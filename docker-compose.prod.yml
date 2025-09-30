@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: prod-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: prod-backend
+    command: uv run gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 src.main:app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.production  # 使用根目录的统一配置
+    depends_on:
+      - postgres_db
+      - redis
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: prod-frontend
+    env_file:
+      - .env.production  # 使用根目录的统一配置
+    expose:
+      - 3000
+    restart: unless-stopped
+
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: prod-postgres-db
+    env_file:
+      - .env.production  # 使用根目录的统一配置
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: prod-redis
+    volumes:
+      - redis_data_prod:/data
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod: 

@@ -1,0 +1,81 @@
+# Environments
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+backend/.env.production
+frontend/.env.production
+!.env.example
+!.env.production.example
+!frontend/.env.example
+!backend/.env.production.example
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.swp
+
+# OS specific
+.DS_Store
+__MACOSX
+
+# Dependencies / Lock files
+node_modules/
+# poetry.lock should be committed, but ignore other managers' lock files
+Pipfile.lock
+
+# --- Frontend (Nuxt.js) ---
+.nuxt/
+.output/
+dist/
+.nitro/
+.cache/
+
+# Log files
+logs
+*.log
+
+# --- Python / Backend ---
+# Virtual Environments
+.venv
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Caches and artifacts
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+*$py.class
+*.so
+
+# Build outputs
+build/
+develop-eggs/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Testing artifacts
+test.db
+*.sqlite
+*.sqlite3
+
+# MediaCrawler projects (external reference)
+MediaCrawlerPro-Python/
+MediaCrawlerPro-SignSrv/

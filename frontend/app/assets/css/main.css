@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* @nuxt/ui v3 官方推荐方式：使用 @source 指令扫描 layers 目录 */
+@source "../../../layers";
+
+/* 根据官方文档，@nuxtjs/color-mode会自动处理深色模式 */
+/* 这里只定义UI变量 */

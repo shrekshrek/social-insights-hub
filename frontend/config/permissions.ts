@@ -31,7 +31,28 @@ export const PERMISSIONS = {
   
   // 基础业务
   DASHBOARD_ACCESS: {target: 'dashboard', action: 'access'},
-  
+
+  // 爬虫任务模块
+  CRAWLER_TASKS_ACCESS: {target: 'crawler_tasks', action: 'access'},
+  CRAWLER_TASKS_READ: {target: 'crawler_tasks', action: 'read'},
+  CRAWLER_TASKS_WRITE: {target: 'crawler_tasks', action: 'write'},
+  CRAWLER_TASKS_DELETE: {target: 'crawler_tasks', action: 'delete'},
+  CRAWLER_TASKS_EXECUTE: {target: 'crawler_tasks', action: 'execute'},
+
+  // 爬虫执行监控
+  CRAWLER_EXECUTIONS_ACCESS: {target: 'crawler_executions', action: 'access'},
+  CRAWLER_EXECUTIONS_READ: {target: 'crawler_executions', action: 'read'},
+
+  // 爬虫资源管理
+  CRAWLER_RESOURCES_ACCESS: {target: 'crawler_resources', action: 'access'},
+  CRAWLER_RESOURCES_READ: {target: 'crawler_resources', action: 'read'},
+  CRAWLER_RESOURCES_WRITE: {target: 'crawler_resources', action: 'write'},
+  CRAWLER_RESOURCES_DELETE: {target: 'crawler_resources', action: 'delete'},
+
+  // 爬虫指标
+  CRAWLER_METRICS_ACCESS: {target: 'crawler_metrics', action: 'access'},
+  CRAWLER_METRICS_READ: {target: 'crawler_metrics', action: 'read'},
+
   // 扩展权限示例（根据需要添加）
   // REPORTS_ACCESS: {target: 'reports', action: 'access'},
   // REPORTS_READ: {target: 'reports', action: 'read'},

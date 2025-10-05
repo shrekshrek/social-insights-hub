@@ -47,14 +47,16 @@
             </ClientOnly>
 
             <template v-if="status === 'authenticated'">
-              <NuxtLink
-                v-for="item in navigationLinks"
-                :key="item.path"
-                :to="item.path"
-                class="text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-              >
-                {{ item.label }}
-              </NuxtLink>
+              <ClientOnly>
+                <NuxtLink
+                  v-for="item in navigationLinks"
+                  :key="item.path"
+                  :to="item.path"
+                  class="text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  {{ item.label }}
+                </NuxtLink>
+              </ClientOnly>
 
               <UDropdownMenu :items="userMenuItems" :content="{ align: 'end' }">
                 <UAvatar
@@ -148,15 +150,17 @@
         <UContainer>
           <div class="py-4 space-y-2">
             <template v-if="status === 'authenticated'">
-              <NuxtLink
-                v-for="item in navigationLinks"
-                :key="item.path"
-                :to="item.path"
-                class="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors"
-                @click="isMobileMenuOpen = false"
-              >
-                {{ item.label }}
-              </NuxtLink>
+              <ClientOnly>
+                <NuxtLink
+                  v-for="item in navigationLinks"
+                  :key="item.path"
+                  :to="item.path"
+                  class="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors"
+                  @click="isMobileMenuOpen = false"
+                >
+                  {{ item.label }}
+                </NuxtLink>
+              </ClientOnly>
 
               <!-- 分割线 -->
               <div
@@ -269,13 +273,12 @@ const hasRouteAccess = (path: string) => {
 };
 
 // 导航基础数据从配置中生成，后续仅根据用户权限做过滤
-const baseNavigationItems = getNavigationItems();
-
 const navigationLinks = computed<NavigationItem[]>(() => {
   if (status.value !== 'authenticated') {
     return [];
   }
 
+  const baseNavigationItems = getNavigationItems();
   return baseNavigationItems.filter((item) => hasRouteAccess(item.path));
 });
 
@@ -288,16 +291,17 @@ watch(route, () => {
   isMobileMenuOpen.value = false;
 });
 
-watchEffect(() => {
+// 仅在认证状态变化时加载权限，避免死循环
+watch(status, (newStatus) => {
   if (
-    status.value === 'authenticated' &&
+    newStatus === 'authenticated' &&
     !permissions.permissionsLoaded.value &&
     !permissions.permissionsLoading.value
   ) {
     // 登录后确保权限列表已加载，避免首次进入时菜单为空
     permissions.loadUserPermissions?.();
   }
-});
+}, { immediate: true });
 
 const userMenuItems = computed(
   () =>

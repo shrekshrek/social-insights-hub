@@ -62,6 +62,31 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     order: 50,
   },
   '/rbac/permissions/[id]': { permission: PERMISSIONS.PERMISSION_READ },
+  '/crawler-tasks': {
+    permission: PERMISSIONS.CRAWLER_TASKS_ACCESS,
+    label: '爬虫任务',
+    showInNav: true,
+    order: 60,
+  },
+  '/crawler-tasks/[id]': { permission: PERMISSIONS.CRAWLER_TASKS_READ },
+  '/crawler-executions': {
+    permission: PERMISSIONS.CRAWLER_EXECUTIONS_ACCESS,
+    label: '任务执行',
+    showInNav: true,
+    order: 65,
+  },
+  '/crawler-resources': {
+    permission: PERMISSIONS.CRAWLER_RESOURCES_ACCESS,
+    label: '资源管理',
+    showInNav: true,
+    order: 66,
+  },
+  '/crawler-metrics': {
+    permission: PERMISSIONS.CRAWLER_METRICS_ACCESS,
+    label: '运行指标',
+    showInNav: true,
+    order: 67,
+  },
 }
 
 /**

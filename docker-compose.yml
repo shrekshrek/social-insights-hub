@@ -44,6 +44,28 @@ services:
       - postgres_db
       - redis
 
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: celery-worker
+    command: sh -c "uv run celery -A src.celery_app.celery_app worker --loglevel=info"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    depends_on:
+      - backend
+      - redis
+      - postgres_db
+    dns:
+      - 8.8.8.8
+
 
 volumes:
   postgres_data: 

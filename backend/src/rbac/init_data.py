@@ -178,6 +178,65 @@ CORE_PERMISSIONS = [
 BUSINESS_PERMISSIONS = [
     # 基础业务模块（使用模板函数，1行即可！）
     *create_module_permissions("dashboard", ["access"]),
+    # 🕷️ 爬虫任务模块（完整CRUD + 执行权限）
+    *create_module_permissions(
+        "crawler_tasks",
+        ["access", "read", "write", "delete", "execute"],
+        display_names={
+            "access": "访问爬虫任务",
+            "read": "查看爬虫任务",
+            "write": "编辑爬虫任务",
+            "delete": "删除爬虫任务",
+            "execute": "执行爬虫任务",
+        },
+        descriptions={
+            "access": "允许访问爬虫任务模块",
+            "read": "允许查看爬虫任务列表和详情",
+            "write": "允许创建和编辑爬虫任务配置",
+            "delete": "允许删除爬虫任务",
+            "execute": "允许启动、暂停、停止爬虫任务",
+        },
+    ),
+    *create_module_permissions(
+        "crawler_executions",
+        ["access", "read"],
+        display_names={
+            "access": "访问任务执行监控",
+            "read": "查看执行详情",
+        },
+        descriptions={
+            "access": "允许访问任务执行监控页面",
+            "read": "允许查看任务执行详情和实时日志",
+        },
+    ),
+    *create_module_permissions(
+        "crawler_resources",
+        ["access", "read", "write", "delete"],
+        display_names={
+            "access": "访问资源管理",
+            "read": "查看资源",
+            "write": "管理资源",
+            "delete": "移除资源",
+        },
+        descriptions={
+            "access": "允许访问账号与代理资源管理模块",
+            "read": "允许查看账号、代理等资源信息",
+            "write": "允许新增或更新账号、代理配置",
+            "delete": "允许停用或删除账号、代理资源",
+        },
+    ),
+    *create_module_permissions(
+        "crawler_metrics",
+        ["access", "read"],
+        display_names={
+            "access": "访问运行指标",
+            "read": "查看指标数据",
+        },
+        descriptions={
+            "access": "允许访问爬虫运行指标页面",
+            "read": "允许查看统计报表与监控数据",
+        },
+    ),
     # ========================================================================
     # 新模块权限添加示例（开发者只需1行代码！）
     # ========================================================================

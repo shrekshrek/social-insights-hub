@@ -36,6 +36,11 @@ SECRET_KEY=your-secret-key-for-development-only
 PROJECT_NAME=Full-Stack Starter API
 API_PREFIX=/api/v1
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+# 签名策略（javascript | playwright）
+SIGNING_STRATEGY=javascript
+SIGNING_JS_BUNDLE=
+SIGNING_PLAYWRIGHT_BROWSER=chromium
+SIGNING_PLAYWRIGHT_HEADLESS=true
 
 # ===== 前端配置 =====
 NUXT_PUBLIC_API_BASE=http://localhost:8000/api/v1
@@ -63,6 +68,11 @@ PROJECT_NAME=Production API
 API_PREFIX=/api/v1
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 BACKEND_CORS_ORIGINS=["https://yourdomain.com"]
+# 签名策略
+SIGNING_STRATEGY=playwright
+SIGNING_JS_BUNDLE=
+SIGNING_PLAYWRIGHT_BROWSER=chromium
+SIGNING_PLAYWRIGHT_HEADLESS=true
 
 # ===== 前端配置 =====
 NUXT_PUBLIC_API_BASE=https://yourdomain.com/api/v1

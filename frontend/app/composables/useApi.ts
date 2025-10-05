@@ -64,16 +64,22 @@ export const useApi = () => {
       case 400:
         message = `请求错误: ${message}`
         break
-      case 401:
+      case 401: {
         message = '登录已过期，请重新登录'
         // 处理token过期，自动登出
         if (import.meta.client) {
-          const { clear } = useUserSession()
-          clear().then(() => {
-            navigateTo('/login')
-          })
+          const { clear, session } = useUserSession()
+          session.value = null
+          clear()
+            .catch((error) => {
+              console.warn('Failed to clear expired session', error)
+            })
+            .finally(() => {
+              navigateTo('/login')
+            })
         }
         break
+      }
       case 403:
         message = '权限不足'
         break

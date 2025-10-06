@@ -427,12 +427,14 @@ dependencies = [
     { name = "celery" },
     { name = "fastapi" },
     { name = "flower" },
+    { name = "httpx" },
     { name = "langchain" },
     { name = "passlib", extra = ["bcrypt"] },
     { name = "playwright" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
+    { name = "pyexecjs" },
     { name = "python-jose", extra = ["cryptography"] },
     { name = "python-multipart" },
     { name = "redis" },
@@ -470,6 +472,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.113.1" },
     { name = "flower", specifier = ">=2.0.1" },
     { name = "greenlet", marker = "extra == 'dev'", specifier = ">=3.2.3" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
     { name = "langchain", specifier = ">=0.3.4" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4" },
@@ -477,6 +480,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.1" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.9.1" },
     { name = "pydantic-settings", specifier = ">=2.4.1" },
+    { name = "pyexecjs", specifier = ">=1.5.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.8" },
     { name = "pytest-env", marker = "extra == 'dev'", specifier = ">=1.1.5" },
@@ -1123,6 +1127,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/95/03/1fd98d5841cd7964a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/4d/b9add7c84060d4c1906abe9a7e5359f2a60f7a9a4f67268b2766673427d8/pyee-13.0.0-py3-none-any.whl", hash = "sha256:48195a3cddb3b1515ce0695ed76036b5ccc2ef3a9f963ff9f77aec0139845498", size = 15730, upload-time = "2025-03-17T18:53:14.532Z" },
 ]
+
+[[package]]
+name = "pyexecjs"
+version = "1.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ba/8e/aedef81641c8dca6fd0fb7294de5bed9c45f3397d67fddf755c1042c2642/PyExecJS-1.5.1.tar.gz", hash = "sha256:34cc1d070976918183ff7bdc0ad71f8157a891c92708c00c5fbbff7a769f505c", size = 13344, upload-time = "2018-01-18T04:33:55.126Z" }
 
 [[package]]
 name = "pygments"

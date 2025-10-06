@@ -13,6 +13,7 @@ from src.users.router import router as users_router
 from src.rbac.router import router as rbac_router
 from src.signing.router import router as signing_router
 from src.tasks.router import router as crawler_tasks_router
+from src.resources.router import router as resources_router
 from src.config import settings
 from src.database import get_async_db, AsyncSessionLocal
 from src.rbac.init_data import init_rbac_data
@@ -185,3 +186,4 @@ app.include_router(users_router, prefix=settings.API_PREFIX)
 app.include_router(rbac_router, prefix=settings.API_PREFIX)
 app.include_router(crawler_tasks_router, prefix=settings.API_PREFIX)
 app.include_router(signing_router, prefix=settings.API_PREFIX)
+app.include_router(resources_router, prefix=settings.API_PREFIX)

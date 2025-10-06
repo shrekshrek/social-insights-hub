@@ -41,6 +41,21 @@ SIGNING_STRATEGY=javascript
 SIGNING_JS_BUNDLE=
 SIGNING_PLAYWRIGHT_BROWSER=chromium
 SIGNING_PLAYWRIGHT_HEADLESS=true
+SIGNING_PLAYWRIGHT_USER_DATA_DIR=./.playwright/xhs
+SIGNING_PLAYWRIGHT_STEALTH_JS=./frontend/node_modules/stealth.min.js
+SIGNING_PLAYWRIGHT_DEFAULT_COOKIES=
+# JavaScript 策略依赖 Node 环境（用于编译 XHS JS 脚本）
+# 若缺失将自动回退到占位签名，需手动安装 node >= 16
+
+#### Playwright 签名环境准备
+
+1. 安装 Node.js 16 或更高版本（用于执行补环境脚本）。
+2. 安装 Playwright 浏览器依赖：在 `backend` 目录执行 `uv run playwright install chromium`，或直接运行 `scripts/setup-playwright-signing.sh`。
+3. 确认环境变量指向有效路径：
+   - `SIGNING_PLAYWRIGHT_USER_DATA_DIR`：浏览器数据目录，会在脚本中自动创建；
+   - `SIGNING_PLAYWRIGHT_STEALTH_JS`：默认指向仓库内的 `backend/src/signing/resources/xhs/stealth.min.js`；
+   - `SIGNING_PLAYWRIGHT_DEFAULT_COOKIES`：用于初始化固定 Cookie，可留空。
+4. 启动前可通过 `uv run playwright doctor` 检查运行时状态，确保签名服务可用。
 
 # ===== 前端配置 =====
 NUXT_PUBLIC_API_BASE=http://localhost:8000/api/v1
@@ -73,6 +88,9 @@ SIGNING_STRATEGY=playwright
 SIGNING_JS_BUNDLE=
 SIGNING_PLAYWRIGHT_BROWSER=chromium
 SIGNING_PLAYWRIGHT_HEADLESS=true
+SIGNING_PLAYWRIGHT_USER_DATA_DIR=/data/signing/xhs
+SIGNING_PLAYWRIGHT_STEALTH_JS=/opt/signing/stealth.min.js
+SIGNING_PLAYWRIGHT_DEFAULT_COOKIES=
 
 # ===== 前端配置 =====
 NUXT_PUBLIC_API_BASE=https://yourdomain.com/api/v1

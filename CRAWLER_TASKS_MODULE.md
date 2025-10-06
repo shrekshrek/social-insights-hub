@@ -19,7 +19,7 @@
   - 支持7个平台: 小红书、微博、抖音、快手、B站、贴吧、知乎
   - 4种爬取模式: search、detail、creator、homefeed
   - 6种状态: pending、running、paused、completed、failed、cancelled
-  - JSON配置: 关键词、URL、数量、评论、代理等
+  - JSON配置: 关键词、URL、数量、评论、代理等（XHS 最小链路读取 `keywords`、`max_count`）
   - 断点续爬支持: checkpoint_id, checkpoint_data
 
 - **TaskLog**: 任务日志表
@@ -50,9 +50,15 @@
 - 日志记录功能
 - 统计数据查询
 
-#### 5. 签名策略基础结构 ([backend/src/signing](backend/src/signing))
+#### 5. 资源管理模块 ([backend/src/resources](backend/src/resources))
+- 新增账号/代理资源模型 (`models.py`)，支持锁定/释放、失败计数
+- 提供创建、查询、状态切换接口 (`router.py`)，与 RBAC 权限联动
+- 服务层实现资源分配/释放 (`service.py`)，与任务执行上下文集成
+
+#### 6. 签名策略基础结构 ([backend/src/signing](backend/src/signing))
 - 定义统一的签名策略抽象与工厂 (`base.py`, `factory.py`)
 - 提供 JavaScript / Playwright 策略占位实现，支持健康检查
+- `client.generate_signature` 统一封装调用；默认 JavaScript 策略返回稳定签名，供 XHS 适配器接入
 - 暴露 `/api/v1/signing/health` 健康检查接口
 
 ---
@@ -260,6 +266,12 @@ backend/src/tasks/
 ├── router.py          # API路由
 └── orchestrator/      # 任务编排子模块 (dispatch、validator、runner等)
 
+backend/src/platforms/
+├── __init__.py
+├── base.py            # 适配器抽象与执行上下文
+├── registry.py        # 平台注册表
+└── xhs/adapter.py     # 小红书平台适配器（占位实现）
+
 backend/src/signing/
 ├── __init__.py
 ├── base.py            # 策略抽象
@@ -267,6 +279,12 @@ backend/src/signing/
 ├── router.py          # 健康检查路由
 ├── schemas.py         # 请求/响应模型
 └── strategies/        # 具体策略实现 (javascript, playwright)
+
+backend/src/results/
+├── __init__.py
+├── models.py          # 结果模型 (crawler_note_results)
+├── schemas.py         # 响应模型
+└── service.py         # 批量写入与查询接口
 ```
 
 ### 前端文件

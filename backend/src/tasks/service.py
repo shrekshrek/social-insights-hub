@@ -13,8 +13,12 @@ from sqlalchemy.orm import selectinload
 from src.pagination import PaginationParams, paginate_query
 
 from . import models, schemas
+from .orchestrator import get_task_dispatcher
+from .orchestrator.validator import TaskValidationError
 
 logger = logging.getLogger(__name__)
+
+dispatcher = get_task_dispatcher()
 
 
 # ============================================================================
@@ -155,8 +159,43 @@ async def start_task(db: AsyncSession, task_id: int) -> models.CrawlerTask:
     await add_task_log(db, task_id, "INFO", "任务开始执行")
     logger.info(f"启动任务: {task_id}")
 
-    # TODO: 在此处触发后台爬虫执行
-    # await execute_crawler_task(task)
+    try:
+        job_id = await dispatcher.start_task(task)
+    except TaskValidationError as exc:
+        task.status = models.TaskStatus.FAILED
+        task.error_message = str(exc)
+        await db.commit()
+        await db.refresh(task)
+        await add_task_log(
+            db,
+            task_id,
+            "ERROR",
+            f"任务校验失败: {exc}",
+        )
+        logger.exception("任务调度校验失败", exc_info=exc)
+        raise ValueError(str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - unexpected failure
+        task.status = models.TaskStatus.FAILED
+        task.error_message = str(exc)
+        await db.commit()
+        await db.refresh(task)
+        await add_task_log(
+            db,
+            task_id,
+            "ERROR",
+            "任务调度失败",
+            detail={"error": repr(exc)},
+        )
+        logger.exception("任务调度异常", exc_info=exc)
+        raise ValueError("任务调度失败，请稍后再试") from exc
+    else:
+        if job_id:
+            await add_task_log(
+                db,
+                task_id,
+                "INFO",
+                f"任务已提交至队列，作业ID: {job_id}",
+            )
 
     return task
 
@@ -167,8 +206,13 @@ async def pause_task(db: AsyncSession, task_id: int) -> models.CrawlerTask:
     if not task:
         raise ValueError(f"任务不存在: {task_id}")
 
-    if task.status != models.TaskStatus.RUNNING:
-        raise ValueError(f"任务未在运行中，无法暂停: {task.status}")
+    try:
+        await dispatcher.pause_task(task)
+    except TaskValidationError as exc:
+        raise ValueError(str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - unexpected failure
+        logger.exception("任务暂停调度失败", exc_info=exc)
+        raise ValueError("任务暂停调度失败") from exc
 
     task.status = models.TaskStatus.PAUSED
     await db.commit()
@@ -186,8 +230,13 @@ async def stop_task(db: AsyncSession, task_id: int) -> models.CrawlerTask:
     if not task:
         raise ValueError(f"任务不存在: {task_id}")
 
-    if task.status not in [models.TaskStatus.RUNNING, models.TaskStatus.PAUSED]:
-        raise ValueError(f"任务状态错误，无法停止: {task.status}")
+    try:
+        await dispatcher.stop_task(task)
+    except TaskValidationError as exc:
+        raise ValueError(str(exc)) from exc
+    except Exception as exc:  # pragma: no cover
+        logger.exception("任务停止调度失败", exc_info=exc)
+        raise ValueError("任务停止调度失败") from exc
 
     task.status = models.TaskStatus.CANCELLED
     task.completed_at = datetime.utcnow()

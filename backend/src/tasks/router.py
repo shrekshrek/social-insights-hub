@@ -19,6 +19,8 @@ from .dependencies import (
     require_crawler_tasks_read,
     require_crawler_tasks_write,
 )
+from src.results import service as result_service
+from src.results.schemas import CrawlerNoteResultResponse
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +207,20 @@ async def stop_task(
         return schemas.CrawlerTaskResponse.model_validate(task)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get(
+    "/{task_id}/results",
+    response_model=list[CrawlerNoteResultResponse],
+    summary="获取任务结果",
+)
+async def list_task_results(
+    task_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_crawler_tasks_read),
+):
+    results = await result_service.list_notes_by_task(db, task_id)
+    return [CrawlerNoteResultResponse.model_validate(item) for item in results]
 
 
 # ============================================================================

@@ -346,6 +346,28 @@ async def init_roles(
         # 检查角色是否已存在
         existing = await service.get_role_by_name(db, role_data["name"])
         if existing:
+            updated = False
+            if (
+                role_data.get("display_name")
+                and existing.display_name != role_data["display_name"]
+            ):
+                existing.display_name = role_data["display_name"]
+                updated = True
+            if (
+                role_data.get("description") is not None
+                and existing.description != role_data["description"]
+            ):
+                existing.description = role_data["description"]
+                updated = True
+            desired_strategy = role_data.get("permission_strategy", "explicit")
+            if existing.permission_strategy != desired_strategy:
+                existing.permission_strategy = desired_strategy
+                updated = True
+
+            if updated:
+                await db.commit()
+                await db.refresh(existing)
+
             roles[role_data["name"]] = existing
             continue
 
@@ -367,6 +389,7 @@ async def init_roles(
                 "name": role_data["name"],
                 "display_name": role_data["display_name"],
                 "description": role_data["description"],
+                "permission_strategy": permission_strategy,
                 "permission_ids": permission_ids,
             }
 

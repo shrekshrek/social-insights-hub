@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     SIGNING_JS_BUNDLE: str | None = None
     SIGNING_PLAYWRIGHT_BROWSER: str = "chromium"
     SIGNING_PLAYWRIGHT_HEADLESS: bool = True
+    SIGNING_PLAYWRIGHT_USER_DATA_DIR: str | None = None
+    SIGNING_PLAYWRIGHT_STEALTH_JS: str | None = None
+    SIGNING_PLAYWRIGHT_DEFAULT_COOKIES: str | None = None
 
     # API settings
     API_PREFIX: str = "/api/v1"

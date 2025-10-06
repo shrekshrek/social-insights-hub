@@ -49,7 +49,7 @@ async def read_users_me(
 
 
 @router.get(
-    "/",
+    "",
     response_model=schemas.UserListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get users list",
@@ -78,7 +78,7 @@ async def read_users(
 
 
 @router.post(
-    "/",
+    "",
     response_model=auth_schemas.UserRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create user",

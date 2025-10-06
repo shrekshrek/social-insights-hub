@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth import service as auth_service
 from src.rbac import service as rbac_service
 from src.rbac.models import SystemRoles
+from src.rbac.init_data import init_rbac_data
 
 
 pytestmark = pytest.mark.asyncio
@@ -18,6 +19,8 @@ async def _prepare_super_admin(
     email: str,
 ) -> dict:
     """创建并登录超级管理员，返回认证头信息"""
+
+    await init_rbac_data(db)
 
     register_payload = {
         "username": username,

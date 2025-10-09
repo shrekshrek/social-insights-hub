@@ -217,7 +217,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import type { User } from '../../../types'
 import { getRoleColor, getRoleLabel } from '../../../utils/ui-helpers'
-import { isCoreRole } from '../../../../rbac/utils/permissions'  // 明确的跨模块依赖
+import { isCoreRole } from '~/layers/rbac/utils/permissions'  // 明确的跨模块依赖
 
 // 页面元数据
 definePageMeta({

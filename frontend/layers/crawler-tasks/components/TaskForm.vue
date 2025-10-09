@@ -84,19 +84,19 @@
       <!-- 开关选项 -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <UFormField label="爬取评论" name="enable_comments">
-          <UToggle v-model="formState.enable_comments" :disabled="loading" />
+          <USwitch v-model="formState.enable_comments" :disabled="loading" />
         </UFormField>
 
         <UFormField label="爬取二级评论" name="enable_sub_comments">
-          <UToggle v-model="formState.enable_sub_comments" :disabled="loading" />
+          <USwitch v-model="formState.enable_sub_comments" :disabled="loading" />
         </UFormField>
 
         <UFormField label="使用代理" name="proxy_enabled">
-          <UToggle v-model="formState.proxy_enabled" :disabled="loading" />
+          <USwitch v-model="formState.proxy_enabled" :disabled="loading" />
         </UFormField>
 
         <UFormField label="启用断点续传" name="enable_checkpoint">
-          <UToggle v-model="formState.enable_checkpoint" :disabled="loading" />
+          <USwitch v-model="formState.enable_checkpoint" :disabled="loading" />
         </UFormField>
       </div>
     </div>

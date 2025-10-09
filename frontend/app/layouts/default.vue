@@ -250,8 +250,8 @@
 
 <script setup lang="ts">
 import type { DropdownMenuItem } from "@nuxt/ui";
-import { getNavigationItems, getRoutePermissions } from "../../config/routes";
-import type { NavigationItem } from "../../config/routes";
+import { getNavigationItems, getRoutePermissions } from "~/config/routes";
+import type { NavigationItem } from "~/config/routes";
 
 const { loggedIn, session } = useUserSession();
 const { logout } = useAuthApi();

@@ -114,7 +114,7 @@
 
 <script setup lang="ts">
 // 认证保护已由全局认证守卫处理，无需重复定义
-import { getRoleColor, getRoleLabel } from '../../layers/users/utils/ui-helpers'
+import { getRoleColor, getRoleLabel } from '~/layers/users/utils/ui-helpers'
 
 const { session } = useUserSession()
 const { logout } = useAuthApi()

@@ -18,7 +18,9 @@ async def test_javascript_strategy_fallback_when_payload_missing():
 @pytest.mark.asyncio
 async def test_javascript_strategy_xhs_real_signature():
     strategy = JavascriptSignatureStrategy()
-    if not strategy.is_platform_available("xhs"):
+    available = strategy.is_platform_available("xhs")
+    print("is_platform_available", available)
+    if not available:
         pytest.skip("XHS javascript signer unavailable in this environment")
 
     request = SignatureRequest(

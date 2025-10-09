@@ -3,8 +3,8 @@
  * 基于 nuxt-auth-utils 模块，遵循官方最佳实践
  */
 
-import type { User, UserCreate } from '../../../types/user'
-import type { Msg, PasswordResetRequest, PasswordReset, StandardError } from '../../../types/auth'
+import type { User, UserCreate } from "~/types/user"
+import type { Msg, PasswordResetRequest, PasswordReset, StandardError } from "~/types/auth"
 
 export const useAuthApi = () => {
   const { showSuccess, showError } = useApi()

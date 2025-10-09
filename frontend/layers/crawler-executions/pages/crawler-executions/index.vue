@@ -154,10 +154,13 @@ function formatDate(value: string) {
 async function fetchTasks() {
   loadingTasks.value = true
   try {
-    const res = await apiRequest('/crawler-tasks')
+    const res = await apiRequest<PaginatedResponse<CrawlerTaskResponse>>('/crawler-tasks')
     tasks.value = res.items ?? []
     if (tasks.value.length > 0) {
-      await selectTask(tasks.value[0])
+      const firstTask = tasks.value[0]
+      if (firstTask) {
+        await selectTask(firstTask)
+      }
     }
   } finally {
     loadingTasks.value = false
@@ -172,7 +175,7 @@ async function selectTask(task: CrawlerTaskResponse) {
 async function loadResults(taskId: number) {
   loadingResults.value = true
   try {
-    results.value = await apiRequest(`/crawler-tasks/${taskId}/results`)
+    results.value = await apiRequest<NoteResult[]>(`/crawler-tasks/${taskId}/results`)
   } finally {
     loadingResults.value = false
   }

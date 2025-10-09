@@ -7,8 +7,8 @@
  * 3. 统一权限检查
  */
 
-import { getRoutePermissions, isPublicPage, isGuestOnlyPage } from '../../config/routes'
-import type { Permission } from '../../types/permissions'
+import { getRoutePermissions, isPublicPage, isGuestOnlyPage } from '~/config/routes'
+import type { Permission } from '~/types/permissions'
 
 export default defineNuxtRouteMiddleware(async (to) => {
   const { loggedIn, session, fetch: fetchSession } = useUserSession()

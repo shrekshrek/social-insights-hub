@@ -4,8 +4,8 @@
  * 核心功能：权限检查和加载
  */
 
-import type { Permission, PermissionWithMeta } from '../../types/permissions'
-import { isSamePermission } from '../../types/permissions'
+import type { Permission, PermissionWithMeta } from '~/types/permissions'
+import { isSamePermission } from '~/types/permissions'
 
 // 全局权限缓存
 const globalUserPermissions = ref<PermissionWithMeta[]>([])

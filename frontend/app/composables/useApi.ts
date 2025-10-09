@@ -71,7 +71,7 @@ export const useApi = () => {
           const { clear, session } = useUserSession()
           session.value = null
           clear()
-            .catch((error) => {
+            .catch((error: unknown) => {
               console.warn('Failed to clear expired session', error)
             })
             .finally(() => {

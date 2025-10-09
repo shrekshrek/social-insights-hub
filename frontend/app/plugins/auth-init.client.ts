@@ -19,7 +19,7 @@ export default defineNuxtPlugin(async () => {
   // 如果用户已认证，预加载权限数据
   if (isAuthenticated) {
     try {
-      const { useUserStore } = await import('../../layers/auth/stores/user')
+      const { useUserStore } = await import('~/layers/auth/stores/user')
       const userStore = useUserStore()
       const permissions = usePermissions()
       

@@ -48,7 +48,7 @@
 
 <script setup lang="ts">
 import { isCoreRole } from "../../../../utils/permissions";
-import { PERMISSIONS } from "../../../../../../config/permissions";
+import { PERMISSIONS } from "~/config/permissions";
 
 // 页面元数据
 definePageMeta({

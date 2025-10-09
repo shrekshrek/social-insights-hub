@@ -4,7 +4,7 @@
  * 与后端保持一致的权限定义
  */
 
-import type { Permission } from '../types/permissions'
+import type { Permission } from '~/types/permissions'
 
 // ============================================================================
 // 权限定义（与后端保持一致）

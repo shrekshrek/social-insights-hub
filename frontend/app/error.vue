@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import type { NuxtError } from '#app'
+import type { NuxtError } from 'nuxt/app'
 
 // 定义props
 const props = defineProps<{

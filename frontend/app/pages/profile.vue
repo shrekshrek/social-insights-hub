@@ -161,7 +161,7 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import { getRoleColor, getRoleLabel } from '../../layers/users/utils/ui-helpers'
+import { getRoleColor, getRoleLabel } from '~/layers/users/utils/ui-helpers'
 
 // 页面元数据
 definePageMeta({

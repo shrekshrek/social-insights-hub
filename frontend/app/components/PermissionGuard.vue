@@ -19,7 +19,7 @@
  * 遵循KISS原则，专注核心功能
  */
 
-import type { Permission } from '../../types/permissions'
+import type { Permission } from '~/types/permissions'
 
 interface Props {
   // 需要的权限（满足任意一个即可）

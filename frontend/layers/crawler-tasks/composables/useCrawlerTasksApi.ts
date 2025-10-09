@@ -12,7 +12,7 @@ import type {
   PlatformType,
   TaskStatus
 } from '../types'
-import type { PaginatedResponse } from '../../../types/common'
+import type { PaginatedResponse } from '~/types/common'
 
 export const useCrawlerTasksApi = () => {
   const { apiRequest, useApiData, showSuccess, showError } = useApi()

@@ -133,3 +133,4 @@ export const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
   [TaskStatus.FAILED]: 'red',
   [TaskStatus.CANCELLED]: 'gray'
 }
+export type CrawlerTaskResponse = CrawlerTask

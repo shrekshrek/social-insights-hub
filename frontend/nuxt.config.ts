@@ -1,5 +1,8 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import { defineNuxtConfig } from 'nuxt/config'
+import { fileURLToPath } from 'node:url'
+
+const resolve = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 
 export default defineNuxtConfig({
   // 启用 Nuxt 4 兼容模式
@@ -20,8 +23,16 @@ export default defineNuxtConfig({
 
   // 别名配置，解决Layer中的import路径问题
   alias: {
-    "~/config": "./config",
-    "@config": "./config"
+    '~': resolve('./'),
+    '@': resolve('./'),
+    '~/': resolve('./'),
+    '@/': resolve('./'),
+    '~/app': resolve('./app'),
+    '@/app': resolve('./app'),
+    '~/layers': resolve('./layers'),
+    '@/layers': resolve('./layers'),
+    '~/config': resolve('./config'),
+    '@config': resolve('./config')
   },
 
   // 运行时配置

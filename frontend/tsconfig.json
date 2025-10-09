@@ -1,5 +1,17 @@
 {
   "extends": "./.nuxt/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "~/*": ["./*"],
+      "@/*": ["./*"],
+      "~/app/*": ["./app/*"],
+      "@app/*": ["./app/*"],
+      "~/layers/*": ["./layers/*"],
+      "@layers/*": ["./layers/*"],
+      "~/config/*": ["./config/*"],
+      "@config/*": ["./config/*"]
+    }
+  },
   "include": [
     ".nuxt/nuxt.d.ts",
     "types/**/*.ts",

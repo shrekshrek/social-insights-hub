@@ -1,5 +1,11 @@
 import { defineNuxtConfig } from 'nuxt/config'
 
 export default defineNuxtConfig({
-  components: [{ path: './components', pathPrefix: false }]
+  imports: {
+    dirs: ['composables/**', 'stores/**', 'types/**'],
+    autoImport: true
+  },
+  components: [
+    { path: './components', pathPrefix: false }
+  ]
 })

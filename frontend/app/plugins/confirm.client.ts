@@ -5,7 +5,7 @@
  * 配合ConfirmModal组件使用，提供完整的确认/取消功能
  */
 
-import type { ConfirmOptions } from '../../types/common'
+import type { ConfirmOptions } from '~/types/common'
 
 declare global {
   interface Window {
@@ -30,7 +30,7 @@ export default defineNuxtPlugin(() => {
     } = opts
 
     // 动态导入确认对话框组件
-    const ConfirmModal = (await import('../components/ConfirmModal.vue')).default
+    const ConfirmModal = (await import('~/app/components/ConfirmModal.vue')).default
     
     // 使用Nuxt UI v3的useOverlay来程序化创建模态框
     const overlay = useOverlay()

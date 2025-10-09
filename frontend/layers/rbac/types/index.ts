@@ -4,9 +4,9 @@
  */
 
 // 导入基础类型（来自全局）
-import type { Role } from '../../../types/user'
-import type { Permission, PermissionWithMeta } from '../../../types/permissions'
-import type { PaginationParams, PaginatedResponse } from '../../../types/common'
+import type { Role } from '~/types/user'
+import type { Permission, PermissionWithMeta } from '~/types/permissions'
+import type { PaginationParams, PaginatedResponse } from '~/types/common'
 
 // 重新导出基础类型，便于模块内部使用
 export type { Role, Permission, PermissionWithMeta, PaginationParams, PaginatedResponse }

@@ -115,11 +115,14 @@ def is_available() -> bool:
     if _context is not None:
         return True
     if _context_error:
+        _LOGGER.debug("javascript signer unavailable cached error: %s", _context_error)
         return False
     if execjs is None:
+        _LOGGER.debug("javascript signer unavailable: execjs missing")
         return False
     try:
         execjs.get()
     except Exception:  # pragma: no cover - runtime detection
+        _LOGGER.debug("javascript signer unavailable: runtime lookup failed", exc_info=True)
         return False
     return True

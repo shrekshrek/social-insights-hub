@@ -3,9 +3,9 @@
  * 包含角色和权限相关的UI展示和业务逻辑工具
  */
 
-import type { Permission } from '../../../types/permissions'
-import { getPermissionKey } from '../../../types/permissions'
-import { SYSTEM_ROLES } from '../../../config/permissions'
+import type { Permission } from '~/types/permissions'
+import { getPermissionKey } from '~/types/permissions'
+import { SYSTEM_ROLES } from '~/config/permissions'
 
 // 判断角色是否为核心角色
 export const isCoreRole = (roleName: string | undefined): boolean => {

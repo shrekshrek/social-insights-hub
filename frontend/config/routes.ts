@@ -3,7 +3,7 @@
  */
 
 import { PERMISSIONS } from './permissions'
-import type { Permission } from '../types/permissions'
+import type { Permission } from '~/types/permissions'
 
 export interface RouteConfig {
   permission: Permission | Permission[] | null

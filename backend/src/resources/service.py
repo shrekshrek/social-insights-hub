@@ -47,6 +47,29 @@ async def list_accounts(
     return list(result.scalars().all())
 
 
+async def get_account(
+    db: AsyncSession, account_id: int
+) -> models.CrawlerAccount | None:
+    return await db.get(models.CrawlerAccount, account_id)
+
+
+async def update_account(
+    db: AsyncSession, account_id: int, data: schemas.CrawlerAccountUpdate
+) -> models.CrawlerAccount | None:
+    account = await get_account(db, account_id)
+    if not account:
+        return None
+
+    update_dict = data.model_dump(exclude_unset=True, exclude_none=True)
+    for field, value in update_dict.items():
+        setattr(account, field, value)
+    account.updated_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(account)
+    return account
+
+
 async def allocate_account(
     db: AsyncSession, platform: PlatformType, task_id: int
 ) -> Optional[models.CrawlerAccount]:
@@ -127,6 +150,29 @@ async def list_proxies(
     stmt = stmt.order_by(models.CrawlerProxy.created_at.desc())
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_proxy(
+    db: AsyncSession, proxy_id: int
+) -> models.CrawlerProxy | None:
+    return await db.get(models.CrawlerProxy, proxy_id)
+
+
+async def update_proxy(
+    db: AsyncSession, proxy_id: int, data: schemas.CrawlerProxyUpdate
+) -> models.CrawlerProxy | None:
+    proxy = await get_proxy(db, proxy_id)
+    if not proxy:
+        return None
+
+    update_dict = data.model_dump(exclude_unset=True, exclude_none=True)
+    for field, value in update_dict.items():
+        setattr(proxy, field, value)
+    proxy.updated_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(proxy)
+    return proxy
 
 
 async def allocate_proxy(

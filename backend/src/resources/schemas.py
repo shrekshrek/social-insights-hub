@@ -17,6 +17,12 @@ class CrawlerAccountCreate(CustomBaseModel):
     cookies: str = Field(..., description="登录Cookies")
 
 
+class CrawlerAccountUpdate(CustomBaseModel):
+    account_name: str | None = Field(default=None, max_length=255, description="账号标识")
+    cookies: str | None = Field(default=None, description="登录Cookies")
+    is_active: bool | None = Field(default=None, description="是否启用")
+
+
 class CrawlerAccountUpdateStatus(CustomBaseModel):
     is_active: bool = Field(..., description="是否启用")
 
@@ -40,6 +46,16 @@ class CrawlerProxyCreate(CustomBaseModel):
     port: int = Field(..., ge=1, le=65535, description="端口")
     username: str | None = Field(default=None, description="代理用户名")
     password: str | None = Field(default=None, description="代理密码")
+
+
+class CrawlerProxyUpdate(CustomBaseModel):
+    label: str | None = Field(default=None, max_length=255, description="代理标识")
+    protocol: str | None = Field(default=None, description="协议")
+    host: str | None = Field(default=None, description="主机地址")
+    port: int | None = Field(default=None, ge=1, le=65535, description="端口")
+    username: str | None = Field(default=None, description="代理用户名")
+    password: str | None = Field(default=None, description="代理密码")
+    is_active: bool | None = Field(default=None, description="是否启用")
 
 
 class CrawlerProxyUpdateStatus(CustomBaseModel):

@@ -36,6 +36,22 @@ async def create_account(
 
 
 @router.get(
+    "/accounts/{account_id}",
+    response_model=schemas.CrawlerAccountResponse,
+    summary="账号资源详情",
+)
+async def get_account(
+    account_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_resources_read),
+):
+    account = await service.get_account(db, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    return schemas.CrawlerAccountResponse.model_validate(account)
+
+
+@router.get(
     "/accounts",
     response_model=List[schemas.CrawlerAccountResponse],
     summary="账号资源列表",
@@ -56,6 +72,23 @@ async def list_accounts(
             raise HTTPException(status_code=400, detail="无效的平台标识") from exc
     accounts = await service.list_accounts(db, platform_enum, active)
     return [schemas.CrawlerAccountResponse.model_validate(acc) for acc in accounts]
+
+
+@router.patch(
+    "/accounts/{account_id}",
+    response_model=schemas.CrawlerAccountResponse,
+    summary="更新账号信息",
+)
+async def update_account(
+    account_id: int,
+    payload: schemas.CrawlerAccountUpdate,
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_resources_write),
+):
+    account = await service.update_account(db, account_id, payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    return schemas.CrawlerAccountResponse.model_validate(account)
 
 
 @router.patch(
@@ -94,6 +127,22 @@ async def create_proxy(
 
 
 @router.get(
+    "/proxies/{proxy_id}",
+    response_model=schemas.CrawlerProxyResponse,
+    summary="代理资源详情",
+)
+async def get_proxy(
+    proxy_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_resources_read),
+):
+    proxy = await service.get_proxy(db, proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="代理不存在")
+    return schemas.CrawlerProxyResponse.model_validate(proxy)
+
+
+@router.get(
     "/proxies",
     response_model=List[schemas.CrawlerProxyResponse],
     summary="代理资源列表",
@@ -105,6 +154,23 @@ async def list_proxies(
 ):
     proxies = await service.list_proxies(db, active)
     return [schemas.CrawlerProxyResponse.model_validate(proxy) for proxy in proxies]
+
+
+@router.patch(
+    "/proxies/{proxy_id}",
+    response_model=schemas.CrawlerProxyResponse,
+    summary="更新代理信息",
+)
+async def update_proxy(
+    proxy_id: int,
+    payload: schemas.CrawlerProxyUpdate,
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_resources_write),
+):
+    proxy = await service.update_proxy(db, proxy_id, payload)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="代理不存在")
+    return schemas.CrawlerProxyResponse.model_validate(proxy)
 
 
 @router.patch(

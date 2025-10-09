@@ -3,7 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.resources import service as resource_service
 from src.resources.models import CrawlerAccount, CrawlerProxy
-from src.resources.schemas import CrawlerAccountCreate, CrawlerProxyCreate
+from src.resources.schemas import (
+    CrawlerAccountCreate,
+    CrawlerAccountUpdate,
+    CrawlerProxyCreate,
+    CrawlerProxyUpdate,
+)
 from src.tasks.models import CrawlerTask, PlatformType, CrawlerType, TaskStatus
 
 pytestmark = pytest.mark.asyncio
@@ -31,6 +36,15 @@ async def test_allocate_and_release_account(async_db_session: AsyncSession):
         ),
     )
 
+    updated = await resource_service.update_account(
+        async_db_session,
+        account.id,
+        CrawlerAccountUpdate(account_name="acc2", is_active=False),
+    )
+    assert updated is not None
+    assert updated.account_name == "acc2"
+    assert updated.is_active is False
+
     task = await _create_task(async_db_session)
 
     allocated = await resource_service.allocate_account(
@@ -53,6 +67,15 @@ async def test_allocate_proxy(async_db_session: AsyncSession):
         async_db_session,
         CrawlerProxyCreate(host="127.0.0.1", port=8080),
     )
+
+    updated = await resource_service.update_proxy(
+        async_db_session,
+        proxy.id,
+        CrawlerProxyUpdate(label="test-proxy", is_active=False),
+    )
+    assert updated is not None
+    assert updated.label == "test-proxy"
+    assert updated.is_active is False
 
     task = await _create_task(async_db_session)
 

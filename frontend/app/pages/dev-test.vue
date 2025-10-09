@@ -395,9 +395,9 @@
 </template>
 
 <script setup lang="ts">
-import { PERMISSIONS } from '../../config/permissions'
-import { isCorePermission } from '../composables/usePermissions'
-import { getRoleLabel } from '../../layers/users/utils/ui-helpers'
+import { PERMISSIONS } from '~/config/permissions'
+import { isCorePermission } from '~/app/composables/usePermissions'
+import { getRoleLabel } from '~/layers/users/utils/ui-helpers'
 
 // 开发环境检查 - 生产环境下重定向到首页
 if (process.env.NODE_ENV === 'production') {

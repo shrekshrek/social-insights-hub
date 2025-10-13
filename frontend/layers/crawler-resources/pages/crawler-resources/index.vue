@@ -19,7 +19,7 @@
     </div>
 
     <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      <section class="space-y-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <UCard>
         <div class="space-y-1">
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="text-xl font-semibold">账号资源</h2>
@@ -32,16 +32,20 @@
         <div class="flex flex-wrap items-center gap-2">
           <USelect
             v-model="accountFilters.platform"
-            :options="platformSelectOptions"
+            :items="platformSelectOptions"
+            placeholder="全部平台"
             value-attribute="value"
             label-attribute="label"
+            clearable
             class="w-36"
           />
           <USelect
             v-model="accountFilters.active"
-            :options="activeOptions"
+            :items="activeOptions"
+            placeholder="全部状态"
             value-attribute="value"
             label-attribute="label"
+            clearable
             class="w-32"
           />
           <UInput
@@ -59,9 +63,9 @@
           @edit="item => openAccountModal(item as AccountResource)"
           @toggle="item => toggleAccount(item as AccountResource)"
         />
-      </section>
+      </UCard>
 
-      <section class="space-y-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <UCard>
         <div class="space-y-1">
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="text-xl font-semibold">代理资源</h2>
@@ -74,9 +78,11 @@
         <div class="flex flex-wrap items-center gap-2">
           <USelect
             v-model="proxyFilters.active"
-            :options="activeOptions"
+            :items="activeOptions"
+            placeholder="全部状态"
             value-attribute="value"
             label-attribute="label"
+            clearable
             class="w-32"
           />
           <UInput
@@ -94,7 +100,7 @@
           @edit="item => openProxyModal(item as ProxyResource)"
           @toggle="item => toggleProxy(item as ProxyResource)"
         />
-      </section>
+      </UCard>
     </div>
 
     <AccountModal
@@ -115,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useCrawlerResourcesApi } from '../../composables/useCrawlerResourcesApi'
 import ResourceList from '../../components/ResourceList.vue'
 import AccountModal from '../../components/AccountModal.vue'
@@ -137,18 +143,45 @@ const accountSaving = ref(false)
 const proxySaving = ref(false)
 
 const accountFilters = reactive({
-  platform: '' as string | '',
-  active: '' as '' | 'active' | 'inactive',
+  platform: 'all' as 'all' | string,
+  active: 'all' as 'all' | 'active' | 'inactive',
   keyword: '',
 })
 
 const proxyFilters = reactive({
-  active: '' as '' | 'active' | 'inactive',
+  active: 'all' as 'all' | 'active' | 'inactive',
   keyword: '',
 })
 
-const platformSelectOptions = [
-  { label: '全部平台', value: '' },
+watch(
+  () => accountFilters.platform,
+  (value) => {
+    if (!value) {
+      accountFilters.platform = 'all'
+    }
+  }
+)
+
+watch(
+  () => accountFilters.active,
+  (value) => {
+    if (!value) {
+      accountFilters.active = 'all'
+    }
+  }
+)
+
+watch(
+  () => proxyFilters.active,
+  (value) => {
+    if (!value) {
+      proxyFilters.active = 'all'
+    }
+  }
+)
+
+const platformSelectOptions = computed(() => [
+  { label: '全部平台', value: 'all' },
   { label: '小红书', value: 'xhs' },
   { label: '微博', value: 'weibo' },
   { label: '抖音', value: 'douyin' },
@@ -156,13 +189,13 @@ const platformSelectOptions = [
   { label: '哔哩哔哩', value: 'bilibili' },
   { label: '贴吧', value: 'tieba' },
   { label: '知乎', value: 'zhihu' },
-]
+])
 
-const activeOptions = [
-  { label: '全部状态', value: '' },
+const activeOptions = computed(() => [
+  { label: '全部状态', value: 'all' },
   { label: '仅启用', value: 'active' },
   { label: '仅停用', value: 'inactive' },
-]
+])
 
 const resourcesApi = useCrawlerResourcesApi()
 
@@ -179,8 +212,8 @@ const proxiesActive = computed(() => proxies.value.filter((item) => item.is_acti
 
 const filteredAccounts = computed(() =>
   accounts.value.filter((item) => {
-    const matchesPlatform = accountFilters.platform ? item.platform === accountFilters.platform : true
-    const matchesStatus = accountFilters.active
+    const matchesPlatform = accountFilters.platform !== 'all' ? item.platform === accountFilters.platform : true
+    const matchesStatus = accountFilters.active !== 'all'
       ? accountFilters.active === 'active'
         ? item.is_active
         : !item.is_active
@@ -194,7 +227,7 @@ const filteredAccounts = computed(() =>
 
 const filteredProxies = computed(() =>
   proxies.value.filter((item) => {
-    const matchesStatus = proxyFilters.active
+    const matchesStatus = proxyFilters.active !== 'all'
       ? proxyFilters.active === 'active'
         ? item.is_active
         : !item.is_active

@@ -73,23 +73,33 @@ async def update_account(
 async def allocate_account(
     db: AsyncSession, platform: PlatformType, task_id: int
 ) -> Optional[models.CrawlerAccount]:
-    stmt = (
-        select(models.CrawlerAccount)
-        .where(
+    async def _select_account(active_only: bool) -> models.CrawlerAccount | None:
+        filters = [
             models.CrawlerAccount.platform == platform,
-            models.CrawlerAccount.is_active.is_(True),
             models.CrawlerAccount.locked_by_task_id.is_(None),
+        ]
+        if active_only:
+            filters.append(models.CrawlerAccount.is_active.is_(True))
+
+        stmt = (
+            select(models.CrawlerAccount)
+            .where(*filters)
+            .order_by(
+                models.CrawlerAccount.last_used_at.is_(None).desc(),
+                models.CrawlerAccount.last_used_at.asc(),
+            )
+            .with_for_update(skip_locked=True)
         )
-        .order_by(
-            models.CrawlerAccount.last_used_at.is_(None).desc(),
-            models.CrawlerAccount.last_used_at.asc(),
-        )
-        .with_for_update(skip_locked=True)
-    )
-    result = await db.execute(stmt)
-    account = result.scalars().first()
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
+    account = await _select_account(active_only=True)
     if not account:
-        return None
+        account = await _select_account(active_only=False)
+        if not account:
+            return None
+        if account.is_active is False:
+            account.is_active = True
 
     account.locked_by_task_id = task_id
     now = datetime.utcnow()
@@ -178,22 +188,30 @@ async def update_proxy(
 async def allocate_proxy(
     db: AsyncSession, task_id: int
 ) -> Optional[models.CrawlerProxy]:
-    stmt = (
-        select(models.CrawlerProxy)
-        .where(
-            models.CrawlerProxy.is_active.is_(True),
-            models.CrawlerProxy.locked_by_task_id.is_(None),
+    async def _select_proxy(active_only: bool) -> models.CrawlerProxy | None:
+        filters = [models.CrawlerProxy.locked_by_task_id.is_(None)]
+        if active_only:
+            filters.append(models.CrawlerProxy.is_active.is_(True))
+
+        stmt = (
+            select(models.CrawlerProxy)
+            .where(*filters)
+            .order_by(
+                models.CrawlerProxy.last_used_at.is_(None).desc(),
+                models.CrawlerProxy.last_used_at.asc(),
+            )
+            .with_for_update(skip_locked=True)
         )
-        .order_by(
-            models.CrawlerProxy.last_used_at.is_(None).desc(),
-            models.CrawlerProxy.last_used_at.asc(),
-        )
-        .with_for_update(skip_locked=True)
-    )
-    result = await db.execute(stmt)
-    proxy = result.scalars().first()
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
+    proxy = await _select_proxy(active_only=True)
     if not proxy:
-        return None
+        proxy = await _select_proxy(active_only=False)
+        if not proxy:
+            return None
+        if proxy.is_active is False:
+            proxy.is_active = True
 
     now = datetime.utcnow()
     proxy.locked_by_task_id = task_id

@@ -16,6 +16,8 @@ export const useApi = () => {
   const { session, fetch: fetchSession } = useUserSession()
 
   let sessionFetchPromise: Promise<void> | null = null
+  type SessionLoadState = 'unloaded' | 'loaded' | 'loaded-with-token'
+  let sessionState: SessionLoadState = 'unloaded'
 
   const normalizeHeaders = (input?: HeadersInit | Record<string, string>): Record<string, string> => {
     if (!input) {
@@ -39,7 +41,11 @@ export const useApi = () => {
 
   // 确保在首次请求前已经恢复会话，避免因 token 未加载造成 401 重试
   const ensureSessionLoaded = async () => {
-    if (typeof session.value !== 'undefined') {
+    const hasToken = Boolean(session.value?.accessToken)
+    if (
+      (sessionState === 'loaded-with-token' && hasToken) ||
+      (sessionState === 'loaded' && !hasToken)
+    ) {
       return
     }
 
@@ -50,6 +56,9 @@ export const useApi = () => {
         })
         .finally(() => {
           sessionFetchPromise = null
+          sessionState = session.value?.accessToken
+            ? 'loaded-with-token'
+            : 'loaded'
         })
     }
 
@@ -111,6 +120,7 @@ export const useApi = () => {
         // 处理token过期，自动登出
         if (import.meta.client) {
           const { clear } = useUserSession()
+          sessionState = 'unloaded'
           session.value = null
           clear()
             .catch((error: unknown) => {

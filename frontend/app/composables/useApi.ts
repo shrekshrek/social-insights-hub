@@ -9,10 +9,52 @@
  * - 后端采用 FastAPI 原生响应格式，直接返回业务数据
  * - 成功响应：直接返回数据对象（如 UserResponse）
  * - 错误响应：通过 HTTP 状态码和标准错误格式处理
- */
+*/
 export const useApi = () => {
   const toast = useToast()
   const config = useRuntimeConfig()
+  const { session, fetch: fetchSession } = useUserSession()
+
+  let sessionFetchPromise: Promise<void> | null = null
+
+  const normalizeHeaders = (input?: HeadersInit | Record<string, string>): Record<string, string> => {
+    if (!input) {
+      return {}
+    }
+
+    if (input instanceof Headers) {
+      const result: Record<string, string> = {}
+      input.forEach((value, key) => {
+        result[key] = value
+      })
+      return result
+    }
+
+    if (Array.isArray(input)) {
+      return Object.fromEntries(input)
+    }
+
+    return { ...input }
+  }
+
+  // 确保在首次请求前已经恢复会话，避免因 token 未加载造成 401 重试
+  const ensureSessionLoaded = async () => {
+    if (typeof session.value !== 'undefined') {
+      return
+    }
+
+    if (!sessionFetchPromise) {
+      sessionFetchPromise = fetchSession()
+        .catch((error: unknown) => {
+          console.warn('Failed to fetch user session before API request', error)
+        })
+        .finally(() => {
+          sessionFetchPromise = null
+        })
+    }
+
+    await sessionFetchPromise
+  }
 
   /**
    * 构建完整的API路径
@@ -68,7 +110,7 @@ export const useApi = () => {
         message = '登录已过期，请重新登录'
         // 处理token过期，自动登出
         if (import.meta.client) {
-          const { clear, session } = useUserSession()
+          const { clear } = useUserSession()
           session.value = null
           clear()
             .catch((error: unknown) => {
@@ -138,16 +180,14 @@ export const useApi = () => {
    */
   const apiRequest = async <T = unknown>(path: string, options: Record<string, unknown> = {}): Promise<T> => {
     const fullPath = buildApiPath(path)
-    
-    // 获取认证 token
-    const { session } = useUserSession()
-    const headers = { ...((options.headers as Record<string, string>) || {}) }
-    
-    // 如果有认证 token，添加到请求头
+    await ensureSessionLoaded()
+
+    const headers = normalizeHeaders(options.headers as HeadersInit | Record<string, string> | undefined)
+
     if (session.value?.accessToken) {
       headers.Authorization = `Bearer ${session.value.accessToken}`
     }
-    
+
     const response = await $fetch<T>(fullPath, {
       ...options,
       headers,
@@ -166,24 +206,43 @@ export const useApi = () => {
    */
   const useApiData = <T = unknown>(path: string, options: Record<string, unknown> = {}) => {
     const fullPath = buildApiPath(path)
-    
-    // 获取认证 token
-    const { session } = useUserSession()
-    const headers = { ...((options.headers as Record<string, string>) || {}) }
-    
-    // 如果有认证 token，添加到请求头
-    if (session.value?.accessToken) {
-      headers.Authorization = `Bearer ${session.value.accessToken}`
-    }
-    
+    const userOnRequest = options.onRequest as ((ctx: unknown) => unknown | Promise<unknown>) | undefined
+    const userOnResponseError = options.onResponseError as
+      ((ctx: unknown) => unknown | Promise<unknown>) | undefined
+    const baseHeaders = normalizeHeaders(options.headers as HeadersInit | Record<string, string> | undefined)
+
     return useFetch<T>(fullPath, {
       ...options,
-      headers,
       baseURL: '', // 使用空字符串确保相对路径，避免CORS问题
-      onResponseError({ response }) {
-        const { message } = handleApiError(response)
+      async onRequest(context) {
+        await ensureSessionLoaded()
+
+        const mergedHeaders = {
+          ...baseHeaders,
+          ...normalizeHeaders(context.options.headers as HeadersInit | Record<string, string> | undefined),
+        }
+
+        if (session.value?.accessToken) {
+          mergedHeaders.Authorization = `Bearer ${session.value.accessToken}`
+        }
+
+        const headersInstance = new Headers()
+        Object.entries(mergedHeaders).forEach(([key, value]) => {
+          headersInstance.set(key, value)
+        })
+        context.options.headers = headersInstance
+
+        if (userOnRequest) {
+          await userOnRequest(context)
+        }
+      },
+      async onResponseError(context) {
+        if (userOnResponseError) {
+          await userOnResponseError(context)
+        }
+        const { message } = handleApiError(context.response)
         showError(message)
-      }
+      },
     })
   }
 

@@ -37,9 +37,9 @@
     "be:worker": "docker-compose exec backend uv run celery -A src.celery_app.celery_app worker --loglevel=info",
     "be:worker:local": "./scripts/start-celery-worker.sh",
     "be:test:setup": "cd backend && uv run python tests/setup_test_db.py",
-    "be:test": "docker-compose up -d postgres_db redis && sleep 2 && pnpm be:test:setup && cd backend && uv run pytest",
+    "be:test": "docker-compose up -d postgres_db redis && sleep 2 && pnpm be:test:setup && cd backend && uv run python -m pytest",
     "be:test:watch": "docker-compose up -d postgres_db redis && cd backend && uv run pytest-watch",
-    "be:test:cov": "docker-compose up -d postgres_db redis && sleep 2 && pnpm be:test:setup && cd backend && uv run pytest --cov=src --cov-report=term-missing"
+    "be:test:cov": "docker-compose up -d postgres_db redis && sleep 2 && pnpm be:test:setup && cd backend && uv run python -m pytest --cov=src --cov-report=term-missing"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

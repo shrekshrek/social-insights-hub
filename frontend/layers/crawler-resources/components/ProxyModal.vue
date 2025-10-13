@@ -2,41 +2,48 @@
   <UModal
     :open="open"
     :title="isEdit ? '编辑代理' : '新增代理'"
+    description="填写代理节点信息"
     :close="{ onClick: () => emit('update:open', false) }"
     :ui="{ footer: 'justify-end gap-3' }"
   >
     <template #body>
-      <div class="space-y-4">
-        <UForm :state="form" class="space-y-4">
-          <UFormGroup label="标签">
-            <UInput v-model="form.label" placeholder="例如：默认代理池" />
-          </UFormGroup>
+      <div class="space-y-5">
+        <UForm :state="form" class="space-y-5">
+          <UFormField label="标签" name="label">
+            <UInput v-model="form.label" placeholder="例如：默认代理池" class="w-full" />
+          </UFormField>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <UFormGroup label="协议" required>
-              <USelect v-model="form.protocol" :options="protocolOptions" />
-            </UFormGroup>
-            <UFormGroup label="端口" required>
-              <UInput v-model.number="form.port" type="number" min="1" max="65535" />
-            </UFormGroup>
+            <UFormField label="协议" name="protocol" required>
+              <USelect
+                v-model="form.protocol"
+                :items="protocolOptions"
+                value-attribute="value"
+                label-attribute="label"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="端口" name="port" required>
+              <UInput v-model.number="form.port" type="number" min="1" max="65535" class="w-full" />
+            </UFormField>
           </div>
 
-          <UFormGroup label="主机地址" required>
-            <UInput v-model="form.host" placeholder="例如：127.0.0.1" />
-          </UFormGroup>
+          <UFormField label="主机地址" name="host" required>
+            <UInput v-model="form.host" placeholder="例如：127.0.0.1" class="w-full" />
+          </UFormField>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <UFormGroup label="用户名">
-              <UInput v-model="form.username" />
-            </UFormGroup>
-            <UFormGroup label="密码">
-              <UInput v-model="form.password" type="password" />
-            </UFormGroup>
+            <UFormField label="用户名" name="username">
+              <UInput v-model="form.username" class="w-full" />
+            </UFormField>
+            <UFormField label="密码" name="password">
+              <UInput v-model="form.password" type="password" class="w-full" />
+            </UFormField>
           </div>
 
-          <UFormGroup v-if="isEdit" label="启用状态">
+          <UFormField v-if="isEdit" label="启用状态" name="is_active">
             <USwitch v-model="form.is_active" />
-          </UFormGroup>
+          </UFormField>
         </UForm>
       </div>
     </template>

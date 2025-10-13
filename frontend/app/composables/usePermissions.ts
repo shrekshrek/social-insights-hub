@@ -75,6 +75,12 @@ export const usePermissions = () => {
    * 加载用户权限（缓存优化）
    */
   const loadUserPermissions = async (): Promise<PermissionWithMeta[]> => {
+    if (!session.value?.accessToken) {
+      globalUserPermissions.value = []
+      permissionsLoaded.value = false
+      return []
+    }
+
     // 避免重复加载
     if (permissionsLoading.value) return globalUserPermissions.value
     if (permissionsLoaded.value) return globalUserPermissions.value

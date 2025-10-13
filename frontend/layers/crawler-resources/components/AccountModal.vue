@@ -2,33 +2,41 @@
   <UModal
     :open="open"
     :title="isEdit ? '编辑账号' : '新增账号'"
+    description="填写账号基础信息"
     :close="{ onClick: () => emit('update:open', false) }"
     :ui="{ footer: 'justify-end gap-3' }"
   >
     <template #body>
-      <div class="space-y-4">
-        <UForm :state="form" class="space-y-4">
-          <UFormGroup label="平台" required>
+      <div class="space-y-5">
+        <UForm :state="form" class="space-y-5">
+          <UFormField label="平台" name="platform" required>
             <USelect
               v-model="form.platform"
-              :options="platformOptions"
+              :items="platformOptions"
               value-attribute="value"
               label-attribute="label"
               :disabled="isEdit"
+              placeholder="请选择平台"
+              class="w-full"
             />
-          </UFormGroup>
+          </UFormField>
 
-          <UFormGroup label="账号标识" required>
-            <UInput v-model="form.account_name" placeholder="例如：xhs_account_01" />
-          </UFormGroup>
+          <UFormField label="账号标识" name="account_name" required>
+            <UInput v-model="form.account_name" placeholder="例如：xhs_account_01" class="w-full" />
+          </UFormField>
 
-          <UFormGroup label="Cookies" required>
-            <UTextarea v-model="form.cookies" :rows="4" placeholder="粘贴账号登录 cookies" />
-          </UFormGroup>
+          <UFormField label="Cookies" name="cookies" required>
+            <UTextarea
+              v-model="form.cookies"
+              :rows="4"
+              placeholder="粘贴账号登录 cookies"
+              class="w-full"
+            />
+          </UFormField>
 
-          <UFormGroup v-if="isEdit" label="启用状态">
+          <UFormField v-if="isEdit" label="启用状态" name="is_active">
             <USwitch v-model="form.is_active" />
-          </UFormGroup>
+          </UFormField>
         </UForm>
       </div>
     </template>
@@ -63,13 +71,6 @@ const emit = defineEmits<{
   submit: [payload: AccountCreatePayload | AccountUpdatePayload, id?: number]
 }>()
 
-const form = reactive({
-  platform: '',
-  account_name: '',
-  cookies: '',
-  is_active: true,
-})
-
 const platformOptions = [
   { label: '小红书', value: 'xhs' },
   { label: '微博', value: 'weibo' },
@@ -80,10 +81,17 @@ const platformOptions = [
   { label: '知乎', value: 'zhihu' },
 ]
 
+const form = reactive({
+  platform: platformOptions[0]?.value ?? '',
+  account_name: '',
+  cookies: '',
+  is_active: true,
+})
+
 const isEdit = computed(() => !!props.editing)
 
 const resetForm = () => {
-  form.platform = ''
+  form.platform = platformOptions[0]?.value ?? ''
   form.account_name = ''
   form.cookies = ''
   form.is_active = true

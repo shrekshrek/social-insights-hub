@@ -1,20 +1,6 @@
 <template>
-  <UCard>
-    <template #header>
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold">
-          {{ type === 'account' ? '账号列表' : '代理列表' }} ({{ items.length }})
-        </h2>
-        <UButton
-          icon="i-heroicons-arrow-path"
-          variant="ghost"
-          :loading="loading"
-          @click="emit('refresh')"
-        >刷新</UButton>
-      </div>
-    </template>
-
-    <UTable :rows="items" :columns="columns" :loading="loading">
+  <div class="space-y-4">
+    <UTable :rows="paginatedItems" :columns="columns" :loading="loading">
       <template #status-data="{ row }">
         <UBadge :color="row.is_active ? 'green' : 'gray'">
           {{ row.is_active ? '启用' : '停用' }}
@@ -46,11 +32,32 @@
         </div>
       </template>
     </UTable>
-  </UCard>
+
+    <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-500">
+      <span>
+        <template v-if="total > 0">
+          显示 {{ rangeStart }}-{{ rangeEnd }} 共 {{ total }} 条记录
+        </template>
+        <template v-else>
+          暂无数据
+        </template>
+      </span>
+      <UPagination
+        v-model:page="page"
+        :total="total"
+        :items-per-page="pageSize"
+        :disabled="total === 0"
+        :sibling-count="1"
+        show-first
+        show-last
+        show-edges
+      />
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { PropType } from 'vue'
 import type { AccountResource, ProxyResource } from '../types'
 
@@ -67,13 +74,40 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  pageSize: {
+    type: Number,
+    default: 10,
+  },
 })
 
 const emit = defineEmits<{
-  refresh: []
   edit: [item: AccountResource | ProxyResource]
   toggle: [item: AccountResource | ProxyResource]
 }>()
+
+const page = ref(1)
+
+watch(
+  () => props.items,
+  () => {
+    page.value = 1
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.items.length,
+  (length) => {
+    if (length === 0) {
+      page.value = 1
+      return
+    }
+    const maxPage = Math.max(1, Math.ceil(length / props.pageSize))
+    if (page.value > maxPage) {
+      page.value = maxPage
+    }
+  },
+)
 
 const columns = computed(() => {
   if (props.type === 'account') {
@@ -95,6 +129,27 @@ const columns = computed(() => {
     { key: 'last_used_at', id: 'last_used_at', label: '最近使用' },
     { key: 'actions', id: 'actions', label: '操作' },
   ]
+})
+
+const total = computed(() => props.items.length)
+
+const paginatedItems = computed(() => {
+  const start = (page.value - 1) * props.pageSize
+  return props.items.slice(start, start + props.pageSize)
+})
+
+const rangeStart = computed(() => {
+  if (total.value === 0) {
+    return 0
+  }
+  return (page.value - 1) * props.pageSize + 1
+})
+
+const rangeEnd = computed(() => {
+  if (total.value === 0) {
+    return 0
+  }
+  return Math.min(page.value * props.pageSize, total.value)
 })
 
 const formatDate = (value?: string | null) => {

@@ -10,10 +10,12 @@
  * - 成功响应：直接返回数据对象（如 UserResponse）
  * - 错误响应：通过 HTTP 状态码和标准错误格式处理
 */
+import { isJwtExpiring } from '~/app/utils/token'
+
 export const useApi = () => {
   const toast = useToast()
   const config = useRuntimeConfig()
-  const { session, fetch: fetchSession } = useUserSession()
+  const { session, fetch: fetchSession, clear: clearSession } = useUserSession()
 
   let sessionFetchPromise: Promise<void> | null = null
   type SessionLoadState = 'unloaded' | 'loaded' | 'loaded-with-token'
@@ -41,10 +43,17 @@ export const useApi = () => {
 
   // 确保在首次请求前已经恢复会话，避免因 token 未加载造成 401 重试
   const ensureSessionLoaded = async () => {
-    const hasToken = Boolean(session.value?.accessToken)
+    const token = session.value?.accessToken
+    const hasToken = Boolean(token)
+    const tokenExpired = isJwtExpiring(token)
     if (
-      (sessionState === 'loaded-with-token' && hasToken) ||
-      (sessionState === 'loaded' && !hasToken)
+      sessionState === 'loaded-with-token' && hasToken && !tokenExpired
+    ) {
+      return
+    }
+
+    if (
+      sessionState === 'loaded' && !hasToken
     ) {
       return
     }
@@ -63,6 +72,34 @@ export const useApi = () => {
     }
 
     await sessionFetchPromise
+
+    const refreshedToken = session.value?.accessToken
+    if (!refreshedToken || isJwtExpiring(refreshedToken)) {
+      sessionState = 'unloaded'
+      if (import.meta.client) {
+        await clearSession().catch((error: unknown) => {
+          console.warn('Failed to clear session when unauthenticated', error)
+        })
+        window.location.href = '/login'
+      }
+      throw new Error('Unauthorized')
+    }
+  }
+
+  const ensureAuthenticated = async (): Promise<string> => {
+    await ensureSessionLoaded()
+    const token = session.value?.accessToken
+    if (!token) {
+      sessionState = 'unloaded'
+      if (import.meta.client) {
+        await clearSession().catch((error: unknown) => {
+          console.warn('Failed to clear session when unauthenticated', error)
+        })
+        window.location.href = '/login'
+      }
+      throw new Error('Unauthorized')
+    }
+    return token as string
   }
 
   /**
@@ -190,13 +227,11 @@ export const useApi = () => {
    */
   const apiRequest = async <T = unknown>(path: string, options: Record<string, unknown> = {}): Promise<T> => {
     const fullPath = buildApiPath(path)
-    await ensureSessionLoaded()
+    const token = await ensureAuthenticated()
 
     const headers = normalizeHeaders(options.headers as HeadersInit | Record<string, string> | undefined)
 
-    if (session.value?.accessToken) {
-      headers.Authorization = `Bearer ${session.value.accessToken}`
-    }
+    headers.Authorization = `Bearer ${token}`
 
     const response = await $fetch<T>(fullPath, {
       ...options,
@@ -225,16 +260,14 @@ export const useApi = () => {
       ...options,
       baseURL: '', // 使用空字符串确保相对路径，避免CORS问题
       async onRequest(context) {
-        await ensureSessionLoaded()
+        const token = await ensureAuthenticated()
 
         const mergedHeaders = {
           ...baseHeaders,
           ...normalizeHeaders(context.options.headers as HeadersInit | Record<string, string> | undefined),
         }
 
-        if (session.value?.accessToken) {
-          mergedHeaders.Authorization = `Bearer ${session.value.accessToken}`
-        }
+        mergedHeaders.Authorization = `Bearer ${token}`
 
         const headersInstance = new Headers()
         Object.entries(mergedHeaders).forEach(([key, value]) => {

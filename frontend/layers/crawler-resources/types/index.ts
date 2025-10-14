@@ -14,15 +14,6 @@ export interface AccountResource extends BaseResource {
   cookies?: string
 }
 
-export interface ProxyResource extends BaseResource {
-  label?: string | null
-  protocol: string
-  host: string
-  port: number
-  username?: string | null
-  password?: string | null
-}
-
 export interface AccountCreatePayload {
   platform: string
   account_name: string
@@ -35,24 +26,53 @@ export interface AccountUpdatePayload {
   is_active?: boolean
 }
 
-export interface ProxyCreatePayload {
-  label?: string | null
-  protocol?: string
-  host: string
-  port: number
-  username?: string | null
-  password?: string | null
+export interface ProxyProvider {
+  id: number
+  name: string
+  provider_type: string
+  secret_id: string
+  signature: string
+  username: string
+  password: string
+  pool_size: number
+  validate_enabled: boolean
+  sync_interval_minutes: number
+  is_active: boolean
+  last_synced_at?: string | null
+  created_at: string
+  updated_at: string
 }
 
-export interface ProxyUpdatePayload {
-  label?: string | null
-  protocol?: string | null
-  host?: string | null
-  port?: number | null
-  username?: string | null
-  password?: string | null
+export interface ProxyProviderCreatePayload {
+  name: string
+  secret_id: string
+  signature: string
+  username: string
+  password: string
+  pool_size?: number
+  validate_enabled?: boolean
+  sync_interval_minutes?: number
+  is_active?: boolean
+}
+
+export interface ProxyProviderUpdatePayload {
+  name?: string
+  secret_id?: string
+  signature?: string
+  username?: string
+  password?: string
+  pool_size?: number
+  validate_enabled?: boolean
+  sync_interval_minutes?: number
   is_active?: boolean
 }
 
 export type AccountListResponse = AccountResource[]
-export type ProxyListResponse = ProxyResource[]
+export type ProxyProviderListResponse = ProxyProvider[]
+
+export interface ProxyPoolStatus {
+  provider_id: number
+  available: number
+  last_synced_at?: string | null
+  checked_at: string
+}

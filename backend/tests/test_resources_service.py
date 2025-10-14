@@ -2,12 +2,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.resources import service as resource_service
-from src.resources.models import CrawlerAccount, CrawlerProxy
+from src.resources.models import CrawlerAccount
 from src.resources.schemas import (
     CrawlerAccountCreate,
     CrawlerAccountUpdate,
-    CrawlerProxyCreate,
-    CrawlerProxyUpdate,
+    ProxyProviderCreate,
+    ProxyProviderUpdate,
 )
 from src.tasks.models import CrawlerTask, PlatformType, CrawlerType, TaskStatus
 
@@ -62,28 +62,52 @@ async def test_allocate_and_release_account(async_db_session: AsyncSession):
     assert refreshed.failure_count == 1
 
 
-async def test_allocate_proxy(async_db_session: AsyncSession):
-    proxy = await resource_service.create_proxy(
+async def test_proxy_provider_flow(async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
+    provider = await resource_service.create_proxy_provider(
         async_db_session,
-        CrawlerProxyCreate(host="127.0.0.1", port=8080),
+        ProxyProviderCreate(
+            name="默认快代理",
+            secret_id="sid",
+            signature="sig",
+            username="user",
+            password="pwd",
+            pool_size=5,
+        ),
     )
 
-    updated = await resource_service.update_proxy(
-        async_db_session,
-        proxy.id,
-        CrawlerProxyUpdate(label="test-proxy", is_active=False),
+    updated = await resource_service.update_proxy_provider(
+        async_db_session, provider.id, ProxyProviderUpdate(is_active=True, pool_size=3)
     )
     assert updated is not None
-    assert updated.label == "test-proxy"
-    assert updated.is_active is False
+    assert updated.pool_size == 3
 
-    task = await _create_task(async_db_session)
+    async def fake_fetch(_provider, count):
+        return [
+            resource_service.ProxyEndpoint(
+                host="127.0.0.1",
+                port=8000 + index,
+                protocol="http",
+                username="user",
+                password="pwd",
+                expires_in=60,
+            )
+            for index in range(count)
+        ]
 
-    allocated = await resource_service.allocate_proxy(async_db_session, task.id)
-    assert allocated is not None
-    assert allocated.id == proxy.id
+    async def fake_acquire():
+        return None
 
-    await resource_service.release_proxy(async_db_session, allocated.id, success=True)
-    refreshed = await async_db_session.get(CrawlerProxy, allocated.id)
-    assert refreshed.locked_by_task_id is None
-    assert refreshed.failure_count == 0
+    monkeypatch.setattr(resource_service, "_fetch_proxies_from_kdl", fake_fetch)
+    monkeypatch.setattr(resource_service, "_acquire_redis_client", fake_acquire)
+
+    status = await resource_service.refresh_proxy_pool(async_db_session, provider.id)
+    assert status.provider_id == provider.id
+    assert status.available == 3
+
+    allocation = await resource_service.allocate_proxy_endpoint(async_db_session, provider.id)
+    assert allocation is not None
+    assert allocation.host == "127.0.0.1"
+
+    pool_status = await resource_service.get_proxy_pool_status(async_db_session, provider.id)
+    assert pool_status is not None
+    assert pool_status.provider_id == provider.id

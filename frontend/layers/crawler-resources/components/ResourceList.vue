@@ -14,6 +14,9 @@
       <template #last_used_at-data="{ row }">
         <span>{{ formatDate(row.last_used_at) }}</span>
       </template>
+      <template #last_synced_at-data="{ row }">
+        <span>{{ formatDate(row.last_synced_at) }}</span>
+      </template>
       <template #actions-data="{ row }">
         <div class="flex items-center gap-2">
           <UButton
@@ -23,12 +26,28 @@
             @click="emit('edit', row)"
           />
           <UButton
+            v-if="props.type === 'account'"
             :icon="row.is_active ? 'i-heroicons-pause' : 'i-heroicons-play'"
             size="xs"
             variant="ghost"
             color="warning"
             @click="emit('toggle', row)"
           />
+          <template v-else>
+            <UButton
+              :icon="row.is_active ? 'i-heroicons-pause' : 'i-heroicons-play'"
+              size="xs"
+              variant="ghost"
+              color="warning"
+              @click="emit('toggle', row)"
+            />
+            <UButton
+              icon="i-heroicons-arrow-path"
+              size="xs"
+              variant="ghost"
+              @click="emit('refresh', row)"
+            />
+          </template>
         </div>
       </template>
     </UTable>
@@ -59,15 +78,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { PropType } from 'vue'
-import type { AccountResource, ProxyResource } from '../types'
+import type { AccountResource, ProxyProvider } from '../types'
 
 const props = defineProps({
   type: {
-    type: String as PropType<'account' | 'proxy'>,
+    type: String as PropType<'account' | 'provider'>,
     required: true,
   },
   items: {
-    type: Array as PropType<(AccountResource | ProxyResource)[]>,
+    type: Array as PropType<(AccountResource | ProxyProvider)[]>,
     default: () => [],
   },
   loading: {
@@ -81,8 +100,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits<{
-  edit: [item: AccountResource | ProxyResource]
-  toggle: [item: AccountResource | ProxyResource]
+  edit: [item: AccountResource | ProxyProvider]
+  toggle: [item: AccountResource | ProxyProvider]
+  refresh: [item: ProxyProvider]
 }>()
 
 const page = ref(1)
@@ -121,12 +141,11 @@ const columns = computed(() => {
     ]
   }
   return [
-    { key: 'label', id: 'label', label: '标识' },
-    { key: 'host', id: 'host', label: '地址', sortable: false },
-    { key: 'protocol', id: 'protocol', label: '协议' },
+    { key: 'name', id: 'name', label: '名称' },
+    { key: 'provider_type', id: 'provider_type', label: '类型' },
+    { key: 'pool_size', id: 'pool_size', label: '池容量' },
     { key: 'status', id: 'status', label: '状态' },
-    { key: 'failure_count', id: 'failure_count', label: '失败次数' },
-    { key: 'last_used_at', id: 'last_used_at', label: '最近使用' },
+    { key: 'last_synced_at', id: 'last_synced_at', label: '最近同步' },
     { key: 'actions', id: 'actions', label: '操作' },
   ]
 })

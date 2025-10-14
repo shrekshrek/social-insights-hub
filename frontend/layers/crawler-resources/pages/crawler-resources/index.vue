@@ -9,8 +9,8 @@
         <UButton icon="i-heroicons-plus" color="primary" @click="openAccountModal()">
           新增账号
         </UButton>
-        <UButton icon="i-heroicons-plus" variant="outline" @click="openProxyModal()">
-          新增代理
+        <UButton icon="i-heroicons-plus" variant="outline" @click="openProviderModal()">
+          新增代理服务商
         </UButton>
         <UButton icon="i-heroicons-arrow-path" variant="ghost" @click="handleRefreshAll">
           刷新
@@ -68,16 +68,16 @@
       <UCard>
         <div class="space-y-1">
           <div class="flex flex-wrap items-center gap-2">
-            <h2 class="text-xl font-semibold">代理资源</h2>
-            <UBadge color="primary" variant="soft">{{ proxiesTotal }}</UBadge>
-            <UBadge color="success" variant="soft">启用 {{ proxiesActive }}/{{ proxiesTotal }}</UBadge>
+            <h2 class="text-xl font-semibold">代理服务商</h2>
+            <UBadge color="primary" variant="soft">{{ providersTotal }}</UBadge>
+            <UBadge color="success" variant="soft">启用 {{ providersActive }}/{{ providersTotal }}</UBadge>
           </div>
-          <p class="text-sm text-gray-500">维护代理节点配置，掌握可用率与健康度。</p>
+          <p class="text-sm text-gray-500">管理快代理配置，自动同步代理池信息。</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
           <USelect
-            v-model="proxyFilters.active"
+            v-model="providerFilters.active"
             :items="activeOptions"
             placeholder="全部状态"
             value-attribute="value"
@@ -86,19 +86,20 @@
             class="w-32"
           />
           <UInput
-            v-model="proxyFilters.keyword"
-            placeholder="搜索代理地址..."
+            v-model="providerFilters.keyword"
+            placeholder="搜索配置名称..."
             icon="i-heroicons-magnifying-glass"
             class="w-48"
           />
         </div>
 
         <ResourceList
-          type="proxy"
-          :loading="proxiesPending"
-          :items="filteredProxies"
-          @edit="item => openProxyModal(item as ProxyResource)"
-          @toggle="item => toggleProxy(item as ProxyResource)"
+          type="provider"
+          :loading="providersPending"
+          :items="filteredProviders"
+          @edit="item => openProviderModal(item as ProxyProvider)"
+          @toggle="item => toggleProvider(item as ProxyProvider)"
+          @refresh="item => refreshProviderPool(item as ProxyProvider)"
         />
       </UCard>
     </div>
@@ -110,12 +111,12 @@
       :loading="accountSaving"
       @submit="(payload, id) => handleAccountSubmit(payload as AccountCreatePayload | AccountUpdatePayload, id)"
     />
-    <ProxyModal
-      v-if="showProxyModal"
-      v-model:open="showProxyModal"
-      :editing="editingProxy"
-      :loading="proxySaving"
-      @submit="(payload, id) => handleProxySubmit(payload as ProxyCreatePayload | ProxyUpdatePayload, id)"
+    <ProxyProviderModal
+      v-if="showProviderModal"
+      v-model:open="showProviderModal"
+      :editing="editingProvider"
+      :loading="providerSaving"
+      @submit="(payload, id) => handleProviderSubmit(payload as ProxyProviderCreatePayload | ProxyProviderUpdatePayload, id)"
     />
   </div>
 </template>
@@ -125,22 +126,22 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useCrawlerResourcesApi } from '../../composables/useCrawlerResourcesApi'
 import ResourceList from '../../components/ResourceList.vue'
 import AccountModal from '../../components/AccountModal.vue'
-import ProxyModal from '../../components/ProxyModal.vue'
+import ProxyProviderModal from '../../components/ProxyProviderModal.vue'
 import type {
   AccountResource,
-  ProxyResource,
+  ProxyProvider,
   AccountCreatePayload,
   AccountUpdatePayload,
-  ProxyCreatePayload,
-  ProxyUpdatePayload,
+  ProxyProviderCreatePayload,
+  ProxyProviderUpdatePayload,
 } from '../../types'
 
 const showAccountModal = ref(false)
-const showProxyModal = ref(false)
+const showProviderModal = ref(false)
 const editingAccount = ref<AccountResource | null>(null)
-const editingProxy = ref<ProxyResource | null>(null)
+const editingProvider = ref<ProxyProvider | null>(null)
 const accountSaving = ref(false)
-const proxySaving = ref(false)
+const providerSaving = ref(false)
 
 const accountFilters = reactive({
   platform: 'all' as 'all' | string,
@@ -148,7 +149,7 @@ const accountFilters = reactive({
   keyword: '',
 })
 
-const proxyFilters = reactive({
+const providerFilters = reactive({
   active: 'all' as 'all' | 'active' | 'inactive',
   keyword: '',
 })
@@ -159,7 +160,7 @@ watch(
     if (!value) {
       accountFilters.platform = 'all'
     }
-  }
+  },
 )
 
 watch(
@@ -168,16 +169,16 @@ watch(
     if (!value) {
       accountFilters.active = 'all'
     }
-  }
+  },
 )
 
 watch(
-  () => proxyFilters.active,
+  () => providerFilters.active,
   (value) => {
     if (!value) {
-      proxyFilters.active = 'all'
+      providerFilters.active = 'all'
     }
-  }
+  },
 )
 
 const platformSelectOptions = computed(() => [
@@ -200,15 +201,19 @@ const activeOptions = computed(() => [
 const resourcesApi = useCrawlerResourcesApi()
 
 const { data: accountData, pending: accountsPending, refresh: refreshAccounts } = await resourcesApi.getAccounts()
-const { data: proxyData, pending: proxiesPending, refresh: refreshProxies } = await resourcesApi.getProxies()
+const {
+  data: providerData,
+  pending: providersPending,
+  refresh: refreshProviders,
+} = await resourcesApi.getProxyProviders()
 
 const accounts = computed(() => accountData.value ?? [])
-const proxies = computed(() => proxyData.value ?? [])
+const providers = computed(() => providerData.value ?? [])
 
 const accountsTotal = computed(() => accounts.value.length)
-const proxiesTotal = computed(() => proxies.value.length)
+const providersTotal = computed(() => providers.value.length)
 const accountsActive = computed(() => accounts.value.filter((item) => item.is_active).length)
-const proxiesActive = computed(() => proxies.value.filter((item) => item.is_active).length)
+const providersActive = computed(() => providers.value.filter((item) => item.is_active).length)
 
 const filteredAccounts = computed(() =>
   accounts.value.filter((item) => {
@@ -225,15 +230,15 @@ const filteredAccounts = computed(() =>
   }),
 )
 
-const filteredProxies = computed(() =>
-  proxies.value.filter((item) => {
-    const matchesStatus = proxyFilters.active !== 'all'
-      ? proxyFilters.active === 'active'
+const filteredProviders = computed(() =>
+  providers.value.filter((item) => {
+    const matchesStatus = providerFilters.active !== 'all'
+      ? providerFilters.active === 'active'
         ? item.is_active
         : !item.is_active
       : true
-    const matchesKeyword = proxyFilters.keyword
-      ? `${item.host}:${item.port}`.toLowerCase().includes(proxyFilters.keyword.toLowerCase())
+    const matchesKeyword = providerFilters.keyword
+      ? item.name.toLowerCase().includes(providerFilters.keyword.toLowerCase())
       : true
     return matchesStatus && matchesKeyword
   }),
@@ -244,9 +249,9 @@ function openAccountModal(account?: AccountResource) {
   showAccountModal.value = true
 }
 
-function openProxyModal(proxy?: ProxyResource) {
-  editingProxy.value = proxy ?? null
-  showProxyModal.value = true
+function openProviderModal(provider?: ProxyProvider) {
+  editingProvider.value = provider ?? null
+  showProviderModal.value = true
 }
 
 async function handleAccountSubmit(payload: AccountCreatePayload | AccountUpdatePayload, accountId?: number) {
@@ -265,19 +270,22 @@ async function handleAccountSubmit(payload: AccountCreatePayload | AccountUpdate
   }
 }
 
-async function handleProxySubmit(payload: ProxyCreatePayload | ProxyUpdatePayload, proxyId?: number) {
-  proxySaving.value = true
+async function handleProviderSubmit(
+  payload: ProxyProviderCreatePayload | ProxyProviderUpdatePayload,
+  providerId?: number,
+) {
+  providerSaving.value = true
   try {
-    if (proxyId) {
-      await resourcesApi.updateProxy(proxyId, payload)
+    if (providerId) {
+      await resourcesApi.updateProxyProvider(providerId, payload)
     } else {
-      await resourcesApi.createProxy(payload as ProxyCreatePayload)
+      await resourcesApi.createProxyProvider(payload as ProxyProviderCreatePayload)
     }
-    await refreshProxies()
-    showProxyModal.value = false
-    editingProxy.value = null
+    await refreshProviders()
+    showProviderModal.value = false
+    editingProvider.value = null
   } finally {
-    proxySaving.value = false
+    providerSaving.value = false
   }
 }
 
@@ -286,12 +294,17 @@ async function toggleAccount(account: AccountResource) {
   await refreshAccounts()
 }
 
-async function toggleProxy(proxy: ProxyResource) {
-  await resourcesApi.updateProxyStatus(proxy.id, !proxy.is_active)
-  await refreshProxies()
+async function toggleProvider(provider: ProxyProvider) {
+  await resourcesApi.updateProxyProvider(provider.id, { is_active: !provider.is_active })
+  await refreshProviders()
+}
+
+async function refreshProviderPool(provider: ProxyProvider) {
+  await resourcesApi.refreshProxyProvider(provider.id)
+  await refreshProviders()
 }
 
 async function handleRefreshAll() {
-  await Promise.all([refreshAccounts(), refreshProxies()])
+  await Promise.all([refreshAccounts(), refreshProviders()])
 }
 </script>

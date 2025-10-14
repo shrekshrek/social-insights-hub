@@ -1,4 +1,4 @@
-"""Resource models for crawler accounts and proxies."""
+"""Resource models for crawler accounts and proxy providers."""
 
 from __future__ import annotations
 
@@ -49,23 +49,23 @@ class CrawlerAccount(Base):
     )
 
 
-class CrawlerProxy(Base):
-    """Proxy resource for crawler execution."""
+class CrawlerProxyProvider(Base):
+    """Fast-proxy provider configuration."""
 
-    __tablename__ = "crawler_proxies"
+    __tablename__ = "crawler_proxy_providers"
 
     id = Column(Integer, primary_key=True, index=True)
-    label = Column(String(255), nullable=True, comment="代理标识")
-    protocol = Column(String(32), nullable=False, default="http", comment="协议")
-    host = Column(String(255), nullable=False, comment="主机地址")
-    port = Column(Integer, nullable=False, comment="端口")
-    username = Column(String(255), nullable=True, comment="认证用户名")
-    password = Column(String(255), nullable=True, comment="认证密码")
-    is_active = Column(Boolean, nullable=False, default=True, comment="是否可用")
-    locked_by_task_id = Column(Integer, nullable=True, comment="当前占用的任务ID")
-    locked_at = Column(DateTime, nullable=True, comment="锁定时间")
-    last_used_at = Column(DateTime, nullable=True, comment="最近使用时间")
-    failure_count = Column(Integer, nullable=False, default=0, comment="连续失败次数")
+    name = Column(String(255), nullable=False, comment="配置名称", index=True)
+    provider_type = Column(String(64), nullable=False, default="kuaidaili", comment="代理商类型")
+    secret_id = Column(String(255), nullable=False, comment="快代理 secret_id")
+    signature = Column(String(255), nullable=False, comment="快代理 signature")
+    username = Column(String(255), nullable=False, comment="代理用户名")
+    password = Column(String(255), nullable=False, comment="代理密码")
+    pool_size = Column(Integer, nullable=False, default=10, comment="期望池容量")
+    validate_enabled = Column(Boolean, nullable=False, default=True, comment="启用有效性校验")
+    sync_interval_minutes = Column(Integer, nullable=False, default=5, comment="同步间隔(分钟)")
+    is_active = Column(Boolean, nullable=False, default=True, comment="是否启用", index=True)
+    last_synced_at = Column(DateTime, nullable=True, comment="最近同步时间")
     created_at = Column(
         DateTime, default=datetime.utcnow, nullable=False, comment="创建时间"
     )
@@ -76,7 +76,3 @@ class CrawlerProxy(Base):
         nullable=False,
         comment="更新时间",
     )
-
-    @property
-    def display_host(self) -> str:  # pragma: no cover - simple helper
-        return f"{self.protocol}://{self.host}:{self.port}"

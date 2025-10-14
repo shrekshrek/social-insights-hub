@@ -11,7 +11,7 @@ from src.auth.models import User
 from src.database import get_async_db
 
 from . import schemas, service
-from .models import CrawlerAccount, CrawlerProxy
+from .models import CrawlerAccount
 from .dependencies import (
     require_resources_read,
     require_resources_write,
@@ -112,82 +112,98 @@ async def update_account_status(
 
 
 @router.post(
-    "/proxies",
-    response_model=schemas.CrawlerProxyResponse,
+    "/proxy-providers",
+    response_model=schemas.ProxyProviderResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="创建代理资源",
+    summary="创建代理服务商配置",
 )
-async def create_proxy(
-    data: schemas.CrawlerProxyCreate,
+async def create_proxy_provider(
+    data: schemas.ProxyProviderCreate,
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_resources_write),
 ):
-    proxy = await service.create_proxy(db, data)
-    return schemas.CrawlerProxyResponse.model_validate(proxy)
+    provider = await service.create_proxy_provider(db, data)
+    return schemas.ProxyProviderResponse.model_validate(provider)
 
 
 @router.get(
-    "/proxies/{proxy_id}",
-    response_model=schemas.CrawlerProxyResponse,
-    summary="代理资源详情",
+    "/proxy-providers",
+    response_model=List[schemas.ProxyProviderResponse],
+    summary="代理服务商列表",
 )
-async def get_proxy(
-    proxy_id: int,
-    db: AsyncSession = Depends(get_async_db),
-    _: User = Depends(require_resources_read),
-):
-    proxy = await service.get_proxy(db, proxy_id)
-    if not proxy:
-        raise HTTPException(status_code=404, detail="代理不存在")
-    return schemas.CrawlerProxyResponse.model_validate(proxy)
-
-
-@router.get(
-    "/proxies",
-    response_model=List[schemas.CrawlerProxyResponse],
-    summary="代理资源列表",
-)
-async def list_proxies(
+async def list_proxy_providers(
     active: bool | None = None,
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_resources_read),
 ):
-    proxies = await service.list_proxies(db, active)
-    return [schemas.CrawlerProxyResponse.model_validate(proxy) for proxy in proxies]
+    providers = await service.list_proxy_providers(db, active)
+    return [
+        schemas.ProxyProviderResponse.model_validate(provider)
+        for provider in providers
+    ]
+
+
+@router.get(
+    "/proxy-providers/{provider_id}",
+    response_model=schemas.ProxyProviderResponse,
+    summary="代理服务商详情",
+)
+async def get_proxy_provider(
+    provider_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_resources_read),
+):
+    provider = await service.get_proxy_provider(db, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="代理服务商不存在")
+    return schemas.ProxyProviderResponse.model_validate(provider)
 
 
 @router.patch(
-    "/proxies/{proxy_id}",
-    response_model=schemas.CrawlerProxyResponse,
-    summary="更新代理信息",
+    "/proxy-providers/{provider_id}",
+    response_model=schemas.ProxyProviderResponse,
+    summary="更新代理服务商配置",
 )
-async def update_proxy(
-    proxy_id: int,
-    payload: schemas.CrawlerProxyUpdate,
+async def update_proxy_provider(
+    provider_id: int,
+    payload: schemas.ProxyProviderUpdate,
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_resources_write),
 ):
-    proxy = await service.update_proxy(db, proxy_id, payload)
-    if not proxy:
-        raise HTTPException(status_code=404, detail="代理不存在")
-    return schemas.CrawlerProxyResponse.model_validate(proxy)
+    provider = await service.update_proxy_provider(db, provider_id, payload)
+    if not provider:
+        raise HTTPException(status_code=404, detail="代理服务商不存在")
+    return schemas.ProxyProviderResponse.model_validate(provider)
 
 
-@router.patch(
-    "/proxies/{proxy_id}/status",
-    response_model=schemas.CrawlerProxyResponse,
-    summary="更新代理状态",
+@router.post(
+    "/proxy-providers/{provider_id}/refresh",
+    response_model=schemas.ProxyPoolStatus,
+    summary="立即刷新代理池",
 )
-async def update_proxy_status(
-    proxy_id: int,
-    payload: schemas.CrawlerProxyUpdateStatus,
+async def refresh_proxy_provider_pool(
+    provider_id: int,
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_resources_write),
 ):
-    proxy = await db.get(CrawlerProxy, proxy_id)
-    if not proxy:
-        raise HTTPException(status_code=404, detail="代理不存在")
-    proxy.is_active = payload.is_active
-    await db.commit()
-    await db.refresh(proxy)
-    return schemas.CrawlerProxyResponse.model_validate(proxy)
+    try:
+        status_info = await service.refresh_proxy_pool(db, provider_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return schemas.ProxyPoolStatus.model_validate(status_info)
+
+
+@router.get(
+    "/proxy-providers/{provider_id}/status",
+    response_model=schemas.ProxyPoolStatus,
+    summary="代理池状态",
+)
+async def get_proxy_provider_status(
+    provider_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_resources_read),
+):
+    status_info = await service.get_proxy_pool_status(db, provider_id)
+    if not status_info:
+        raise HTTPException(status_code=404, detail="代理服务商不存在")
+    return schemas.ProxyPoolStatus.model_validate(status_info)

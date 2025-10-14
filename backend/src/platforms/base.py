@@ -10,7 +10,8 @@ from typing import Any, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.tasks import models, service
-from src.resources.models import CrawlerAccount, CrawlerProxy
+from src.resources.models import CrawlerAccount
+from src.resources.service import ProxyEndpoint
 
 
 @dataclass
@@ -21,7 +22,7 @@ class TaskExecutionContext:
     task: models.CrawlerTask
     logger: logging.Logger
     account: CrawlerAccount | None = None
-    proxy: CrawlerProxy | None = None
+    proxy: ProxyEndpoint | None = None
 
     async def update_progress(
         self,

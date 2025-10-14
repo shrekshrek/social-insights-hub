@@ -1,12 +1,15 @@
+import { computed } from 'vue'
+
 import type {
   AccountCreatePayload,
   AccountListResponse,
   AccountResource,
   AccountUpdatePayload,
-  ProxyCreatePayload,
-  ProxyListResponse,
-  ProxyResource,
-  ProxyUpdatePayload,
+  ProxyPoolStatus,
+  ProxyProvider,
+  ProxyProviderCreatePayload,
+  ProxyProviderListResponse,
+  ProxyProviderUpdatePayload,
 } from '../types'
 
 export const useCrawlerResourcesApi = () => {
@@ -65,55 +68,68 @@ export const useCrawlerResourcesApi = () => {
     }
   }
 
-  const getProxies = (params?: { active?: boolean }) =>
-    useApiData<ProxyListResponse>('/resources/proxies', {
+  const getProxyProviders = (params?: { active?: boolean }) =>
+    useApiData<ProxyProviderListResponse>('/resources/proxy-providers', {
       query: params,
-      key: computed(() => `crawler-proxies-${params?.active ?? 'all'}`),
+      key: computed(() => `crawler-proxy-providers-${params?.active ?? 'all'}`),
     })
 
-  const getProxy = (proxyId: number) =>
-    useApiData<ProxyResource>(`/resources/proxies/${proxyId}`, {
-      key: `crawler-proxy-${proxyId}`,
+  const getProxyProvider = (providerId: number) =>
+    useApiData<ProxyProvider>(`/resources/proxy-providers/${providerId}`, {
+      key: `crawler-proxy-provider-${providerId}`,
     })
 
-  const createProxy = async (payload: ProxyCreatePayload) => {
+  const createProxyProvider = async (payload: ProxyProviderCreatePayload) => {
     try {
-      const result = await apiRequest<ProxyResource>('/resources/proxies', {
+      const result = await apiRequest<ProxyProvider>('/resources/proxy-providers', {
         method: 'POST',
         body: payload,
       })
-      showSuccess('代理已创建')
+      showSuccess('代理服务商配置已创建')
       return result
     } catch (error) {
-      showError('创建代理失败')
+      showError('创建代理服务商配置失败')
       throw error
     }
   }
 
-  const updateProxy = async (proxyId: number, payload: ProxyUpdatePayload) => {
+  const updateProxyProvider = async (providerId: number, payload: ProxyProviderUpdatePayload) => {
     try {
-      const result = await apiRequest<ProxyResource>(`/resources/proxies/${proxyId}`, {
+      const result = await apiRequest<ProxyProvider>(`/resources/proxy-providers/${providerId}`, {
         method: 'PATCH',
         body: payload,
       })
-      showSuccess('代理已更新')
+      showSuccess('代理服务商配置已更新')
       return result
     } catch (error) {
-      showError('更新代理失败')
+      showError('更新代理服务商配置失败')
       throw error
     }
   }
 
-  const updateProxyStatus = async (proxyId: number, isActive: boolean) => {
+  const refreshProxyProvider = async (providerId: number) => {
     try {
-      const result = await apiRequest<ProxyResource>(`/resources/proxies/${proxyId}/status`, {
-        method: 'PATCH',
-        body: { is_active: isActive },
-      })
-      showSuccess(isActive ? '代理已启用' : '代理已禁用')
+      const result = await apiRequest<ProxyPoolStatus>(
+        `/resources/proxy-providers/${providerId}/refresh`,
+        {
+          method: 'POST',
+        },
+      )
+      showSuccess('代理池已刷新')
       return result
     } catch (error) {
-      showError('更新代理状态失败')
+      showError('刷新代理池失败')
+      throw error
+    }
+  }
+
+  const getProxyPoolStatus = async (providerId: number) => {
+    try {
+      return await apiRequest<ProxyPoolStatus>(
+        `/resources/proxy-providers/${providerId}/status`,
+      )
+    } catch (error) {
+      showError('获取代理池状态失败')
       throw error
     }
   }
@@ -124,10 +140,11 @@ export const useCrawlerResourcesApi = () => {
     createAccount,
     updateAccount,
     updateAccountStatus,
-    getProxies,
-    getProxy,
-    createProxy,
-    updateProxy,
-    updateProxyStatus,
+    getProxyProviders,
+    getProxyProvider,
+    createProxyProvider,
+    updateProxyProvider,
+    refreshProxyProvider,
+    getProxyPoolStatus,
   }
 }

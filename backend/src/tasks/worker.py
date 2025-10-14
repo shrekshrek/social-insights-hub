@@ -11,7 +11,8 @@ from src.database import AsyncSessionLocal
 from src.platforms import get_adapter_for_platform
 from src.platforms.base import TaskExecutionContext
 from src.resources import service as resource_service
-from src.resources.models import CrawlerAccount, CrawlerProxy
+from src.resources.models import CrawlerAccount
+from src.resources.service import ProxyEndpoint
 from src.tasks import models, service
 
 logger = logging.getLogger(__name__)
@@ -39,12 +40,12 @@ def execute_task(task_id: int, payload: Dict[str, Any] | None = None) -> str:
                 return "adapter-missing"
 
             account: CrawlerAccount | None = None
-            proxy: CrawlerProxy | None = None
+            proxy: ProxyEndpoint | None = None
             try:
                 account = await resource_service.allocate_account(
                     session, task.platform, task.id
                 )
-                proxy = await resource_service.allocate_proxy(session, task.id)
+                proxy = await resource_service.allocate_proxy_endpoint(session)
 
                 context = TaskExecutionContext(
                     session,
@@ -80,8 +81,8 @@ def execute_task(task_id: int, payload: Dict[str, Any] | None = None) -> str:
                         session, account.id, success=success
                     )
                 if proxy:
-                    await resource_service.release_proxy(
-                        session, proxy.id, success=success
+                    await resource_service.release_proxy_endpoint(
+                        session, proxy, success=success
                     )
 
     return asyncio.run(_run())

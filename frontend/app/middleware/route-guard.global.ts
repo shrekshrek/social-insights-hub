@@ -9,9 +9,10 @@
 
 import { getRoutePermissions, isPublicPage, isGuestOnlyPage } from '~/config/routes'
 import type { Permission } from '~/types/permissions'
+import { isJwtExpiring } from '~/app/utils/token'
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { loggedIn, session, fetch: fetchSession } = useUserSession()
+  const { loggedIn, session, fetch: fetchSession, clear: clearSession } = useUserSession()
   
   // ========================================================================
   // 第1层：公开页面和客人页面处理
@@ -35,7 +36,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
     await fetchSession()
   }
   
-  if (!loggedIn.value || !session.value?.accessToken) {
+  if (!loggedIn.value || !session.value?.accessToken || isJwtExpiring(session.value.accessToken, 0)) {
+    await clearSession()
     return navigateTo('/login')
   }
   

@@ -23,7 +23,5 @@
     "layers/**/*.d.ts",
     "layers/**/*.vue"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

@@ -35,7 +35,17 @@
     ```bash
     cp .env.example .env
     ```
-2.  **一键安装与构建**:
+2.  **设置项目名称** (重要！):
+    
+    编辑 `.env` 文件，设置唯一的 `PROJECT_NAME`：
+    ```bash
+    # 使用有意义的项目名称，如: crm, admin, api_v2
+    PROJECT_NAME=your_project_name
+    ```
+    
+    > 💡 **多项目开发**: 如果你基于此脚手架开发多个项目，每个项目的 `PROJECT_NAME` 必须不同。这样可以避免 Docker 容器和数据库冲突，让多个项目同时运行。
+
+3.  **一键安装与构建**:
     ```bash
     pnpm setup
     ```
@@ -64,6 +74,7 @@ pnpm dev
 | `pnpm setup` | **首次安装**：安装所有依赖并预构建Docker镜像。|
 | `pnpm dev` | **日常开发**：一键启动整个开发环境。 |
 | `pnpm stop` | **停止服务**：停止并移除所有开发容器。 |
+| `pnpm cleanup` | **清理资源**：交互式清理 Docker 容器和数据卷。 |
 
 ### 后端命令 (`be:*`)
 
@@ -74,6 +85,7 @@ pnpm dev
 | `pnpm be:migrate:make "<信息>"` | **(常用)** 生成一个新的数据库迁移脚本。 |
 | `pnpm be:migrate:up` | **(常用)** 应用所有数据库迁移。 |
 | `pnpm be:shell` | 进入正在运行的后端容器的 Shell 环境。 |
+| `pnpm be:worker` | 在 backend 容器内启动 Celery Worker。 |
 
 ### 生产部署命令 (`prod:*`)
 
@@ -101,7 +113,52 @@ pnpm dev
 **⚙️ 专项功能**：
 - 权限管理：[`docs/PERMISSION_MANAGEMENT.md`](docs/PERMISSION_MANAGEMENT.md)
 - 配置管理：[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
+- 多项目隔离：详见下文 [🔄 多项目开发](#🔄-多项目开发) ⭐ 多项目开发必读
 - Claude配置：[`CLAUDE.md`](CLAUDE.md)
+
+---
+
+## 🔄 多项目开发
+
+如果你基于此脚手架开发多个项目，需要注意：
+
+### 项目隔离机制
+
+每个项目通过 `PROJECT_NAME` 环境变量实现资源隔离：
+- **Docker 容器名**: `{PROJECT_NAME}_postgres_db_1`, `{PROJECT_NAME}_backend_1`
+- **数据卷名**: `{PROJECT_NAME}_postgres_data`, `{PROJECT_NAME}_redis_data`
+- **数据库名**: `{PROJECT_NAME}_db`
+
+### 最佳实践
+
+1. **设置唯一的项目名**
+   ```bash
+   # 项目 A (.env)
+   PROJECT_NAME=crm_app
+   
+   # 项目 B (.env)
+   PROJECT_NAME=admin_panel
+   ```
+
+2. **同时运行多个项目**
+   ```bash
+   # 项目 A
+   cd /path/to/project-a
+   pnpm dev  # 运行在 localhost:3000
+   
+   # 项目 B (新终端)
+   cd /path/to/project-b
+   # 需要修改前端端口或停止项目 A 的前端
+   ```
+
+3. **切换项目时的注意事项**
+   - 确保每个项目的 `.env` 文件都设置了不同的 `PROJECT_NAME`
+   - 使用 `pnpm cleanup` 清理不用的 Docker 资源
+   - 数据库数据会保留在各自的数据卷中
+
+4. **端口占用处理**
+   - PostgreSQL (5432)、Redis (6379)、Backend (8000) 端口会被共享
+   - 如需同时运行多个项目，需要修改 `docker-compose.yml` 中的端口映射
 
 ---
 

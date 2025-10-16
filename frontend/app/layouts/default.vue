@@ -249,9 +249,9 @@
 </template>
 
 <script setup lang="ts">
-import type { DropdownMenuItem } from "@nuxt/ui";
-import { getNavigationItems, getRoutePermissions } from "~/config/routes";
+import { ref, computed, watch } from "vue";
 import type { NavigationItem } from "~/config/routes";
+import { getNavigationItems, getRoutePermissions } from "~/config/routes";
 
 const { loggedIn, session } = useUserSession();
 const { logout } = useAuthApi();
@@ -303,38 +303,36 @@ watch(status, (newStatus) => {
   }
 }, { immediate: true });
 
-const userMenuItems = computed(
-  () =>
-    [
-      [
-        {
-          label: data.value?.user?.username || "用户",
-          slot: "account",
-          disabled: true,
-          type: "label" as const,
-        },
-      ],
-      [
-        {
-          label: "个人资料",
-          icon: "i-heroicons-user-circle",
-          to: "/profile",
-        },
-        {
-          label: "账户设置",
-          icon: "i-heroicons-cog-6-tooth",
-          to: "/settings",
-        },
-      ],
-      [
-        {
-          label: "登出",
-          icon: "i-heroicons-arrow-right-on-rectangle",
-          onSelect: handleSignOut,
-        },
-      ],
-    ] satisfies DropdownMenuItem[][]
-);
+// Nuxt UI v4 - 直接使用类型推断，items 为嵌套数组结构
+const userMenuItems = computed(() => [
+  [
+    {
+      label: data.value?.user?.username || "用户",
+      slot: "account",
+      disabled: true,
+      type: "label" as const,
+    },
+  ],
+  [
+    {
+      label: "个人资料",
+      icon: "i-heroicons-user-circle",
+      to: "/profile",
+    },
+    {
+      label: "账户设置",
+      icon: "i-heroicons-cog-6-tooth",
+      to: "/settings",
+    },
+  ],
+  [
+    {
+      label: "登出",
+      icon: "i-heroicons-arrow-right-on-rectangle",
+      onSelect: handleSignOut,
+    },
+  ],
+]);
 
 const handleSignOut = async () => {
   try {

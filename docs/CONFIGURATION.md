@@ -50,7 +50,7 @@ SIGNING_PLAYWRIGHT_DEFAULT_COOKIES=
 #### Playwright 签名环境准备
 
 1. 安装 Node.js 16 或更高版本（用于执行补环境脚本）。Docker 镜像在构建阶段已默认安装 Node 20 与 Playwright 浏览器。
-2. 若在运行期需要重新安装（例如浏览器缓存损坏），可进入容器执行 `scripts/setup-playwright-signing.sh`。
+2. 若在运行期需要重新安装（例如浏览器缓存损坏），可在项目根目录执行 `pnpm be:playwright:setup`（或直接运行 `tsx scripts/setup-playwright-signing.ts`）。
 3. 确认环境变量指向有效路径：
    - `SIGNING_PLAYWRIGHT_USER_DATA_DIR`：浏览器数据目录，会在脚本中自动创建；
    - `SIGNING_PLAYWRIGHT_STEALTH_JS`：默认指向仓库内的 `backend/src/signing/resources/xhs/stealth.min.js`；

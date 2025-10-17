@@ -65,6 +65,7 @@ export default defineNuxtConfig({
     './layers/crawler-executions',
     './layers/crawler-resources',
     './layers/crawler-metrics',
+    './layers/crawler-data',
   ],
   components: [
     // 只注册根目录的全局组件和ui-kit组件为全局

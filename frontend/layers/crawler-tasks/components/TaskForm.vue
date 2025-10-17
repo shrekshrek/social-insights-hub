@@ -130,7 +130,7 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import type { PlatformType, CrawlerType, TaskCreateRequest } from '../types'
+import type { TaskCreateRequest, PlatformType, CrawlerType } from '../types'
 import { usePlatformOptions, useCrawlerTypeOptions } from '../composables/usePlatformOptions'
 
 // Props
@@ -233,8 +233,8 @@ const handleSubmit = async () => {
 
   const taskData: TaskCreateRequest = {
     name: formState.name,
-    platform: formState.platform,
-    crawler_type: formState.crawler_type,
+    platform: formState.platform as PlatformType,
+    crawler_type: formState.crawler_type as CrawlerType,
     config
   }
 

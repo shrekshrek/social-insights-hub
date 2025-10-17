@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 
 from src.platforms.base import CrawlerAdapter, TaskExecutionContext
 from src.data.notes import service as notes_service
+from src.data.comments import service as comments_service
 from src.signing import SignatureGenerationError, generate_signature
 
 from .client import XhsClient
@@ -45,10 +46,14 @@ class XiaoHongShuAdapter(CrawlerAdapter):
                     await context.log("INFO", f"✅ {message}")
                 else:
                     await context.log("ERROR", f"❌ Cookie 验证失败: {message}")
-                    await context.log("WARNING", "Cookie 可能已过期或无效，建议更换账号")
+                    await context.log(
+                        "WARNING", "Cookie 可能已过期或无效，建议更换账号"
+                    )
                     # 继续执行，但用户已被警告
             elif not context.account:
-                await context.log("WARNING", "未配置账号，将尝试匿名访问（可能无法获取数据）")
+                await context.log(
+                    "WARNING", "未配置账号，将尝试匿名访问（可能无法获取数据）"
+                )
 
             if crawler_type == "search":
                 await self._execute_search(context, client, config)
@@ -165,7 +170,7 @@ class XiaoHongShuAdapter(CrawlerAdapter):
                 await context.log("ERROR", f"关键词 {keyword} 搜索失败: {exc}")
                 continue
 
-        # Save results
+        # Save notes to database
         if all_notes:
             await context.log("INFO", f"保存 {len(all_notes)} 条笔记到数据库...")
             await notes_service.bulk_save_notes_from_crawler(
@@ -174,6 +179,21 @@ class XiaoHongShuAdapter(CrawlerAdapter):
                 context.task.platform,
                 all_notes,
             )
+
+        # Fetch and save comments if enabled
+        if config.get("enable_comments", False) and all_notes:
+            await context.update_progress(95, crawled_count=len(all_notes))
+            all_comments = await self._fetch_comments_for_notes(
+                context, client, all_notes, config
+            )
+            if all_comments:
+                await context.log("INFO", f"保存 {len(all_comments)} 条评论到数据库...")
+                await comments_service.bulk_save_comments_from_crawler(
+                    context.db,
+                    context.task.id,
+                    context.task.platform,
+                    all_comments,
+                )
 
         await context.log("INFO", f"搜索任务完成，共获取 {len(all_notes)} 条笔记")
         await context.update_progress(100, crawled_count=len(all_notes))
@@ -214,7 +234,7 @@ class XiaoHongShuAdapter(CrawlerAdapter):
         notes = [{"note_id": nid} for nid in note_ids]
         detailed_notes = await self._fetch_note_details(context, client, notes)
 
-        # Save results
+        # Save notes to database
         if detailed_notes:
             await context.log("INFO", f"保存 {len(detailed_notes)} 条笔记到数据库...")
             await notes_service.bulk_save_notes_from_crawler(
@@ -223,6 +243,21 @@ class XiaoHongShuAdapter(CrawlerAdapter):
                 context.task.platform,
                 detailed_notes,
             )
+
+        # Fetch and save comments if enabled
+        if config.get("enable_comments", False) and detailed_notes:
+            await context.update_progress(95, crawled_count=len(detailed_notes))
+            all_comments = await self._fetch_comments_for_notes(
+                context, client, detailed_notes, config
+            )
+            if all_comments:
+                await context.log("INFO", f"保存 {len(all_comments)} 条评论到数据库...")
+                await comments_service.bulk_save_comments_from_crawler(
+                    context.db,
+                    context.task.id,
+                    context.task.platform,
+                    all_comments,
+                )
 
         await context.log("INFO", f"详情任务完成，共获取 {len(detailed_notes)} 条笔记")
         await context.update_progress(100, crawled_count=len(detailed_notes))
@@ -281,3 +316,107 @@ class XiaoHongShuAdapter(CrawlerAdapter):
                 continue
 
         return detailed_notes
+
+    async def _fetch_comments_for_notes(
+        self,
+        context: TaskExecutionContext,
+        client: XhsClient,
+        notes: List[Dict[str, Any]],
+        config: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch comments for notes.
+
+        Args:
+            context: Task execution context
+            client: XHS client
+            notes: List of note dicts
+            config: Task configuration
+
+        Returns:
+            List of comment dicts
+        """
+        enable_comments = config.get("enable_comments", False)
+        enable_sub_comments = config.get("enable_sub_comments", False)
+        max_comments_per_item = config.get("max_comments_per_item", 20)
+
+        if not enable_comments:
+            return []
+
+        await context.log("INFO", f"开始采集 {len(notes)} 条笔记的评论...")
+
+        all_comments = []
+        total_notes = len(notes)
+
+        for idx, note in enumerate(notes, 1):
+            note_id = note.get("note_id")
+            note_title = note.get("title", "")
+            keyword = note.get("keyword")
+
+            if not note_id:
+                continue
+
+            try:
+                # Generate signature for comment API
+                try:
+                    sig_data = await generate_signature(
+                        "xhs",
+                        {
+                            "note_id": note_id,
+                            "cursor": "",
+                            "top_comment_id": "",
+                        },
+                    )
+                    x_s = sig_data.get("x-s", "")
+                    x_t = sig_data.get("x-t", "")
+                except SignatureGenerationError as exc:
+                    await context.log("WARNING", f"笔记 {note_id} 评论签名失败: {exc}")
+                    x_s, x_t = "", ""
+
+                # Fetch comments
+                comments = await client.fetch_comments(
+                    note_id=note_id,
+                    cursor="",
+                    max_count=max_comments_per_item,
+                    x_s=x_s,
+                    x_t=x_t,
+                )
+
+                if comments:
+                    # Filter sub-comments if not enabled
+                    if not enable_sub_comments:
+                        comments = [
+                            c for c in comments if not c.get("parent_comment_id")
+                        ]
+
+                    # Add note info and keyword to each comment
+                    for comment in comments:
+                        comment["note_title"] = note_title
+                        comment["keyword"] = keyword
+
+                    all_comments.extend(comments)
+                    await context.log(
+                        "INFO",
+                        f"[{idx}/{total_notes}] 笔记 {note_id[:8]}... 获取到 {len(comments)} 条评论",
+                    )
+                else:
+                    await context.log(
+                        "DEBUG", f"[{idx}/{total_notes}] 笔记 {note_id[:8]}... 无评论"
+                    )
+
+                # Rate limiting between notes
+                if idx < total_notes:
+                    await asyncio.sleep(1.5)
+
+            except Exception as exc:
+                await context.log("WARNING", f"获取笔记 {note_id} 评论失败: {exc}")
+                continue
+
+        if all_comments:
+            await context.log(
+                "INFO", f"评论采集完成，共获取 {len(all_comments)} 条评论"
+            )
+        else:
+            await context.log("INFO", "未获取到评论数据")
+
+        return all_comments

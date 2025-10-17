@@ -46,6 +46,7 @@ import src.rbac.models  # noqa: E402, F401
 import src.tasks.models  # noqa: E402, F401
 import src.resources.models  # noqa: E402, F401
 import src.data.notes.models  # noqa: E402, F401
+import src.data.comments.models  # noqa: E402, F401
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

@@ -23,7 +23,7 @@ from sqlalchemy.orm import relationship
 from src.database import Base
 
 if TYPE_CHECKING:
-    from src.data.notes.models import TaskNote
+    pass
 
 
 class TaskStatus(str, Enum):
@@ -144,7 +144,9 @@ class CrawlerTask(Base):
 
     # 关系
     creator = relationship("User", backref="crawler_tasks")
+    logs = relationship("TaskLog", back_populates="task", cascade="all, delete-orphan")
     note_associations = relationship("TaskNote", back_populates="task", cascade="all, delete-orphan")
+    comment_associations = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
 
 
 class TaskLog(Base):
@@ -164,4 +166,4 @@ class TaskLog(Base):
     )
 
     # 关系
-    task = relationship("CrawlerTask", backref="logs")
+    task = relationship("CrawlerTask", back_populates="logs")

@@ -25,10 +25,10 @@ async def test_cookie_verification():
 
         print("\n" + "="*60)
         if is_valid:
-            print(f"✅ 验证结果: 成功")
+            print("✅ 验证结果: 成功")
             print(f"📝 信息: {message}")
         else:
-            print(f"❌ 验证结果: 失败")
+            print("❌ 验证结果: 失败")
             print(f"📝 原因: {message}")
         print("="*60)
 

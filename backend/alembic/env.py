@@ -39,6 +39,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # for 'autogenerate' support
 from src.database import Base  # noqa: E402
 
+# Import all models so Alembic can detect them
+from src.users.models import User  # noqa: E402, F401
+from src.rbac.models import Role, Permission, RolePermission, UserRole  # noqa: E402, F401
+from src.tasks.models import CrawlerTask, TaskLog  # noqa: E402, F401
+from src.resources.models import CrawlerAccount, ProxyProvider  # noqa: E402, F401
+from src.results.models import NoteResult  # noqa: E402, F401
+from src.data.notes.models import Note, TaskNote  # noqa: E402, F401
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:

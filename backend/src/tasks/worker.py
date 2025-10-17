@@ -6,7 +6,12 @@ import logging
 import asyncio
 from typing import Any, Dict
 
+import nest_asyncio
+
 from src.celery_app import celery_app
+
+# Allow nested event loops (required for Celery + asyncio.run)
+nest_asyncio.apply()
 from src.database import AsyncSessionLocal
 from src.platforms import get_adapter_for_platform
 from src.platforms.base import TaskExecutionContext

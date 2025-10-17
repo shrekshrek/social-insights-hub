@@ -2,8 +2,11 @@
 爬虫任务数据模型
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
@@ -18,6 +21,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from src.database import Base
+
+if TYPE_CHECKING:
+    from src.data.notes.models import TaskNote
 
 
 class TaskStatus(str, Enum):
@@ -60,11 +66,36 @@ class CrawlerTask(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, comment="任务名称")
     platform = Column(
-        SQLEnum(PlatformType), nullable=False, index=True, comment="爬取平台"
+        SQLEnum(
+            PlatformType,
+            name="platformtype",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            validate_strings=True,
+        ),
+        nullable=False,
+        index=True,
+        comment="爬取平台",
     )
-    crawler_type = Column(SQLEnum(CrawlerType), nullable=False, comment="爬取模式")
+    crawler_type = Column(
+        SQLEnum(
+            CrawlerType,
+            name="crawlertype",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            validate_strings=True,
+        ),
+        nullable=False,
+        comment="爬取模式",
+    )
     status = Column(
-        SQLEnum(TaskStatus),
+        SQLEnum(
+            TaskStatus,
+            name="taskstatus",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            validate_strings=True,
+        ),
         default=TaskStatus.PENDING,
         nullable=False,
         index=True,
@@ -113,6 +144,8 @@ class CrawlerTask(Base):
 
     # 关系
     creator = relationship("User", backref="crawler_tasks")
+    # note_associations 关联暂时注释，等 data 模块完全迁移后再启用
+    # note_associations = relationship("TaskNote", back_populates="task", cascade="all, delete-orphan")
 
 
 class TaskLog(Base):

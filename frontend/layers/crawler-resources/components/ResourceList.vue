@@ -12,37 +12,53 @@
       </template>
 
       <UTable :data="tableRows" :columns="columns" :loading="loading">
-        <template #actions-data="{ row }">
-          <div class="flex items-center gap-2">
-            <UButton
-              icon="i-heroicons-pencil-square"
-              size="xs"
-              variant="outline"
-              @click="emit('edit', row.__raw)"
-            />
-            <UButton
-              v-if="props.type === 'account'"
-              :icon="row.is_active ? 'i-heroicons-pause' : 'i-heroicons-play'"
-              size="xs"
-              variant="ghost"
-              color="warning"
-              @click="emit('toggle', row.__raw)"
-            />
-            <template v-else>
+        <template #actions-cell="{ row }">
+          <div v-if="props.type === 'account'" class="flex items-center gap-1">
+            <UTooltip text="编辑">
               <UButton
-                :icon="row.is_active ? 'i-heroicons-pause' : 'i-heroicons-play'"
+                icon="i-heroicons-pencil-square"
+                size="xs"
+                variant="outline"
+                @click="emit('edit', row.original)"
+              />
+            </UTooltip>
+            <UTooltip :text="row.original.is_active ? '禁用' : '启用'">
+              <UButton
+                :icon="row.original.is_active ? 'i-heroicons-pause' : 'i-heroicons-play'"
                 size="xs"
                 variant="ghost"
                 color="warning"
-                @click="emit('toggle', row.__raw)"
+                @click="emit('toggle', row.original)"
               />
+            </UTooltip>
+          </div>
+          <div v-else class="flex items-center gap-1">
+            <UTooltip text="编辑">
+              <UButton
+                icon="i-heroicons-pencil-square"
+                size="xs"
+                variant="outline"
+                @click="emit('edit', row.original)"
+              />
+            </UTooltip>
+            <UTooltip :text="row.original.is_active ? '禁用' : '启用'">
+              <UButton
+                :icon="row.original.is_active ? 'i-heroicons-pause' : 'i-heroicons-play'"
+                size="xs"
+                variant="ghost"
+                color="warning"
+                @click="emit('toggle', row.original)"
+              />
+            </UTooltip>
+            <UTooltip text="刷新代理池">
               <UButton
                 icon="i-heroicons-arrow-path"
                 size="xs"
-                variant="ghost"
-                @click="emit('refresh', row.__raw)"
+                variant="outline"
+                color="primary"
+                @click="emit('refresh', row.original)"
               />
-            </template>
+            </UTooltip>
           </div>
         </template>
       </UTable>
@@ -134,33 +150,21 @@ watch(
 const columns = computed(() => {
   if (props.type === 'account') {
     return [
-      { accessorKey: 'account_name', id: 'account_name', header: '账号' },
-      { accessorKey: 'platform', id: 'platform', header: '平台' },
-      { accessorKey: 'status_text', id: 'status', header: '状态' },
-      { accessorKey: 'failure_count', id: 'failure_count', header: '失败次数' },
-      { accessorKey: 'last_used_display', id: 'last_used_at', header: '最近使用' },
-      {
-        accessorKey: 'actions',
-        id: 'actions',
-        header: '操作',
-        enableSorting: false,
-        cell: () => '',
-      },
+      { accessorKey: 'account_name', header: '账号' },
+      { accessorKey: 'platform', header: '平台' },
+      { accessorKey: 'status_text', header: '状态' },
+      { accessorKey: 'failure_count', header: '失败次数' },
+      { accessorKey: 'last_used_display', header: '最近使用' },
+      { id: 'actions', header: '操作', cell: () => '' },
     ]
   }
   return [
-    { accessorKey: 'name', id: 'name', header: '名称' },
-    { accessorKey: 'provider_type', id: 'provider_type', header: '类型' },
-    { accessorKey: 'pool_size', id: 'pool_size', header: '池容量' },
-    { accessorKey: 'status_text', id: 'status', header: '状态' },
-    { accessorKey: 'last_synced_display', id: 'last_synced_at', header: '最近同步' },
-    {
-      accessorKey: 'actions',
-      id: 'actions',
-      header: '操作',
-      enableSorting: false,
-      cell: () => '',
-    },
+    { accessorKey: 'name', header: '名称' },
+    { accessorKey: 'provider_type', header: '类型' },
+    { accessorKey: 'pool_size', header: '池容量' },
+    { accessorKey: 'status_text', header: '状态' },
+    { accessorKey: 'last_synced_display', header: '最近同步' },
+    { id: 'actions', header: '操作', cell: () => '' },
   ]
 })
 
@@ -177,7 +181,6 @@ const tableRows = computed(() =>
       const account = item as AccountResource
       return {
         ...account,
-        __raw: account,
         status_text: account.is_active ? '启用' : '停用',
         last_used_display: formatDate(account.last_used_at),
       }
@@ -185,7 +188,6 @@ const tableRows = computed(() =>
     const provider = item as ProxyProvider
     return {
       ...provider,
-      __raw: provider,
       status_text: provider.is_active ? '启用' : '禁用',
       last_synced_display: formatDate(provider.last_synced_at),
     }

@@ -31,6 +31,7 @@ class CrawlerAccountResponse(CustomBaseModel):
     id: int
     platform: PlatformType
     account_name: str
+    cookies: Optional[str] = Field(default=None, description="登录Cookies（编辑时需要）")
     is_active: bool
     locked_by_task_id: Optional[int]
     last_used_at: Optional[datetime]

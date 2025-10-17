@@ -25,7 +25,13 @@ class CrawlerAccount(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     platform = Column(
-        SQLEnum(PlatformType, name="platformtype", create_type=False),
+        SQLEnum(
+            PlatformType,
+            name="platformtype",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            validate_strings=True,
+        ),
         nullable=False,
         index=True,
         comment="所属平台",

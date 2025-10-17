@@ -31,14 +31,16 @@
           <div class="flex items-center gap-3">
             <USelect
               v-model="filters.platform"
-              :options="platformOptions"
+              :items="platformOptions"
               placeholder="全部平台"
+              clearable
               class="w-40"
             />
             <USelect
               v-model="filters.status"
-              :options="statusOptions"
+              :items="statusOptions"
               placeholder="全部状态"
+              clearable
               class="w-40"
             />
             <UInput
@@ -103,14 +105,15 @@
 <script setup lang="ts">
 import { h, ref, computed, watch, resolveComponent } from 'vue'
 import {
+  TaskStatus,
   PLATFORM_LABELS,
   TASK_STATUS_LABELS,
   TASK_STATUS_COLORS,
   CRAWLER_TYPE_LABELS,
   type PlatformType,
-  type TaskStatus,
   type CrawlerTask
 } from '../../types'
+import { usePlatformOptionsWithAll } from '../../composables/usePlatformOptions'
 type TaskCellContext = {
   row: {
     getValue: (accessorKey: string) => unknown
@@ -140,8 +143,8 @@ const router = useRouter()
 const searchQuery = ref('')
 const refreshing = ref(false)
 const filters = reactive({
-  platform: '' as PlatformType | '',
-  status: '' as TaskStatus | ''
+  platform: undefined as PlatformType | undefined,
+  status: undefined as TaskStatus | undefined
 })
 
 // 从 URL 查询参数获取当前页码
@@ -199,15 +202,14 @@ const paginatedTasks = computed(() => {
 })
 
 // 下拉选项
-const platformOptions = computed(() => [
-  { value: '', label: '全部平台' },
-  ...Object.entries(PLATFORM_LABELS).map(([value, label]) => ({ value, label }))
-])
+const platformOptions = usePlatformOptionsWithAll()
 
-const statusOptions = computed(() => [
-  { value: '', label: '全部状态' },
-  ...Object.entries(TASK_STATUS_LABELS).map(([value, label]) => ({ value, label }))
-])
+const statusOptions = computed(() =>
+  Object.entries(TASK_STATUS_LABELS).map(([key, label]) => ({
+    value: TaskStatus[key as keyof typeof TaskStatus],
+    label
+  }))
+)
 
 // 当搜索查询或筛选变化时，重置到第一页
 watch([searchQuery, () => filters.platform, () => filters.status], () => {

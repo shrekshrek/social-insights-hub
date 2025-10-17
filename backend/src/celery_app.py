@@ -12,4 +12,8 @@ celery_app.conf.update(
     task_track_started=True,
 )
 
-celery_app.autodiscover_tasks(["src.tasks"], force=True)
+# Celery worker 启动时会自动 import 这个模块的任务
+# 通过 include 配置让 Celery 知道从哪里加载任务
+celery_app.conf.update(
+    include=["src.tasks.worker"]
+)

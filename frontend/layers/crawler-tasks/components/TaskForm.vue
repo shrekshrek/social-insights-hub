@@ -19,7 +19,9 @@
         <UFormField label="平台" name="platform" required>
           <USelect
             v-model="formState.platform"
-            :options="platformOptions"
+            :items="platformOptions"
+            value-attribute="value"
+            label-attribute="label"
             placeholder="请选择平台"
             :disabled="loading"
           />
@@ -28,7 +30,9 @@
         <UFormField label="爬取模式" name="crawler_type" required>
           <USelect
             v-model="formState.crawler_type"
-            :options="crawlerTypeOptions"
+            :items="crawlerTypeOptions"
+            value-attribute="value"
+            label-attribute="label"
             placeholder="请选择爬取模式"
             :disabled="loading"
           />
@@ -52,6 +56,7 @@
           v-model="formState.keywords"
           placeholder="例如: deepseek,chatgpt,AI"
           :disabled="loading"
+          class="w-full"
         />
       </UFormField>
 
@@ -68,6 +73,7 @@
           :rows="4"
           placeholder="https://example.com/post/123&#10;https://example.com/post/456"
           :disabled="loading"
+          class="w-full"
         />
       </UFormField>
 
@@ -124,8 +130,8 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import { PLATFORM_LABELS, CRAWLER_TYPE_LABELS } from '../types'
 import type { PlatformType, CrawlerType, TaskCreateRequest } from '../types'
+import { usePlatformOptions, useCrawlerTypeOptions } from '../composables/usePlatformOptions'
 
 // Props
 interface Props {
@@ -143,25 +149,14 @@ const emit = defineEmits<{
 }>()
 
 // 下拉选项
-const platformOptions = computed(() =>
-  Object.entries(PLATFORM_LABELS).map(([value, label]) => ({
-    value,
-    label
-  }))
-)
-
-const crawlerTypeOptions = computed(() =>
-  Object.entries(CRAWLER_TYPE_LABELS).map(([value, label]) => ({
-    value,
-    label
-  }))
-)
+const platformOptions = usePlatformOptions()
+const crawlerTypeOptions = useCrawlerTypeOptions()
 
 // 表单状态
 const formState = reactive({
   name: '',
-  platform: '' as PlatformType | '',
-  crawler_type: '' as CrawlerType | '',
+  platform: undefined as string | undefined,
+  crawler_type: undefined as string | undefined,
   keywords: '',
   max_count: 40,
   enable_comments: true,
@@ -176,8 +171,8 @@ const urlsText = ref('')
 const schema = computed(() => {
   const baseSchema = z.object({
     name: z.string().min(1, '请输入任务名称').max(255, '任务名称不能超过255个字符'),
-    platform: z.string().min(1, '请选择平台'),
-    crawler_type: z.string().min(1, '请选择爬取模式'),
+    platform: z.string().optional(),
+    crawler_type: z.string().optional(),
     max_count: z.number().min(1, '最小爬取数量为1').max(1000, '最大爬取数量为1000'),
     enable_comments: z.boolean(),
     enable_sub_comments: z.boolean(),
@@ -205,6 +200,24 @@ const schema = computed(() => {
 
 // 提交处理
 const handleSubmit = async () => {
+  // 验证必填字段
+  if (!formState.name || !formState.platform || !formState.crawler_type) {
+    useToast().add({ title: '请填写完整信息', color: 'warning' })
+    return
+  }
+
+  // 验证关键词（搜索模式）
+  if (formState.crawler_type === 'search' && !formState.keywords) {
+    useToast().add({ title: '请输入关键词', color: 'warning' })
+    return
+  }
+
+  // 验证URL列表（详情/创作者模式）
+  if ((formState.crawler_type === 'detail' || formState.crawler_type === 'creator') && !urlsText.value.trim()) {
+    useToast().add({ title: '请输入URL列表', color: 'warning' })
+    return
+  }
+
   // 构建请求数据
   const config = {
     max_count: formState.max_count,
@@ -220,8 +233,8 @@ const handleSubmit = async () => {
 
   const taskData: TaskCreateRequest = {
     name: formState.name,
-    platform: formState.platform as PlatformType,
-    crawler_type: formState.crawler_type as CrawlerType,
+    platform: formState.platform,
+    crawler_type: formState.crawler_type,
     config
   }
 
@@ -231,8 +244,8 @@ const handleSubmit = async () => {
 // 重置表单
 const resetForm = () => {
   formState.name = ''
-  formState.platform = ''
-  formState.crawler_type = ''
+  formState.platform = undefined
+  formState.crawler_type = undefined
   formState.keywords = ''
   formState.max_count = 40
   formState.enable_comments = true

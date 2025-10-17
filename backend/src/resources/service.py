@@ -118,12 +118,19 @@ async def _fetch_proxies_from_kdl(
         "sep": 1,
         "f_et": 1,
     }
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get(KDL_API_URL, params=params)
-    response.raise_for_status()
-    payload = response.json()
-    if payload.get("code") != 0:
-        raise RuntimeError(payload.get("msg", "failed to fetch proxies"))
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(KDL_API_URL, params=params)
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("code") != 0:
+            raise RuntimeError(payload.get("msg", "failed to fetch proxies"))
+    except httpx.TimeoutException as exc:
+        logger.error("快代理 API 请求超时: %s", exc)
+        raise RuntimeError("快代理 API 请求超时，请检查网络连接或稍后重试") from exc
+    except httpx.HTTPError as exc:
+        logger.error("快代理 API 请求失败: %s", exc)
+        raise RuntimeError(f"快代理 API 请求失败: {exc}") from exc
 
     proxy_list = payload.get("data", {}).get("proxy_list", [])
     proxies: List[ProxyEndpoint] = []
@@ -173,10 +180,26 @@ async def _populate_provider_cache(
 async def create_account(
     db: AsyncSession, data: schemas.CrawlerAccountCreate
 ) -> models.CrawlerAccount:
+    platform_value = (
+        data.platform.value
+        if isinstance(data.platform, PlatformType)
+        else str(data.platform)
+    )
+    platform_enum = PlatformType(platform_value.lower())
+    logger.debug(
+        "Creating crawler account: raw_platform=%s normalized=%s",
+        data.platform,
+        platform_enum.value,
+    )
     account = models.CrawlerAccount(
-        platform=data.platform,
+        platform=platform_enum.value,
         account_name=data.account_name,
         cookies=data.cookies,
+    )
+    logger.debug(
+        "CrawlerAccount model platform=%s (%s)",
+        account.platform,
+        type(account.platform),
     )
     db.add(account)
     await db.commit()

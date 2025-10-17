@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     SIGNING_PLAYWRIGHT_STEALTH_JS: str | None = None
     SIGNING_PLAYWRIGHT_DEFAULT_COOKIES: str | None = None
 
+    # Sign Service settings (MediaCrawlerPro-SignSrv)
+    SIGN_SERVICE_ENABLED: bool = True
+    SIGN_SERVICE_HOST: str = "localhost"
+    SIGN_SERVICE_PORT: int = 8989
+
     # API settings
     API_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "Full-Stack Starter API"

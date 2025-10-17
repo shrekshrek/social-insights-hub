@@ -1,5 +1,6 @@
 <template>
   <div class="space-y-6">
+    <!-- 页面标题和操作按钮 -->
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div class="space-y-1">
         <h1 class="text-2xl font-bold">资源管理</h1>
@@ -18,92 +19,93 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      <UCard>
-        <div class="space-y-1">
-          <div class="flex flex-wrap items-center gap-2">
+    <!-- 账号资源 -->
+    <UCard>
+      <template #header>
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-2">
             <h2 class="text-xl font-semibold">账号资源</h2>
             <UBadge color="primary" variant="soft">{{ accountsTotal }}</UBadge>
             <UBadge color="success" variant="soft">启用 {{ accountsActive }}/{{ accountsTotal }}</UBadge>
           </div>
-          <p class="text-sm text-gray-500">按平台与状态筛选账号，快速定位与管理。</p>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <USelect
-            v-model="accountFilters.platform"
-            :items="platformSelectOptions"
-            placeholder="全部平台"
-            value-attribute="value"
-            label-attribute="label"
-            clearable
-            class="w-36"
-          />
-          <USelect
-            v-model="accountFilters.active"
-            :items="activeOptions"
-            placeholder="全部状态"
-            value-attribute="value"
-            label-attribute="label"
-            clearable
-            class="w-32"
-          />
-          <UInput
-            v-model="accountFilters.keyword"
-            placeholder="搜索账号..."
-            icon="i-heroicons-magnifying-glass"
-            class="w-48"
-          />
-        </div>
-
-        <ResourceList
-          type="account"
-          :loading="accountsPending"
-          :items="filteredAccounts"
-          @edit="item => openAccountModal(item as AccountResource)"
-          @toggle="item => toggleAccount(item as AccountResource)"
-        />
-      </UCard>
-
-      <UCard>
-        <div class="space-y-1">
           <div class="flex flex-wrap items-center gap-2">
+            <USelect
+              v-model="accountFilters.platform"
+              :items="platformSelectOptions"
+              placeholder="全部平台"
+              value-attribute="value"
+              label-attribute="label"
+              clearable
+              class="w-36"
+            />
+            <USelect
+              v-model="accountFilters.active"
+              :items="activeOptions"
+              placeholder="全部状态"
+              value-attribute="value"
+              label-attribute="label"
+              clearable
+              class="w-32"
+            />
+            <UInput
+              v-model="accountFilters.keyword"
+              placeholder="搜索账号..."
+              icon="i-heroicons-magnifying-glass"
+              class="w-48"
+            />
+          </div>
+        </div>
+      </template>
+
+      <ResourceList
+        type="account"
+        :loading="accountsPending"
+        :items="filteredAccounts"
+        @edit="item => openAccountModal(item as AccountResource)"
+        @toggle="item => toggleAccount(item as AccountResource)"
+      />
+    </UCard>
+
+    <!-- 代理服务商 -->
+    <UCard>
+      <template #header>
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-2">
             <h2 class="text-xl font-semibold">代理服务商</h2>
             <UBadge color="primary" variant="soft">{{ providersTotal }}</UBadge>
             <UBadge color="success" variant="soft">启用 {{ providersActive }}/{{ providersTotal }}</UBadge>
           </div>
-          <p class="text-sm text-gray-500">管理快代理配置，自动同步代理池信息。</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <USelect
+              v-model="providerFilters.active"
+              :items="activeOptions"
+              placeholder="全部状态"
+              value-attribute="value"
+              label-attribute="label"
+              clearable
+              class="w-32"
+            />
+            <UInput
+              v-model="providerFilters.keyword"
+              placeholder="搜索配置名称..."
+              icon="i-heroicons-magnifying-glass"
+              class="w-48"
+            />
+          </div>
         </div>
+      </template>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <USelect
-            v-model="providerFilters.active"
-            :items="activeOptions"
-            placeholder="全部状态"
-            value-attribute="value"
-            label-attribute="label"
-            clearable
-            class="w-32"
-          />
-          <UInput
-            v-model="providerFilters.keyword"
-            placeholder="搜索配置名称..."
-            icon="i-heroicons-magnifying-glass"
-            class="w-48"
-          />
-        </div>
+      <ResourceList
+        type="provider"
+        :loading="providersPending"
+        :items="filteredProviders"
+        @edit="item => openProviderModal(item as ProxyProvider)"
+        @toggle="item => toggleProvider(item as ProxyProvider)"
+        @refresh="item => refreshProviderPool(item as ProxyProvider)"
+      />
+    </UCard>
 
-        <ResourceList
-          type="provider"
-          :loading="providersPending"
-          :items="filteredProviders"
-          @edit="item => openProviderModal(item as ProxyProvider)"
-          @toggle="item => toggleProvider(item as ProxyProvider)"
-          @refresh="item => refreshProviderPool(item as ProxyProvider)"
-        />
-      </UCard>
-    </div>
-
+    <!-- 模态框 -->
     <AccountModal
       v-if="showAccountModal"
       v-model:open="showAccountModal"

@@ -49,6 +49,8 @@ class CrawlerTaskCreate(CustomBaseModel):
     crawler_type: CrawlerType = Field(..., description="爬取模式")
     config: dict[str, Any] = Field(..., description="爬取配置")
 
+    model_config = {"use_enum_values": True}
+
     @field_validator("config")
     @classmethod
     def validate_config(cls, v: dict, info) -> dict:

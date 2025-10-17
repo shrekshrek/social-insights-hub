@@ -134,21 +134,33 @@ watch(
 const columns = computed(() => {
   if (props.type === 'account') {
     return [
-      { key: 'account_name', id: 'account_name', label: '账号' },
-      { key: 'platform', id: 'platform', label: '平台' },
-      { key: 'status_text', id: 'status', label: '状态' },
-      { key: 'failure_count', id: 'failure_count', label: '失败次数' },
-      { key: 'last_used_display', id: 'last_used_at', label: '最近使用' },
-      { key: 'actions', id: 'actions', label: '操作' },
+      { accessorKey: 'account_name', id: 'account_name', header: '账号' },
+      { accessorKey: 'platform', id: 'platform', header: '平台' },
+      { accessorKey: 'status_text', id: 'status', header: '状态' },
+      { accessorKey: 'failure_count', id: 'failure_count', header: '失败次数' },
+      { accessorKey: 'last_used_display', id: 'last_used_at', header: '最近使用' },
+      {
+        accessorKey: 'actions',
+        id: 'actions',
+        header: '操作',
+        enableSorting: false,
+        cell: () => '',
+      },
     ]
   }
   return [
-    { key: 'name', id: 'name', label: '名称' },
-    { key: 'provider_type', id: 'provider_type', label: '类型' },
-    { key: 'pool_size', id: 'pool_size', label: '池容量' },
-    { key: 'status_text', id: 'status', label: '状态' },
-    { key: 'last_synced_display', id: 'last_synced_at', label: '最近同步' },
-    { key: 'actions', id: 'actions', label: '操作' },
+    { accessorKey: 'name', id: 'name', header: '名称' },
+    { accessorKey: 'provider_type', id: 'provider_type', header: '类型' },
+    { accessorKey: 'pool_size', id: 'pool_size', header: '池容量' },
+    { accessorKey: 'status_text', id: 'status', header: '状态' },
+    { accessorKey: 'last_synced_display', id: 'last_synced_at', header: '最近同步' },
+    {
+      accessorKey: 'actions',
+      id: 'actions',
+      header: '操作',
+      enableSorting: false,
+      cell: () => '',
+    },
   ]
 })
 

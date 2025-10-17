@@ -111,7 +111,18 @@ import {
   type TaskStatus,
   type CrawlerTask
 } from '../../types'
-import type { TableColumn } from '@nuxt/ui'
+type TaskCellContext = {
+  row: {
+    getValue: (accessorKey: string) => unknown
+    original: CrawlerTask
+  }
+}
+type TableColumnConfig = {
+  accessorKey?: string
+  id?: string
+  header?: string
+  cell?: (ctx: TaskCellContext) => ReturnType<typeof h> | ReturnType<typeof h>[]
+}
 
 definePageMeta({
   title: '爬虫任务',
@@ -228,11 +239,11 @@ const formatDate = (dateString: string) => {
 }
 
 // 表格列配置
-const columns: TableColumn<CrawlerTask>[] = [
+const columns: TableColumnConfig[] = [
   {
     accessorKey: 'name',
     header: '任务名称',
-    cell: ({ row }) => {
+    cell: ({ row }: TaskCellContext) => {
       const name = row.getValue('name') as string
       const task = row.original
       const UBadge = resolveComponent('UBadge')
@@ -257,7 +268,7 @@ const columns: TableColumn<CrawlerTask>[] = [
   {
     accessorKey: 'progress',
     header: '进度',
-    cell: ({ row }) => {
+    cell: ({ row }: TaskCellContext) => {
       const progress = row.getValue('progress') as number
       const crawledCount = row.original.crawled_count
 
@@ -278,18 +289,18 @@ const columns: TableColumn<CrawlerTask>[] = [
   {
     accessorKey: 'created_at',
     header: '创建时间',
-    cell: ({ row }) => {
+    cell: ({ row }: TaskCellContext) => {
       return h(
         'span',
         { class: 'text-sm text-gray-500 dark:text-gray-400' },
-        formatDate(row.getValue('created_at'))
+        formatDate(row.getValue('created_at') as string)
       )
     }
   },
   {
     id: 'actions',
     header: '操作',
-    cell: ({ row }) => {
+    cell: ({ row }: TaskCellContext) => {
       const UButton = resolveComponent('UButton')
       const task = row.original
 

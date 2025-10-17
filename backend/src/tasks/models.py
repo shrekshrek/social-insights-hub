@@ -144,8 +144,7 @@ class CrawlerTask(Base):
 
     # 关系
     creator = relationship("User", backref="crawler_tasks")
-    # note_associations 关联暂时注释，等 data 模块完全迁移后再启用
-    # note_associations = relationship("TaskNote", back_populates="task", cascade="all, delete-orphan")
+    note_associations = relationship("TaskNote", back_populates="task", cascade="all, delete-orphan")
 
 
 class TaskLog(Base):

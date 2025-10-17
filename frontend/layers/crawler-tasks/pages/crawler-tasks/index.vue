@@ -358,6 +358,19 @@ const columns: TableColumnConfig[] = [
         )
       }
 
+      // 编辑按钮（仅 pending 状态可编辑）
+      if (task.status === 'pending') {
+        buttons.push(
+          h(UButton, {
+            color: 'neutral',
+            variant: 'ghost',
+            size: 'sm',
+            icon: 'i-heroicons-pencil-square',
+            onClick: () => navigateTo(`/crawler-tasks/${task.id}/edit`)
+          })
+        )
+      }
+
       // 查看按钮
       buttons.push(
         h(UButton, {
@@ -368,6 +381,31 @@ const columns: TableColumnConfig[] = [
           onClick: () => navigateTo(`/crawler-tasks/${task.id}`)
         })
       )
+
+      // 删除按钮（不能删除运行中的任务）
+      if (task.status !== 'running') {
+        buttons.push(
+          h(UButton, {
+            color: 'error',
+            variant: 'ghost',
+            size: 'sm',
+            icon: 'i-heroicons-trash',
+            onClick: async () => {
+              const { $confirm } = useNuxtApp()
+              const confirmed = await $confirm(`确定要删除任务 "${task.name}" 吗？此操作不可恢复。`)
+              if (!confirmed) return
+
+              try {
+                await crawlerTasksApi.deleteTask(task.id)
+                await refresh()
+              } catch (error) {
+                // API composable 已经显示了错误提示
+                console.error('删除任务失败:', error)
+              }
+            }
+          })
+        )
+      }
 
       return h('div', { class: 'flex items-center gap-1' }, buttons)
     }

@@ -7,7 +7,6 @@ import logging
 import random
 import time
 from typing import Any, Dict, List
-from urllib.parse import urlencode
 
 import httpx
 
@@ -17,7 +16,9 @@ from src.signing import generate_signature
 logger = logging.getLogger(__name__)
 
 
-def _base36_encode(number: int, alphabet: str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") -> str:
+def _base36_encode(
+    number: int, alphabet: str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+) -> str:
     """Convert integer to base36 string."""
     if number == 0:
         return alphabet[0]
@@ -195,6 +196,7 @@ class XhsClient:
         try:
             # 添加随机延时，避免频繁请求触发反爬 (2-5秒)
             import asyncio
+
             delay = random.uniform(2, 5)
             logger.info(f"延时 {delay:.2f} 秒后发起请求...")
             await asyncio.sleep(delay)
@@ -203,7 +205,9 @@ class XhsClient:
             logger.info(f"请求 URL: {url}")
             logger.info(f"请求数据: {json.dumps(search_data, ensure_ascii=False)}")
             logger.info(f"Cookie (前50字符): {self._cookie_str[:50]}...")
-            logger.info(f"签名头: X-s={headers.get('X-s', '')[:20]}..., X-t={headers.get('X-t', '')}")
+            logger.info(
+                f"签名头: X-s={headers.get('X-s', '')[:20]}..., X-t={headers.get('X-t', '')}"
+            )
 
             response = await client.post(url, json=search_data, headers=headers)
             response.raise_for_status()
@@ -270,10 +274,14 @@ class XhsClient:
             response = await client.get(url, headers=headers)
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"User selfinfo response: {json.dumps(data, ensure_ascii=False)[:200]}")
+                logger.info(
+                    f"User selfinfo response: {json.dumps(data, ensure_ascii=False)[:200]}"
+                )
                 return data
             else:
-                logger.warning(f"Query selfinfo failed with status {response.status_code}")
+                logger.warning(
+                    f"Query selfinfo failed with status {response.status_code}"
+                )
                 return None
 
         except Exception as exc:
@@ -412,6 +420,144 @@ class XhsClient:
             ]
 
         return parsed
+
+    async def fetch_comments(
+        self,
+        note_id: str,
+        cursor: str = "",
+        max_count: int = 30,
+        x_s: str = "",
+        x_t: str = "",
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch comments for a note.
+
+        Args:
+            note_id: Note ID to fetch comments from
+            cursor: Pagination cursor (empty for first page)
+            max_count: Maximum number of comments to fetch
+            x_s: Signature parameter
+            x_t: Timestamp parameter
+
+        Returns:
+            List of comment dicts
+        """
+        client = self._get_client()
+        uri = "/api/sns/web/v2/comment/page"
+        url = f"{self.BASE_URL}{uri}"
+
+        params = {
+            "note_id": note_id,
+            "cursor": cursor,
+            "top_comment_id": "",
+            "image_formats": "jpg,webp,avif",
+        }
+
+        headers = {}
+        if x_s:
+            headers["X-s"] = x_s
+        if x_t:
+            headers["X-t"] = str(x_t)
+
+        try:
+            logger.info(f"Fetching comments for note {note_id}, cursor={cursor}")
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+
+            data = response.json()
+            logger.debug(
+                f"Comments API response: {json.dumps(data, ensure_ascii=False)[:300]}"
+            )
+
+            # Parse response
+            if data.get("code") == 0 or data.get("success"):
+                comments_data = data.get("data", {}).get("comments", [])
+                has_more = data.get("data", {}).get("has_more", False)
+                next_cursor = data.get("data", {}).get("cursor", "")
+
+                parsed_comments = []
+                for comment_dict in comments_data:
+                    parsed = self._parse_comment(comment_dict, note_id)
+                    if parsed:
+                        parsed_comments.append(parsed)
+
+                        # Parse sub-comments if exist
+                        sub_comments = comment_dict.get("sub_comments", [])
+                        for sub_comment in sub_comments:
+                            sub_parsed = self._parse_comment(
+                                sub_comment, note_id, parent_id=parsed["comment_id"]
+                            )
+                            if sub_parsed:
+                                parsed_comments.append(sub_parsed)
+
+                logger.info(
+                    f"Fetched {len(parsed_comments)} comments for note {note_id}"
+                )
+
+                # Fetch next page if needed and not reached max_count
+                if has_more and next_cursor and len(parsed_comments) < max_count:
+                    remaining = max_count - len(parsed_comments)
+                    if remaining > 0:
+                        next_page = await self.fetch_comments(
+                            note_id=note_id,
+                            cursor=next_cursor,
+                            max_count=remaining,
+                            x_s=x_s,
+                            x_t=x_t,
+                        )
+                        parsed_comments.extend(next_page)
+
+                return parsed_comments[:max_count]
+            else:
+                error_msg = data.get("msg", "Unknown error")
+                logger.warning(f"Comments API returned error: {error_msg}")
+                return []
+
+        except httpx.HTTPStatusError as exc:
+            logger.error(f"HTTP error {exc.response.status_code}: {exc.response.text}")
+            return []
+        except Exception as exc:
+            logger.error(f"Fetch comments request failed: {exc}")
+            return []
+
+    def _parse_comment(
+        self,
+        comment_dict: Dict[str, Any],
+        note_id: str,
+        parent_id: str | None = None,
+    ) -> Dict[str, Any] | None:
+        """
+        Parse comment data from API response.
+
+        Args:
+            comment_dict: Raw comment data from API
+            note_id: Note ID this comment belongs to
+            parent_id: Parent comment ID (for sub-comments)
+
+        Returns:
+            Parsed comment dict or None if invalid
+        """
+        try:
+            user_info = comment_dict.get("user_info", {})
+
+            parsed = {
+                "comment_id": comment_dict.get("id", ""),
+                "content": comment_dict.get("content", ""),
+                "note_id": note_id,
+                "parent_comment_id": parent_id,
+                "sub_comment_count": comment_dict.get("sub_comment_count", 0),
+                "user_id": user_info.get("user_id", ""),
+                "user_name": user_info.get("nickname", ""),
+                "avatar": user_info.get("avatar", ""),
+                "liked_count": comment_dict.get("like_count", 0),
+                "ip_location": comment_dict.get("ip_location", ""),
+                "create_time": comment_dict.get("create_time", 0),  # Timestamp in ms
+            }
+
+            return parsed
+        except Exception as exc:
+            logger.warning(f"Failed to parse comment: {exc}")
+            return None
 
     async def __aenter__(self):
         """Context manager entry."""

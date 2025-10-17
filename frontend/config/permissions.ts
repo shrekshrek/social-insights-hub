@@ -53,6 +53,18 @@ export const PERMISSIONS = {
   CRAWLER_METRICS_ACCESS: {target: 'crawler_metrics', action: 'access'},
   CRAWLER_METRICS_READ: {target: 'crawler_metrics', action: 'read'},
 
+  // 爬虫数据 - 笔记
+  CRAWLER_DATA_NOTES_ACCESS: {target: 'crawler_data_notes', action: 'access'},
+  CRAWLER_DATA_NOTES_READ: {target: 'crawler_data_notes', action: 'read'},
+  CRAWLER_DATA_NOTES_WRITE: {target: 'crawler_data_notes', action: 'write'},
+  CRAWLER_DATA_NOTES_DELETE: {target: 'crawler_data_notes', action: 'delete'},
+
+  // 爬虫数据 - 评论
+  CRAWLER_DATA_COMMENTS_ACCESS: {target: 'crawler_data_comments', action: 'access'},
+  CRAWLER_DATA_COMMENTS_READ: {target: 'crawler_data_comments', action: 'read'},
+  CRAWLER_DATA_COMMENTS_WRITE: {target: 'crawler_data_comments', action: 'write'},
+  CRAWLER_DATA_COMMENTS_DELETE: {target: 'crawler_data_comments', action: 'delete'},
+
   // 扩展权限示例（根据需要添加）
   // REPORTS_ACCESS: {target: 'reports', action: 'access'},
   // REPORTS_READ: {target: 'reports', action: 'read'},

@@ -87,6 +87,20 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     showInNav: true,
     order: 67,
   },
+  '/crawler-data/notes': {
+    permission: PERMISSIONS.CRAWLER_DATA_NOTES_ACCESS,
+    label: '笔记数据',
+    showInNav: true,
+    order: 68,
+  },
+  '/crawler-data/notes/[id]': { permission: PERMISSIONS.CRAWLER_DATA_NOTES_READ },
+  '/crawler-data/comments': {
+    permission: PERMISSIONS.CRAWLER_DATA_COMMENTS_ACCESS,
+    label: '评论数据',
+    showInNav: true,
+    order: 69,
+  },
+  '/crawler-data/comments/[id]': { permission: PERMISSIONS.CRAWLER_DATA_COMMENTS_READ },
 }
 
 /**

@@ -86,6 +86,18 @@ class TaskNoteCreate(BaseModel):
     keyword: Optional[str] = None
 
 
+class TaskNoteResponse(BaseModel):
+    """任务-笔记关联响应."""
+
+    id: int
+    task_id: int
+    note_id: int
+    keyword: Optional[str]
+    crawled_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class NoteListResponse(BaseModel):
     """笔记列表响应."""
 

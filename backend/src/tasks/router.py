@@ -19,8 +19,8 @@ from .dependencies import (
     require_crawler_tasks_read,
     require_crawler_tasks_write,
 )
-from src.results import service as result_service
-from src.results.schemas import CrawlerNoteResultResponse
+from src.data.notes import service as notes_service
+from src.data.notes.schemas import NoteInDB
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +211,7 @@ async def stop_task(
 
 @router.get(
     "/{task_id}/results",
-    response_model=list[CrawlerNoteResultResponse],
+    response_model=list[NoteInDB],
     summary="获取任务结果",
 )
 async def list_task_results(
@@ -219,8 +219,8 @@ async def list_task_results(
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_crawler_tasks_read),
 ):
-    results = await result_service.list_notes_by_task(db, task_id)
-    return [CrawlerNoteResultResponse.model_validate(item) for item in results]
+    notes = await notes_service.get_notes_by_task(db, task_id)
+    return [NoteInDB.model_validate(note) for note in notes]
 
 
 # ============================================================================

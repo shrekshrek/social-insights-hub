@@ -40,12 +40,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.database import Base  # noqa: E402
 
 # Import all models so Alembic can detect them
-from src.users.models import User  # noqa: E402, F401
-from src.rbac.models import Role, Permission, RolePermission, UserRole  # noqa: E402, F401
-from src.tasks.models import CrawlerTask, TaskLog  # noqa: E402, F401
-from src.resources.models import CrawlerAccount, ProxyProvider  # noqa: E402, F401
-from src.results.models import NoteResult  # noqa: E402, F401
-from src.data.notes.models import Note, TaskNote  # noqa: E402, F401
+# 直接导入 models.py 文件确保所有模型都被加载
+import src.auth.models  # noqa: E402, F401
+import src.rbac.models  # noqa: E402, F401
+import src.tasks.models  # noqa: E402, F401
+import src.resources.models  # noqa: E402, F401
+import src.data.notes.models  # noqa: E402, F401
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

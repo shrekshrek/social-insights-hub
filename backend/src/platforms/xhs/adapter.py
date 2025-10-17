@@ -6,7 +6,7 @@ import asyncio
 from typing import Any, Dict, List
 
 from src.platforms.base import CrawlerAdapter, TaskExecutionContext
-from src.results import service as result_service
+from src.data.notes import service as notes_service
 from src.signing import SignatureGenerationError, generate_signature
 
 from .client import XhsClient
@@ -168,9 +168,10 @@ class XiaoHongShuAdapter(CrawlerAdapter):
         # Save results
         if all_notes:
             await context.log("INFO", f"保存 {len(all_notes)} 条笔记到数据库...")
-            await result_service.bulk_create_notes(
+            await notes_service.bulk_save_notes_from_crawler(
                 context.db,
-                context.task,
+                context.task.id,
+                context.task.platform,
                 all_notes,
             )
 
@@ -216,9 +217,10 @@ class XiaoHongShuAdapter(CrawlerAdapter):
         # Save results
         if detailed_notes:
             await context.log("INFO", f"保存 {len(detailed_notes)} 条笔记到数据库...")
-            await result_service.bulk_create_notes(
+            await notes_service.bulk_save_notes_from_crawler(
                 context.db,
-                context.task,
+                context.task.id,
+                context.task.platform,
                 detailed_notes,
             )
 

@@ -52,26 +52,11 @@ const handleSubmit = async (data: TaskCreateRequest) => {
   loading.value = true
   try {
     await crawlerTasksApi.createTask(data)
-
-    // 显示成功消息
-    const toast = useToast()
-    toast.add({
-      title: '创建成功',
-      description: `任务 "${data.name}" 已创建`,
-      color: 'success'
-    })
-
+    // API composable 已经显示了成功提示
     navigateTo('/crawler-tasks')
   } catch (error) {
+    // API composable 已经显示了错误提示
     console.error('创建任务失败:', error)
-
-    // 显示错误消息
-    const toast = useToast()
-    toast.add({
-      title: '创建失败',
-      description: '无法创建任务，请稍后重试',
-      color: 'error'
-    })
   } finally {
     loading.value = false
   }

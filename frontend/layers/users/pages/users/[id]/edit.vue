@@ -89,24 +89,11 @@ const handleSubmit = async (updateData: UserUpdate) => {
   loading.value = true;
   try {
     await usersApi.updateUser(data.value.id, updateData);
-
-    // 显示成功消息
-    const toast = useToast();
-    toast.add({
-      title: "更新成功",
-      description: `用户信息已更新`,
-      color: "success",
-    });
-
+    // API composable 已经显示了成功提示
     navigateTo(`/users/${userId.value}`);
-  } catch {
-    // 显示错误消息
-    const toast = useToast();
-    toast.add({
-      title: "更新失败",
-      description: "无法更新用户信息，请稍后重试",
-      color: "error",
-    });
+  } catch (error) {
+    // API composable 已经显示了错误提示
+    console.error('更新用户失败:', error);
   } finally {
     loading.value = false;
   }

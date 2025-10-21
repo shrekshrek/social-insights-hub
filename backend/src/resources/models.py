@@ -62,15 +62,23 @@ class CrawlerProxyProvider(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, comment="配置名称", index=True)
-    provider_type = Column(String(64), nullable=False, default="kuaidaili", comment="代理商类型")
+    provider_type = Column(
+        String(64), nullable=False, default="kuaidaili", comment="代理商类型"
+    )
     secret_id = Column(String(255), nullable=False, comment="快代理 secret_id")
     signature = Column(String(255), nullable=False, comment="快代理 signature")
     username = Column(String(255), nullable=False, comment="代理用户名")
     password = Column(String(255), nullable=False, comment="代理密码")
     pool_size = Column(Integer, nullable=False, default=10, comment="期望池容量")
-    validate_enabled = Column(Boolean, nullable=False, default=True, comment="启用有效性校验")
-    sync_interval_minutes = Column(Integer, nullable=False, default=5, comment="同步间隔(分钟)")
-    is_active = Column(Boolean, nullable=False, default=True, comment="是否启用", index=True)
+    validate_enabled = Column(
+        Boolean, nullable=False, default=True, comment="启用有效性校验"
+    )
+    sync_interval_minutes = Column(
+        Integer, nullable=False, default=5, comment="同步间隔(分钟)"
+    )
+    is_active = Column(
+        Boolean, nullable=False, default=True, comment="是否启用", index=True
+    )
     last_synced_at = Column(DateTime, nullable=True, comment="最近同步时间")
     created_at = Column(
         DateTime, default=datetime.utcnow, nullable=False, comment="创建时间"

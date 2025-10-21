@@ -1,7 +1,10 @@
 import pytest
 
 from src.signing.schemas import SignatureRequest
-from src.signing.strategies.playwright import PlaywrightSignatureStrategy, _PLAYWRIGHT_AVAILABLE
+from src.signing.strategies.playwright import (
+    PlaywrightSignatureStrategy,
+    _PLAYWRIGHT_AVAILABLE,
+)
 
 
 @pytest.mark.asyncio

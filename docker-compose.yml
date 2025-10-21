@@ -60,8 +60,6 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
-      - SIGN_SERVICE_HOST=signsrv
-      - SIGN_SERVICE_PORT=8989
     volumes:
       - ./backend:/app
       - /app/.venv
@@ -69,19 +67,8 @@ services:
       - backend
       - redis
       - postgres_db
-      - signsrv
     dns:
       - 8.8.8.8
-
-  signsrv:
-    build:
-      context: ./MediaCrawlerPro-SignSrv
-      dockerfile: Dockerfile
-    # 不使用固定 container_name，让 Docker Compose 基于项目名自动生成
-    ports:
-      - "8989:8989"
-    environment:
-      - LOGGER_LEVEL=INFO
 
 
 volumes:

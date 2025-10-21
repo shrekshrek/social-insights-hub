@@ -23,16 +23,24 @@ class Note(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     # 平台信息
-    platform: Mapped[str] = mapped_column(String(50), nullable=False, index=True, comment="平台类型")
-    note_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True, comment="平台笔记ID")
+    platform: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True, comment="平台类型"
+    )
+    note_id: Mapped[str] = mapped_column(
+        String(100), nullable=False, unique=True, index=True, comment="平台笔记ID"
+    )
 
     # 笔记基本信息
     title: Mapped[str] = mapped_column(String(500), nullable=False, comment="笔记标题")
     content: Mapped[str | None] = mapped_column(Text, comment="笔记内容")
-    note_type: Mapped[str | None] = mapped_column(String(50), comment="笔记类型(video/image/note)")
+    note_type: Mapped[str | None] = mapped_column(
+        String(50), comment="笔记类型(video/image/note)"
+    )
 
     # 作者信息
-    author_id: Mapped[str | None] = mapped_column(String(100), index=True, comment="作者ID")
+    author_id: Mapped[str | None] = mapped_column(
+        String(100), index=True, comment="作者ID"
+    )
     author_name: Mapped[str | None] = mapped_column(String(200), comment="作者昵称")
 
     # 统计数据
@@ -52,11 +60,17 @@ class Note(Base):
     tags: Mapped[str | None] = mapped_column(Text, comment="标签列表(JSON)")
 
     # 平台发布时间
-    published_at: Mapped[datetime | None] = mapped_column(DateTime, comment="笔记发布时间")
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime, comment="笔记发布时间"
+    )
 
     # 数据管理
-    last_modified_at: Mapped[datetime | None] = mapped_column(DateTime, comment="笔记最后修改时间")
-    crawled_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, comment="首次爬取时间")
+    last_modified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, comment="笔记最后修改时间"
+    )
+    crawled_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, comment="首次爬取时间"
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now, comment="数据更新时间"
     )
@@ -93,10 +107,14 @@ class TaskNote(Base):
     crawled_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, comment="该任务爬取此笔记的时间"
     )
-    keyword: Mapped[str | None] = mapped_column(String(200), comment="爬取时使用的关键词")
+    keyword: Mapped[str | None] = mapped_column(
+        String(200), comment="爬取时使用的关键词"
+    )
 
     # 关联关系
-    task: Mapped[CrawlerTask] = relationship("CrawlerTask", back_populates="note_associations")
+    task: Mapped[CrawlerTask] = relationship(
+        "CrawlerTask", back_populates="note_associations"
+    )
     note: Mapped[Note] = relationship("Note", back_populates="task_associations")
 
     __table_args__ = (

@@ -66,7 +66,8 @@ class XhsClient:
             timeout: Request timeout in seconds
         """
         self._cookies = self._parse_cookies(cookies) if cookies else {}
-        self._cookie_str = cookies or ""  # Keep original cookie string for signing
+        # Clean cookie string: strip whitespace and newlines to avoid "Illegal header value" errors
+        self._cookie_str = cookies.strip() if cookies else ""
         self._proxy = self._build_proxy_url(proxy) if proxy else None
         self._timeout = timeout
         self._client: httpx.AsyncClient | None = None
@@ -93,10 +94,13 @@ class XhsClient:
         """Get or create async HTTP client."""
         if self._client is None:
             # 构建 AsyncClient 参数（请求头需要完全模拟浏览器）
+            # NOTE: 不在这里设置 cookies，而是在每个请求中手动添加 Cookie header
+            # 这样可以确保 Cookie 和签名的一致性
             client_kwargs = {
-                "cookies": self._cookies,
                 "timeout": self._timeout,
                 "follow_redirects": True,
+                "http2": False,  # ⚠️ 使用HTTP/1.1（虽然此方法已不再用于搜索）
+                "trust_env": False,  # 不信任环境变量的代理设置
                 "headers": {
                     "accept": "application/json, text/plain, */*",
                     "accept-language": "zh-CN,zh;q=0.9",
@@ -153,7 +157,9 @@ class XhsClient:
         Returns:
             List of note data dicts
         """
-        client = self._get_client()
+        # ⚠️ 不使用 self._get_client()，而是为每个请求创建新的客户端
+        # 这样可以避免连接池/HTTP2状态复用被小红书反爬识别
+        # 参考 MediaCrawlerPro-Python 的实现方式
 
         # Build search data (POST body, not query params)
         search_data = {
@@ -169,7 +175,7 @@ class XhsClient:
         url = f"{self.BASE_URL}{self.SEARCH_ENDPOINT}"
 
         # Get signature using built-in signing module
-        headers = {}
+        signature_headers = {}
         try:
             sign_data = await generate_signature(
                 platform="xhs",
@@ -177,54 +183,119 @@ class XhsClient:
                     "uri": self.SEARCH_ENDPOINT,
                     "data": search_data,
                     "cookies": self._cookie_str,
+                    # b1 will use default value from signing service
                 },
             )
             # Extract signature headers
             if sign_data:
-                headers["X-s"] = sign_data.get("x-s", "")
-                headers["X-t"] = sign_data.get("x-t", "")
+                logger.info(
+                    f"完整签名数据: {json.dumps(sign_data, ensure_ascii=False)}"
+                )
+                signature_headers["X-s"] = sign_data.get("x-s", "")
+                signature_headers["X-t"] = sign_data.get("x-t", "")
                 if "x-s-common" in sign_data:
-                    headers["x-s-common"] = sign_data["x-s-common"]
+                    signature_headers["x-s-common"] = sign_data["x-s-common"]
                 if "x-b3-traceid" in sign_data:
-                    headers["X-B3-Traceid"] = sign_data["x-b3-traceid"]
+                    signature_headers["X-B3-Traceid"] = sign_data["x-b3-traceid"]
                 if "x-mns" in sign_data:
-                    headers["X-Mns"] = sign_data["x-mns"]
+                    signature_headers["X-Mns"] = sign_data["x-mns"]
                 logger.info("Generated signature headers successfully")
         except Exception as e:
             logger.warning(f"Failed to generate signature, proceeding without: {e}")
 
         try:
-            # 添加随机延时，避免频繁请求触发反爬 (2-5秒)
+            # 添加随机延时，避免频繁请求触发反爬 (5-10秒，增加延时以避免反爬)
             import asyncio
 
-            delay = random.uniform(2, 5)
-            logger.info(f"延时 {delay:.2f} 秒后发起请求...")
+            delay = random.uniform(5, 10)
+            logger.info(f"延时 {delay:.2f} 秒后发起搜索请求...")
             await asyncio.sleep(delay)
+
+            # Serialize data to JSON string (same format used for signature)
+            json_str = json.dumps(
+                search_data, separators=(",", ":"), ensure_ascii=False
+            )
 
             # 打印请求详情用于调试
             logger.info(f"请求 URL: {url}")
-            logger.info(f"请求数据: {json.dumps(search_data, ensure_ascii=False)}")
+            logger.info(f"请求数据: {json_str}")
             logger.info(f"Cookie (前50字符): {self._cookie_str[:50]}...")
             logger.info(
-                f"签名头: X-s={headers.get('X-s', '')[:20]}..., X-t={headers.get('X-t', '')}"
+                f"签名头: X-s={signature_headers.get('X-s', '')[:20]}..., X-t={signature_headers.get('X-t', '')}"
             )
 
-            response = await client.post(url, json=search_data, headers=headers)
-            response.raise_for_status()
+            # 构建完整的请求头（包含签名头） - 完全匹配 MediaCrawlerPro
+            request_headers = {
+                "accept": "application/json, text/plain, */*",
+                "accept-language": "zh-CN,zh;q=0.9",
+                "cache-control": "no-cache",
+                "content-type": "application/json;charset=UTF-8",
+                "origin": "https://www.xiaohongshu.com",
+                "pragma": "no-cache",
+                "priority": "u=1, i",
+                "referer": "https://www.xiaohongshu.com/",
+                "sec-ch-ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"',  # 匹配 MediaCrawlerPro
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",  # 匹配 MediaCrawlerPro
+                "cookie": self._cookie_str,
+            }
+            # 添加签名头
+            request_headers.update(signature_headers)
 
-            data = response.json()
+            # 🔍 调试: 打印完整Cookie
+            logger.info(f"🔍 完整Cookie长度: {len(self._cookie_str)}")
+            logger.info(f"🔍 完整Cookie内容: {self._cookie_str}")
+
+            # 打印所有将要发送的请求头（调试用）
             logger.info(
-                f"Search API response: {json.dumps(data, ensure_ascii=False)[:500]}"
+                f"所有请求头: {json.dumps({k: v[:100] + '...' if len(str(v)) > 100 else v for k, v in request_headers.items()}, ensure_ascii=False, indent=2)}"
             )
+
+            # ✅ 关键修改: 为每个请求创建新的 AsyncClient (完全模仿 MediaCrawlerPro)
+            # MediaCrawlerPro 使用 HTTP/1.1 而非 HTTP/2！
+            client_kwargs = {
+                "timeout": self._timeout,
+                "follow_redirects": True,
+                "http2": False,  # ⚠️ 关键：MediaCrawlerPro使用HTTP/1.1，不是HTTP/2
+                "trust_env": False,
+            }
+            if self._proxy:
+                client_kwargs["proxy"] = self._proxy
+
+            async with httpx.AsyncClient(**client_kwargs) as fresh_client:
+                # Use data= with JSON string instead of json= to match signature
+                response = await fresh_client.post(url, data=json_str, headers=request_headers)
+                response.raise_for_status()
+
+                data = response.json()
+                logger.info(
+                    f"Search API response: {json.dumps(data, ensure_ascii=False)[:500]}"
+                )
 
             # Parse response
             if data.get("code") == 0 or data.get("success"):
                 items = data.get("data", {}).get("items", [])
                 notes = []
                 for item in items:
-                    note_card = item.get("note_card", {})
-                    if note_card:
-                        notes.append(self._parse_note_card(note_card))
+                    # Handle multiple response structure formats:
+                    # 1. item.note_card (wrapped format)
+                    # 2. item.data (alternative wrapper)
+                    # 3. item itself (direct format)
+                    note_data = item.get("note_card") or item.get("data") or item
+
+                    # Validate we have valid note data (must have note_id)
+                    if note_data and isinstance(note_data, dict) and note_data.get("note_id"):
+                        try:
+                            notes.append(self._parse_note_card(note_data))
+                        except Exception as e:
+                            logger.warning(f"Failed to parse note {note_data.get('note_id')}: {e}")
+                            continue
+
+                logger.info(f"Successfully parsed {len(notes)} notes from {len(items)} items")
                 return notes
             else:
                 error_msg = data.get("msg", "Unknown error")
@@ -245,13 +316,12 @@ class XhsClient:
         Returns:
             User info dict if successful, None otherwise
         """
-        client = self._get_client()
         uri = "/api/sns/web/v1/user/selfinfo"
         url = f"{self.BASE_URL}{uri}"
 
         try:
             # Generate signature for this request
-            headers = {}
+            signature_headers = {}
             try:
                 sign_data = await generate_signature(
                     platform="xhs",
@@ -262,27 +332,57 @@ class XhsClient:
                     },
                 )
                 if sign_data:
-                    headers["X-s"] = sign_data.get("x-s", "")
-                    headers["X-t"] = sign_data.get("x-t", "")
+                    signature_headers["X-s"] = sign_data.get("x-s", "")
+                    signature_headers["X-t"] = sign_data.get("x-t", "")
                     if "x-s-common" in sign_data:
-                        headers["x-s-common"] = sign_data["x-s-common"]
+                        signature_headers["x-s-common"] = sign_data["x-s-common"]
                     if "x-b3-traceid" in sign_data:
-                        headers["X-B3-Traceid"] = sign_data["x-b3-traceid"]
+                        signature_headers["X-B3-Traceid"] = sign_data["x-b3-traceid"]
             except Exception as e:
                 logger.warning(f"Failed to generate signature for selfinfo: {e}")
 
-            response = await client.get(url, headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                logger.info(
-                    f"User selfinfo response: {json.dumps(data, ensure_ascii=False)[:200]}"
-                )
-                return data
-            else:
-                logger.warning(
-                    f"Query selfinfo failed with status {response.status_code}"
-                )
-                return None
+            # 构建完整的请求头
+            request_headers = {
+                "accept": "application/json, text/plain, */*",
+                "accept-language": "zh-CN,zh;q=0.9",
+                "cache-control": "no-cache",
+                "origin": "https://www.xiaohongshu.com",
+                "pragma": "no-cache",
+                "referer": "https://www.xiaohongshu.com/",
+                "sec-ch-ua": '"Chromium";v="131", "Google Chrome";v="131", "Not.A/Brand";v="99"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"macOS"',
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "cookie": self._cookie_str,
+            }
+            request_headers.update(signature_headers)
+
+            # ✅ 使用新客户端实例（HTTP/1.1，匹配MediaCrawlerPro）
+            client_kwargs = {
+                "timeout": self._timeout,
+                "follow_redirects": True,
+                "http2": False,  # 使用HTTP/1.1
+                "trust_env": False,
+            }
+            if self._proxy:
+                client_kwargs["proxy"] = self._proxy
+
+            async with httpx.AsyncClient(**client_kwargs) as fresh_client:
+                response = await fresh_client.get(url, headers=request_headers)
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info(
+                        f"User selfinfo response: {json.dumps(data, ensure_ascii=False)[:200]}"
+                    )
+                    return data
+                else:
+                    logger.warning(
+                        f"Query selfinfo failed with status {response.status_code}"
+                    )
+                    return None
 
         except Exception as exc:
             logger.error(f"Query selfinfo request failed: {exc}")

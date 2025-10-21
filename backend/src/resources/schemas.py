@@ -18,7 +18,9 @@ class CrawlerAccountCreate(CustomBaseModel):
 
 
 class CrawlerAccountUpdate(CustomBaseModel):
-    account_name: str | None = Field(default=None, max_length=255, description="账号标识")
+    account_name: str | None = Field(
+        default=None, max_length=255, description="账号标识"
+    )
     cookies: str | None = Field(default=None, description="登录Cookies")
     is_active: bool | None = Field(default=None, description="是否启用")
 
@@ -31,7 +33,9 @@ class CrawlerAccountResponse(CustomBaseModel):
     id: int
     platform: PlatformType
     account_name: str
-    cookies: Optional[str] = Field(default=None, description="登录Cookies（编辑时需要）")
+    cookies: Optional[str] = Field(
+        default=None, description="登录Cookies（编辑时需要）"
+    )
     is_active: bool
     locked_by_task_id: Optional[int]
     last_used_at: Optional[datetime]
@@ -49,12 +53,8 @@ class ProxyProviderCreate(CustomBaseModel):
     signature: str = Field(..., max_length=255, description="快代理 signature")
     username: str = Field(..., max_length=255, description="代理用户名")
     password: str = Field(..., max_length=255, description="代理密码")
-    pool_size: int = Field(
-        default=10, ge=1, le=200, description="期望的代理池容量"
-    )
-    validate_enabled: bool = Field(
-        default=True, description="是否启用代理可用性校验"
-    )
+    pool_size: int = Field(default=10, ge=1, le=200, description="期望的代理池容量")
+    validate_enabled: bool = Field(default=True, description="是否启用代理可用性校验")
     sync_interval_minutes: int = Field(
         default=5, ge=1, le=120, description="同步间隔（分钟）"
     )
@@ -66,8 +66,12 @@ class ProxyProviderUpdate(CustomBaseModel):
     provider_type: str | None = Field(
         default=None, description="代理商类型，当前仅支持快代理"
     )
-    secret_id: str | None = Field(default=None, max_length=255, description="快代理 secret_id")
-    signature: str | None = Field(default=None, max_length=255, description="快代理 signature")
+    secret_id: str | None = Field(
+        default=None, max_length=255, description="快代理 secret_id"
+    )
+    signature: str | None = Field(
+        default=None, max_length=255, description="快代理 signature"
+    )
     username: str | None = Field(default=None, max_length=255, description="代理用户名")
     password: str | None = Field(default=None, max_length=255, description="代理密码")
     pool_size: int | None = Field(

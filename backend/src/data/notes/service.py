@@ -153,7 +153,9 @@ async def associate_note_with_task(
     existing = result.scalars().first()
 
     if existing:
-        logger.debug(f"Task-Note association already exists: task={task_id}, note={note_id}")
+        logger.debug(
+            f"Task-Note association already exists: task={task_id}, note={note_id}"
+        )
         return existing
 
     # Create new association
@@ -181,9 +183,7 @@ async def get_notes_by_task(
     return list(result.scalars().all())
 
 
-async def get_tasks_by_note(
-    db: AsyncSession, note_id: int
-) -> List[models.TaskNote]:
+async def get_tasks_by_note(db: AsyncSession, note_id: int) -> List[models.TaskNote]:
     """Get all task associations for a note (with task metadata)."""
     stmt = (
         select(models.TaskNote)
@@ -247,19 +247,29 @@ async def bulk_save_notes_from_crawler(
                 content=note_dict.get("content") or note_dict.get("desc"),
                 note_type=note_dict.get("type"),
                 author_id=note_dict.get("user_id") or note_dict.get("author_id"),
-                author_name=note_dict.get("user_name") or note_dict.get("author_name") or note_dict.get("nickname"),
-                liked_count=note_dict.get("liked_count", 0) or note_dict.get("likes", 0),
-                collected_count=note_dict.get("collected_count", 0) or note_dict.get("collects", 0),
-                comment_count=note_dict.get("comment_count", 0) or note_dict.get("comments", 0),
-                shared_count=note_dict.get("shared_count", 0) or note_dict.get("shares", 0),
+                author_name=note_dict.get("user_name")
+                or note_dict.get("author_name")
+                or note_dict.get("nickname"),
+                liked_count=note_dict.get("liked_count", 0)
+                or note_dict.get("likes", 0),
+                collected_count=note_dict.get("collected_count", 0)
+                or note_dict.get("collects", 0),
+                comment_count=note_dict.get("comment_count", 0)
+                or note_dict.get("comments", 0),
+                shared_count=note_dict.get("shared_count", 0)
+                or note_dict.get("shares", 0),
                 view_count=note_dict.get("view_count", 0) or note_dict.get("views", 0),
-                images=str(note_dict.get("images")) if note_dict.get("images") else None,
+                images=str(note_dict.get("images"))
+                if note_dict.get("images")
+                else None,
                 video_url=note_dict.get("video_url"),
                 note_url=note_dict.get("note_url"),
                 ip_location=note_dict.get("ip_location") or note_dict.get("ip_loc"),
                 tags=str(note_dict.get("tags")) if note_dict.get("tags") else None,
-                published_at=note_dict.get("published_at") or note_dict.get("publish_time"),
-                last_modified_at=note_dict.get("last_modified_at") or note_dict.get("last_update_time"),
+                published_at=note_dict.get("published_at")
+                or note_dict.get("publish_time"),
+                last_modified_at=note_dict.get("last_modified_at")
+                or note_dict.get("last_update_time"),
             )
 
             # Get or create note
@@ -276,7 +286,9 @@ async def bulk_save_notes_from_crawler(
                 logger.debug(f"Updated existing note: {note.note_id}")
 
         except Exception as exc:
-            logger.error(f"Failed to save note {note_dict.get('note_id')}: {exc}", exc_info=True)
+            logger.error(
+                f"Failed to save note {note_dict.get('note_id')}: {exc}", exc_info=True
+            )
             continue
 
     logger.info(f"Bulk saved {len(saved_notes)} notes for task {task_id}")

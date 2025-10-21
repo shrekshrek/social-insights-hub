@@ -76,7 +76,9 @@ async def get_note_by_platform_id(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="无效的平台标识") from exc
 
-    note = await service.get_note_by_platform_id(db, platform_enum.value, platform_note_id)
+    note = await service.get_note_by_platform_id(
+        db, platform_enum.value, platform_note_id
+    )
     if not note:
         raise HTTPException(status_code=404, detail="笔记不存在")
     return schemas.NoteInDB.model_validate(note)

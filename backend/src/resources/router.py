@@ -138,8 +138,7 @@ async def list_proxy_providers(
 ):
     providers = await service.list_proxy_providers(db, active)
     return [
-        schemas.ProxyProviderResponse.model_validate(provider)
-        for provider in providers
+        schemas.ProxyProviderResponse.model_validate(provider) for provider in providers
     ]
 
 

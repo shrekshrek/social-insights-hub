@@ -10,10 +10,12 @@ from src.config import settings
 from .base import SignatureStrategy
 from .strategies.javascript import JavascriptSignatureStrategy
 from .strategies.playwright import PlaywrightSignatureStrategy
+from .strategies.http import HttpSignatureStrategy
 
 _STRATEGY_REGISTRY: Dict[str, Type[SignatureStrategy]] = {
     "javascript": JavascriptSignatureStrategy,
     "playwright": PlaywrightSignatureStrategy,
+    "http": HttpSignatureStrategy,
 }
 
 

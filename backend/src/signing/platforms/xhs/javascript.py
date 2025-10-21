@@ -508,7 +508,9 @@ def _mrc(e: str) -> int:
         MAX32INT = 4294967295
         return (val + (MAX32INT + 1)) % (2 * (MAX32INT + 1)) - MAX32INT - 1
 
-    for n in range(len(e)):
+    # ⭐ 关键修复: MediaCrawlerPro-SignSrv固定循环57次，而不是len(e)
+    # 这是x-s-common签名计算的关键差异！
+    for n in range(57):
         o = ie[(o & 255) ^ ord(e[n])] ^ right_without_sign(o, 8)
     return o ^ -1 ^ 3988292384
 
@@ -603,16 +605,16 @@ def apply_secondary_signature(
         "s0": 3,  # getPlatformCode
         "s1": "",
         "x0": "1",  # localStorage.getItem("b1b1")
-        "x1": "3.7.8-2",  # version
+        "x1": "3.6.8",  # version (匹配MediaCrawlerPro-SignSrv)
         "x2": "Mac OS",
         "x3": "xhs-pc-web",
-        "x4": "4.27.2",
+        "x4": "4.20.1",  # app version (匹配MediaCrawlerPro-SignSrv)
         "x5": a1,  # cookie of a1
         "x6": x_t,
         "x7": x_s,
         "x8": b1,  # localStorage.getItem("b1")
         "x9": _mrc(x_t + x_s + b1),
-        "x10": 154,  # getSigCount
+        "x10": 1,  # getSigCount (匹配MediaCrawlerPro-SignSrv)
     }
 
     encode_str = _encode_utf8(json.dumps(common, separators=(",", ":")))

@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     @field_validator("SIGNING_STRATEGY")
     @classmethod
     def validate_signing_strategy(cls, v: str) -> str:
-        allowed = {"javascript", "playwright"}
+        allowed = {"javascript", "playwright", "http"}
         value = v.lower()
         if value not in allowed:
             raise ValueError(f"SIGNING_STRATEGY 必须是 {allowed} 之一")

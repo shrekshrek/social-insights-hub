@@ -256,19 +256,15 @@ class XhsClient:
             )
 
             # ✅ 关键修改: 为每个请求创建新的 AsyncClient (完全模仿 MediaCrawlerPro)
-            # MediaCrawlerPro 使用 HTTP/1.1 而非 HTTP/2！
-            client_kwargs = {
-                "timeout": self._timeout,
-                "follow_redirects": True,
-                "http2": False,  # ⚠️ 关键：MediaCrawlerPro使用HTTP/1.1，不是HTTP/2
-                "trust_env": False,
-            }
+            # MediaCrawlerPro 只设置 proxies，其他参数使用httpx默认值！
+            client_kwargs = {}
             if self._proxy:
-                client_kwargs["proxy"] = self._proxy
+                client_kwargs["proxies"] = self._proxy  # MediaCrawlerPro使用复数形式
 
             async with httpx.AsyncClient(**client_kwargs) as fresh_client:
                 # Use data= with JSON string instead of json= to match signature
-                response = await fresh_client.post(url, data=json_str, headers=request_headers)
+                # MediaCrawlerPro在request调用时传入timeout=10（见client.py第210行）
+                response = await fresh_client.post(url, data=json_str, headers=request_headers, timeout=10.0)
                 response.raise_for_status()
 
                 data = response.json()
@@ -360,18 +356,13 @@ class XhsClient:
             }
             request_headers.update(signature_headers)
 
-            # ✅ 使用新客户端实例（HTTP/1.1，匹配MediaCrawlerPro）
-            client_kwargs = {
-                "timeout": self._timeout,
-                "follow_redirects": True,
-                "http2": False,  # 使用HTTP/1.1
-                "trust_env": False,
-            }
+            # ✅ 使用新客户端实例（完全使用httpx默认配置，匹配MediaCrawlerPro）
+            client_kwargs = {}
             if self._proxy:
-                client_kwargs["proxy"] = self._proxy
+                client_kwargs["proxies"] = self._proxy
 
             async with httpx.AsyncClient(**client_kwargs) as fresh_client:
-                response = await fresh_client.get(url, headers=request_headers)
+                response = await fresh_client.get(url, headers=request_headers, timeout=10.0)
                 if response.status_code == 200:
                     data = response.json()
                     logger.info(

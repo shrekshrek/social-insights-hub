@@ -51,9 +51,13 @@ class JavascriptSignatureStrategy(SignatureStrategy):
         else:
             details["xhs"] = "unavailable"
             status = "degraded"
-        return SignatureHealth(status=status, strategy=self.name, details=details or None)
+        return SignatureHealth(
+            status=status, strategy=self.name, details=details or None
+        )
 
-    async def _generate_xhs(self, payload: Dict[str, Any]) -> Optional[SignatureResponse]:
+    async def _generate_xhs(
+        self, payload: Dict[str, Any]
+    ) -> Optional[SignatureResponse]:
         if "uri" not in payload or "cookies" not in payload:
             self._xhs_unavailable_reason = None
             return None

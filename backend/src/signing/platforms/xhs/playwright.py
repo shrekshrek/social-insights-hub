@@ -12,6 +12,7 @@ from typing import Any, Dict
 
 try:  # pragma: no cover - optional dependency
     from playwright.async_api import BrowserContext, Page, Playwright, async_playwright
+
     _PLAYWRIGHT_IMPORTED = True
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     BrowserContext = Page = Playwright = Any  # type: ignore
@@ -50,7 +51,11 @@ class XhsPlaywrightRuntime:
 
     async def ensure_ready(self) -> None:
         if self._is_circuit_open():
-            remaining = int(self._circuit_open_until - time.monotonic()) if self._circuit_open_until else 0
+            remaining = (
+                int(self._circuit_open_until - time.monotonic())
+                if self._circuit_open_until
+                else 0
+            )
             raise RuntimeError(
                 f"Playwright signing temporarily disabled, retry after {remaining}s"
             )
@@ -68,7 +73,9 @@ class XhsPlaywrightRuntime:
             pw = await async_playwright().start()
             browser_type = getattr(pw, self._settings.browser)
         except AttributeError as exc:  # pragma: no cover - misconfiguration
-            raise ValueError(f"Unsupported Playwright browser: {self._settings.browser}") from exc
+            raise ValueError(
+                f"Unsupported Playwright browser: {self._settings.browser}"
+            ) from exc
 
         user_data_dir = self._settings.user_data_dir
         if user_data_dir.exists():
@@ -178,7 +185,7 @@ class XhsPlaywrightRuntime:
             "x-t": str(x_t),
             "x-s-common": result.get("X-s-common"),
             "x-b3-traceid": result.get("X-b3-traceid"),
-            }
+        }
 
     def health(self) -> Dict[str, Any]:
         status = "ok"
@@ -204,7 +211,9 @@ class XhsPlaywrightRuntime:
         self._error = message
         self._failure_count += 1
         if self._failure_count >= self._settings.max_failures:
-            self._circuit_open_until = time.monotonic() + self._settings.cooldown_seconds
+            self._circuit_open_until = (
+                time.monotonic() + self._settings.cooldown_seconds
+            )
             _LOGGER.warning(
                 "Playwright signing circuit opened for %.0fs due to repeated failures",
                 self._settings.cooldown_seconds,

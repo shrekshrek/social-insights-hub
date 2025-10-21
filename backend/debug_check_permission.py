@@ -44,13 +44,23 @@ async def main():
         await init_rbac_data(async_session)
         resp = await client.post(
             "/api/v1/auth/register",
-            json={"username": "admin_user", "password": "StrongPass123", "email": "admin@example.com"},
+            json={
+                "username": "admin_user",
+                "password": "StrongPass123",
+                "email": "admin@example.com",
+            },
         )
         print("register", resp.status_code, resp.json())
 
-        admin_user = await auth_service.get_user_by_username(async_session, "admin_user")
-        super_role = await rbac_service.get_role_by_name(async_session, SystemRoles.SUPER_ADMIN)
-        await rbac_service.assign_user_roles(async_session, admin_user.id, [super_role.id])
+        admin_user = await auth_service.get_user_by_username(
+            async_session, "admin_user"
+        )
+        super_role = await rbac_service.get_role_by_name(
+            async_session, SystemRoles.SUPER_ADMIN
+        )
+        await rbac_service.assign_user_roles(
+            async_session, admin_user.id, [super_role.id]
+        )
 
         login_resp = await client.post(
             "/api/v1/auth/token",

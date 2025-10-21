@@ -35,10 +35,16 @@ def upgrade() -> None:
             comment="代理商类型",
         ),
         sa.Column(
-            "secret_id", sa.String(length=255), nullable=False, comment="快代理 secret_id"
+            "secret_id",
+            sa.String(length=255),
+            nullable=False,
+            comment="快代理 secret_id",
         ),
         sa.Column(
-            "signature", sa.String(length=255), nullable=False, comment="快代理 signature"
+            "signature",
+            sa.String(length=255),
+            nullable=False,
+            comment="快代理 signature",
         ),
         sa.Column(
             "username", sa.String(length=255), nullable=False, comment="代理用户名"
@@ -74,7 +80,9 @@ def upgrade() -> None:
             server_default=sa.text("true"),
             comment="是否启用",
         ),
-        sa.Column("last_synced_at", sa.DateTime(), nullable=True, comment="最近同步时间"),
+        sa.Column(
+            "last_synced_at", sa.DateTime(), nullable=True, comment="最近同步时间"
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(),

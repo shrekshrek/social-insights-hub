@@ -130,22 +130,11 @@ const handleDelete = async () => {
 
   try {
     await crawlerTasksApi.deleteTask(data.value.id)
-
-    const toast = useToast()
-    toast.add({
-      title: '删除成功',
-      description: `任务 "${data.value.name}" 已被删除`,
-      color: 'success'
-    })
-
+    // API composable 已经显示了成功提示
     navigateTo('/crawler-tasks')
-  } catch {
-    const toast = useToast()
-    toast.add({
-      title: '删除失败',
-      description: '无法删除任务，请稍后重试',
-      color: 'error'
-    })
+  } catch (error) {
+    // API composable 已经显示了错误提示
+    console.error('删除任务失败:', error)
   }
 }
 

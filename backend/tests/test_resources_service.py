@@ -62,7 +62,9 @@ async def test_allocate_and_release_account(async_db_session: AsyncSession):
     assert refreshed.failure_count == 1
 
 
-async def test_proxy_provider_flow(async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
+async def test_proxy_provider_flow(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+):
     provider = await resource_service.create_proxy_provider(
         async_db_session,
         ProxyProviderCreate(
@@ -104,10 +106,14 @@ async def test_proxy_provider_flow(async_db_session: AsyncSession, monkeypatch: 
     assert status.provider_id == provider.id
     assert status.available == 3
 
-    allocation = await resource_service.allocate_proxy_endpoint(async_db_session, provider.id)
+    allocation = await resource_service.allocate_proxy_endpoint(
+        async_db_session, provider.id
+    )
     assert allocation is not None
     assert allocation.host == "127.0.0.1"
 
-    pool_status = await resource_service.get_proxy_pool_status(async_db_session, provider.id)
+    pool_status = await resource_service.get_proxy_pool_status(
+        async_db_session, provider.id
+    )
     assert pool_status is not None
     assert pool_status.provider_id == provider.id

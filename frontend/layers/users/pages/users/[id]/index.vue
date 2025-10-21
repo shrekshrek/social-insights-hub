@@ -91,24 +91,11 @@ const handleDelete = async () => {
   
   try {
     await usersApi.deleteUser(data.value.id)
-    
-    // 显示成功消息
-    const toast = useToast()
-    toast.add({
-      title: '删除成功',
-      description: `用户 "${data.value.username}" 已被删除`,
-      color: 'success'
-    })
-    
+    // API composable 已经显示了成功提示
     navigateTo('/users')
-  } catch {
-    // 显示错误消息
-    const toast = useToast()
-    toast.add({
-      title: '删除失败',
-      description: '无法删除用户，请稍后重试',
-      color: 'error'
-    })
+  } catch (error) {
+    // API composable 已经显示了错误提示
+    console.error('删除用户失败:', error)
   }
 }
 

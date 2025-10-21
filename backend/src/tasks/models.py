@@ -145,8 +145,12 @@ class CrawlerTask(Base):
     # 关系
     creator = relationship("User", backref="crawler_tasks")
     logs = relationship("TaskLog", back_populates="task", cascade="all, delete-orphan")
-    note_associations = relationship("TaskNote", back_populates="task", cascade="all, delete-orphan")
-    comment_associations = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
+    note_associations = relationship(
+        "TaskNote", back_populates="task", cascade="all, delete-orphan"
+    )
+    comment_associations = relationship(
+        "TaskComment", back_populates="task", cascade="all, delete-orphan"
+    )
 
 
 class TaskLog(Base):

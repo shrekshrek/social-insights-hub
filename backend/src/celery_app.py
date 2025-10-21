@@ -14,6 +14,4 @@ celery_app.conf.update(
 
 # Celery worker 启动时会自动 import 这个模块的任务
 # 通过 include 配置让 Celery 知道从哪里加载任务
-celery_app.conf.update(
-    include=["src.tasks.worker"]
-)
+celery_app.conf.update(include=["src.tasks.worker"])

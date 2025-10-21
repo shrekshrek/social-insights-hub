@@ -96,9 +96,7 @@ async def _pop_cached_proxy(
     return None
 
 
-async def _count_cached_proxies(
-    redis_client: redis.Redis, provider_id: int
-) -> int:
+async def _count_cached_proxies(redis_client: redis.Redis, provider_id: int) -> int:
     pattern = f"{PROXY_CACHE_PREFIX}:{provider_id}:*"
     count = 0
     async for _ in redis_client.scan_iter(match=pattern):
@@ -373,7 +371,9 @@ async def refresh_proxy_pool(
         raise ValueError("代理服务商未启用")
 
     redis_client = await _acquire_redis_client()
-    proxies = await _populate_provider_cache(db, provider, redis_client, provider.pool_size)
+    proxies = await _populate_provider_cache(
+        db, provider, redis_client, provider.pool_size
+    )
     available = len(proxies)
     if redis_client:
         available = await _count_cached_proxies(redis_client, provider.id)

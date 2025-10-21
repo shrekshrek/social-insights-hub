@@ -37,9 +37,7 @@ class PlaywrightSignatureStrategy(SignatureStrategy):
         self.browser = browser
         self.headless = headless
         self.user_data_dir = Path(user_data_dir or ".playwright/xhs").resolve()
-        self.stealth_script = (
-            Path(stealth_script).resolve() if stealth_script else None
-        )
+        self.stealth_script = Path(stealth_script).resolve() if stealth_script else None
         if self.stealth_script and not self.stealth_script.exists():
             _LOGGER.warning("Stealth script not found at %s", self.stealth_script)
             self.stealth_script = None

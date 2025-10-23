@@ -11,7 +11,9 @@ from typing import Any, Dict, List
 import httpx
 
 from src.resources.service import ProxyEndpoint
-from src.signing import generate_signature
+
+from .sign_client import SignServerClient
+from .sign_models import XhsSignRequest
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,7 @@ class XhsClient:
         cookies: str | None = None,
         proxy: ProxyEndpoint | None = None,
         timeout: int = 30,
+        sign_service_url: str = "http://localhost:8989",
     ) -> None:
         """
         Initialize XHS client.
@@ -64,6 +67,7 @@ class XhsClient:
             cookies: Cookie string for authentication (format: "key1=value1; key2=value2")
             proxy: Proxy endpoint configuration
             timeout: Request timeout in seconds
+            sign_service_url: MediaCrawlerPro sign service URL
         """
         self._cookies = self._parse_cookies(cookies) if cookies else {}
         # Clean cookie string: strip whitespace and newlines to avoid "Illegal header value" errors
@@ -71,6 +75,9 @@ class XhsClient:
         self._proxy = self._build_proxy_url(proxy) if proxy else None
         self._timeout = timeout
         self._client: httpx.AsyncClient | None = None
+
+        # ⭐ Use MediaCrawlerPro's SignServerClient (with aiohttp, matching working implementation)
+        self._sign_client = SignServerClient(endpoint=sign_service_url, timeout=60)
 
     @staticmethod
     def _parse_cookies(cookie_str: str) -> Dict[str, str]:
@@ -174,34 +181,33 @@ class XhsClient:
         # Build URL
         url = f"{self.BASE_URL}{self.SEARCH_ENDPOINT}"
 
-        # Get signature using built-in signing module
+        # ⭐ Get signature using MediaCrawlerPro's SignServerClient (with aiohttp)
         signature_headers = {}
         try:
-            sign_data = await generate_signature(
-                platform="xhs",
-                payload={
-                    "uri": self.SEARCH_ENDPOINT,
-                    "data": search_data,
-                    "cookies": self._cookie_str,
-                    # b1 will use default value from signing service
-                },
+            # Create sign request (matching MediaCrawlerPro-Python exactly)
+            sign_req = XhsSignRequest(
+                uri=self.SEARCH_ENDPOINT,
+                data=search_data,  # Pass dict object directly (will be converted by model_dump())
+                cookies=self._cookie_str,
             )
-            # Extract signature headers
-            if sign_data:
-                logger.info(
-                    f"完整签名数据: {json.dumps(sign_data, ensure_ascii=False)}"
-                )
-                signature_headers["X-s"] = sign_data.get("x-s", "")
-                signature_headers["X-t"] = sign_data.get("x-t", "")
-                if "x-s-common" in sign_data:
-                    signature_headers["x-s-common"] = sign_data["x-s-common"]
-                if "x-b3-traceid" in sign_data:
-                    signature_headers["X-B3-Traceid"] = sign_data["x-b3-traceid"]
-                if "x-mns" in sign_data:
-                    signature_headers["X-Mns"] = sign_data["x-mns"]
-                logger.info("Generated signature headers successfully")
+
+            # Call sign service using aiohttp (matching MediaCrawlerPro-Python)
+            xhs_sign_resp = await self._sign_client.xiaohongshu_sign(sign_req)
+
+            # Extract signature headers (matching MediaCrawlerPro-Python's format)
+            xmns = xhs_sign_resp.data.x_mns
+            signature_headers = {
+                "X-s": xhs_sign_resp.data.x_s,
+                "X-t": xhs_sign_resp.data.x_t,
+                "x-s-common": xhs_sign_resp.data.x_s_common,
+                "X-B3-Traceid": xhs_sign_resp.data.x_b3_traceid,
+                "X-Mns": xmns,
+            }
+
+            logger.info("✅ Generated signature using MediaCrawlerPro SignServerClient")
         except Exception as e:
-            logger.warning(f"Failed to generate signature, proceeding without: {e}")
+            logger.error(f"❌ Failed to generate signature: {e}")
+            raise
 
         try:
             # 添加随机延时，避免频繁请求触发反爬 (5-10秒，增加延时以避免反爬)
@@ -316,24 +322,24 @@ class XhsClient:
         url = f"{self.BASE_URL}{uri}"
 
         try:
-            # Generate signature for this request
+            # ⭐ Generate signature using MediaCrawlerPro's SignServerClient
             signature_headers = {}
             try:
-                sign_data = await generate_signature(
-                    platform="xhs",
-                    payload={
-                        "uri": uri,
-                        "data": None,
-                        "cookies": self._cookie_str,
-                    },
+                sign_req = XhsSignRequest(
+                    uri=uri,
+                    data=None,
+                    cookies=self._cookie_str,
                 )
-                if sign_data:
-                    signature_headers["X-s"] = sign_data.get("x-s", "")
-                    signature_headers["X-t"] = sign_data.get("x-t", "")
-                    if "x-s-common" in sign_data:
-                        signature_headers["x-s-common"] = sign_data["x-s-common"]
-                    if "x-b3-traceid" in sign_data:
-                        signature_headers["X-B3-Traceid"] = sign_data["x-b3-traceid"]
+                xhs_sign_resp = await self._sign_client.xiaohongshu_sign(sign_req)
+
+                xmns = xhs_sign_resp.data.x_mns
+                signature_headers = {
+                    "X-s": xhs_sign_resp.data.x_s,
+                    "X-t": xhs_sign_resp.data.x_t,
+                    "x-s-common": xhs_sign_resp.data.x_s_common,
+                    "X-B3-Traceid": xhs_sign_resp.data.x_b3_traceid,
+                    "X-Mns": xmns,
+                }
             except Exception as e:
                 logger.warning(f"Failed to generate signature for selfinfo: {e}")
 

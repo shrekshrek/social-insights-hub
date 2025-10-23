@@ -8,7 +8,6 @@ from typing import Any, Dict, List
 from src.platforms.base import CrawlerAdapter, TaskExecutionContext
 from src.data.notes import service as notes_service
 from src.data.comments import service as comments_service
-from src.signing import SignatureGenerationError, generate_signature
 
 from .client import XhsClient
 

@@ -11,7 +11,6 @@ from src.schemas import CustomBaseModel
 from src.auth.router import router as auth_router
 from src.users.router import router as users_router
 from src.rbac.router import router as rbac_router
-from src.signing.router import router as signing_router
 from src.tasks.router import router as crawler_tasks_router
 from src.resources.router import router as resources_router
 from src.data.notes.router import router as notes_router
@@ -187,7 +186,6 @@ app.include_router(auth_router, prefix=settings.API_PREFIX)
 app.include_router(users_router, prefix=settings.API_PREFIX)
 app.include_router(rbac_router, prefix=settings.API_PREFIX)
 app.include_router(crawler_tasks_router, prefix=settings.API_PREFIX)
-app.include_router(signing_router, prefix=settings.API_PREFIX)
 app.include_router(resources_router, prefix=settings.API_PREFIX)
 app.include_router(notes_router, prefix=settings.API_PREFIX)
 app.include_router(comments_router, prefix=settings.API_PREFIX)

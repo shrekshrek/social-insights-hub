@@ -15,67 +15,49 @@ export const useAuthApi = () => {
    * 用户注册 - 直接调用后端API
    */
   const register = async (data: UserCreate) => {
-    try {
-      // 直接调用后端注册接口（通过Nuxt代理）
-      const result = await $fetch<User>('/api/v1/auth/register', {
-        method: 'POST',
-        body: {
-          email: data.email,
-          username: data.username,
-          password: data.password
-        }
-      })
-      
-      // 注册成功后自动登录
-      await login({
+    // 直接调用后端注册接口（通过Nuxt代理）
+    const result = await $fetch<User>('/api/v1/auth/register', {
+      method: 'POST',
+      body: {
+        email: data.email,
         username: data.username,
         password: data.password
-      })
-      
-      showSuccess('注册成功！已自动登录')
-      return result
-    } catch (error: unknown) {
-      const message = (error as StandardError)?.data?.error?.message 
-        || (error as StandardError)?.data?.detail 
-        || (error as StandardError)?.data?.statusMessage 
-        || '注册失败'
-      showError(message)
-      throw error
-    }
+      }
+    })
+    
+    // 注册成功后自动登录
+    await login({
+      username: data.username,
+      password: data.password
+    })
+    
+    showSuccess('注册成功！已自动登录')
+    return result
   }
   
   /**
    * 用户登录 - 通过服务端认证端点设置session
    */
   const login = async (data: { username: string; password: string }) => {
-    try {
-      // 调用服务端认证端点，它会设置session
-      const result = await $fetch<{ success: boolean; user: User }>('/api/auth/login', {
-        method: 'POST',
-        body: {
-          email: data.username, // 后端使用email作为username
-          password: data.password
-        }
-      })
-      
-      // 刷新客户端session状态
-      await refreshSession()
-      
-      // 更新用户store
-      if (result.user) {
-        userStore.setUser(result.user)
+    // 调用服务端认证端点，它会设置session
+    const result = await $fetch<{ success: boolean; user: User }>('/api/auth/login', {
+      method: 'POST',
+      body: {
+        email: data.username, // 后端使用email作为username
+        password: data.password
       }
-      
-      showSuccess('登录成功！')
-      return result
-    } catch (error: unknown) {
-      const message = (error as StandardError)?.data?.error?.message 
-        || (error as StandardError)?.data?.statusMessage 
-        || (error as StandardError)?.data?.detail 
-        || '登录失败'
-      showError(message)
-      throw error
+    })
+    
+    // 刷新客户端session状态
+    await refreshSession()
+    
+    // 更新用户store
+    if (result.user) {
+      userStore.setUser(result.user)
     }
+    
+    showSuccess('登录成功！')
+    return result
   }
   
   /**
@@ -145,50 +127,33 @@ export const useAuthApi = () => {
    * 重置密码 - 直接调用后端API
    */
   const resetPassword = async (data: PasswordReset) => {
-    try {
-      const result = await $fetch<Msg>('/api/v1/auth/reset-password', {
-        method: 'POST',
-        body: data,
-      })
-      showSuccess('密码重置成功！请使用新密码登录')
-      return result
-    } catch (error: unknown) {
-      const message = (error as StandardError)?.data?.error?.message 
-        || (error as StandardError)?.data?.detail 
-        || (error as StandardError)?.data?.statusMessage 
-        || '密码重置失败'
-      showError(message)
-      throw error
-    }
+    const result = await $fetch<Msg>('/api/v1/auth/reset-password', {
+      method: 'POST',
+      body: data,
+    })
+    showSuccess('密码重置成功！请使用新密码登录')
+    return result
   }
   
   /**
    * 修改当前用户密码
    */
   const changePassword = async (data: { current_password: string; new_password: string }) => {
-    try {
-      // 确保用户已登录
-      if (!session.value?.accessToken) {
-        throw new Error('未登录')
-      }
-      
-      const result = await $fetch<Msg>('/api/v1/auth/change-password', {
-        method: 'POST',
-        body: data,
-        headers: {
-          'Authorization': `Bearer ${session.value.accessToken}`
-        }
-      })
-      
-      showSuccess('密码修改成功！')
-      return result
-    } catch (error: unknown) {
-      const message = (error as StandardError)?.data?.error?.message 
-        || (error as StandardError)?.data?.detail 
-        || '密码修改失败'
-      showError(message)
-      throw error
+    // 确保用户已登录
+    if (!session.value?.accessToken) {
+      throw new Error('未登录')
     }
+    
+    const result = await $fetch<Msg>('/api/v1/auth/change-password', {
+      method: 'POST',
+      body: data,
+      headers: {
+        'Authorization': `Bearer ${session.value.accessToken}`
+      }
+    })
+    
+    showSuccess('密码修改成功！')
+    return result
   }
   
   return {

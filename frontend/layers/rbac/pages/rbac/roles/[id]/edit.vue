@@ -80,14 +80,7 @@ const fetchRole = async () => {
     role.value = response.data.value ?? null;
   } catch (error) {
     console.error("获取角色详情失败:", error);
-    
-    const toast = useToast();
-    toast.add({
-      title: "获取数据失败",
-      description: "无法获取角色详情，请稍后重试",
-      color: "error",
-    });
-    
+    // 错误已由 useApi 自动处理
     // 如果获取失败，返回列表页
     navigateTo("/rbac/roles");
   }
@@ -103,27 +96,11 @@ const handleSubmit = async (data: RoleUpdate) => {
   loading.value = true;
   try {
     await rbacApi.updateRole(roleId.value, data);
-    
-    // 显示成功消息
-    const toast = useToast();
-    toast.add({
-      title: "更新成功",
-      description: `角色 "${data.display_name}" 已更新`,
-      color: "success",
-    });
-    
     // 返回详情页
     navigateTo(`/rbac/roles/${roleId.value}`);
   } catch (error) {
     console.error("更新角色失败:", error);
-    
-    // 显示错误消息
-    const toast = useToast();
-    toast.add({
-      title: "更新失败",
-      description: "无法更新角色，请稍后重试",
-      color: "error",
-    });
+    // 错误已由 useApi 自动处理
   } finally {
     loading.value = false;
   }

@@ -14,6 +14,7 @@ from sqlalchemy.pool import NullPool
 
 from src.database import Base, get_async_db
 from src.main import app
+from src.rbac.init_data import init_rbac_data
 
 # 加载测试环境变量
 env_path = Path(__file__).parent.parent / ".env.test"
@@ -53,6 +54,9 @@ async def setup_database():
         # 删除所有表并重新创建
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+    async with AsyncTestingSessionLocal() as seed_session:
+        await init_rbac_data(seed_session)
+        await seed_session.commit()
     yield
     # 测试结束后清理
     async with async_engine.begin() as conn:
@@ -109,7 +113,9 @@ async def async_client(
     app.dependency_overrides[get_redis_client] = override_get_redis_client
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(
+        transport=transport, base_url="http://test", follow_redirects=True
+    ) as client:
         yield client
 
     # 清理依赖覆盖

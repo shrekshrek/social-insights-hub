@@ -54,11 +54,9 @@ const handleSubmit = async (data: UserCreate | UserUpdate) => {
   loading.value = true
   try {
     await usersApi.createUser(createData)
-    // API composable 已经显示了成功提示
     navigateTo('/users')
-  } catch (error) {
-    // API composable 已经显示了错误提示
-    console.error('创建用户失败:', error)
+  } catch {
+    // 错误已由 useApi 自动处理
   } finally {
     loading.value = false
   }

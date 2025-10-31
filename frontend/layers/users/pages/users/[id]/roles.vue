@@ -217,7 +217,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import type { User } from '../../../types'
 import { getRoleColor, getRoleLabel } from '../../../utils/ui-helpers'
-import { isCoreRole } from '~/layers/rbac/utils/permissions'  // 明确的跨模块依赖
+import { isCoreRole } from '../../../../rbac/utils/permissions'  // 明确的跨模块依赖
 
 // 页面元数据
 definePageMeta({
@@ -428,25 +428,11 @@ const handleSubmit = async () => {
   loading.value = true
   try {
     await rbacApi.assignUserRoles(user.value.id, selectedRoleIds.value)
-
-    const toast = useToast()
-    toast.add({
-      title: "角色分配成功",
-      description: `用户 "${user.value.username}" 的角色已更新`,
-      color: "success",
-    })
-
     // 返回用户详情页
     navigateTo(`/users/${userId.value}`)
   } catch (error) {
     console.error("分配用户角色失败:", error)
-    
-    const toast = useToast()
-    toast.add({
-      title: "角色分配失败",
-      description: "无法分配角色，请稍后重试",
-      color: "error",
-    })
+    // 错误已由 useApi 自动处理
   } finally {
     loading.value = false
   }

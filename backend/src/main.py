@@ -11,10 +11,6 @@ from src.schemas import CustomBaseModel
 from src.auth.router import router as auth_router
 from src.users.router import router as users_router
 from src.rbac.router import router as rbac_router
-from src.tasks.router import router as crawler_tasks_router
-from src.resources.router import router as resources_router
-from src.data.notes.router import router as notes_router
-from src.data.comments.router import router as comments_router
 from src.config import settings
 from src.database import get_async_db, AsyncSessionLocal
 from src.rbac.init_data import init_rbac_data
@@ -185,7 +181,8 @@ async def read_root():
 app.include_router(auth_router, prefix=settings.API_PREFIX)
 app.include_router(users_router, prefix=settings.API_PREFIX)
 app.include_router(rbac_router, prefix=settings.API_PREFIX)
-app.include_router(crawler_tasks_router, prefix=settings.API_PREFIX)
-app.include_router(resources_router, prefix=settings.API_PREFIX)
-app.include_router(notes_router, prefix=settings.API_PREFIX)
-app.include_router(comments_router, prefix=settings.API_PREFIX)
+
+# Here we will include routers from different modules
+# For example:
+# from .auth.router import router as auth_router
+# app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])

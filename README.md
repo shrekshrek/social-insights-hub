@@ -85,7 +85,6 @@ pnpm dev
 | `pnpm be:migrate:make "<信息>"` | **(常用)** 生成一个新的数据库迁移脚本。 |
 | `pnpm be:migrate:up` | **(常用)** 应用所有数据库迁移。 |
 | `pnpm be:shell` | 进入正在运行的后端容器的 Shell 环境。 |
-| `pnpm be:worker` | 在 backend 容器内启动 Celery Worker。 |
 
 ### 生产部署命令 (`prod:*`)
 
@@ -113,7 +112,6 @@ pnpm dev
 **⚙️ 专项功能**：
 - 权限管理：[`docs/PERMISSION_MANAGEMENT.md`](docs/PERMISSION_MANAGEMENT.md)
 - 配置管理：[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
-- 多项目隔离：详见下文 [🔄 多项目开发](#🔄-多项目开发) ⭐ 多项目开发必读
 - Claude配置：[`CLAUDE.md`](CLAUDE.md)
 
 ---

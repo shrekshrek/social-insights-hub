@@ -19,6 +19,9 @@
 开发环境配置用于本地开发，包含所有服务的配置：
 
 ```bash
+# ===== 项目标识 (多项目隔离) =====
+PROJECT_NAME=fullstack_scaffold  # 每个项目使用唯一名称
+
 # ===== 环境标识 =====
 ENVIRONMENT=development
 
@@ -27,35 +30,15 @@ POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-POSTGRES_DB=fastapi_db
+POSTGRES_DB=${PROJECT_NAME}_db  # 根据项目名动态生成
 
 # ===== 后端配置 =====
-DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres_db:5432/fastapi_db
+DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
 REDIS_URL=redis://redis:6379
 SECRET_KEY=your-secret-key-for-development-only
 PROJECT_NAME=Full-Stack Starter API
 API_PREFIX=/api/v1
 ACCESS_TOKEN_EXPIRE_MINUTES=30
-# 签名策略（javascript | playwright）
-SIGNING_STRATEGY=javascript
-SIGNING_JS_BUNDLE=
-SIGNING_PLAYWRIGHT_BROWSER=chromium
-SIGNING_PLAYWRIGHT_HEADLESS=true
-SIGNING_PLAYWRIGHT_USER_DATA_DIR=./.playwright/xhs
-SIGNING_PLAYWRIGHT_STEALTH_JS=./frontend/node_modules/stealth.min.js
-SIGNING_PLAYWRIGHT_DEFAULT_COOKIES=
-# JavaScript 策略依赖 Node 环境（用于编译 XHS JS 脚本）
-# 若缺失将自动回退到占位签名，需手动安装 node >= 16
-
-#### Playwright 签名环境准备
-
-1. 安装 Node.js 16 或更高版本（用于执行补环境脚本）。Docker 镜像在构建阶段已默认安装 Node 20 与 Playwright 浏览器。
-2. 若在运行期需要重新安装（例如浏览器缓存损坏），可在项目根目录执行 `pnpm be:playwright:setup`（或直接运行 `tsx scripts/setup-playwright-signing.ts`）。
-3. 确认环境变量指向有效路径：
-   - `SIGNING_PLAYWRIGHT_USER_DATA_DIR`：浏览器数据目录，会在脚本中自动创建；
-   - `SIGNING_PLAYWRIGHT_STEALTH_JS`：默认指向仓库内的 `backend/src/signing/resources/xhs/stealth.min.js`；
-   - `SIGNING_PLAYWRIGHT_DEFAULT_COOKIES`：用于初始化固定 Cookie，可留空。
-4. 启动前可通过 `uv run playwright doctor` 检查运行时状态，确保签名服务可用。
 
 # ===== 前端配置 =====
 NUXT_PUBLIC_API_BASE=http://localhost:8000/api/v1
@@ -66,6 +49,8 @@ NUXT_SESSION_PASSWORD=this-is-a-32-character-string-for-dev-only!
 
 生产环境配置用于服务器部署，包含所有安全敏感的配置：
 
+> 📝 **注意**: 生产环境通常使用固定的数据库名（如 `fastapi_db`），因为生产环境一般是一台服务器部署一个项目，不需要像开发环境那样支持多项目隔离。
+
 ```bash
 # ===== 环境标识 =====
 ENVIRONMENT=production
@@ -73,7 +58,7 @@ ENVIRONMENT=production
 # ===== PostgreSQL 配置 =====
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=CHANGE_THIS_STRONG_PASSWORD
-POSTGRES_DB=fastapi_db
+POSTGRES_DB=fastapi_db  # 生产环境使用固定名称
 
 # ===== 后端配置 =====
 DATABASE_URL=postgresql+psycopg://postgres:CHANGE_THIS_STRONG_PASSWORD@postgres_db:5432/fastapi_db
@@ -83,14 +68,6 @@ PROJECT_NAME=Production API
 API_PREFIX=/api/v1
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 BACKEND_CORS_ORIGINS=["https://yourdomain.com"]
-# 签名策略
-SIGNING_STRATEGY=playwright
-SIGNING_JS_BUNDLE=
-SIGNING_PLAYWRIGHT_BROWSER=chromium
-SIGNING_PLAYWRIGHT_HEADLESS=true
-SIGNING_PLAYWRIGHT_USER_DATA_DIR=/data/signing/xhs
-SIGNING_PLAYWRIGHT_STEALTH_JS=/opt/signing/stealth.min.js
-SIGNING_PLAYWRIGHT_DEFAULT_COOKIES=
 
 # ===== 前端配置 =====
 NUXT_PUBLIC_API_BASE=https://yourdomain.com/api/v1

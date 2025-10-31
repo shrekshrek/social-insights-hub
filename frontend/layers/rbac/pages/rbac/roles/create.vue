@@ -55,26 +55,10 @@ const handleSubmit = async (data: RoleCreate | RoleUpdate) => {
   loading.value = true
   try {
     await rbacApi.createRole(data as RoleCreate)
-    
-    // 显示成功消息
-    const toast = useToast()
-    toast.add({
-      title: '创建成功',
-      description: `角色 "${data.display_name}" 已创建`,
-      color: 'success'
-    })
-    
     navigateTo('/rbac/roles')
   } catch (error) {
     console.error('创建角色失败:', error)
-    
-    // 显示错误消息
-    const toast = useToast()
-    toast.add({
-      title: '创建失败',
-      description: '无法创建角色，请稍后重试',
-      color: 'error'
-    })
+    // 错误已由 useApi 自动处理
   } finally {
     loading.value = false
   }

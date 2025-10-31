@@ -246,7 +246,7 @@ async def init_rbac_data(db: AsyncSession):
 docker-compose logs backend | grep -E "(权限|Permission|ERROR)"
 
 # 2. 验证数据库连接
-docker-compose exec postgres_db psql -U postgres -d fastapi_db -c "SELECT 1;"
+docker-compose exec postgres_db sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1;"'
 
 # 3. 检查权限定义语法
 # 确保 init_data.py 中权限定义格式正确
@@ -268,15 +268,15 @@ docker-compose exec postgres_db psql -U postgres -d fastapi_db -c "SELECT 1;"
 # 重新登录获取最新权限
 
 # 3. 检查权限分配
-docker-compose exec postgres_db psql -U postgres -d fastapi_db -c "
+docker-compose exec postgres_db sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "
 SELECT u.username, r.name as role, p.target, p.action 
 FROM users u 
 JOIN user_roles ur ON u.id = ur.user_id 
 JOIN roles r ON ur.role_id = r.id 
 JOIN role_permissions rp ON r.id = rp.role_id 
 JOIN permissions p ON rp.permission_id = p.id 
-WHERE u.username = 'admin';
-"
+WHERE u.username = '\''admin'\'';
+"'
 ```
 
 #### 性能问题
@@ -290,9 +290,9 @@ WHERE u.username = 'admin';
 **性能优化**：
 ```bash
 # 1. 检查权限数量
-docker-compose exec postgres_db psql -U postgres -d fastapi_db -c "
+docker-compose exec postgres_db sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "
 SELECT COUNT(*) as total_permissions FROM permissions;
-"
+"'
 
 # 2. 分析同步耗时
 # 启动时观察日志中的同步时间戳
@@ -317,15 +317,15 @@ docker-compose logs backend | grep -E "(添加权限|删除权限|更新权限)"
 
 ```bash
 # 查看当前权限统计
-docker-compose exec postgres_db psql -U postgres -d fastapi_db -c "
+docker-compose exec postgres_db sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "
 SELECT target, COUNT(*) as permission_count 
 FROM permissions 
 GROUP BY target 
 ORDER BY permission_count DESC;
-"
+"'
 
 # 查看权限使用情况
-docker-compose exec postgres_db psql -U postgres -d fastapi_db -c "
+docker-compose exec postgres_db sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "
 SELECT p.target, p.action, COUNT(rp.id) as assigned_roles
 FROM permissions p
 LEFT JOIN role_permissions rp ON p.id = rp.permission_id

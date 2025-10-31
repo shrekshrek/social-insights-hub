@@ -320,24 +320,9 @@ const confirmDeleteRole = async (role: Role) => {
     if (!confirmed) return;
 
     await rbacApi.deleteRole(role.id);
-
-    // 显示成功消息
-    const toast = useToast();
-    toast.add({
-      title: "删除成功",
-      description: `角色 "${role.display_name}" 已被删除`,
-      color: "success",
-    });
-
     await handleRefresh();
   } catch {
-    // 显示错误消息
-    const toast = useToast();
-    toast.add({
-      title: "删除失败",
-      description: "无法删除角色，请稍后重试",
-      color: "error",
-    });
+    // 错误已由 useApi 自动处理
   }
 };
 </script> 

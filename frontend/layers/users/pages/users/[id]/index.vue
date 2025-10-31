@@ -91,11 +91,9 @@ const handleDelete = async () => {
   
   try {
     await usersApi.deleteUser(data.value.id)
-    // API composable 已经显示了成功提示
     navigateTo('/users')
-  } catch (error) {
-    // API composable 已经显示了错误提示
-    console.error('删除用户失败:', error)
+  } catch {
+    // 错误已由 useApi 自动处理
   }
 }
 

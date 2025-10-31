@@ -12,14 +12,6 @@ WORKDIR /app
 # 4. Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# 4.1 Install system dependencies (Node.js for JS signing)
-RUN apt-get update \
-    && apt-get install -y curl gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
 # 5. Copy project files and install dependencies
 # Note: uv.lock should be committed to your repository
 COPY pyproject.toml uv.lock* ./
@@ -27,26 +19,12 @@ COPY pyproject.toml uv.lock* ./
 # Install dependencies using uv
 RUN uv sync --frozen --no-dev
 
-# 设置 Playwright 镜像源并安装浏览器依赖
-ENV PLAYWRIGHT_DOWNLOAD_HOST=https://playwright.azureedge.net
-RUN uv run playwright install --with-deps chromium
+# 6. Copy application code
+COPY ./src ./src
 
-# 6. 创建非 root 用户
-RUN groupadd --system app \
-    && useradd --system --gid app --create-home app
-
-# 7. Copy application code
-COPY --chown=app:app ./src ./src
-
-# 8. 调整权限，确保运行用户可写
-RUN chown -R app:app /app
-
-# 9. 切换到非 root 用户
-USER app
-
-# 10. Expose port
+# 7. Expose port
 EXPOSE 8000
 
-# 11. Command to run the application
+# 8. Command to run the application
 # Use uv to run the application
 CMD ["uv", "run", "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "src.main:app"]

@@ -29,20 +29,6 @@ services:
       - redis
     restart: unless-stopped
 
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: prod-celery-worker
-    command: uv run celery -A src.celery_app.celery_app worker --loglevel=info
-    env_file:
-      - .env.production
-    depends_on:
-      - backend
-      - redis
-      - postgres_db
-    restart: unless-stopped
-
   frontend:
     build:
       context: ./frontend

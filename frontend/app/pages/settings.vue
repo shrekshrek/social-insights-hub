@@ -173,24 +173,14 @@ const handlePasswordSubmit = async () => {
       }
     })
     
-    toast.add({
-      title: '密码更新成功',
-      description: '您的密码已成功更新',
-      color: 'success'
-    })
-    
     // 清空表单
     passwordState.value = {
       currentPassword: '',
       newPassword: '',
       confirmPassword: ''
     }
-  } catch (err) {
-    toast.add({
-      title: '密码更新失败',
-      description: err instanceof Error ? err.message : '请稍后重试',
-      color: 'error'
-    })
+  } catch {
+    // 错误已由 useApi 自动处理
   } finally {
     passwordLoading.value = false
   }

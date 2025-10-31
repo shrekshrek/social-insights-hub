@@ -21,58 +21,38 @@ export const useRbacApi = () => {
   }
 
   const createRole = async (data: RoleCreate) => {
-    try {
-      const result = await apiRequest<Role>('/rbac/roles', {
-        method: 'POST',
-        body: data,
-      })
-      showSuccess('角色创建成功！')
-      return result
-    } catch (error) {
-      showError('角色创建失败')
-      throw error
-    }
+    const result = await apiRequest<Role>('/rbac/roles', {
+      method: 'POST',
+      body: data,
+    })
+    showSuccess('角色创建成功！')
+    return result
   }
 
   const updateRole = async (id: number, data: RoleUpdate) => {
-    try {
-      const result = await apiRequest<Role>(`/rbac/roles/${id}`, {
-        method: 'PUT',
-        body: data,
-      })
-      showSuccess('角色更新成功！')
-      return result
-    } catch (error) {
-      showError('角色更新失败')
-      throw error
-    }
+    const result = await apiRequest<Role>(`/rbac/roles/${id}`, {
+      method: 'PUT',
+      body: data,
+    })
+    showSuccess('角色更新成功！')
+    return result
   }
 
   const updateRolePermissions = async (roleId: number, permissionIds: number[]) => {
-    try {
-      const result = await apiRequest<Role>(`/rbac/roles/${roleId}`, {
-        method: 'PUT',
-        body: { permission_ids: permissionIds },
-      })
-      showSuccess('角色权限更新成功！')
-      return result
-    } catch (error) {
-      showError('角色权限更新失败')
-      throw error
-    }
+    const result = await apiRequest<Role>(`/rbac/roles/${roleId}`, {
+      method: 'PUT',
+      body: { permission_ids: permissionIds },
+    })
+    showSuccess('角色权限更新成功！')
+    return result
   }
 
   const deleteRole = async (id: number) => {
-    try {
-      await apiRequest(`/rbac/roles/${id}`, {
-        method: 'DELETE',
-      })
-      showSuccess('角色删除成功！')
-      return true
-    } catch (error) {
-      showError('角色删除失败')
-      throw error
-    }
+    await apiRequest(`/rbac/roles/${id}`, {
+      method: 'DELETE',
+    })
+    showSuccess('角色删除成功！')
+    return true
   }
 
   // 权限管理
@@ -103,17 +83,12 @@ export const useRbacApi = () => {
   }
 
   const assignRolePermissions = async (roleId: number, permissionIds: number[]) => {
-    try {
-      await apiRequest(`/rbac/roles/${roleId}/permissions`, {
-        method: 'POST',
-        body: { permission_ids: permissionIds },
-      })
-      showSuccess('权限分配成功！')
-      return true
-    } catch (error) {
-      showError('权限分配失败')
-      throw error
-    }
+    await apiRequest(`/rbac/roles/${roleId}/permissions`, {
+      method: 'POST',
+      body: { permission_ids: permissionIds },
+    })
+    showSuccess('权限分配成功！')
+    return true
   }
 
   // 用户角色关联
@@ -124,17 +99,12 @@ export const useRbacApi = () => {
   }
 
   const assignUserRoles = async (userId: number, roleIds: number[]) => {
-    try {
-      await apiRequest(`/rbac/users/${userId}/roles`, {
-        method: 'POST',
-        body: { role_ids: roleIds },
-      })
-      showSuccess('角色分配成功！')
-      return true
-    } catch (error) {
-      showError('角色分配失败')
-      throw error
-    }
+    await apiRequest(`/rbac/users/${userId}/roles`, {
+      method: 'POST',
+      body: { role_ids: roleIds },
+    })
+    showSuccess('角色分配成功！')
+    return true
   }
 
 

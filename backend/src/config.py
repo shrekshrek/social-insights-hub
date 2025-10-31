@@ -29,20 +29,6 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
 
-    # Signing strategy settings
-    SIGNING_STRATEGY: str = "javascript"
-    SIGNING_JS_BUNDLE: str | None = None
-    SIGNING_PLAYWRIGHT_BROWSER: str = "chromium"
-    SIGNING_PLAYWRIGHT_HEADLESS: bool = True
-    SIGNING_PLAYWRIGHT_USER_DATA_DIR: str | None = None
-    SIGNING_PLAYWRIGHT_STEALTH_JS: str | None = None
-    SIGNING_PLAYWRIGHT_DEFAULT_COOKIES: str | None = None
-
-    # Sign Service settings (MediaCrawlerPro-SignSrv)
-    SIGN_SERVICE_ENABLED: bool = True
-    SIGN_SERVICE_HOST: str = "localhost"
-    SIGN_SERVICE_PORT: int = 8989
-
     # API settings
     API_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "Full-Stack Starter API"
@@ -88,15 +74,6 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [i.strip() for i in v.split(",")]
         return v
-
-    @field_validator("SIGNING_STRATEGY")
-    @classmethod
-    def validate_signing_strategy(cls, v: str) -> str:
-        allowed = {"javascript", "playwright", "http"}
-        value = v.lower()
-        if value not in allowed:
-            raise ValueError(f"SIGNING_STRATEGY 必须是 {allowed} 之一")
-        return value
 
     # Model config
     model_config = SettingsConfigDict(

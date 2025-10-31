@@ -27,7 +27,6 @@ const main = async () => {
       console.log('   - Generate SECRET_KEY: openssl rand -hex 32')
       console.log('   - Generate NUXT_SESSION_PASSWORD: openssl rand -base64 32')
       console.log('   - Update POSTGRES_PASSWORD with a strong password')
-      console.log('   - Configure SMTP settings for your mail service')
       console.log('   - Update BACKEND_CORS_ORIGINS with your domain')
     } else {
       console.log('💡 Please create production environment configuration first.')
@@ -110,7 +109,6 @@ const main = async () => {
   console.log('   🌐 Application: http://localhost')
   console.log('   🔧 API: http://localhost/api/v1')
   console.log('   📖 API Docs: http://localhost/api/v1/docs')
-  console.log('   📧 MailHog: http://localhost:8025')
   console.log('')
   console.log('📊 To view logs:')
   console.log('   docker-compose -f docker-compose.prod.yml logs -f')

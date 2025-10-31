@@ -317,11 +317,9 @@ const confirmDeleteUser = async (user: User) => {
     if (!confirmed) return;
 
     await usersApi.deleteUser(user.id);
-    // API composable 已经显示了成功提示
     await handleRefresh();
-  } catch (error) {
-    // API composable 已经显示了错误提示
-    console.error("删除用户失败:", error);
+  } catch {
+    // 错误已由 useApi 自动处理
   }
 };
 </script>

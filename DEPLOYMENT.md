@@ -146,8 +146,8 @@ curl http://localhost
 
 ### 数据备份
 ```bash
-# 备份生产数据库
-docker-compose -f docker-compose.prod.yml exec postgres_db pg_dump -U postgres fastapi_db > backup.sql
+# 备份生产数据库（使用环境变量）
+docker-compose -f docker-compose.prod.yml exec postgres_db sh -c 'pg_dump -U $POSTGRES_USER $POSTGRES_DB' > backup.sql
 ```
 
 ## 🎯 最佳实践

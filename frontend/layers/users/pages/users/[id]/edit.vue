@@ -89,11 +89,9 @@ const handleSubmit = async (updateData: UserUpdate) => {
   loading.value = true;
   try {
     await usersApi.updateUser(data.value.id, updateData);
-    // API composable 已经显示了成功提示
     navigateTo(`/users/${userId.value}`);
-  } catch (error) {
-    // API composable 已经显示了错误提示
-    console.error('更新用户失败:', error);
+  } catch {
+    // 错误已由 useApi 自动处理
   } finally {
     loading.value = false;
   }

@@ -39,15 +39,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # for 'autogenerate' support
 from src.database import Base  # noqa: E402
 
-# Import all models so Alembic can detect them
-# 直接导入 models.py 文件确保所有模型都被加载
-import src.auth.models  # noqa: E402, F401
-import src.rbac.models  # noqa: E402, F401
-import src.tasks.models  # noqa: E402, F401
-import src.resources.models  # noqa: E402, F401
-import src.data.notes.models  # noqa: E402, F401
-import src.data.comments.models  # noqa: E402, F401
-
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:

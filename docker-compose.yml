@@ -48,28 +48,6 @@ services:
       - postgres_db
       - redis
 
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    # 不使用固定 container_name，让 Docker Compose 基于项目名自动生成
-    command: sh -c "uv run celery -A src.celery_app.celery_app worker --loglevel=info"
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
-    volumes:
-      - ./backend:/app
-      - /app/.venv
-    depends_on:
-      - backend
-      - redis
-      - postgres_db
-    dns:
-      - 8.8.8.8
-
 
 volumes:
   # 数据卷会自动使用项目名前缀: {PROJECT_NAME}_postgres_data

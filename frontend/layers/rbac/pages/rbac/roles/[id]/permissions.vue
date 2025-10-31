@@ -397,25 +397,11 @@ const handleSubmit = async () => {
   loading.value = true;
   try {
     await rbacApi.updateRolePermissions(roleData.value.id, selectedPermissionIds.value);
-
-    const toast = useToast();
-    toast.add({
-      title: "权限更新成功",
-      description: `角色 "${roleData.value.display_name}" 的权限已更新`,
-      color: "success",
-    });
-
     // 返回角色详情页
     navigateTo(`/rbac/roles/${roleId.value}`);
   } catch (error) {
     console.error("更新角色权限失败:", error);
-    
-    const toast = useToast();
-    toast.add({
-      title: "权限更新失败",
-      description: "无法更新角色权限，请稍后重试",
-      color: "error",
-    });
+    // 错误已由 useApi 自动处理
   } finally {
     loading.value = false;
   }

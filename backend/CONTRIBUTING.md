@@ -244,7 +244,11 @@ async def get_user(user_id: int):
 
 #### LLM 应用开发 (LangChain)
 - **核心框架**: 使用 `LangChain` 作为构建语言模型应用和工作流的核心框架。
-- **版本要求**: 项目锁定使用 `LangChain v0.3+` 系列版本。
+- **版本要求**: 项目使用 `LangChain 1.0+` 系列版本（2025年10月发布的首个稳定版本）。
+- **核心变化**: 1.0 版本专注于 Agent 构建的核心功能，传统 Chains、Retrievers 等功能移至 `langchain-classic` 包。
+- **推荐用法**:
+  - 新功能使用新的 `create_agent` API 和 LangGraph
+  - 如需使用传统功能，安装 `langchain-classic` 包
 
 #### 权限系统开发 (RBAC)
 

@@ -1,17 +1,90 @@
-from celery import Celery
+"""Celery异步任务配置
 
+配置Celery应用用于处理异步任务，特别是AI分析任务。
+使用Redis作为消息代理和结果后端。
+
+优化配置用于：
+- AI数据筛选任务
+- AI深度分析任务
+- 主题聚类任务
+- 竞品分析任务
+"""
+
+import logging
+from celery import Celery
 from src.config import settings
 
+logger = logging.getLogger(__name__)
+
 celery_app = Celery(
-    __name__,
+    "social_insights_hub",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=[],  # No task modules currently - add here when needed
+    include=[],  # Task modules will be added here in future modules
 )
 
+# 详细的Celery配置
 celery_app.conf.update(
-    task_track_started=True,
+    # ========== 任务序列化 ==========
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+
+    # ========== 时区和编码 ==========
+    timezone="Asia/Shanghai",  # 使用中国时区
+    enable_utc=True,
+
+    # ========== 任务跟踪 ==========
+    task_track_started=True,  # 跟踪任务启动状态
+    task_send_sent_event=True,  # 发送任务发送事件
+
+    # ========== 任务超时配置 ==========
+    task_time_limit=7200,  # 硬超时：2小时（用于长时间AI任务）
+    task_soft_time_limit=6600,  # 软超时：1小时50分钟
+
+    # ========== Worker配置 ==========
+    worker_prefetch_multiplier=1,  # 每次只预取1个任务，避免内存堆积
+    worker_max_tasks_per_child=100,  # 每个worker进程最多执行100个任务后重启
+    worker_disable_rate_limits=False,  # 启用速率限制
+
+    # ========== 结果配置 ==========
+    result_extended=True,  # 启用扩展任务结果属性
+    result_expires=86400,  # 结果过期时间：24小时
+    result_backend_transport_options={
+        "master_name": "mymaster",
+    },
+
+    # ========== 连接配置 ==========
+    broker_connection_retry_on_startup=True,  # 启动时自动重试连接
+    broker_connection_retry=True,  # 连接断开后自动重试
+    broker_connection_max_retries=10,  # 最多重试10次
+
+    # ========== 任务路由配置（预留，后续模块使用） ==========
+    # task_routes={
+    #     "ai.screening.*": {"queue": "screening"},
+    #     "ai.analysis.*": {"queue": "analysis"},
+    #     "ai.clustering.*": {"queue": "clustering"},
+    # },
+
+    # ========== 任务优先级配置（预留） ==========
+    # task_default_priority=5,
+    # task_inherit_parent_priority=True,
+
+    # ========== 错误处理 ==========
+    task_acks_late=True,  # 任务执行完成后才确认（防止任务丢失）
+    task_reject_on_worker_lost=True,  # Worker丢失时拒绝任务
+
+    # ========== 性能优化 ==========
+    worker_pool="eventlet",  # 使用eventlet作为并发池（适合IO密集型AI任务）
+    worker_concurrency=100,  # 并发数（与AI任务配置对应）
 )
 
-# A more robust way for task discovery might be needed for larger apps,
-# but explicit inclusion is clear and effective for this structure.
+logger.info("✅ Celery应用配置完成")
+logger.info(f"   Broker: {settings.CELERY_BROKER_URL}")
+logger.info(f"   Backend: {settings.CELERY_RESULT_BACKEND}")
+logger.info(f"   Worker Pool: eventlet (concurrency=100)")
+logger.info(f"   Task Timeout: 7200s (2 hours)")
+
+# Task modules will be imported here when they are created
+# Example:
+# from src.worker import screening_tasks, analysis_tasks

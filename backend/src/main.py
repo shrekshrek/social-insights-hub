@@ -11,9 +11,12 @@ from src.schemas import CustomBaseModel
 from src.auth.router import router as auth_router
 from src.users.router import router as users_router
 from src.rbac.router import router as rbac_router
+from src.social_media.router import router as social_media_router
+from src.task_manager.router import router as task_manager_router
 from src.config import settings
 from src.database import get_async_db, AsyncSessionLocal
 from src.rbac.init_data import init_rbac_data
+from src.social_media.init_data import init_platforms
 from src.middleware import (
     RequestLoggingMiddleware,
     GlobalExceptionHandlerMiddleware,
@@ -39,6 +42,16 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ 权限同步失败: {e}", exc_info=True)
         # 权限同步失败不阻止应用启动（开发环境容错）
         logger.warning("⚠️ 应用将以现有权限配置启动")
+
+    # 初始化平台数据
+    try:
+        async with AsyncSessionLocal() as db:
+            logger.info("开始初始化平台数据...")
+            await init_platforms(db)
+            logger.info("✅ 平台数据初始化成功")
+    except Exception as e:
+        logger.error(f"❌ 平台数据初始化失败: {e}", exc_info=True)
+        logger.warning("⚠️ 应用将以现有平台配置启动")
 
     yield  # 应用运行期间
 
@@ -181,8 +194,5 @@ async def read_root():
 app.include_router(auth_router, prefix=settings.API_PREFIX)
 app.include_router(users_router, prefix=settings.API_PREFIX)
 app.include_router(rbac_router, prefix=settings.API_PREFIX)
-
-# Here we will include routers from different modules
-# For example:
-# from .auth.router import router as auth_router
-# app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(social_media_router, prefix=settings.API_PREFIX)
+app.include_router(task_manager_router, prefix=settings.API_PREFIX)

@@ -62,6 +62,25 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     order: 50,
   },
   '/rbac/permissions/[id]': { permission: PERMISSIONS.PERMISSION_READ },
+  // 社交媒体洞察模块
+  '/social-insights/projects': {
+    permission: null, // TODO: 后续可添加权限控制
+    label: '社交媒体项目',
+    showInNav: true,
+    order: 60,
+  },
+  '/social-insights/projects/create': { permission: null },
+  '/social-insights/projects/[id]': { permission: null },
+  '/social-insights/tasks': {
+    permission: null,
+    label: '数据采集任务',
+    showInNav: true,
+    order: 70,
+  },
+  '/social-insights/tasks/create': { permission: null },
+  '/social-insights/tasks/[id]': { permission: null },
+  '/social-insights/tasks/[id]/upload': { permission: null },
+  '/social-insights/posts/[id]': { permission: null },
 }
 
 /**

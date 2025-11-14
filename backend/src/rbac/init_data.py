@@ -205,6 +205,37 @@ BUSINESS_PERMISSIONS = [
     #
     # 📦 库存管理（完整管理权限）
     # *create_module_permissions("inventory", ["access", "read", "write", "delete", "export", "import"]),
+    #
+    # ========================================================================
+    # 社交媒体数据管理模块 (已启用)
+    # ========================================================================
+    *create_module_permissions(
+        "social_media",
+        [
+            "project.create",
+            "project.view",
+            "project.update",
+            "project.delete",
+            "data.view",
+            "data.export"
+        ],
+        display_names={
+            "project.create": "创建社交媒体项目",
+            "project.view": "查看社交媒体项目",
+            "project.update": "编辑社交媒体项目",
+            "project.delete": "删除社交媒体项目",
+            "data.view": "查看社交媒体数据",
+            "data.export": "导出社交媒体数据",
+        },
+        descriptions={
+            "project.create": "允许创建新的社交媒体数据分析项目",
+            "project.view": "允许查看项目列表和项目详情",
+            "project.update": "允许编辑项目信息、关联平台、管理参与者",
+            "project.delete": "允许删除项目及其关联数据",
+            "data.view": "允许查看项目中的原文和评论数据",
+            "data.export": "允许导出数据为Excel、CSV等格式",
+        }
+    ),
 ]
 
 # 合并所有权限

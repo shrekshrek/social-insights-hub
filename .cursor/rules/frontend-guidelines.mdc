@@ -8,7 +8,7 @@ alwaysApply: true
 ## 核心技术栈
 - **框架**: Nuxt 4
 - **架构**: Nuxt Layers (领域驱动设计)
-- **UI库**: @nuxt/ui v3（必须是v3版本）
+- **UI库**: @nuxt/ui v4（基于 Tailwind CSS v4 和 Reka UI）
 - **状态管理**: Pinia
 - **认证**: nuxt-auth-utils
 - **图表**: ECharts（必须用ClientOnly包装）
@@ -55,8 +55,8 @@ frontend/
 ### 组件开发
 - 业务组件放在对应Layer中
 - 通用UI组件放在 `layers/ui-kit`
-- 优先使用 @nuxt/ui v3 组件
-- 样式使用 Tailwind CSS
+- 优先使用 @nuxt/ui v4 组件
+- 样式使用 Tailwind CSS v4
 
 ### 状态管理
 - Store按业务领域组织

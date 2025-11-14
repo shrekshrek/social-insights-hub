@@ -9,7 +9,7 @@ alwaysApply: true
 - **框架**: FastAPI
 - **数据库**: PostgreSQL + SQLAlchemy (异步ORM) + Alembic
 - **异步任务**: Celery + Redis
-- **LLM框架**: LangChain v0.3+
+- **LLM框架**: LangChain 1.0+
 - **包管理器**: uv
 
 ## 关键编码规范

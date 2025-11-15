@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { SocialProject } from '../../../types'
+import type { TableColumn } from '@nuxt/ui'
 
 definePageMeta({
-  middleware: 'auth',
   layout: 'default',
 })
 
@@ -46,34 +46,6 @@ const handleDelete = async (project: SocialProject) => {
   }
 }
 
-// 表格列定义
-const columns = [
-  {
-    key: 'name',
-    label: '项目名称',
-  },
-  {
-    key: 'platforms',
-    label: '平台',
-  },
-  {
-    key: 'keywords',
-    label: '关键词',
-  },
-  {
-    key: 'owner_username',
-    label: '创建者',
-  },
-  {
-    key: 'created_at',
-    label: '创建时间',
-  },
-  {
-    key: 'actions',
-    label: '操作',
-  },
-]
-
 // 格式化日期
 const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -84,6 +56,64 @@ const formatDate = (dateStr: string) => {
     minute: '2-digit',
   })
 }
+
+// 表格列定义
+const columns: TableColumn<SocialProject>[] = [
+  {
+    accessorKey: 'name',
+    header: '项目名称',
+    cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
+  },
+  {
+    accessorKey: 'platforms',
+    header: '平台',
+    cell: ({ row }) => {
+      const UBadge = resolveComponent('UBadge')
+      return h('div', { class: 'flex flex-wrap gap-1' },
+        row.original.platforms.map((platform) =>
+          h(UBadge, { key: platform.id, variant: 'subtle', size: 'xs' }, () => platform.name)
+        )
+      )
+    },
+  },
+  {
+    accessorKey: 'keywords',
+    header: '关键词',
+    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, row.original.keywords || '-'),
+  },
+  {
+    accessorKey: 'owner_username',
+    header: '创建者',
+    cell: ({ row }) => h('span', row.original.owner_username || '-'),
+  },
+  {
+    accessorKey: 'created_at',
+    header: '创建时间',
+    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDate(row.original.created_at)),
+  },
+  {
+    accessorKey: 'actions',
+    header: '操作',
+    cell: ({ row }) => {
+      const UButton = resolveComponent('UButton')
+      return h('div', { class: 'flex items-center gap-2' }, [
+        h(UButton, {
+          size: 'xs',
+          variant: 'ghost',
+          icon: 'i-heroicons-eye',
+          onClick: () => navigateTo(`/social-insights/projects/${row.original.id}`),
+        }, () => '查看'),
+        h(UButton, {
+          size: 'xs',
+          variant: 'ghost',
+          icon: 'i-heroicons-trash',
+          color: 'red',
+          onClick: () => handleDelete(row.original),
+        }, () => '删除'),
+      ])
+    },
+  },
+]
 </script>
 
 <template>
@@ -148,54 +178,7 @@ const formatDate = (dateStr: string) => {
           :columns="columns"
           :loading="loading"
           class="w-full"
-        >
-          <template #platforms-data="{ row }">
-            <div class="flex flex-wrap gap-1">
-              <UBadge
-                v-for="platform in row.platforms"
-                :key="platform.id"
-                variant="subtle"
-                size="xs"
-              >
-                {{ platform.name }}
-              </UBadge>
-            </div>
-          </template>
-
-          <template #keywords-data="{ row }">
-            <span class="text-sm text-gray-600 dark:text-gray-400">
-              {{ row.keywords || '-' }}
-            </span>
-          </template>
-
-          <template #created_at-data="{ row }">
-            <span class="text-sm text-gray-600 dark:text-gray-400">
-              {{ formatDate(row.created_at) }}
-            </span>
-          </template>
-
-          <template #actions-data="{ row }">
-            <div class="flex items-center gap-2">
-              <UButton
-                size="xs"
-                variant="ghost"
-                icon="i-heroicons-eye"
-                @click="navigateTo(`/social-insights/projects/${row.id}`)"
-              >
-                查看
-              </UButton>
-              <UButton
-                size="xs"
-                variant="ghost"
-                icon="i-heroicons-trash"
-                color="red"
-                @click="handleDelete(row)"
-              >
-                删除
-              </UButton>
-            </div>
-          </template>
-        </UTable>
+        />
       </ClientOnly>
 
       <!-- 分页 -->

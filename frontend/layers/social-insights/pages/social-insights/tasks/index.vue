@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { DataTaskWithRelations } from '../../../types'
+import type { TableColumn } from '@nuxt/ui'
 
 definePageMeta({
-  middleware: 'auth',
   layout: 'default',
 })
 
@@ -60,17 +60,6 @@ const handleDelete = async (task: DataTaskWithRelations) => {
   }
 }
 
-// 表格列定义
-const columns = [
-  { key: 'name', label: '任务名称' },
-  { key: 'project', label: '所属项目' },
-  { key: 'platform', label: '平台' },
-  { key: 'status', label: '状态' },
-  { key: 'stats', label: '数据统计' },
-  { key: 'created_at', label: '创建时间' },
-  { key: 'actions', label: '操作' },
-]
-
 // 格式化日期
 const formatDateTime = (dateStr: string) => {
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -117,6 +106,79 @@ const dataSourceOptions = [
   { label: '全部', value: undefined },
   { label: '本地上传', value: 'local_upload' },
   { label: '远程爬虫', value: 'remote_crawler' },
+]
+
+// 表格列定义
+const columns: TableColumn<DataTaskWithRelations>[] = [
+  {
+    accessorKey: 'name',
+    header: '任务名称',
+    cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
+  },
+  {
+    accessorKey: 'project',
+    header: '所属项目',
+    cell: ({ row }) => h('span', row.original.project?.name || '-'),
+  },
+  {
+    accessorKey: 'platform',
+    header: '平台',
+    cell: ({ row }) => {
+      const UBadge = resolveComponent('UBadge')
+      return h(UBadge, { variant: 'subtle', size: 'xs' }, () => row.original.platform?.name || '-')
+    },
+  },
+  {
+    accessorKey: 'status',
+    header: '状态',
+    cell: ({ row }) => {
+      const UBadge = resolveComponent('UBadge')
+      return h(UBadge, { color: getStatusColor(row.original.status) }, () => getStatusText(row.original.status))
+    },
+  },
+  {
+    accessorKey: 'stats',
+    header: '数据统计',
+    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
+      `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
+    ),
+  },
+  {
+    accessorKey: 'created_at',
+    header: '创建时间',
+    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
+  },
+  {
+    accessorKey: 'actions',
+    header: '操作',
+    cell: ({ row }) => {
+      const UButton = resolveComponent('UButton')
+      return h('div', { class: 'flex items-center gap-2' }, [
+        h(UButton, {
+          size: 'xs',
+          variant: 'ghost',
+          icon: 'i-heroicons-eye',
+          onClick: () => navigateTo(`/social-insights/tasks/${row.original.id}`),
+        }, () => '查看'),
+        row.original.status === 'pending' && row.original.data_source === 'local_upload'
+          ? h(UButton, {
+              size: 'xs',
+              variant: 'ghost',
+              icon: 'i-heroicons-arrow-up-tray',
+              color: 'blue',
+              onClick: () => navigateTo(`/social-insights/tasks/${row.original.id}/upload`),
+            }, () => '上传')
+          : null,
+        h(UButton, {
+          size: 'xs',
+          variant: 'ghost',
+          icon: 'i-heroicons-trash',
+          color: 'red',
+          onClick: () => handleDelete(row.original),
+        }, () => '删除'),
+      ].filter(Boolean))
+    },
+  },
 ]
 </script>
 
@@ -217,69 +279,7 @@ const dataSourceOptions = [
           :columns="columns"
           :loading="loading"
           class="w-full"
-        >
-          <template #project-data="{ row }">
-            <span class="text-sm text-gray-900 dark:text-white">
-              {{ row.project_name || '-' }}
-            </span>
-          </template>
-
-          <template #platform-data="{ row }">
-            <UBadge variant="subtle">
-              {{ row.platform_name }}
-            </UBadge>
-          </template>
-
-          <template #status-data="{ row }">
-            <UBadge :color="getStatusColor(row.status)">
-              {{ getStatusText(row.status) }}
-            </UBadge>
-          </template>
-
-          <template #stats-data="{ row }">
-            <div class="text-xs text-gray-600 dark:text-gray-400">
-              <div>原文: {{ row.posts_count }}</div>
-              <div>评论: {{ row.comments_count }}</div>
-            </div>
-          </template>
-
-          <template #created_at-data="{ row }">
-            <span class="text-sm text-gray-600 dark:text-gray-400">
-              {{ formatDateTime(row.created_at) }}
-            </span>
-          </template>
-
-          <template #actions-data="{ row }">
-            <div class="flex items-center gap-2">
-              <UButton
-                size="xs"
-                variant="ghost"
-                icon="i-heroicons-eye"
-                @click="navigateTo(`/social-insights/tasks/${row.id}`)"
-              >
-                查看
-              </UButton>
-              <UButton
-                v-if="row.status === 'pending' && row.data_source === 'local_upload'"
-                size="xs"
-                variant="ghost"
-                icon="i-heroicons-arrow-up-tray"
-                @click="navigateTo(`/social-insights/tasks/${row.id}/upload`)"
-              >
-                上传
-              </UButton>
-              <UButton
-                size="xs"
-                variant="ghost"
-                icon="i-heroicons-trash"
-                color="red"
-                @click="handleDelete(row)"
-              >
-                删除
-              </UButton>
-            </div>
-          </template>
-        </UTable>
+        />
       </ClientOnly>
 
       <!-- 分页 -->

@@ -67,10 +67,10 @@ async def get_platform(
 
 @router.post(
     "/projects",
-    response_model=schemas.SocialProjectRead,
+    response_model=schemas.SocialProjectCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create new project",
-    description="创建新的社交媒体数据分析项目",
+    description="创建新的社交媒体数据分析项目（可选同时批量创建任务）",
 )
 async def create_project(
     project_in: schemas.SocialProjectCreate,
@@ -81,12 +81,35 @@ async def create_project(
     创建新项目。
 
     - 项目名称必须唯一
-    - 可以同时关联多个平台
     - 可以添加其他用户作为参与者
     - 创建者自动成为项目owner
+    - 可选：通过quick_tasks同时批量创建任务（仅支持search和homefeed类型）
+
+    quick_tasks示例:
+    - search任务: {"platform_ids": [1,2], "task_type": "search", "data_source": "remote_crawler", "keywords": "测试关键词"}
+    - homefeed任务: {"platform_ids": [1,2], "task_type": "homefeed", "data_source": "remote_crawler"}
     """
-    project = await service.create_project(db, project_in, current_user.id)
-    return project
+    result = await service.create_project(db, project_in, current_user.id)
+
+    # 构建响应
+    project_dict = schemas.SocialProjectRead.model_validate(result["project"]).model_dump()
+    project_dict["participant_ids"] = [p.id for p in result["project"].participants]
+
+    # 转换任务为字典列表
+    from src.task_manager.schemas import DataTaskReadWithRelations
+    tasks_list = []
+    for task in result["created_tasks"]:
+        task_dict = DataTaskReadWithRelations.model_validate(task).model_dump()
+        task_dict["project_name"] = result["project"].name
+        task_dict["platform_name"] = task.platform.name if task.platform else None
+        task_dict["platform_code"] = task.platform.code if task.platform else None
+        task_dict["creator_username"] = task.creator.username if task.creator else None
+        tasks_list.append(task_dict)
+
+    return schemas.SocialProjectCreateResponse(
+        project=schemas.SocialProjectRead(**project_dict),
+        created_tasks=tasks_list
+    )
 
 
 @router.get(
@@ -217,55 +240,6 @@ async def delete_project(
     """
     await service.delete_project(db, project)
     return MessageResponse(message=f"Project '{project.name}' deleted successfully")
-
-
-# ==================== Project-Platform Management ====================
-
-@router.post(
-    "/projects/{project_id}/platforms",
-    response_model=schemas.SocialProjectRead,
-    status_code=status.HTTP_200_OK,
-    summary="Add platforms to project",
-    description="为项目添加关联平台",
-)
-async def add_platforms_to_project(
-    platform_assignment: schemas.ProjectPlatformAssignment,
-    db: AsyncSession = Depends(get_async_db),
-    project: SocialProject = Depends(validate_project_owner),
-):
-    """
-    为项目添加一个或多个平台。
-
-    只有项目owner可以管理关联平台。
-    已关联的平台会被自动跳过。
-    """
-    updated_project = await service.add_platforms(db, project, platform_assignment.platform_ids)
-    project_dict = schemas.SocialProjectRead.model_validate(updated_project).model_dump()
-    project_dict["participant_ids"] = [p.id for p in updated_project.participants]
-    return schemas.SocialProjectRead(**project_dict)
-
-
-@router.delete(
-    "/projects/{project_id}/platforms/{platform_id}",
-    response_model=schemas.SocialProjectRead,
-    status_code=status.HTTP_200_OK,
-    summary="Remove platform from project",
-    description="从项目移除平台",
-)
-async def remove_platform_from_project(
-    platform_id: int,
-    db: AsyncSession = Depends(get_async_db),
-    project: SocialProject = Depends(validate_project_owner),
-):
-    """
-    从项目移除指定平台。
-
-    只有项目owner可以管理关联平台。
-    """
-    updated_project = await service.remove_platform(db, project, platform_id)
-    project_dict = schemas.SocialProjectRead.model_validate(updated_project).model_dump()
-    project_dict["participant_ids"] = [p.id for p in updated_project.participants]
-    return schemas.SocialProjectRead(**project_dict)
 
 
 # ==================== Project-Participant Management ====================

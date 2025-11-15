@@ -65,21 +65,9 @@ const columns: TableColumn<SocialProject>[] = [
     cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
   },
   {
-    accessorKey: 'platforms',
-    header: '平台',
-    cell: ({ row }) => {
-      const UBadge = resolveComponent('UBadge')
-      return h('div', { class: 'flex flex-wrap gap-1' },
-        row.original.platforms.map((platform) =>
-          h(UBadge, { key: platform.id, variant: 'subtle', size: 'xs' }, () => platform.name)
-        )
-      )
-    },
-  },
-  {
-    accessorKey: 'keywords',
-    header: '关键词',
-    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, row.original.keywords || '-'),
+    accessorKey: 'description',
+    header: '描述',
+    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, row.original.description || '-'),
   },
   {
     accessorKey: 'owner_username',
@@ -156,7 +144,7 @@ const columns: TableColumn<SocialProject>[] = [
           </h2>
           <UInput
             v-model="searchQuery"
-            placeholder="搜索项目名称或关键词..."
+            placeholder="搜索项目名称..."
             icon="i-heroicons-magnifying-glass"
             class="w-80"
           />

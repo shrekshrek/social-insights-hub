@@ -6,6 +6,17 @@ definePageMeta({
 const route = useRoute()
 const taskId = computed(() => Number(route.params.id))
 
+// 智能返回路径：根据来源返回到对应页面
+const backPath = computed(() => {
+  const from = route.query.from as string
+  const projectId = route.query.project_id
+
+  if (from === 'project' && projectId) {
+    return `/social-insights/projects/${projectId}`
+  }
+  return '/social-insights/tasks' // 默认返回任务列表
+})
+
 const { getTask, deleteTask } = useTasks()
 const { getTaskPosts } = usePosts()
 
@@ -60,7 +71,7 @@ const getStatusText = (status: string) => {
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <UButton variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/social-insights/tasks')" />
+        <UButton variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo(backPath)" />
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ task?.name || '加载中...' }}</h1>
           <p class="text-gray-600 dark:text-gray-400 mt-1">任务详情</p>

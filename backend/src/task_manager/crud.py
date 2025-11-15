@@ -400,3 +400,68 @@ async def create_comments_bulk(
     db.add_all(comments)
     await db.flush()
     return comments
+
+
+# ==================== Bulk Task Creation ====================
+
+async def bulk_create_tasks(
+    db: AsyncSession,
+    project_id: int,
+    platform_ids: List[int],
+    task_type: str,
+    data_source: str,
+    creator_id: int,
+    keywords: Optional[str] = None,
+) -> List[DataTask]:
+    """为多个平台批量创建相同配置的任务
+
+    Args:
+        db: 数据库会话
+        project_id: 项目ID
+        platform_ids: 平台ID列表
+        task_type: 任务类型（search/homefeed）
+        data_source: 数据源
+        creator_id: 创建者ID
+        keywords: 关键词（search类型必填）
+
+    Returns:
+        创建的任务列表
+    """
+    tasks = []
+
+    for platform_id in platform_ids:
+        # 生成任务名称
+        task_name = f"{task_type.title()} Task"
+        if keywords:
+            task_name += f" - {keywords[:20]}"  # 限制长度
+
+        task_data = {
+            "project_id": project_id,
+            "platform_id": platform_id,
+            "task_type": task_type,
+            "data_source": data_source,
+            "name": task_name,
+            "keywords": keywords,
+            "status": "pending",
+        }
+
+        task = DataTask(**task_data, creator_id=creator_id)
+        tasks.append(task)
+
+    db.add_all(tasks)
+    await db.flush()
+
+    # 重新查询以获取完整的关系数据
+    task_ids = [task.id for task in tasks]
+    result = await db.execute(
+        select(DataTask)
+        .options(
+            selectinload(DataTask.project),
+            selectinload(DataTask.platform),
+            selectinload(DataTask.creator)
+        )
+        .where(DataTask.id.in_(task_ids))
+    )
+    refreshed_tasks = result.scalars().all()
+
+    return list(refreshed_tasks)

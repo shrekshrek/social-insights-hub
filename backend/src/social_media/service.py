@@ -37,8 +37,8 @@ async def create_project(
     db: AsyncSession,
     project_in: SocialProjectCreate,
     current_user_id: int
-) -> SocialProject:
-    """创建新项目"""
+) -> dict:
+    """创建新项目（可选同时批量创建任务）"""
     # 检查项目名称是否已存在
     existing = await crud.get_project_by_name(db, project_in.name)
     if existing:
@@ -47,9 +47,24 @@ async def create_project(
             detail=f"Project with name '{project_in.name}' already exists"
         )
 
-    # 验证平台ID是否存在
-    if project_in.platform_ids:
-        for platform_id in project_in.platform_ids:
+    # 准备项目数据
+    project_data = project_in.model_dump(exclude={"participant_ids", "quick_tasks"})
+
+    # 创建项目
+    project = await crud.create_project(
+        db,
+        project_data=project_data,
+        owner_id=current_user_id,
+        participant_ids=project_in.participant_ids
+    )
+
+    # 如果提供了快速创建任务配置，批量创建任务
+    created_tasks = []
+    if project_in.quick_tasks:
+        from src.task_manager.crud import bulk_create_tasks
+
+        # 验证平台ID是否存在
+        for platform_id in project_in.quick_tasks.platform_ids:
             platform = await crud.get_platform_by_id(db, platform_id)
             if not platform:
                 raise HTTPException(
@@ -57,19 +72,23 @@ async def create_project(
                     detail=f"Platform with id {platform_id} not found"
                 )
 
-    # 准备项目数据
-    project_data = project_in.model_dump(exclude={"platform_ids", "participant_ids"})
+        # 批量创建任务
+        created_tasks = await bulk_create_tasks(
+            db=db,
+            project_id=project.id,
+            platform_ids=project_in.quick_tasks.platform_ids,
+            task_type=project_in.quick_tasks.task_type,
+            data_source=project_in.quick_tasks.data_source,
+            creator_id=current_user_id,
+            keywords=project_in.quick_tasks.keywords
+        )
 
-    # 创建项目
-    project = await crud.create_project(
-        db,
-        project_data=project_data,
-        owner_id=current_user_id,
-        platform_ids=project_in.platform_ids,
-        participant_ids=project_in.participant_ids
-    )
+        await db.commit()
 
-    return project
+    return {
+        "project": project,
+        "created_tasks": created_tasks
+    }
 
 
 async def get_project(
@@ -126,43 +145,6 @@ async def delete_project(
 ) -> None:
     """删除项目"""
     await crud.delete_project(db, project)
-
-
-# ==================== Project-Platform Relations ====================
-
-async def add_platforms(
-    db: AsyncSession,
-    project: SocialProject,
-    platform_ids: List[int]
-) -> SocialProject:
-    """为项目添加平台"""
-    # 验证平台ID是否存在
-    for platform_id in platform_ids:
-        platform = await crud.get_platform_by_id(db, platform_id)
-        if not platform:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Platform with id {platform_id} not found"
-            )
-
-    return await crud.add_platforms_to_project(db, project, platform_ids)
-
-
-async def remove_platform(
-    db: AsyncSession,
-    project: SocialProject,
-    platform_id: int
-) -> SocialProject:
-    """从项目移除平台"""
-    # 检查平台是否关联到项目
-    platform_ids = [p.id for p in project.platforms]
-    if platform_id not in platform_ids:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform {platform_id} is not associated with this project"
-        )
-
-    return await crud.remove_platform_from_project(db, project, platform_id)
 
 
 # ==================== Project-Participant Relations ====================

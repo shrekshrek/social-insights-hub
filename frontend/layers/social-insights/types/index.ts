@@ -21,38 +21,42 @@ export interface SocialProject {
   id: number
   name: string
   description: string | null
-  keywords: string | null
   project_start_date: string | null
   project_end_date: string | null
   owner_id: number
   deep_analysis_settings: Record<string, any> | null
   created_at: string
   updated_at: string
-  platforms?: Platform[]
   participant_ids?: number[]
   owner_username?: string
+}
+
+export interface QuickTaskCreate {
+  platform_ids: number[]
+  task_type: 'search' | 'homefeed'
+  data_source: DataSource
+  keywords?: string
 }
 
 export interface SocialProjectCreate {
   name: string
   description?: string
-  keywords?: string
   project_start_date?: string
   project_end_date?: string
-  platform_ids: number[]
   participant_ids?: number[]
-  deep_analysis_settings?: Record<string, any>
+  quick_tasks?: QuickTaskCreate
 }
 
 export interface SocialProjectUpdate {
   name?: string
   description?: string
-  keywords?: string
   project_start_date?: string
   project_end_date?: string
-  platform_ids?: number[]
-  participant_ids?: number[]
-  deep_analysis_settings?: Record<string, any>
+}
+
+export interface SocialProjectCreateResponse {
+  project: SocialProject
+  created_tasks: DataTaskWithRelations[]
 }
 
 // ==================== Data Task ====================

@@ -107,15 +107,26 @@ async def get_projects(
     """
     获取项目列表。
 
+    权限规则：
+    - 管理员和超级管理员：可以查看所有项目
+    - 普通用户：默认只能查看自己创建或参与的项目
+
     过滤选项：
-    - my_projects=true: 只显示当前用户创建或参与的项目
-    - owner_id: 按特定owner过滤
+    - my_projects=true: 显式只显示当前用户的项目
+    - owner_id: 按特定owner过滤（管理员可用）
     - search: 搜索项目名称或关键词
 
     返回分页结果，包含owner信息和关联平台。
     """
-    # 如果请求"我的项目"，使用participant_id过滤
-    participant_id = current_user.id if my_projects else None
+    from .dependencies import is_admin_or_super_admin
+
+    # 权限判断：管理员可以看到所有项目，普通用户只能看到自己的项目
+    if is_admin_or_super_admin(current_user):
+        # 管理员可以查看所有项目
+        participant_id = None
+    else:
+        # 普通用户只能查看自己创建或参与的项目
+        participant_id = current_user.id
 
     projects, total = await service.get_projects_list(
         db,

@@ -1,19 +1,24 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from src.auth import models, schemas
 from src.exceptions import UserAlreadyExists
 from src.auth.security import verify_password, pwd_context
 from src.rbac import service as rbac_service
-from src.rbac.models import SystemRoles
+from src.rbac.models import SystemRoles, UserRole, Role
 
 
 async def get_user_by_username(db: AsyncSession, username: str):
     """
-    根据用户名获取用户
+    根据用户名获取用户（包含角色信息）
     """
     result = await db.execute(
-        select(models.User).where(models.User.username == username)
+        select(models.User)
+        .options(
+            selectinload(models.User.user_roles).selectinload(UserRole.role)
+        )
+        .where(models.User.username == username)
     )
     return result.scalar_one_or_none()
 

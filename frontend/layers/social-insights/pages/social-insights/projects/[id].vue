@@ -177,30 +177,6 @@ const getStatusText = (status: string) => {
 
         <div>
           <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            关键词
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ project.keywords || '-' }}
-          </p>
-        </div>
-
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            目标平台
-          </h3>
-          <div class="mt-1 flex flex-wrap gap-2">
-            <UBadge
-              v-for="platform in project.platforms"
-              :key="platform.id"
-              variant="subtle"
-            >
-              {{ platform.name }}
-            </UBadge>
-          </div>
-        </div>
-
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
             项目时间
           </h3>
           <p class="mt-1 text-sm text-gray-900 dark:text-white">
@@ -252,7 +228,7 @@ const getStatusText = (status: string) => {
           v-for="task in tasks"
           :key="task.id"
           class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-          @click="navigateTo(`/social-insights/tasks/${task.id}`)"
+          @click="navigateTo(`/social-insights/tasks/${task.id}?from=project&project_id=${projectId}`)"
         >
           <div class="flex items-start justify-between">
             <div class="flex-1">

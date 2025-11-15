@@ -11,14 +11,6 @@ if TYPE_CHECKING:
     from src.auth.models import User
 
 
-# 项目-平台关联表（多对多）
-social_project_platform_assignments = Table(
-    "social_project_platform_assignments",
-    Base.metadata,
-    Column("project_id", Integer, ForeignKey("social_projects.id", ondelete="CASCADE"), primary_key=True),
-    Column("platform_id", Integer, ForeignKey("platforms.id", ondelete="CASCADE"), primary_key=True),
-)
-
 # 项目-参与者关联表（多对多）
 social_project_participants = Table(
     "social_project_participants",
@@ -51,14 +43,6 @@ class Platform(Base):
         onupdate=func.now()
     )
 
-    # 关系
-    projects: Mapped[list["SocialProject"]] = relationship(
-        "SocialProject",
-        secondary=social_project_platform_assignments,
-        back_populates="platforms",
-        lazy="selectin"
-    )
-
     def __repr__(self):
         return f"<Platform(id={self.id}, name='{self.name}', code='{self.code}')>"
 
@@ -78,7 +62,6 @@ class SocialProject(Base):
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
 
     # 项目元数据
-    keywords: Mapped[str | None] = mapped_column(Text, nullable=True)  # 逗号分隔的关键词
     project_start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     project_end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -97,13 +80,6 @@ class SocialProject(Base):
     owner: Mapped["User"] = relationship(
         "src.auth.models.User",
         foreign_keys=[owner_id],
-        lazy="selectin"
-    )
-
-    platforms: Mapped[list["Platform"]] = relationship(
-        "Platform",
-        secondary=social_project_platform_assignments,
-        back_populates="projects",
         lazy="selectin"
     )
 

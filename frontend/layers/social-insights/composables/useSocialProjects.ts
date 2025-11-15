@@ -2,6 +2,7 @@ import type {
   SocialProject,
   SocialProjectCreate,
   SocialProjectUpdate,
+  SocialProjectCreateResponse,
   PaginatedResponse,
 } from '../types'
 
@@ -28,11 +29,11 @@ export const useSocialProjects = () => {
 
   // 创建项目
   const createProject = async (data: SocialProjectCreate) => {
-    const result = await apiRequest<SocialProject>('/social-media/projects', {
+    const result = await apiRequest<SocialProjectCreateResponse>('/social-media/projects', {
       method: 'POST',
       body: data,
     })
-    showSuccess('项目创建成功！')
+    // Don't show toast here, let the page handle it based on created_tasks
     return result
   }
 

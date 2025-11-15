@@ -1,8 +1,8 @@
 """社交媒体数据模块的Pydantic schemas"""
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 from src.schemas import CustomBaseModel, PaginatedResponse
 
 
@@ -38,16 +38,31 @@ class SocialProjectBase(CustomBaseModel):
 
     name: str = Field(..., min_length=1, max_length=255, description="项目名称")
     description: Optional[str] = Field(None, description="项目描述")
-    keywords: Optional[str] = Field(None, description="关键词（逗号分隔）")
     project_start_date: Optional[datetime] = Field(None, description="项目开始时间")
     project_end_date: Optional[datetime] = Field(None, description="项目结束时间")
+
+
+class QuickTaskCreate(CustomBaseModel):
+    """快速创建任务配置（仅支持search和homefeed）"""
+
+    platform_ids: List[int] = Field(..., min_length=1, description="平台ID列表")
+    task_type: Literal["search", "homefeed"] = Field(..., description="任务类型（仅支持search和homefeed）")
+    data_source: Literal["local_upload", "remote_crawler"] = Field(..., description="数据源")
+    keywords: Optional[str] = Field(None, description="搜索关键词（search类型必填）")
+
+    @model_validator(mode='after')
+    def validate_keywords(self):
+        """验证search任务必须提供关键词"""
+        if self.task_type == "search" and not self.keywords:
+            raise ValueError("keywords is required for search tasks")
+        return self
 
 
 class SocialProjectCreate(SocialProjectBase):
     """创建社交项目请求模型"""
 
-    platform_ids: List[int] = Field(default_factory=list, description="关联的平台ID列表")
     participant_ids: List[int] = Field(default_factory=list, description="参与者用户ID列表")
+    quick_tasks: Optional[QuickTaskCreate] = Field(None, description="同时创建任务（可选）")
 
 
 class SocialProjectUpdate(CustomBaseModel):
@@ -55,7 +70,6 @@ class SocialProjectUpdate(CustomBaseModel):
 
     name: Optional[str] = Field(None, min_length=1, max_length=255, description="项目名称")
     description: Optional[str] = Field(None, description="项目描述")
-    keywords: Optional[str] = Field(None, description="关键词（逗号分隔）")
     project_start_date: Optional[datetime] = Field(None, description="项目开始时间")
     project_end_date: Optional[datetime] = Field(None, description="项目结束时间")
 
@@ -70,7 +84,6 @@ class SocialProjectRead(SocialProjectBase):
     updated_at: datetime
 
     # 关联数据
-    platforms: List[PlatformRead] = Field(default_factory=list)
     participant_ids: List[int] = Field(default_factory=list, description="参与者ID列表")
 
     model_config = {"from_attributes": True}
@@ -85,13 +98,14 @@ class SocialProjectReadWithOwner(SocialProjectRead):
 SocialProjectListResponse = PaginatedResponse[SocialProjectReadWithOwner]
 
 
-# ==================== Project-Platform Management ====================
+class SocialProjectCreateResponse(CustomBaseModel):
+    """创建项目响应（包含项目和可选的批量创建任务）"""
 
-class ProjectPlatformAssignment(CustomBaseModel):
-    """项目-平台关联模型"""
+    project: SocialProjectRead = Field(..., description="创建的项目")
+    created_tasks: List[dict] = Field(default_factory=list, description="批量创建的任务列表")
 
-    platform_ids: List[int] = Field(..., min_length=1, description="要关联的平台ID列表")
 
+# ==================== Project-Participant Management ====================
 
 class ProjectParticipantAssignment(CustomBaseModel):
     """项目-参与者关联模型"""

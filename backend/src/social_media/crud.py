@@ -5,7 +5,7 @@ from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .models import Platform, SocialProject, social_project_platform_assignments, social_project_participants
+from .models import Platform, SocialProject, social_project_participants
 from src.auth.models import User
 
 
@@ -66,7 +66,6 @@ async def get_project_by_id(
 
     if load_relations:
         query = query.options(
-            selectinload(SocialProject.platforms),
             selectinload(SocialProject.participants),
             selectinload(SocialProject.owner)
         )
@@ -116,12 +115,7 @@ async def get_projects(
 
     if search:
         search_pattern = f"%{search}%"
-        conditions.append(
-            or_(
-                SocialProject.name.ilike(search_pattern),
-                SocialProject.keywords.ilike(search_pattern)
-            )
-        )
+        conditions.append(SocialProject.name.ilike(search_pattern))
 
     # 构建基础查询
     base_query = select(SocialProject)
@@ -135,7 +129,6 @@ async def get_projects(
 
     # 查询数据（加载关联）
     query = base_query.options(
-        selectinload(SocialProject.platforms),
         selectinload(SocialProject.owner)
     ).offset(skip).limit(limit).order_by(SocialProject.created_at.desc())
 
@@ -149,26 +142,15 @@ async def create_project(
     db: AsyncSession,
     project_data: dict,
     owner_id: int,
-    platform_ids: List[int] = None,
     participant_ids: List[int] = None
 ) -> SocialProject:
     """创建项目"""
-    from .models import social_project_platform_assignments, social_project_participants
+    from .models import social_project_participants
 
     # 创建项目
     project = SocialProject(**project_data, owner_id=owner_id)
     db.add(project)
     await db.flush()  # 获取项目ID
-
-    # 关联平台 - 直接插入关联表
-    if platform_ids:
-        for platform_id in platform_ids:
-            await db.execute(
-                social_project_platform_assignments.insert().values(
-                    project_id=project.id,
-                    platform_id=platform_id
-                )
-            )
 
     # 关联参与者 - 直接插入关联表
     if participant_ids:
@@ -185,7 +167,6 @@ async def create_project(
     result = await db.execute(
         select(SocialProject)
         .options(
-            selectinload(SocialProject.platforms),
             selectinload(SocialProject.participants),
             selectinload(SocialProject.owner)
         )
@@ -214,42 +195,6 @@ async def delete_project(db: AsyncSession, project: SocialProject) -> None:
     """删除项目"""
     await db.delete(project)
     await db.commit()
-
-
-# ==================== Project-Platform Relations ====================
-
-async def add_platforms_to_project(
-    db: AsyncSession,
-    project: SocialProject,
-    platform_ids: List[int]
-) -> SocialProject:
-    """为项目添加平台"""
-    platforms = await db.execute(
-        select(Platform).where(Platform.id.in_(platform_ids))
-    )
-    new_platforms = platforms.scalars().all()
-
-    # 只添加未关联的平台
-    existing_ids = {p.id for p in project.platforms}
-    for platform in new_platforms:
-        if platform.id not in existing_ids:
-            project.platforms.append(platform)
-
-    await db.commit()
-    await db.refresh(project, ["platforms"])
-    return project
-
-
-async def remove_platform_from_project(
-    db: AsyncSession,
-    project: SocialProject,
-    platform_id: int
-) -> SocialProject:
-    """从项目移除平台"""
-    project.platforms = [p for p in project.platforms if p.id != platform_id]
-    await db.commit()
-    await db.refresh(project, ["platforms"])
-    return project
 
 
 # ==================== Project-Participant Relations ====================

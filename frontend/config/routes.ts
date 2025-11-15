@@ -64,23 +64,23 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   '/rbac/permissions/[id]': { permission: PERMISSIONS.PERMISSION_READ },
   // 社交媒体洞察模块
   '/social-insights/projects': {
-    permission: null, // TODO: 后续可添加权限控制
+    permission: PERMISSIONS.SOCIAL_PROJECT_ACCESS,
     label: '社交媒体项目',
     showInNav: true,
     order: 60,
   },
-  '/social-insights/projects/create': { permission: null },
-  '/social-insights/projects/[id]': { permission: null },
+  '/social-insights/projects/create': { permission: PERMISSIONS.SOCIAL_PROJECT_WRITE },
+  '/social-insights/projects/[id]': { permission: PERMISSIONS.SOCIAL_PROJECT_READ },
   '/social-insights/tasks': {
-    permission: null,
+    permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
     label: '数据采集任务',
     showInNav: true,
     order: 70,
   },
-  '/social-insights/tasks/create': { permission: null },
-  '/social-insights/tasks/[id]': { permission: null },
-  '/social-insights/tasks/[id]/upload': { permission: null },
-  '/social-insights/posts/[id]': { permission: null },
+  '/social-insights/tasks/create': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
+  '/social-insights/tasks/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
+  '/social-insights/tasks/[id]/upload': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
+  '/social-insights/posts/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
 }
 
 /**

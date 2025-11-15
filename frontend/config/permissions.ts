@@ -31,7 +31,18 @@ export const PERMISSIONS = {
   
   // 基础业务
   DASHBOARD_ACCESS: {target: 'dashboard', action: 'access'},
-  
+
+  // 社交媒体洞察
+  SOCIAL_PROJECT_ACCESS: {target: 'social_project', action: 'access'},
+  SOCIAL_PROJECT_READ: {target: 'social_project', action: 'read'},
+  SOCIAL_PROJECT_WRITE: {target: 'social_project', action: 'write'},
+  SOCIAL_PROJECT_DELETE: {target: 'social_project', action: 'delete'},
+
+  SOCIAL_TASK_ACCESS: {target: 'social_task', action: 'access'},
+  SOCIAL_TASK_READ: {target: 'social_task', action: 'read'},
+  SOCIAL_TASK_WRITE: {target: 'social_task', action: 'write'},
+  SOCIAL_TASK_DELETE: {target: 'social_task', action: 'delete'},
+
   // 扩展权限示例（根据需要添加）
   // REPORTS_ACCESS: {target: 'reports', action: 'access'},
   // REPORTS_READ: {target: 'reports', action: 'read'},

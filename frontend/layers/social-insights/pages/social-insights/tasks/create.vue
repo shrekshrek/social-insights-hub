@@ -3,7 +3,6 @@ import type { DataTaskCreate, TaskType, DataSource } from '../../../types'
 import { z } from 'zod'
 
 definePageMeta({
-  middleware: 'auth',
   layout: 'default',
 })
 

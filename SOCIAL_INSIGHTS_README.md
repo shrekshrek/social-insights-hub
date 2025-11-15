@@ -317,7 +317,10 @@ social-insights-hub/
 ## 注意事项
 
 1. **数据源选择**：目前仅支持"本地上传"，WebSocket爬虫功能标记为待开发
-2. **权限控制**：当前所有路由设置为`permission: null`，后续可集成RBAC权限
+2. **权限控制**：✅ 已完成RBAC权限集成
+   - 社交媒体项目：`SOCIAL_PROJECT_ACCESS/READ/WRITE/DELETE`
+   - 数据采集任务：`SOCIAL_TASK_ACCESS/READ/WRITE/DELETE`
+   - 权限自动同步到数据库
 3. **性能优化**：大量数据时建议分批上传
 4. **数据验证**：上传前务必验证JSON格式，必填字段：
    - contents: `post_id_on_platform`
@@ -326,5 +329,5 @@ social-insights-hub/
 ## 开发者
 
 - 后端开发：阶段1-2完成
-- 前端开发：阶段3完成
+- 前端开发：阶段3完成（含RBAC权限集成）
 - 生成工具：Claude Code (Sonnet 4.5)

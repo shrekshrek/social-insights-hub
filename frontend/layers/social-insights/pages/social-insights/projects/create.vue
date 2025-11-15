@@ -3,7 +3,6 @@ import type { SocialProjectCreate } from '../../../types'
 import { z } from 'zod'
 
 definePageMeta({
-  middleware: 'auth',
   layout: 'default',
 })
 

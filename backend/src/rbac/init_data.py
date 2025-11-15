@@ -207,33 +207,41 @@ BUSINESS_PERMISSIONS = [
     # *create_module_permissions("inventory", ["access", "read", "write", "delete", "export", "import"]),
     #
     # ========================================================================
-    # 社交媒体数据管理模块 (已启用)
+    # 社交洞察模块 - 项目管理
     # ========================================================================
     *create_module_permissions(
-        "social_media",
-        [
-            "project.create",
-            "project.view",
-            "project.update",
-            "project.delete",
-            "data.view",
-            "data.export"
-        ],
+        "social_project",
+        ["access", "read", "write", "delete"],
         display_names={
-            "project.create": "创建社交媒体项目",
-            "project.view": "查看社交媒体项目",
-            "project.update": "编辑社交媒体项目",
-            "project.delete": "删除社交媒体项目",
-            "data.view": "查看社交媒体数据",
-            "data.export": "导出社交媒体数据",
+            "access": "访问社交媒体项目",
+            "read": "查看社交媒体项目",
+            "write": "编辑社交媒体项目",
+            "delete": "删除社交媒体项目",
         },
         descriptions={
-            "project.create": "允许创建新的社交媒体数据分析项目",
-            "project.view": "允许查看项目列表和项目详情",
-            "project.update": "允许编辑项目信息、关联平台、管理参与者",
-            "project.delete": "允许删除项目及其关联数据",
-            "data.view": "允许查看项目中的原文和评论数据",
-            "data.export": "允许导出数据为Excel、CSV等格式",
+            "access": "允许访问社交媒体项目管理页面",
+            "read": "允许查看项目详情和列表",
+            "write": "允许创建和编辑项目",
+            "delete": "允许删除项目及其关联数据",
+        }
+    ),
+    # ========================================================================
+    # 社交洞察模块 - 任务管理 (新增)
+    # ========================================================================
+    *create_module_permissions(
+        "social_task",
+        ["access", "read", "write", "delete"],
+        display_names={
+            "access": "访问数据采集任务",
+            "read": "查看数据采集任务",
+            "write": "编辑数据采集任务",
+            "delete": "删除数据采集任务",
+        },
+        descriptions={
+            "access": "允许访问数据采集任务管理页面",
+            "read": "允许查看任务详情和数据",
+            "write": "允许创建任务和上传数据",
+            "delete": "允许删除任务及其数据",
         }
     ),
 ]

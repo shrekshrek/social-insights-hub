@@ -10,7 +10,7 @@ export const useTasks = () => {
   const { apiRequest, useApiData, showSuccess } = useApi()
 
   // 获取任务列表
-  const getTasks = (params?: Record<string, unknown>) => {
+  const getTasks = (params?: MaybeRef<Record<string, unknown>>) => {
     return useApiData<PaginatedResponse<DataTaskWithRelations>>('/tasks', {
       query: params,
       key: computed(() => {

@@ -31,10 +31,10 @@ const projectSchema = z.object({
 const quickTaskSchema = z.object({
   platform_ids: z.array(z.number()).min(1, '请至少选择一个平台'),
   task_type: z.enum(['search', 'homefeed'], {
-    required_error: '请选择任务类型'
+    message: '请选择任务类型'
   }),
   data_source: z.enum(['remote_crawler', 'local_upload'], {
-    required_error: '请选择数据源'
+    message: '请选择数据源'
   }),
   keywords: z.string().optional(),
 }).refine((data) => {

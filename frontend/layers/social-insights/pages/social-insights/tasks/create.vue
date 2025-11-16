@@ -25,23 +25,21 @@ const submitting = ref(false)
 const schema = z.object({
   name: z.string().min(1, '任务名称不能为空').max(255, '任务名称不能超过255个字符'),
   description: z.string().optional(),
-  project_id: z.number({ required_error: '请选择项目' }),
-  platform_id: z.number({ required_error: '请选择平台' }),
-  task_type: z.enum(['search', 'detail', 'creator', 'homefeed'], { required_error: '请选择任务类型' }),
-  data_source: z.enum(['local_upload', 'remote_crawler'], { required_error: '请选择数据源' }),
+  project_id: z.number({ message: '请选择项目' }),
+  platform_id: z.number({ message: '请选择平台' }),
+  task_type: z.enum(['search', 'detail', 'creator', 'homefeed'], { message: '请选择任务类型' }),
+  data_source: z.enum(['local_upload', 'remote_crawler'], { message: '请选择数据源' }),
   keywords: z.string().optional(),
 })
 
-type Schema = z.output<typeof schema>
-
 // 表单初始值
-const state = reactive<Schema>({
+const state = reactive({
   name: '',
   description: '',
   project_id: preselectedProjectId,
-  platform_id: undefined as any,
-  task_type: 'search',
-  data_source: 'local_upload',
+  platform_id: undefined as number | undefined,
+  task_type: 'search' as const,
+  data_source: 'local_upload' as const,
   keywords: '',
 })
 
@@ -85,8 +83,8 @@ const handleSubmit = async () => {
     const taskData: DataTaskCreate = {
       name: state.name,
       description: state.description || undefined,
-      project_id: state.project_id,
-      platform_id: state.platform_id,
+      project_id: state.project_id!,
+      platform_id: state.platform_id!,
       task_type: state.task_type,
       data_source: state.data_source,
       keywords: state.keywords || undefined,

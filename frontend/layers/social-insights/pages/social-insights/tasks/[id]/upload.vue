@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { JSONUploadData } from '../../../../types'
+
 definePageMeta({
   layout: 'default',
 })
@@ -12,7 +14,7 @@ const { uploadJSONData, validateJSONData } = useJSONUpload()
 const { data: task } = getTask(taskId.value)
 
 const jsonContent = ref('')
-const validationResult = ref<{ valid: boolean; data?: any; error?: string }>()
+const validationResult = ref<{ valid: boolean; data?: JSONUploadData; error?: string }>()
 const uploading = ref(false)
 
 // 验证JSON
@@ -110,7 +112,7 @@ const loadExample = () => {
 
       <template #footer>
         <div v-if="validationResult" class="space-y-4">
-          <UAlert v-if="validationResult.valid" color="green" icon="i-heroicons-check-circle" title="验证通过" :description="`检测到 ${validationResult.data.contents.length} 个帖子和 ${validationResult.data.comments.length} 条评论`" />
+          <UAlert v-if="validationResult.valid && validationResult.data" color="green" icon="i-heroicons-check-circle" title="验证通过" :description="`检测到 ${validationResult.data.contents.length} 个帖子和 ${validationResult.data.comments.length} 条评论`" />
           <UAlert v-else color="red" icon="i-heroicons-x-circle" title="验证失败" :description="validationResult.error" />
           <UButton v-if="validationResult.valid" :loading="uploading" @click="handleUpload">上传数据</UButton>
         </div>

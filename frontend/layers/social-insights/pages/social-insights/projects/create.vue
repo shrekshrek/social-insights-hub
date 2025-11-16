@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { SocialProjectCreate, QuickTaskCreate } from '../../../types'
 import { z } from 'zod'
-import { CalendarDate } from '@internationalized/date'
 import type { DateValue } from '@internationalized/date'
 
 definePageMeta({
@@ -199,72 +198,75 @@ const handleSubmit = async () => {
         新建项目
       </h1>
       <p class="text-gray-600 dark:text-gray-400 mt-1">
-        创建一个新的社交媒体数据采集项目，可选择同时批量创建任务
+        创建一个新的社交媒体数据采集项目
       </p>
     </div>
 
     <!-- 项目基本信息卡片 -->
     <UCard>
       <template #header>
-        <h2 class="text-lg font-semibold">
-          项目基本信息
+        <h2 class="text-base font-semibold">
+          项目信息
         </h2>
       </template>
 
       <UForm
         :schema="projectSchema"
         :state="projectState"
-        class="space-y-6"
       >
-        <!-- 项目名称 -->
-        <UFormField
-          label="项目名称"
-          name="name"
-          required
-        >
-          <UInput
-            v-model="projectState.name"
-            placeholder="请输入项目名称"
-          />
-        </UFormField>
-
-        <!-- 项目描述 -->
-        <UFormField
-          label="项目描述"
-          name="description"
-        >
-          <UTextarea
-            v-model="projectState.description"
-            placeholder="请输入项目描述"
-            :rows="4"
-            class="w-full"
-          />
-        </UFormField>
-
-        <!-- 项目时间范围 -->
-        <UFormField
-          label="项目时间范围"
-          name="date_range"
-          help="选择项目的开始和结束日期（可选）"
-        >
-          <UPopover>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <!-- 项目名称 -->
+          <UFormField
+            label="项目名称"
+            name="name"
+            required
+          >
             <UInput
-              :model-value="dateRangeText"
-              readonly
-              placeholder="选择日期范围"
-              icon="i-lucide-calendar"
+              v-model="projectState.name"
+              placeholder="请输入项目名称"
+              class="w-full"
             />
+          </UFormField>
 
-            <template #content>
-              <UCalendar
-                v-model="projectState.date_range"
-                class="p-2"
-                :number-of-months="2"
-                range
+          <!-- 项目时间范围 -->
+          <UFormField
+            label="项目时间"
+            name="date_range"
+          >
+            <UPopover class="w-full">
+              <UInput
+                :model-value="dateRangeText"
+                readonly
+                placeholder="选择日期范围"
+                icon="i-lucide-calendar"
+                class="w-full"
               />
-            </template>
-          </UPopover>
-        </UFormField>
+
+              <template #content>
+                <UCalendar
+                  v-model="projectState.date_range"
+                  class="p-2"
+                  :number-of-months="2"
+                  range
+                />
+              </template>
+            </UPopover>
+          </UFormField>
+
+          <!-- 项目描述 - 占据整行 -->
+          <UFormField
+            label="项目描述"
+            name="description"
+            class="md:col-span-2"
+          >
+            <UTextarea
+              v-model="projectState.description"
+              placeholder="请输入项目描述"
+              :rows="3"
+              class="w-full"
+            />
+          </UFormField>
+        </div>
       </UForm>
     </UCard>
 
@@ -272,8 +274,8 @@ const handleSubmit = async () => {
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">
-            快速创建任务（可选）
+          <h2 class="text-base font-semibold">
+            批量创建任务
           </h2>
           <USwitch
             v-model="enableQuickTasks"
@@ -281,128 +283,148 @@ const handleSubmit = async () => {
         </div>
       </template>
 
-      <div v-if="enableQuickTasks" class="space-y-6">
-        <UAlert
-          color="info"
-          variant="subtle"
-          title="批量任务创建"
-          description="根据您的配置，系统将为每个选中的平台创建一个独立的采集任务"
-        />
-
+      <div v-if="enableQuickTasks">
         <UForm
           :schema="quickTaskSchema"
           :state="quickTaskState"
-          class="space-y-6"
         >
-          <!-- 任务类型 -->
-          <UFormField
-            label="任务类型"
-            name="task_type"
-            required
-            help="仅支持批量创建搜索任务和主页任务"
-          >
-            <USelect
-              v-model="quickTaskState.task_type"
-              :items="taskTypeOptions"
-              value-key="value"
-              placeholder="选择任务类型"
-            />
-          </UFormField>
+          <div class="space-y-5">
+            <!-- 任务类型和数据源 - 两列并排 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <!-- 任务类型 -->
+              <UFormField
+                label="任务类型"
+                name="task_type"
+                required
+              >
+                <USelect
+                  v-model="quickTaskState.task_type"
+                  :items="taskTypeOptions"
+                  value-key="value"
+                  placeholder="选择任务类型"
+                  class="w-full"
+                />
+              </UFormField>
 
-          <!-- 数据源 -->
-          <UFormField
-            label="数据源"
-            name="data_source"
-            required
-          >
-            <USelect
-              v-model="quickTaskState.data_source"
-              :items="dataSourceOptions"
-              value-key="value"
-              placeholder="选择数据源"
-            />
-          </UFormField>
-
-          <!-- 关键词（仅search任务） -->
-          <UFormField
-            v-if="showKeywordsInput"
-            label="搜索关键词"
-            name="keywords"
-            required
-            help="将为每个平台创建使用此关键词的搜索任务"
-          >
-            <UInput
-              v-model="quickTaskState.keywords"
-              placeholder="例如：品牌名、产品名、话题标签"
-            />
-          </UFormField>
-
-          <!-- 选择平台 -->
-          <UFormField
-            label="目标平台"
-            name="platform_ids"
-            required
-            help="将为每个选中的平台创建一个任务"
-          >
-            <div v-if="platformsLoading" class="text-sm text-gray-500">
-              加载平台列表中...
+              <!-- 数据源 -->
+              <UFormField
+                label="数据源"
+                name="data_source"
+                required
+              >
+                <USelect
+                  v-model="quickTaskState.data_source"
+                  :items="dataSourceOptions"
+                  value-key="value"
+                  placeholder="选择数据源"
+                  class="w-full"
+                />
+              </UFormField>
             </div>
-            <UCheckboxGroup
-              v-else
-              v-model="quickTaskState.platform_ids"
-              :items="platformOptions"
-              value-key="value"
-              variant="card"
-            />
-          </UFormField>
-        </UForm>
 
-        <!-- 任务创建摘要 -->
-        <UCard v-if="taskSummary" class="bg-gray-50 dark:bg-gray-800">
-          <div class="space-y-3">
-            <div class="flex items-center gap-2">
+            <!-- 关键词（仅search任务） -->
+            <UFormField
+              v-if="showKeywordsInput"
+              label="搜索关键词"
+              name="keywords"
+              required
+            >
+              <UInput
+                v-model="quickTaskState.keywords"
+                placeholder="例如：品牌名、产品名、话题标签"
+                class="w-full"
+              />
+            </UFormField>
+
+            <!-- 选择平台 - 占据整行 -->
+            <UFormField
+              label="目标平台"
+              name="platform_ids"
+              required
+            >
+              <div v-if="platformsLoading" class="text-sm text-gray-500">
+                加载中...
+              </div>
+              <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <label
+                  v-for="platform in platformOptions"
+                  :key="platform.value"
+                  class="relative flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+                  :class="{
+                    'ring-2 ring-primary-500 border-primary-500': quickTaskState.platform_ids.includes(platform.value)
+                  }"
+                >
+                  <input
+                    v-model="quickTaskState.platform_ids"
+                    type="checkbox"
+                    :value="platform.value"
+                    class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  >
+                  <div class="ml-3 flex-1">
+                    <div class="font-medium text-sm">
+                      {{ platform.label }}
+                    </div>
+                    <div
+                      v-if="platform.description"
+                      class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"
+                    >
+                      {{ platform.description }}
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </UFormField>
+          </div>
+
+          <!-- 任务摘要 -->
+          <div
+            v-if="taskSummary"
+            class="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700"
+          >
+            <div class="flex items-center gap-2 mb-3">
               <UIcon name="i-lucide-info" class="text-blue-500" />
-              <h3 class="font-semibold text-sm">
-                将创建 {{ taskSummary.count }} 个任务
-              </h3>
+              <span class="text-sm font-medium">将创建 {{ taskSummary.count }} 个任务</span>
             </div>
-            <div class="text-sm space-y-2 text-gray-600 dark:text-gray-300">
-              <div>
-                <span class="font-medium">任务类型：</span>
-                <span>{{ taskSummary.taskType }}</span>
+            <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1.5">
+              <div>{{ taskSummary.taskType }} · {{ taskSummary.dataSource }}</div>
+              <div
+                v-if="taskSummary.keywords"
+                class="text-blue-600 dark:text-blue-400"
+              >
+                {{ taskSummary.keywords }}
               </div>
-              <div>
-                <span class="font-medium">数据源：</span>
-                <span>{{ taskSummary.dataSource }}</span>
-              </div>
-              <div v-if="taskSummary.keywords">
-                <span class="font-medium">关键词：</span>
-                <span>{{ taskSummary.keywords }}</span>
-              </div>
-              <div>
-                <span class="font-medium">目标平台：</span>
-                <span>{{ taskSummary.platforms.join('、') }}</span>
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <UBadge
+                  v-for="platform in taskSummary.platforms"
+                  :key="platform"
+                  variant="subtle"
+                  size="sm"
+                >
+                  {{ platform }}
+                </UBadge>
               </div>
             </div>
           </div>
-        </UCard>
+        </UForm>
       </div>
 
-      <div v-else class="text-sm text-gray-500">
-        <p>您可以稍后在项目详情页面创建任务</p>
+      <div v-else class="text-sm text-gray-500 py-8 text-center">
+        <p>稍后可在项目详情页创建任务</p>
       </div>
     </UCard>
 
     <!-- 操作按钮 -->
     <div class="flex items-center gap-3">
       <UButton
-        @click="handleSubmit"
+        size="lg"
         :loading="submitting"
+        @click="handleSubmit"
       >
         创建项目
       </UButton>
       <UButton
         variant="outline"
+        size="lg"
         @click="navigateTo('/social-insights/projects')"
       >
         取消

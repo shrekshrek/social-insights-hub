@@ -10,7 +10,7 @@ export const useSocialProjects = () => {
   const { apiRequest, useApiData, showSuccess } = useApi()
 
   // 获取项目列表
-  const getProjects = (params?: Record<string, unknown>) => {
+  const getProjects = (params?: MaybeRef<Record<string, unknown>>) => {
     return useApiData<PaginatedResponse<SocialProject>>('/social-media/projects', {
       query: params,
       key: computed(() => {

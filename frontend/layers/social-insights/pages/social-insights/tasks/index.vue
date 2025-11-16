@@ -102,12 +102,6 @@ const statusOptions = [
   { label: '失败', value: 'failed' },
 ]
 
-const dataSourceOptions = [
-  { label: '全部', value: undefined },
-  { label: '本地上传', value: 'local_upload' },
-  { label: '远程爬虫', value: 'remote_crawler' },
-]
-
 // 表格列定义
 const columns: TableColumn<DataTaskWithRelations>[] = [
   {
@@ -116,16 +110,16 @@ const columns: TableColumn<DataTaskWithRelations>[] = [
     cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
   },
   {
-    accessorKey: 'project',
+    accessorKey: 'project_name',
     header: '所属项目',
-    cell: ({ row }) => h('span', row.original.project?.name || '-'),
+    cell: ({ row }) => h('span', row.original.project_name || '-'),
   },
   {
-    accessorKey: 'platform',
+    accessorKey: 'platform_name',
     header: '平台',
     cell: ({ row }) => {
       const UBadge = resolveComponent('UBadge')
-      return h(UBadge, { variant: 'subtle', size: 'xs' }, () => row.original.platform?.name || '-')
+      return h(UBadge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-')
     },
   },
   {

@@ -10,7 +10,7 @@ const { getProject, deleteProject } = useSocialProjects()
 const { getTasks } = useTasks()
 
 // 获取项目详情
-const { data: project, pending: projectLoading, refresh: refreshProject } = getProject(projectId.value)
+const { data: project, pending: _projectLoading, refresh: refreshProject } = getProject(projectId.value)
 
 // 获取项目下的任务列表
 const taskParams = computed(() => ({

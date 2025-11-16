@@ -12,8 +12,9 @@ export const useJSONUpload = () => {
       })
       showSuccess(`数据上传成功！导入了 ${result.posts_imported} 个帖子和 ${result.comments_imported} 条评论`)
       return result
-    } catch (error: any) {
-      showError(error.message || '数据上传失败')
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '数据上传失败'
+      showError(message)
       throw error
     }
   }
@@ -35,7 +36,7 @@ export const useJSONUpload = () => {
       // 验证 contents 中每个帖子都有 post_id_on_platform
       for (let i = 0; i < data.contents.length; i++) {
         const post = data.contents[i]
-        if (!post.post_id_on_platform) {
+        if (!post?.post_id_on_platform) {
           return { valid: false, error: `第 ${i + 1} 个帖子缺少 post_id_on_platform 字段` }
         }
       }
@@ -43,14 +44,15 @@ export const useJSONUpload = () => {
       // 验证 comments 中每个评论都有 comment_id_on_platform
       for (let i = 0; i < data.comments.length; i++) {
         const comment = data.comments[i]
-        if (!comment.comment_id_on_platform) {
+        if (!comment?.comment_id_on_platform) {
           return { valid: false, error: `第 ${i + 1} 条评论缺少 comment_id_on_platform 字段` }
         }
       }
 
       return { valid: true, data }
-    } catch (error: any) {
-      return { valid: false, error: `JSON 解析失败: ${error.message}` }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '未知错误'
+      return { valid: false, error: `JSON 解析失败: ${message}` }
     }
   }
 

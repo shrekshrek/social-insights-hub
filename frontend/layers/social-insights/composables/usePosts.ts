@@ -8,7 +8,7 @@ export const usePosts = () => {
   const { useApiData } = useApi()
 
   // 获取任务的原文列表
-  const getTaskPosts = (taskId: number, params?: Record<string, unknown>) => {
+  const getTaskPosts = (taskId: number, params?: MaybeRef<Record<string, unknown>>) => {
     return useApiData<SocialPost[]>(`/tasks/${taskId}/posts`, {
       query: params,
       key: computed(() => {
@@ -19,7 +19,7 @@ export const usePosts = () => {
   }
 
   // 获取原文及其评论
-  const getPostWithComments = (postId: number, params?: Record<string, unknown>) => {
+  const getPostWithComments = (postId: number, params?: MaybeRef<Record<string, unknown>>) => {
     return useApiData<SocialPostWithComments>(`/tasks/posts/${postId}`, {
       query: params,
       key: computed(() => {

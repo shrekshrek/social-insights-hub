@@ -21,7 +21,7 @@ const { getTask, deleteTask } = useTasks()
 const { getTaskPosts } = usePosts()
 
 // 获取任务详情
-const { data: task, pending: taskLoading, refresh: refreshTask } = getTask(taskId.value)
+const { data: task, pending: _taskLoading, refresh: refreshTask } = getTask(taskId.value)
 
 // 获取任务的原文列表
 const postParams = computed(() => ({

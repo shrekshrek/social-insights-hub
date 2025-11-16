@@ -24,7 +24,7 @@ export interface SocialProject {
   project_start_date: string | null
   project_end_date: string | null
   owner_id: number
-  deep_analysis_settings: Record<string, any> | null
+  deep_analysis_settings: Record<string, unknown> | null
   created_at: string
   updated_at: string
   participant_ids?: number[]
@@ -74,7 +74,7 @@ export interface DataTask {
   creator_id: number
   task_type: TaskType
   keywords: string | null
-  task_params: Record<string, any> | null
+  task_params: Record<string, unknown> | null
   data_source: DataSource
   status: TaskStatus
   posts_count: number
@@ -101,7 +101,7 @@ export interface DataTaskCreate {
   platform_id: number
   task_type: TaskType
   keywords?: string
-  task_params?: Record<string, any>
+  task_params?: Record<string, unknown>
   data_source: DataSource
 }
 
@@ -109,7 +109,7 @@ export interface DataTaskUpdate {
   name?: string
   description?: string
   keywords?: string
-  task_params?: Record<string, any>
+  task_params?: Record<string, unknown>
 }
 
 // ==================== Social Post ====================
@@ -132,7 +132,7 @@ export interface SocialPost {
   videos: string[] | null
   published_at: string | null
   url: string | null
-  raw_data: Record<string, any> | null
+  raw_data: Record<string, unknown> | null
   collected_at: string
   is_deleted: boolean
   created_at: string
@@ -154,7 +154,7 @@ export interface SocialPostCreate {
   videos?: string[]
   published_at?: string
   url?: string
-  raw_data?: Record<string, any>
+  raw_data?: Record<string, unknown>
 }
 
 export interface SocialPostWithComments extends SocialPost {
@@ -177,7 +177,7 @@ export interface SocialComment {
   sub_comments_count: number
   images: string[] | null
   published_at: string | null
-  raw_data: Record<string, any> | null
+  raw_data: Record<string, unknown> | null
   collected_at: string
   is_deleted: boolean
   created_at: string
@@ -194,7 +194,7 @@ export interface SocialCommentCreate {
   sub_comments_count?: number
   images?: string[]
   published_at?: string
-  raw_data?: Record<string, any>
+  raw_data?: Record<string, unknown>
 }
 
 // ==================== JSON Upload ====================

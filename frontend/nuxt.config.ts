@@ -70,20 +70,25 @@ export default defineNuxtConfig({
     // 业务layer组件都在各自layer内部使用
   ],
   modules: [
-    ['@nuxt/ui', {
-      // 禁用字体功能以避免网络连接问题
-      fonts: false,
-      colorMode: {
-        preference: 'light', // 默认浅色模式
-        fallback: 'light',   // 当检测不到系统偏好时使用浅色
-        classSuffix: '',     // 使用 'dark' 类而不是 'dark-mode'
-        storageKey: 'nuxt-color-mode'
-      }
-    }],
+    '@nuxt/ui',
     '@nuxt/eslint',
     // '@nuxt/image',
     '@nuxt/icon',
     '@pinia/nuxt',
     'nuxt-auth-utils'  // 使用新的认证模块
-  ]
+  ],
+
+  // Nuxt UI v4 配置
+  ui: {
+    // 禁用字体功能以避免网络连接问题
+    fonts: false
+  },
+
+  // Color Mode 配置（Nuxt UI v4 自动注册 @nuxt/color-mode）
+  colorMode: {
+    preference: 'light', // 默认浅色模式
+    fallback: 'light',   // 当检测不到系统偏好时使用浅色
+    classSuffix: '',     // 使用 'dark' 类而不是 'dark-mode'
+    storageKey: 'nuxt-color-mode'
+  }
 })

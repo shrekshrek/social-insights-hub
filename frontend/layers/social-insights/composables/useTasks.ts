@@ -24,7 +24,7 @@ export const useTasks = () => {
 
   // 获取单个任务
   const getTask = (id: number) => {
-    return useApiData<DataTask>(`/tasks/${id}`, {
+    return useApiData<DataTaskWithRelations>(`/tasks/${id}`, {
       key: `task-${id}`,
     })
   }

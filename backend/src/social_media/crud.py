@@ -240,13 +240,43 @@ async def check_project_access(
     project_id: int,
     user_id: int
 ) -> bool:
-    """检查用户是否有项目访问权限（owner或participant）"""
+    """
+    检查用户是否有项目访问权限
+
+    访问权限规则：
+    1. 管理员和超级管理员：可以访问所有项目
+    2. 项目创建者（owner）：可以访问
+    3. 项目参与者（participant）：可以访问
+    """
+    # 获取用户信息和角色
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from src.auth.models import User
+    from src.rbac.models import UserRole
+
+    stmt = select(User).where(User.id == user_id).options(
+        selectinload(User.user_roles).selectinload(UserRole.role)
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return False
+
+    # 检查是否是管理员或超级管理员
+    role_names = [ur.role.name for ur in user.user_roles]
+    if 'admin' in role_names or 'super_admin' in role_names:
+        return True
+
+    # 获取项目信息
     project = await get_project_by_id(db, project_id, load_relations=True)
     if not project:
         return False
 
+    # 检查是否是owner
     if project.owner_id == user_id:
         return True
 
+    # 检查是否是participant
     participant_ids = [p.id for p in project.participants]
     return user_id in participant_ids

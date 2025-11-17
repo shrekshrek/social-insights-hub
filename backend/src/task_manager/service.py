@@ -287,6 +287,26 @@ async def get_task_posts(
     return await crud.get_posts_by_task(db, task_id, skip=skip, limit=page_size)
 
 
+async def get_task_comments(
+    db: AsyncSession,
+    task_id: int,
+    page: int = 1,
+    page_size: int = 50,
+    current_user_id: int = None
+) -> tuple[List[SocialComment], int]:
+    """获取任务的评论列表"""
+    # 验证任务访问权限
+    task = await get_task(db, task_id, current_user_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with id {task_id} not found"
+        )
+
+    skip = (page - 1) * page_size
+    return await crud.get_comments_by_task(db, task_id, skip=skip, limit=page_size)
+
+
 async def get_post_with_comments(
     db: AsyncSession,
     post_id: int,

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { TableColumn } from '#ui/types'
+import type { SocialPost } from '~/layers/social-insights/types'
+
 definePageMeta({
   layout: 'default',
 })
@@ -18,23 +21,55 @@ const backPath = computed(() => {
 })
 
 const { getTask, deleteTask } = useTasks()
-const { getTaskPosts, getPostWithComments } = usePosts()
+const { getTaskPosts, getTaskComments } = usePosts()
 
 // 获取任务详情
 const { data: task, pending: _taskLoading, refresh: refreshTask } = getTask(taskId.value)
 
+// 原文分页状态
+const postPage = ref(1)
+const postPageSize = ref(20)
+
 // 获取任务的原文列表
 const postParams = computed(() => ({
-  page: 1,
-  page_size: 20,
+  page: postPage.value,
+  page_size: postPageSize.value,
 }))
 
 const { data: posts, pending: postsLoading, refresh: refreshPosts } = getTaskPosts(taskId.value, postParams)
 
+// 评论分页状态
+const commentPage = ref(1)
+const commentPageSize = ref(20)
+
+// 获取任务的评论列表
+const commentParams = computed(() => ({
+  page: commentPage.value,
+  page_size: commentPageSize.value,
+}))
+
+const { data: allComments, pending: commentsLoading, refresh: refreshComments } = getTaskComments(taskId.value, commentParams)
+
+// 评论筛选
+const selectedPostIdOnPlatform = ref<string | null>(null)
+const selectedPostDbId = ref<number | null>(null)
+
+// 计算显示的评论（筛选或全部）
+const displayedComments = computed(() => {
+  if (!allComments.value) return []
+
+  // 如果有筛选条件，只显示该帖子的评论
+  if (selectedPostDbId.value) {
+    return allComments.value.filter((comment: any) => comment.post_id === selectedPostDbId.value)
+  }
+
+  return allComments.value
+})
+
 const refreshing = ref(false)
 const handleRefresh = async () => {
   refreshing.value = true
-  await Promise.all([refreshTask(), refreshPosts()])
+  await Promise.all([refreshTask(), refreshPosts(), refreshComments()])
   refreshing.value = false
 }
 
@@ -51,32 +86,19 @@ const handleDelete = async () => {
   }
 }
 
-// 查看评论Modal
-const showCommentsModal = ref(false)
-const selectedPostId = ref<number | null>(null)
-const commentParams = computed(() => ({
-  page: 1,
-  page_size: 100,
-}))
-
-const selectedPostData = computed(() => {
-  if (!selectedPostId.value) return null
-  return getPostWithComments(selectedPostId.value, commentParams.value)
-})
-
-const selectedPost = computed(() => selectedPostData.value?.data.value || null)
-const commentsLoading = computed(() => selectedPostData.value?.pending.value || false)
-
-const handleViewComments = (postId: number) => {
-  selectedPostId.value = postId
-  showCommentsModal.value = true
+// 查看评论
+const handleViewComments = (post: any) => {
+  selectedPostIdOnPlatform.value = post.post_id_on_platform
+  selectedPostDbId.value = post.id
+  // 清除评论筛选时重置到第一页
+  commentPage.value = 1
 }
 
-const handleCloseModal = () => {
-  showCommentsModal.value = false
-  setTimeout(() => {
-    selectedPostId.value = null
-  }, 300)
+// 清除筛选
+const handleClearFilter = () => {
+  selectedPostIdOnPlatform.value = null
+  selectedPostDbId.value = null
+  commentPage.value = 1
 }
 
 // 格式化函数
@@ -102,16 +124,101 @@ const getStatusText = (status: string) => {
   return texts[status] || status
 }
 
-// 表格列定义
-const columns = [
-  { key: 'title', label: '标题/内容', class: 'min-w-[300px]' },
-  { key: 'author_name', label: '作者', class: 'min-w-[120px]' },
-  { key: 'likes_count', label: '点赞', class: 'text-right' },
-  { key: 'comments_count', label: '评论', class: 'text-right' },
-  { key: 'shares_count', label: '转发', class: 'text-right' },
-  { key: 'views_count', label: '浏览', class: 'text-right' },
-  { key: 'collected_at', label: '采集时间', class: 'min-w-[160px]' },
-  { key: 'actions', label: '操作', class: 'text-right' },
+// 原文表格列定义
+const postsColumns: TableColumn<any>[] = [
+  {
+    accessorKey: 'post_id_on_platform',
+    header: '平台ID',
+    cell: ({ row }) => h('span', { class: 'text-xs font-mono' }, row.original.post_id_on_platform || '-'),
+  },
+  {
+    accessorKey: 'author_name',
+    header: '作者',
+    cell: ({ row }) => h('span', { class: 'text-sm truncate' }, row.original.author_name || '-'),
+  },
+  {
+    accessorKey: 'title',
+    header: '标题/内容',
+    cell: ({ row }) => h('div', { class: 'max-w-md' }, [
+      row.original.title ? h('p', { class: 'font-medium text-sm truncate' }, row.original.title) : null,
+      h('p', { class: 'text-xs text-gray-600 dark:text-gray-400 truncate mt-1' },
+        row.original.content?.substring(0, 60) || '无内容'
+      ),
+    ]),
+  },
+  {
+    accessorKey: 'likes_count',
+    header: '点赞',
+    cell: ({ row }) => h('span', { class: 'text-sm text-right block' }, formatNumber(row.original.likes_count)),
+  },
+  {
+    accessorKey: 'comments_count',
+    header: '评论',
+    cell: ({ row }) => h('span', { class: 'text-sm text-right block' }, formatNumber(row.original.comments_count)),
+  },
+  {
+    accessorKey: 'shares_count',
+    header: '转发',
+    cell: ({ row }) => h('span', { class: 'text-sm text-right block' }, formatNumber(row.original.shares_count)),
+  },
+  {
+    accessorKey: 'views_count',
+    header: '浏览',
+    cell: ({ row }) => h('span', { class: 'text-sm text-right block' }, formatNumber(row.original.views_count)),
+  },
+  {
+    accessorKey: 'collected_at',
+    header: '采集时间',
+    cell: ({ row }) => h('span', { class: 'text-xs' }, formatDateTime(row.original.collected_at)),
+  },
+  {
+    accessorKey: 'actions',
+    header: '操作',
+    cell: ({ row }) => {
+      const UButton = resolveComponent('UButton')
+      if (row.original.comments_count > 0) {
+        return h('div', { class: 'flex justify-end' }, [
+          h(UButton, {
+            size: 'xs',
+            variant: 'ghost',
+            onClick: () => handleViewComments(row.original),
+          }, () => '查看评论'),
+        ])
+      }
+      return h('span', { class: 'text-xs text-gray-400 text-right block' }, '无评论')
+    },
+  },
+]
+
+// 评论表格列定义
+const commentsColumns: TableColumn<any>[] = [
+  {
+    accessorKey: 'post_id_on_platform',
+    header: '关联主贴ID',
+    cell: ({ row }) => h('span', { class: 'text-xs font-mono' },
+      row.original.post?.post_id_on_platform || row.original.raw_data?.post_id_on_platform || '-'
+    ),
+  },
+  {
+    accessorKey: 'author_name',
+    header: '作者',
+    cell: ({ row }) => h('span', { class: 'text-sm truncate' }, row.original.author_name || '-'),
+  },
+  {
+    accessorKey: 'content',
+    header: '评论内容',
+    cell: ({ row }) => h('p', { class: 'text-sm truncate max-w-md' }, row.original.content || '无内容'),
+  },
+  {
+    accessorKey: 'likes_count',
+    header: '点赞',
+    cell: ({ row }) => h('span', { class: 'text-sm text-right block' }, formatNumber(row.original.likes_count)),
+  },
+  {
+    accessorKey: 'collected_at',
+    header: '评论时间',
+    cell: ({ row }) => h('span', { class: 'text-xs' }, formatDateTime(row.original.collected_at)),
+  },
 ]
 </script>
 
@@ -150,142 +257,112 @@ const columns = [
       </div>
     </UCard>
 
-    <UCard>
-      <template #header><h2 class="text-lg font-semibold">原文列表 ({{ posts?.length || 0 }})</h2></template>
-
-      <UTable
-        v-if="!postsLoading && posts && posts.length > 0"
-        :rows="posts"
-        :columns="columns"
-        :loading="postsLoading"
-      >
-        <template #title-data="{ row }">
-          <div class="max-w-md">
-            <p class="font-medium text-sm truncate">{{ row.title || '无标题' }}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400 truncate mt-1">
-              {{ row.content?.substring(0, 80) || '无内容' }}
-            </p>
-          </div>
-        </template>
-
-        <template #author_name-data="{ row }">
-          <span class="text-sm">{{ row.author_name || '-' }}</span>
-        </template>
-
-        <template #likes_count-data="{ row }">
-          <span class="text-sm text-right block">{{ formatNumber(row.likes_count) }}</span>
-        </template>
-
-        <template #comments_count-data="{ row }">
-          <span class="text-sm text-right block">{{ formatNumber(row.comments_count) }}</span>
-        </template>
-
-        <template #shares_count-data="{ row }">
-          <span class="text-sm text-right block">{{ formatNumber(row.shares_count) }}</span>
-        </template>
-
-        <template #views_count-data="{ row }">
-          <span class="text-sm text-right block">{{ formatNumber(row.views_count) }}</span>
-        </template>
-
-        <template #collected_at-data="{ row }">
-          <span class="text-xs">{{ formatDateTime(row.collected_at) }}</span>
-        </template>
-
-        <template #actions-data="{ row }">
-          <div class="flex justify-end">
-            <UButton
-              size="xs"
-              variant="ghost"
-              icon="i-heroicons-chat-bubble-left-right"
-              @click="handleViewComments(row.id)"
-            >
-              查看评论
-            </UButton>
-          </div>
-        </template>
-      </UTable>
-
-      <div v-else-if="postsLoading" class="text-center py-8">
-        <p class="text-gray-600 dark:text-gray-400">加载中...</p>
-      </div>
-
-      <div v-else class="text-center py-8">
-        <p class="text-gray-600 dark:text-gray-400">暂无数据</p>
-      </div>
-    </UCard>
-
-    <!-- 评论Modal -->
-    <UModal v-model="showCommentsModal" :ui="{ width: 'sm:max-w-4xl' }">
+    <!-- 双栏数据展示 -->
+    <div class="grid grid-cols-2 gap-6">
+      <!-- 左侧：原文列表 -->
       <UCard>
         <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold">帖子详情与评论</h3>
-            <UButton
-              variant="ghost"
-              icon="i-heroicons-x-mark"
-              @click="handleCloseModal"
-            />
+          <h2 class="text-lg font-semibold">原文数据</h2>
+        </template>
+
+        <ClientOnly>
+          <template #fallback>
+            <div class="text-center py-8">
+              <p class="text-gray-600 dark:text-gray-400">加载中...</p>
+            </div>
+          </template>
+
+          <div v-if="!postsLoading && posts && posts.length > 0" class="max-h-[600px] overflow-auto">
+            <UTable :data="posts" :columns="postsColumns" size="sm" />
+          </div>
+
+          <div v-else-if="postsLoading" class="text-center py-8">
+            <p class="text-gray-600 dark:text-gray-400">加载中...</p>
+          </div>
+
+          <div v-else class="text-center py-8">
+            <p class="text-gray-600 dark:text-gray-400">暂无数据</p>
+          </div>
+        </ClientOnly>
+
+        <template #footer>
+          <ClientOnly>
+            <div class="flex justify-between items-center">
+              <div class="text-sm text-gray-500 dark:text-gray-400">
+                显示 {{ (postPage - 1) * postPageSize + 1 }} 到
+                {{ Math.min(postPage * postPageSize, task?.posts_count || 0) }} 共
+                {{ task?.posts_count || 0 }} 条记录
+              </div>
+              <UPagination
+                v-model:page="postPage"
+                :total="task?.posts_count || 0"
+                :items-per-page="postPageSize"
+                :sibling-count="2"
+              />
+            </div>
+          </ClientOnly>
+        </template>
+      </UCard>
+
+      <!-- 右侧：评论列表 -->
+      <UCard>
+        <template #header>
+          <div class="space-y-3">
+            <h2 class="text-lg font-semibold">评论数据</h2>
+            <div v-if="selectedPostIdOnPlatform" class="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
+              <span class="text-sm text-blue-700 dark:text-blue-300">
+                正在查看帖子: <span class="font-mono font-medium">{{ selectedPostIdOnPlatform }}</span> 的评论
+              </span>
+              <UButton
+                size="xs"
+                variant="ghost"
+                icon="i-heroicons-x-mark"
+                @click="handleClearFilter"
+              >
+                查看全部
+              </UButton>
+            </div>
           </div>
         </template>
 
-        <div v-if="commentsLoading" class="text-center py-8">
-          <p class="text-gray-600 dark:text-gray-400">加载中...</p>
-        </div>
-
-        <div v-else-if="selectedPost" class="space-y-6">
-          <!-- 帖子信息 -->
-          <div class="border-b border-gray-200 dark:border-gray-700 pb-4">
-            <h4 class="font-medium text-base mb-2">{{ selectedPost.title || '无标题' }}</h4>
-            <p class="text-sm text-gray-700 dark:text-gray-300 mb-3 whitespace-pre-wrap">
-              {{ selectedPost.content || '无内容' }}
-            </p>
-            <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-              <span>作者: {{ selectedPost.author_name || '-' }}</span>
-              <span>👍 {{ formatNumber(selectedPost.likes_count) }}</span>
-              <span>💬 {{ formatNumber(selectedPost.comments_count) }}</span>
-              <span>🔄 {{ formatNumber(selectedPost.shares_count) }}</span>
-              <span>👀 {{ formatNumber(selectedPost.views_count) }}</span>
-              <span>{{ formatDateTime(selectedPost.collected_at) }}</span>
+        <ClientOnly>
+          <template #fallback>
+            <div class="text-center py-8">
+              <p class="text-gray-600 dark:text-gray-400">加载中...</p>
             </div>
+          </template>
+
+          <div v-if="!commentsLoading && displayedComments && displayedComments.length > 0" class="max-h-[600px] overflow-auto">
+            <UTable :data="displayedComments" :columns="commentsColumns" size="sm" />
           </div>
 
-          <!-- 评论列表 -->
-          <div>
-            <h4 class="font-medium text-sm mb-3">
-              评论列表 ({{ selectedPost.comments?.length || 0 }})
-            </h4>
+          <div v-else-if="commentsLoading" class="text-center py-8">
+            <p class="text-gray-600 dark:text-gray-400">加载中...</p>
+          </div>
 
-            <div v-if="!selectedPost.comments || selectedPost.comments.length === 0" class="text-center py-4 text-gray-500">
-              暂无评论
-            </div>
+          <div v-else class="text-center py-8">
+            <p class="text-gray-600 dark:text-gray-400">{{ selectedPostIdOnPlatform ? '该帖子暂无评论' : '暂无评论数据' }}</p>
+          </div>
+        </ClientOnly>
 
-            <div v-else class="space-y-3 max-h-[400px] overflow-y-auto">
-              <div
-                v-for="comment in selectedPost.comments"
-                :key="comment.id"
-                class="border border-gray-200 dark:border-gray-700 rounded-lg p-3"
-              >
-                <div class="flex items-start gap-3">
-                  <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-1">
-                      <span class="font-medium text-sm">{{ comment.author_name || '匿名用户' }}</span>
-                      <span class="text-xs text-gray-500">{{ formatDateTime(comment.collected_at) }}</span>
-                    </div>
-                    <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                      {{ comment.content || '无内容' }}
-                    </p>
-                    <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                      <span>👍 {{ comment.likes_count }}</span>
-                      <span v-if="comment.sub_comments_count > 0">💬 {{ comment.sub_comments_count }} 条回复</span>
-                    </div>
-                  </div>
-                </div>
+        <template #footer>
+          <ClientOnly>
+            <div v-if="!selectedPostIdOnPlatform" class="flex justify-between items-center">
+              <div class="text-sm text-gray-500 dark:text-gray-400">
+                显示 {{ (commentPage - 1) * commentPageSize + 1 }} 到
+                {{ Math.min(commentPage * commentPageSize, task?.comments_count || 0) }} 共
+                {{ task?.comments_count || 0 }} 条记录
               </div>
+              <UPagination
+                v-model:page="commentPage"
+                :total="task?.comments_count || 0"
+                :items-per-page="commentPageSize"
+                :sibling-count="2"
+              />
             </div>
-          </div>
-        </div>
+          </ClientOnly>
+        </template>
       </UCard>
-    </UModal>
+    </div>
   </div>
 </template>

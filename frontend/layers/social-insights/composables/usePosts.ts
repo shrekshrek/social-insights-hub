@@ -18,6 +18,17 @@ export const usePosts = () => {
     })
   }
 
+  // 获取任务的评论列表
+  const getTaskComments = (taskId: number, params?: MaybeRef<Record<string, unknown>>) => {
+    return useApiData<SocialPost[]>(`/tasks/${taskId}/comments`, {
+      query: params,
+      key: computed(() => {
+        const p = unref(params)
+        return `task-${taskId}-comments-${p?.page || 1}-${p?.page_size || 50}`
+      }),
+    })
+  }
+
   // 获取原文及其评论
   const getPostWithComments = (postId: number, params?: MaybeRef<Record<string, unknown>>) => {
     return useApiData<SocialPostWithComments>(`/tasks/posts/${postId}`, {
@@ -46,6 +57,7 @@ export const usePosts = () => {
 
   return {
     getTaskPosts,
+    getTaskComments,
     getPostWithComments,
     queryCrossTaskPosts,
   }

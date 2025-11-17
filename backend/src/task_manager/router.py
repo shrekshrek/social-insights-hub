@@ -271,6 +271,35 @@ async def get_task_posts(
 
 
 @router.get(
+    "/{task_id}/comments",
+    response_model=List[schemas.SocialCommentRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get task comments",
+    description="获取任务的评论列表"
+)
+async def get_task_comments(
+    task_id: int,
+    pagination: PaginationParams = Depends(get_pagination_params),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    获取任务的评论列表（分页）。
+
+    需要项目访问权限。
+    评论按采集时间倒序排列。
+    """
+    comments, total = await service.get_task_comments(
+        db,
+        task_id=task_id,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        current_user_id=current_user.id
+    )
+    return comments
+
+
+@router.get(
     "/posts/{post_id}",
     response_model=schemas.SocialPostWithComments,
     status_code=status.HTTP_200_OK,

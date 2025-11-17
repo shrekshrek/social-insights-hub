@@ -120,7 +120,7 @@ async def get_tasks(
 
 @router.get(
     "/{task_id}",
-    response_model=schemas.DataTaskRead,
+    response_model=schemas.DataTaskReadWithRelations,
     status_code=status.HTTP_200_OK,
     summary="Get task by ID",
     description="获取任务详情"
@@ -133,7 +133,13 @@ async def get_task(
 
     需要项目访问权限（owner或participant）。
     """
-    return task
+    # 转换为带关联信息的response
+    task_dict = schemas.DataTaskRead.model_validate(task).model_dump()
+    task_dict["project_name"] = task.project.name if task.project else None
+    task_dict["platform_name"] = task.platform.name if task.platform else None
+    task_dict["platform_code"] = task.platform.code if task.platform else None
+    task_dict["creator_username"] = task.creator.username if task.creator else None
+    return schemas.DataTaskReadWithRelations(**task_dict)
 
 
 @router.put(

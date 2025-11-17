@@ -414,20 +414,20 @@ const handleSubmit = async () => {
     </UCard>
 
     <!-- 操作按钮 -->
-    <div class="flex items-center gap-3">
-      <UButton
-        size="lg"
-        :loading="submitting"
-        @click="handleSubmit"
-      >
-        创建项目
-      </UButton>
+    <div class="flex justify-end items-center gap-3">
       <UButton
         variant="outline"
         size="lg"
         @click="navigateTo('/social-insights/projects')"
       >
         取消
+      </UButton>
+      <UButton
+        size="lg"
+        :loading="submitting"
+        @click="handleSubmit"
+      >
+        创建项目
       </UButton>
     </div>
   </div>

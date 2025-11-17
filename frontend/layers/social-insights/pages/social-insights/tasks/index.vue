@@ -7,18 +7,15 @@ definePageMeta({
 })
 
 const { getTasks, deleteTask } = useTasks()
-const { getProjects } = useSocialProjects()
 const { getPlatforms } = usePlatforms()
 
-// 获取项目和平台列表用于过滤
-const { data: projectsData } = getProjects({ page: 1, page_size: 100 })
+// 获取平台列表用于过滤
 const { data: platforms } = getPlatforms()
 
 // 分页和过滤
 const currentPage = ref(1)
 const pageSize = ref(20)
 const searchQuery = ref('')
-const selectedProjectId = ref<number | undefined>()
 const selectedPlatformId = ref<number | undefined>()
 const selectedStatus = ref<string | undefined>()
 const selectedDataSource = ref<string | undefined>()
@@ -29,7 +26,6 @@ const params = computed(() => ({
   page: currentPage.value,
   page_size: pageSize.value,
   search: searchQuery.value || undefined,
-  project_id: selectedProjectId.value,
   platform_id: selectedPlatformId.value,
   status: selectedStatus.value,
   data_source: selectedDataSource.value,
@@ -112,7 +108,18 @@ const columns: TableColumn<DataTaskWithRelations>[] = [
   {
     accessorKey: 'project_name',
     header: '所属项目',
-    cell: ({ row }) => h('span', row.original.project_name || '-'),
+    cell: ({ row }) => {
+      if (!row.original.project_name || !row.original.project_id) {
+        return h('span', { class: 'text-gray-400' }, '-')
+      }
+      const UButton = resolveComponent('UButton')
+      return h(UButton, {
+        variant: 'link',
+        size: 'xs',
+        class: 'p-0 font-normal',
+        to: `/social-insights/projects/${row.original.project_id}`,
+      }, () => row.original.project_name)
+    },
   },
   {
     accessorKey: 'platform_name',
@@ -207,55 +214,42 @@ const columns: TableColumn<DataTaskWithRelations>[] = [
       </div>
     </div>
 
-    <!-- 过滤器 -->
-    <UCard>
-      <div class="grid grid-cols-4 gap-4">
-        <UFormGroup label="搜索">
-          <UInput
-            v-model="searchQuery"
-            placeholder="搜索任务名称或关键词..."
-            icon="i-heroicons-magnifying-glass"
-          />
-        </UFormGroup>
-
-        <UFormGroup label="所属项目">
-          <USelectMenu
-            v-model="selectedProjectId"
-            :options="[
-              { label: '全部项目', value: undefined },
-              ...(projectsData?.items.map(p => ({ label: p.name, value: p.id })) || [])
-            ]"
-            placeholder="选择项目"
-          />
-        </UFormGroup>
-
-        <UFormGroup label="平台">
-          <USelectMenu
-            v-model="selectedPlatformId"
-            :options="[
-              { label: '全部平台', value: undefined },
-              ...(platforms?.map(p => ({ label: p.name, value: p.id })) || [])
-            ]"
-            placeholder="选择平台"
-          />
-        </UFormGroup>
-
-        <UFormGroup label="状态">
-          <USelectMenu
-            v-model="selectedStatus"
-            :options="statusOptions"
-            placeholder="选择状态"
-          />
-        </UFormGroup>
-      </div>
-    </UCard>
-
     <!-- 任务列表卡片 -->
     <UCard>
       <template #header>
-        <h2 class="text-lg font-semibold">
-          任务列表
-        </h2>
+        <div class="flex items-center justify-between gap-4">
+          <h2 class="text-lg font-semibold">
+            任务列表
+          </h2>
+
+          <div class="flex items-center gap-3 flex-1 max-w-3xl">
+            <UInput
+              v-model="searchQuery"
+              placeholder="搜索任务名称或关键词..."
+              icon="i-heroicons-magnifying-glass"
+              class="flex-1"
+            />
+
+            <USelect
+              v-model="selectedPlatformId"
+              :items="[
+                { label: '全部平台', value: undefined },
+                ...(platforms?.map(p => ({ label: p.name, value: p.id })) || [])
+              ]"
+              value-key="value"
+              placeholder="平台"
+              class="w-36"
+            />
+
+            <USelect
+              v-model="selectedStatus"
+              :items="statusOptions"
+              value-key="value"
+              placeholder="状态"
+              class="w-32"
+            />
+          </div>
+        </div>
       </template>
 
       <!-- 任务表格 -->

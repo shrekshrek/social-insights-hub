@@ -35,7 +35,7 @@ from .models import TaskAnalysisResult, PostAnalysis, CommentAnalysis
 
 router = APIRouter(
     prefix="/social-media/analysis",
-    tags=["Analysis"],
+    tags=["Social Media - Analysis"],
 )
 
 

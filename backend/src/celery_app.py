@@ -20,7 +20,13 @@ celery_app = Celery(
     "social_insights_hub",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=[],  # Task modules will be added here in future modules
+    include=[
+        "src.analysis.tasks.screening_tasks",
+        # Future task modules:
+        # "src.analysis.tasks.deep_analysis_tasks",
+        # "src.analysis.tasks.clustering_tasks",
+        # "src.analysis.tasks.competitive_tasks",
+    ],
 )
 
 # 详细的Celery配置

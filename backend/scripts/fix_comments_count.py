@@ -8,7 +8,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import async_engine, AsyncSessionLocal
-from src.task_manager.models import SocialPost, SocialComment
+from src.tasks.models import SocialPost, SocialComment
 
 
 async def fix_comments_count():

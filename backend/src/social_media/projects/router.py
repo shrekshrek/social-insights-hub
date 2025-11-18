@@ -22,7 +22,7 @@ from .models import SocialProject, Platform
 
 router = APIRouter(
     prefix="/social-media",
-    tags=["Projects"],
+    tags=["Social Media - Projects"],
 )
 
 

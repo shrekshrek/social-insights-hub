@@ -22,7 +22,7 @@ from .models import DataTask, SocialPost
 
 router = APIRouter(
     prefix="/social-media/tasks",
-    tags=["Tasks"],
+    tags=["Social Media - Tasks"],
 )
 
 

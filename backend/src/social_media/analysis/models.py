@@ -93,12 +93,12 @@ class PostAnalysis(Base):
 
     # 关系
     task: Mapped["DataTask"] = relationship(
-        "src.tasks.models.DataTask",
+        "src.social_media.tasks.models.DataTask",
         foreign_keys=[task_id],
         lazy="selectin"
     )
     post: Mapped["SocialPost"] = relationship(
-        "src.tasks.models.SocialPost",
+        "src.social_media.tasks.models.SocialPost",
         foreign_keys=[post_id],
         lazy="selectin"
     )
@@ -192,12 +192,12 @@ class CommentAnalysis(Base):
 
     # 关系
     task: Mapped["DataTask"] = relationship(
-        "src.tasks.models.DataTask",
+        "src.social_media.tasks.models.DataTask",
         foreign_keys=[task_id],
         lazy="selectin"
     )
     comment: Mapped["SocialComment"] = relationship(
-        "src.tasks.models.SocialComment",
+        "src.social_media.tasks.models.SocialComment",
         foreign_keys=[comment_id],
         lazy="selectin"
     )
@@ -327,7 +327,7 @@ class TaskAnalysisResult(Base):
 
     # 关系
     task: Mapped["DataTask"] = relationship(
-        "src.tasks.models.DataTask",
+        "src.social_media.tasks.models.DataTask",
         foreign_keys=[task_id],
         lazy="selectin"
     )
@@ -458,7 +458,7 @@ class ProjectAnalysisResult(Base):
 
     # 关系
     project: Mapped["SocialProject"] = relationship(
-        "src.projects.models.SocialProject",
+        "src.social_media.projects.models.SocialProject",
         foreign_keys=[project_id],
         lazy="selectin"
     )

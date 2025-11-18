@@ -58,11 +58,21 @@ export const useTasks = () => {
     return true
   }
 
+  // 清空任务数据
+  const clearTaskData = async (id: number) => {
+    const result = await apiRequest<DataTask>(`/tasks/${id}/clear-data`, {
+      method: 'POST',
+    })
+    showSuccess('任务数据已清空，可以重新上传或采集')
+    return result
+  }
+
   return {
     getTasks,
     getTask,
     createTask,
     updateTask,
     deleteTask,
+    clearTaskData,
   }
 }

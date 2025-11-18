@@ -177,7 +177,7 @@ async def get_projects(
 
 @router.get(
     "/projects/{project_id}",
-    response_model=schemas.SocialProjectRead,
+    response_model=schemas.SocialProjectReadWithOwner,
     status_code=status.HTTP_200_OK,
     summary="Get project by ID",
     description="获取项目详情",
@@ -191,10 +191,12 @@ async def get_project(
     需要是项目的owner或participant才能访问。
     返回包含关联平台和参与者信息。
     """
-    # 构建参与者ID列表
+    # 构建参与者ID列表和用户名列表
     project_dict = schemas.SocialProjectRead.model_validate(project).model_dump()
     project_dict["participant_ids"] = [p.id for p in project.participants]
-    return schemas.SocialProjectRead(**project_dict)
+    project_dict["owner_username"] = project.owner.username
+    project_dict["participant_usernames"] = [p.username for p in project.participants]
+    return schemas.SocialProjectReadWithOwner(**project_dict)
 
 
 @router.put(

@@ -370,3 +370,32 @@ async def query_cross_task_posts(
     )
 
     return posts
+
+
+async def clear_task_data(
+    db: AsyncSession,
+    task: DataTask
+) -> DataTask:
+    """
+    清空任务的所有数据（软删除原文和评论），重置任务状态
+
+    用于重新上传或重新采集数据
+    """
+    # 软删除该任务的所有原文
+    await crud.soft_delete_task_posts(db, task.id)
+
+    # 软删除该任务的所有评论
+    await crud.soft_delete_task_comments(db, task.id)
+
+    # 重置任务状态和计数
+    task.status = "pending"
+    task.posts_count = 0
+    task.comments_count = 0
+    task.started_at = None
+    task.completed_at = None
+    task.error_message = None
+
+    await db.commit()
+    await db.refresh(task)
+
+    return task

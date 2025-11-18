@@ -35,7 +35,15 @@ const handleRefresh = async () => {
 
 // 删除项目
 const handleDelete = async (project: SocialProject) => {
-  const confirmed = await confirm(`确定要删除项目 "${project.name}" 吗？此操作不可恢复。`)
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '删除项目',
+    message: `确定要删除项目 "${project.name}" 吗？此操作不可恢复，所有相关任务和数据也将被删除。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'error',
+  })
+
   if (!confirmed) return
 
   try {

@@ -19,7 +19,7 @@ const backPath = computed(() => {
   return "/social-insights/tasks"; // 默认返回任务列表
 });
 
-const { getTask, deleteTask } = useTasks();
+const { getTask, deleteTask, clearTaskData } = useTasks();
 const { getTaskPosts, getTaskComments } = usePosts();
 
 // 获取任务详情
@@ -97,7 +97,16 @@ const handleRefresh = async () => {
 
 const handleDelete = async () => {
   if (!task.value) return;
-  const confirmed = await confirm(`确定要删除任务 "${task.value.name}" 吗？`);
+
+  const { $confirm } = useNuxtApp();
+  const confirmed = await $confirm({
+    title: "删除任务",
+    message: `确定要删除任务 "${task.value.name}" 吗？此操作不可恢复，将同时删除所有相关的原文和评论数据。`,
+    confirmText: "删除",
+    cancelText: "取消",
+    type: "error",
+  });
+
   if (!confirmed) return;
 
   try {
@@ -105,6 +114,28 @@ const handleDelete = async () => {
     await navigateTo("/social-insights/tasks");
   } catch (error) {
     console.error("删除任务失败:", error);
+  }
+};
+
+const handleClearData = async () => {
+  if (!task.value) return;
+
+  const { $confirm } = useNuxtApp();
+  const confirmed = await $confirm({
+    title: "清空任务数据",
+    message: `确定要清空任务 "${task.value.name}" 的所有数据吗？\n\n此操作将删除所有原文和评论数据，任务状态将重置为"待处理"，您可以重新上传或采集数据。`,
+    confirmText: "清空数据",
+    cancelText: "取消",
+    type: "warning",
+  });
+
+  if (!confirmed) return;
+
+  try {
+    await clearTaskData(task.value.id);
+    await handleRefresh();
+  } catch (error) {
+    console.error("清空任务数据失败:", error);
   }
 };
 
@@ -136,14 +167,15 @@ const formatNumber = (num: number) => {
   return num.toString();
 };
 
+// 任务状态颜色（使用 Nuxt UI 标准颜色）
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
-    pending: "gray",
-    running: "blue",
-    completed: "green",
-    failed: "red",
+    pending: 'neutral',
+    running: 'info',
+    completed: 'success',
+    failed: 'error',
   };
-  return colors[status] || "gray";
+  return colors[status] || 'neutral';
 };
 
 const getStatusText = (status: string) => {
@@ -254,10 +286,14 @@ const postsColumns = [
   {
     accessorKey: "actions",
     header: () =>
-      h("span", {
-        style: { whiteSpace: "nowrap" } as const,
-        class: "text-right block w-full"
-      }, "操作"),
+      h(
+        "span",
+        {
+          style: { whiteSpace: "nowrap" } as const,
+          class: "block w-full",
+        },
+        "操作"
+      ),
     cell: ({ row }: { row: { original: SocialPost } }) => {
       const UButton = resolveComponent("UButton");
       if (row.original.comments_count > 0) {
@@ -273,11 +309,7 @@ const postsColumns = [
           ),
         ]);
       }
-      return h(
-        "span",
-        { class: "text-xs text-gray-400 text-right block" },
-        "无评论"
-      );
+      return h("span", { class: "text-xs text-gray-400 block" }, "无评论");
     },
   },
 ];
@@ -290,7 +322,8 @@ const commentsColumns = [
       h("span", { style: { whiteSpace: "nowrap" } as const }, "关联主贴ID"),
     cell: ({ row }: { row: { original: SocialComment } }) => {
       // 通过 post_id 从映射中获取 post_id_on_platform
-      const postIdOnPlatform = postIdMap.value.get(row.original.post_id) ||
+      const postIdOnPlatform =
+        postIdMap.value.get(row.original.post_id) ||
         (row.original.raw_data?.post_id_on_platform as string) ||
         "-";
       return h("span", { class: "text-xs font-mono" }, postIdOnPlatform);
@@ -372,9 +405,17 @@ const commentsColumns = [
           >刷新</UButton
         >
         <UButton
+          v-if="task && (task.posts_count > 0 || task.comments_count > 0)"
+          variant="outline"
+          icon="i-heroicons-x-circle"
+          color="warning"
+          @click="handleClearData"
+          >清空数据</UButton
+        >
+        <UButton
           variant="outline"
           icon="i-heroicons-trash"
-          color="red"
+          color="error"
           @click="handleDelete"
           >删除</UButton
         >
@@ -382,106 +423,216 @@ const commentsColumns = [
     </div>
 
     <UCard v-if="task">
-      <template #header
-        ><h2 class="text-lg font-semibold">任务信息</h2></template
-      >
-      <div class="grid grid-cols-3 gap-6">
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            任务名称
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ task.name }}
-          </p>
+      <template #header>
+        <h2 class="text-lg font-semibold">任务信息</h2>
+      </template>
+
+      <div class="space-y-4">
+        <!-- 第一行：核心标识（4列） -->
+        <div class="grid grid-cols-4 gap-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              任务名称
+            </h3>
+            <p
+              class="mt-1 text-sm text-gray-900 dark:text-white truncate"
+              :title="task.name"
+            >
+              {{ task.name }}
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              所属项目
+            </h3>
+            <p
+              class="mt-1 text-sm text-gray-900 dark:text-white truncate"
+              :title="task.project_name || '-'"
+            >
+              {{ task.project_name || "-" }}
+            </p>
+          </div>
+
+          <div v-if="task.description" class="col-span-2">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              任务描述
+            </h3>
+            <p
+              class="mt-1 text-sm text-gray-900 dark:text-white line-clamp-3"
+              :title="task.description"
+            >
+              {{ task.description }}
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            状态
-          </h3>
-          <UBadge class="mt-1" :color="getStatusColor(task.status)">{{
-            getStatusText(task.status)
-          }}</UBadge>
+
+        <!-- 第二行：描述和关键词（条件显示，整合到网格） -->
+        <div class="grid grid-cols-4 gap-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              平台
+            </h3>
+            <div class="mt-1">
+              <UBadge variant="subtle" size="sm">
+                {{ task.platform_name || "-" }}
+              </UBadge>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              任务类型
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{ task.task_type }}
+            </p>
+          </div>
+
+          <!-- 搜索关键词（仅 search 类型） -->
+          <div
+            v-if="task.task_type === 'search' && task.keywords"
+            class="col-span-2"
+          >
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              搜索关键词
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{ task.keywords }}
+            </p>
+          </div>
+
+          <!-- 任务参数（detail/creator 类型） -->
+          <div
+            v-else-if="(task.task_type === 'detail' || task.task_type === 'creator') && task.task_params && Object.keys(task.task_params).length > 0"
+            class="col-span-2"
+          >
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+              任务参数
+            </h3>
+            <div class="space-y-1.5">
+              <div
+                v-for="(value, key) in task.task_params"
+                :key="key"
+                class="bg-gray-50 dark:bg-gray-800 rounded-md px-2 py-1.5"
+              >
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  {{ key }}
+                </div>
+                <div v-if="Array.isArray(value)" class="space-y-0.5">
+                  <div
+                    v-for="(item, index) in value"
+                    :key="index"
+                    class="text-xs font-mono text-gray-900 dark:text-white break-all"
+                  >
+                    {{ item }}
+                  </div>
+                </div>
+                <div
+                  v-else
+                  class="text-xs font-mono text-gray-900 dark:text-white break-all"
+                >
+                  {{ value }}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            平台
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ task.platform_name || "-" }}
-          </p>
+
+        <!-- 分隔线 -->
+        <div class="border-t border-gray-200 dark:border-gray-700" />
+
+        <!-- 第三行：配置和归属（4列） -->
+        <div class="grid grid-cols-4 gap-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              数据源
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{
+                task.data_source === "local_upload" ? "本地上传" : "远程爬虫"
+              }}
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              状态
+            </h3>
+            <div class="mt-1">
+              <UBadge
+                :color="getStatusColor(task.status)"
+                variant="solid"
+                size="sm"
+              >
+                {{ getStatusText(task.status) }}
+              </UBadge>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              原文数量
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{ task.posts_count }}
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              评论数量
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{ task.comments_count }}
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            任务类型
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ task.task_type }}
-          </p>
+
+        <!-- 第四行：人员和时间（4列） -->
+        <div class="grid grid-cols-4 gap-4">
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              创建者
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{ task.creator_username || "-" }}
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              创建时间
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{ formatDateTime(task.created_at) }}
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              开始时间
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{ formatDateTime(task.started_at) }}
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+              完成时间
+            </h3>
+            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+              {{ formatDateTime(task.completed_at) }}
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            数据源
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ task.data_source === "local_upload" ? "本地上传" : "远程爬虫" }}
-          </p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            所属项目
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ task.project_name || "-" }}
-          </p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            原文数量
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ task.posts_count }}
-          </p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            评论数量
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ task.comments_count }}
-          </p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            创建者
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ task.creator_username || "-" }}
-          </p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            创建时间
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ formatDateTime(task.created_at) }}
-          </p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            开始时间
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ formatDateTime(task.started_at) }}
-          </p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-            完成时间
-          </h3>
-          <p class="mt-1 text-sm text-gray-900 dark:text-white">
-            {{ formatDateTime(task.completed_at) }}
-          </p>
-        </div>
+
+        <!-- 错误信息（失败时显示） -->
+        <UAlert
+          v-if="task.status === 'failed' && task.error_message"
+          color="error"
+          variant="soft"
+          title="任务执行失败"
+          :description="task.error_message"
+          icon="i-heroicons-exclamation-triangle"
+        />
       </div>
     </UCard>
 
@@ -545,7 +696,9 @@ const commentsColumns = [
               v-if="selectedPostIdOnPlatform"
               class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-1.5"
             >
-              <span class="text-sm text-blue-700 dark:text-blue-300 whitespace-nowrap">
+              <span
+                class="text-sm text-blue-700 dark:text-blue-300 whitespace-nowrap"
+              >
                 正在查看:
                 <span class="font-mono font-medium">{{
                   selectedPostIdOnPlatform
@@ -571,11 +724,7 @@ const commentsColumns = [
           </template>
 
           <UTable
-            v-if="
-              !commentsLoading &&
-              comments &&
-              comments.length > 0
-            "
+            v-if="!commentsLoading && comments && comments.length > 0"
             sticky
             :data="comments"
             :columns="commentsColumns"
@@ -598,13 +747,10 @@ const commentsColumns = [
             <div class="flex justify-between items-center">
               <div class="text-sm text-gray-500 dark:text-gray-400">
                 显示 {{ (commentPage - 1) * commentPageSize + 1 }} 到
-                {{
-                  Math.min(
-                    commentPage * commentPageSize,
-                    commentsTotal
-                  )
+                {{ Math.min(commentPage * commentPageSize, commentsTotal) }}
+                共 {{ commentsTotal }} 条{{
+                  selectedPostIdOnPlatform ? "评论" : "记录"
                 }}
-                共 {{ commentsTotal }} 条{{ selectedPostIdOnPlatform ? '评论' : '记录' }}
               </div>
               <UPagination
                 v-model:page="commentPage"

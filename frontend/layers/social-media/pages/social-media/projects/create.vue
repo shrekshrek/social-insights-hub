@@ -12,9 +12,21 @@ const { getPlatforms } = usePlatforms()
 // 获取平台列表
 const { data: platforms, pending: platformsLoading } = getPlatforms()
 
+// 路由
+const router = useRouter()
+
 // 表单状态
 const submitting = ref(false)
 const enableQuickTasks = ref(false)
+
+// 返回处理
+const handleBack = () => {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    navigateTo('/social-media/projects')
+  }
+}
 
 // 表单Schema (基础项目信息)
 const projectSchema = z.object({
@@ -192,13 +204,38 @@ const handleSubmit = async () => {
 <template>
   <div class="space-y-6">
     <!-- 页面标题 -->
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-        新建项目
-      </h1>
-      <p class="text-gray-600 dark:text-gray-400 mt-1">
-        创建一个新的社交媒体数据采集项目
-      </p>
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <UButton
+          variant="ghost"
+          icon="i-heroicons-arrow-left"
+          @click="handleBack"
+        />
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+            新建项目
+          </h1>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">
+            创建一个新的社交媒体数据采集项目
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <UButton
+          variant="outline"
+          :disabled="submitting"
+          @click="navigateTo('/social-media/projects')"
+        >
+          取消
+        </UButton>
+        <UButton
+          :loading="submitting"
+          @click="handleSubmit"
+        >
+          创建
+        </UButton>
+      </div>
     </div>
 
     <!-- 项目基本信息卡片 -->
@@ -412,22 +449,5 @@ const handleSubmit = async () => {
       </div>
     </UCard>
 
-    <!-- 操作按钮 -->
-    <div class="flex justify-end items-center gap-3">
-      <UButton
-        variant="outline"
-        size="lg"
-        @click="navigateTo('/social-media/projects')"
-      >
-        取消
-      </UButton>
-      <UButton
-        size="lg"
-        :loading="submitting"
-        @click="handleSubmit"
-      >
-        创建项目
-      </UButton>
-    </div>
   </div>
 </template>

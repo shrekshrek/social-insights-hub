@@ -3,19 +3,33 @@
   <div class="space-y-6">
     <!-- 页面标题 -->
     <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">创建角色</h1>
-        <p class="text-gray-600 dark:text-gray-400 mt-1">创建新的系统角色</p>
+      <div class="flex items-center gap-3">
+        <UButton
+          variant="ghost"
+          icon="i-heroicons-arrow-left"
+          @click="handleBack"
+        />
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">创建角色</h1>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">创建新的系统角色</p>
+        </div>
       </div>
-      
-      <UButton
-        icon="i-heroicons-arrow-left"
-        variant="outline"
-        size="sm"
-        @click="navigateTo('/rbac/roles')"
-      >
-        返回列表
-      </UButton>
+
+      <div class="flex items-center gap-3">
+        <UButton
+          variant="outline"
+          :disabled="loading"
+          @click="handleCancel"
+        >
+          取消
+        </UButton>
+        <UButton
+          :loading="loading"
+          @click="handleFormSubmit"
+        >
+          创建
+        </UButton>
+      </div>
     </div>
 
     <!-- 创建表单 -->
@@ -25,8 +39,10 @@
       </template>
 
       <RoleForm
+        ref="roleFormRef"
         :loading="loading"
         :is-edit="false"
+        :hide-actions="true"
         @submit="handleSubmit"
         @cancel="handleCancel"
       />
@@ -46,9 +62,29 @@ definePageMeta({
 
 // 状态
 const loading = ref(false)
+const roleFormRef = ref<InstanceType<typeof RoleForm> | null>(null)
+
+// 路由
+const router = useRouter()
 
 // API
 const rbacApi = useRbacApi()
+
+// 返回处理
+const handleBack = () => {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    navigateTo('/rbac/roles')
+  }
+}
+
+// 表单提交处理
+const handleFormSubmit = () => {
+  if (roleFormRef.value) {
+    roleFormRef.value.handleSubmit()
+  }
+}
 
 // 处理表单提交
 const handleSubmit = async (data: RoleCreate | RoleUpdate) => {

@@ -7,7 +7,7 @@ from typing import Annotated
 from src.auth.models import User
 from src.auth.dependencies import get_current_user
 from src.database import get_async_db
-from src.social_media import crud as social_crud
+from src.projects import crud as social_crud
 from . import crud
 from .models import DataTask, SocialPost
 

@@ -11,6 +11,9 @@ from sqlalchemy import text
 from src.rbac import models, service, schemas
 from src.rbac.models import SystemRoles
 
+# 导入模块权限定义
+from src.analysis.permissions_def import ALL_PERMISSIONS as ANALYSIS_PERMISSIONS
+
 logger = logging.getLogger(__name__)
 
 
@@ -207,35 +210,35 @@ BUSINESS_PERMISSIONS = [
     # *create_module_permissions("inventory", ["access", "read", "write", "delete", "export", "import"]),
     #
     # ========================================================================
-    # 社交洞察模块 - 项目管理
+    # 项目管理
     # ========================================================================
     *create_module_permissions(
-        "social_project",
+        "project",
         ["access", "read", "write", "delete"],
         display_names={
-            "access": "访问社交媒体项目",
-            "read": "查看社交媒体项目",
-            "write": "编辑社交媒体项目",
-            "delete": "删除社交媒体项目",
+            "access": "访问项目管理",
+            "read": "查看项目",
+            "write": "编辑项目",
+            "delete": "删除项目",
         },
         descriptions={
-            "access": "允许访问社交媒体项目管理页面",
+            "access": "允许访问项目管理页面",
             "read": "允许查看项目详情和列表",
             "write": "允许创建和编辑项目",
             "delete": "允许删除项目及其关联数据",
         }
     ),
     # ========================================================================
-    # 社交洞察模块 - 任务管理 (新增)
+    # 任务管理
     # ========================================================================
     *create_module_permissions(
-        "social_task",
+        "task",
         ["access", "read", "write", "delete"],
         display_names={
-            "access": "访问数据采集任务",
-            "read": "查看数据采集任务",
-            "write": "编辑数据采集任务",
-            "delete": "删除数据采集任务",
+            "access": "访问任务管理",
+            "read": "查看任务",
+            "write": "编辑任务",
+            "delete": "删除任务",
         },
         descriptions={
             "access": "允许访问数据采集任务管理页面",
@@ -244,6 +247,11 @@ BUSINESS_PERMISSIONS = [
             "delete": "允许删除任务及其数据",
         }
     ),
+    # ========================================================================
+    # 数据分析模块 (新增)
+    # ========================================================================
+    # 分析模块使用细粒度的权限定义（task和project两个层级）
+    *ANALYSIS_PERMISSIONS,
 ]
 
 # 合并所有权限

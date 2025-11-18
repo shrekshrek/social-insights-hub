@@ -25,7 +25,7 @@ async def create_task(
 ) -> DataTask:
     """创建任务"""
     # 验证项目是否存在
-    from src.social_media import crud as social_crud
+    from src.projects import crud as social_crud
     project = await social_crud.get_project_by_id(db, task_in.project_id, load_relations=False)
     if not project:
         raise HTTPException(
@@ -71,7 +71,7 @@ async def get_task(
         return None
 
     # 验证用户是否有项目访问权限
-    from src.social_media import crud as social_crud
+    from src.projects import crud as social_crud
     has_access = await social_crud.check_project_access(db, task.project_id, current_user_id)
     if not has_access:
         raise HTTPException(
@@ -98,7 +98,7 @@ async def get_tasks_list(
     """获取任务列表（带过滤和分页）"""
     # 如果指定了project_id，验证访问权限
     if project_id is not None and current_user_id is not None:
-        from src.social_media import crud as social_crud
+        from src.projects import crud as social_crud
         has_access = await social_crud.check_project_access(db, project_id, current_user_id)
         if not has_access:
             raise HTTPException(
@@ -354,7 +354,7 @@ async def query_cross_task_posts(
     """跨任务查询同一帖子的历史数据"""
     # 如果指定了project_id，验证访问权限
     if project_id is not None and current_user_id is not None:
-        from src.social_media import crud as social_crud
+        from src.projects import crud as social_crud
         has_access = await social_crud.check_project_access(db, project_id, current_user_id)
         if not has_access:
             raise HTTPException(

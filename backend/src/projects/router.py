@@ -96,7 +96,7 @@ async def create_project(
     project_dict["participant_ids"] = [p.id for p in result["project"].participants]
 
     # 转换任务为字典列表
-    from src.task_manager.schemas import DataTaskReadWithRelations
+    from src.tasks.schemas import DataTaskReadWithRelations
     tasks_list = []
     for task in result["created_tasks"]:
         task_dict = DataTaskReadWithRelations.model_validate(task).model_dump()

@@ -222,3 +222,13 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_settings() -> Settings:
+    """
+    获取应用配置实例
+
+    Returns:
+        Settings: 应用配置实例
+    """
+    return settings

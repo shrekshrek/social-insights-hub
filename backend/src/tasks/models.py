@@ -9,7 +9,7 @@ from sqlalchemy.sql import func
 from src.database import Base
 
 if TYPE_CHECKING:
-    from src.social_media.models import SocialProject, Platform
+    from src.projects.models import SocialProject, Platform
     from src.auth.models import User
 
 
@@ -94,12 +94,12 @@ class DataTask(Base):
 
     # 关系
     project: Mapped["SocialProject"] = relationship(
-        "src.social_media.models.SocialProject",
+        "src.projects.models.SocialProject",
         foreign_keys=[project_id],
         lazy="selectin"
     )
     platform: Mapped["Platform"] = relationship(
-        "src.social_media.models.Platform",
+        "src.projects.models.Platform",
         foreign_keys=[platform_id],
         lazy="selectin"
     )
@@ -203,7 +203,7 @@ class SocialPost(Base):
     # 关系
     task: Mapped["DataTask"] = relationship("DataTask", back_populates="posts", lazy="selectin")
     platform: Mapped["Platform"] = relationship(
-        "src.social_media.models.Platform",
+        "src.projects.models.Platform",
         foreign_keys=[platform_id],
         lazy="selectin"
     )
@@ -304,7 +304,7 @@ class SocialComment(Base):
     task: Mapped["DataTask"] = relationship("DataTask", back_populates="comments", lazy="selectin")
     post: Mapped["SocialPost"] = relationship("SocialPost", back_populates="comments", lazy="selectin")
     platform: Mapped["Platform"] = relationship(
-        "src.social_media.models.Platform",
+        "src.projects.models.Platform",
         foreign_keys=[platform_id],
         lazy="selectin"
     )

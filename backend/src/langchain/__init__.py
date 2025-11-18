@@ -9,13 +9,13 @@ LangChain 1.0规范：提供LLM实例和工具函数的统一导入接口
 - 通用工具函数
 """
 
-from src.langchain_module.llm import (
+from src.langchain.llm import (
     get_deepseek_chat,
     get_deepseek_reasoner,
     calculate_cost,
 )
 
-from src.langchain_module.utils import (
+from src.langchain.utils import (
     extract_token_usage,
     truncate_text,
     format_keywords_for_prompt,

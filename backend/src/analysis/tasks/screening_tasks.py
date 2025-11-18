@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from src.celery_app import celery_app
 from src.analysis.base_task import AnalysisTaskBase
 from src.database import AsyncSessionLocal
-from src.langchain_module.utils import invoke_llm_with_stats, get_llm
+from src.langchain.utils import invoke_llm_with_stats, get_llm
 from src.analysis.models import PostAnalysis, CommentAnalysis
 
 logger = logging.getLogger(__name__)

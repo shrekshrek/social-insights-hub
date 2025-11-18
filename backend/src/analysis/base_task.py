@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.celery_app import celery_app
 from src.database import AsyncSessionLocal
-from src.langchain_module.utils import TaskAnalysisStats
+from src.langchain.utils import TaskAnalysisStats
 from src.analysis.models import TaskAnalysisResult, ProjectAnalysisResult
 
 logger = logging.getLogger(__name__)

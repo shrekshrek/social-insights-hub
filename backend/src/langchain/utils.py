@@ -451,7 +451,7 @@ async def invoke_llm_with_stats(
         (response, stats): LLM响应和token统计
 
     Examples:
-        >>> from src.langchain_module.llm import get_deepseek_chat
+        >>> from src.langchain.llm import get_deepseek_chat
         >>> llm = get_deepseek_chat()
         >>> messages = [{"role": "user", "content": "你好"}]
         >>> response, stats = await invoke_llm_with_stats(llm, messages, "chat")

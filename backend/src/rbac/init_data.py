@@ -11,86 +11,13 @@ from sqlalchemy import text
 from src.rbac import models, service, schemas
 from src.rbac.models import SystemRoles
 
+# 导入权限模板工具函数
+from src.rbac.utils import create_module_permissions
+
 # 导入模块权限定义
-from src.analysis.permissions_def import ALL_PERMISSIONS as ANALYSIS_PERMISSIONS
+from src.social_media.analysis.permissions_def import ALL_PERMISSIONS as ANALYSIS_PERMISSIONS
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# 权限模板函数（用于快速创建新模块权限）
-# ============================================================================
-
-
-def create_module_permissions(
-    module_name: str,
-    actions: list[str],
-    display_names: dict[str, str] = None,
-    descriptions: dict[str, str] = None,
-) -> list[dict]:
-    """
-    快速创建模块权限集
-
-    Args:
-        module_name: 模块名，如 "reports"
-        actions: 权限动作列表，如 ["access", "read", "export"]
-        display_names: 自定义显示名称 (可选)
-        descriptions: 自定义描述 (可选)
-
-    Returns:
-        权限定义列表
-
-    常用权限组合：
-    - ["access"] - 仅页面访问（最简单）
-    - ["access", "read"] - 页面 + 查看数据
-    - ["access", "read", "write"] - 页面 + 增改操作
-    - ["access", "read", "write", "delete"] - 完整CRUD
-    - ["access", "read", "export"] - 页面 + 查看 + 导出
-    - ["access", "read", "write", "export"] - 管理 + 导出
-    """
-    default_display_names = {
-        "access": f"访问{module_name}",
-        "read": f"查看{module_name}",
-        "write": f"编辑{module_name}",
-        "delete": f"删除{module_name}",
-        "export": f"导出{module_name}",
-        "approve": f"审批{module_name}",
-        "publish": f"发布{module_name}",
-        "import": f"导入{module_name}",
-        "manage": f"管理{module_name}",
-    }
-
-    default_descriptions = {
-        "access": f"允许访问{module_name}页面和基础功能",
-        "read": f"允许查看{module_name}的详细数据和列表",
-        "write": f"允许创建、编辑{module_name}的数据",
-        "delete": f"允许删除{module_name}的数据",
-        "export": f"允许导出{module_name}的数据",
-        "approve": f"允许审批{module_name}相关流程",
-        "publish": f"允许发布{module_name}到外部系统",
-        "import": f"允许导入{module_name}数据",
-        "manage": f"允许管理{module_name}的高级设置",
-    }
-
-    permissions = []
-    for action in actions:
-        display_name = (display_names or {}).get(action) or default_display_names.get(
-            action, f"{action.title()} {module_name}"
-        )
-        description = (descriptions or {}).get(action) or default_descriptions.get(
-            action, f"允许对{module_name}进行{action}操作"
-        )
-
-        permissions.append(
-            {
-                "target": module_name,
-                "action": action,
-                "display_name": display_name,
-                "description": description,
-            }
-        )
-
-    return permissions
 
 
 # ============================================================================

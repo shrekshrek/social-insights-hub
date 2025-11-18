@@ -9,7 +9,7 @@ from sqlalchemy.sql import func
 from src.database import Base
 
 if TYPE_CHECKING:
-    from src.projects.models import SocialProject, Platform
+    from src.social_media.projects.models import SocialProject, Platform
     from src.auth.models import User
 
 

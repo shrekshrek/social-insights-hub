@@ -59,7 +59,7 @@ async def run_post_screening(
 
         async with AsyncSessionLocal() as db:
             from sqlalchemy import select
-            from src.tasks.models import SocialPost
+            from src.social_media.tasks.models import SocialPost
 
             # 批量处理帖子
             for post_id in post_ids:
@@ -216,7 +216,7 @@ async def run_comment_screening(
 
         async with AsyncSessionLocal() as db:
             from sqlalchemy import select
-            from src.tasks.models import SocialComment
+            from src.social_media.tasks.models import SocialComment
 
             # 批量处理评论
             for comment_id in comment_ids:

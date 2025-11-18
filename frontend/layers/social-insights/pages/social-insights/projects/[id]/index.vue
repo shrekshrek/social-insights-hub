@@ -12,8 +12,8 @@ const projectId = computed(() => Number(route.params.id))
 const { getProject, deleteProject } = useSocialProjects()
 const { getTasks } = useTasks()
 
-// 获取项目详情
-const { data: project, pending: _projectLoading, refresh: refreshProject } = getProject(projectId.value)
+// 获取项目详情（使用顶层 await）
+const { data: project, pending: _projectLoading, refresh: refreshProject } = await getProject(projectId.value)
 
 // 获取项目下的任务列表
 const taskParams = computed(() => ({
@@ -22,7 +22,7 @@ const taskParams = computed(() => ({
   page_size: 100,
 }))
 
-const { data: tasksData, pending: tasksLoading, refresh: refreshTasks } = getTasks(taskParams)
+const { data: tasksData, pending: tasksLoading, refresh: refreshTasks } = await getTasks(taskParams)
 
 const tasks = computed(() => tasksData.value?.items || [])
 
@@ -190,30 +190,32 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
-        <UButton
-          icon="i-heroicons-plus"
-          @click="navigateTo(`/social-insights/tasks/create?project_id=${projectId}`)"
-        >
-          新建任务
-        </UButton>
-        <UButton
-          variant="outline"
-          icon="i-heroicons-arrow-path"
-          :loading="refreshing"
-          @click="handleRefresh"
-        >
-          刷新
-        </UButton>
-        <UButton
-          variant="outline"
-          icon="i-heroicons-trash"
-          color="error"
-          @click="handleDelete"
-        >
-          删除
-        </UButton>
-      </div>
+      <ClientOnly>
+        <div v-if="project" class="flex items-center gap-3">
+          <UButton
+            icon="i-heroicons-plus"
+            @click="navigateTo(`/social-insights/tasks/create?project_id=${projectId}`)"
+          >
+            新建任务
+          </UButton>
+          <UButton
+            variant="outline"
+            icon="i-heroicons-arrow-path"
+            :loading="refreshing"
+            @click="handleRefresh"
+          >
+            刷新
+          </UButton>
+          <UButton
+            variant="outline"
+            icon="i-heroicons-trash"
+            color="error"
+            @click="handleDelete"
+          >
+            删除
+          </UButton>
+        </div>
+      </ClientOnly>
     </div>
 
     <!-- 项目信息卡片 -->

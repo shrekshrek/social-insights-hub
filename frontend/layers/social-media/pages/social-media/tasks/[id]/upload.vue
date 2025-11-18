@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { JSONUploadData } from '../../../../types'
-
 definePageMeta({
   layout: 'default',
 })
@@ -237,7 +235,7 @@ const handleUpload = async () => {
   uploading.value = true
   try {
     await uploadJSONData(taskId.value, validationResult.value.data)
-    await navigateTo(`/social-insights/tasks/${taskId.value}`)
+    await navigateTo(`/social-media/tasks/${taskId.value}`)
   } catch (error) {
     console.error('上传失败:', error)
   } finally {
@@ -250,7 +248,7 @@ const handleUpload = async () => {
 <template>
   <div class="space-y-6">
     <div class="flex items-center gap-3">
-      <UButton variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo(`/social-insights/tasks/${taskId}`)" />
+      <UButton variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo(`/social-media/tasks/${taskId}`)" />
       <div>
         <h1 class="text-2xl font-bold">上传JSON数据</h1>
         <p class="text-gray-600 mt-1">{{ task?.name }}</p>

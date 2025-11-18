@@ -10,7 +10,7 @@ export const usePosts = () => {
 
   // 获取任务的原文列表
   const getTaskPosts = (taskId: number, params?: MaybeRef<Record<string, unknown>>) => {
-    return useApiData<PostListResponse>(`/tasks/${taskId}/posts`, {
+    return useApiData<PostListResponse>(`/social-media/tasks/${taskId}/posts`, {
       query: params,
       key: computed(() => {
         const p = unref(params)
@@ -21,7 +21,7 @@ export const usePosts = () => {
 
   // 获取任务的评论列表
   const getTaskComments = (taskId: number, params?: MaybeRef<Record<string, unknown>>) => {
-    return useApiData<CommentListResponse>(`/tasks/${taskId}/comments`, {
+    return useApiData<CommentListResponse>(`/social-media/tasks/${taskId}/comments`, {
       query: params,
       key: computed(() => {
         const p = unref(params)
@@ -32,7 +32,7 @@ export const usePosts = () => {
 
   // 获取原文及其评论
   const getPostWithComments = (postId: number, params?: MaybeRef<Record<string, unknown>>) => {
-    return useApiData<SocialPostWithComments>(`/tasks/posts/${postId}`, {
+    return useApiData<SocialPostWithComments>(`/social-media/tasks/posts/${postId}`, {
       query: params,
       key: computed(() => {
         const p = unref(params)
@@ -48,7 +48,7 @@ export const usePosts = () => {
     params?: Record<string, unknown>
   ) => {
     return useApiData<PostQueryResponse>(
-      `/tasks/posts/cross-task/${platformId}/${postIdOnPlatform}`,
+      `/social-media/tasks/posts/cross-task/${platformId}/${postIdOnPlatform}`,
       {
         query: params,
         key: `cross-task-${platformId}-${postIdOnPlatform}-${params?.project_id || ''}`,

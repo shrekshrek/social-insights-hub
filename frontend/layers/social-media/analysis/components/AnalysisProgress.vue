@@ -192,7 +192,7 @@ const props = withDefaults(defineProps<Props>(), {
   refreshInterval: 2000,
 })
 
-const emit = defineEmits<{
+const _emit = defineEmits<{
   'cancel': []
   'retry': []
   'view-results': []

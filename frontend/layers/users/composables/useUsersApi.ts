@@ -1,7 +1,7 @@
 import type { User, UserUpdate, UserListResponse, AdminUserCreate } from '../types'
 
 export const useUsersApi = () => {
-  const { apiRequest, useApiData, showSuccess, showError } = useApi()
+  const { apiRequest, useApiData, showSuccess } = useApi()
 
   // 获取用户列表
   const getUsers = (params?: Record<string, unknown>) => {

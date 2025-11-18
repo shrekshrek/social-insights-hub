@@ -170,14 +170,14 @@ interface Props {
   showExport?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
+const _props = withDefaults(defineProps<Props>(), {
   buttonLabel: '成本详情',
   showCallDetails: true,
   maxCallDetails: 10,
   showExport: true,
 })
 
-const emit = defineEmits<{
+const _emit = defineEmits<{
   'export': []
 }>()
 

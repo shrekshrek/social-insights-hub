@@ -249,8 +249,8 @@ export const useApi = () => {
    * 基于 useFetch 的数据获取
    * 支持 SSR，用于页面数据获取
    */
-  const useApiData = <T = unknown>(path: string, options: Record<string, unknown> = {}) => {
-    const fullPath = buildApiPath(path)
+  const useApiData = <T = unknown>(path: MaybeRef<string>, options: Record<string, unknown> = {}) => {
+    const fullPath = computed(() => buildApiPath(unref(path)))
     const userOnRequest = options.onRequest as ((ctx: unknown) => unknown | Promise<unknown>) | undefined
     const userOnResponseError = options.onResponseError as
       ((ctx: unknown) => unknown | Promise<unknown>) | undefined

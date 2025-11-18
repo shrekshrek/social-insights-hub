@@ -62,25 +62,25 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     order: 50,
   },
   '/rbac/permissions/[id]': { permission: PERMISSIONS.PERMISSION_READ },
-  // 社交媒体洞察模块
-  '/social-insights/projects': {
+  // 社交媒体数据洞察模块
+  '/social-media/projects': {
     permission: PERMISSIONS.SOCIAL_PROJECT_ACCESS,
     label: '社交媒体项目',
     showInNav: true,
     order: 60,
   },
-  '/social-insights/projects/create': { permission: PERMISSIONS.SOCIAL_PROJECT_WRITE },
-  '/social-insights/projects/[id]': { permission: PERMISSIONS.SOCIAL_PROJECT_READ },
-  '/social-insights/tasks': {
+  '/social-media/projects/create': { permission: PERMISSIONS.SOCIAL_PROJECT_WRITE },
+  '/social-media/projects/[id]': { permission: PERMISSIONS.SOCIAL_PROJECT_READ },
+  '/social-media/tasks': {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
     label: '数据采集任务',
     showInNav: true,
     order: 70,
   },
-  '/social-insights/tasks/create': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
-  '/social-insights/tasks/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
-  '/social-insights/tasks/[id]/upload': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
-  '/social-insights/posts/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
+  '/social-media/tasks/create': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
+  '/social-media/tasks/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
+  '/social-media/tasks/[id]/upload': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
+  '/social-media/posts/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
 }
 
 /**

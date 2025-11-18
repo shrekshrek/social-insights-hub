@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { SocialProjectCreate, QuickTaskCreate } from '../../../types'
 import { z } from 'zod'
 import type { DateValue } from '@internationalized/date'
 
@@ -181,7 +180,7 @@ const handleSubmit = async () => {
     }
 
     // 跳转到项目详情页
-    await navigateTo(`/social-insights/projects/${result.project.id}`)
+    await navigateTo(`/social-media/projects/${result.project.id}`)
   } catch (error) {
     console.error('创建项目失败:', error)
   } finally {
@@ -418,7 +417,7 @@ const handleSubmit = async () => {
       <UButton
         variant="outline"
         size="lg"
-        @click="navigateTo('/social-insights/projects')"
+        @click="navigateTo('/social-media/projects')"
       >
         取消
       </UButton>

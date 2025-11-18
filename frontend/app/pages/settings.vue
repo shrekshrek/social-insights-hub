@@ -131,7 +131,6 @@ definePageMeta({
 })
 
 const { logout } = useAuthApi()
-const toast = useToast()
 
 // 修改密码相关
 const passwordLoading = ref(false)

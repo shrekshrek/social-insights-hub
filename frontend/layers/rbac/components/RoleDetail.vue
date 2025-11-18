@@ -1,61 +1,24 @@
 <template>
   <UCard v-if="role" class="shadow-sm">
     <template #header>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          <div class="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center">
-            <span class="text-lg font-medium text-primary-600 dark:text-primary-400">
-              {{ role.display_name.charAt(0).toUpperCase() }}
-            </span>
-          </div>
-          <div>
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ role.display_name }}</h2>
-            <p class="text-gray-500 dark:text-gray-400">{{ role.name }}</p>
-            <div class="mt-1">
-              <UBadge
-                :color="isCoreRole(role.name) ? 'warning' : 'neutral'"
-                variant="soft"
-                size="sm"
-              >
-                {{ isCoreRole(role.name) ? '核心角色' : '自定义角色' }}
-              </UBadge>
-            </div>
-          </div>
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center">
+          <span class="text-lg font-medium text-primary-600 dark:text-primary-400">
+            {{ role.display_name.charAt(0).toUpperCase() }}
+          </span>
         </div>
-        
-        <div class="flex items-center gap-2">
-          <UButton
-            v-if="canEdit"
-            icon="i-heroicons-key"
-            variant="outline"
-            size="sm"
-            color="primary"
-            @click="$emit('edit-permissions')"
-          >
-            编辑权限
-          </UButton>
-          
-          <UButton
-            v-if="canEdit && !isCoreRole(role?.name)"
-            icon="i-heroicons-pencil-square"
-            variant="outline"
-            size="sm"
-            color="primary"
-            @click="$emit('edit')"
-          >
-            编辑
-          </UButton>
-          
-          <UButton
-            v-if="canDelete && !isCoreRole(role?.name)"
-            icon="i-heroicons-trash"
-            variant="outline"
-            size="sm"
-            color="error"
-            @click="$emit('delete')"
-          >
-            删除
-          </UButton>
+        <div>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ role.display_name }}</h2>
+          <p class="text-gray-500 dark:text-gray-400">{{ role.name }}</p>
+          <div class="mt-1">
+            <UBadge
+              :color="isCoreRole(role.name) ? 'warning' : 'neutral'"
+              variant="soft"
+              size="sm"
+            >
+              {{ isCoreRole(role.name) ? '核心角色' : '自定义角色' }}
+            </UBadge>
+          </div>
         </div>
       </div>
     </template>

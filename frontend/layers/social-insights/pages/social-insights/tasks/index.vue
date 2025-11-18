@@ -106,63 +106,64 @@ const statusOptions = [
   { label: '失败', value: 'failed' },
 ]
 
-// 表格列定义
-const columns: TableColumn<DataTaskWithRelations>[] = [
-  {
-    accessorKey: 'name',
-    header: '任务名称',
-    cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
-  },
-  {
-    accessorKey: 'project_name',
-    header: '所属项目',
-    cell: ({ row }) => {
-      if (!row.original.project_name || !row.original.project_id) {
-        return h('span', { class: 'text-gray-400' }, '-')
-      }
-      const UButton = resolveComponent('UButton')
-      return h(UButton, {
-        variant: 'link',
-        size: 'xs',
-        class: 'p-0 font-normal',
-        to: `/social-insights/projects/${row.original.project_id}`,
-      }, () => row.original.project_name)
+// 表格列定义 - 使用 computed 以避免 SSR 水合问题
+const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
+  if (!import.meta.client) return []
+
+  const UBadge = resolveComponent('UBadge')
+  const UButton = resolveComponent('UButton')
+
+  return [
+    {
+      accessorKey: 'name',
+      header: '任务名称',
+      cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
     },
-  },
-  {
-    accessorKey: 'platform_name',
-    header: '平台',
-    cell: ({ row }) => {
-      const UBadge = resolveComponent('UBadge')
-      return h(UBadge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-')
+    {
+      accessorKey: 'project_name',
+      header: '所属项目',
+      cell: ({ row }) => {
+        if (!row.original.project_name || !row.original.project_id) {
+          return h('span', { class: 'text-gray-400' }, '-')
+        }
+        return h(UButton, {
+          variant: 'link',
+          size: 'xs',
+          class: 'p-0 font-normal',
+          to: `/social-insights/projects/${row.original.project_id}`,
+        }, () => row.original.project_name)
+      },
     },
-  },
-  {
-    accessorKey: 'status',
-    header: '状态',
-    cell: ({ row }) => {
-      const UBadge = resolveComponent('UBadge')
-      return h(UBadge, { color: getStatusColor(row.original.status) }, () => getStatusText(row.original.status))
+    {
+      accessorKey: 'platform_name',
+      header: '平台',
+      cell: ({ row }) => h(UBadge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
     },
-  },
-  {
-    accessorKey: 'stats',
-    header: '数据统计',
-    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
-      `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
-    ),
-  },
-  {
-    accessorKey: 'created_at',
-    header: '创建时间',
-    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
-  },
-  {
-    accessorKey: 'actions',
-    header: '操作',
-    cell: ({ row }) => {
-      const UButton = resolveComponent('UButton')
-      return h('div', { class: 'flex items-center gap-2' }, [
+    {
+      accessorKey: 'status',
+      header: '状态',
+      cell: ({ row }) => h(UBadge, {
+        color: getStatusColor(row.original.status),
+        variant: 'solid',
+        size: 'xs'
+      }, () => getStatusText(row.original.status)),
+    },
+    {
+      accessorKey: 'stats',
+      header: '数据统计',
+      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
+        `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
+      ),
+    },
+    {
+      accessorKey: 'created_at',
+      header: '创建时间',
+      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
+    },
+    {
+      accessorKey: 'actions',
+      header: '操作',
+      cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
         h(UButton, {
           size: 'xs',
           variant: 'ghost',
@@ -185,10 +186,10 @@ const columns: TableColumn<DataTaskWithRelations>[] = [
           color: 'error',
           onClick: () => handleDelete(row.original),
         }, () => '删除'),
-      ].filter(Boolean))
+      ].filter(Boolean)),
     },
-  },
-]
+  ]
+})
 </script>
 
 <template>

@@ -4,56 +4,75 @@
     <!-- 页面标题 -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">编辑用户角色</h1>
-        <p class="text-gray-600 dark:text-gray-400 mt-1">
-          为用户 "{{ user?.username }}" 分配角色
-        </p>
+        <div class="flex items-center gap-3">
+          <UButton
+            variant="ghost"
+            icon="i-heroicons-arrow-left"
+            @click="handleCancel"
+          />
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+              {{ user?.username || '加载中...' }}
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">
+              编辑用户角色
+            </p>
+          </div>
+        </div>
       </div>
-      
+
       <div class="flex items-center gap-3">
         <UButton
-          icon="i-heroicons-arrow-left"
           variant="outline"
-          size="sm"
+          :disabled="loading"
           @click="handleCancel"
         >
-          返回
+          取消
+        </UButton>
+        <UButton
+          :disabled="!hasChanges || loading"
+          :loading="loading"
+          @click="handleSubmit"
+        >
+          保存
         </UButton>
       </div>
     </div>
 
     <!-- 用户信息卡片 -->
-    <UCard v-if="user">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">用户信息</h2>
-          <div class="flex flex-wrap gap-1">
-            <UBadge
-              v-for="role in user.roles"
-              :key="role"
-              :color="getRoleColor(role)"
-              variant="soft"
-              size="sm"
-            >
-              {{ getRoleLabel(role) }}
-            </UBadge>
+    <ClientOnly>
+      <UCard v-if="user">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">用户信息</h2>
+            <div class="flex flex-wrap gap-1">
+              <UBadge
+                v-for="role in user.roles"
+                :key="role"
+                :color="getRoleColor(role)"
+                variant="soft"
+                size="sm"
+              >
+                {{ getRoleLabel(role) }}
+              </UBadge>
+            </div>
+          </div>
+        </template>
+
+        <div class="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <UAvatar
+            :alt="user.username"
+            size="md"
+          >
+            {{ user.username.charAt(0).toUpperCase() }}
+          </UAvatar>
+          <div>
+            <p class="font-medium text-gray-900 dark:text-white">{{ user.username }}</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ user.email }}</p>
           </div>
         </div>
-      </template>
-
-      <div class="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <UAvatar
-          :alt="user.username"
-          size="md"
-        >
-          {{ user.username.charAt(0).toUpperCase() }}
-        </UAvatar>
-        <div>
-          <p class="font-medium text-gray-900 dark:text-white">{{ user.username }}</p>
-          <p class="text-sm text-gray-500 dark:text-gray-400">{{ user.email }}</p>
-        </div>
-      </div>
-    </UCard>
+      </UCard>
+    </ClientOnly>
 
     <!-- 角色分配卡片 -->
     <UCard>
@@ -176,39 +195,6 @@
         </div>
       </ClientOnly>
 
-      <!-- 操作按钮 -->
-      <template #footer>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <UButton
-              variant="outline"
-              size="sm"
-              :disabled="loading"
-              @click="resetSelection"
-            >
-              重置选择
-            </UButton>
-          </div>
-          
-          <div class="flex items-center gap-3">
-            <UButton
-              variant="outline"
-              :disabled="loading"
-              @click="handleCancel"
-            >
-              取消
-            </UButton>
-            <UButton
-              color="primary"
-              :loading="loading"
-              :disabled="!hasChanges"
-              @click="handleSubmit"
-            >
-              保存更改
-            </UButton>
-          </div>
-        </div>
-      </template>
     </UCard>
   </div>
 </template>
@@ -393,7 +379,7 @@ const deselectAllInGroup = (groupType: string) => {
   }
 }
 
-const resetSelection = () => {
+const _resetSelection = () => {
   initializeSelectedRoles()
 }
 

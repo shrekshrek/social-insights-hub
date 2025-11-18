@@ -37,17 +37,17 @@
     </div>
 
     <!-- 操作按钮 -->
-    <div class="flex justify-end gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
-      <UButton 
-        variant="outline" 
+    <div v-if="!hideActions" class="flex justify-end gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
+      <UButton
+        variant="outline"
         :disabled="loading"
         @click="$emit('cancel')"
       >
         取消
       </UButton>
-      
-      <UButton 
-        type="submit" 
+
+      <UButton
+        type="submit"
         :loading="loading"
         color="primary"
       >
@@ -66,12 +66,14 @@ interface Props {
   role?: Role | null
   loading?: boolean
   isEdit?: boolean
+  hideActions?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   role: null,
   loading: false,
-  isEdit: false
+  isEdit: false,
+  hideActions: false
 })
 
 // Emits
@@ -147,6 +149,7 @@ const resetForm = () => {
 
 // 暴露方法
 defineExpose({
-  resetForm
+  resetForm,
+  handleSubmit
 })
 </script> 

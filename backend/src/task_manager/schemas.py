@@ -125,6 +125,19 @@ class SocialPostWithComments(SocialPostRead):
     comments: List["SocialCommentRead"] = []
 
 
+class SocialPostListResponse(CustomBaseModel):
+    """原文列表响应"""
+    items: List[SocialPostRead]
+    total: int
+    page: int
+    page_size: int
+
+    @classmethod
+    def create(cls, items: List[SocialPostRead], total: int, page: int, page_size: int):
+        """创建分页响应"""
+        return cls(items=items, total=total, page=page, page_size=page_size)
+
+
 # ==================== SocialComment Schemas ====================
 
 class SocialCommentBase(CustomBaseModel):
@@ -156,6 +169,19 @@ class SocialCommentRead(SocialCommentBase):
     is_deleted: bool
     created_at: datetime
     updated_at: datetime
+
+
+class SocialCommentListResponse(CustomBaseModel):
+    """评论列表响应"""
+    items: List[SocialCommentRead]
+    total: int
+    page: int
+    page_size: int
+
+    @classmethod
+    def create(cls, items: List[SocialCommentRead], total: int, page: int, page_size: int):
+        """创建分页响应"""
+        return cls(items=items, total=total, page=page, page_size=page_size)
 
 
 # ==================== JSON Upload Schemas ====================

@@ -417,13 +417,13 @@ const handleSubmit = async () => {
               <div class="relative">
                 <UInput
                   :model-value="projectSearchFocused ? projectSearchQuery : selectedProjectName"
-                  @update:model-value="handleSearchInput"
-                  @focus="handleProjectInputFocus"
-                  @blur="handleProjectInputBlur"
                   placeholder="输入项目名称搜索..."
                   icon="i-lucide-search"
                   :loading="projectsPending"
                   class="w-full"
+                  @update:model-value="handleSearchInput"
+                  @focus="handleProjectInputFocus"
+                  @blur="handleProjectInputBlur"
                 />
 
                 <!-- 下拉列表 -->

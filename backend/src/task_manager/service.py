@@ -292,9 +292,10 @@ async def get_task_comments(
     task_id: int,
     page: int = 1,
     page_size: int = 50,
-    current_user_id: int = None
+    current_user_id: int = None,
+    post_id: int = None
 ) -> tuple[List[SocialComment], int]:
-    """获取任务的评论列表"""
+    """获取任务的评论列表，可选按原文ID筛选"""
     # 验证任务访问权限
     task = await get_task(db, task_id, current_user_id)
     if not task:
@@ -304,7 +305,7 @@ async def get_task_comments(
         )
 
     skip = (page - 1) * page_size
-    return await crud.get_comments_by_task(db, task_id, skip=skip, limit=page_size)
+    return await crud.get_comments_by_task(db, task_id, skip=skip, limit=page_size, post_id=post_id)
 
 
 async def get_post_with_comments(

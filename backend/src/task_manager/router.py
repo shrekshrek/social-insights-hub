@@ -244,7 +244,7 @@ async def upload_json_data(
 
 @router.get(
     "/{task_id}/posts",
-    response_model=List[schemas.SocialPostRead],
+    response_model=schemas.SocialPostListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get task posts",
     description="获取任务的原文列表"
@@ -267,12 +267,20 @@ async def get_task_posts(
         page_size=pagination.page_size,
         current_user_id=current_user.id
     )
-    return posts
+
+    # 转换为分页响应
+    posts_read = [schemas.SocialPostRead.model_validate(p) for p in posts]
+    return schemas.SocialPostListResponse.create(
+        items=posts_read,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size
+    )
 
 
 @router.get(
     "/{task_id}/comments",
-    response_model=List[schemas.SocialCommentRead],
+    response_model=schemas.SocialCommentListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get task comments",
     description="获取任务的评论列表"
@@ -282,21 +290,34 @@ async def get_task_comments(
     pagination: PaginationParams = Depends(get_pagination_params),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
+    post_id: Optional[int] = Query(None, description="按原文ID筛选评论"),
 ):
     """
     获取任务的评论列表（分页）。
 
     需要项目访问权限。
     评论按采集时间倒序排列。
+
+    可选参数：
+    - post_id: 筛选指定原文的评论
     """
     comments, total = await service.get_task_comments(
         db,
         task_id=task_id,
         page=pagination.page,
         page_size=pagination.page_size,
-        current_user_id=current_user.id
+        current_user_id=current_user.id,
+        post_id=post_id
     )
-    return comments
+
+    # 转换为分页响应
+    comments_read = [schemas.SocialCommentRead.model_validate(c) for c in comments]
+    return schemas.SocialCommentListResponse.create(
+        items=comments_read,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size
+    )
 
 
 @router.get(

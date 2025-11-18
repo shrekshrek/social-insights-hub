@@ -225,3 +225,17 @@ export interface PostQueryResponse {
   total_tasks: number
   message: string
 }
+
+export interface PostListResponse {
+  items: SocialPost[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface CommentListResponse {
+  items: SocialComment[]
+  total: number
+  page: number
+  page_size: number
+}

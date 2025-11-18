@@ -24,6 +24,9 @@ const { data: preselectedProject } = preselectedProjectId
 // 获取平台列表
 const { data: platforms } = getPlatforms()
 
+// 路由
+const router = useRouter()
+
 // 表单状态
 const submitting = ref(false)
 
@@ -34,6 +37,15 @@ const cancelReturnPath = computed(() => {
   }
   return '/social-media/tasks'
 })
+
+// 返回处理
+const handleBack = () => {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    navigateTo(cancelReturnPath.value)
+  }
+}
 
 // 表单Schema
 const schema = z.object({
@@ -356,13 +368,38 @@ const handleSubmit = async () => {
 <template>
   <div class="space-y-6">
     <!-- 页面标题 -->
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-        新建任务
-      </h1>
-      <p class="text-gray-600 dark:text-gray-400 mt-1">
-        创建一个新的数据采集任务
-      </p>
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <UButton
+          variant="ghost"
+          icon="i-heroicons-arrow-left"
+          @click="handleBack"
+        />
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+            新建任务
+          </h1>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">
+            创建一个新的数据采集任务
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <UButton
+          variant="outline"
+          :disabled="submitting"
+          @click="navigateTo(cancelReturnPath)"
+        >
+          取消
+        </UButton>
+        <UButton
+          :loading="submitting"
+          @click="handleSubmit"
+        >
+          创建
+        </UButton>
+      </div>
     </div>
 
     <!-- 表单卡片 -->
@@ -586,22 +623,5 @@ const handleSubmit = async () => {
       </UForm>
     </UCard>
 
-    <!-- 操作按钮 -->
-    <div class="flex justify-end items-center gap-3">
-      <UButton
-        variant="outline"
-        size="lg"
-        @click="navigateTo(cancelReturnPath)"
-      >
-        取消
-      </UButton>
-      <UButton
-        size="lg"
-        :loading="submitting"
-        @click="handleSubmit"
-      >
-        创建任务
-      </UButton>
-    </div>
   </div>
 </template>

@@ -93,6 +93,7 @@ class SocialProjectReadWithOwner(SocialProjectRead):
     """带owner信息的项目读取模型"""
 
     owner_username: str = Field(..., description="项目创建者用户名")
+    participant_usernames: List[str] = Field(default_factory=list, description="参与者用户名列表")
 
 
 SocialProjectListResponse = PaginatedResponse[SocialProjectReadWithOwner]

@@ -29,6 +29,7 @@ export interface SocialProject {
   updated_at: string
   participant_ids?: number[]
   owner_username?: string
+  participant_usernames?: string[]
 }
 
 export interface QuickTaskCreate {

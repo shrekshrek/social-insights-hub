@@ -45,7 +45,15 @@ const handleRefresh = async () => {
 
 // 删除任务
 const handleDelete = async (task: DataTaskWithRelations) => {
-  const confirmed = await confirm(`确定要删除任务 "${task.name}" 吗？此操作不可恢复。`)
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '删除任务',
+    message: `确定要删除任务 "${task.name}" 吗？此操作不可恢复，将同时删除所有相关的原文和评论数据。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'error',
+  })
+
   if (!confirmed) return
 
   try {
@@ -70,12 +78,12 @@ const formatDateTime = (dateStr: string) => {
 // 任务状态颜色
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
-    pending: 'gray',
-    running: 'blue',
-    completed: 'green',
-    failed: 'red',
+    pending: 'neutral',
+    running: 'info',
+    completed: 'success',
+    failed: 'error',
   }
-  return colors[status] || 'gray'
+  return colors[status] || 'neutral'
 }
 
 // 任务状态文本
@@ -166,7 +174,7 @@ const columns: TableColumn<DataTaskWithRelations>[] = [
               size: 'xs',
               variant: 'ghost',
               icon: 'i-heroicons-arrow-up-tray',
-              color: 'blue',
+              color: 'info',
               onClick: () => navigateTo(`/social-insights/tasks/${row.original.id}/upload`),
             }, () => '上传')
           : null,
@@ -174,7 +182,7 @@ const columns: TableColumn<DataTaskWithRelations>[] = [
           size: 'xs',
           variant: 'ghost',
           icon: 'i-heroicons-trash',
-          color: 'red',
+          color: 'error',
           onClick: () => handleDelete(row.original),
         }, () => '删除'),
       ].filter(Boolean))

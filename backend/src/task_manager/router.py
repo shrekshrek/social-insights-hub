@@ -184,6 +184,27 @@ async def delete_task(
     return MessageResponse(message=f"Task '{task.name}' deleted successfully")
 
 
+@router.post(
+    "/{task_id}/clear-data",
+    response_model=schemas.DataTaskRead,
+    status_code=status.HTTP_200_OK,
+    summary="Clear task data",
+    description="清空任务的所有数据以便重新上传或采集"
+)
+async def clear_task_data(
+    db: AsyncSession = Depends(get_async_db),
+    task: DataTask = Depends(validate_task_owner),
+):
+    """
+    清空任务的所有数据（软删除原文和评论），重置任务状态。
+
+    只有任务创建者或项目owner可以清空任务数据。
+    清空后任务状态会重置为pending，可以重新上传或采集数据。
+    """
+    updated_task = await service.clear_task_data(db, task)
+    return updated_task
+
+
 # ==================== JSON Upload APIs ====================
 
 @router.post(

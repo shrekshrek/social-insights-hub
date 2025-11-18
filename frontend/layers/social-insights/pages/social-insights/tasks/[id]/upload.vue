@@ -385,7 +385,7 @@ const handleUpload = async () => {
         <div v-if="validationResult">
           <UAlert
             v-if="validationResult.valid && validationResult.data"
-            color="green"
+            color="success"
             icon="i-heroicons-check-circle"
             title="验证通过"
           >
@@ -400,7 +400,7 @@ const handleUpload = async () => {
           </UAlert>
           <UAlert
             v-else
-            color="red"
+            color="error"
             icon="i-heroicons-x-circle"
             title="验证失败"
             :description="validationResult.error"
@@ -425,50 +425,11 @@ const handleUpload = async () => {
             上传数据
           </UButton>
         </div>
-      </div>
-    </UCard>
 
-    <UCard>
-      <template #header><h2 class="text-lg font-semibold">数据格式说明</h2></template>
-      <div class="prose prose-sm dark:prose-invert max-w-none">
-        <p>需要分别上传两个JSON文件：</p>
-        <ol>
-          <li>
-            <strong>Contents 文件</strong>（帖子数据）：
-            <ul>
-              <li>可以是直接的数组格式：<code>[{...}, {...}]</code></li>
-              <li>或包含 contents 字段的对象：<code>{"contents": [{...}]}</code></li>
-              <li>每个帖子需要包含帖子ID字段：
-                <ul>
-                  <li><code>post_id_on_platform</code>（通用）</li>
-                  <li><code>aweme_id</code>（抖音，系统会自动映射）</li>
-                </ul>
-              </li>
-            </ul>
-          </li>
-          <li>
-            <strong>Comments 文件</strong>（评论数据）：
-            <ul>
-              <li>可以是直接的数组格式：<code>[{...}, {...}]</code></li>
-              <li>或包含 comments 字段的对象：<code>{"comments": [{...}]}</code></li>
-              <li>每个评论需要包含评论ID字段：
-                <ul>
-                  <li><code>comment_id_on_platform</code>（通用）</li>
-                  <li><code>comment_id</code>（系统会自动映射）</li>
-                </ul>
-              </li>
-              <li>需要包含关联的帖子ID字段（用于关联评论和帖子）：
-                <ul>
-                  <li><code>raw_data.post_id_on_platform</code>（通用）</li>
-                  <li><code>aweme_id</code> 或 <code>post_id</code>（系统会自动映射到 raw_data）</li>
-                </ul>
-              </li>
-            </ul>
-          </li>
-        </ol>
-        <div class="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+        <!-- 自动字段映射提示 -->
+        <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
           <p class="text-sm text-blue-800 dark:text-blue-200 font-medium mb-1">
-            自动字段映射
+            💡 自动字段映射
           </p>
           <p class="text-xs text-blue-700 dark:text-blue-300">
             系统支持自动映射爬虫导出的原始字段名（如抖音的 aweme_id、comment_id）到统一的字段名。

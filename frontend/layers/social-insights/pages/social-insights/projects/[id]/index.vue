@@ -99,56 +99,54 @@ const getStatusText = (status: string) => {
   return texts[status] || status
 }
 
-// 表格列定义
-const columns: TableColumn<DataTaskWithRelations>[] = [
-  {
-    accessorKey: 'name',
-    header: '任务名称',
-    cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
-  },
-  {
-    accessorKey: 'platform_name',
-    header: '平台',
-    cell: ({ row }) => {
-      const UBadge = resolveComponent('UBadge')
-      return h(UBadge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-')
+// 表格列定义 - 使用 computed 以避免 SSR 水合问题
+const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
+  if (!import.meta.client) return []
+
+  const UBadge = resolveComponent('UBadge')
+  const UButton = resolveComponent('UButton')
+
+  return [
+    {
+      accessorKey: 'name',
+      header: '任务名称',
+      cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
     },
-  },
-  {
-    accessorKey: 'task_type',
-    header: '类型',
-    cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.task_type),
-  },
-  {
-    accessorKey: 'status',
-    header: '状态',
-    cell: ({ row }) => {
-      const UBadge = resolveComponent('UBadge')
-      return h(UBadge, {
+    {
+      accessorKey: 'platform_name',
+      header: '平台',
+      cell: ({ row }) => h(UBadge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
+    },
+    {
+      accessorKey: 'task_type',
+      header: '类型',
+      cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.task_type),
+    },
+    {
+      accessorKey: 'status',
+      header: '状态',
+      cell: ({ row }) => h(UBadge, {
         color: getStatusColor(row.original.status),
         variant: 'solid',
         size: 'xs'
-      }, () => getStatusText(row.original.status))
+      }, () => getStatusText(row.original.status)),
     },
-  },
-  {
-    accessorKey: 'stats',
-    header: '数据统计',
-    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
-      `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
-    ),
-  },
-  {
-    accessorKey: 'created_at',
-    header: '创建时间',
-    cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
-  },
-  {
-    accessorKey: 'actions',
-    header: '操作',
-    cell: ({ row }) => {
-      const UButton = resolveComponent('UButton')
-      return h('div', { class: 'flex items-center gap-2' }, [
+    {
+      accessorKey: 'stats',
+      header: '数据统计',
+      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
+        `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
+      ),
+    },
+    {
+      accessorKey: 'created_at',
+      header: '创建时间',
+      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
+    },
+    {
+      accessorKey: 'actions',
+      header: '操作',
+      cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
         h(UButton, {
           size: 'xs',
           variant: 'ghost',
@@ -164,10 +162,10 @@ const columns: TableColumn<DataTaskWithRelations>[] = [
               onClick: () => navigateTo(`/social-insights/tasks/${row.original.id}/upload`),
             }, () => '上传')
           : null,
-      ].filter(Boolean))
+      ].filter(Boolean)),
     },
-  },
-]
+  ]
+})
 </script>
 
 <template>
@@ -213,7 +211,7 @@ const columns: TableColumn<DataTaskWithRelations>[] = [
           color="error"
           @click="handleDelete"
         >
-          删除项目
+          删除
         </UButton>
       </div>
     </div>

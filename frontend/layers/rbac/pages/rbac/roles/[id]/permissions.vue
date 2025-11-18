@@ -4,22 +4,41 @@
     <!-- 页面标题 -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">编辑角色权限</h1>
-        <p class="text-gray-600 dark:text-gray-400 mt-1">
-          为角色 "{{ roleData?.display_name }}" 分配权限
-        </p>
+        <div class="flex items-center gap-3">
+          <UButton
+            variant="ghost"
+            icon="i-heroicons-arrow-left"
+            @click="handleCancel"
+          />
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+              {{ roleData?.display_name || '加载中...' }}
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">
+              配置角色权限
+            </p>
+          </div>
+        </div>
       </div>
-      
-      <div class="flex items-center gap-3">
-        <UButton
-          icon="i-heroicons-arrow-left"
-          variant="outline"
-          size="sm"
-          @click="handleCancel"
-        >
-          返回
-        </UButton>
-      </div>
+
+      <ClientOnly>
+        <div class="flex items-center gap-3">
+          <UButton
+            variant="outline"
+            :disabled="loading"
+            @click="handleCancel"
+          >
+            取消
+          </UButton>
+          <UButton
+            :disabled="!hasChanges || loading"
+            :loading="loading"
+            @click="handleSubmit"
+          >
+            保存
+          </UButton>
+        </div>
+      </ClientOnly>
     </div>
 
     <!-- 角色信息卡片 -->
@@ -190,35 +209,6 @@
             </div>
           </template>
 
-          <div class="flex justify-between items-center">
-            <div class="flex items-center gap-2">
-              <UButton
-                variant="outline"
-                size="sm"
-                :disabled="loading"
-                @click="resetSelection"
-              >
-                重置选择
-              </UButton>
-            </div>
-            <div class="flex items-center gap-3">
-              <UButton
-                variant="outline"
-                :disabled="loading"
-                @click="handleCancel"
-              >
-                取消
-              </UButton>
-              <UButton
-                color="primary"
-                :loading="loading"
-                :disabled="!hasChanges"
-                @click="handleSubmit"
-              >
-                保存权限
-              </UButton>
-            </div>
-          </div>
         </ClientOnly>
       </template>
     </UCard>
@@ -386,7 +376,7 @@ const deselectAllInCategory = (categoryName: string) => {
   }
 };
 
-const resetSelection = () => {
+const _resetSelection = () => {
   selectedPermissionIds.value = roleData.value?.permissions?.map((p: Permission) => p.id!) || [];
 };
 

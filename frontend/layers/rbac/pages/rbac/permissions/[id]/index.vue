@@ -4,18 +4,22 @@
     <!-- 页面标题 -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">权限详情</h1>
-        <p class="text-gray-600 dark:text-gray-400 mt-1">查看权限详细信息</p>
+        <div class="flex items-center gap-3">
+          <UButton
+            variant="ghost"
+            icon="i-heroicons-arrow-left"
+            @click="navigateTo('/rbac/permissions')"
+          />
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+              {{ data?.display_name || '加载中...' }}
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">
+              权限详情
+            </p>
+          </div>
+        </div>
       </div>
-      
-      <UButton
-        icon="i-heroicons-arrow-left"
-        variant="outline"
-        size="sm"
-        @click="navigateTo('/rbac/permissions')"
-      >
-        返回列表
-      </UButton>
     </div>
 
     <!-- 加载状态 -->

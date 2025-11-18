@@ -1,66 +1,29 @@
 <template>
   <UCard v-if="user" class="shadow-sm">
     <template #header>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          <UAvatar
-            :alt="user.username"
-            size="xl"
-          >
-            {{ user.username.charAt(0).toUpperCase() }}
-          </UAvatar>
-          <div>
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ user.username }}</h2>
-            <p class="text-gray-500 dark:text-gray-400">{{ user.email }}</p>
-            <div class="mt-1">
-              <div class="flex flex-wrap gap-1">
-                <UBadge
-                  v-for="role in user.roles"
-                  :key="role"
-                  :color="getRoleColor(role)"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ getRoleLabel(role) }}
-                </UBadge>
-              </div>
+      <div class="flex items-center gap-4">
+        <UAvatar
+          :alt="user.username"
+          size="xl"
+        >
+          {{ user.username.charAt(0).toUpperCase() }}
+        </UAvatar>
+        <div>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ user.username }}</h2>
+          <p class="text-gray-500 dark:text-gray-400">{{ user.email }}</p>
+          <div class="mt-1">
+            <div class="flex flex-wrap gap-1">
+              <UBadge
+                v-for="role in user.roles"
+                :key="role"
+                :color="getRoleColor(role)"
+                variant="subtle"
+                size="sm"
+              >
+                {{ getRoleLabel(role) }}
+              </UBadge>
             </div>
           </div>
-        </div>
-        
-        <div class="flex items-center gap-2">
-          <UButton
-            v-if="canEdit"
-            icon="i-heroicons-user-group"
-            variant="outline"
-            size="sm"
-            color="primary"
-            @click="$emit('edit-roles')"
-          >
-            编辑角色
-          </UButton>
-          
-          <UButton
-            v-if="canEdit"
-            icon="i-heroicons-pencil-square"
-            variant="outline"
-            size="sm"
-            color="primary"
-            @click="$emit('edit')"
-          >
-            编辑
-          </UButton>
-          
-          <UButton
-            v-if="canDelete"
-            icon="i-heroicons-trash"
-            variant="outline"
-            size="sm"
-            color="error"
-            @click="$emit('delete')"
-          >
-            删除
-          </UButton>
         </div>
       </div>
     </template>

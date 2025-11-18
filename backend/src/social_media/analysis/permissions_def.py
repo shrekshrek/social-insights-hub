@@ -3,7 +3,7 @@
 定义analysis模块的所有权限，用于RBAC系统初始化
 """
 
-from src.rbac.init_data import create_module_permissions
+from src.rbac.utils import create_module_permissions
 
 
 # 数据分析权限

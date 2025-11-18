@@ -9,7 +9,7 @@
 
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 from datetime import datetime, timezone
 from celery import Task
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.celery_app import celery_app
 from src.database import AsyncSessionLocal
 from src.langchain.utils import TaskAnalysisStats
-from src.analysis.models import TaskAnalysisResult, ProjectAnalysisResult
+
+if TYPE_CHECKING:
+    from src.analysis.models import TaskAnalysisResult, ProjectAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +96,7 @@ class AnalysisTaskBase(Task):
         async with AsyncSessionLocal() as db:
             try:
                 from sqlalchemy import select, update
+                from src.analysis.models import TaskAnalysisResult
 
                 # 构建更新数据
                 update_data = {
@@ -154,6 +157,7 @@ class AnalysisTaskBase(Task):
         async with AsyncSessionLocal() as db:
             try:
                 from sqlalchemy import update
+                from src.analysis.models import ProjectAnalysisResult
 
                 # 构建更新数据
                 update_data = {

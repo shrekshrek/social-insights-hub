@@ -61,7 +61,7 @@ async def create_project(
     # 如果提供了快速创建任务配置，批量创建任务
     created_tasks = []
     if project_in.quick_tasks:
-        from src.tasks.crud import bulk_create_tasks
+        from src.social_media.tasks.crud import bulk_create_tasks
 
         # 验证平台ID是否存在
         for platform_id in project_in.quick_tasks.platform_ids:

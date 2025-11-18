@@ -11,12 +11,13 @@ from src.schemas import CustomBaseModel
 from src.auth.router import router as auth_router
 from src.users.router import router as users_router
 from src.rbac.router import router as rbac_router
-from src.projects.router import router as projects_router
-from src.tasks.router import router as tasks_router
+from src.social_media.projects.router import router as projects_router
+from src.social_media.tasks.router import router as tasks_router
+from src.social_media.analysis.router import router as analysis_router
 from src.config import settings
 from src.database import get_async_db, AsyncSessionLocal
 from src.rbac.init_data import init_rbac_data
-from src.projects.init_data import init_platforms
+from src.social_media.projects.init_data import init_platforms
 from src.middleware import (
     RequestLoggingMiddleware,
     GlobalExceptionHandlerMiddleware,
@@ -196,3 +197,4 @@ app.include_router(users_router, prefix=settings.API_PREFIX)
 app.include_router(rbac_router, prefix=settings.API_PREFIX)
 app.include_router(projects_router, prefix=settings.API_PREFIX)
 app.include_router(tasks_router, prefix=settings.API_PREFIX)
+app.include_router(analysis_router, prefix=settings.API_PREFIX)

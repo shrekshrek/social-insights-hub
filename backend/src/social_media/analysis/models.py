@@ -9,8 +9,8 @@ from sqlalchemy.sql import func
 from src.database import Base
 
 if TYPE_CHECKING:
-    from src.tasks.models import DataTask, SocialPost, SocialComment
-    from src.projects.models import SocialProject
+    from src.social_media.tasks.models import DataTask, SocialPost, SocialComment
+    from src.social_media.projects.models import SocialProject
     from src.auth.models import User
 
 

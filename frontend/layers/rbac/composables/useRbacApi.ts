@@ -1,7 +1,7 @@
 import type { Role, PermissionWithMeta as Permission, RoleCreate, RoleUpdate, RoleListResponse, PermissionListResponse } from '../types'
 
 export const useRbacApi = () => {
-  const { apiRequest, useApiData, showSuccess, showError } = useApi()
+  const { apiRequest, useApiData, showSuccess } = useApi()
 
   // 角色管理
   const getRoles = (params?: Record<string, unknown>) => {

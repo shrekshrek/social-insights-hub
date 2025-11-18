@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { DataTaskCreate } from '../../../types'
 import { z } from 'zod'
 
 definePageMeta({
@@ -31,9 +30,9 @@ const submitting = ref(false)
 // 计算返回路径
 const cancelReturnPath = computed(() => {
   if (isFromProjectDetail.value && preselectedProjectId) {
-    return `/social-insights/projects/${preselectedProjectId}`
+    return `/social-media/projects/${preselectedProjectId}`
   }
-  return '/social-insights/tasks'
+  return '/social-media/tasks'
 })
 
 // 表单Schema
@@ -341,10 +340,10 @@ const handleSubmit = async () => {
 
     // 如果是本地上传，直接跳转到上传页面
     if (result.data_source === 'local_upload') {
-      await navigateTo(`/social-insights/tasks/${result.id}/upload`)
+      await navigateTo(`/social-media/tasks/${result.id}/upload`)
     } else {
       // 否则跳转到任务详情页
-      await navigateTo(`/social-insights/tasks/${result.id}`)
+      await navigateTo(`/social-media/tasks/${result.id}`)
     }
   } catch (error) {
     console.error('创建任务失败:', error)

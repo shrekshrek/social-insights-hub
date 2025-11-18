@@ -25,7 +25,7 @@ export const useAnalysis = () => {
    */
   const getTaskAnalysisResults = (taskId: MaybeRef<number>) => {
     return useApiData<PaginatedResponse<TaskAnalysisResult>>(
-      computed(() => `/analysis/tasks/${unref(taskId)}/results`),
+      computed(() => `/social-media/analysis/tasks/${unref(taskId)}/results`),
       {
         key: computed(() => `task-analysis-results-${unref(taskId)}`),
       }
@@ -37,7 +37,7 @@ export const useAnalysis = () => {
    */
   const getTaskAnalysisResult = (resultId: number) => {
     return useApiData<TaskAnalysisResult>(
-      `/analysis/tasks/results/${resultId}`,
+      `/social-media/analysis/tasks/results/${resultId}`,
       {
         key: `task-analysis-result-${resultId}`,
       }
@@ -49,7 +49,7 @@ export const useAnalysis = () => {
    */
   const runPostScreening = async (data: RunScreeningRequest) => {
     const result = await apiRequest<RunAnalysisResponse>(
-      '/analysis/tasks/screening/posts',
+      '/social-media/analysis/tasks/screening/posts',
       {
         method: 'POST',
         body: data,
@@ -64,7 +64,7 @@ export const useAnalysis = () => {
    */
   const runCommentScreening = async (data: RunScreeningRequest) => {
     const result = await apiRequest<RunAnalysisResponse>(
-      '/analysis/tasks/screening/comments',
+      '/social-media/analysis/tasks/screening/comments',
       {
         method: 'POST',
         body: data,
@@ -79,7 +79,7 @@ export const useAnalysis = () => {
    */
   const runPostDeepAnalysis = async (data: RunDeepAnalysisRequest) => {
     const result = await apiRequest<RunAnalysisResponse>(
-      '/analysis/tasks/deep/posts',
+      '/social-media/analysis/tasks/deep/posts',
       {
         method: 'POST',
         body: data,
@@ -94,7 +94,7 @@ export const useAnalysis = () => {
    */
   const runCommentDeepAnalysis = async (data: RunDeepAnalysisRequest) => {
     const result = await apiRequest<RunAnalysisResponse>(
-      '/analysis/tasks/deep/comments',
+      '/social-media/analysis/tasks/deep/comments',
       {
         method: 'POST',
         body: data,
@@ -109,7 +109,7 @@ export const useAnalysis = () => {
    */
   const getAnalysisProgress = (resultId: MaybeRef<number>) => {
     return useApiData<AnalysisProgressResponse>(
-      computed(() => `/analysis/tasks/results/${unref(resultId)}/progress`),
+      computed(() => `/social-media/analysis/tasks/results/${unref(resultId)}/progress`),
       {
         key: computed(() => `analysis-progress-${unref(resultId)}`),
       }
@@ -120,7 +120,7 @@ export const useAnalysis = () => {
    * 取消分析任务
    */
   const cancelAnalysis = async (resultId: number) => {
-    await apiRequest(`/analysis/tasks/results/${resultId}/cancel`, {
+    await apiRequest(`/social-media/analysis/tasks/results/${resultId}/cancel`, {
       method: 'POST',
     })
     showSuccess('分析任务已取消')
@@ -131,7 +131,7 @@ export const useAnalysis = () => {
    * 删除分析结果
    */
   const deleteAnalysisResult = async (resultId: number) => {
-    await apiRequest(`/analysis/tasks/results/${resultId}`, {
+    await apiRequest(`/social-media/analysis/tasks/results/${resultId}`, {
       method: 'DELETE',
     })
     showSuccess('分析结果已删除')
@@ -145,7 +145,7 @@ export const useAnalysis = () => {
    */
   const getProjectAnalysisResults = (projectId: MaybeRef<number>) => {
     return useApiData<PaginatedResponse<ProjectAnalysisResult>>(
-      computed(() => `/analysis/projects/${unref(projectId)}/results`),
+      computed(() => `/social-media/analysis/projects/${unref(projectId)}/results`),
       {
         key: computed(() => `project-analysis-results-${unref(projectId)}`),
       }
@@ -157,7 +157,7 @@ export const useAnalysis = () => {
    */
   const getProjectAnalysisResult = (resultId: number) => {
     return useApiData<ProjectAnalysisResult>(
-      `/analysis/projects/results/${resultId}`,
+      `/social-media/analysis/projects/results/${resultId}`,
       {
         key: `project-analysis-result-${resultId}`,
       }
@@ -169,7 +169,7 @@ export const useAnalysis = () => {
    */
   const runTopicClustering = async (data: RunClusteringRequest) => {
     const result = await apiRequest<RunAnalysisResponse>(
-      '/analysis/projects/clustering',
+      '/social-media/analysis/projects/clustering',
       {
         method: 'POST',
         body: data,
@@ -184,7 +184,7 @@ export const useAnalysis = () => {
    */
   const runCompetitiveAnalysis = async (data: RunCompetitiveRequest) => {
     const result = await apiRequest<RunAnalysisResponse>(
-      '/analysis/projects/competitive',
+      '/social-media/analysis/projects/competitive',
       {
         method: 'POST',
         body: data,
@@ -198,7 +198,7 @@ export const useAnalysis = () => {
    * 删除项目分析结果
    */
   const deleteProjectAnalysisResult = async (resultId: number) => {
-    await apiRequest(`/analysis/projects/results/${resultId}`, {
+    await apiRequest(`/social-media/analysis/projects/results/${resultId}`, {
       method: 'DELETE',
     })
     showSuccess('分析结果已删除')

@@ -140,13 +140,14 @@ interface Props {
   }
 }
 
-const props = withDefaults(defineProps<Props>(), {
+const _props = withDefaults(defineProps<Props>(), {
   title: 'Token使用统计',
   loading: false,
   showDetails: true,
+  badge: undefined,
 })
 
-const emit = defineEmits<{
+const _emit = defineEmits<{
   'view-details': []
 }>()
 

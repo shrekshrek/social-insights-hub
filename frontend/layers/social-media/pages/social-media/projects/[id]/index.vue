@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { DataTaskWithRelations } from '~/layers/social-insights/types'
 
 definePageMeta({
   layout: 'default',
@@ -51,7 +50,7 @@ const handleDelete = async () => {
 
   try {
     await deleteProject(project.value.id)
-    await navigateTo('/social-insights/projects')
+    await navigateTo('/social-media/projects')
   } catch (error) {
     console.error('删除项目失败:', error)
   }
@@ -151,7 +150,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           size: 'xs',
           variant: 'ghost',
           icon: 'i-heroicons-eye',
-          onClick: () => navigateTo(`/social-insights/tasks/${row.original.id}?from=project&project_id=${projectId.value}`),
+          onClick: () => navigateTo(`/social-media/tasks/${row.original.id}?from=project&project_id=${projectId.value}`),
         }, () => '查看'),
         row.original.status === 'pending' && row.original.data_source === 'local_upload'
           ? h(UButton, {
@@ -159,7 +158,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               variant: 'ghost',
               icon: 'i-heroicons-arrow-up-tray',
               color: 'info',
-              onClick: () => navigateTo(`/social-insights/tasks/${row.original.id}/upload`),
+              onClick: () => navigateTo(`/social-media/tasks/${row.original.id}/upload`),
             }, () => '上传')
           : null,
       ].filter(Boolean)),
@@ -177,7 +176,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           <UButton
             variant="ghost"
             icon="i-heroicons-arrow-left"
-            @click="navigateTo('/social-insights/projects')"
+            @click="navigateTo('/social-media/projects')"
           />
           <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
@@ -194,7 +193,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         <div v-if="project" class="flex items-center gap-3">
           <UButton
             icon="i-heroicons-plus"
-            @click="navigateTo(`/social-insights/tasks/create?project_id=${projectId}`)"
+            @click="navigateTo(`/social-media/tasks/create?project_id=${projectId}`)"
           >
             新建任务
           </UButton>
@@ -320,7 +319,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           </p>
           <UButton
             class="mt-4"
-            @click="navigateTo(`/social-insights/tasks/create?project_id=${projectId}`)"
+            @click="navigateTo(`/social-media/tasks/create?project_id=${projectId}`)"
           >
             创建第一个任务
           </UButton>

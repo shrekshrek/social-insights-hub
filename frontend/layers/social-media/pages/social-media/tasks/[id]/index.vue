@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { SocialPost, SocialComment } from "~/layers/social-insights/types";
-
 definePageMeta({
   layout: "default",
 });
@@ -14,9 +12,9 @@ const backPath = computed(() => {
   const projectId = route.query.project_id;
 
   if (from === "project" && projectId) {
-    return `/social-insights/projects/${projectId}`;
+    return `/social-media/projects/${projectId}`;
   }
-  return "/social-insights/tasks"; // 默认返回任务列表
+  return "/social-media/tasks"; // 默认返回任务列表
 });
 
 const { getTask, deleteTask, clearTaskData } = useTasks();
@@ -111,7 +109,7 @@ const handleDelete = async () => {
 
   try {
     await deleteTask(task.value.id);
-    await navigateTo("/social-insights/tasks");
+    await navigateTo("/social-media/tasks");
   } catch (error) {
     console.error("删除任务失败:", error);
   }
@@ -402,7 +400,7 @@ const commentsColumns = computed(() => {
           <UButton
             v-if="task.status === 'pending' && task.data_source === 'local_upload'"
             icon="i-heroicons-arrow-up-tray"
-            @click="navigateTo(`/social-insights/tasks/${taskId}/upload`)"
+            @click="navigateTo(`/social-media/tasks/${taskId}/upload`)"
           >
             上传数据
           </UButton>

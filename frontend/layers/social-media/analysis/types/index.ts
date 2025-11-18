@@ -263,6 +263,13 @@ export interface RunCompetitiveRequest {
 
 // ==================== API Responses ====================
 
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export interface RunAnalysisResponse {
   celery_task_id: string
   result_id: number

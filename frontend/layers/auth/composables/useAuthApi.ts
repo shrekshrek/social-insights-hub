@@ -4,10 +4,10 @@
  */
 
 import type { User, UserCreate } from "~/types/user"
-import type { Msg, PasswordResetRequest, PasswordReset, StandardError } from "~/types/auth"
+import type { Msg, PasswordResetRequest, PasswordReset } from "~/types/auth"
 
 export const useAuthApi = () => {
-  const { showSuccess, showError } = useApi()
+  const { showSuccess } = useApi()
   const { fetch: refreshSession, clear: clearSession, session } = useUserSession()
   const userStore = useUserStore()
   

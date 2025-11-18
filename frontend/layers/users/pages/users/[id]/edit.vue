@@ -115,7 +115,7 @@ const { data, pending, error, refresh } = await usersApi.getUser(userId.value);
 
 // 状态管理
 const loading = ref(false);
-const userFormRef = ref<InstanceType<typeof UserForm> | null>(null);
+const userFormRef = ref<{ handleSubmit: () => void } | null>(null);
 
 // 事件处理
 const handleSubmit = async (updateData: UserUpdate) => {

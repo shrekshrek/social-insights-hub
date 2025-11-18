@@ -6,7 +6,7 @@ export const useJSONUpload = () => {
   // 上传JSON数据
   const uploadJSONData = async (taskId: number, data: JSONUploadData) => {
     try {
-      const result = await apiRequest<JSONUploadResponse>(`/tasks/${taskId}/upload`, {
+      const result = await apiRequest<JSONUploadResponse>(`/social-media/tasks/${taskId}/upload`, {
         method: 'POST',
         body: data,
       })

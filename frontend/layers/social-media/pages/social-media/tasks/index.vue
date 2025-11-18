@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { DataTaskWithRelations } from '../../../types'
 import type { TableColumn } from '@nuxt/ui'
 
 definePageMeta({
@@ -130,7 +129,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           variant: 'link',
           size: 'xs',
           class: 'p-0 font-normal',
-          to: `/social-insights/projects/${row.original.project_id}`,
+          to: `/social-media/projects/${row.original.project_id}`,
         }, () => row.original.project_name)
       },
     },
@@ -168,7 +167,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           size: 'xs',
           variant: 'ghost',
           icon: 'i-heroicons-eye',
-          onClick: () => navigateTo(`/social-insights/tasks/${row.original.id}`),
+          onClick: () => navigateTo(`/social-media/tasks/${row.original.id}`),
         }, () => '查看'),
         row.original.status === 'pending' && row.original.data_source === 'local_upload'
           ? h(UButton, {
@@ -176,7 +175,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               variant: 'ghost',
               icon: 'i-heroicons-arrow-up-tray',
               color: 'info',
-              onClick: () => navigateTo(`/social-insights/tasks/${row.original.id}/upload`),
+              onClick: () => navigateTo(`/social-media/tasks/${row.original.id}/upload`),
             }, () => '上传')
           : null,
         h(UButton, {
@@ -208,7 +207,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       <div class="flex items-center gap-3">
         <UButton
           icon="i-heroicons-plus"
-          @click="navigateTo('/social-insights/tasks/create')"
+          @click="navigateTo('/social-media/tasks/create')"
         >
           新建任务
         </UButton>

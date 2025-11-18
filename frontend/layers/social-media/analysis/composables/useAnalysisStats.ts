@@ -18,7 +18,7 @@ export const useAnalysisStats = () => {
    * 获取全局分析统计
    */
   const getGlobalStats = () => {
-    return useApiData<AnalysisStats>('/analysis/stats/global', {
+    return useApiData<AnalysisStats>('/social-media/analysis/stats/global', {
       key: 'analysis-global-stats',
     })
   }
@@ -28,7 +28,7 @@ export const useAnalysisStats = () => {
    */
   const getTaskStats = (taskId: MaybeRef<number>) => {
     return useApiData<TaskAnalysisStats>(
-      computed(() => `/analysis/stats/tasks/${unref(taskId)}`),
+      computed(() => `/social-media/analysis/stats/tasks/${unref(taskId)}`),
       {
         key: computed(() => `analysis-task-stats-${unref(taskId)}`),
       }
@@ -40,7 +40,7 @@ export const useAnalysisStats = () => {
    */
   const getProjectStats = (projectId: MaybeRef<number>) => {
     return useApiData<ProjectAnalysisStats>(
-      computed(() => `/analysis/stats/projects/${unref(projectId)}`),
+      computed(() => `/social-media/analysis/stats/projects/${unref(projectId)}`),
       {
         key: computed(() => `analysis-project-stats-${unref(projectId)}`),
       }
@@ -52,7 +52,7 @@ export const useAnalysisStats = () => {
    */
   const getPostAnalysis = (postId: MaybeRef<number>) => {
     return useApiData<PostAnalysis>(
-      computed(() => `/analysis/posts/${unref(postId)}`),
+      computed(() => `/social-media/analysis/posts/${unref(postId)}`),
       {
         key: computed(() => `post-analysis-${unref(postId)}`),
       }
@@ -64,7 +64,7 @@ export const useAnalysisStats = () => {
    */
   const getCommentAnalysis = (commentId: MaybeRef<number>) => {
     return useApiData<CommentAnalysis>(
-      computed(() => `/analysis/comments/${unref(commentId)}`),
+      computed(() => `/social-media/analysis/comments/${unref(commentId)}`),
       {
         key: computed(() => `comment-analysis-${unref(commentId)}`),
       }
@@ -79,7 +79,7 @@ export const useAnalysisStats = () => {
     format?: 'excel' | 'pdf' | 'json'
   }) => {
     const result = await apiRequest<Blob>(
-      '/analysis/export',
+      '/social-media/analysis/export',
       {
         method: 'POST',
         body: params,

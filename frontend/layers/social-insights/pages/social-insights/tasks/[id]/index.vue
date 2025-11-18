@@ -22,12 +22,12 @@ const backPath = computed(() => {
 const { getTask, deleteTask, clearTaskData } = useTasks();
 const { getTaskPosts, getTaskComments } = usePosts();
 
-// 获取任务详情
+// 获取任务详情（使用顶层 await）
 const {
   data: task,
   pending: _taskLoading,
   refresh: refreshTask,
-} = getTask(taskId.value);
+} = await getTask(taskId.value);
 
 // 原文分页状态
 const postPage = ref(1);
@@ -43,7 +43,7 @@ const {
   data: postsResponse,
   pending: postsLoading,
   refresh: refreshPosts,
-} = getTaskPosts(taskId.value, postParams);
+} = await getTaskPosts(taskId.value, postParams);
 
 // 计算属性：原文列表和总数
 const posts = computed(() => postsResponse.value?.items || []);
@@ -74,7 +74,7 @@ const {
   data: commentsResponse,
   pending: commentsLoading,
   refresh: refreshComments,
-} = getTaskComments(taskId.value, commentParams);
+} = await getTaskComments(taskId.value, commentParams);
 
 // 计算属性：评论列表和总数
 const comments = computed(() => commentsResponse.value?.items || []);
@@ -188,19 +188,22 @@ const getStatusText = (status: string) => {
   return texts[status] || status;
 };
 
-// 原文表格列定义
-const postsColumns = [
-  {
-    accessorKey: "post_id_on_platform",
-    header: () =>
-      h("span", { style: { whiteSpace: "nowrap" } as const }, "平台ID"),
-    cell: ({ row }: { row: { original: SocialPost } }) =>
-      h(
-        "span",
-        { class: "text-xs font-mono" },
-        row.original.post_id_on_platform || "-"
-      ),
-  },
+// 原文表格列定义 - 使用 computed 避免 SSR 水合问题
+const postsColumns = computed(() => {
+  if (!import.meta.client) return []
+
+  return [
+    {
+      accessorKey: "post_id_on_platform",
+      header: () =>
+        h("span", { style: { whiteSpace: "nowrap" } as const }, "平台ID"),
+      cell: ({ row }: { row: { original: SocialPost } }) =>
+        h(
+          "span",
+          { class: "text-xs font-mono" },
+          row.original.post_id_on_platform || "-"
+        ),
+    },
   {
     accessorKey: "author_name",
     header: () =>
@@ -312,10 +315,14 @@ const postsColumns = [
       return h("span", { class: "text-xs text-gray-400 block" }, "无评论");
     },
   },
-];
+  ]
+})
 
-// 评论表格列定义
-const commentsColumns = [
+// 评论表格列定义 - 使用 computed 避免 SSR 水合问题
+const commentsColumns = computed(() => {
+  if (!import.meta.client) return []
+
+  return [
   {
     accessorKey: "post_id",
     header: () =>
@@ -369,7 +376,8 @@ const commentsColumns = [
         formatDateTime(row.original.collected_at)
       ),
   },
-];
+  ]
+})
 </script>
 
 <template>
@@ -388,38 +396,43 @@ const commentsColumns = [
           <p class="text-gray-600 dark:text-gray-400 mt-1">任务详情</p>
         </div>
       </div>
-      <div class="flex gap-3">
-        <UButton
-          v-if="
-            task?.status === 'pending' && task?.data_source === 'local_upload'
-          "
-          icon="i-heroicons-arrow-up-tray"
-          @click="navigateTo(`/social-insights/tasks/${taskId}/upload`)"
-          >上传数据</UButton
-        >
-        <UButton
-          variant="outline"
-          icon="i-heroicons-arrow-path"
-          :loading="refreshing"
-          @click="handleRefresh"
-          >刷新</UButton
-        >
-        <UButton
-          v-if="task && (task.posts_count > 0 || task.comments_count > 0)"
-          variant="outline"
-          icon="i-heroicons-x-circle"
-          color="warning"
-          @click="handleClearData"
-          >清空数据</UButton
-        >
-        <UButton
-          variant="outline"
-          icon="i-heroicons-trash"
-          color="error"
-          @click="handleDelete"
-          >删除</UButton
-        >
-      </div>
+
+      <ClientOnly>
+        <div v-if="task" class="flex gap-3">
+          <UButton
+            v-if="task.status === 'pending' && task.data_source === 'local_upload'"
+            icon="i-heroicons-arrow-up-tray"
+            @click="navigateTo(`/social-insights/tasks/${taskId}/upload`)"
+          >
+            上传数据
+          </UButton>
+          <UButton
+            variant="outline"
+            icon="i-heroicons-arrow-path"
+            :loading="refreshing"
+            @click="handleRefresh"
+          >
+            刷新
+          </UButton>
+          <UButton
+            v-if="task.posts_count > 0 || task.comments_count > 0"
+            variant="outline"
+            icon="i-heroicons-x-circle"
+            color="warning"
+            @click="handleClearData"
+          >
+            清空数据
+          </UButton>
+          <UButton
+            variant="outline"
+            icon="i-heroicons-trash"
+            color="error"
+            @click="handleDelete"
+          >
+            删除
+          </UButton>
+        </div>
+      </ClientOnly>
     </div>
 
     <UCard v-if="task">

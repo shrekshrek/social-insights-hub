@@ -1,7 +1,8 @@
 import type {
-  SocialPost,
   SocialPostWithComments,
   PostQueryResponse,
+  PostListResponse,
+  CommentListResponse,
 } from '../types'
 
 export const usePosts = () => {
@@ -9,7 +10,7 @@ export const usePosts = () => {
 
   // 获取任务的原文列表
   const getTaskPosts = (taskId: number, params?: MaybeRef<Record<string, unknown>>) => {
-    return useApiData<SocialPost[]>(`/tasks/${taskId}/posts`, {
+    return useApiData<PostListResponse>(`/tasks/${taskId}/posts`, {
       query: params,
       key: computed(() => {
         const p = unref(params)
@@ -20,11 +21,11 @@ export const usePosts = () => {
 
   // 获取任务的评论列表
   const getTaskComments = (taskId: number, params?: MaybeRef<Record<string, unknown>>) => {
-    return useApiData<SocialPost[]>(`/tasks/${taskId}/comments`, {
+    return useApiData<CommentListResponse>(`/tasks/${taskId}/comments`, {
       query: params,
       key: computed(() => {
         const p = unref(params)
-        return `task-${taskId}-comments-${p?.page || 1}-${p?.page_size || 50}`
+        return `task-${taskId}-comments-${p?.page || 1}-${p?.page_size || 50}-${p?.post_id || 'all'}`
       }),
     })
   }

@@ -332,21 +332,29 @@ async def get_comments_by_task(
     db: AsyncSession,
     task_id: int,
     skip: int = 0,
-    limit: int = 50
+    limit: int = 50,
+    post_id: int = None
 ) -> tuple[List[SocialComment], int]:
-    """获取任务的评论列表"""
-    # 统计总数
-    count_query = select(func.count()).select_from(SocialComment).where(
+    """获取任务的评论列表，可选按原文ID筛选"""
+    # 构建查询条件
+    conditions = [
         SocialComment.task_id == task_id,
         SocialComment.is_deleted == False
-    )
+    ]
+
+    # 如果指定了post_id，添加筛选条件
+    if post_id is not None:
+        conditions.append(SocialComment.post_id == post_id)
+
+    # 统计总数
+    count_query = select(func.count()).select_from(SocialComment).where(*conditions)
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
     # 查询数据
     query = (
         select(SocialComment)
-        .where(SocialComment.task_id == task_id, SocialComment.is_deleted == False)
+        .where(*conditions)
         .offset(skip)
         .limit(limit)
         .order_by(SocialComment.collected_at.desc())
@@ -398,6 +406,18 @@ async def create_comments_bulk(
         for post_id, comment_data in comments_data
     ]
     db.add_all(comments)
+    await db.flush()
+
+    # 更新每个原文的评论计数
+    from collections import Counter
+    post_comment_counts = Counter(post_id for post_id, _ in comments_data)
+
+    for post_id, count in post_comment_counts.items():
+        # 获取原文并更新评论计数
+        post = await db.get(SocialPost, post_id)
+        if post:
+            post.comments_count = (post.comments_count or 0) + count
+
     await db.flush()
     return comments
 

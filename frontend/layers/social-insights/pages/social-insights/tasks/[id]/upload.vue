@@ -15,8 +15,8 @@ const { data: task } = getTask(taskId.value)
 
 const contentsFile = ref<File | null>(null)
 const commentsFile = ref<File | null>(null)
-const contentsData = ref<any>(null)
-const commentsData = ref<any>(null)
+const contentsData = ref<Record<string, unknown>[] | null>(null)
+const commentsData = ref<Record<string, unknown>[] | null>(null)
 const validationResult = ref<{ valid: boolean; data?: JSONUploadData; error?: string }>()
 const uploading = ref(false)
 const isDraggingContents = ref(false)
@@ -97,7 +97,7 @@ const handleCommentsFileSelect = async (file: File) => {
 }
 
 // 字段映射：将爬虫字段映射到后端期望的字段
-const mapContentFields = (content: any) => {
+const mapContentFields = (content: Record<string, unknown>) => {
   // 如果已经有 post_id_on_platform 字段，直接返回
   if (content.post_id_on_platform) {
     return content
@@ -115,8 +115,8 @@ const mapContentFields = (content: any) => {
   return content
 }
 
-const mapCommentFields = (comment: any) => {
-  const mapped: any = { ...comment }
+const mapCommentFields = (comment: Record<string, unknown>) => {
+  const mapped: Record<string, unknown> = { ...comment }
 
   // 映射 comment_id
   if (!mapped.comment_id_on_platform) {
@@ -127,17 +127,18 @@ const mapCommentFields = (comment: any) => {
 
   // 确保 raw_data 存在并包含 post_id_on_platform
   if (!mapped.raw_data) {
-    mapped.raw_data = {}
+    mapped.raw_data = {} as Record<string, unknown>
   }
 
-  if (!mapped.raw_data.post_id_on_platform) {
+  const rawData = mapped.raw_data as Record<string, unknown>
+  if (!rawData.post_id_on_platform) {
     // 尝试从多个可能的字段中获取帖子ID
     if (comment.aweme_id) {
-      mapped.raw_data.post_id_on_platform = comment.aweme_id
+      rawData.post_id_on_platform = comment.aweme_id
     } else if (comment.post_id) {
-      mapped.raw_data.post_id_on_platform = comment.post_id
+      rawData.post_id_on_platform = comment.post_id
     } else if (comment.post_id_on_platform) {
-      mapped.raw_data.post_id_on_platform = comment.post_id_on_platform
+      rawData.post_id_on_platform = comment.post_id_on_platform
     }
   }
 

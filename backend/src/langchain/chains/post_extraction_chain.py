@@ -7,8 +7,6 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
-from src.social_media.analysis.schemas import PostExtractionResult
-from src.langchain.utils import invoke_llm_with_stats
 from src.langchain.llm import get_llm
 
 

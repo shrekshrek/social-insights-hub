@@ -1,6 +1,7 @@
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
 
 from .config import settings
 
@@ -36,10 +37,50 @@ AsyncSessionLocal = async_sessionmaker(
 Base = declarative_base(metadata=metadata)
 
 
-# Dependency to get a DB session (async)
+# ==================== Sync Engine for Celery Tasks ====================
+# Create sync engine for Celery tasks (works with gevent pool)
+sync_engine = create_engine(
+    settings.DATABASE_URL,  # Use psycopg2 driver (default)
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_pre_ping=True,
+)
+
+# Create sync sessionmaker for Celery tasks
+SyncSessionLocal = sessionmaker(
+    sync_engine, class_=Session, expire_on_commit=False
+)
+
+
+# ==================== Dependencies ====================
+
+# Dependency to get a DB session (async) - for FastAPI
 async def get_async_db():
     """
     FastAPI dependency that provides an async SQLAlchemy database session.
     """
     async with AsyncSessionLocal() as session:
         yield session
+
+
+# Context manager for sync DB session - for Celery tasks
+def get_sync_db():
+    """
+    Context manager that provides a sync SQLAlchemy database session.
+    Use this in Celery tasks with gevent pool.
+
+    Example:
+        with get_sync_db() as db:
+            result = db.query(Model).filter(...).first()
+    """
+    session = SyncSessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()

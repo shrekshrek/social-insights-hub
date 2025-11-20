@@ -214,12 +214,8 @@ export interface JSONUploadResponse {
 
 // ==================== API Responses ====================
 
-export interface PaginatedResponse<T> {
-  items: T[]
-  total: number
-  page: number
-  page_size: number
-}
+// Re-export PaginatedResponse from analysis module to avoid duplication
+export type { PaginatedResponse } from '../../analysis/types'
 
 export interface PostQueryResponse {
   posts: SocialPost[]

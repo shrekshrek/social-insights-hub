@@ -10,11 +10,24 @@
 - 竞品分析任务
 """
 
+# ==================== Gevent Integration ====================
+# Apply gevent monkey patching for optimal I/O cooperation
+# MUST be done BEFORE any other imports (including stdlib modules)
+#
+# Psycopg3 原生支持 gevent：
+# - 当检测到 gevent.monkey.patch_select() 时自动启用协作模式
+# - 不需要额外的 psycogreen 库（那是 psycopg2 时代的解决方案）
+# - 参考：https://www.psycopg.org/psycopg3/docs/advanced/async.html
+
+import gevent.monkey
+gevent.monkey.patch_all()  # Patch所有阻塞IO函数（socket, select, time等）
+
 import logging
 from celery import Celery
 from src.config import settings
 
 logger = logging.getLogger(__name__)
+logger.info("✅ Gevent monkey patching applied - psycopg3 will work cooperatively")
 
 celery_app = Celery(
     "social_insights_hub",

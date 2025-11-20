@@ -325,7 +325,7 @@ const TokenUsageCard = resolveComponent('TokenUsageCard')
               </div>
               <div v-if="item.token_usage">
                 <div class="text-gray-500 text-xs mb-1">成本</div>
-                <div class="font-semibold text-green-600">¥{{ item.token_usage.summary.cost_cny.toFixed(4) }}</div>
+                <div class="font-semibold text-green-600">¥{{ item.token_usage.summary.total_cost_cny.toFixed(4) }}</div>
               </div>
             </div>
 

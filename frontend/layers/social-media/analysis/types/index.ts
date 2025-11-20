@@ -36,8 +36,60 @@ export interface TokenUsageStats {
   call_details: CallDetail[]
 }
 
+// ==================== Deep Analysis Results ====================
+
+/**
+ * 实体信息
+ */
+export interface EntityInfo {
+  name: string
+  type: '品牌' | '商品' | '服务' | '其他'
+  sentiment: 1 | 0 | -1
+  features: string[]
+  issues: string[]
+  expectations: string[]
+  audience: string[]
+  scenarios: string[]
+  market_factors: string[]
+  competitors: string[]
+}
+
+/**
+ * 通用观点
+ */
+export interface GeneralOpinion {
+  category: string
+  opinions: string[]
+  sentiment: 1 | 0 | -1
+}
+
+/**
+ * 帖子深度分析结果
+ */
+export interface PostDeepResult {
+  entities: EntityInfo[]
+  general_opinions: GeneralOpinion[]
+  summary: string
+}
+
+/**
+ * 评论深度分析结果（按帖子聚合）
+ */
+export interface CommentDeepResult {
+  entities: EntityInfo[]
+  general_opinions: GeneralOpinion[]
+}
+
 // ==================== Post Analysis ====================
 
+/**
+ * 帖子AI分析结果（唯一的分析表）
+ *
+ * 包含三个层次的分析：
+ * 1. 初筛分析：spam_score, value_score, relevance_score, sentiment
+ * 2. 帖子深度分析：post_deep_result (实体、观点、摘要)
+ * 3. 评论深度分析：comment_deep_result (评论的实体和观点聚合)
+ */
 export interface PostAnalysis {
   id: number
   task_id: number
@@ -46,7 +98,8 @@ export interface PostAnalysis {
   value_score: number | null
   relevance_score: number | null
   sentiment: -1 | 0 | 1 | null
-  depth_analysis_result: Record<string, unknown> | null
+  post_deep_result: PostDeepResult | null
+  comment_deep_result: CommentDeepResult | null
   analyzed_at: string | null
   analysis_model: string | null
   created_at: string
@@ -60,41 +113,20 @@ export interface PostAnalysisCreate {
   value_score?: number
   relevance_score?: number
   sentiment?: -1 | 0 | 1
-  depth_analysis_result?: Record<string, unknown>
-}
-
-// ==================== Comment Analysis ====================
-
-export interface CommentAnalysis {
-  id: number
-  task_id: number
-  comment_id: number
-  spam_score: number | null
-  value_score: number | null
-  relevance_score: number | null
-  sentiment: -1 | 0 | 1 | null
-  depth_analysis_result: Record<string, unknown> | null
-  analyzed_at: string | null
-  analysis_model: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface CommentAnalysisCreate {
-  task_id: number
-  comment_id: number
-  spam_score?: number
-  value_score?: number
-  relevance_score?: number
-  sentiment?: -1 | 0 | 1
-  depth_analysis_result?: Record<string, unknown>
+  post_deep_result?: PostDeepResult
+  comment_deep_result?: CommentDeepResult
 }
 
 // ==================== Task Analysis Result ====================
 
+/**
+ * 分析类型
+ * - screening_posts: 帖子初筛
+ * - deep_posts: 帖子深度分析
+ * - deep_comments: 评论深度分析（聚合到帖子）
+ */
 export type AnalysisType =
   | 'screening_posts'
-  | 'screening_comments'
   | 'deep_posts'
   | 'deep_comments'
 
@@ -236,14 +268,12 @@ export interface ProjectAnalysisStats {
 export interface RunScreeningRequest {
   task_id: number
   post_ids?: number[]
-  comment_ids?: number[]
   analyze_all?: boolean
 }
 
 export interface RunDeepAnalysisRequest {
   task_id: number
   post_ids?: number[]
-  comment_ids?: number[]
   analysis_focus?: string[]
 }
 

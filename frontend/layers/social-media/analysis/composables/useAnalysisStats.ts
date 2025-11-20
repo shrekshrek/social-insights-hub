@@ -3,7 +3,6 @@ import type {
   TaskAnalysisStats,
   ProjectAnalysisStats,
   PostAnalysis,
-  CommentAnalysis,
 } from '../types'
 
 /**
@@ -60,18 +59,6 @@ export const useAnalysisStats = () => {
   }
 
   /**
-   * 获取评论的分析结果
-   */
-  const getCommentAnalysis = (commentId: MaybeRef<number>) => {
-    return useApiData<CommentAnalysis>(
-      computed(() => `/social-media/analysis/comments/${unref(commentId)}`),
-      {
-        key: computed(() => `comment-analysis-${unref(commentId)}`),
-      }
-    )
-  }
-
-  /**
    * 导出分析结果
    */
   const exportAnalysisResults = async (params: {
@@ -94,7 +81,6 @@ export const useAnalysisStats = () => {
     getTaskStats,
     getProjectStats,
     getPostAnalysis,
-    getCommentAnalysis,
     exportAnalysisResults,
   }
 }

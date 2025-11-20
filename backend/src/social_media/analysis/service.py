@@ -8,7 +8,6 @@ from fastapi import HTTPException, status
 
 from .models import (
     PostAnalysis,
-    CommentAnalysis,
     TaskAnalysisResult,
     ProjectAnalysisResult
 )
@@ -20,8 +19,6 @@ from .schemas import (
     RunAnalysisResponse,
     AnalysisProgressResponse,
     AnalysisStatsResponse,
-    TaskAnalysisStatsResponse,
-    ProjectAnalysisStatsResponse,
 )
 
 
@@ -105,17 +102,17 @@ async def run_post_screening(
     )
 
 
-async def run_comment_screening(
+async def run_comment_deep_analysis(
     db: AsyncSession,
-    request: RunScreeningRequest,
+    request: RunDeepAnalysisRequest,
     current_user_id: int
 ) -> RunAnalysisResponse:
-    """运行评论AI初筛分析"""
+    """运行评论深度分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.projects import crud as project_crud
-    from .tasks.screening_tasks import run_comment_screening as celery_task
+    from .tasks.deep_analysis_tasks import run_comment_deep_analysis as celery_task
 
-    # 验证任务和权限（与帖子初筛类似）
+    # 验证任务和权限
     task = await task_crud.get_task_by_id(db, request.task_id, load_relations=False)
     if not task:
         raise HTTPException(
@@ -130,45 +127,46 @@ async def run_comment_screening(
             detail="You don't have access to this task"
         )
 
-    # 获取要分析的评论ID列表
-    comment_ids = request.comment_ids or []
+    # 获取要分析的帖子ID列表（因为评论分析是基于帖子的）
+    post_ids = request.post_ids or []
 
-    if request.analyze_all or not comment_ids:
-        from src.social_media.tasks.models import SocialComment
-        stmt = select(SocialComment.id).where(SocialComment.task_id == request.task_id)
+    if not post_ids:
+        # 如果没传post_ids，默认获取任务下所有有评论的帖子ID
+        from src.social_media.tasks.models import SocialPost
+        stmt = select(SocialPost.id).where(
+            SocialPost.task_id == request.task_id,
+            SocialPost.comments_count > 0
+        )
         result = await db.execute(stmt)
-        comment_ids = [row[0] for row in result.fetchall()]
+        post_ids = [row[0] for row in result.fetchall()]
 
-    if not comment_ids:
+    if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No comments to analyze"
+            detail="No posts with comments to analyze"
         )
 
     # 创建分析结果记录
     analysis_result = TaskAnalysisResult(
         task_id=request.task_id,
-        analysis_type="screening_comments",
+        analysis_type="deep_comments",
         celery_task_id="",
         status="pending",
-        source_count=len(comment_ids),
+        source_count=len(post_ids), # 这里的source_count是指要分析多少个帖子下的评论
     )
     db.add(analysis_result)
     await db.commit()
     await db.refresh(analysis_result)
 
-    # 获取项目关键词
-    project = await project_crud.get_project_by_id(db, task.project_id, load_relations=False)
-    project_keywords = task.keywords or ""
-
     # 启动Celery任务
     celery_result = celery_task.delay(
         result_id=analysis_result.id,
         task_id=request.task_id,
-        comment_ids=comment_ids,
-        project_keywords=project_keywords,
+        post_ids=post_ids,
+        analysis_focus=request.analysis_focus
     )
 
+    # 更新celery_task_id
     analysis_result.celery_task_id = celery_result.id
     await db.commit()
 
@@ -176,7 +174,80 @@ async def run_comment_screening(
         celery_task_id=celery_result.id,
         result_id=analysis_result.id,
         status="pending",
-        message=f"评论初筛任务已启动，共{len(comment_ids)}条数据"
+        message=f"评论深度分析任务已启动，将分析{len(post_ids)}个帖子的评论"
+    )
+
+
+async def run_post_deep_analysis(
+    db: AsyncSession,
+    request: RunDeepAnalysisRequest,
+    current_user_id: int
+) -> RunAnalysisResponse:
+    """运行帖子深度分析"""
+    from src.social_media.tasks import crud as task_crud
+    from src.social_media.projects import crud as project_crud
+    from .tasks.deep_analysis_tasks import run_post_deep_analysis as celery_task
+
+    # 验证任务和权限
+    task = await task_crud.get_task_by_id(db, request.task_id, load_relations=False)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task {request.task_id} not found"
+        )
+
+    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this task"
+        )
+
+    # 获取要分析的帖子ID列表
+    post_ids = request.post_ids or []
+
+    if not post_ids:
+        # 获取任务下所有帖子ID
+        from src.social_media.tasks.models import SocialPost
+        stmt = select(SocialPost.id).where(SocialPost.task_id == request.task_id)
+        result = await db.execute(stmt)
+        post_ids = [row[0] for row in result.fetchall()]
+
+    if not post_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No posts to analyze"
+        )
+
+    # 创建分析结果记录
+    analysis_result = TaskAnalysisResult(
+        task_id=request.task_id,
+        analysis_type="deep_posts",
+        celery_task_id="",
+        status="pending",
+        source_count=len(post_ids),
+    )
+    db.add(analysis_result)
+    await db.commit()
+    await db.refresh(analysis_result)
+
+    # 启动Celery任务
+    celery_result = celery_task.delay(
+        result_id=analysis_result.id,
+        task_id=request.task_id,
+        post_ids=post_ids,
+        analysis_focus=request.analysis_focus
+    )
+
+    # 更新celery_task_id
+    analysis_result.celery_task_id = celery_result.id
+    await db.commit()
+
+    return RunAnalysisResponse(
+        celery_task_id=celery_result.id,
+        result_id=analysis_result.id,
+        status="pending",
+        message=f"帖子深度分析任务已启动，共{len(post_ids)}条数据"
     )
 
 
@@ -411,18 +482,14 @@ async def get_post_analysis(
     post_id: int,
     current_user_id: int
 ) -> Optional[PostAnalysis]:
-    """获取帖子的分析结果"""
+    """获取帖子的分析结果
+
+    Returns:
+        PostAnalysis对象，包含：
+        - 初筛分析结果（spam_score, value_score, relevance_score, sentiment）
+        - 帖子深度分析结果（post_deep_result: 实体、观点、摘要）
+        - 评论深度分析聚合结果（comment_deep_result: 实体和观点）
+    """
     stmt = select(PostAnalysis).where(PostAnalysis.post_id == post_id)
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
-
-
-async def get_comment_analysis(
-    db: AsyncSession,
-    comment_id: int,
-    current_user_id: int
-) -> Optional[CommentAnalysis]:
-    """获取评论的分析结果"""
-    stmt = select(CommentAnalysis).where(CommentAnalysis.comment_id == comment_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()

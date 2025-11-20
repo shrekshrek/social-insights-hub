@@ -21,11 +21,11 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
-        "src.analysis.tasks.screening_tasks",
+        "src.social_media.analysis.tasks.screening_tasks",
+        "src.social_media.analysis.tasks.deep_analysis_tasks",
         # Future task modules:
-        # "src.analysis.tasks.deep_analysis_tasks",
-        # "src.analysis.tasks.clustering_tasks",
-        # "src.analysis.tasks.competitive_tasks",
+        # "src.social_media.analysis.tasks.clustering_tasks",
+        # "src.social_media.analysis.tasks.competitive_tasks",
     ],
 )
 
@@ -81,14 +81,13 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,  # Worker丢失时拒绝任务
 
     # ========== 性能优化 ==========
-    worker_pool="eventlet",  # 使用eventlet作为并发池（适合IO密集型AI任务）
-    worker_concurrency=100,  # 并发数（与AI任务配置对应）
+    # worker_pool 通过命令行参数指定
+    # worker_concurrency 通过命令行参数指定
 )
 
 logger.info("✅ Celery应用配置完成")
 logger.info(f"   Broker: {settings.CELERY_BROKER_URL}")
 logger.info(f"   Backend: {settings.CELERY_RESULT_BACKEND}")
-logger.info(f"   Worker Pool: eventlet (concurrency=100)")
 logger.info(f"   Task Timeout: 7200s (2 hours)")
 
 # Task modules will be imported here when they are created

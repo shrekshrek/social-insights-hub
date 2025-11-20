@@ -1,13 +1,16 @@
-"""分析模块Pydantic模型"""
+"""分析模块 Pydantic 模型
+
+简化设计，移除 CommentAnalysis 相关的 Schema。
+"""
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-from pydantic import Field, field_validator
+from typing import Literal
+from pydantic import Field
 
 from src.schemas import CustomBaseModel
 
 
-# ==================== Token Usage Schemas ====================
+# ==================== Token 使用统计 ====================
 
 class CallDetail(CustomBaseModel):
     """单次LLM调用详情"""
@@ -17,97 +20,139 @@ class CallDetail(CustomBaseModel):
     total_tokens: int
     cost_cny: float
     duration_seconds: float
-    timestamp: Optional[str] = None
+    timestamp: datetime | None = None
 
 
 class TokenUsageSummary(CustomBaseModel):
-    """Token使用摘要"""
-    total_calls: int
-    total_input_tokens: int
-    total_output_tokens: int
-    total_tokens: int
-    total_cost_cny: float
-    total_duration_seconds: float
-    avg_tokens_per_call: float
-    avg_cost_per_call: float
+    """Token使用汇总"""
+    total_calls: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    total_cost_cny: float = 0.0
+    total_duration_seconds: float = 0.0
+    avg_tokens_per_call: float = 0.0
+    avg_cost_per_call: float = 0.0
 
 
 class TokenUsageStats(CustomBaseModel):
     """Token使用统计"""
     summary: TokenUsageSummary
-    call_details: List[CallDetail] = []
+    call_details: list[CallDetail] = []
 
 
-# ==================== Post Analysis Schemas ====================
+# ==================== 提取结果 Schema ====================
+
+class EntityInfo(CustomBaseModel):
+    """实体信息"""
+    name: str = Field(..., description="实体名称")
+    type: Literal["品牌", "商品", "服务", "其他"] = Field(..., description="实体类型")
+    sentiment: Literal[1, 0, -1] = Field(..., description="情感倾向")
+    features: list[str] = Field(default_factory=list, description="特性/功能/亮点")
+    issues: list[str] = Field(default_factory=list, description="问题/缺点")
+    expectations: list[str] = Field(default_factory=list, description="改进期望/建议")
+    audience: list[str] = Field(default_factory=list, description="目标人群")
+    scenarios: list[str] = Field(default_factory=list, description="使用场景")
+    market_factors: list[str] = Field(default_factory=list, description="价格/促销信息")
+    competitors: list[str] = Field(default_factory=list, description="竞品对比")
+
+
+class GeneralOpinion(CustomBaseModel):
+    """通用观点"""
+    category: str = Field(..., description="观点类别")
+    opinions: list[str] = Field(default_factory=list, description="具体观点")
+    sentiment: Literal[1, 0, -1] = Field(..., description="情感倾向")
+
+
+class PostDeepResult(CustomBaseModel):
+    """帖子深度分析结果"""
+    entities: list[EntityInfo] = Field(default_factory=list, description="识别的实体")
+    general_opinions: list[GeneralOpinion] = Field(default_factory=list, description="通用观点")
+    summary: str = Field(..., description="内容摘要（100-200字）")
+
+
+class CommentDeepResult(CustomBaseModel):
+    """评论深度分析结果（按帖子聚合）"""
+    entities: list[EntityInfo] = Field(default_factory=list, description="识别的实体")
+    general_opinions: list[GeneralOpinion] = Field(default_factory=list, description="通用观点")
+    # 注意：评论分析没有 summary
+
+
+# ==================== PostAnalysis Schema ====================
 
 class PostAnalysisCreate(CustomBaseModel):
     """创建帖子分析"""
     task_id: int = Field(..., gt=0, description="任务ID")
     post_id: int = Field(..., gt=0, description="帖子ID")
-    spam_score: Optional[float] = Field(None, ge=0, le=10, description="垃圾分(0-10)")
-    value_score: Optional[float] = Field(None, ge=0, le=10, description="价值分(0-10)")
-    relevance_score: Optional[float] = Field(None, ge=0, le=10, description="相关度分(0-10)")
-    sentiment: Optional[int] = Field(None, ge=-1, le=1, description="情感倾向(-1/0/1)")
-    depth_analysis_result: Optional[Dict[str, Any]] = Field(None, description="深度分析结果")
+    spam_score: float | None = Field(None, ge=0, le=10)
+    value_score: float | None = Field(None, ge=0, le=10)
+    relevance_score: float | None = Field(None, ge=0, le=10)
+    sentiment: int | None = Field(None, ge=-1, le=1)
+    post_deep_result: dict | None = None
+    comment_deep_result: dict | None = None
+
+
+class PostAnalysisUpdate(CustomBaseModel):
+    """更新帖子分析"""
+    spam_score: float | None = Field(None, ge=0, le=10)
+    value_score: float | None = Field(None, ge=0, le=10)
+    relevance_score: float | None = Field(None, ge=0, le=10)
+    sentiment: int | None = Field(None, ge=-1, le=1)
+    post_deep_result: dict | None = None
+    comment_deep_result: dict | None = None
+    analyzed_at: datetime | None = None
+    analysis_model: str | None = None
 
 
 class PostAnalysisResponse(CustomBaseModel):
-    """帖子分析响应"""
+    """帖子分析完整响应"""
     id: int
     task_id: int
     post_id: int
-    spam_score: Optional[float]
-    value_score: Optional[float]
-    relevance_score: Optional[float]
-    sentiment: Optional[int]
-    depth_analysis_result: Optional[Dict[str, Any]]
-    analyzed_at: Optional[datetime]
-    analysis_model: Optional[str]
+
+    # 初筛分析
+    spam_score: float | None = None
+    value_score: float | None = None
+    relevance_score: float | None = None
+    sentiment: int | None = None
+
+    # 深度分析
+    post_deep_result: PostDeepResult | None = None
+    comment_deep_result: CommentDeepResult | None = None
+
+    # 元数据
+    analyzed_at: datetime | None = None
+    analysis_model: str | None = None
     created_at: datetime
     updated_at: datetime
 
 
-# ==================== Comment Analysis Schemas ====================
-
-class CommentAnalysisCreate(CustomBaseModel):
-    """创建评论分析"""
-    task_id: int = Field(..., gt=0, description="任务ID")
-    comment_id: int = Field(..., gt=0, description="评论ID")
-    spam_score: Optional[float] = Field(None, ge=0, le=10)
-    value_score: Optional[float] = Field(None, ge=0, le=10)
-    relevance_score: Optional[float] = Field(None, ge=0, le=10)
-    sentiment: Optional[int] = Field(None, ge=-1, le=1)
-    depth_analysis_result: Optional[Dict[str, Any]] = None
-
-
-class CommentAnalysisResponse(CustomBaseModel):
-    """评论分析响应"""
-    id: int
-    task_id: int
-    comment_id: int
-    spam_score: Optional[float]
-    value_score: Optional[float]
-    relevance_score: Optional[float]
-    sentiment: Optional[int]
-    depth_analysis_result: Optional[Dict[str, Any]]
-    analyzed_at: Optional[datetime]
-    analysis_model: Optional[str]
-    created_at: datetime
-    updated_at: datetime
-
-
-# ==================== Task Analysis Result Schemas ====================
+# ==================== TaskAnalysisResult Schema ====================
 
 class TaskAnalysisResultCreate(CustomBaseModel):
     """创建任务分析结果"""
     task_id: int = Field(..., gt=0, description="任务ID")
     analysis_type: str = Field(
         ...,
-        pattern="^(screening_posts|screening_comments|deep_posts|deep_comments)$",
+        pattern="^(screening_posts|deep_posts|deep_comments)$",
         description="分析类型"
     )
     celery_task_id: str = Field(..., description="Celery任务ID")
     source_count: int = Field(0, ge=0, description="源数据数量")
+
+
+class TaskAnalysisResultUpdate(CustomBaseModel):
+    """更新任务分析结果"""
+    status: str | None = None
+    result_data: dict | None = None
+    analysis_summary: str | None = None
+    analyzed_count: int | None = None
+    failed_count: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    processing_time: int | None = None
+    token_usage: TokenUsageStats | None = None
+    error_message: str | None = None
 
 
 class TaskAnalysisResultResponse(CustomBaseModel):
@@ -115,31 +160,35 @@ class TaskAnalysisResultResponse(CustomBaseModel):
     id: int
     task_id: int
     analysis_type: str
-    result_data: Optional[Dict[str, Any]]
-    analysis_summary: Optional[str]
+    celery_task_id: str
+    status: str
+
     source_count: int
     analyzed_count: int
     failed_count: int
-    celery_task_id: str
-    status: str
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
-    processing_time: Optional[int]
-    token_usage: Optional[TokenUsageStats]
-    error_message: Optional[str]
+
+    result_data: dict | None = None
+    analysis_summary: str | None = None
+
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    processing_time: int | None = None
+    token_usage: TokenUsageStats | None = None
+    error_message: str | None = None
+
     created_at: datetime
     updated_at: datetime
 
 
 class TaskAnalysisResultListResponse(CustomBaseModel):
     """任务分析结果列表响应"""
-    items: List[TaskAnalysisResultResponse]
+    items: list[TaskAnalysisResultResponse]
     total: int
     page: int
     page_size: int
 
 
-# ==================== Project Analysis Result Schemas ====================
+# ==================== ProjectAnalysisResult Schema （预留）====================
 
 class ProjectAnalysisResultCreate(CustomBaseModel):
     """创建项目分析结果"""
@@ -149,8 +198,8 @@ class ProjectAnalysisResultCreate(CustomBaseModel):
         pattern="^(topic_clustering|competitive_analysis)$",
         description="分析类型"
     )
-    analysis_config: Optional[Dict[str, Any]] = Field(None, description="分析配置")
-    source_task_ids: Optional[List[int]] = Field(None, description="源任务ID列表")
+    analysis_config: dict | None = Field(None, description="分析配置")
+    source_task_ids: list[int] | None = Field(None, description="源任务ID列表")
 
 
 class ProjectAnalysisResultResponse(CustomBaseModel):
@@ -159,121 +208,97 @@ class ProjectAnalysisResultResponse(CustomBaseModel):
     project_id: int
     user_id: int
     analysis_type: str
-    analysis_config: Optional[Dict[str, Any]]
-    source_task_ids: Optional[List[int]]
+    analysis_config: dict | None
+    source_task_ids: list[int] | None
     source_data_count: int
-    result_data: Optional[Dict[str, Any]]
-    analysis_summary: Optional[str]
+    result_data: dict | None
+    analysis_summary: str | None
     celery_task_id: str
     status: str
-    processing_time: Optional[int]
-    token_usage: Optional[TokenUsageStats]
-    error_message: Optional[str]
+    processing_time: int | None
+    token_usage: TokenUsageStats | None
+    error_message: str | None
     created_at: datetime
-    completed_at: Optional[datetime]
+    completed_at: datetime | None
     updated_at: datetime
 
 
 class ProjectAnalysisResultListResponse(CustomBaseModel):
     """项目分析结果列表响应"""
-    items: List[ProjectAnalysisResultResponse]
+    items: list[ProjectAnalysisResultResponse]
     total: int
     page: int
     page_size: int
 
 
-# ==================== Analysis Request Schemas ====================
+# ==================== API 请求 Schema ====================
 
 class RunScreeningRequest(CustomBaseModel):
-    """运行初筛分析请求"""
+    """运行帖子初筛请求"""
     task_id: int = Field(..., gt=0, description="任务ID")
-    post_ids: Optional[List[int]] = Field(None, description="指定帖子ID列表")
-    comment_ids: Optional[List[int]] = Field(None, description="指定评论ID列表")
-    analyze_all: bool = Field(False, description="分析所有数据")
-
-    @field_validator('analyze_all')
-    @classmethod
-    def validate_analyze_all(cls, v, info):
-        """验证至少指定一种分析对象"""
-        post_ids = info.data.get('post_ids')
-        comment_ids = info.data.get('comment_ids')
-        if not v and not post_ids and not comment_ids:
-            raise ValueError("必须指定post_ids、comment_ids或设置analyze_all=True")
-        return v
+    post_ids: list[int] | None = Field(None, description="指定的帖子ID列表，为空则分析所有")
+    analyze_all: bool = Field(False, description="是否分析所有帖子")
 
 
 class RunDeepAnalysisRequest(CustomBaseModel):
     """运行深度分析请求"""
     task_id: int = Field(..., gt=0, description="任务ID")
-    post_ids: Optional[List[int]] = Field(None, description="指定帖子ID列表")
-    comment_ids: Optional[List[int]] = Field(None, description="指定评论ID列表")
-    analysis_focus: Optional[List[str]] = Field(
-        None,
-        description="分析重点（如：用户画像、需求挖掘、竞品分析等）"
-    )
+    post_ids: list[int] | None = Field(None, description="指定的帖子ID列表，为空则分析所有")
+    analysis_focus: list[str] | None = Field(None, description="分析重点（预留扩展）")
 
 
 class RunClusteringRequest(CustomBaseModel):
-    """运行聚类分析请求"""
+    """运行主题聚类分析请求（项目级分析，预留）"""
     project_id: int = Field(..., gt=0, description="项目ID")
-    task_ids: Optional[List[int]] = Field(None, description="指定任务ID列表")
-    num_clusters: int = Field(5, ge=2, le=20, description="聚类数量")
-    clustering_method: str = Field(
-        "kmeans",
-        pattern="^(kmeans|hierarchical|dbscan)$",
-        description="聚类方法"
-    )
+    task_ids: list[int] | None = Field(None, description="源任务ID列表")
+    config: dict | None = Field(None, description="聚类配置")
 
 
 class RunCompetitiveRequest(CustomBaseModel):
-    """运行竞品分析请求"""
+    """运行竞品分析请求（项目级分析，预留）"""
     project_id: int = Field(..., gt=0, description="项目ID")
-    task_ids: Optional[List[int]] = Field(None, description="指定任务ID列表")
-    competitor_keywords: List[str] = Field(..., min_length=1, description="竞品关键词")
-    comparison_metrics: Optional[List[str]] = Field(
-        None,
-        description="对比维度（如：功能、价格、用户评价等）"
-    )
+    task_ids: list[int] | None = Field(None, description="源任务ID列表")
+    competitors: list[str] | None = Field(None, description="竞品列表")
 
-
-# ==================== Analysis Response Schemas ====================
 
 class RunAnalysisResponse(CustomBaseModel):
-    """运行分析响应"""
-    celery_task_id: str = Field(..., description="Celery任务ID")
-    result_id: int = Field(..., description="分析结果记录ID")
-    status: str = Field(..., description="任务状态")
-    message: str = Field(..., description="提示信息")
+    """启动分析任务响应"""
+    celery_task_id: str
+    result_id: int
+    status: str
+    message: str
 
+
+# ==================== 分析进度查询 Schema ====================
 
 class AnalysisProgressResponse(CustomBaseModel):
     """分析进度响应"""
     result_id: int
     status: str
-    progress: float = Field(..., ge=0, le=100, description="进度百分比")
+    progress: float  # 0-100
     analyzed_count: int
     total_count: int
-    estimated_time_remaining: Optional[int] = Field(None, description="预计剩余时间（秒）")
-    current_cost: float
-    current_tokens: int
+    estimated_time_remaining: int | None = None  # 秒
+    current_cost: float  # 当前成本（元）
+    current_tokens: int  # 当前token消耗
 
 
-# ==================== Statistics Schemas ====================
+# ==================== 分析统计 Schema ====================
 
 class AnalysisStatsResponse(CustomBaseModel):
     """分析统计响应"""
-    total_tasks: int = Field(..., description="总任务数")
-    completed_tasks: int = Field(..., description="已完成任务数")
-    failed_tasks: int = Field(..., description="失败任务数")
-    pending_tasks: int = Field(..., description="待处理任务数")
-    processing_tasks: int = Field(..., description="处理中任务数")
-    total_cost_cny: float = Field(..., description="总成本（人民币）")
-    total_tokens: int = Field(..., description="总Token数")
-    avg_processing_time: float = Field(..., description="平均处理时间（秒）")
+    total_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+    pending_tasks: int
+    processing_tasks: int
+    total_cost_cny: float
+    total_tokens: int
+    avg_processing_time: float
 
 
-class TaskAnalysisStatsResponse(CustomBaseModel):
-    """任务级分析统计"""
+class TaskAnalysisStats(CustomBaseModel):
+    """任务分析统计"""
     task_id: int
     task_name: str
     total_analyses: int
@@ -281,11 +306,11 @@ class TaskAnalysisStatsResponse(CustomBaseModel):
     deep_analysis_count: int
     total_cost: float
     total_tokens: int
-    last_analysis_at: Optional[datetime]
+    last_analysis_at: datetime | None
 
 
-class ProjectAnalysisStatsResponse(CustomBaseModel):
-    """项目级分析统计"""
+class ProjectAnalysisStats(CustomBaseModel):
+    """项目分析统计"""
     project_id: int
     project_name: str
     total_analyses: int
@@ -293,4 +318,4 @@ class ProjectAnalysisStatsResponse(CustomBaseModel):
     competitive_count: int
     total_cost: float
     total_tokens: int
-    last_analysis_at: Optional[datetime]
+    last_analysis_at: datetime | None

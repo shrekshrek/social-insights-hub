@@ -421,6 +421,7 @@ class TaskAnalysisStats:
             },
             "call_details": [
                 {
+                    "call_index": idx,
                     "call_type": detail.call_type,
                     "input_tokens": detail.input_tokens,
                     "output_tokens": detail.output_tokens,
@@ -429,7 +430,7 @@ class TaskAnalysisStats:
                     "duration_seconds": round(detail.duration_seconds, 2),
                     "timestamp": detail.timestamp
                 }
-                for detail in self.call_details
+                for idx, detail in enumerate(self.call_details)
             ]
         }
 

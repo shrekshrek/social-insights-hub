@@ -221,6 +221,21 @@ def calculate_cost(
     return round(cost, 6)  # 保留6位小数
 
 
+def get_llm(llm_type: str = "chat") -> BaseChatModel:
+    """
+    获取LLM实例的通用接口（兼容性包装函数）
+
+    Args:
+        llm_type: LLM类型，"chat"或"reasoner"
+
+    Returns:
+        BaseChatModel: 配置好的LLM实例
+    """
+    if llm_type == "reasoner":
+        return get_deepseek_reasoner()
+    return get_deepseek_chat()
+
+
 def get_model_info(model_type: str = "chat") -> Dict[str, Any]:
     """
     获取模型配置信息

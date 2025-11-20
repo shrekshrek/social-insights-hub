@@ -60,21 +60,6 @@ export const useAnalysis = () => {
   }
 
   /**
-   * 运行评论AI初筛分析
-   */
-  const runCommentScreening = async (data: RunScreeningRequest) => {
-    const result = await apiRequest<RunAnalysisResponse>(
-      '/social-media/analysis/tasks/screening/comments',
-      {
-        method: 'POST',
-        body: data,
-      }
-    )
-    showSuccess('评论初筛任务已启动')
-    return result
-  }
-
-  /**
    * 运行帖子深度分析
    */
   const runPostDeepAnalysis = async (data: RunDeepAnalysisRequest) => {
@@ -210,7 +195,6 @@ export const useAnalysis = () => {
     getTaskAnalysisResults,
     getTaskAnalysisResult,
     runPostScreening,
-    runCommentScreening,
     runPostDeepAnalysis,
     runCommentDeepAnalysis,
     getAnalysisProgress,

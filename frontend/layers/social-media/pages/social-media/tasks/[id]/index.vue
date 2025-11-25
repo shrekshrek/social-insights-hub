@@ -152,6 +152,30 @@ const handleClearFilter = () => {
   commentPage.value = 1;
 };
 
+// 原文内容展开状态
+const expandedPostIds = ref<Set<number>>(new Set());
+const togglePostExpand = (postId: number) => {
+  if (expandedPostIds.value.has(postId)) {
+    expandedPostIds.value.delete(postId);
+  } else {
+    expandedPostIds.value.add(postId);
+  }
+  // 触发响应式更新
+  expandedPostIds.value = new Set(expandedPostIds.value);
+};
+
+// 评论内容展开状态
+const expandedCommentIds = ref<Set<number>>(new Set());
+const toggleCommentExpand = (commentId: number) => {
+  if (expandedCommentIds.value.has(commentId)) {
+    expandedCommentIds.value.delete(commentId);
+  } else {
+    expandedCommentIds.value.add(commentId);
+  }
+  // 触发响应式更新
+  expandedCommentIds.value = new Set(expandedCommentIds.value);
+};
+
 // 格式化函数
 const formatDateTime = (dateStr: string | null) => {
   if (!dateStr) return "-";
@@ -213,21 +237,56 @@ const postsColumns = computed(() => {
     accessorKey: "title",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "标题/内容"),
-    cell: ({ row }: { row: { original: SocialPost } }) =>
-      h("div", { class: "max-w-md" }, [
-        row.original.title
+    cell: ({ row }: { row: { original: SocialPost } }) => {
+      const post = row.original;
+      const isExpanded = expandedPostIds.value.has(post.id);
+      const title = post.title || "";
+      const content = post.content || "";
+      const hasLongTitle = title.length > 100;
+      const hasLongContent = content.length > 100;
+      const needsExpand = hasLongTitle || hasLongContent;
+
+      return h("div", { class: "max-w-md" }, [
+        // 标题
+        title
           ? h(
               "p",
-              { class: "font-medium text-sm truncate" },
-              row.original.title
+              {
+                class: isExpanded
+                  ? "font-medium text-sm whitespace-pre-wrap"
+                  : "font-medium text-sm truncate",
+              },
+              isExpanded ? title : (hasLongTitle ? title.substring(0, 100) + "..." : title)
             )
           : null,
+        // 内容
         h(
           "p",
-          { class: "text-xs text-gray-600 dark:text-gray-400 truncate mt-1" },
-          row.original.content?.substring(0, 60) || "无内容"
+          {
+            class: isExpanded
+              ? "text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap mt-1"
+              : "text-xs text-gray-600 dark:text-gray-400 truncate mt-1",
+          },
+          content
+            ? (isExpanded ? content : (hasLongContent ? content.substring(0, 100) + "..." : content))
+            : "无内容"
         ),
-      ]),
+        // 展开/收起按钮
+        needsExpand
+          ? h(
+              "button",
+              {
+                class: "text-xs text-primary-500 hover:text-primary-600 mt-1 font-medium",
+                onClick: (e: Event) => {
+                  e.stopPropagation();
+                  togglePostExpand(post.id);
+                },
+              },
+              isExpanded ? "−" : "+"
+            )
+          : null,
+      ]);
+    },
   },
   {
     accessorKey: "likes_count",
@@ -345,12 +404,39 @@ const commentsColumns = computed(() => {
     accessorKey: "content",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论内容"),
-    cell: ({ row }: { row: { original: SocialComment } }) =>
-      h(
-        "p",
-        { class: "text-sm truncate max-w-md" },
-        row.original.content || "无内容"
-      ),
+    cell: ({ row }: { row: { original: SocialComment } }) => {
+      const comment = row.original;
+      const isExpanded = expandedCommentIds.value.has(comment.id);
+      const content = comment.content || "";
+      const hasLongContent = content.length > 100;
+
+      return h("div", { class: "max-w-md" }, [
+        h(
+          "p",
+          {
+            class: isExpanded
+              ? "text-sm whitespace-pre-wrap"
+              : "text-sm truncate",
+          },
+          content
+            ? (isExpanded ? content : (hasLongContent ? content.substring(0, 100) + "..." : content))
+            : "无内容"
+        ),
+        hasLongContent
+          ? h(
+              "button",
+              {
+                class: "text-xs text-primary-500 hover:text-primary-600 mt-1 font-medium",
+                onClick: (e: Event) => {
+                  e.stopPropagation();
+                  toggleCommentExpand(comment.id);
+                },
+              },
+              isExpanded ? "−" : "+"
+            )
+          : null,
+      ]);
+    },
   },
   {
     accessorKey: "likes_count",

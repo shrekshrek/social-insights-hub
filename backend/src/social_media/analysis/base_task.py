@@ -19,7 +19,7 @@ from src.database import AsyncSessionLocal
 from src.langchain.utils import TaskAnalysisStats
 
 if TYPE_CHECKING:
-    from src.analysis.models import TaskAnalysisResult, ProjectAnalysisResult
+    from src.social_media.analysis.models import AnalysisJob
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class AnalysisTaskBase(Task):
         """更新任务级分析结果记录
 
         Args:
-            result_id: TaskAnalysisResult的ID
+            result_id: AnalysisJob的ID
             status: 任务状态 (pending/processing/completed/failed)
             result_data: 结果数据
             error_message: 错误信息
@@ -95,8 +95,8 @@ class AnalysisTaskBase(Task):
         """
         async with AsyncSessionLocal() as db:
             try:
-                from sqlalchemy import select, update
-                from src.social_media.analysis.models import TaskAnalysisResult
+                from sqlalchemy import update
+                from src.social_media.analysis.models import AnalysisJob
 
                 # 构建更新数据
                 update_data = {
@@ -126,17 +126,17 @@ class AnalysisTaskBase(Task):
 
                 # 执行更新
                 stmt = (
-                    update(TaskAnalysisResult)
-                    .where(TaskAnalysisResult.id == result_id)
+                    update(AnalysisJob)
+                    .where(AnalysisJob.id == result_id)
                     .values(**update_data)
                 )
                 await db.execute(stmt)
                 await db.commit()
 
-                logger.debug(f"更新TaskAnalysisResult#{result_id}: status={status}")
+                logger.debug(f"更新AnalysisJob#{result_id}: status={status}")
 
             except Exception as e:
-                logger.error(f"更新TaskAnalysisResult失败: {e}", exc_info=True)
+                logger.error(f"更新AnalysisJob失败: {e}", exc_info=True)
                 await db.rollback()
 
     async def update_project_result(
@@ -149,7 +149,7 @@ class AnalysisTaskBase(Task):
         """更新项目级分析结果记录
 
         Args:
-            result_id: ProjectAnalysisResult的ID
+            result_id: AnalysisJob的ID
             status: 任务状态 (pending/processing/completed/failed)
             result_data: 结果数据
             error_message: 错误信息
@@ -157,7 +157,7 @@ class AnalysisTaskBase(Task):
         async with AsyncSessionLocal() as db:
             try:
                 from sqlalchemy import update
-                from src.social_media.analysis.models import ProjectAnalysisResult
+                from src.social_media.analysis.models import AnalysisJob
 
                 # 构建更新数据
                 update_data = {
@@ -178,17 +178,17 @@ class AnalysisTaskBase(Task):
 
                 # 执行更新
                 stmt = (
-                    update(ProjectAnalysisResult)
-                    .where(ProjectAnalysisResult.id == result_id)
+                    update(AnalysisJob)
+                    .where(AnalysisJob.id == result_id)
                     .values(**update_data)
                 )
                 await db.execute(stmt)
                 await db.commit()
 
-                logger.debug(f"更新ProjectAnalysisResult#{result_id}: status={status}")
+                logger.debug(f"更新AnalysisJob#{result_id}: status={status}")
 
             except Exception as e:
-                logger.error(f"更新ProjectAnalysisResult失败: {e}", exc_info=True)
+                logger.error(f"更新AnalysisJob失败: {e}", exc_info=True)
                 await db.rollback()
 
 

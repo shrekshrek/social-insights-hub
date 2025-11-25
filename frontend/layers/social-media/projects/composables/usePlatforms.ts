@@ -1,4 +1,4 @@
-import type { Platform } from '../types'
+import type { Platform } from '../../tasks/types'
 
 export const usePlatforms = () => {
   const { useApiData } = useApi()

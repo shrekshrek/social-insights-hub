@@ -3,7 +3,6 @@ import type {
   DataTaskCreate,
   DataTaskUpdate,
   DataTaskWithRelations,
-  PaginatedResponse,
 } from '../types'
 
 export const useTasks = () => {

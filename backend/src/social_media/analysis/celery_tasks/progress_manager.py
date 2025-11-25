@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from src.redis_sync_client import get_sync_redis
 from src.database import SyncSessionLocal
-from src.social_media.analysis.models import TaskAnalysisResult
+from src.social_media.analysis.models import AnalysisJob
 from src.config import get_settings
 from sqlalchemy import select
 
@@ -38,6 +38,27 @@ class AnalysisProgressManager:
 
         # 批量同步阈值（从配置读取）
         self.batch_threshold = settings.DB_COMMIT_AFTER_BATCH_COUNT
+
+    def initialize(self, total_count: int):
+        """初始化进度计数器
+
+        Args:
+            total_count: 待分析的总数量
+        """
+        try:
+            # 重置计数器
+            self.redis_client.set(self.key_analyzed, 0)
+            self.redis_client.set(self.key_failed, 0)
+            self.redis_client.delete(self.key_token_usage)
+            self.redis_client.delete(self.key_call_details)
+
+            # 存储总数以便计算进度
+            self.redis_client.set(f"analysis:result:{self.result_id}:total_count", total_count)
+
+            logger.info(f"初始化分析进度: result_id={self.result_id}, total_count={total_count}")
+
+        except Exception as e:
+            logger.error(f"初始化Redis进度失败: {e}")
 
     def increment_analyzed(self, token_stats: Dict[str, Any]) -> int:
         """
@@ -165,21 +186,21 @@ class AnalysisProgressManager:
                 summary["avg_cost_per_call"] = summary["total_cost_cny"] / summary["total_calls"]
 
             # 更新数据库
-            stmt = select(TaskAnalysisResult).where(
-                TaskAnalysisResult.id == self.result_id
+            stmt = select(AnalysisJob).where(
+                AnalysisJob.id == self.result_id
             ).with_for_update()
 
             result = db.execute(stmt)
-            task_result = result.scalar_one_or_none()
+            analysis_job = result.scalar_one_or_none()
 
-            if task_result:
-                task_result.analyzed_count = analyzed_count
-                task_result.failed_count = failed_count
-                task_result.token_usage = {
+            if analysis_job:
+                analysis_job.analyzed_count = analyzed_count
+                analysis_job.failed_count = failed_count
+                analysis_job.token_usage = {
                     "summary": summary,
                     "call_details": call_details
                 }
-                task_result.updated_at = datetime.now(timezone.utc)
+                analysis_job.updated_at = datetime.now(timezone.utc)
 
                 db.commit()
 
@@ -211,16 +232,16 @@ class AnalysisProgressManager:
             # 更新任务状态为completed
             db = SyncSessionLocal()
             try:
-                stmt = select(TaskAnalysisResult).where(
-                    TaskAnalysisResult.id == self.result_id
+                stmt = select(AnalysisJob).where(
+                    AnalysisJob.id == self.result_id
                 ).with_for_update()
 
                 result = db.execute(stmt)
-                task_result = result.scalar_one_or_none()
+                analysis_job = result.scalar_one_or_none()
 
-                if task_result:
-                    task_result.status = "completed"
-                    task_result.completed_at = datetime.now(timezone.utc)
+                if analysis_job:
+                    analysis_job.status = "completed"
+                    analysis_job.completed_at = datetime.now(timezone.utc)
                     db.commit()
 
             finally:
@@ -244,15 +265,15 @@ class AnalysisProgressManager:
         """降级方案：直接写入数据库（Redis不可用时）"""
         db = SyncSessionLocal()
         try:
-            stmt = select(TaskAnalysisResult).where(
-                TaskAnalysisResult.id == self.result_id
+            stmt = select(AnalysisJob).where(
+                AnalysisJob.id == self.result_id
             ).with_for_update()
 
             result = db.execute(stmt)
-            task_result = result.scalar_one_or_none()
+            analysis_job = result.scalar_one_or_none()
 
-            if task_result:
-                current_usage = task_result.token_usage or {"summary": {}, "call_details": []}
+            if analysis_job:
+                current_usage = analysis_job.token_usage or {"summary": {}, "call_details": []}
 
                 new_call_detail = {
                     "call_index": len(current_usage.get("call_details", [])),
@@ -273,12 +294,12 @@ class AnalysisProgressManager:
                     summary["avg_tokens_per_call"] = summary["total_tokens"] / summary["total_calls"]
                     summary["avg_cost_per_call"] = summary["total_cost_cny"] / summary["total_calls"]
 
-                task_result.analyzed_count += 1
-                task_result.token_usage = current_usage
-                task_result.updated_at = datetime.now(timezone.utc)
+                analysis_job.analyzed_count += 1
+                analysis_job.token_usage = current_usage
+                analysis_job.updated_at = datetime.now(timezone.utc)
 
                 db.commit()
-                return task_result.analyzed_count
+                return analysis_job.analyzed_count
 
         finally:
             db.close()
@@ -289,18 +310,18 @@ class AnalysisProgressManager:
         """降级方案：直接写入数据库（Redis不可用时）"""
         db = SyncSessionLocal()
         try:
-            stmt = select(TaskAnalysisResult).where(
-                TaskAnalysisResult.id == self.result_id
+            stmt = select(AnalysisJob).where(
+                AnalysisJob.id == self.result_id
             ).with_for_update()
 
             result = db.execute(stmt)
-            task_result = result.scalar_one_or_none()
+            analysis_job = result.scalar_one_or_none()
 
-            if task_result:
-                task_result.failed_count += 1
-                task_result.updated_at = datetime.now(timezone.utc)
+            if analysis_job:
+                analysis_job.failed_count += 1
+                analysis_job.updated_at = datetime.now(timezone.utc)
                 db.commit()
-                return task_result.failed_count
+                return analysis_job.failed_count
 
         finally:
             db.close()

@@ -380,20 +380,6 @@ const commentsColumns = computed(() => {
 const AnalysisPanel = defineAsyncComponent(() =>
   import('./components/AnalysisPanel.vue')
 )
-
-// 标签页定义
-const items = computed(() => [
-  {
-    label: '数据预览',
-    slot: 'data',
-    icon: 'i-heroicons-table-cells'
-  },
-  {
-    label: 'AI 分析',
-    slot: 'analysis',
-    icon: 'i-heroicons-sparkles'
-  }
-])
 </script>
 
 <template>
@@ -451,10 +437,8 @@ const items = computed(() => [
       </ClientOnly>
     </div>
 
-    <UTabs :items="items" class="w-full">
-      <template #data>
-        <div class="space-y-6 pt-4">
-          <UCard v-if="task">
+    <!-- 任务信息卡片 -->
+    <UCard v-if="task">
             <template #header>
               <h2 class="text-lg font-semibold">任务信息</h2>
             </template>
@@ -795,16 +779,12 @@ const items = computed(() => [
               </template>
             </UCard>
           </div>
-        </div>
-      </template>
 
-      <template #analysis>
-        <div class="pt-4">
-          <ClientOnly>
-            <AnalysisPanel :task-id="taskId" />
-          </ClientOnly>
-        </div>
-      </template>
-    </UTabs>
+          <!-- AI 分析卡片 -->
+          <div class="mt-6">
+            <ClientOnly>
+              <AnalysisPanel :task-id="taskId" />
+            </ClientOnly>
+          </div>
   </div>
 </template>

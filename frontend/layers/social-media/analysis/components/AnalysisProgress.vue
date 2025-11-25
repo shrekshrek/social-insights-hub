@@ -179,10 +179,10 @@
 </template>
 
 <script setup lang="ts">
-import type { TaskAnalysisResult } from '../types'
+import type { AnalysisJob, AnalysisStatus, AnalysisType } from '../types'
 
 interface Props {
-  result: TaskAnalysisResult
+  result: AnalysisJob
   autoRefresh?: boolean
   refreshInterval?: number
 }
@@ -201,7 +201,7 @@ const _emit = defineEmits<{
 const { formatTokens, formatCost, formatDuration, estimateRemainingCost } = useTokenUsage()
 
 // 计算属性
-const status = computed(() => props.result.status)
+const status = computed<AnalysisStatus>(() => props.result.status as AnalysisStatus)
 
 const progress = computed(() => {
   if (props.result.source_count === 0) return 0
@@ -287,11 +287,13 @@ const progressColor = computed(() => {
 })
 
 const analysisTypeLabel = computed(() => {
-  const labels = {
+  const labels: Record<string, string> = {
     screening_posts: '帖子初筛',
     screening_comments: '评论初筛',
     deep_posts: '帖子深度分析',
     deep_comments: '评论深度分析',
+    topic_clustering: '主题聚类',
+    competitive: '竞品分析',
   }
   return labels[props.result.analysis_type] || props.result.analysis_type
 })

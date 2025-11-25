@@ -28,12 +28,6 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   },
   '/profile': { permission: null },
   '/settings': { permission: null },
-  '/charts': {
-    permission: null,
-    label: '数据图表',
-    showInNav: true,
-    order: 20,
-  },
   '/users': {
     permission: PERMISSIONS.USER_MGMT_ACCESS,
     label: '用户管理',
@@ -65,7 +59,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   // 社交媒体数据洞察模块
   '/social-media/projects': {
     permission: PERMISSIONS.SOCIAL_PROJECT_ACCESS,
-    label: '社交媒体项目',
+    label: '舆情项目',
     showInNav: true,
     order: 60,
   },
@@ -73,7 +67,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   '/social-media/projects/[id]': { permission: PERMISSIONS.SOCIAL_PROJECT_READ },
   '/social-media/tasks': {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
-    label: '数据采集任务',
+    label: '数据任务',
     showInNav: true,
     order: 70,
   },
@@ -81,6 +75,13 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   '/social-media/tasks/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
   '/social-media/tasks/[id]/upload': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
   '/social-media/posts/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
+  // AI 分析模块
+  '/social-media/analysis': {
+    permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
+    label: 'AI 分析',
+    showInNav: true,
+    order: 80,
+  },
 }
 
 /**

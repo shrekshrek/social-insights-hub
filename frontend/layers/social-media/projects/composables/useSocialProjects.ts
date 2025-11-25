@@ -3,8 +3,7 @@ import type {
   SocialProjectCreate,
   SocialProjectUpdate,
   SocialProjectCreateResponse,
-  PaginatedResponse,
-} from '../types'
+} from '../../tasks/types'
 
 export const useSocialProjects = () => {
   const { apiRequest, useApiData, showSuccess } = useApi()

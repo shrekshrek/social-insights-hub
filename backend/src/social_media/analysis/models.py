@@ -1,16 +1,14 @@
 """分析模块数据模型
 
 简化设计：
-- PostAnalysis: 唯一的分析表，包含初筛分析 + 帖子深度分析 + 评论深度分析
-- TaskAnalysisResult: 任务级分析结果记录
-- ProjectAnalysisResult: 项目级分析结果记录（预留）
-
-评论不需要单独的初筛分析，评论深度分析结果聚合存储在帖子记录中。
+- AnalysisJob: 统一的AI分析任务记录（合并原 TaskAnalysisResult 和 ProjectAnalysisResult）
+- PostAnalysis: 帖子级分析结果，包含初筛 + 帖子深度 + 评论深度
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Integer, Float, ForeignKey, Text, DateTime, Boolean, JSON, Index
+from sqlalchemy import String, Integer, Float, ForeignKey, Text, DateTime, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -22,8 +20,28 @@ if TYPE_CHECKING:
     from src.auth.models import User
 
 
+class AnalysisType(str, Enum):
+    """分析类型枚举"""
+    # 任务级分析（需要 task_id）
+    SCREENING_POSTS = "screening_posts"      # 帖子初筛
+    DEEP_POSTS = "deep_posts"                # 帖子深度分析
+    DEEP_COMMENTS = "deep_comments"          # 评论深度分析
+
+    # 项目级分析（task_id 为空）
+    TOPIC_CLUSTERING = "topic_clustering"    # 主题聚类
+    COMPETITIVE_ANALYSIS = "competitive"     # 竞品分析
+
+
+class AnalysisStatus(str, Enum):
+    """分析状态枚举"""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class PostAnalysis(Base):
-    """帖子AI分析结果（唯一的分析表）
+    """帖子AI分析结果
 
     功能：
     1. 初筛分析：spam_score, value_score, relevance_score, sentiment
@@ -129,49 +147,61 @@ class PostAnalysis(Base):
         return f"<PostAnalysis(id={self.id}, post_id={self.post_id})>"
 
 
-class TaskAnalysisResult(Base):
-    """任务级分析结果记录
+class AnalysisJob(Base):
+    """AI分析任务（统一模型）
 
-    记录每次分析任务的执行情况、统计信息和聚合结果
-    支持的分析类型：
-    - screening_posts: 帖子初筛
-    - deep_posts: 帖子深度分析
-    - deep_comments: 评论深度分析
+    合并原 TaskAnalysisResult 和 ProjectAnalysisResult，
+    通过 task_id 是否为空来区分任务级/项目级分析。
+
+    任务级分析类型：screening_posts, deep_posts, deep_comments
+    项目级分析类型：topic_clustering, competitive
     """
 
-    __tablename__ = "task_analysis_results"
+    __tablename__ = "analysis_jobs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # 关联关系
-    task_id: Mapped[int] = mapped_column(
-        ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
+    # ===== 关联关系 =====
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("social_projects.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        comment="关联的数据任务ID"
+        comment="关联的项目ID（必填）"
+    )
+    task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="关联的数据任务ID（任务级分析时填写，项目级分析时为空）"
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+        comment="执行分析的用户ID"
     )
 
-    # 分析类型
+    # ===== 分析类型 =====
     analysis_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
         index=True,
-        comment="分析类型: screening_posts/deep_posts/deep_comments"
+        comment="分析类型: screening_posts/deep_posts/deep_comments/topic_clustering/competitive"
     )
 
-    # 结果数据
-    result_data: Mapped[dict | None] = mapped_column(
+    # ===== 分析配置（主要用于项目级分析）=====
+    analysis_config: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
-        comment="聚合统计结果（如成功率、平均分等）"
+        comment="分析配置参数（如聚类数量、竞品关键词等）"
     )
-    analysis_summary: Mapped[str | None] = mapped_column(
-        Text,
+    source_task_ids: Mapped[list | None] = mapped_column(
+        JSON,
         nullable=True,
-        comment="分析摘要"
+        comment="源任务ID列表（项目级分析时指定的任务范围）"
     )
 
-    # 统计信息
+    # ===== 统计信息 =====
     source_count: Mapped[int] = mapped_column(
         Integer,
         default=0,
@@ -188,7 +218,19 @@ class TaskAnalysisResult(Base):
         comment="失败数量"
     )
 
-    # Celery任务信息
+    # ===== 结果数据 =====
+    result_data: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="聚合统计结果"
+    )
+    analysis_summary: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="分析摘要"
+    )
+
+    # ===== Celery任务信息 =====
     celery_task_id: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -204,7 +246,7 @@ class TaskAnalysisResult(Base):
         comment="状态: pending/processing/completed/failed"
     )
 
-    # 性能指标
+    # ===== 性能指标 =====
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -221,21 +263,21 @@ class TaskAnalysisResult(Base):
         comment="处理耗时（秒）"
     )
 
-    # Token使用统计
+    # ===== Token使用统计 =====
     token_usage: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
         comment="Token使用统计（包含成本信息）"
     )
 
-    # 错误信息
+    # ===== 错误信息 =====
     error_message: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="错误信息"
     )
 
-    # 时间戳
+    # ===== 时间戳 =====
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now()
@@ -246,141 +288,15 @@ class TaskAnalysisResult(Base):
         onupdate=func.now()
     )
 
-    # 关系
-    task: Mapped["DataTask"] = relationship(
-        "src.social_media.tasks.models.DataTask",
-        foreign_keys=[task_id],
-        lazy="selectin"
-    )
-
-    # 索引
-    __table_args__ = (
-        Index('idx_task_analysis_type_status', 'analysis_type', 'status'),
-        Index('idx_task_analysis_created_at', 'created_at'),
-    )
-
-    def __repr__(self):
-        return f"<TaskAnalysisResult(id={self.id}, type='{self.analysis_type}', status='{self.status}')>"
-
-
-class ProjectAnalysisResult(Base):
-    """项目级分析结果模型（预留）
-
-    存储项目级的全局分析结果，如主题聚类、竞品分析等。
-    """
-
-    __tablename__ = "project_analysis_results"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-
-    # 关联关系
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("social_projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-        comment="关联的项目ID"
-    )
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"),
-        nullable=False,
-        index=True,
-        comment="执行分析的用户ID"
-    )
-
-    # 分析配置
-    analysis_type: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        index=True,
-        comment="分析类型: topic_clustering/competitive_analysis"
-    )
-    analysis_config: Mapped[dict | None] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="分析配置参数"
-    )
-
-    # 数据源（多任务聚合）
-    source_task_ids: Mapped[list | None] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="源任务ID列表"
-    )
-    source_data_count: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        comment="源数据总数"
-    )
-
-    # 分析结果
-    result_data: Mapped[dict | None] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="分析结果数据（JSON格式）"
-    )
-    analysis_summary: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-        comment="分析结果摘要"
-    )
-
-    # Celery任务信息
-    celery_task_id: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        unique=True,
-        index=True,
-        comment="Celery任务ID"
-    )
-    status: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        default="pending",
-        index=True,
-        comment="状态: pending/processing/completed/failed"
-    )
-
-    # 性能指标
-    processing_time: Mapped[int | None] = mapped_column(
-        Integer,
-        nullable=True,
-        comment="处理耗时（秒）"
-    )
-
-    # Token使用统计
-    token_usage: Mapped[dict | None] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="Token使用统计（包含成本信息）"
-    )
-
-    # 错误信息
-    error_message: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-        comment="错误信息"
-    )
-
-    # 时间戳
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now()
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        comment="完成时间"
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now()
-    )
-
-    # 关系
+    # ===== 关系 =====
     project: Mapped["SocialProject"] = relationship(
         "src.social_media.projects.models.SocialProject",
         foreign_keys=[project_id],
+        lazy="selectin"
+    )
+    task: Mapped["DataTask | None"] = relationship(
+        "src.social_media.tasks.models.DataTask",
+        foreign_keys=[task_id],
         lazy="selectin"
     )
     user: Mapped["User"] = relationship(
@@ -389,12 +305,29 @@ class ProjectAnalysisResult(Base):
         lazy="selectin"
     )
 
-    # 索引
+    # ===== 索引 =====
     __table_args__ = (
-        Index('idx_project_analysis_type_status', 'analysis_type', 'status'),
-        Index('idx_project_analysis_created_at', 'created_at'),
-        Index('idx_project_analysis_project_user', 'project_id', 'user_id'),
+        Index('idx_analysis_job_project', 'project_id'),
+        Index('idx_analysis_job_task', 'task_id'),
+        Index('idx_analysis_job_type_status', 'analysis_type', 'status'),
+        Index('idx_analysis_job_created_at', 'created_at'),
+        Index('idx_analysis_job_user', 'user_id'),
     )
 
     def __repr__(self):
-        return f"<ProjectAnalysisResult(id={self.id}, project_id={self.project_id}, type='{self.analysis_type}', status='{self.status}')>"
+        return f"<AnalysisJob(id={self.id}, type='{self.analysis_type}', status='{self.status}')>"
+
+    @property
+    def is_task_level(self) -> bool:
+        """是否为任务级分析"""
+        return self.task_id is not None
+
+    @property
+    def is_project_level(self) -> bool:
+        """是否为项目级分析"""
+        return self.task_id is None
+
+
+# ===== 向后兼容的别名（过渡期使用，后续删除）=====
+TaskAnalysisResult = AnalysisJob
+ProjectAnalysisResult = AnalysisJob

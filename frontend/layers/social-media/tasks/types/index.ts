@@ -214,9 +214,6 @@ export interface JSONUploadResponse {
 
 // ==================== API Responses ====================
 
-// Re-export PaginatedResponse from analysis module to avoid duplication
-export type { PaginatedResponse } from '../../analysis/types'
-
 export interface PostQueryResponse {
   posts: SocialPost[]
   total_tasks: number

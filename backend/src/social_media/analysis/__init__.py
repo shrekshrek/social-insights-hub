@@ -11,13 +11,12 @@
 
 from .models import (
     PostAnalysis,
-    TaskAnalysisResult,
-    ProjectAnalysisResult,
+    AnalysisJob,
 )
 from .schemas import (
     PostAnalysisCreate,
     PostAnalysisResponse,
-    TaskAnalysisResultResponse,
+    AnalysisJobResponse,
     AnalysisStatsResponse,
 )
 from .base_task import AnalysisTaskBase
@@ -25,12 +24,11 @@ from .base_task import AnalysisTaskBase
 __all__ = [
     # Models
     "PostAnalysis",
-    "TaskAnalysisResult",
-    "ProjectAnalysisResult",
+    "AnalysisJob",
     # Schemas
     "PostAnalysisCreate",
     "PostAnalysisResponse",
-    "TaskAnalysisResultResponse",
+    "AnalysisJobResponse",
     "AnalysisStatsResponse",
     # Task Base
     "AnalysisTaskBase",

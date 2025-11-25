@@ -1,11 +1,7 @@
 /**
  * AI分析模块 - TypeScript 类型定义
  *
- * 包含：
- * - Token使用统计
- * - 分析结果模型
- * - 任务级分析
- * - 项目级分析
+ * 统一使用 AnalysisJob 模型，通过 task_id 是否为空区分任务级/项目级分析
  */
 
 // ==================== Token Usage ====================
@@ -117,150 +113,82 @@ export interface PostAnalysisCreate {
   comment_deep_result?: CommentDeepResult
 }
 
-// ==================== Task Analysis Result ====================
+// ==================== Analysis Job (统一模型) ====================
 
 /**
  * 分析类型
- * - screening_posts: 帖子初筛
- * - deep_posts: 帖子深度分析
- * - deep_comments: 评论深度分析（聚合到帖子）
+ * - 任务级: screening_posts, deep_posts, deep_comments
+ * - 项目级: topic_clustering, competitive
  */
 export type AnalysisType =
   | 'screening_posts'
   | 'deep_posts'
   | 'deep_comments'
+  | 'topic_clustering'
+  | 'competitive'
 
 export type AnalysisStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
-export interface TaskAnalysisResult {
+/**
+ * 分析任务（统一模型）
+ *
+ * 合并原 TaskAnalysisResult 和 ProjectAnalysisResult
+ * task_id 为空表示项目级分析，非空表示任务级分析
+ */
+export interface AnalysisJob {
   id: number
-  task_id: number
+  project_id: number
+  task_id: number | null
+  user_id: number
   analysis_type: AnalysisType
-  result_data: Record<string, unknown> | null
-  analysis_summary: string | null
+  celery_task_id: string
+  status: AnalysisStatus
+
+  // 配置
+  analysis_config: Record<string, unknown> | null
+  source_task_ids: number[] | null
+
+  // 统计
   source_count: number
   analyzed_count: number
   failed_count: number
-  celery_task_id: string
-  status: AnalysisStatus
+
+  // 结果
+  result_data: Record<string, unknown> | null
+  analysis_summary: string | null
+
+  // 性能
   started_at: string | null
   completed_at: string | null
   processing_time: number | null
   token_usage: TokenUsageStats | null
+
+  // 错误
   error_message: string | null
+
+  // 时间戳
   created_at: string
   updated_at: string
+
+  // 关联信息（从列表接口返回）
+  project_name?: string
+  task_name?: string
+  user_name?: string
 }
 
-export interface TaskAnalysisResultCreate {
-  task_id: number
-  analysis_type: AnalysisType
-  celery_task_id: string
-  source_count?: number
-}
-
-export interface TaskAnalysisResultUpdate {
-  status?: AnalysisStatus
-  result_data?: Record<string, unknown>
-  analysis_summary?: string
-  analyzed_count?: number
-  failed_count?: number
-  started_at?: string
-  completed_at?: string
-  processing_time?: number
-  token_usage?: TokenUsageStats
-  error_message?: string
-}
-
-// ==================== Project Analysis Result ====================
-
-export type ProjectAnalysisType =
-  | 'topic_clustering'
-  | 'competitive_analysis'
-
-export interface ProjectAnalysisConfig {
-  // 主题聚类配置
-  num_clusters?: number
-  clustering_method?: 'kmeans' | 'hierarchical' | 'dbscan'
-
-  // 竞品分析配置
-  competitor_keywords?: string[]
-  comparison_metrics?: string[]
-
-  // 通用配置
-  [key: string]: unknown
-}
-
-export interface ProjectAnalysisResult {
-  id: number
-  project_id: number
-  user_id: number
-  analysis_type: ProjectAnalysisType
-  analysis_config: ProjectAnalysisConfig | null
-  source_task_ids: number[] | null
-  source_data_count: number
-  result_data: Record<string, unknown> | null
-  analysis_summary: string | null
-  celery_task_id: string
-  status: AnalysisStatus
-  processing_time: number | null
-  token_usage: TokenUsageStats | null
-  error_message: string | null
-  created_at: string
-  completed_at: string | null
-  updated_at: string
-}
-
-export interface ProjectAnalysisResultCreate {
-  project_id: number
-  analysis_type: ProjectAnalysisType
-  analysis_config?: ProjectAnalysisConfig
-  source_task_ids?: number[]
-}
-
-export interface ProjectAnalysisResultUpdate {
-  status?: AnalysisStatus
-  result_data?: Record<string, unknown>
-  analysis_summary?: string
-  processing_time?: number
-  token_usage?: TokenUsageStats
-  error_message?: string
-  completed_at?: string
-}
+export interface AnalysisJobListResponse extends PaginatedResponse<AnalysisJob> {}
 
 // ==================== Analysis Statistics ====================
 
 export interface AnalysisStats {
-  total_tasks: number
-  completed_tasks: number
-  failed_tasks: number
-  pending_tasks: number
-  processing_tasks: number
+  total_jobs: number
+  completed_jobs: number
+  failed_jobs: number
+  pending_jobs: number
+  processing_jobs: number
   total_cost_cny: number
   total_tokens: number
   avg_processing_time: number
-}
-
-export interface TaskAnalysisStats {
-  task_id: number
-  task_name: string
-  total_analyses: number
-  screening_count: number
-  deep_analysis_count: number
-  total_cost: number
-  total_tokens: number
-  last_analysis_at: string | null
-}
-
-export interface ProjectAnalysisStats {
-  project_id: number
-  project_name: string
-  total_analyses: number
-  clustering_count: number
-  competitive_count: number
-  total_cost: number
-  total_tokens: number
-  last_analysis_at: string | null
 }
 
 // ==================== API Requests ====================
@@ -293,22 +221,15 @@ export interface RunCompetitiveRequest {
 
 // ==================== API Responses ====================
 
-export interface PaginatedResponse<T> {
-  items: T[]
-  total: number
-  page: number
-  page_size: number
-}
-
 export interface RunAnalysisResponse {
   celery_task_id: string
-  result_id: number
+  job_id: number
   status: AnalysisStatus
   message: string
 }
 
 export interface AnalysisProgressResponse {
-  result_id: number
+  job_id: number
   status: AnalysisStatus
   progress: number
   analyzed_count: number
@@ -316,4 +237,59 @@ export interface AnalysisProgressResponse {
   estimated_time_remaining: number | null
   current_cost: number
   current_tokens: number
+}
+
+// ==================== Post Analysis with Post Info ====================
+
+export interface PostAnalysisWithPostInfo {
+  // 帖子基本信息
+  post_id: number
+  title: string | null
+  content: string | null
+  author_name: string | null
+  likes_count: number
+  comments_count: number
+  views_count: number
+  published_at: string | null
+  url: string | null
+
+  // 初筛分析
+  spam_score: number | null
+  value_score: number | null
+  relevance_score: number | null
+  sentiment: -1 | 0 | 1 | null
+
+  // 深度分析
+  post_deep_result: PostDeepResult | null
+  comment_deep_result: CommentDeepResult | null
+
+  // 元数据
+  analyzed_at: string | null
+  analysis_model: string | null
+}
+
+export interface PostAnalysisListResponse extends PaginatedResponse<PostAnalysisWithPostInfo> {}
+
+// ==================== 深度分析预览 ====================
+export interface DeepAnalysisPreview {
+  total_posts: number
+  screened_count: number
+  matched_count: number
+  deep_done: number
+  comment_done: number
+  deep_candidate_ids: number[]
+  comment_candidate_ids: number[]
+}
+
+// ==================== 筛选参数 ====================
+
+export interface AnalysisJobFilterParams {
+  page?: number
+  page_size?: number
+  project_id?: number
+  task_id?: number
+  analysis_type?: AnalysisType
+  status?: AnalysisStatus
+  start_date?: string
+  end_date?: string
 }

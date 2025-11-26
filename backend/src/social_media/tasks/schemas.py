@@ -93,10 +93,11 @@ class SocialPostBase(CustomBaseModel):
     content: Optional[str] = None
     author_id: Optional[str] = Field(None, max_length=255)
     author_name: Optional[str] = Field(None, max_length=255)
-    likes_count: int = Field(0, ge=0)
-    comments_count: int = Field(0, ge=0)
-    shares_count: int = Field(0, ge=0)
-    views_count: int = Field(0, ge=0)
+    likes_count: int = Field(0, ge=0, description="点赞数")
+    comments_count: int = Field(0, ge=0, description="评论数")
+    shares_count: int = Field(0, ge=0, description="分享/转发数")
+    collected_count: int = Field(0, ge=0, description="收藏数")
+    views_count: int = Field(0, ge=0, description="播放/浏览数")
     images: Optional[List[str]] = None
     videos: Optional[List[str]] = None
     published_at: Optional[datetime] = None
@@ -186,10 +187,30 @@ class SocialCommentListResponse(CustomBaseModel):
 
 # ==================== JSON Upload Schemas ====================
 
+class RawPostData(CustomBaseModel):
+    """原始帖子数据（宽松验证，由适配器负责转换）
+
+    支持各平台原始字段名，如：
+    - 抖音: aweme_id, liked_count, comment_count, ...
+    - 微博: note_id, liked_count, comments_count, ...
+    - 小红书: note_id, liked_count, collected_count, ...
+    等等
+    """
+    model_config = {"extra": "allow"}  # 允许任意额外字段
+
+
+class RawCommentData(CustomBaseModel):
+    """原始评论数据（宽松验证，由适配器负责转换）"""
+    model_config = {"extra": "allow"}  # 允许任意额外字段
+
+
 class JSONUploadData(CustomBaseModel):
-    """JSON上传数据格式"""
-    contents: List[SocialPostCreate] = Field(..., description="原文列表")
-    comments: List[SocialCommentCreate] = Field(..., description="评论列表")
+    """JSON上传数据格式
+
+    接受各平台原始格式的数据，后端适配器会自动转换为统一格式。
+    """
+    contents: List[RawPostData] = Field(..., description="原文列表（支持平台原始格式）")
+    comments: List[RawCommentData] = Field(default_factory=list, description="评论列表（支持平台原始格式）")
 
     @field_validator('contents')
     @classmethod

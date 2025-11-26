@@ -94,68 +94,17 @@ const handleCommentsFileSelect = async (file: File) => {
   reader.readAsText(file)
 }
 
-// 字段映射：将爬虫字段映射到后端期望的字段
-const mapContentFields = (content: Record<string, unknown>) => {
-  // 如果已经有 post_id_on_platform 字段，直接返回
-  if (content.post_id_on_platform) {
-    return content
-  }
-
-  // 映射抖音字段
-  if (content.aweme_id) {
-    return {
-      ...content,
-      post_id_on_platform: content.aweme_id,
-    }
-  }
-
-  // 其他平台可以在这里添加映射规则
-  return content
-}
-
-const mapCommentFields = (comment: Record<string, unknown>) => {
-  const mapped: Record<string, unknown> = { ...comment }
-
-  // 映射 comment_id
-  if (!mapped.comment_id_on_platform) {
-    if (comment.comment_id) {
-      mapped.comment_id_on_platform = comment.comment_id
-    }
-  }
-
-  // 确保 raw_data 存在并包含 post_id_on_platform
-  if (!mapped.raw_data) {
-    mapped.raw_data = {} as Record<string, unknown>
-  }
-
-  const rawData = mapped.raw_data as Record<string, unknown>
-  if (!rawData.post_id_on_platform) {
-    // 尝试从多个可能的字段中获取帖子ID
-    if (comment.aweme_id) {
-      rawData.post_id_on_platform = comment.aweme_id
-    } else if (comment.post_id) {
-      rawData.post_id_on_platform = comment.post_id
-    } else if (comment.post_id_on_platform) {
-      rawData.post_id_on_platform = comment.post_id_on_platform
-    }
-  }
-
-  return mapped
-}
-
 // 验证合并后的数据
+// 注意：后端适配器会处理字段映射，前端直接上传原始数据
 const validateCombinedData = () => {
   if (!contentsData.value || !commentsData.value) {
     return // 等待两个文件都上传
   }
 
-  // 映射字段
-  const mappedContents = contentsData.value.map(mapContentFields)
-  const mappedComments = commentsData.value.map(mapCommentFields)
-
+  // 直接使用原始数据，后端适配器会自动转换字段
   const combinedData = {
-    contents: mappedContents,
-    comments: mappedComments,
+    contents: contentsData.value,
+    comments: commentsData.value,
   }
 
   const jsonStr = JSON.stringify(combinedData)
@@ -424,14 +373,13 @@ const handleUpload = async () => {
           </UButton>
         </div>
 
-        <!-- 自动字段映射提示 -->
+        <!-- 支持的平台提示 -->
         <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
           <p class="text-sm text-blue-800 dark:text-blue-200 font-medium mb-1">
-            💡 自动字段映射
+            支持的平台
           </p>
           <p class="text-xs text-blue-700 dark:text-blue-300">
-            系统支持自动映射爬虫导出的原始字段名（如抖音的 aweme_id、comment_id）到统一的字段名。
-            您可以直接上传爬虫原始导出的文件，无需手动修改字段名。
+            抖音、微博、小红书、B站、知乎、快手、贴吧。直接上传爬虫原始导出的 JSON 文件，系统会自动识别并转换字段。
           </p>
         </div>
       </div>

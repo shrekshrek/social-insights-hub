@@ -196,7 +196,8 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           }, () => getStatusLabel(job.status)),
           ['pending', 'processing'].includes(job.status) && job.source_count > 0
             ? h(UProgress, {
-                value: job.source_count ? (job.analyzed_count / job.source_count) * 100 : 0,
+                modelValue: job.source_count ? (job.analyzed_count / job.source_count) * 100 : 0,
+                max: 100,
                 size: 'xs',
                 class: 'mt-1 w-20',
               })

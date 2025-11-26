@@ -250,6 +250,8 @@ export interface PostAnalysisWithPostInfo {
   author_name: string | null
   likes_count: number
   comments_count: number
+  shares_count: number
+  collected_count: number
   views_count: number
   published_at: string | null
   url: string | null

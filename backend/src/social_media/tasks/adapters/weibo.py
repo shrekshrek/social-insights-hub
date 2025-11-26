@@ -6,7 +6,7 @@ from .base import PlatformAdapter
 from .factory import register_adapter
 
 
-@register_adapter("weibo")
+@register_adapter("wb")
 class WeiboAdapter(PlatformAdapter):
     """微博数据适配器
 

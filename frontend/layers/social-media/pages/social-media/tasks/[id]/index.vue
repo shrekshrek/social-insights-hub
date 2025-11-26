@@ -188,9 +188,20 @@ const getStatusText = (status: string) => {
   return texts[status] || status;
 };
 
+// 各平台数据支持情况
+const platformsWithShares = ['dy', 'wb', 'xhs']      // 有转发数据：抖音、微博、小红书
+const platformsWithCollected = ['dy', 'xhs']         // 有收藏数据：抖音、小红书
+const platformsWithViews = ['bili', 'ks']            // 有浏览量数据：B站、快手
+
 // 原文表格列定义 - 使用 computed 避免 SSR 水合问题
 const postsColumns = computed(() => {
   if (!import.meta.client) return []
+
+  // 根据平台决定是否显示各列
+  const platformCode = task.value?.platform_code || ''
+  const showSharesColumn = platformsWithShares.includes(platformCode)
+  const showCollectedColumn = platformsWithCollected.includes(platformCode)
+  const showViewsColumn = platformsWithViews.includes(platformCode)
 
   return [
     {
@@ -249,13 +260,15 @@ const postsColumns = computed(() => {
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论"),
     cell: ({ row }: { row: { original: SocialPost } }) =>
-      h(
-        "span",
-        { class: "text-sm text-right block" },
-        formatNumber(row.original.comments_count)
-      ),
+      h("div", { class: "text-sm text-right" }, [
+        h("span", {}, formatNumber(row.original.comments_count)),
+        h("span", { class: "text-xs text-gray-400 ml-1" },
+          `(${formatNumber(row.original.crawled_comments_count)})`
+        ),
+      ]),
   },
-  {
+  // 转发列 - 仅在支持的平台显示
+  ...(showSharesColumn ? [{
     accessorKey: "shares_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "转发"),
@@ -265,8 +278,21 @@ const postsColumns = computed(() => {
         { class: "text-sm text-right block" },
         formatNumber(row.original.shares_count)
       ),
-  },
-  {
+  }] : []),
+  // 收藏列 - 仅在支持的平台显示
+  ...(showCollectedColumn ? [{
+    accessorKey: "collected_count",
+    header: () =>
+      h("span", { style: { whiteSpace: "nowrap" } as const }, "收藏"),
+    cell: ({ row }: { row: { original: SocialPost } }) =>
+      h(
+        "span",
+        { class: "text-sm text-right block" },
+        formatNumber(row.original.collected_count)
+      ),
+  }] : []),
+  // 浏览列 - 仅在支持的平台显示
+  ...(showViewsColumn ? [{
     accessorKey: "views_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "浏览"),
@@ -276,7 +302,7 @@ const postsColumns = computed(() => {
         { class: "text-sm text-right block" },
         formatNumber(row.original.views_count)
       ),
-  },
+  }] : []),
   {
     accessorKey: "published_at",
     header: () =>
@@ -301,8 +327,27 @@ const postsColumns = computed(() => {
       ),
     cell: ({ row }: { row: { original: SocialPost } }) => {
       const UButton = resolveComponent("UButton");
-      if (row.original.comments_count > 0) {
-        return h("div", { class: "flex justify-end" }, [
+      const buttons = [];
+
+      // 查看原文按钮
+      if (row.original.url) {
+        buttons.push(
+          h(
+            UButton,
+            {
+              size: "xs",
+              variant: "ghost",
+              icon: "i-heroicons-arrow-top-right-on-square",
+              onClick: () => window.open(row.original.url!, "_blank"),
+            },
+            () => "原文"
+          )
+        );
+      }
+
+      // 查看评论按钮
+      if (row.original.crawled_comments_count > 0) {
+        buttons.push(
           h(
             UButton,
             {
@@ -310,11 +355,15 @@ const postsColumns = computed(() => {
               variant: "ghost",
               onClick: () => handleViewComments(row.original),
             },
-            () => "查看评论"
-          ),
-        ]);
+            () => "评论"
+          )
+        );
       }
-      return h("span", { class: "text-xs text-gray-400 block" }, "无评论");
+
+      if (buttons.length > 0) {
+        return h("div", { class: "flex justify-end gap-1" }, buttons);
+      }
+      return h("span", { class: "text-xs text-gray-400 block text-right" }, "-");
     },
   },
   ]

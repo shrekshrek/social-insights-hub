@@ -119,6 +119,8 @@ class SocialPostRead(SocialPostBase):
     is_deleted: bool
     created_at: datetime
     updated_at: datetime
+    # 已爬取的评论数（与平台显示的 comments_count 区分）
+    crawled_comments_count: int = Field(0, ge=0, description="已爬取的评论数")
 
 
 class SocialPostWithComments(SocialPostRead):

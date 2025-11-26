@@ -6,7 +6,7 @@ from .base import PlatformAdapter
 from .factory import register_adapter
 
 
-@register_adapter("kuaishou")
+@register_adapter("ks")
 class KuaishouAdapter(PlatformAdapter):
     """快手数据适配器
 

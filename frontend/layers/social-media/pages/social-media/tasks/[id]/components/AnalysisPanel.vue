@@ -547,12 +547,22 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
       accessorKey: 'engagement',
       header: '互动',
       cell: ({ row }) => {
-        const { likes_count, comments_count, views_count } = row.original
-        return h('div', { class: 'text-xs space-y-0.5 text-gray-600 dark:text-gray-400' }, [
+        const { likes_count, comments_count, shares_count, collected_count, views_count } = row.original
+        const items = [
           h('div', {}, `赞 ${formatNumber(likes_count)}`),
           h('div', {}, `评 ${formatNumber(comments_count)}`),
-          h('div', {}, `览 ${formatNumber(views_count)}`),
-        ])
+        ]
+        // 仅在有数据时显示对应项
+        if (shares_count > 0) {
+          items.push(h('div', {}, `转 ${formatNumber(shares_count)}`))
+        }
+        if (collected_count > 0) {
+          items.push(h('div', {}, `藏 ${formatNumber(collected_count)}`))
+        }
+        if (views_count > 0) {
+          items.push(h('div', {}, `览 ${formatNumber(views_count)}`))
+        }
+        return h('div', { class: 'text-xs space-y-0.5 text-gray-600 dark:text-gray-400' }, items)
       },
     },
     {

@@ -128,6 +128,7 @@ export interface SocialPost {
   likes_count: number
   comments_count: number
   shares_count: number
+  collected_count: number
   views_count: number
   images: string[] | null
   videos: string[] | null
@@ -138,6 +139,8 @@ export interface SocialPost {
   is_deleted: boolean
   created_at: string
   updated_at: string
+  // 已爬取的评论数（与平台显示的 comments_count 区分）
+  crawled_comments_count: number
 }
 
 export interface SocialPostCreate {
@@ -150,6 +153,7 @@ export interface SocialPostCreate {
   likes_count?: number
   comments_count?: number
   shares_count?: number
+  collected_count?: number
   views_count?: number
   images?: string[]
   videos?: string[]

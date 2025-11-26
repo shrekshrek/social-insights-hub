@@ -320,8 +320,8 @@ async def get_task_posts(
     page: int = 1,
     page_size: int = 20,
     current_user_id: int = None
-) -> tuple[List[SocialPost], int]:
-    """获取任务的原文列表"""
+) -> tuple[List[dict], int]:
+    """获取任务的原文列表（包含已爬取评论数）"""
     # 验证任务访问权限
     task = await get_task(db, task_id, current_user_id)
     if not task:

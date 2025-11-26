@@ -1,6 +1,6 @@
 """社交媒体数据任务业务逻辑层"""
 
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
@@ -14,6 +14,7 @@ from .schemas import (
     SocialPostCreate,
     SocialCommentCreate
 )
+from .adapters import get_adapter
 
 
 # ==================== DataTask Service ====================
@@ -153,9 +154,11 @@ async def process_json_upload(
 ) -> dict:
     """处理JSON上传数据
 
+    使用平台适配器将原始数据转换为统一格式后存储。
+
     Args:
         task_id: 任务ID
-        upload_data: 上传的数据
+        upload_data: 上传的数据（原始格式或已转换格式）
         current_user_id: 当前用户ID
 
     Returns:
@@ -183,14 +186,42 @@ async def process_json_upload(
             detail=f"Task data_source is '{task.data_source}', expected 'local_upload'"
         )
 
+    # 4. 获取平台适配器
+    platform_code = task.platform.code if task.platform else None
+    adapter = None
+    if platform_code:
+        try:
+            adapter = get_adapter(platform_code)
+        except ValueError:
+            # 平台暂不支持适配器，使用原始数据
+            pass
+
     try:
-        # 4. 更新任务状态为running
+        # 5. 更新任务状态为running
         await crud.update_task_status(db, task, "running")
         task.started_at = datetime.now(timezone.utc)
         await db.flush()
 
-        # 5. 导入原文数据
-        posts_data = [post.model_dump() for post in upload_data.contents]
+        # 6. 转换并导入原文数据
+        posts_data = []
+        for post in upload_data.contents:
+            raw_data = post.model_dump()
+            if adapter:
+                # 使用适配器转换并验证
+                transformed = adapter.transform_post(raw_data)
+                adapter.validate_post(transformed)
+            else:
+                # 直接使用原始数据（假设已是统一格式）
+                transformed = raw_data
+                # 基础验证：必须有 post_id_on_platform
+                if not transformed.get("post_id_on_platform"):
+                    raise ValueError(
+                        f"Missing required field 'post_id_on_platform'. "
+                        f"Platform '{platform_code}' has no adapter. "
+                        f"Data keys: {list(raw_data.keys())[:10]}"
+                    )
+            posts_data.append(transformed)
+
         created_posts = await crud.create_posts_bulk(
             db,
             task_id=task.id,
@@ -198,21 +229,37 @@ async def process_json_upload(
             posts_data=posts_data
         )
 
-        # 6. 创建post_id映射（平台ID -> 数据库ID）
+        # 7. 创建post_id映射（平台ID -> 数据库ID）
         post_id_mapping = {
             post.post_id_on_platform: post.id
             for post in created_posts
         }
 
-        # 7. 导入评论数据
+        # 8. 转换并导入评论数据
         comments_to_create = []
         for comment in upload_data.comments:
-            comment_dict = comment.model_dump()
+            raw_data = comment.model_dump()
+            if adapter:
+                # 使用适配器转换并验证
+                transformed = adapter.transform_comment(raw_data)
+                adapter.validate_comment(transformed)
+                # 从适配器获取帖子ID
+                post_id_on_platform = adapter.get_post_id_from_comment(transformed)
+            else:
+                # 直接使用原始数据（假设已是统一格式）
+                transformed = raw_data
+                # 基础验证：必须有 comment_id_on_platform
+                if not transformed.get("comment_id_on_platform"):
+                    raise ValueError(
+                        f"Missing required field 'comment_id_on_platform'. "
+                        f"Platform '{platform_code}' has no adapter. "
+                        f"Data keys: {list(raw_data.keys())[:10]}"
+                    )
+                post_id_on_platform = transformed.get('raw_data', {}).get('post_id_on_platform')
 
-            # 查找对应的post（评论的raw_data中应包含post_id_on_platform）
-            post_id_on_platform = comment_dict.get('raw_data', {}).get('post_id_on_platform')
+            # 查找对应的 post
             if not post_id_on_platform:
-                # 如果raw_data中没有，尝试从第一个原文推断（简化处理）
+                # 如果没有帖子ID，尝试从第一个原文推断（简化处理）
                 if created_posts:
                     post_id = created_posts[0].id
                 else:
@@ -223,7 +270,7 @@ async def process_json_upload(
                     # 找不到对应的原文，跳过该评论
                     continue
 
-            comments_to_create.append((post_id, comment_dict))
+            comments_to_create.append((post_id, transformed))
 
         created_comments = await crud.create_comments_bulk(
             db,
@@ -232,7 +279,7 @@ async def process_json_upload(
             comments_data=comments_to_create
         )
 
-        # 8. 更新任务统计和状态
+        # 9. 更新任务统计和状态
         await crud.update_task_counts(
             db,
             task,
@@ -241,7 +288,7 @@ async def process_json_upload(
         )
         await crud.update_task_status(db, task, "completed")
 
-        # 9. 提交事务
+        # 10. 提交事务
         await db.commit()
 
         return {

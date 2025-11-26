@@ -381,6 +381,14 @@ async def clear_task_data(
 
     用于重新上传或重新采集数据
     """
+    from sqlalchemy import delete
+    from src.social_media.analysis.models import PostAnalysis
+
+    # 先删除分析结果（因为帖子是软删除，CASCADE 不会触发）
+    await db.execute(
+        delete(PostAnalysis).where(PostAnalysis.task_id == task.id)
+    )
+
     # 软删除该任务的所有原文
     await crud.soft_delete_task_posts(db, task.id)
 

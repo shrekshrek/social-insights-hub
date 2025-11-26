@@ -86,7 +86,7 @@ class PostAnalysisCreate(CustomBaseModel):
     spam_score: float | None = Field(None, ge=0, le=10)
     value_score: float | None = Field(None, ge=0, le=10)
     relevance_score: float | None = Field(None, ge=0, le=10)
-    sentiment: int | None = Field(None, ge=-1, le=1)
+    sentiment: int | None = Field(None, ge=-2, le=2, description="情感倾向（-2强烈负面 到 2强烈正面）")
     post_deep_result: dict | None = None
     comment_deep_result: dict | None = None
 
@@ -96,7 +96,7 @@ class PostAnalysisUpdate(CustomBaseModel):
     spam_score: float | None = Field(None, ge=0, le=10)
     value_score: float | None = Field(None, ge=0, le=10)
     relevance_score: float | None = Field(None, ge=0, le=10)
-    sentiment: int | None = Field(None, ge=-1, le=1)
+    sentiment: int | None = Field(None, ge=-2, le=2, description="情感倾向（-2强烈负面 到 2强烈正面）")
     post_deep_result: dict | None = None
     comment_deep_result: dict | None = None
     analyzed_at: datetime | None = None

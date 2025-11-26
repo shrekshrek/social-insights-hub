@@ -98,6 +98,7 @@ class SocialPostBase(CustomBaseModel):
     shares_count: int = Field(0, ge=0, description="分享/转发数")
     collected_count: int = Field(0, ge=0, description="收藏数")
     views_count: int = Field(0, ge=0, description="播放/浏览数")
+    danmaku_count: int = Field(0, ge=0, description="弹幕数(B站特有)")
     images: Optional[List[str]] = None
     videos: Optional[List[str]] = None
     published_at: Optional[datetime] = None

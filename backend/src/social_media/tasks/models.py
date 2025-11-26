@@ -171,6 +171,7 @@ class SocialPost(Base):
     shares_count: Mapped[int] = mapped_column(Integer, default=0, comment="分享/转发数")
     collected_count: Mapped[int] = mapped_column(Integer, default=0, comment="收藏数")
     views_count: Mapped[int] = mapped_column(Integer, default=0, comment="播放/浏览数")
+    danmaku_count: Mapped[int] = mapped_column(Integer, default=0, comment="弹幕数(B站特有)")
 
     # 媒体资源
     images: Mapped[list | None] = mapped_column(JSON, nullable=True, comment="图片URL列表")

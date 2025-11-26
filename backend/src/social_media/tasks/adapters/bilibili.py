@@ -19,6 +19,7 @@ class BilibiliAdapter(PlatformAdapter):
     - liked_count -> likes_count
     - video_comment -> comments_count
     - video_play_count -> views_count
+    - video_danmaku -> danmaku_count
     - video_url -> url
     - video_cover_url -> images
     - user_id -> author_id
@@ -46,6 +47,7 @@ class BilibiliAdapter(PlatformAdapter):
             "shares_count": 0,  # B站数据中没有分享数
             "collected_count": 0,  # B站数据中没有收藏数
             "views_count": self.safe_int(raw_data.get("video_play_count")),
+            "danmaku_count": self.safe_int(raw_data.get("video_danmaku")),
             "images": images,
             "videos": None,  # B站视频链接需要特殊处理，暂不存储
             "published_at": self.parse_timestamp(raw_data.get("create_time")),

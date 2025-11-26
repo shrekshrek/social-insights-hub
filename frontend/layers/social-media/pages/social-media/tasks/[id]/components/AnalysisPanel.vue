@@ -78,16 +78,16 @@ const formatDateTime = (value?: string | null) => {
 /** 阈值筛选 */
 const thresholds = reactive({
   spamMax: 5,
-  valueMin: 6,
-  relevanceMin: 6,
+  valueMin: 3,
+  relevanceMin: 3,
 })
 
 // 深度分析对话框状态
 const deepDialogOpen = ref(false)
 const dialogThresholds = reactive({
   spamMax: 5,
-  valueMin: 6,
-  relevanceMin: 6,
+  valueMin: 3,
+  relevanceMin: 3,
 })
 const dialogPreview = ref<DeepAnalysisPreview | null>(null)
 const dialogPreviewLoading = ref(false)

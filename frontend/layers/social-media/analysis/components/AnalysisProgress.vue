@@ -179,7 +179,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AnalysisJob, AnalysisStatus, AnalysisType } from '../types'
+import type { AnalysisJob, AnalysisStatus } from '../types'
 
 interface Props {
   result: AnalysisJob

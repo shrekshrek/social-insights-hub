@@ -207,7 +207,7 @@ async def get_posts_by_task(
         .where(SocialPost.task_id == task_id, SocialPost.is_deleted == False)
         .offset(skip)
         .limit(limit)
-        .order_by(SocialPost.collected_at.desc())
+        .order_by(SocialPost.published_at.desc())
     )
 
     result = await db.execute(query)
@@ -222,7 +222,7 @@ async def get_posts_by_platform_post_id(
     post_id_on_platform: str,
     project_id: Optional[int] = None
 ) -> List[SocialPost]:
-    """跨任务查询同一帖子（按采集时间倒序）"""
+    """跨任务查询同一帖子（按发布时间倒序）"""
     conditions = [
         SocialPost.platform_id == platform_id,
         SocialPost.post_id_on_platform == post_id_on_platform,
@@ -237,13 +237,13 @@ async def get_posts_by_platform_post_id(
             select(SocialPost)
             .join(DataTask, SocialPost.task_id == DataTask.id)
             .where(and_(*conditions))
-            .order_by(SocialPost.collected_at.desc())
+            .order_by(SocialPost.published_at.desc())
         )
     else:
         query = (
             select(SocialPost)
             .where(and_(*conditions))
-            .order_by(SocialPost.collected_at.desc())
+            .order_by(SocialPost.published_at.desc())
         )
 
     result = await db.execute(query)
@@ -310,7 +310,7 @@ async def get_comments_by_post(
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
-    # 查询评论，按采集时间倒序
+    # 查询评论，按发布时间倒序
     query = (
         select(SocialComment)
         .where(
@@ -319,7 +319,7 @@ async def get_comments_by_post(
         )
         .offset(skip)
         .limit(limit)
-        .order_by(SocialComment.collected_at.desc())
+        .order_by(SocialComment.published_at.desc())
     )
 
     result = await db.execute(query)
@@ -357,7 +357,7 @@ async def get_comments_by_task(
         .where(*conditions)
         .offset(skip)
         .limit(limit)
-        .order_by(SocialComment.collected_at.desc())
+        .order_by(SocialComment.published_at.desc())
     )
 
     result = await db.execute(query)

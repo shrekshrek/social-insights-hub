@@ -332,8 +332,6 @@ const { data } = usersApi.getUsers({
 - **Fallback 内容**: 为 `<ClientOnly>` 提供 `fallback` 内容，提升用户体验
 - **useCharts 组合函数**: 使用项目提供的 `useCharts` 组合函数，而非直接调用 ECharts API
 
-**参考示例**：查看 `pages/charts.vue` 获取完整的使用示例。
-
 **最佳实践**：
 ```vue
 <ClientOnly>

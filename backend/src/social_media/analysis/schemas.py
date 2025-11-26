@@ -296,6 +296,7 @@ class PostAnalysisWithPostInfo(CustomBaseModel):
     """带帖子信息的分析结果"""
     # 帖子基本信息
     post_id: int
+    post_id_on_platform: str | None = None  # 平台上的帖子ID，用于关联原文数据
     title: str | None = None
     content: str | None = None
     author_name: str | None = None

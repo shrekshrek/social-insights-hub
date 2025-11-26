@@ -21,6 +21,7 @@ const {
   runPostScreening,
   runPostDeepAnalysis,
   runCommentDeepAnalysis,
+  deleteTaskAnalyses,
 } = useAnalysis()
 
 /** 任务历史（用于运行中状态提示，按 task_id 筛选） */
@@ -142,11 +143,49 @@ const screeningTask = computed<AnalysisJob | undefined>(() =>
   ),
 )
 
+// 原文深度任务（用于显示进度）
+const deepPostsTask = computed<AnalysisJob | undefined>(() =>
+  (analysisHistory.value?.items || []).find(
+    (item) =>
+      item.analysis_type === 'deep_posts' &&
+      ['pending', 'processing'].includes(item.status)
+  ),
+)
+
+// 评论深度任务（用于显示进度）
+const deepCommentsTask = computed<AnalysisJob | undefined>(() =>
+  (analysisHistory.value?.items || []).find(
+    (item) =>
+      item.analysis_type === 'deep_comments' &&
+      ['pending', 'processing'].includes(item.status)
+  ),
+)
+
+// 依赖状态：是否有初筛结果
+const hasScreeningResult = computed(() => (preview.value?.screened_count ?? 0) > 0)
+// 依赖状态：是否有原文深度结果
+const hasDeepResult = computed(() => (preview.value?.deep_done ?? 0) > 0)
+// 依赖状态：未初筛的帖子数量
+const unscreenedCount = computed(() => {
+  const total = preview.value?.total_posts ?? 0
+  const screened = preview.value?.screened_count ?? 0
+  return total - screened
+})
+// 依赖状态：是否所有帖子都已初筛
+const allPostsScreened = computed(() => {
+  const total = preview.value?.total_posts ?? 0
+  return total > 0 && unscreenedCount.value === 0
+})
+
 const actionLoading = reactive({
   screening: false,
   deep: false,
   comment: false,
+  delete: false,
 })
+
+// 删除分析结果对话框状态
+const deleteDialogOpen = ref(false)
 
 const refreshAll = async () => {
   await Promise.all([refreshHistory(), refreshPostAnalysis(), loadPreview()])
@@ -253,6 +292,36 @@ const handleConfirmDeepAnalysis = async () => {
   await handleDeep()
 }
 
+// 评论深度分析弹窗状态
+const commentDialogOpen = ref(false)
+const commentDialogPreview = ref<DeepAnalysisPreview | null>(null)
+const commentDialogPreviewLoading = ref(false)
+
+const loadCommentDialogPreview = async () => {
+  commentDialogPreviewLoading.value = true
+  try {
+    commentDialogPreview.value = await getDeepAnalysisPreview(props.taskId, {
+      spam_max: thresholds.spamMax,
+      value_min: thresholds.valueMin,
+      relevance_min: thresholds.relevanceMin,
+    })
+  } catch (error) {
+    console.error('Failed to load comment dialog preview:', error)
+  } finally {
+    commentDialogPreviewLoading.value = false
+  }
+}
+
+const openCommentAnalysisDialog = () => {
+  commentDialogOpen.value = true
+  loadCommentDialogPreview()
+}
+
+const handleConfirmCommentAnalysis = async () => {
+  commentDialogOpen.value = false
+  await handleComment()
+}
+
 const ensureNotRunning = () => {
   if (hasRunningTask.value) {
     toast.add({
@@ -271,8 +340,8 @@ const handleScreening = async () => {
   try {
     await runPostScreening(props.taskId)
     await refreshAll()
-  } catch (error) {
-    toast.add({ title: '启动初筛失败', description: String(error), color: 'error' })
+  } catch {
+    // 错误已由 apiRequest 处理并显示 toast
   } finally {
     actionLoading.screening = false
   }
@@ -297,8 +366,8 @@ const handleDeep = async () => {
       relevance_min: thresholds.relevanceMin,
     })
     await refreshAll()
-  } catch (error) {
-    toast.add({ title: '启动原文分析失败', description: String(error), color: 'error' })
+  } catch {
+    // 错误已由 apiRequest 处理并显示 toast
   } finally {
     actionLoading.deep = false
   }
@@ -323,10 +392,30 @@ const handleComment = async () => {
       relevance_min: thresholds.relevanceMin,
     })
     await refreshAll()
-  } catch (error) {
-    toast.add({ title: '启动评论分析失败', description: String(error), color: 'error' })
+  } catch {
+    // 错误已由 apiRequest 处理并显示 toast
   } finally {
     actionLoading.comment = false
+  }
+}
+
+// 删除分析结果
+const openDeleteDialog = () => {
+  deleteDialogOpen.value = true
+}
+
+const handleDeleteAnalyses = async () => {
+  if (!ensureNotRunning()) return
+
+  actionLoading.delete = true
+  try {
+    await deleteTaskAnalyses(props.taskId)
+    deleteDialogOpen.value = false
+    await refreshAll()
+  } catch {
+    // 错误已由 apiRequest 处理并显示 toast，保持对话框打开以便重试
+  } finally {
+    actionLoading.delete = false
   }
 }
 
@@ -358,6 +447,11 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
       accessorKey: 'post_id',
       header: 'ID',
       cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.post_id),
+    },
+    {
+      accessorKey: 'post_id_on_platform',
+      header: '平台ID',
+      cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono truncate max-w-[80px]', title: row.original.post_id_on_platform || '-' }, row.original.post_id_on_platform || '-'),
     },
     {
       accessorKey: 'content',
@@ -516,6 +610,18 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
             icon="i-heroicons-x-mark"
             @click="handleClearSearch"
           />
+
+          <!-- 删除分析结果按钮 -->
+          <UButton
+            size="sm"
+            color="error"
+            variant="soft"
+            icon="i-heroicons-trash"
+            :disabled="hasRunningTask || total === 0"
+            @click="openDeleteDialog"
+          >
+            清空结果
+          </UButton>
         </div>
       </div>
     </template>
@@ -524,38 +630,53 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     <div class="mb-4 flex justify-between items-start flex-wrap gap-3">
       <!-- 左侧：操作按钮 -->
       <div class="flex items-center gap-2 flex-wrap">
-        <UButton
-          size="sm"
-          color="primary"
-          :loading="actionLoading.screening"
-          :disabled="hasRunningTask && screeningTask?.status === 'processing'"
-          icon="i-heroicons-funnel"
-          @click="handleScreening"
+        <UTooltip
+          :text="allPostsScreened ? '所有帖子已完成初筛' : totalPostsCount === 0 ? '没有帖子数据' : ''"
+          :disabled="!allPostsScreened && totalPostsCount > 0"
         >
-          原文初筛
-        </UButton>
+          <UButton
+            size="sm"
+            color="primary"
+            :loading="actionLoading.screening"
+            :disabled="hasRunningTask || allPostsScreened || totalPostsCount === 0"
+            icon="i-heroicons-funnel"
+            @click="handleScreening"
+          >
+            原文初筛{{ unscreenedCount > 0 ? ` (${unscreenedCount})` : '' }}
+          </UButton>
+        </UTooltip>
 
-        <UButton
-          size="sm"
-          color="success"
-          :loading="actionLoading.deep"
-          :disabled="hasRunningTask"
-          icon="i-heroicons-document-text"
-          @click="openDeepAnalysisDialog"
+        <UTooltip
+          :text="!hasScreeningResult ? '请先完成原文初筛' : ''"
+          :disabled="hasScreeningResult"
         >
-          原文深度
-        </UButton>
+          <UButton
+            size="sm"
+            color="success"
+            :loading="actionLoading.deep"
+            :disabled="hasRunningTask || !hasScreeningResult"
+            icon="i-heroicons-document-text"
+            @click="openDeepAnalysisDialog"
+          >
+            原文深度
+          </UButton>
+        </UTooltip>
 
-        <UButton
-          size="sm"
-          color="warning"
-          :loading="actionLoading.comment"
-          :disabled="hasRunningTask"
-          icon="i-heroicons-chat-bubble-left-right"
-          @click="handleComment"
+        <UTooltip
+          :text="!hasScreeningResult ? '请先完成原文初筛' : !hasDeepResult ? '请先完成原文深度分析' : ''"
+          :disabled="hasScreeningResult && hasDeepResult"
         >
-          评论深度
-        </UButton>
+          <UButton
+            size="sm"
+            color="warning"
+            :loading="actionLoading.comment"
+            :disabled="hasRunningTask || !hasDeepResult"
+            icon="i-heroicons-chat-bubble-left-right"
+            @click="openCommentAnalysisDialog"
+          >
+            评论深度
+          </UButton>
+        </UTooltip>
       </div>
 
       <!-- 右侧：阈值显示 -->
@@ -601,6 +722,66 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
         :color="screeningTask.status === 'failed' ? 'error' : 'primary'"
       />
       <p v-if="screeningTask.status === 'failed'" class="text-xs text-red-600 mt-2">
+        任务执行失败
+      </p>
+    </div>
+
+    <!-- 原文深度任务进度 -->
+    <div
+      v-if="deepPostsTask"
+      class="mb-4 p-3 border rounded-lg bg-green-50 dark:bg-green-900/20"
+    >
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium">原文深度分析任务</span>
+          <UBadge
+            :color="deepPostsTask.status === 'completed' ? 'success' : deepPostsTask.status === 'failed' ? 'error' : 'success'"
+            size="xs"
+          >
+            {{ deepPostsTask.status === 'completed' ? '已完成' : deepPostsTask.status === 'failed' ? '失败' : '进行中' }}
+          </UBadge>
+        </div>
+        <span class="text-xs text-gray-500">
+          {{ deepPostsTask.analyzed_count || 0 }} / {{ deepPostsTask.source_count || 0 }}
+        </span>
+      </div>
+      <UProgress
+        :model-value="deepPostsTask.source_count > 0 ? ((deepPostsTask.analyzed_count || 0) / deepPostsTask.source_count) * 100 : 0"
+        :max="100"
+        size="sm"
+        :color="deepPostsTask.status === 'failed' ? 'error' : 'success'"
+      />
+      <p v-if="deepPostsTask.status === 'failed'" class="text-xs text-red-600 mt-2">
+        任务执行失败
+      </p>
+    </div>
+
+    <!-- 评论深度任务进度 -->
+    <div
+      v-if="deepCommentsTask"
+      class="mb-4 p-3 border rounded-lg bg-orange-50 dark:bg-orange-900/20"
+    >
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium">评论深度分析任务</span>
+          <UBadge
+            :color="deepCommentsTask.status === 'completed' ? 'success' : deepCommentsTask.status === 'failed' ? 'error' : 'warning'"
+            size="xs"
+          >
+            {{ deepCommentsTask.status === 'completed' ? '已完成' : deepCommentsTask.status === 'failed' ? '失败' : '进行中' }}
+          </UBadge>
+        </div>
+        <span class="text-xs text-gray-500">
+          {{ deepCommentsTask.analyzed_count || 0 }} / {{ deepCommentsTask.source_count || 0 }}
+        </span>
+      </div>
+      <UProgress
+        :model-value="deepCommentsTask.source_count > 0 ? ((deepCommentsTask.analyzed_count || 0) / deepCommentsTask.source_count) * 100 : 0"
+        :max="100"
+        size="sm"
+        :color="deepCommentsTask.status === 'failed' ? 'error' : 'warning'"
+      />
+      <p v-if="deepCommentsTask.status === 'failed'" class="text-xs text-red-600 mt-2">
         任务执行失败
       </p>
     </div>
@@ -720,6 +901,67 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     </template>
   </UModal>
 
+  <!-- 评论深度分析预览弹窗 -->
+  <UModal
+    v-model:open="commentDialogOpen"
+    title="评论深度分析预览"
+    :ui="{ width: 'sm:max-w-xl', footer: 'justify-end' }"
+  >
+    <template #body>
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          评论深度分析将对已完成原文深度分析且有评论的帖子进行评论内容分析，提取评论中的实体和观点。
+        </p>
+
+        <!-- 加载状态 -->
+        <div v-if="commentDialogPreviewLoading" class="text-center text-gray-500 py-4">
+          <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin mx-auto mb-2" />
+          正在加载预览...
+        </div>
+
+        <!-- 预览信息 -->
+        <div v-else-if="commentDialogPreview" class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-2">
+          <div class="flex justify-between text-sm">
+            <span class="text-gray-500">已初筛帖子</span>
+            <span class="font-medium">{{ commentDialogPreview.screened_count }} 条</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-gray-500">已完成原文深度</span>
+            <span class="font-medium">{{ commentDialogPreview.deep_done }} 条</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-gray-500">已完成评论深度</span>
+            <span class="font-medium">{{ commentDialogPreview.comment_done }} 条</span>
+          </div>
+          <hr class="border-gray-200 dark:border-gray-700">
+          <div class="flex justify-between text-sm">
+            <span class="text-gray-700 dark:text-gray-300 font-medium">待分析评论的帖子</span>
+            <span class="text-lg font-bold text-warning">{{ commentDialogPreview.comment_candidate_ids?.length || 0 }} 条</span>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">
+            仅分析已完成原文深度分析且有评论的帖子
+          </p>
+        </div>
+      </div>
+    </template>
+
+    <template #footer>
+      <UButton
+        label="取消"
+        color="neutral"
+        variant="outline"
+        @click="commentDialogOpen = false"
+      />
+      <UButton
+        :label="`开始分析 (${commentDialogPreview?.comment_candidate_ids?.length || 0} 条)`"
+        color="warning"
+        :loading="actionLoading.comment"
+        :disabled="!commentDialogPreview || (commentDialogPreview.comment_candidate_ids?.length || 0) === 0"
+        @click="handleConfirmCommentAnalysis"
+      />
+    </template>
+  </UModal>
+
   <!-- 深度分析结果弹窗 -->
   <UModal
     v-model:open="deepResultModalOpen"
@@ -823,6 +1065,55 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
         color="neutral"
         variant="outline"
         @click="deepResultModalOpen = false"
+      />
+    </template>
+  </UModal>
+
+  <!-- 删除分析结果确认对话框 -->
+  <UModal
+    v-model:open="deleteDialogOpen"
+    title="确认删除分析结果"
+    :ui="{ width: 'sm:max-w-md', footer: 'justify-end' }"
+  >
+    <template #body>
+      <div class="space-y-4">
+        <div class="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+          <UIcon name="i-heroicons-exclamation-triangle" class="w-8 h-8 text-red-500" />
+          <div>
+            <p class="font-medium text-red-700 dark:text-red-400">此操作不可撤销</p>
+            <p class="text-sm text-red-600 dark:text-red-400/80">删除后需要重新运行分析任务</p>
+          </div>
+        </div>
+
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          将删除此任务下所有帖子的分析结果，包括：
+        </p>
+        <ul class="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1">
+          <li>初筛评分（垃圾分、价值分、相关度、情感）</li>
+          <li>原文深度分析结果（实体、观点、摘要）</li>
+          <li>评论深度分析结果</li>
+        </ul>
+
+        <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <p class="text-sm">
+            当前共有 <strong class="text-lg text-primary">{{ total }}</strong> 条分析记录将被删除
+          </p>
+        </div>
+      </div>
+    </template>
+
+    <template #footer>
+      <UButton
+        label="取消"
+        color="neutral"
+        variant="outline"
+        @click="deleteDialogOpen = false"
+      />
+      <UButton
+        label="确认删除"
+        color="error"
+        :loading="actionLoading.delete"
+        @click="handleDeleteAnalyses"
       />
     </template>
   </UModal>

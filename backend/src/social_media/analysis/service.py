@@ -371,16 +371,22 @@ async def run_post_screening(
     post_ids = request.post_ids or []
 
     if request.analyze_all or not post_ids:
-        # 获取任务下所有帖子ID
+        # 获取任务下所有帖子ID（排除已有初筛结果的）
         from src.social_media.tasks.models import SocialPost
-        stmt = select(SocialPost.id).where(SocialPost.task_id == request.task_id)
+        stmt = (
+            select(SocialPost.id)
+            .outerjoin(PostAnalysis, PostAnalysis.post_id == SocialPost.id)
+            .where(SocialPost.task_id == request.task_id)
+            .where(SocialPost.is_deleted == False)
+            .where(PostAnalysis.spam_score.is_(None))  # 只选择尚未初筛的
+        )
         result = await db.execute(stmt)
         post_ids = [row[0] for row in result.fetchall()]
 
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No posts to analyze"
+            detail="没有需要初筛的帖子（所有帖子已完成初筛）"
         )
 
     # 创建分析任务记录（使用新的 AnalysisJob 模型）
@@ -462,7 +468,7 @@ async def run_post_deep_analysis(
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No posts to analyze"
+            detail="没有符合条件的帖子需要原文深度分析（请先完成初筛或调整阈值）"
         )
 
     # 创建分析任务记录
@@ -546,7 +552,7 @@ async def run_comment_deep_analysis(
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No posts with comments to analyze"
+            detail="没有符合条件的帖子需要评论深度分析（需先完成原文深度分析且有评论）"
         )
 
     # 创建分析任务记录
@@ -641,6 +647,7 @@ async def get_task_post_analyses(
     stmt = (
         select(
             SocialPost.id,
+            SocialPost.post_id_on_platform,
             SocialPost.title,
             SocialPost.content,
             SocialPost.author_name,
@@ -695,6 +702,7 @@ async def get_task_post_analyses(
     for row in rows:
         items.append({
             "post_id": row.id,
+            "post_id_on_platform": row.post_id_on_platform,
             "title": row.title,
             "content": row.content,
             "author_name": row.author_name,
@@ -815,6 +823,66 @@ async def preview_deep_analysis_candidates(
         "comment_done": comment_done,
         "deep_candidate_ids": matched_ids,
         "comment_candidate_ids": comment_candidate_ids,
+    }
+
+
+# ==================== Delete Analysis Results ====================
+
+async def delete_task_analyses(
+    db: AsyncSession,
+    task_id: int,
+    current_user_id: int,
+) -> dict[str, Any]:
+    """删除任务下所有帖子的分析结果，方便重新分析
+
+    Args:
+        task_id: 任务ID
+        current_user_id: 当前用户ID
+
+    Returns:
+        删除结果，包含删除的记录数
+    """
+    from src.social_media.tasks import crud as task_crud
+    from src.social_media.projects import crud as project_crud
+    from sqlalchemy import delete
+
+    # 验证任务是否存在
+    task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task {task_id} not found"
+        )
+
+    # 验证用户权限
+    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this task"
+        )
+
+    # 查询要删除的记录数
+    count_stmt = select(func.count()).where(PostAnalysis.task_id == task_id)
+    count_result = await db.execute(count_stmt)
+    deleted_count = count_result.scalar() or 0
+
+    if deleted_count == 0:
+        return {
+            "success": True,
+            "deleted_count": 0,
+            "message": "没有需要删除的分析结果"
+        }
+
+    # 删除所有分析结果
+    delete_stmt = delete(PostAnalysis).where(PostAnalysis.task_id == task_id)
+    await db.execute(delete_stmt)
+    await db.commit()
+
+    return {
+        "success": True,
+        "deleted_count": deleted_count,
+        "message": f"已删除 {deleted_count} 条分析结果"
     }
 
 

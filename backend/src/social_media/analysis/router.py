@@ -320,6 +320,28 @@ async def preview_deep_analysis(
     return DeepAnalysisPreviewResponse.model_validate(preview)
 
 
+@router.delete(
+    "/tasks/{task_id}/analyses",
+    status_code=status.HTTP_200_OK,
+    summary="删除任务下所有分析结果",
+)
+async def delete_task_analyses(
+    task_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    删除任务下所有帖子的分析结果，方便重新分析
+
+    - 会删除初筛结果（spam_score, value_score, relevance_score, sentiment）
+    - 会删除帖子深度分析结果（post_deep_result）
+    - 会删除评论深度分析结果（comment_deep_result）
+    - 删除后可重新运行各类分析
+    """
+    result = await service.delete_task_analyses(db, task_id, current_user.id)
+    return result
+
+
 # ==================== 项目级分析操作（预留）====================
 
 @router.post(

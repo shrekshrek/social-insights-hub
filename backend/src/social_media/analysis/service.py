@@ -349,7 +349,7 @@ async def run_post_screening(
     """运行帖子AI初筛分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.projects import crud as project_crud
-    from .tasks.screening_tasks import screening_coordinator
+    from .celery_tasks.screening_tasks import screening_coordinator
 
     # 验证任务是否存在
     task = await task_crud.get_task_by_id(db, request.task_id, load_relations=False)
@@ -431,7 +431,7 @@ async def run_post_deep_analysis(
     """运行帖子深度分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.projects import crud as project_crud
-    from .tasks.deep_analysis_tasks import post_deep_coordinator
+    from .celery_tasks.deep_analysis_tasks import post_deep_coordinator
 
     # 验证任务和权限
     task = await task_crud.get_task_by_id(db, request.task_id, load_relations=False)
@@ -515,7 +515,7 @@ async def run_comment_deep_analysis(
     """运行评论深度分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.projects import crud as project_crud
-    from .tasks.deep_analysis_tasks import comment_deep_coordinator
+    from .celery_tasks.deep_analysis_tasks import comment_deep_coordinator
 
     # 验证任务和权限
     task = await task_crud.get_task_by_id(db, request.task_id, load_relations=False)

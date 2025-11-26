@@ -26,14 +26,19 @@ from datetime import datetime, timezone
 from sqlalchemy import select, update
 
 from src.celery_app import celery_app
+from src.config import get_settings
 from src.social_media.analysis.base_task import AnalysisTaskBase
 from src.database import SyncSessionLocal
-from src.langchain.llm import get_llm
 from src.social_media.analysis.models import PostAnalysis, AnalysisJob
 from src.social_media.tasks.models import SocialPost
 from src.social_media.analysis.celery_tasks.progress_manager import AnalysisProgressManager
-from src.social_media.analysis.celery_tasks.llm_utils import invoke_llm_with_stats_sync
+from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
+from src.langchain.chains.screening_chain import (
+    create_screening_chain,
+    format_posts_for_screening,
+)
 
+settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +60,6 @@ def _analyze_batch_posts(
         批量分析结果
     """
     try:
-        llm = get_llm(llm_type="chat")
         db = SyncSessionLocal()
 
         try:
@@ -68,39 +72,22 @@ def _analyze_batch_posts(
                 logger.warning(f"批次帖子均不存在: {post_ids}")
                 return {"success": False, "analyzed": 0, "failed": len(post_ids)}
 
-            # 2. 构建批量提示词
-            posts_content = []
-            for i, post_id in enumerate(post_ids, 1):
-                post = posts.get(post_id)
-                if post:
-                    posts_content.append(f"""
-帖子{i}（ID:{post_id}）：
-标题：{post.title or '无'}
-正文：{post.content}
-""")
+            # 2. 构建帖子内容列表
+            posts_list = [
+                {"id": post_id, "title": posts[post_id].title, "content": posts[post_id].content}
+                for post_id in post_ids
+                if post_id in posts
+            ]
+            posts_content = format_posts_for_screening(posts_list)
 
-            prompt = f"""请对以下社交媒体帖子进行批量初筛评分：
-
-项目关键词：{project_keywords}
-
-{''.join(posts_content)}
-
-请从以下维度评分（0-10分）：
-1. 垃圾分（spam_score）：是否为垃圾、广告、灌水内容
-2. 价值分（value_score）：内容的信息价值和质量
-3. 相关度分（relevance_score）：与项目关键词的相关程度
-4. 情感倾向（sentiment）：-1（负面）、0（中性）、1（正面）
-
-请以JSON数组格式返回结果（按帖子顺序）：
-[
-    {{"post_id": {post_ids[0] if post_ids else 0}, "spam_score": 分数, "value_score": 分数, "relevance_score": 分数, "sentiment": -1/0/1}},
-    ...
-]"""
-
-            # 3. 调用LLM（一次调用分析多个帖子）
-            response, token_stats = invoke_llm_with_stats_sync(
-                llm=llm,
-                messages=[{"role": "user", "content": prompt}],
+            # 3. 创建链并调用LLM（一次调用分析多个帖子）
+            chain = create_screening_chain()
+            response, token_stats = invoke_chain_with_stats_sync(
+                chain=chain,
+                input_dict={
+                    "project_keywords": project_keywords,
+                    "posts_content": posts_content,
+                },
                 llm_type="chat"
             )
 
@@ -164,18 +151,11 @@ def _analyze_batch_posts(
 
             db.commit()
 
-            # 6. 更新进度
+            # 6. 更新进度 - 一次API调用，记录处理了多少条
             progress_mgr = AnalysisProgressManager(result_id)
             if analyzed_count > 0:
-                # 将token统计平均分配到每个帖子
-                for _ in range(analyzed_count):
-                    progress_mgr.increment_analyzed({
-                        'input_tokens': token_stats['input_tokens'] // analyzed_count,
-                        'output_tokens': token_stats['output_tokens'] // analyzed_count,
-                        'total_tokens': token_stats['total_tokens'] // analyzed_count,
-                        'total_cost_cny': token_stats['total_cost_cny'] / analyzed_count,
-                        'duration_seconds': token_stats['duration_seconds'] / analyzed_count,
-                    })
+                # 一次API调用处理了 analyzed_count 条记录
+                progress_mgr.increment_analyzed_batch(analyzed_count, token_stats)
 
             if failed_count > 0:
                 for _ in range(failed_count):
@@ -327,13 +307,13 @@ def screening_coordinator(
         # 更新状态为处理中
         _update_task_status(result_id, status="processing")
 
-        # 将帖子分批，每批5个
+        # 将帖子分批（批次大小从配置读取）
         from celery import group, chain
 
-        BATCH_SIZE = 5
+        batch_size = settings.CELERY_AI_POSTS_BATCH_SIZE
         batches = [
-            post_ids[i:i + BATCH_SIZE]
-            for i in range(0, len(post_ids), BATCH_SIZE)
+            post_ids[i:i + batch_size]
+            for i in range(0, len(post_ids), batch_size)
         ]
 
         # 为每批创建一个子任务
@@ -356,14 +336,14 @@ def screening_coordinator(
 
         logger.info(
             f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个帖子，"
-            f"每批 {BATCH_SIZE} 个）到队列，启动监控任务"
+            f"每批 {batch_size} 个）到队列，启动监控任务"
         )
 
         return {
             "status": "dispatched",
             "subtasks_count": len(batches),
             "total_posts": len(post_ids),
-            "batch_size": BATCH_SIZE,
+            "batch_size": batch_size,
             "message": f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个帖子）到队列"
         }
 

@@ -20,12 +20,17 @@ from datetime import datetime, timezone
 from celery import chord, group
 
 from src.celery_app import celery_app
+from src.config import get_settings
 from src.database import SyncSessionLocal
 from src.social_media.analysis.models import PostAnalysis
 from src.social_media.analysis.schemas import PostDeepResult, CommentDeepResult
 from src.social_media.tasks.models import SocialPost, SocialComment
 from src.social_media.analysis.celery_tasks.progress_manager import AnalysisProgressManager
-from src.social_media.analysis.celery_tasks.llm_utils import invoke_llm_with_stats_sync
+from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
+from src.langchain.chains.post_extraction_chain import create_post_extraction_chain
+from src.langchain.chains.comment_extraction_chain import create_comment_extraction_chain
+
+settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
@@ -69,22 +74,11 @@ def _analyze_single_post(
             # 2. 准备输入内容
             content = f"标题：{post.title or '无'}\n正文：{post.content}"
 
-            # 3. 调用LLM进行深度分析
-            from src.langchain.chains.post_extraction_chain import (
-                POST_EXTRACTION_SYSTEM_TEMPLATE,
-                POST_EXTRACTION_USER_TEMPLATE
-            )
-            from src.langchain.llm import get_llm
-
-            messages = [
-                {"role": "system", "content": POST_EXTRACTION_SYSTEM_TEMPLATE},
-                {"role": "user", "content": POST_EXTRACTION_USER_TEMPLATE.format(content=content)}
-            ]
-
-            llm = get_llm(llm_type="chat")
-            response, token_stats = invoke_llm_with_stats_sync(
-                llm=llm,
-                messages=messages,
+            # 3. 调用LLM进行深度分析（使用chain）
+            chain = create_post_extraction_chain()
+            response, token_stats = invoke_chain_with_stats_sync(
+                chain=chain,
+                input_dict={"content": content},
                 llm_type="chat"
             )
 
@@ -369,30 +363,19 @@ def _analyze_single_post_comments(
             if not comment_texts:
                 return {"success": False, "error": "no_valid_comments"}
 
-            # 4. 调用LLM进行评论分析
-            from src.langchain.chains.comment_extraction_chain import (
-                COMMENT_ANALYSIS_SYSTEM_TEMPLATE,
-                COMMENT_ANALYSIS_USER_TEMPLATE
-            )
-            from src.langchain.llm import get_llm
-
+            # 4. 调用LLM进行评论分析（使用chain）
             formatted_comments = "\n".join(
                 [f"评论{i+1}: {comment}" for i, comment in enumerate(comment_texts)]
             )
             context_text = f"背景上下文：\n{context}"
 
-            messages = [
-                {"role": "system", "content": COMMENT_ANALYSIS_SYSTEM_TEMPLATE},
-                {"role": "user", "content": COMMENT_ANALYSIS_USER_TEMPLATE.format(
-                    context=context_text,
-                    comments=formatted_comments
-                )}
-            ]
-
-            llm = get_llm(llm_type="chat")
-            response, token_stats = invoke_llm_with_stats_sync(
-                llm=llm,
-                messages=messages,
+            chain = create_comment_extraction_chain()
+            response, token_stats = invoke_chain_with_stats_sync(
+                chain=chain,
+                input_dict={
+                    "context": context_text,
+                    "comments": formatted_comments,
+                },
                 llm_type="chat"
             )
 

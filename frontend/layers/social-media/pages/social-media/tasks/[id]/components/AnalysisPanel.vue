@@ -6,6 +6,7 @@ import type {
   AnalysisJob,
   DeepAnalysisPreview,
 } from '../../../../../analysis/types'
+import ExpandableText from '../../../../../analysis/components/ExpandableText.vue'
 
 const props = defineProps<{
   taskId: number
@@ -329,11 +330,20 @@ const handleComment = async () => {
   }
 }
 
-// 内容展开状态
-const expandedContentId = ref<number | null>(null)
+// 深度分析结果弹窗
+const deepResultModalOpen = ref(false)
+const deepResultModalType = ref<'post' | 'comment'>('post')
+const deepResultModalPostId = ref<number | null>(null)
 
-const toggleContent = (postId: number) => {
-  expandedContentId.value = expandedContentId.value === postId ? null : postId
+const selectedPostForDeepResult = computed(() => {
+  if (!deepResultModalPostId.value) return null
+  return rows.value.find(r => r.post_id === deepResultModalPostId.value) || null
+})
+
+const openDeepResultModal = (postId: number, type: 'post' | 'comment') => {
+  deepResultModalPostId.value = postId
+  deepResultModalType.value = type
+  deepResultModalOpen.value = true
 }
 
 /** 统一表格列定义 */
@@ -341,6 +351,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
   if (!import.meta.client) return []
 
   const UBadge = resolveComponent('UBadge')
+  const UIcon = resolveComponent('UIcon')
 
   return [
     {
@@ -351,53 +362,12 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     {
       accessorKey: 'content',
       header: '标题/内容',
-      cell: ({ row }) => {
-        const { title, content, post_id } = row.original
-        const isExpanded = expandedContentId.value === post_id
-        const titleText = title || ''
-        const contentText = content || ''
-        const hasLongTitle = titleText.length > 100
-        const hasLongContent = contentText.length > 100
-        const needsExpand = hasLongTitle || hasLongContent
-
-        return h('div', { class: 'max-w-md' }, [
-          // 标题
-          titleText
-            ? h(
-                'p',
-                {
-                  class: isExpanded
-                    ? 'font-medium text-sm whitespace-pre-wrap'
-                    : 'font-medium text-sm truncate',
-                },
-                isExpanded ? titleText : (hasLongTitle ? titleText.substring(0, 100) + '...' : titleText)
-              )
-            : null,
-          // 内容
-          h(
-            'p',
-            {
-              class: isExpanded
-                ? 'text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap mt-1'
-                : 'text-xs text-gray-600 dark:text-gray-400 truncate mt-1',
-            },
-            contentText
-              ? (isExpanded ? contentText : (hasLongContent ? contentText.substring(0, 100) + '...' : contentText))
-              : '无内容'
-          ),
-          // 展开/收起按钮
-          needsExpand
-            ? h(
-                'button',
-                {
-                  class: 'text-xs text-primary-500 hover:text-primary-600 mt-1 font-medium',
-                  onClick: () => toggleContent(post_id),
-                },
-                isExpanded ? '−' : '+'
-              )
-            : null,
-        ])
-      },
+      cell: ({ row }) =>
+        h(ExpandableText, {
+          title: row.original.title || '',
+          content: row.original.content || '',
+          maxLength: 30,
+        }),
     },
     {
       accessorKey: 'scores',
@@ -433,6 +403,50 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
         return sentiment != null
           ? h(UBadge, { size: 'xs', color, variant: 'subtle' }, () => label)
           : h('span', { class: 'text-gray-400 text-xs' }, '-')
+      },
+    },
+    {
+      accessorKey: 'deep_analysis',
+      header: '深度分析',
+      cell: ({ row }) => {
+        const { post_deep_result, comment_deep_result, post_id } = row.original
+        const hasPostDeep = !!post_deep_result
+        const hasCommentDeep = !!comment_deep_result
+
+        if (!hasPostDeep && !hasCommentDeep) {
+          return h('span', { class: 'text-gray-400 text-xs' }, '-')
+        }
+
+        return h('div', { class: 'space-y-1' }, [
+          // 原文深度标签
+          hasPostDeep
+            ? h(
+                'button',
+                {
+                  class: 'flex items-center gap-1 text-xs text-green-600 hover:text-green-700 cursor-pointer',
+                  onClick: () => openDeepResultModal(post_id, 'post'),
+                },
+                [
+                  h(UIcon, { name: 'i-heroicons-document-text', class: 'w-3 h-3' }),
+                  h('span', {}, '原文'),
+                ]
+              )
+            : null,
+          // 评论深度标签
+          hasCommentDeep
+            ? h(
+                'button',
+                {
+                  class: 'flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 cursor-pointer',
+                  onClick: () => openDeepResultModal(post_id, 'comment'),
+                },
+                [
+                  h(UIcon, { name: 'i-heroicons-chat-bubble-left-right', class: 'w-3 h-3' }),
+                  h('span', {}, '评论'),
+                ]
+              )
+            : null,
+        ])
       },
     },
     {
@@ -628,7 +642,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
   <UModal
     v-model:open="deepDialogOpen"
     title="设置原文深度分析阈值"
-    :ui="{ width: 'sm:max-w-xl' }"
+    :ui="{ width: 'sm:max-w-xl', footer: 'justify-end' }"
   >
     <template #body>
       <div class="space-y-4">
@@ -690,21 +704,126 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     </template>
 
     <template #footer>
-      <div class="flex gap-3 justify-end">
-        <UButton
-          label="取消"
-          color="neutral"
-          variant="outline"
-          @click="deepDialogOpen = false"
-        />
-        <UButton
-          :label="`确定分析 (${dialogPreview?.matched_count || 0} 条)`"
-          color="primary"
-          :loading="actionLoading.deep"
-          :disabled="!dialogPreview || dialogPreview.matched_count === 0"
-          @click="handleConfirmDeepAnalysis"
-        />
+      <UButton
+        label="取消"
+        color="neutral"
+        variant="outline"
+        @click="deepDialogOpen = false"
+      />
+      <UButton
+        :label="`确定分析 (${dialogPreview?.matched_count || 0} 条)`"
+        color="primary"
+        :loading="actionLoading.deep"
+        :disabled="!dialogPreview || dialogPreview.matched_count === 0"
+        @click="handleConfirmDeepAnalysis"
+      />
+    </template>
+  </UModal>
+
+  <!-- 深度分析结果弹窗 -->
+  <UModal
+    v-model:open="deepResultModalOpen"
+    :title="deepResultModalType === 'post' ? '原文深度分析结果' : '评论深度分析结果'"
+    :ui="{ width: 'sm:max-w-2xl', footer: 'justify-end' }"
+  >
+    <template #body>
+      <div v-if="selectedPostForDeepResult" class="space-y-4">
+        <!-- 帖子标题 -->
+        <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {{ selectedPostForDeepResult.title || '无标题' }}
+          </p>
+        </div>
+
+        <!-- 原文深度结果 -->
+        <template v-if="deepResultModalType === 'post' && selectedPostForDeepResult.post_deep_result">
+          <!-- AI总结 -->
+          <div class="space-y-2">
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">AI 总结</h4>
+            <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+              {{ selectedPostForDeepResult.post_deep_result.summary || '无' }}
+            </p>
+          </div>
+
+          <!-- 识别的实体 -->
+          <div v-if="selectedPostForDeepResult.post_deep_result.entities?.length" class="space-y-2">
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">识别的实体</h4>
+            <div class="flex flex-wrap gap-2">
+              <UBadge
+                v-for="(entity, idx) in selectedPostForDeepResult.post_deep_result.entities"
+                :key="idx"
+                :color="entity.type === '品牌' ? 'primary' : entity.type === '商品' ? 'success' : 'neutral'"
+                variant="subtle"
+                size="sm"
+              >
+                {{ entity.name }} ({{ entity.type }})
+              </UBadge>
+            </div>
+          </div>
+
+          <!-- 通用观点 -->
+          <div v-if="selectedPostForDeepResult.post_deep_result.general_opinions?.length" class="space-y-2">
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">提取的观点</h4>
+            <div class="space-y-2">
+              <div
+                v-for="(opinion, idx) in selectedPostForDeepResult.post_deep_result.general_opinions"
+                :key="idx"
+                class="p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm"
+              >
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ opinion.category }}：</span>
+                <span class="text-gray-600 dark:text-gray-400">{{ opinion.opinions?.join('、') }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 评论深度结果 -->
+        <template v-else-if="deepResultModalType === 'comment' && selectedPostForDeepResult.comment_deep_result">
+          <!-- 识别的实体 -->
+          <div v-if="selectedPostForDeepResult.comment_deep_result.entities?.length" class="space-y-2">
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">评论中识别的实体</h4>
+            <div class="flex flex-wrap gap-2">
+              <UBadge
+                v-for="(entity, idx) in selectedPostForDeepResult.comment_deep_result.entities"
+                :key="idx"
+                :color="entity.type === '品牌' ? 'primary' : entity.type === '商品' ? 'success' : 'neutral'"
+                variant="subtle"
+                size="sm"
+              >
+                {{ entity.name }} ({{ entity.type }})
+              </UBadge>
+            </div>
+          </div>
+
+          <!-- 通用观点 -->
+          <div v-if="selectedPostForDeepResult.comment_deep_result.general_opinions?.length" class="space-y-2">
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">评论中提取的观点</h4>
+            <div class="space-y-2">
+              <div
+                v-for="(opinion, idx) in selectedPostForDeepResult.comment_deep_result.general_opinions"
+                :key="idx"
+                class="p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm"
+              >
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ opinion.category }}：</span>
+                <span class="text-gray-600 dark:text-gray-400">{{ opinion.opinions?.join('、') }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div v-else class="text-center text-gray-500 py-4">
+          暂无分析结果
+        </div>
       </div>
+    </template>
+
+    <template #footer>
+      <UButton
+        label="关闭"
+        color="neutral"
+        variant="outline"
+        @click="deepResultModalOpen = false"
+      />
     </template>
   </UModal>
   </div>

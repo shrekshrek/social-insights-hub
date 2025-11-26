@@ -22,19 +22,17 @@
     </template>
 
     <template #footer>
-      <div class="flex gap-3">
-        <UButton 
-          :label="cancelText" 
-          color="neutral" 
-          variant="outline" 
-          @click="emit('close', false)"
-        />
-        <UButton 
-          :label="confirmText" 
-          :color="buttonColor"
-          @click="emit('close', true)"
-        />
-      </div>
+      <UButton
+        :label="cancelText"
+        color="neutral"
+        variant="outline"
+        @click="emit('close', false)"
+      />
+      <UButton
+        :label="confirmText"
+        :color="buttonColor"
+        @click="emit('close', true)"
+      />
     </template>
   </UModal>
 </template>

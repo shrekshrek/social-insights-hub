@@ -113,6 +113,12 @@ def _analyze_batch_posts(
 
             for item in results:
                 post_id = item.get("post_id")
+                # 确保 post_id 是整数（AI 可能返回字符串）
+                if post_id is not None:
+                    try:
+                        post_id = int(post_id)
+                    except (ValueError, TypeError):
+                        pass
                 if not post_id or post_id not in posts:
                     continue
 

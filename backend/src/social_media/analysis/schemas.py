@@ -302,6 +302,8 @@ class PostAnalysisWithPostInfo(CustomBaseModel):
     author_name: str | None = None
     likes_count: int = 0
     comments_count: int = 0
+    shares_count: int = 0
+    collected_count: int = 0
     views_count: int = 0
     published_at: datetime | None = None
     url: str | None = None

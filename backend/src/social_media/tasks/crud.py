@@ -191,8 +191,12 @@ async def get_posts_by_task(
     task_id: int,
     skip: int = 0,
     limit: int = 20
-) -> tuple[List[SocialPost], int]:
-    """获取任务的原文列表"""
+) -> tuple[List[dict], int]:
+    """获取任务的原文列表（包含已爬取评论数）
+
+    Returns:
+        tuple: (帖子数据列表（包含 crawled_comments_count）, 总数)
+    """
     # 统计总数
     count_query = select(func.count()).select_from(SocialPost).where(
         SocialPost.task_id == task_id,
@@ -201,9 +205,20 @@ async def get_posts_by_task(
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
-    # 查询数据
+    # 子查询：每个帖子的已爬取评论数
+    crawled_count_subquery = (
+        select(func.count(SocialComment.id))
+        .where(
+            SocialComment.post_id == SocialPost.id,
+            SocialComment.is_deleted == False
+        )
+        .correlate(SocialPost)
+        .scalar_subquery()
+    )
+
+    # 查询数据（包含已爬取评论数）
     query = (
-        select(SocialPost)
+        select(SocialPost, crawled_count_subquery.label("crawled_comments_count"))
         .where(SocialPost.task_id == task_id, SocialPost.is_deleted == False)
         .offset(skip)
         .limit(limit)
@@ -211,9 +226,40 @@ async def get_posts_by_task(
     )
 
     result = await db.execute(query)
-    posts = result.scalars().all()
+    rows = result.all()
 
-    return list(posts), total
+    # 转换为字典列表，包含 crawled_comments_count
+    posts_data = []
+    for post, crawled_count in rows:
+        post_dict = {
+            "id": post.id,
+            "task_id": post.task_id,
+            "platform_id": post.platform_id,
+            "post_id_on_platform": post.post_id_on_platform,
+            "post_type": post.post_type,
+            "title": post.title,
+            "content": post.content,
+            "author_id": post.author_id,
+            "author_name": post.author_name,
+            "likes_count": post.likes_count,
+            "comments_count": post.comments_count,
+            "shares_count": post.shares_count,
+            "collected_count": post.collected_count,
+            "views_count": post.views_count,
+            "images": post.images,
+            "videos": post.videos,
+            "published_at": post.published_at,
+            "url": post.url,
+            "raw_data": post.raw_data,
+            "collected_at": post.collected_at,
+            "is_deleted": post.is_deleted,
+            "created_at": post.created_at,
+            "updated_at": post.updated_at,
+            "crawled_comments_count": crawled_count or 0,
+        }
+        posts_data.append(post_dict)
+
+    return posts_data, total
 
 
 async def get_posts_by_platform_post_id(

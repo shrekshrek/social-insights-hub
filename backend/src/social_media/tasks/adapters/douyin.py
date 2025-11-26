@@ -6,7 +6,7 @@ from .base import PlatformAdapter
 from .factory import register_adapter
 
 
-@register_adapter("douyin")
+@register_adapter("dy")
 class DouyinAdapter(PlatformAdapter):
     """抖音数据适配器
 

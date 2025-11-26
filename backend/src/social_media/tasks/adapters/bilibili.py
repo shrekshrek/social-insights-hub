@@ -6,7 +6,7 @@ from .base import PlatformAdapter
 from .factory import register_adapter
 
 
-@register_adapter("bilibili")
+@register_adapter("bili")
 class BilibiliAdapter(PlatformAdapter):
     """B站数据适配器
 

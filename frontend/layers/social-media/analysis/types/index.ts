@@ -176,7 +176,7 @@ export interface AnalysisJob {
   user_name?: string
 }
 
-export interface AnalysisJobListResponse extends PaginatedResponse<AnalysisJob> {}
+export type AnalysisJobListResponse = PaginatedResponse<AnalysisJob>
 
 // ==================== Analysis Statistics ====================
 
@@ -244,6 +244,7 @@ export interface AnalysisProgressResponse {
 export interface PostAnalysisWithPostInfo {
   // 帖子基本信息
   post_id: number
+  post_id_on_platform: string | null  // 平台上的帖子ID，用于关联原文数据
   title: string | null
   content: string | null
   author_name: string | null
@@ -268,7 +269,7 @@ export interface PostAnalysisWithPostInfo {
   analysis_model: string | null
 }
 
-export interface PostAnalysisListResponse extends PaginatedResponse<PostAnalysisWithPostInfo> {}
+export type PostAnalysisListResponse = PaginatedResponse<PostAnalysisWithPostInfo>
 
 // ==================== 深度分析预览 ====================
 export interface DeepAnalysisPreview {

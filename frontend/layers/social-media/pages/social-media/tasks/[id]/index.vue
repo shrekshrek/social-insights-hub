@@ -80,7 +80,7 @@ const {
 const comments = computed(() => commentsResponse.value?.items || []);
 const commentsTotal = computed(() => commentsResponse.value?.total || 0);
 
-// 创建 post_id 到 post_id_on_platform 的映射
+// 创建 post_id 到 post_id_on_platform 的映射（用于评论表格显示主贴平台ID）
 const postIdMap = computed(() => {
   if (!posts.value) return new Map<number, string>();
   return new Map(
@@ -194,13 +194,24 @@ const postsColumns = computed(() => {
 
   return [
     {
+      accessorKey: "id",
+      header: () =>
+        h("span", { style: { whiteSpace: "nowrap" } as const }, "ID"),
+      cell: ({ row }: { row: { original: SocialPost } }) =>
+        h(
+          "span",
+          { class: "text-xs text-gray-500 font-mono" },
+          row.original.id
+        ),
+    },
+    {
       accessorKey: "post_id_on_platform",
       header: () =>
         h("span", { style: { whiteSpace: "nowrap" } as const }, "平台ID"),
       cell: ({ row }: { row: { original: SocialPost } }) =>
         h(
           "span",
-          { class: "text-xs font-mono" },
+          { class: "text-xs font-mono truncate max-w-[80px]", title: row.original.post_id_on_platform || "-" },
           row.original.post_id_on_platform || "-"
         ),
     },
@@ -267,14 +278,14 @@ const postsColumns = computed(() => {
       ),
   },
   {
-    accessorKey: "collected_at",
+    accessorKey: "published_at",
     header: () =>
-      h("span", { style: { whiteSpace: "nowrap" } as const }, "采集时间"),
+      h("span", { style: { whiteSpace: "nowrap" } as const }, "发布时间"),
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
         { class: "text-xs" },
-        formatDateTime(row.original.collected_at)
+        formatDateTime(row.original.published_at)
       ),
   },
   {
@@ -317,14 +328,17 @@ const commentsColumns = computed(() => {
   {
     accessorKey: "post_id",
     header: () =>
-      h("span", { style: { whiteSpace: "nowrap" } as const }, "关联主贴ID"),
+      h("span", { style: { whiteSpace: "nowrap" } as const }, "主贴ID"),
+    cell: ({ row }: { row: { original: SocialComment } }) =>
+      h("span", { class: "text-xs text-gray-500 font-mono" }, row.original.post_id),
+  },
+  {
+    accessorKey: "post_id_on_platform",
+    header: () =>
+      h("span", { style: { whiteSpace: "nowrap" } as const }, "主贴平台ID"),
     cell: ({ row }: { row: { original: SocialComment } }) => {
-      // 通过 post_id 从映射中获取 post_id_on_platform
-      const postIdOnPlatform =
-        postIdMap.value.get(row.original.post_id) ||
-        (row.original.raw_data?.post_id_on_platform as string) ||
-        "-";
-      return h("span", { class: "text-xs font-mono" }, postIdOnPlatform);
+      const postIdOnPlatform = postIdMap.value.get(row.original.post_id) || "-";
+      return h("span", { class: "text-xs font-mono truncate max-w-[80px]", title: postIdOnPlatform }, postIdOnPlatform);
     },
   },
   {
@@ -356,14 +370,14 @@ const commentsColumns = computed(() => {
       ),
   },
   {
-    accessorKey: "collected_at",
+    accessorKey: "published_at",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论时间"),
     cell: ({ row }: { row: { original: SocialComment } }) =>
       h(
         "span",
         { class: "text-xs" },
-        formatDateTime(row.original.collected_at)
+        formatDateTime(row.original.published_at)
       ),
   },
   ]

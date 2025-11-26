@@ -221,6 +221,20 @@ export const useAnalysis = () => {
     )
   }
 
+  /**
+   * 删除任务下所有分析结果（方便重新分析）
+   */
+  const deleteTaskAnalyses = async (taskId: number) => {
+    const result = await apiRequest<{ success: boolean; deleted_count: number; message: string }>(
+      `/social-media/analysis/tasks/${taskId}/analyses`,
+      {
+        method: 'DELETE',
+      }
+    )
+    showSuccess(result.message)
+    return result
+  }
+
   // ==================== 项目级分析操作（预留）====================
 
   /**
@@ -271,6 +285,7 @@ export const useAnalysis = () => {
     runCommentDeepAnalysis,
     getTaskPostAnalyses,
     getDeepAnalysisPreview,
+    deleteTaskAnalyses,
 
     // 项目级分析操作（预留）
     runTopicClustering,

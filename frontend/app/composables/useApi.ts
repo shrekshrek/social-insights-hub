@@ -123,6 +123,7 @@ export const useApi = () => {
     console.error('API 错误:', error)
 
     // 获取错误信息
+    // ofetch 使用 _data，普通 fetch 使用 data
     const errorObj = error as {
       status?: number
       statusCode?: number
@@ -130,20 +131,27 @@ export const useApi = () => {
         error?: { code?: string; message?: string }
         detail?: string | Array<{ msg: string }>
       }
+      _data?: {
+        error?: { code?: string; message?: string }
+        detail?: string | Array<{ msg: string }>
+      }
     }
     const status = errorObj.status || errorObj.statusCode
     let message = '请求失败'
 
+    // 获取响应数据（兼容 ofetch 的 _data 和普通 fetch 的 data）
+    const responseData = errorObj._data || errorObj.data
+
     // 解析错误消息 - 优先使用后端统一格式
-    if (errorObj.data?.error?.message) {
+    if (responseData?.error?.message) {
       // 后端统一错误格式: { error: { code, message } }
-      message = errorObj.data.error.message
-    } else if (errorObj.data?.detail) {
+      message = responseData.error.message
+    } else if (responseData?.detail) {
       // FastAPI 默认格式: { detail: string | array }
-      if (typeof errorObj.data.detail === 'string') {
-        message = errorObj.data.detail
-      } else if (Array.isArray(errorObj.data.detail) && errorObj.data.detail.length > 0) {
-        message = errorObj.data.detail[0]?.msg || message
+      if (typeof responseData.detail === 'string') {
+        message = responseData.detail
+      } else if (Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+        message = responseData.detail[0]?.msg || message
       }
     }
     

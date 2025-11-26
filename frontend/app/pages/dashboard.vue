@@ -78,17 +78,6 @@
         </NuxtLink>
 
         <NuxtLink 
-          to="/charts" 
-          class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-        >
-          <UIcon name="i-heroicons-chart-bar" class="w-6 h-6 text-purple-600" />
-          <div>
-            <div class="font-medium">数据图表</div>
-            <div class="text-sm text-gray-500">查看数据可视化</div>
-          </div>
-        </NuxtLink>
-
-        <NuxtLink 
           v-if="permissions.canAccessUsersPage" 
           to="/users" 
           class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"

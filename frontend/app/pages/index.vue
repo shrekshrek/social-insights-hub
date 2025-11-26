@@ -45,14 +45,6 @@
             <UIcon name="i-heroicons-squares-2x2" class="w-5 h-5" />
             进入工作台
           </NuxtLink>
-          <NuxtLink 
-            v-if="permissions.canAccessDashboard"
-            to="/charts"
-            class="inline-flex items-center justify-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium rounded-lg transition-colors"
-          >
-            <UIcon name="i-heroicons-chart-bar" class="w-5 h-5" />
-            查看图表
-          </NuxtLink>
         </div>
       </div>
 

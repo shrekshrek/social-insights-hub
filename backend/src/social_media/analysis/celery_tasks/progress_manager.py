@@ -55,7 +55,23 @@ class AnalysisProgressManager:
             # 存储总数以便计算进度
             self.redis_client.set(f"analysis:result:{self.result_id}:total_count", total_count)
 
-            logger.info(f"初始化分析进度: result_id={self.result_id}, total_count={total_count}")
+            # 更新数据库：设置状态为processing和started_at
+            db = SyncSessionLocal()
+            try:
+                stmt = select(AnalysisJob).where(
+                    AnalysisJob.id == self.result_id
+                ).with_for_update()
+
+                result = db.execute(stmt)
+                analysis_job = result.scalar_one_or_none()
+
+                if analysis_job:
+                    analysis_job.status = "processing"
+                    analysis_job.started_at = datetime.now(timezone.utc)
+                    db.commit()
+                    logger.info(f"初始化分析进度: result_id={self.result_id}, total_count={total_count}, started_at已设置")
+            finally:
+                db.close()
 
         except Exception as e:
             logger.error(f"初始化Redis进度失败: {e}")
@@ -243,7 +259,7 @@ class AnalysisProgressManager:
             logger.info(f"执行最终同步...")
             self._sync_to_db()
 
-            # 更新任务状态为completed
+            # 更新任务状态为completed，并计算processing_time
             db = SyncSessionLocal()
             try:
                 stmt = select(AnalysisJob).where(
@@ -254,8 +270,19 @@ class AnalysisProgressManager:
                 analysis_job = result.scalar_one_or_none()
 
                 if analysis_job:
+                    completed_at = datetime.now(timezone.utc)
                     analysis_job.status = "completed"
-                    analysis_job.completed_at = datetime.now(timezone.utc)
+                    analysis_job.completed_at = completed_at
+
+                    # 计算处理耗时（秒）
+                    if analysis_job.started_at:
+                        # 确保 started_at 有时区信息
+                        started_at = analysis_job.started_at
+                        if started_at.tzinfo is None:
+                            started_at = started_at.replace(tzinfo=timezone.utc)
+                        analysis_job.processing_time = int((completed_at - started_at).total_seconds())
+                        logger.info(f"任务完成，耗时: {analysis_job.processing_time}秒")
+
                     db.commit()
 
             finally:

@@ -196,6 +196,10 @@ def _update_task_status(result_id: int, status: str, **kwargs):
             **kwargs
         }
 
+        # 当状态变为processing时，设置started_at
+        if status == "processing":
+            update_data["started_at"] = datetime.now(timezone.utc)
+
         stmt = (
             update(AnalysisJob)
             .where(AnalysisJob.id == result_id)

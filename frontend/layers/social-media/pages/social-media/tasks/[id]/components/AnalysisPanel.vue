@@ -490,13 +490,19 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
       header: '情感',
       cell: ({ row }) => {
         const sentiment = row.original.sentiment
-        const color =
-          sentiment === 1 ? 'success' : sentiment === -1 ? 'error' : 'neutral'
-        const label =
-          sentiment === 1 ? '正面' : sentiment === -1 ? '负面' : '中性'
-        return sentiment != null
-          ? h(UBadge, { size: 'xs', color, variant: 'subtle' }, () => label)
-          : h('span', { class: 'text-gray-400 text-xs' }, '-')
+        if (sentiment == null) {
+          return h('span', { class: 'text-gray-400 text-xs' }, '-')
+        }
+        // 五级情感：-2强烈负面, -1轻度负面, 0中性, 1轻度正面, 2强烈正面
+        const sentimentMap: Record<number, { color: string; label: string }> = {
+          [-2]: { color: 'error', label: '强烈负面' },
+          [-1]: { color: 'warning', label: '轻度负面' },
+          [0]: { color: 'neutral', label: '中性' },
+          [1]: { color: 'info', label: '轻度正面' },
+          [2]: { color: 'success', label: '强烈正面' },
+        }
+        const config = sentimentMap[sentiment] || { color: 'neutral', label: '中性' }
+        return h(UBadge, { size: 'xs', color: config.color, variant: 'subtle' }, () => config.label)
       },
     },
     {

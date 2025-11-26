@@ -62,7 +62,7 @@ class AnalysisProgressManager:
 
     def increment_analyzed(self, token_stats: Dict[str, Any]) -> int:
         """
-        增加已分析计数（Redis原子操作）
+        增加已分析计数（Redis原子操作）- 单条记录版本
 
         Args:
             token_stats: Token使用统计
@@ -70,22 +70,36 @@ class AnalysisProgressManager:
         Returns:
             int: 当前已分析数量
         """
-        try:
-            # 1. 原子递增计数
-            current_count = self.redis_client.incr(self.key_analyzed)
+        return self.increment_analyzed_batch(1, token_stats)
 
-            # 2. 追加调用详情到列表
+    def increment_analyzed_batch(self, count: int, token_stats: Dict[str, Any]) -> int:
+        """
+        批量增加已分析计数（一次API调用处理多条记录）
+
+        Args:
+            count: 本批次处理的记录数量
+            token_stats: 本次API调用的Token使用统计（整个批次的总量）
+
+        Returns:
+            int: 当前已分析数量
+        """
+        try:
+            # 1. 原子递增计数（按实际处理数量）
+            current_count = self.redis_client.incrby(self.key_analyzed, count)
+
+            # 2. 追加调用详情到列表（一次API调用记录一条）
             call_detail = {
                 "input_tokens": token_stats['input_tokens'],
                 "output_tokens": token_stats['output_tokens'],
                 "total_tokens": token_stats['total_tokens'],
                 "cost_cny": token_stats['total_cost_cny'],
                 "duration_seconds": token_stats['duration_seconds'],
+                "batch_size": count,  # 记录本批次处理了多少条
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             self.redis_client.rpush(self.key_call_details, json.dumps(call_detail))
 
-            # 3. 累积Token统计（使用Hash）
+            # 3. 累积Token统计（使用Hash）- API调用次数只加1
             self.redis_client.hincrby(self.key_token_usage, "total_calls", 1)
             self.redis_client.hincrbyfloat(
                 self.key_token_usage, "total_input_tokens", token_stats['input_tokens']
@@ -113,7 +127,7 @@ class AnalysisProgressManager:
         except Exception as e:
             logger.error(f"Redis操作失败，降级到直接DB操作: {e}")
             # 降级：直接写入数据库
-            return self._fallback_increment_analyzed(token_stats)
+            return self._fallback_increment_analyzed_batch(count, token_stats)
 
     def increment_failed(self) -> int:
         """增加失败计数（Redis原子操作）"""
@@ -262,7 +276,11 @@ class AnalysisProgressManager:
             logger.error(f"最终同步失败: {e}", exc_info=True)
 
     def _fallback_increment_analyzed(self, token_stats: Dict[str, Any]) -> int:
-        """降级方案：直接写入数据库（Redis不可用时）"""
+        """降级方案：直接写入数据库（Redis不可用时）- 单条版本"""
+        return self._fallback_increment_analyzed_batch(1, token_stats)
+
+    def _fallback_increment_analyzed_batch(self, count: int, token_stats: Dict[str, Any]) -> int:
+        """降级方案：直接写入数据库（Redis不可用时）- 批量版本"""
         db = SyncSessionLocal()
         try:
             stmt = select(AnalysisJob).where(
@@ -277,13 +295,18 @@ class AnalysisProgressManager:
 
                 new_call_detail = {
                     "call_index": len(current_usage.get("call_details", [])),
-                    **token_stats,
+                    "input_tokens": token_stats['input_tokens'],
+                    "output_tokens": token_stats['output_tokens'],
+                    "total_tokens": token_stats['total_tokens'],
+                    "cost_cny": token_stats['total_cost_cny'],
+                    "duration_seconds": token_stats['duration_seconds'],
+                    "batch_size": count,
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
                 current_usage.setdefault("call_details", []).append(new_call_detail)
 
                 summary = current_usage.setdefault("summary", {})
-                summary["total_calls"] = summary.get("total_calls", 0) + 1
+                summary["total_calls"] = summary.get("total_calls", 0) + 1  # 一次API调用
                 summary["total_input_tokens"] = summary.get("total_input_tokens", 0) + token_stats['input_tokens']
                 summary["total_output_tokens"] = summary.get("total_output_tokens", 0) + token_stats['output_tokens']
                 summary["total_tokens"] = summary.get("total_tokens", 0) + token_stats['total_tokens']
@@ -294,7 +317,7 @@ class AnalysisProgressManager:
                     summary["avg_tokens_per_call"] = summary["total_tokens"] / summary["total_calls"]
                     summary["avg_cost_per_call"] = summary["total_cost_cny"] / summary["total_calls"]
 
-                analysis_job.analyzed_count += 1
+                analysis_job.analyzed_count += count  # 按实际处理数量增加
                 analysis_job.token_usage = current_usage
                 analysis_job.updated_at = datetime.now(timezone.utc)
 

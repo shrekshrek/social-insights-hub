@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, computed, reactive, ref, watch, resolveComponent } from 'vue'
+import { h, computed, ref, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import type { AnalysisJob, AnalysisType, AnalysisStatus } from '../../../analysis/types'
 
@@ -242,6 +242,18 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           class: 'p-0 font-normal',
           to: `/social-media/tasks/${row.original.task_id}`,
         }, () => row.original.task_name)
+      },
+    },
+    {
+      accessorKey: 'api_calls',
+      header: 'API 调用',
+      cell: ({ row }) => {
+        const usage = row.original.token_usage?.summary
+        const calls = usage?.total_calls || 0
+        return h('div', { class: 'text-xs text-gray-600 dark:text-gray-400' }, [
+          h('div', {}, `${calls} 次`),
+          h('div', { class: 'text-gray-400' }, 'deepseek-chat'),
+        ])
       },
     },
     {

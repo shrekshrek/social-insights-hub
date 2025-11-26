@@ -10,82 +10,60 @@ from langchain_core.runnables import Runnable
 from src.langchain.llm import get_llm
 
 
-# Post extraction prompts - keep original templates unchanged
-POST_EXTRACTION_SYSTEM_TEMPLATE = """
-你是信息提取专家。提取文本中的结构化信息，不要分析或推断。
+# Post extraction prompts
+POST_EXTRACTION_SYSTEM_TEMPLATE = """你是舆情分析专家，从社交媒体内容中提取结构化信息。
 
-## 提取内容：
+## 提取要求（重要）
+1. **只提取不推断**：严格复制原文短语，不改写意译，不捏造内容
+2. **完整表达**：提取有意义的完整短语，不断章取义
+3. **无则留空**：原文未提及的内容，对应字段返回空数组
+4. **避免重复**：不同字段间不要提取重复内容
 
-1. **实体信息**：识别文本中提及的实体，并提取相关属性
-   * 要点：
-     - 必须是原文中明确提及的实体信息
-     - 如果找不到符合条件的实体信息，应返回空列表
-   * 类型分类指导（**必须严格遵守，只能选择以下4种类型之一**）：
-     - **品牌**：公司名称、品牌名称（如：苹果、华为、可口可乐）
-     - **商品**：具体产品、游戏、应用、角色、物品（如：iPhone、鸣潮、相里要、游戏角色）
-     - **服务**：提供的服务、技术方案、平台服务、技术概念（如：云服务、在线教育、配送服务、D2M技术）
-     - **其他**：实在无法归入上述三类的实体（如：抽象概念、地点、时间等）
-   * 字段：
-     * **name:** 实体名称
-     * **type:** "品牌"、"商品"、"服务" 或 "其他"
-     * **sentiment:** 情感倾向 (1=正面, 0=中性, -1=负面)
-     * **features:** 实体特性/功能/优点
-     * **issues:** 当前存在的问题/缺点
-     * **expectations:** 用户改进期望/建议
-     * **audience:** 目标人群/用户类型
-     * **scenarios:** 使用场景/用途
-     * **market_factors:** 价格/促销/销售渠道
-     * **competitors:** 与其他实体比较
+## 提取内容
 
-2. **通用观点信息**：提取与特定实体无关的观点和见解
-   * 要点：
-     - 必须是原文中明确表达的观点、意见、建议等
-     - 按观点类别分类整理
-     - 如果找不到符合条件的通用观点信息，应返回空列表
-   * 字段：
-     * **category:** 观点类别(如"产品"、"价格"、"服务"、"行业"等)
-     * **opinions:** 具体观点内容列表，不针对特定实体
-     * **sentiment:** 该类别观点的整体情感倾向 (1=正面, 0=中性, -1=负面)
+### 1. 实体信息 (entities)
+识别原文提及的品牌、产品、服务、人物等实体：
 
-3. **内容总结**：用20-100字对原文内容进行简明扼要的总结
+| 字段 | 说明 |
+|-----|------|
+| name | 实体名称 |
+| type | 品牌/产品/服务/人物/其他 |
+| sentiment | 情感：1正面, 0中性, -1负面 |
+| features | 特性/功能/优点 |
+| issues | 问题/缺点/不满 |
+| expectations | 改进期望/建议 |
+| audience | 提及的目标人群 |
+| scenarios | 使用场景/用途 |
+| market_factors | 价格/促销/渠道 |
+| competitors | 竞品对比 |
 
-## 提取要求：
-1. 只提取不分析：严格复制原文短语，不改写意译
-2. 完整短语：提取有意义的完整表达，不断章取义
-3. 避免重复：不同字段间避免提取重复内容
-4. 总结客观：总结应当客观反映原文内容，不添加个人见解
+**type分类（只能选以下5类之一）**：
+- 品牌：公司、品牌（华为、可口可乐）
+- 产品：具体产品、应用、游戏（iPhone、微信、原神）
+- 服务：服务、平台、技术方案（云服务、外卖配送）
+- 人物：KOL、高管、明星（雷军、李佳琦）
+- 其他：无法归入上述类别的实体
 
-## 输出格式：
+### 2. 通用观点 (general_opinions)
+提取不针对特定实体的观点：
+
+| 字段 | 说明 |
+|-----|------|
+| category | 观点类别（产品/价格/服务/行业等） |
+| opinions | 具体观点内容列表 |
+| sentiment | 情感：1正面, 0中性, -1负面 |
+
+### 3. 内容总结 (summary)
+20-100字客观概括原文主旨，不添加个人见解
+
+## 输出格式
 {{
-  "entities": [
-    {{
-      "name": "string",
-      "type": "品牌|商品|服务|其他",
-      "sentiment": 1|0|-1,
-      "features": ["string"],
-      "issues": ["string"],
-      "expectations": ["string"],
-      "audience": ["string"],
-      "scenarios": ["string"],
-      "market_factors": ["string"],
-      "competitors": ["string"]
-    }}
-  ],
-  "general_opinions": [
-    {{
-      "category": "string",
-      "opinions": ["string"],
-      "sentiment": 1|0|-1
-    }}
-  ],
-  "summary": "string"
+  "entities": [{{"name": "", "type": "", "sentiment": 0, "features": [], "issues": [], "expectations": [], "audience": [], "scenarios": [], "market_factors": [], "competitors": []}}],
+  "general_opinions": [{{"category": "", "opinions": [], "sentiment": 0}}],
+  "summary": ""
 }}
 
-只输出JSON格式，不要额外文本。
-
-**重要约束**：
-- type字段必须且只能是："品牌"、"商品"、"服务"、"其他"中的一个
-- 当不确定归类时，优先选择"其他"
+只输出JSON，无额外文本。
 """
 
 POST_EXTRACTION_USER_TEMPLATE = """请提取以下文本的品牌/产品信息和通用观点，并生成总结：

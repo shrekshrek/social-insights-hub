@@ -31,7 +31,7 @@
           </span>
         </div>
         <UProgress
-          :value="progress"
+          :model-value="progress"
           :max="100"
           :color="progressColor"
           size="md"

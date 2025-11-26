@@ -581,7 +581,8 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
         </span>
       </div>
       <UProgress
-        :value="screeningTask.source_count ? ((screeningTask.analyzed_count || 0) / screeningTask.source_count) * 100 : 0"
+        :model-value="screeningTask.source_count > 0 ? ((screeningTask.analyzed_count || 0) / screeningTask.source_count) * 100 : 0"
+        :max="100"
         size="sm"
         :color="screeningTask.status === 'failed' ? 'error' : 'primary'"
       />

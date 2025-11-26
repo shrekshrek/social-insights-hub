@@ -20,6 +20,7 @@ export const useJSONUpload = () => {
   }
 
   // 验证JSON数据格式
+  // 注意：后端适配器会处理字段映射，前端只需验证基本结构
   const validateJSONData = (jsonStr: string): { valid: boolean; data?: JSONUploadData; error?: string } => {
     try {
       const data = JSON.parse(jsonStr) as JSONUploadData
@@ -33,21 +34,13 @@ export const useJSONUpload = () => {
         return { valid: false, error: '缺少 comments 字段或格式不正确' }
       }
 
-      // 验证 contents 中每个帖子都有 post_id_on_platform
-      for (let i = 0; i < data.contents.length; i++) {
-        const post = data.contents[i]
-        if (!post?.post_id_on_platform) {
-          return { valid: false, error: `第 ${i + 1} 个帖子缺少 post_id_on_platform 字段` }
-        }
+      // 验证 contents 不为空
+      if (data.contents.length === 0) {
+        return { valid: false, error: 'contents 数组不能为空' }
       }
 
-      // 验证 comments 中每个评论都有 comment_id_on_platform
-      for (let i = 0; i < data.comments.length; i++) {
-        const comment = data.comments[i]
-        if (!comment?.comment_id_on_platform) {
-          return { valid: false, error: `第 ${i + 1} 条评论缺少 comment_id_on_platform 字段` }
-        }
-      }
+      // 注意：不再验证具体字段名（如 post_id_on_platform）
+      // 后端适配器会根据平台自动转换原始字段名
 
       return { valid: true, data }
     } catch (error: unknown) {

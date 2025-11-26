@@ -59,7 +59,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   // 社交媒体数据洞察模块
   '/social-media/projects': {
     permission: PERMISSIONS.SOCIAL_PROJECT_ACCESS,
-    label: '舆情项目',
+    label: '社媒项目',
     showInNav: true,
     order: 60,
   },

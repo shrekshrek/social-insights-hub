@@ -46,7 +46,7 @@ class TokenUsageStats(CustomBaseModel):
 class EntityInfo(CustomBaseModel):
     """实体信息"""
     name: str = Field(..., description="实体名称")
-    type: Literal["品牌", "商品", "服务", "其他"] = Field(..., description="实体类型")
+    type: Literal["品牌", "产品", "服务", "人物", "其他"] = Field(..., description="实体类型")
     sentiment: Literal[1, 0, -1] = Field(..., description="情感倾向")
     features: list[str] = Field(default_factory=list, description="特性/功能/亮点")
     issues: list[str] = Field(default_factory=list, description="问题/缺点")

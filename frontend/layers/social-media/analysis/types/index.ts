@@ -4,6 +4,8 @@
  * 统一使用 AnalysisJob 模型，通过 task_id 是否为空区分任务级/项目级分析
  */
 
+import type { PaginatedResponse } from '~/types/common'
+
 // ==================== Token Usage ====================
 
 export interface CallDetail {
@@ -253,6 +255,7 @@ export interface PostAnalysisWithPostInfo {
   shares_count: number
   collected_count: number
   views_count: number
+  danmaku_count: number
   published_at: string | null
   url: string | null
 

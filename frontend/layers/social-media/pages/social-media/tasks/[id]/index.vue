@@ -192,6 +192,7 @@ const getStatusText = (status: string) => {
 const platformsWithShares = ['dy', 'wb', 'xhs']      // 有转发数据：抖音、微博、小红书
 const platformsWithCollected = ['dy', 'xhs']         // 有收藏数据：抖音、小红书
 const platformsWithViews = ['bili', 'ks']            // 有浏览量数据：B站、快手
+const platformsWithDanmaku = ['bili']                // 有弹幕数据：B站
 
 // 原文表格列定义 - 使用 computed 避免 SSR 水合问题
 const postsColumns = computed(() => {
@@ -202,6 +203,7 @@ const postsColumns = computed(() => {
   const showSharesColumn = platformsWithShares.includes(platformCode)
   const showCollectedColumn = platformsWithCollected.includes(platformCode)
   const showViewsColumn = platformsWithViews.includes(platformCode)
+  const showDanmakuColumn = platformsWithDanmaku.includes(platformCode)
 
   return [
     {
@@ -301,6 +303,18 @@ const postsColumns = computed(() => {
         "span",
         { class: "text-sm text-right block" },
         formatNumber(row.original.views_count)
+      ),
+  }] : []),
+  // 弹幕列 - 仅B站显示
+  ...(showDanmakuColumn ? [{
+    accessorKey: "danmaku_count",
+    header: () =>
+      h("span", { style: { whiteSpace: "nowrap" } as const }, "弹幕"),
+    cell: ({ row }: { row: { original: SocialPost } }) =>
+      h(
+        "span",
+        { class: "text-sm text-right block" },
+        formatNumber(row.original.danmaku_count)
       ),
   }] : []),
   {

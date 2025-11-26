@@ -12,7 +12,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@internationalized/date": "^3.10.0",
     "@nuxt/eslint": "1.4.1",
     "@nuxt/icon": "1.14.0",
     "@nuxt/image": "1.10.0",

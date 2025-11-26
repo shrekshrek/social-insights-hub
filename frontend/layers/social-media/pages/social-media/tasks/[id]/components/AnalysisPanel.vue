@@ -547,7 +547,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
       accessorKey: 'engagement',
       header: '互动',
       cell: ({ row }) => {
-        const { likes_count, comments_count, shares_count, collected_count, views_count } = row.original
+        const { likes_count, comments_count, shares_count, collected_count, views_count, danmaku_count } = row.original
         const items = [
           h('div', {}, `赞 ${formatNumber(likes_count)}`),
           h('div', {}, `评 ${formatNumber(comments_count)}`),
@@ -561,6 +561,9 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
         }
         if (views_count > 0) {
           items.push(h('div', {}, `览 ${formatNumber(views_count)}`))
+        }
+        if (danmaku_count > 0) {
+          items.push(h('div', {}, `弹 ${formatNumber(danmaku_count)}`))
         }
         return h('div', { class: 'text-xs space-y-0.5 text-gray-600 dark:text-gray-400' }, items)
       },

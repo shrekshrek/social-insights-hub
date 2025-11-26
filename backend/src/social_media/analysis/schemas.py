@@ -305,6 +305,7 @@ class PostAnalysisWithPostInfo(CustomBaseModel):
     shares_count: int = 0
     collected_count: int = 0
     views_count: int = 0
+    danmaku_count: int = 0
     published_at: datetime | None = None
     url: str | None = None
 

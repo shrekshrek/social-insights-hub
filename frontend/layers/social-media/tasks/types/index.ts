@@ -130,6 +130,7 @@ export interface SocialPost {
   shares_count: number
   collected_count: number
   views_count: number
+  danmaku_count: number
   images: string[] | null
   videos: string[] | null
   published_at: string | null
@@ -155,6 +156,7 @@ export interface SocialPostCreate {
   shares_count?: number
   collected_count?: number
   views_count?: number
+  danmaku_count?: number
   images?: string[]
   videos?: string[]
   published_at?: string

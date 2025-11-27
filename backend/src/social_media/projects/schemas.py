@@ -119,9 +119,9 @@ class ProjectParticipantAssignment(CustomBaseModel):
 class DeepAnalysisSettings(CustomBaseModel):
     """深度分析阈值配置"""
 
-    spam_score_max: Optional[float] = Field(None, ge=0, le=1, description="垃圾信息分数上限")
-    value_score_min: Optional[float] = Field(None, ge=0, le=1, description="价值分数下限")
-    relevance_score_min: Optional[float] = Field(None, ge=0, le=1, description="相关性分数下限")
+    spam_score_max: Optional[float] = Field(None, ge=0, le=10, description="广告分数上限")
+    value_score_min: Optional[float] = Field(None, ge=0, le=10, description="价值分数下限")
+    relevance_score_min: Optional[float] = Field(None, ge=0, le=10, description="相关性分数下限")
 
 
 class UpdateDeepAnalysisSettings(CustomBaseModel):

@@ -72,12 +72,12 @@ class PostAnalysis(Base):
     spam_score: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
-        comment="垃圾分（0-10，分数越高越像垃圾）"
+        comment="广告分（0-10，分数越高越像广告/营销内容）"
     )
     value_score: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
-        comment="价值分（0-10，分数越高价值越大）"
+        comment="价值分（0-10，分数越高内容价值越大）"
     )
     relevance_score: Mapped[float | None] = mapped_column(
         Float,

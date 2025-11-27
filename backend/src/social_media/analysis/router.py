@@ -204,7 +204,7 @@ async def run_post_screening(
 )
 async def run_post_deep_analysis(
     task_id: int,
-    spam_max: float | None = Query(None, ge=0, le=10, description="垃圾分上限"),
+    spam_max: float | None = Query(None, ge=0, le=10, description="广告分上限"),
     value_min: float | None = Query(None, ge=0, le=10, description="价值分下限"),
     relevance_min: float | None = Query(None, ge=0, le=10, description="相关度分下限"),
     db: AsyncSession = Depends(get_async_db),
@@ -235,7 +235,7 @@ async def run_post_deep_analysis(
 )
 async def run_comment_deep_analysis(
     task_id: int,
-    spam_max: float | None = Query(None, ge=0, le=10, description="垃圾分上限"),
+    spam_max: float | None = Query(None, ge=0, le=10, description="广告分上限"),
     value_min: float | None = Query(None, ge=0, le=10, description="价值分下限"),
     relevance_min: float | None = Query(None, ge=0, le=10, description="相关度分下限"),
     db: AsyncSession = Depends(get_async_db),
@@ -300,7 +300,7 @@ async def get_task_post_analyses(
 )
 async def preview_deep_analysis(
     task_id: int,
-    spam_max: float | None = Query(None, ge=0, le=10, description="垃圾分上限"),
+    spam_max: float | None = Query(None, ge=0, le=10, description="广告分上限"),
     value_min: float | None = Query(None, ge=0, le=10, description="价值分下限"),
     relevance_min: float | None = Query(None, ge=0, le=10, description="相关度分下限"),
     db: AsyncSession = Depends(get_async_db),

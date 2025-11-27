@@ -479,7 +479,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
           ])
 
         return h('div', { class: 'space-y-0.5' }, [
-          scoreText('垃圾', spam_score),
+          scoreText('广告', spam_score),
           scoreText('价值', value_score),
           scoreText('相关', relevance_score),
         ])
@@ -701,7 +701,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
       <!-- 右侧：阈值显示 -->
       <div v-if="preview" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
         <UBadge color="neutral" variant="subtle" size="xs">
-          垃圾{{ thresholds.spamMax }}
+          广告{{ thresholds.spamMax }}
         </UBadge>
         <UBadge color="info" variant="subtle" size="xs">
           价值{{ thresholds.valueMin }}
@@ -847,8 +847,8 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     <template #body>
       <div class="space-y-4">
         <UFormField
-          label="最大垃圾分"
-          hint="0-10，分数越低表示内容越干净"
+          label="最大广告分"
+          hint="0-10，分数越低表示内容越自然"
         >
           <UInput
             v-model.number="dialogThresholds.spamMax"
@@ -1108,7 +1108,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
           将删除此任务下所有帖子的分析结果，包括：
         </p>
         <ul class="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1">
-          <li>初筛评分（垃圾分、价值分、相关度、情感）</li>
+          <li>初筛评分（广告分、价值分、相关度、情感）</li>
           <li>原文深度分析结果（实体、观点、摘要）</li>
           <li>评论深度分析结果</li>
         </ul>

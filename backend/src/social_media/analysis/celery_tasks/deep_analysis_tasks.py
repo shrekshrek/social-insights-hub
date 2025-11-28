@@ -339,14 +339,14 @@ def _analyze_single_post_comments(
                 logger.warning(f"帖子 {post_id} 不存在")
                 return {"success": False, "error": "post_not_found"}
 
-            # 2. 获取PostAnalysis以便添加上下文
+            # 2. 获取PostAnalysis以便添加上下文（仅使用AI总结）
             post_analysis = db.query(PostAnalysis).filter(PostAnalysis.post_id == post_id).first()
 
-            context = f"帖子标题：{post.title or '无'}\n帖子内容：{post.content}"
+            context = ""
             if post_analysis and post_analysis.post_deep_result:
                 summary = post_analysis.post_deep_result.get('summary', '')
                 if summary:
-                    context += f"\n\nAI对帖子的总结：{summary}"
+                    context = f"背景上下文：{summary}"
 
             # 3. 获取评论（点赞最高的前N条）
             comments = db.query(SocialComment).filter(

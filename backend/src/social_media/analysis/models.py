@@ -45,8 +45,9 @@ class PostAnalysis(Base):
 
     功能：
     1. 初筛分析：spam_score, value_score, relevance_score, sentiment
-    2. 帖子深度分析：post_deep_result (实体、观点、摘要)
-    3. 评论深度分析：comment_deep_result (评论的实体和观点聚合)
+    2. 互动指数：cii (Content Interaction Index)
+    3. 帖子深度分析：post_deep_result (实体、观点、摘要)
+    4. 评论深度分析：comment_deep_result (评论的实体和观点聚合)
     """
 
     __tablename__ = "post_analysis"
@@ -87,7 +88,14 @@ class PostAnalysis(Base):
     sentiment: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        comment="情感倾向（-1: 负面, 0: 中性, 1: 正面）"
+        comment="情感倾向（-2: 强烈负面, -1: 负面, 0: 中性, 1: 正面, 2: 强烈正面）"
+    )
+
+    # ===== 互动指数 =====
+    cii: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="内容互动指数 (Content Interaction Index)，基于互动数据计算"
     )
 
     # ===== 深度分析 (JSON格式) =====

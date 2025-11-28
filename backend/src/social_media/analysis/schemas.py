@@ -97,6 +97,7 @@ class PostAnalysisUpdate(CustomBaseModel):
     value_score: float | None = Field(None, ge=0, le=10)
     relevance_score: float | None = Field(None, ge=0, le=10)
     sentiment: int | None = Field(None, ge=-2, le=2, description="情感倾向（-2强烈负面 到 2强烈正面）")
+    cii: float | None = Field(None, ge=0, description="内容互动指数")
     post_deep_result: dict | None = None
     comment_deep_result: dict | None = None
     analyzed_at: datetime | None = None
@@ -114,6 +115,9 @@ class PostAnalysisResponse(CustomBaseModel):
     value_score: float | None = None
     relevance_score: float | None = None
     sentiment: int | None = None
+
+    # 互动指数
+    cii: float | None = None
 
     # 深度分析
     post_deep_result: PostDeepResult | None = None
@@ -286,8 +290,87 @@ class AnalysisStatsResponse(CustomBaseModel):
     avg_processing_time: float
 
 
-# ==================== 向后兼容别名 ====================
-# 删除旧的向后兼容别名，它们在文件末尾会被删除
+
+# ==================== 任务级聚合结果 Schema ====================
+
+class TaskAnalysisDataVolume(CustomBaseModel):
+    """数据量统计"""
+    total: int = Field(0, description="总帖子数")
+    screened: int = Field(0, description="已初筛数")
+    deep_analyzed: int = Field(0, description="已深度分析数")
+    comment_analyzed: int = Field(0, description="已评论分析数")
+
+
+class TaskAnalysisMetrics(CustomBaseModel):
+    """核心指标"""
+    nsr: float = Field(0.0, description="净情感率 (Net Sentiment Rate), 范围 [-2, +2]")
+    avg_cii: float = Field(0.0, description="平均互动指数 (Content Interaction Index)")
+    serp_health: float = Field(50.0, description="搜索健康度, 范围 [0, 100]")
+
+
+class QuadrantItem(CustomBaseModel):
+    """四象限数据项"""
+    post_id: int
+    x: float = Field(..., description="情感分, 范围 [-2, +2]")
+    y: float = Field(..., description="CII 互动指数")
+    quadrant: str = Field(..., description="象限: Q1_danger/Q2_brand/Q3_complaint/Q4_niche/neutral")
+    label: str = Field("", description="标签（摘要前20字）")
+
+
+class QuadrantSummary(CustomBaseModel):
+    """四象限统计"""
+    Q1_danger: int = Field(0, description="爆雷区（高互动/负面）")
+    Q2_brand: int = Field(0, description="品牌区（高互动/正面）")
+    Q3_complaint: int = Field(0, description="吐槽区（低互动/负面）")
+    Q4_niche: int = Field(0, description="自嗨区（低互动/正面）")
+    neutral: int = Field(0, description="中性区")
+
+
+class TaskAnalysisCharts(CustomBaseModel):
+    """图表数据"""
+    quadrant: list[QuadrantItem] = Field(default_factory=list, description="四象限数据")
+    quadrant_summary: QuadrantSummary = Field(default_factory=QuadrantSummary, description="四象限统计")
+
+
+class EntityStat(CustomBaseModel):
+    """实体统计"""
+    name: str = Field(..., description="实体名称")
+    type: str = Field("其他", description="实体类型")
+    heat: float = Field(0, description="热度（CII加权）")
+    mention_count: int = Field(0, description="提及次数")
+    avg_sentiment: float = Field(0, description="平均情感")
+    top_features: list[str] = Field(default_factory=list, description="主要特性")
+    top_issues: list[str] = Field(default_factory=list, description="主要问题")
+
+
+class OpinionStat(CustomBaseModel):
+    """观点统计"""
+    topic: str = Field(..., description="话题/类别")
+    heat: float = Field(0, description="热度")
+    sentiment: float = Field(0, description="情感倾向")
+    summary: str = Field("", description="观点摘要")
+
+
+class TaskAnalysisInsights(CustomBaseModel):
+    """洞察数据"""
+    top_entities: list[EntityStat] = Field(default_factory=list, description="热门实体")
+    top_issues: list[OpinionStat] = Field(default_factory=list, description="热门问题（负面）")
+    top_features: list[OpinionStat] = Field(default_factory=list, description="热门特性（正面）")
+
+
+class TaskAnalysisMeta(CustomBaseModel):
+    """元数据"""
+    task_id: int | None = None
+    analyzed_at: str | None = None
+    data_volume: TaskAnalysisDataVolume = Field(default_factory=TaskAnalysisDataVolume)
+
+
+class TaskAnalysisResultData(CustomBaseModel):
+    """任务级分析聚合结果（存储在 AnalysisJob.result_data 中）"""
+    meta: TaskAnalysisMeta = Field(default_factory=TaskAnalysisMeta)
+    metrics: TaskAnalysisMetrics = Field(default_factory=TaskAnalysisMetrics)
+    charts: TaskAnalysisCharts = Field(default_factory=TaskAnalysisCharts)
+    insights: TaskAnalysisInsights = Field(default_factory=TaskAnalysisInsights)
 
 
 # ==================== 帖子分析列表 Schema ====================
@@ -314,6 +397,9 @@ class PostAnalysisWithPostInfo(CustomBaseModel):
     value_score: float | None = None
     relevance_score: float | None = None
     sentiment: int | None = None
+
+    # 互动指数
+    cii: float | None = None
 
     # 深度分析
     post_deep_result: PostDeepResult | None = None

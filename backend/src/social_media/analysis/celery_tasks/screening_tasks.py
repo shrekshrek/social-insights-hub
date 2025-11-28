@@ -37,6 +37,7 @@ from src.langchain.chains.screening_chain import (
     create_screening_chain,
     format_posts_for_screening,
 )
+from src.social_media.analysis.celery_tasks.aggregator import calculate_cii
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -123,6 +124,15 @@ def _analyze_batch_posts(
                     continue
 
                 try:
+                    # 计算 CII 互动指数
+                    post = posts[post_id]
+                    cii_value = calculate_cii(
+                        likes=post.likes_count or 0,
+                        comments=post.comments_count or 0,
+                        shares=post.shares_count or 0,
+                        collected=post.collected_count or 0,
+                    )
+
                     # Upsert分析结果
                     stmt = select(PostAnalysis).where(PostAnalysis.post_id == post_id)
                     result = db.execute(stmt)
@@ -134,6 +144,7 @@ def _analyze_batch_posts(
                         post_analysis.value_score = item.get("value_score")
                         post_analysis.relevance_score = item.get("relevance_score")
                         post_analysis.sentiment = item.get("sentiment")
+                        post_analysis.cii = cii_value
                         post_analysis.analyzed_at = datetime.now(timezone.utc)
                         post_analysis.analysis_model = "deepseek-chat"
                     else:
@@ -144,6 +155,7 @@ def _analyze_batch_posts(
                             value_score=item.get("value_score"),
                             relevance_score=item.get("relevance_score"),
                             sentiment=item.get("sentiment"),
+                            cii=cii_value,
                             analyzed_at=datetime.now(timezone.utc),
                             analysis_model="deepseek-chat",
                         )
@@ -253,10 +265,12 @@ def finalize_screening_analysis(result_id: int, total_count: int):
 
     职责：
     1. 执行Redis到DB的最终同步
-    2. 更新任务状态为completed
-    3. 清理Redis缓存
+    2. 执行任务级聚合分析（CII、NSR、SERP、实体聚合等）
+    3. 更新任务状态为completed
+    4. 清理Redis缓存
     """
     import time
+    from src.social_media.analysis.celery_tasks.aggregator import aggregate_task_analysis
 
     logger.info(f"等待所有 {total_count} 个子任务完成...")
 
@@ -275,6 +289,34 @@ def finalize_screening_analysis(result_id: int, total_count: int):
             # 所有任务已完成
             logger.info(f"所有子任务已完成，执行最终同步...")
             progress_mgr.finalize()
+
+            # 执行任务级聚合分析
+            try:
+                db = SyncSessionLocal()
+                try:
+                    # 获取 task_id
+                    stmt = select(AnalysisJob.task_id).where(AnalysisJob.id == result_id)
+                    task_id = db.execute(stmt).scalar_one_or_none()
+
+                    if task_id:
+                        logger.info(f"开始执行任务级聚合分析: task_id={task_id}")
+                        result_data = aggregate_task_analysis(db, task_id)
+
+                        # 更新 AnalysisJob.result_data
+                        stmt = (
+                            update(AnalysisJob)
+                            .where(AnalysisJob.id == result_id)
+                            .values(result_data=result_data)
+                        )
+                        db.execute(stmt)
+                        db.commit()
+                        logger.info(f"任务级聚合分析完成并保存")
+                finally:
+                    db.close()
+            except Exception as e:
+                logger.error(f"任务级聚合分析失败: {e}", exc_info=True)
+                # 聚合失败不影响整体状态，继续返回完成
+
             return {
                 "status": "completed",
                 "analyzed": progress['analyzed_count'],

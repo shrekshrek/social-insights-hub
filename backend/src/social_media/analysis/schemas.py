@@ -301,11 +301,32 @@ class TaskAnalysisDataVolume(CustomBaseModel):
     comment_analyzed: int = Field(0, description="已评论分析数")
 
 
+class MarketingAnalysis(CustomBaseModel):
+    """营销浓度分析"""
+    promotion_ratio: float = Field(0.0, description="营销内容占比 (0-1)")
+    organic_ratio: float = Field(1.0, description="自然内容占比 (0-1)")
+    promotion_count: int = Field(0, description="营销帖子数")
+    organic_count: int = Field(0, description="自然帖子数")
+
+
+class SentimentConflict(CustomBaseModel):
+    """舆论反差度分析"""
+    avg_conflict: float = Field(0.0, description="平均反差度 (绝对值)")
+    conflict_direction: str = Field(
+        "aligned",
+        description="反差方向: post_positive(帖子更正面)/comment_positive(评论更正面)/aligned(一致)"
+    )
+    high_conflict_count: int = Field(0, description="高反差帖子数 (|差值| > 1)")
+    risk_level: str = Field("low", description="风险等级: low/medium/high")
+
+
 class TaskAnalysisMetrics(CustomBaseModel):
     """核心指标"""
     nsr: float = Field(0.0, description="净情感率 (Net Sentiment Rate), 范围 [-2, +2]")
     avg_cii: float = Field(0.0, description="平均互动指数 (Content Interaction Index)")
     serp_health: float = Field(50.0, description="搜索健康度, 范围 [0, 100]")
+    marketing_analysis: MarketingAnalysis = Field(default_factory=MarketingAnalysis, description="营销浓度分析")
+    sentiment_conflict: SentimentConflict = Field(default_factory=SentimentConflict, description="舆论反差度分析")
 
 
 class QuadrantItem(CustomBaseModel):
@@ -326,19 +347,41 @@ class QuadrantSummary(CustomBaseModel):
     neutral: int = Field(0, description="中性区")
 
 
+class TimeDistributionItem(CustomBaseModel):
+    """时间分布数据项"""
+    date: str = Field(..., description="日期 (YYYY-MM-DD)")
+    count: int = Field(0, description="帖子数量")
+
+
+class Freshness(CustomBaseModel):
+    """数据新鲜度"""
+    last_7_days: float = Field(0.0, description="最近7天帖子占比 (0-1)")
+    last_30_days: float = Field(0.0, description="最近30天帖子占比 (0-1)")
+    avg_age_days: float = Field(0.0, description="平均发布天数")
+
+
 class TaskAnalysisCharts(CustomBaseModel):
     """图表数据"""
     quadrant: list[QuadrantItem] = Field(default_factory=list, description="四象限数据")
     quadrant_summary: QuadrantSummary = Field(default_factory=QuadrantSummary, description="四象限统计")
+    time_distribution: list[TimeDistributionItem] = Field(default_factory=list, description="时间分布")
+
+
+class SourceDistribution(CustomBaseModel):
+    """来源分布（帖子 vs 评论）"""
+    post: float = Field(0.0, description="来自帖子的占比 (0-1)")
+    comment: float = Field(0.0, description="来自评论的占比 (0-1)")
 
 
 class EntityStat(CustomBaseModel):
     """实体统计"""
     name: str = Field(..., description="实体名称")
     type: str = Field("其他", description="实体类型")
+    role: str = Field("other", description="主体角色: target(本品)/competitor(竞品)/other(其他有价值实体)")
     heat: float = Field(0, description="热度（CII加权）")
-    mention_count: int = Field(0, description="提及次数")
+    mentions: int = Field(0, description="唯一帖子提及数")
     avg_sentiment: float = Field(0, description="平均情感")
+    source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
     top_features: list[str] = Field(default_factory=list, description="主要特性")
     top_issues: list[str] = Field(default_factory=list, description="主要问题")
 
@@ -347,21 +390,111 @@ class OpinionStat(CustomBaseModel):
     """观点统计"""
     topic: str = Field(..., description="话题/类别")
     heat: float = Field(0, description="热度")
+    mentions: int = Field(0, description="唯一帖子提及数")
     sentiment: float = Field(0, description="情感倾向")
+    source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
     summary: str = Field("", description="观点摘要")
 
 
+# ==================== KANO 需求分层 Schema (§4.5.3) ====================
+
+class KanoItem(CustomBaseModel):
+    """KANO 模型单项"""
+    label: str = Field(..., description="标签名称")
+    heat: float = Field(0, description="热度")
+    mentions: int = Field(0, description="提及数")
+    sentiment: float = Field(0, description="情感倾向")
+
+
+class KanoModel(CustomBaseModel):
+    """KANO 需求分层模型"""
+    must_be: list[KanoItem] = Field(default_factory=list, description="基本型需求（痛点）")
+    attractive: list[KanoItem] = Field(default_factory=list, description="兴奋型需求（惊喜）")
+    one_dimensional: list[KanoItem] = Field(default_factory=list, description="期望型需求（愿望）")
+
+
+class Opportunities(CustomBaseModel):
+    """机会洞察"""
+    kano_model: KanoModel = Field(default_factory=KanoModel, description="KANO 需求分层")
+
+
+# ==================== 场景与人群画像 Schema (§4.5.4) ====================
+
+class ScenarioStat(CustomBaseModel):
+    """场景统计"""
+    label: str = Field(..., description="场景标签")
+    heat: float = Field(0, description="热度")
+    mentions: int = Field(0, description="提及数")
+    associated_issues: list[str] = Field(default_factory=list, description="关联问题")
+    associated_features: list[str] = Field(default_factory=list, description="关联特性")
+
+
+class AudienceStat(CustomBaseModel):
+    """人群画像统计"""
+    label: str = Field(..., description="人群标签")
+    heat: float = Field(0, description="热度")
+    mentions: int = Field(0, description="提及数")
+    preferences: list[str] = Field(default_factory=list, description="偏好")
+
+
+class ContextAnalysis(CustomBaseModel):
+    """场景与人群画像"""
+    scenarios: list[ScenarioStat] = Field(default_factory=list, description="使用场景")
+    audiences: list[AudienceStat] = Field(default_factory=list, description="目标人群")
+
+
+# ==================== 竞品分析 Schema ====================
+
+class CompetitorDetail(CustomBaseModel):
+    """竞品详情"""
+    name: str = Field(..., description="竞品名称")
+    sentiment: float = Field(0, description="情感倾向")
+    heat: float = Field(0, description="热度")
+    mentions: int = Field(0, description="提及数")
+    top_features: list[str] = Field(default_factory=list, description="主要特性")
+    top_issues: list[str] = Field(default_factory=list, description="主要问题")
+
+
+class Competition(CustomBaseModel):
+    """竞品分析"""
+    top_competitors: list[str] = Field(default_factory=list, description="主要竞品")
+    comparison_sentiment: float = Field(0, description="对比情感（正=本品更好）")
+    target_sentiment: float = Field(0, description="本品情感")
+    competitor_sentiment: float = Field(0, description="竞品情感")
+    competitor_details: list[CompetitorDetail] = Field(default_factory=list, description="竞品详情")
+
+
+# ==================== KOL 声音 Schema ====================
+
+class KolVoice(CustomBaseModel):
+    """KOL 声音"""
+    author: str = Field(..., description="作者名称")
+    sentiment: float = Field(0, description="情感倾向")
+    summary: str = Field("", description="观点摘要")
+    post_id: int = Field(..., description="帖子ID")
+    cii: float = Field(0, description="互动指数")
+
+
+# ==================== 洞察数据 Schema ====================
+
 class TaskAnalysisInsights(CustomBaseModel):
     """洞察数据"""
-    top_entities: list[EntityStat] = Field(default_factory=list, description="热门实体")
+    top_entities: list[EntityStat] = Field(default_factory=list, description="热门实体（全部）")
+    target_entities: list[EntityStat] = Field(default_factory=list, description="本品实体")
+    competitor_entities: list[EntityStat] = Field(default_factory=list, description="竞品实体")
     top_issues: list[OpinionStat] = Field(default_factory=list, description="热门问题（负面）")
     top_features: list[OpinionStat] = Field(default_factory=list, description="热门特性（正面）")
+    context_analysis: ContextAnalysis = Field(default_factory=ContextAnalysis, description="场景与人群画像")
+    opportunities: Opportunities = Field(default_factory=Opportunities, description="机会洞察")
+    competition: Competition = Field(default_factory=Competition, description="竞品分析")
+    kol_voices: list[KolVoice] = Field(default_factory=list, description="KOL 声音")
 
 
 class TaskAnalysisMeta(CustomBaseModel):
     """元数据"""
     task_id: int | None = None
     analyzed_at: str | None = None
+    keywords: list[str] = Field(default_factory=list, description="用于分析的关键词")
     data_volume: TaskAnalysisDataVolume = Field(default_factory=TaskAnalysisDataVolume)
 
 
@@ -370,6 +503,7 @@ class TaskAnalysisResultData(CustomBaseModel):
     meta: TaskAnalysisMeta = Field(default_factory=TaskAnalysisMeta)
     metrics: TaskAnalysisMetrics = Field(default_factory=TaskAnalysisMetrics)
     charts: TaskAnalysisCharts = Field(default_factory=TaskAnalysisCharts)
+    freshness: Freshness = Field(default_factory=Freshness, description="数据新鲜度")
     insights: TaskAnalysisInsights = Field(default_factory=TaskAnalysisInsights)
 
 

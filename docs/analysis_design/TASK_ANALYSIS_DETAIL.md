@@ -30,7 +30,6 @@ graph TD
     C1[多维加权聚合]
     C2[舆论焦点地图]
     C3[JSON结果组装]
-    C4[LLM Analyst Summary]
     end
 ```
 
@@ -103,7 +102,7 @@ graph TD
             *   **Heat (热度)**：$\sum CII_p$ (代表影响力，受爆款影响大)。
             *   **Mentions (频次)**：$Count(Unique\_Posts)$ (代表普遍性，受水军影响大)。
             *   *策略*：排序时优先使用 `Heat`，但需保留 `Mentions` 辅助判断“偶然爆款”与“普遍共识”。
-    4.  **Others**：标记为 `Noise`。
+    4.  **Others**：标记为 `Other`（非目标/竞品的其他实体，如人物、场景词等，仍有分析价值）。
 
 ### 4.4 核心指标计算
 基于清洗后的 **Target** 数据桶计算：
@@ -146,24 +145,7 @@ graph TD
 
 ---
 
-## 5. 步骤四：LLM 智能综述 (Analyst Summary) [LLM]
-
-在所有统计完成后，进行一次**低成本、高价值**的 LLM 总结。
-
-*   **Input**：
-    *   Aggregator 计算出的 Top 3 痛点 (Issues) & Top 3 场景 (Scenarios)。
-    *   KANO 分类结果摘要。
-    *   **Top 3 通用观点 (General Opinions)**：捕捉宏观情绪（如“行业内卷”）。
-    *   Top 3 KOL。
-*   **Prompt**：
-    > "你是一名资深舆情分析师。基于以下统计数据，写一段 200 字以内的【舆情结案陈词】。
-    > 重点指出：1. 舆论总体风向；2. 核心矛盾点（痛点）；3. 意外发现（兴奋点或新场景）。
-    > 风格客观犀利，不要堆砌数字。"
-*   **Output**：一段自然语言的分析报告。
-
----
-
-## 6. 数据结构输出定义
+## 5. 数据结构输出定义
 
 任务级分析的结果将存入 `AnalysisJob.result_data` JSON 字段。
 
@@ -261,7 +243,6 @@ graph TD
       "organic_ratio": 0.85, // 85% 为真实用户
       "promotion_ratio": 0.15
     },
-    "analyst_summary": "本期舆情总体偏负面。用户对‘发热’问题的容忍度已达临界点（高互动负面），属于急需解决的基本型需求。尽管‘紫色外观’获得意外好评（兴奋点），但在核心体验短板解决前，难以扭转口碑。建议暂缓营销投放，优先通过OTA优化温控策略。", // LLM 生成
     "kol_voices": [
       {"author": "数码大V", "sentiment": 0.5, "summary": "综合体验不错，但有溢价", "post_id": "p101"}
     ]
@@ -269,7 +250,7 @@ graph TD
 }
 ```
 
-## 8. 开发实现建议
+## 6. 开发实现建议
 
 1.  **参数透传**：确保 `time_range` 参数能从 API 传到 Celery Coordinator。
 2.  **时间筛选**：在 `Coordinator` 分发子任务时，根据 `time_range` 过滤 `post_ids`。
@@ -279,5 +260,4 @@ graph TD
     *   实现共现矩阵 (Scenario-Context)。
     *   实现 KANO 分类逻辑。
     *   实现营销渗透率计算。
-4.  **新增 LLM Summary Task**：在 Aggregator 完成后，新增一个轻量级 LLM 任务生成 `analyst_summary`。
-5.  **Prompt 优化**：修改评论提取 Prompt，支持传入 `summary` 而非 `full_text`。
+4.  **Prompt 优化**：修改评论提取 Prompt，支持传入 `summary` 而非 `full_text`。

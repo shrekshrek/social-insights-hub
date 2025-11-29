@@ -507,6 +507,21 @@ class TaskAnalysisResultData(CustomBaseModel):
     insights: TaskAnalysisInsights = Field(default_factory=TaskAnalysisInsights)
 
 
+class TaskAnalysisResultResponse(CustomBaseModel):
+    """任务级聚合分析结果 API 响应"""
+    task_id: int = Field(..., description="任务ID")
+    analyzed_at: str | None = Field(None, description="聚合分析时间 (ISO格式)")
+    result: TaskAnalysisResultData = Field(..., description="聚合分析结果")
+
+
+class RunAggregationResponse(CustomBaseModel):
+    """运行聚合分析响应"""
+    success: bool = Field(..., description="是否成功")
+    task_id: int = Field(..., description="任务ID")
+    analyzed_at: str = Field(..., description="分析时间 (ISO格式)")
+    result: TaskAnalysisResultData = Field(..., description="聚合分析结果")
+
+
 # ==================== 帖子分析列表 Schema ====================
 
 class PostAnalysisWithPostInfo(CustomBaseModel):

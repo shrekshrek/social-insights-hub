@@ -147,7 +147,9 @@ graph TD
 
 ## 5. 数据结构输出定义
 
-任务级分析的结果将存入 `AnalysisJob.result_data` JSON 字段。
+任务级聚合分析的结果将存入 `DataTask.analysis_result` JSON 字段。
+
+聚合分析通过独立 API 触发：`POST /api/v1/social-media/analysis/tasks/{task_id}/aggregate`
 
 ```json
 {

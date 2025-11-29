@@ -268,7 +268,7 @@ def finalize_screening_analysis(result_id: int, total_count: int):
     2. 更新任务状态为completed
     3. 清理Redis缓存
 
-    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregate)
+    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregation)
     """
     import time
 

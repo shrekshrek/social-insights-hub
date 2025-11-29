@@ -6,6 +6,8 @@ import type {
   AnalysisProgressResponse,
   PostAnalysisListResponse,
   DeepAnalysisPreview,
+  TaskAnalysisResultResponse,
+  RunAggregationResponse,
 } from '../types'
 
 /**
@@ -235,6 +237,32 @@ export const useAnalysis = () => {
     return result
   }
 
+  /**
+   * 运行聚合分析，生成任务级分析报告
+   */
+  const runTaskAggregation = async (taskId: number) => {
+    const result = await apiRequest<RunAggregationResponse>(
+      `/social-media/analysis/tasks/${taskId}/aggregation`,
+      {
+        method: 'POST',
+      }
+    )
+    showSuccess('分析报告生成成功')
+    return result
+  }
+
+  /**
+   * 获取任务级聚合分析结果
+   */
+  const getTaskAggregation = (taskId: MaybeRef<number>) => {
+    return useApiData<TaskAnalysisResultResponse>(
+      computed(() => `/social-media/analysis/tasks/${unref(taskId)}/aggregation`),
+      {
+        key: computed(() => `task-aggregation-${unref(taskId)}`),
+      }
+    )
+  }
+
   // ==================== 项目级分析操作（预留）====================
 
   /**
@@ -286,6 +314,8 @@ export const useAnalysis = () => {
     getTaskPostAnalyses,
     getDeepAnalysisPreview,
     deleteTaskAnalyses,
+    runTaskAggregation,
+    getTaskAggregation,
 
     // 项目级分析操作（预留）
     runTopicClustering,

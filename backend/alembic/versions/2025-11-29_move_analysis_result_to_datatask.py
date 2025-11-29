@@ -7,7 +7,7 @@
 
 设计理念：
 - 聚合分析是任务级的，结果存储在 DataTask 上
-- 聚合分析通过独立 API 触发 (POST /tasks/{task_id}/aggregate)
+- 聚合分析通过独立 API 触发 (POST /tasks/{task_id}/aggregation)
 - AnalysisJob 保留用于分析任务进度跟踪
 
 Revision ID: j5e6f7g8h9i0

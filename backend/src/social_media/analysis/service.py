@@ -939,7 +939,7 @@ async def get_global_stats(
 
 # ==================== Task Analysis Result ====================
 
-async def run_aggregation(
+async def run_task_aggregation(
     db: AsyncSession,
     task_id: int,
     current_user_id: int
@@ -959,7 +959,7 @@ async def run_aggregation(
     from src.social_media.tasks import crud as task_crud
     from src.social_media.tasks.models import DataTask
     from src.social_media.projects import crud as project_crud
-    from .celery_tasks.aggregator import run_task_aggregation
+    from .celery_tasks.aggregator import aggregate_task_analysis
     from src.database import SyncSessionLocal
 
     # 验证任务是否存在
@@ -996,15 +996,10 @@ async def run_aggregation(
     # 使用同步 session 调用 Aggregator（因为 Aggregator 是同步的）
     sync_db = SyncSessionLocal()
     try:
-        # 获取任务关键词
-        keywords = task.keywords.split(",") if task.keywords else []
-        keywords = [k.strip() for k in keywords if k.strip()]
-
-        # 运行聚合
-        aggregation_result = run_task_aggregation(
+        # 运行聚合（函数内部会读取关键词）
+        aggregation_result = aggregate_task_analysis(
             db=sync_db,
             task_id=task_id,
-            task_keywords=keywords
         )
 
         # 更新 DataTask 的 analysis_result
@@ -1035,7 +1030,7 @@ async def run_aggregation(
         sync_db.close()
 
 
-async def get_task_analysis_result(
+async def get_task_aggregation(
     db: AsyncSession,
     task_id: int,
     current_user_id: int

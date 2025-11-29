@@ -299,3 +299,221 @@ export interface AnalysisJobFilterParams {
   start_date?: string
   end_date?: string
 }
+
+// ==================== 任务级聚合分析结果 ====================
+
+/** 数据量统计 */
+export interface TaskAnalysisDataVolume {
+  total: number
+  screened: number
+  deep_analyzed: number
+  comment_analyzed: number
+}
+
+/** 营销浓度分析 */
+export interface MarketingAnalysis {
+  promotion_ratio: number
+  organic_ratio: number
+  promotion_count: number
+  organic_count: number
+}
+
+/** 舆论反差度分析 */
+export interface SentimentConflict {
+  avg_conflict: number
+  conflict_direction: 'post_positive' | 'comment_positive' | 'aligned'
+  high_conflict_count: number
+  risk_level: 'low' | 'medium' | 'high'
+}
+
+/** 核心指标 */
+export interface TaskAnalysisMetrics {
+  nsr: number
+  avg_cii: number
+  serp_health: number
+  marketing_analysis: MarketingAnalysis
+  sentiment_conflict: SentimentConflict
+}
+
+/** 四象限数据项 */
+export interface QuadrantItem {
+  post_id: number
+  x: number
+  y: number
+  quadrant: 'Q1_danger' | 'Q2_brand' | 'Q3_complaint' | 'Q4_niche' | 'neutral'
+  label: string
+}
+
+/** 四象限统计 */
+export interface QuadrantSummary {
+  Q1_danger: number
+  Q2_brand: number
+  Q3_complaint: number
+  Q4_niche: number
+  neutral: number
+}
+
+/** 时间分布数据项 */
+export interface TimeDistributionItem {
+  date: string
+  count: number
+}
+
+/** 数据新鲜度 */
+export interface Freshness {
+  last_7_days: number
+  last_30_days: number
+  avg_age_days: number
+}
+
+/** 图表数据 */
+export interface TaskAnalysisCharts {
+  quadrant: QuadrantItem[]
+  quadrant_summary: QuadrantSummary
+  time_distribution: TimeDistributionItem[]
+}
+
+/** 来源分布 */
+export interface SourceDistribution {
+  post: number
+  comment: number
+}
+
+/** 实体统计 */
+export interface EntityStat {
+  name: string
+  type: string
+  role: 'target' | 'competitor' | 'other'
+  heat: number
+  mentions: number
+  avg_sentiment: number
+  source_distribution: SourceDistribution
+  top_features: string[]
+  top_issues: string[]
+}
+
+/** 观点统计 */
+export interface OpinionStat {
+  topic: string
+  heat: number
+  mentions: number
+  sentiment: number
+  source_distribution: SourceDistribution
+  summary: string
+}
+
+/** KANO 模型单项 */
+export interface KanoItem {
+  label: string
+  heat: number
+  mentions: number
+  sentiment: number
+}
+
+/** KANO 需求分层模型 */
+export interface KanoModel {
+  must_be: KanoItem[]
+  attractive: KanoItem[]
+  one_dimensional: KanoItem[]
+}
+
+/** 机会洞察 */
+export interface Opportunities {
+  kano_model: KanoModel
+}
+
+/** 场景统计 */
+export interface ScenarioStat {
+  label: string
+  heat: number
+  mentions: number
+  associated_issues: string[]
+  associated_features: string[]
+}
+
+/** 人群画像统计 */
+export interface AudienceStat {
+  label: string
+  heat: number
+  mentions: number
+  preferences: string[]
+}
+
+/** 场景与人群画像 */
+export interface ContextAnalysis {
+  scenarios: ScenarioStat[]
+  audiences: AudienceStat[]
+}
+
+/** 竞品详情 */
+export interface CompetitorDetail {
+  name: string
+  sentiment: number
+  heat: number
+  mentions: number
+  top_features: string[]
+  top_issues: string[]
+}
+
+/** 竞品分析 */
+export interface Competition {
+  top_competitors: string[]
+  comparison_sentiment: number
+  target_sentiment: number
+  competitor_sentiment: number
+  competitor_details: CompetitorDetail[]
+}
+
+/** KOL 声音 */
+export interface KolVoice {
+  author: string
+  sentiment: number
+  summary: string
+  post_id: number
+  cii: number
+}
+
+/** 洞察数据 */
+export interface TaskAnalysisInsights {
+  top_entities: EntityStat[]
+  target_entities: EntityStat[]
+  competitor_entities: EntityStat[]
+  top_issues: OpinionStat[]
+  top_features: OpinionStat[]
+  context_analysis: ContextAnalysis
+  opportunities: Opportunities
+  competition: Competition
+  kol_voices: KolVoice[]
+}
+
+/** 元数据 */
+export interface TaskAnalysisMeta {
+  task_id: number | null
+  analyzed_at: string | null
+  keywords: string[]
+  data_volume: TaskAnalysisDataVolume
+}
+
+/** 任务级分析聚合结果 */
+export interface TaskAnalysisResultData {
+  meta: TaskAnalysisMeta
+  metrics: TaskAnalysisMetrics
+  charts: TaskAnalysisCharts
+  freshness: Freshness
+  insights: TaskAnalysisInsights
+}
+
+/** 任务级聚合分析结果 API 响应 */
+export interface TaskAnalysisResultResponse {
+  task_id: number
+  analyzed_at: string | null
+  result: TaskAnalysisResultData
+}
+
+/** 运行聚合分析响应 */
+export interface RunAggregationResponse {
+  success: boolean
+  task_id: number
+  analyzed_at: string
+  result: TaskAnalysisResultData
+}

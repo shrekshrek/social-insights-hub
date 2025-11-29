@@ -205,7 +205,7 @@ def finalize_post_deep_analysis(
     Returns:
         最终统计结果
 
-    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregate)
+    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregation)
     """
     logger.info(f"[Finalizer] 原文深度分析任务开始最终化: result_id={result_id}, total={total_count}")
 
@@ -500,7 +500,7 @@ def finalize_comment_deep_analysis(
     Returns:
         最终统计结果
 
-    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregate)
+    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregation)
     """
     logger.info(f"[Finalizer] 评论深度分析任务开始最终化: result_id={result_id}, total={total_count}")
 

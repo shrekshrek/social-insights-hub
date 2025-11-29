@@ -8,8 +8,7 @@ API 结构：
 - /tasks/{task_id}/screening     运行帖子初筛
 - /tasks/{task_id}/deep-posts    运行帖子深度分析
 - /tasks/{task_id}/deep-comments 运行评论深度分析
-- /tasks/{task_id}/aggregate     运行聚合分析（生成报告）
-- /tasks/{task_id}/result        获取聚合分析结果
+- /tasks/{task_id}/aggregation   POST运行聚合分析 / GET获取聚合结果
 - /tasks/{task_id}/posts         帖子分析结果列表
 - /tasks/{task_id}/preview       深度分析预览
 - /projects/{project_id}/clustering   运行主题聚类（预留）
@@ -298,12 +297,12 @@ async def get_task_post_analyses(
 
 
 @router.post(
-    "/tasks/{task_id}/aggregate",
+    "/tasks/{task_id}/aggregation",
     response_model=RunAggregationResponse,
     status_code=status.HTTP_200_OK,
     summary="运行聚合分析",
 )
-async def run_aggregation(
+async def run_task_aggregation(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
@@ -313,19 +312,19 @@ async def run_aggregation(
 
     - 基于已完成的初筛/深度分析数据，计算聚合指标
     - 生成 NSR、SERP、四象限、实体排行、KANO模型等
-    - 结果存储在任务中，可通过 GET /result 获取
+    - 结果存储在任务中，可通过 GET /aggregation 获取
     - 可多次调用，每次会覆盖之前的结果
     """
-    result = await service.run_aggregation(db, task_id, current_user.id)
+    result = await service.run_task_aggregation(db, task_id, current_user.id)
     return RunAggregationResponse.model_validate(result)
 
 
 @router.get(
-    "/tasks/{task_id}/result",
+    "/tasks/{task_id}/aggregation",
     response_model=TaskAnalysisResultResponse,
     summary="获取任务级聚合分析结果",
 )
-async def get_task_analysis_result(
+async def get_task_aggregation(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
@@ -334,9 +333,9 @@ async def get_task_analysis_result(
     获取任务级聚合分析结果
 
     - 返回 Aggregator 计算的聚合数据（NSR、SERP、四象限、实体、KANO等）
-    - 需先调用 POST /aggregate 生成报告
+    - 需先调用 POST /aggregation 生成报告
     """
-    result = await service.get_task_analysis_result(db, task_id, current_user.id)
+    result = await service.get_task_aggregation(db, task_id, current_user.id)
 
     if not result:
         raise HTTPException(

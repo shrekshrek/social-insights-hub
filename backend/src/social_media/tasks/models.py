@@ -81,6 +81,18 @@ class DataTask(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # AI分析聚合结果
+    analysis_result: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="任务级AI分析聚合结果（NSR、SERP、实体、KANO等）"
+    )
+    analysis_result_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="聚合分析生成时间"
+    )
+
     # 软删除
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 

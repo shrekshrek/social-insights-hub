@@ -663,6 +663,7 @@ async def get_task_post_analyses(
             PostAnalysis.value_score,
             PostAnalysis.relevance_score,
             PostAnalysis.sentiment,
+            PostAnalysis.cii,
             PostAnalysis.post_deep_result,
             PostAnalysis.comment_deep_result,
             PostAnalysis.analyzed_at,
@@ -721,6 +722,7 @@ async def get_task_post_analyses(
             "value_score": row.value_score,
             "relevance_score": row.relevance_score,
             "sentiment": row.sentiment,
+            "cii": row.cii,
             "post_deep_result": row.post_deep_result,
             "comment_deep_result": row.comment_deep_result,
             "analyzed_at": row.analyzed_at,
@@ -933,3 +935,152 @@ async def get_global_stats(
         total_tokens=total_tokens,
         avg_processing_time=avg_processing_time,
     )
+
+
+# ==================== Task Analysis Result ====================
+
+async def run_aggregation(
+    db: AsyncSession,
+    task_id: int,
+    current_user_id: int
+) -> dict[str, Any]:
+    """运行聚合分析，生成任务级分析报告
+
+    调用 Aggregator 计算聚合数据（NSR、SERP、实体、KANO等），
+    结果存储在 DataTask.analysis_result 中。
+
+    Args:
+        task_id: 任务ID
+        current_user_id: 当前用户ID
+
+    Returns:
+        聚合分析结果
+    """
+    from src.social_media.tasks import crud as task_crud
+    from src.social_media.tasks.models import DataTask
+    from src.social_media.projects import crud as project_crud
+    from .celery_tasks.aggregator import run_task_aggregation
+    from src.database import SyncSessionLocal
+
+    # 验证任务是否存在
+    task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task {task_id} not found"
+        )
+
+    # 验证用户权限
+    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this task"
+        )
+
+    # 检查是否有已分析的帖子
+    stmt = (
+        select(func.count())
+        .where(PostAnalysis.task_id == task_id)
+        .where(PostAnalysis.spam_score.isnot(None))
+    )
+    result = await db.execute(stmt)
+    analyzed_count = result.scalar() or 0
+
+    if analyzed_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="没有已分析的帖子，请先运行初筛或深度分析"
+        )
+
+    # 使用同步 session 调用 Aggregator（因为 Aggregator 是同步的）
+    sync_db = SyncSessionLocal()
+    try:
+        # 获取任务关键词
+        keywords = task.keywords.split(",") if task.keywords else []
+        keywords = [k.strip() for k in keywords if k.strip()]
+
+        # 运行聚合
+        aggregation_result = run_task_aggregation(
+            db=sync_db,
+            task_id=task_id,
+            task_keywords=keywords
+        )
+
+        # 更新 DataTask 的 analysis_result
+        now = datetime.now(timezone.utc)
+        update_stmt = (
+            select(DataTask)
+            .where(DataTask.id == task_id)
+        )
+        task_result = sync_db.execute(update_stmt)
+        data_task = task_result.scalar_one()
+        data_task.analysis_result = aggregation_result
+        data_task.analysis_result_at = now
+        sync_db.commit()
+
+        return {
+            "success": True,
+            "task_id": task_id,
+            "analyzed_at": now.isoformat(),
+            "result": aggregation_result,
+        }
+    except Exception as e:
+        sync_db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"聚合分析失败: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+async def get_task_analysis_result(
+    db: AsyncSession,
+    task_id: int,
+    current_user_id: int
+) -> dict[str, Any] | None:
+    """获取任务级聚合分析结果
+
+    从 DataTask.analysis_result 中获取聚合数据。
+
+    Args:
+        task_id: 任务ID
+        current_user_id: 当前用户ID
+
+    Returns:
+        聚合分析结果，如果没有则返回 None
+    """
+    from src.social_media.tasks import crud as task_crud
+    from src.social_media.tasks.models import DataTask
+    from src.social_media.projects import crud as project_crud
+
+    # 验证任务是否存在
+    task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task {task_id} not found"
+        )
+
+    # 验证用户权限
+    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this task"
+        )
+
+    # 从 DataTask 获取 analysis_result
+    stmt = select(DataTask).where(DataTask.id == task_id)
+    result = await db.execute(stmt)
+    data_task = result.scalar_one_or_none()
+
+    if not data_task or not data_task.analysis_result:
+        return None
+
+    return {
+        "task_id": task_id,
+        "analyzed_at": data_task.analysis_result_at.isoformat() if data_task.analysis_result_at else None,
+        "result": data_task.analysis_result,
+    }

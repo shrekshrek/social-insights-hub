@@ -265,12 +265,12 @@ def finalize_screening_analysis(result_id: int, total_count: int):
 
     职责：
     1. 执行Redis到DB的最终同步
-    2. 执行任务级聚合分析（CII、NSR、SERP、实体聚合等）
-    3. 更新任务状态为completed
-    4. 清理Redis缓存
+    2. 更新任务状态为completed
+    3. 清理Redis缓存
+
+    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregate)
     """
     import time
-    from src.social_media.analysis.celery_tasks.aggregator import aggregate_task_analysis
 
     logger.info(f"等待所有 {total_count} 个子任务完成...")
 
@@ -289,33 +289,6 @@ def finalize_screening_analysis(result_id: int, total_count: int):
             # 所有任务已完成
             logger.info(f"所有子任务已完成，执行最终同步...")
             progress_mgr.finalize()
-
-            # 执行任务级聚合分析
-            try:
-                db = SyncSessionLocal()
-                try:
-                    # 获取 task_id
-                    stmt = select(AnalysisJob.task_id).where(AnalysisJob.id == result_id)
-                    task_id = db.execute(stmt).scalar_one_or_none()
-
-                    if task_id:
-                        logger.info(f"开始执行任务级聚合分析: task_id={task_id}")
-                        result_data = aggregate_task_analysis(db, task_id)
-
-                        # 更新 AnalysisJob.result_data
-                        stmt = (
-                            update(AnalysisJob)
-                            .where(AnalysisJob.id == result_id)
-                            .values(result_data=result_data)
-                        )
-                        db.execute(stmt)
-                        db.commit()
-                        logger.info(f"任务级聚合分析完成并保存")
-                finally:
-                    db.close()
-            except Exception as e:
-                logger.error(f"任务级聚合分析失败: {e}", exc_info=True)
-                # 聚合失败不影响整体状态，继续返回完成
 
             return {
                 "status": "completed",

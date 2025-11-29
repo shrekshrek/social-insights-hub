@@ -204,11 +204,9 @@ def finalize_post_deep_analysis(
 
     Returns:
         最终统计结果
-    """
-    from sqlalchemy import select, update
-    from src.social_media.analysis.celery_tasks.aggregator import aggregate_task_analysis
-    from src.social_media.analysis.models import AnalysisJob
 
+    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregate)
+    """
     logger.info(f"[Finalizer] 原文深度分析任务开始最终化: result_id={result_id}, total={total_count}")
 
     progress_mgr = AnalysisProgressManager(result_id)
@@ -238,30 +236,7 @@ def finalize_post_deep_analysis(
     except Exception as e:
         logger.error(f"[Finalizer] 同步进度到数据库失败: {e}", exc_info=True)
 
-    # 3. 执行任务级聚合分析（更新 result_data）
-    try:
-        with SyncSessionLocal() as db:
-            # 获取 task_id
-            stmt = select(AnalysisJob.task_id).where(AnalysisJob.id == result_id)
-            task_id = db.execute(stmt).scalar_one_or_none()
-
-            if task_id:
-                logger.info(f"[Finalizer] 开始执行任务级聚合分析: task_id={task_id}")
-                result_data = aggregate_task_analysis(db, task_id)
-
-                # 更新 AnalysisJob.result_data
-                stmt = (
-                    update(AnalysisJob)
-                    .where(AnalysisJob.id == result_id)
-                    .values(result_data=result_data)
-                )
-                db.execute(stmt)
-                db.commit()
-                logger.info(f"[Finalizer] 任务级聚合分析完成并保存")
-    except Exception as e:
-        logger.error(f"[Finalizer] 任务级聚合分析失败: {e}", exc_info=True)
-
-    # 4. 返回最终统计
+    # 3. 返回最终统计
     final_progress = progress_mgr.get_progress()
     return {
         "status": "completed",
@@ -524,11 +499,9 @@ def finalize_comment_deep_analysis(
 
     Returns:
         最终统计结果
-    """
-    from sqlalchemy import select, update
-    from src.social_media.analysis.celery_tasks.aggregator import aggregate_task_analysis
-    from src.social_media.analysis.models import AnalysisJob
 
+    注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregate)
+    """
     logger.info(f"[Finalizer] 评论深度分析任务开始最终化: result_id={result_id}, total={total_count}")
 
     progress_mgr = AnalysisProgressManager(result_id)
@@ -558,30 +531,7 @@ def finalize_comment_deep_analysis(
     except Exception as e:
         logger.error(f"[Finalizer] 同步评论分析进度失败: {e}", exc_info=True)
 
-    # 3. 执行任务级聚合分析（更新 result_data）
-    try:
-        with SyncSessionLocal() as db:
-            # 获取 task_id
-            stmt = select(AnalysisJob.task_id).where(AnalysisJob.id == result_id)
-            task_id = db.execute(stmt).scalar_one_or_none()
-
-            if task_id:
-                logger.info(f"[Finalizer] 开始执行任务级聚合分析: task_id={task_id}")
-                result_data = aggregate_task_analysis(db, task_id)
-
-                # 更新 AnalysisJob.result_data
-                stmt = (
-                    update(AnalysisJob)
-                    .where(AnalysisJob.id == result_id)
-                    .values(result_data=result_data)
-                )
-                db.execute(stmt)
-                db.commit()
-                logger.info(f"[Finalizer] 任务级聚合分析完成并保存")
-    except Exception as e:
-        logger.error(f"[Finalizer] 任务级聚合分析失败: {e}", exc_info=True)
-
-    # 4. 返回最终统计
+    # 3. 返回最终统计
     final_progress = progress_mgr.get_progress()
     return {
         "status": "completed",

@@ -41,7 +41,7 @@ export interface TokenUsageStats {
  */
 export interface EntityInfo {
   name: string
-  type: '品牌' | '商品' | '服务' | '其他'
+  type: '品牌' | '产品' | '服务' | '人物' | '其他'
   sentiment: 1 | 0 | -1
   features: string[]
   issues: string[]
@@ -264,6 +264,7 @@ export interface PostAnalysisWithPostInfo {
   value_score: number | null
   relevance_score: number | null
   sentiment: -1 | 0 | 1 | null
+  cii: number | null  // 内容影响力指数
 
   // 深度分析
   post_deep_result: PostDeepResult | null

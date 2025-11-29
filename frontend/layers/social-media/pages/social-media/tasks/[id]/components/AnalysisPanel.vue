@@ -8,6 +8,8 @@ import type {
   TaskAnalysisResultData,
 } from '../../../../../analysis/types'
 import ExpandableText from '../../../../../analysis/components/ExpandableText.vue'
+import PostDeepAnalysisResult from '../../../../../analysis/components/PostDeepAnalysisResult.vue'
+import CommentDeepAnalysisResult from '../../../../../analysis/components/CommentDeepAnalysisResult.vue'
 
 const props = defineProps<{
   taskId: number
@@ -583,6 +585,23 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
       },
     },
     {
+      accessorKey: 'cii',
+      header: 'CII',
+      cell: ({ row }) => {
+        const cii = row.original.cii
+        if (cii == null) {
+          return h('span', { class: 'text-gray-400 text-xs' }, '-')
+        }
+        // CII 0-100, 根据值显示不同颜色
+        const getColor = (value: number) => {
+          if (value >= 70) return 'text-green-600'
+          if (value >= 40) return 'text-yellow-600'
+          return 'text-gray-600'
+        }
+        return h('span', { class: `text-sm font-medium ${getColor(cii)}` }, cii.toFixed(1))
+      },
+    },
+    {
       accessorKey: 'deep_analysis',
       header: '深度分析',
       cell: ({ row }) => {
@@ -884,10 +903,11 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
 
     <!-- 分析结果表格 -->
     <UTable
+      sticky
       :data="rows"
       :columns="columns"
       :loading="tableLoading"
-      class="w-full"
+      class="max-h-[600px]"
     >
       <template #empty-state>
         <div class="text-center py-10 text-gray-500">
@@ -1074,80 +1094,16 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
         </div>
 
         <!-- 原文深度结果 -->
-        <template v-if="deepResultModalType === 'post' && selectedPostForDeepResult.post_deep_result">
-          <!-- AI总结 -->
-          <div class="space-y-2">
-            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">AI 总结</h4>
-            <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-              {{ selectedPostForDeepResult.post_deep_result.summary || '无' }}
-            </p>
-          </div>
-
-          <!-- 识别的实体 -->
-          <div v-if="selectedPostForDeepResult.post_deep_result.entities?.length" class="space-y-2">
-            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">识别的实体</h4>
-            <div class="flex flex-wrap gap-2">
-              <UBadge
-                v-for="(entity, idx) in selectedPostForDeepResult.post_deep_result.entities"
-                :key="idx"
-                :color="entity.type === '品牌' ? 'primary' : entity.type === '商品' ? 'success' : 'neutral'"
-                variant="subtle"
-                size="sm"
-              >
-                {{ entity.name }} ({{ entity.type }})
-              </UBadge>
-            </div>
-          </div>
-
-          <!-- 通用观点 -->
-          <div v-if="selectedPostForDeepResult.post_deep_result.general_opinions?.length" class="space-y-2">
-            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">提取的观点</h4>
-            <div class="space-y-2">
-              <div
-                v-for="(opinion, idx) in selectedPostForDeepResult.post_deep_result.general_opinions"
-                :key="idx"
-                class="p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm"
-              >
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{ opinion.category }}：</span>
-                <span class="text-gray-600 dark:text-gray-400">{{ opinion.opinions?.join('、') }}</span>
-              </div>
-            </div>
-          </div>
-        </template>
+        <PostDeepAnalysisResult
+          v-if="deepResultModalType === 'post' && selectedPostForDeepResult.post_deep_result"
+          :data="selectedPostForDeepResult.post_deep_result"
+        />
 
         <!-- 评论深度结果 -->
-        <template v-else-if="deepResultModalType === 'comment' && selectedPostForDeepResult.comment_deep_result">
-          <!-- 识别的实体 -->
-          <div v-if="selectedPostForDeepResult.comment_deep_result.entities?.length" class="space-y-2">
-            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">评论中识别的实体</h4>
-            <div class="flex flex-wrap gap-2">
-              <UBadge
-                v-for="(entity, idx) in selectedPostForDeepResult.comment_deep_result.entities"
-                :key="idx"
-                :color="entity.type === '品牌' ? 'primary' : entity.type === '商品' ? 'success' : 'neutral'"
-                variant="subtle"
-                size="sm"
-              >
-                {{ entity.name }} ({{ entity.type }})
-              </UBadge>
-            </div>
-          </div>
-
-          <!-- 通用观点 -->
-          <div v-if="selectedPostForDeepResult.comment_deep_result.general_opinions?.length" class="space-y-2">
-            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">评论中提取的观点</h4>
-            <div class="space-y-2">
-              <div
-                v-for="(opinion, idx) in selectedPostForDeepResult.comment_deep_result.general_opinions"
-                :key="idx"
-                class="p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm"
-              >
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{ opinion.category }}：</span>
-                <span class="text-gray-600 dark:text-gray-400">{{ opinion.opinions?.join('、') }}</span>
-              </div>
-            </div>
-          </div>
-        </template>
+        <CommentDeepAnalysisResult
+          v-else-if="deepResultModalType === 'comment' && selectedPostForDeepResult.comment_deep_result"
+          :data="selectedPostForDeepResult.comment_deep_result"
+        />
 
         <div v-else class="text-center text-gray-500 py-4">
           暂无分析结果

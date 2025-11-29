@@ -6,9 +6,9 @@ defineProps<{
 }>()
 
 const getSentimentColor = (sentiment: number) => {
-  if (sentiment > 0) return 'green'
-  if (sentiment < 0) return 'red'
-  return 'gray'
+  if (sentiment > 0) return 'success'
+  if (sentiment < 0) return 'error'
+  return 'neutral'
 }
 
 const getSentimentLabel = (sentiment: number) => {
@@ -24,10 +24,10 @@ const getEntityTypeLabel = (type: string) => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-4">
     <!-- 摘要 -->
-    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-      <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">内容摘要</h4>
+    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+      <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">内容摘要</h4>
       <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
         {{ data.summary }}
       </p>
@@ -35,61 +35,74 @@ const getEntityTypeLabel = (type: string) => {
 
     <!-- 实体信息 -->
     <div v-if="data.entities && data.entities.length > 0">
-      <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">识别实体</h4>
-      <div class="grid gap-4 md:grid-cols-2">
-        <UCard v-for="(entity, index) in data.entities" :key="index" :ui="{ body: { padding: 'p-3' } }">
-          <div class="flex justify-between items-start mb-2">
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-gray-900 dark:text-white">{{ entity.name }}</span>
+      <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">识别实体</h4>
+      <div class="space-y-2">
+        <div
+          v-for="(entity, index) in data.entities"
+          :key="index"
+          class="border border-gray-200 dark:border-gray-700 rounded-lg p-2.5"
+        >
+          <div class="flex justify-between items-center mb-1.5">
+            <div class="flex items-center gap-1.5">
+              <span class="font-medium text-sm text-gray-900 dark:text-white">{{ entity.name }}</span>
               <UBadge variant="soft" size="xs">{{ getEntityTypeLabel(entity.type) }}</UBadge>
             </div>
-            <UBadge :color="getSentimentColor(entity.sentiment)" size="xs" variant="subtle">
+            <UBadge :color="getSentimentColor(entity.sentiment)" variant="soft">
               {{ getSentimentLabel(entity.sentiment) }}
             </UBadge>
           </div>
 
-          <div class="space-y-2 text-xs">
-            <div v-if="entity.features?.length">
-              <span class="text-gray-500">特性:</span>
-              <div class="flex flex-wrap gap-1 mt-1">
-                <UBadge v-for="f in entity.features" :key="f" color="gray" variant="soft" size="xs">{{ f }}</UBadge>
-              </div>
+          <div class="space-y-1 text-sm">
+            <div v-if="entity.features?.length" class="flex flex-wrap items-baseline gap-x-3">
+              <span class="font-medium text-gray-500 dark:text-gray-400 shrink-0">特性：</span>
+              <span v-for="f in entity.features" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
             </div>
-
-            <div v-if="entity.issues?.length">
-              <span class="text-red-500">问题:</span>
-              <div class="flex flex-wrap gap-1 mt-1">
-                <UBadge v-for="i in entity.issues" :key="i" color="red" variant="soft" size="xs">{{ i }}</UBadge>
-              </div>
+            <div v-if="entity.issues?.length" class="flex flex-wrap items-baseline gap-x-3">
+              <span class="font-medium text-red-500 dark:text-red-400 shrink-0">问题：</span>
+              <span v-for="i in entity.issues" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
             </div>
-            
-            <div v-if="entity.expectations?.length">
-              <span class="text-blue-500">期望:</span>
-              <div class="flex flex-wrap gap-1 mt-1">
-                <UBadge v-for="e in entity.expectations" :key="e" color="blue" variant="soft" size="xs">{{ e }}</UBadge>
-              </div>
+            <div v-if="entity.expectations?.length" class="flex flex-wrap items-baseline gap-x-3">
+              <span class="font-medium text-blue-500 dark:text-blue-400 shrink-0">期望：</span>
+              <span v-for="e in entity.expectations" :key="e" class="text-gray-700 dark:text-gray-300">{{ e }}</span>
+            </div>
+            <div v-if="entity.audience?.length" class="flex flex-wrap items-baseline gap-x-3">
+              <span class="font-medium text-purple-500 dark:text-purple-400 shrink-0">受众：</span>
+              <span v-for="a in entity.audience" :key="a" class="text-gray-700 dark:text-gray-300">{{ a }}</span>
+            </div>
+            <div v-if="entity.scenarios?.length" class="flex flex-wrap items-baseline gap-x-3">
+              <span class="font-medium text-cyan-500 dark:text-cyan-400 shrink-0">场景：</span>
+              <span v-for="s in entity.scenarios" :key="s" class="text-gray-700 dark:text-gray-300">{{ s }}</span>
+            </div>
+            <div v-if="entity.market_factors?.length" class="flex flex-wrap items-baseline gap-x-3">
+              <span class="font-medium text-amber-500 dark:text-amber-400 shrink-0">市场：</span>
+              <span v-for="m in entity.market_factors" :key="m" class="text-gray-700 dark:text-gray-300">{{ m }}</span>
+            </div>
+            <div v-if="entity.competitors?.length" class="flex flex-wrap items-baseline gap-x-3">
+              <span class="font-medium text-orange-500 dark:text-orange-400 shrink-0">竞品：</span>
+              <span v-for="c in entity.competitors" :key="c" class="text-gray-700 dark:text-gray-300">{{ c }}</span>
             </div>
           </div>
-        </UCard>
+        </div>
       </div>
     </div>
 
     <!-- 通用观点 -->
     <div v-if="data.general_opinions && data.general_opinions.length > 0">
-      <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">通用观点</h4>
+      <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">通用观点</h4>
       <div class="space-y-2">
-        <div 
-          v-for="(opinion, index) in data.general_opinions" 
+        <div
+          v-for="(opinion, index) in data.general_opinions"
           :key="index"
-          class="flex items-start gap-3 p-3 border border-gray-100 dark:border-gray-800 rounded-lg"
+          class="border border-gray-200 dark:border-gray-700 rounded-lg p-2.5"
         >
-          <UBadge :color="getSentimentColor(opinion.sentiment)" size="xs" class="shrink-0 mt-0.5">
-            {{ opinion.category }}
-          </UBadge>
-          <div class="flex-1 space-y-1">
-            <p v-for="(op, idx) in opinion.opinions" :key="idx" class="text-sm text-gray-600 dark:text-gray-400">
-              {{ op }}
-            </p>
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ opinion.category }}</span>
+            <UBadge :color="getSentimentColor(opinion.sentiment)" variant="soft">
+              {{ getSentimentLabel(opinion.sentiment) }}
+            </UBadge>
+          </div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">
+            <p v-for="(op, idx) in opinion.opinions" :key="idx">{{ op }}</p>
           </div>
         </div>
       </div>

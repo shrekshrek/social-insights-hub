@@ -524,7 +524,7 @@ def aggregate_entities(
         "sentiment_sum": 0.0,
         "post_count": 0,  # 来自帖子的提及数
         "comment_count": 0,  # 来自评论的提及数
-        "unique_post_ids": set(),  # 用于计算 Mentions
+        "post_ids": set(),  # 用于计算 Mentions
         "features": defaultdict(int),
         "issues": defaultdict(int),
         "competitors": [],  # 从实体中提取的竞品
@@ -532,6 +532,8 @@ def aggregate_entities(
 
     # 实体名称映射（用于合并相似实体）
     name_mapping: dict[str, str] = {}
+    # 记录合并的实体对
+    merged_pairs: list[tuple[str, str, float]] = []
 
     def get_canonical_name(name: str) -> str:
         """获取实体的标准名称（可能已被映射到其他名称）"""
@@ -541,8 +543,11 @@ def aggregate_entities(
 
         # 检查是否与已有实体相似
         for existing_normalized, canonical in name_mapping.items():
-            if _are_similar_entities(normalized, existing_normalized):
+            similarity = SequenceMatcher(None, normalized, existing_normalized).ratio()
+            if similarity >= 0.8:
                 name_mapping[normalized] = canonical
+                # 记录合并对
+                merged_pairs.append((name, canonical, similarity))
                 return canonical
 
         # 新实体
@@ -577,7 +582,7 @@ def aggregate_entities(
 
         # Mentions 统计（唯一帖子数）
         if post_id:
-            data["unique_post_ids"].add(post_id)
+            data["post_ids"].add(post_id)
 
         # 聚合特性和问题
         for feature in entity.get("features", []):
@@ -593,6 +598,7 @@ def aggregate_entities(
                 data["competitors"].append(comp)
 
     # 遍历所有帖子
+    raw_entity_count = 0  # 统计原始实体数量
     for post in posts_data:
         post_id = post.get("post_id")
         cii = post.get("cii", 0)
@@ -601,12 +607,31 @@ def aggregate_entities(
         comment_deep_result = post.get("comment_deep_result") or {}
 
         # 处理帖子实体（标记来源为 post）
-        for entity in post_deep_result.get("entities", []):
+        post_entities = post_deep_result.get("entities", [])
+        raw_entity_count += len(post_entities)
+        for entity in post_entities:
             process_entity(entity, post_id, cii, "post")
 
         # 处理评论实体（标记来源为 comment）
-        for entity in comment_deep_result.get("entities", []):
+        comment_entities = comment_deep_result.get("entities", [])
+        raw_entity_count += len(comment_entities)
+        for entity in comment_entities:
             process_entity(entity, post_id, cii, "comment")
+
+    # 记录聚合效果
+    merged_entity_count = len(entity_data)
+    if raw_entity_count > 0:
+        print(
+            f"[实体聚合] 原始实体 {raw_entity_count} 个 -> 合并后 {merged_entity_count} 个 "
+            f"(合并率 {(1 - merged_entity_count / raw_entity_count) * 100:.1f}%)"
+        )
+        # 输出相似度合并详情
+        if merged_pairs:
+            print(f"[实体聚合] 相似度合并详情 ({len(merged_pairs)} 对):")
+            for new_name, canonical, similarity in merged_pairs:
+                print(f"  '{new_name}' -> '{canonical}' (相似度: {similarity:.2f})")
+    else:
+        print("[实体聚合] 无实体数据")
 
     # 提取竞品名称
     competitor_names = extract_competitor_names(entity_data, task_keywords)
@@ -618,7 +643,7 @@ def aggregate_entities(
             return None
 
         avg_sentiment = data["sentiment_sum"] / data["mention_count"]
-        mentions = len(data["unique_post_ids"])
+        mentions = len(data["post_ids"])
 
         # 来源分布
         source_distribution = {
@@ -681,52 +706,72 @@ def aggregate_entities(
 def aggregate_opinions(
     posts_data: list[dict[str, Any]],
     top_n: int = 10,
-) -> dict[str, list[dict[str, Any]]]:
-    """聚合任务内的观点，区分正面和负面，并标记来源
+) -> dict[str, Any]:
+    """聚合任务内的观点，按 (category, sentiment) 分组融合，避免混淆不同情感的观点
+
+    改进点：
+    - 原方案：按 category 融合所有情感，最后按平均情感分类
+    - 新方案：按 (category, sentiment) 组合融合，同一话题不同情感的观点分开存储
+
+    数据结构说明：
+    - post_ids: 所有涉及该话题的帖子ID集合（用于计算 mentions）
+    - post_sources: 从帖子原文中提取该观点的帖子ID集合
+    - comment_sources: 从评论中提取该观点的帖子ID集合
+    - cii_added_posts: 已贡献CII的帖子ID（避免同一帖子重复累加CII）
+    - opinions: 具体观点文本 -> 包含该观点的帖子ID集合
 
     Returns:
-        dict: {"top_issues": [...], "top_features": [...]}
+        dict: {
+            "top_issues": [...],  # 负面观点 TOP N
+            "top_features": [...],  # 正面观点 TOP N
+            "aggregated_opinions": {...}  # 原始融合数据，用于持久化和项目级分析
+        }
     """
-    # 收集所有观点
+    # 按 (category, sentiment) 组合收集观点
+    # key 格式: "category|sentiment" 如 "价格|1", "价格|-1", "价格|0"
     opinion_data: dict[str, dict] = defaultdict(lambda: {
         "category": "",
+        "sentiment": 0,  # 固定的情感值 (-1, 0, 1)
         "total_cii": 0.0,
-        "sentiment_sum": 0.0,
-        "count": 0,
-        "post_count": 0,  # 来自帖子的数量
-        "comment_count": 0,  # 来自评论的数量
-        "unique_post_ids": set(),  # 用于计算 mentions
-        "opinions": defaultdict(int),
+        "cii_added_posts": set(),  # 已贡献CII的帖子（避免重复累加）
+        "post_sources": set(),  # 从帖子原文提取的帖子ID
+        "comment_sources": set(),  # 从评论提取的帖子ID
+        "post_ids": set(),  # 所有涉及的帖子ID（用于计算 mentions）
+        "opinions": defaultdict(set),  # 观点文本 -> 帖子ID集合
     })
 
     def process_opinions(opinions: list, post_id: int, cii: float, source: str):
-        """处理观点列表"""
+        """处理观点列表，按 (category, sentiment) 分组"""
         for opinion in opinions:
             category = opinion.get("category", "其他")
             sentiment = opinion.get("sentiment", 0)
 
-            data = opinion_data[category]
+            # 使用 category|sentiment 作为 key
+            key = f"{category}|{sentiment}"
+            data = opinion_data[key]
             data["category"] = category
-            data["total_cii"] += cii
-            data["sentiment_sum"] += sentiment
-            data["count"] += 1
+            data["sentiment"] = sentiment  # 保留原始情感值
 
-            # 来源标记
-            if source == "post":
-                data["post_count"] += 1
-            else:
-                data["comment_count"] += 1
+            # CII 只累加一次（每个帖子对每个分组只贡献一次）
+            if post_id and post_id not in data["cii_added_posts"]:
+                data["total_cii"] += cii
+                data["cii_added_posts"].add(post_id)
 
+            # 来源标记（使用集合去重）
             if post_id:
-                data["unique_post_ids"].add(post_id)
+                if source == "post":
+                    data["post_sources"].add(post_id)
+                else:
+                    data["comment_sources"].add(post_id)
+                data["post_ids"].add(post_id)
 
             for op in opinion.get("opinions", []):
-                if op:
-                    data["opinions"][op] += 1
+                if op and post_id:
+                    data["opinions"][op].add(post_id)
 
     for post in posts_data:
         post_id = post.get("post_id")
-        cii = post.get("cii", 0)
+        cii = post.get("cii", 0) or 0
 
         post_deep_result = post.get("post_deep_result") or {}
         comment_deep_result = post.get("comment_deep_result") or {}
@@ -741,51 +786,93 @@ def aggregate_opinions(
             post_id, cii, "comment"
         )
 
-    # 分类：正面 vs 负面
-    issues = []
-    features = []
+    # 构建结果
+    issues = []  # 负面观点 (sentiment == -1)
+    features = []  # 正面观点 (sentiment == 1)
+    aggregated_opinions = {}  # 原始融合数据（用于持久化）
 
-    for data in opinion_data.values():
-        if data["count"] == 0:
+    for key, data in opinion_data.items():
+        mentions = len(data["post_ids"])
+        if mentions == 0:
             continue
 
-        avg_sentiment = data["sentiment_sum"] / data["count"]
-        total_source = data["post_count"] + data["comment_count"]
-        mentions = len(data["unique_post_ids"])
+        post_source_count = len(data["post_sources"])
+        comment_source_count = len(data["comment_sources"])
+        total_source_count = post_source_count + comment_source_count
 
-        # 来源分布
+        # 来源分布（基于唯一帖子数）
         source_distribution = {
-            "post": round(data["post_count"] / total_source, 2) if total_source > 0 else 0,
-            "comment": round(data["comment_count"] / total_source, 2) if total_source > 0 else 0,
+            "post": round(post_source_count / total_source_count, 2) if total_source_count > 0 else 0,
+            "comment": round(comment_source_count / total_source_count, 2) if total_source_count > 0 else 0,
         }
 
-        top_opinions = sorted(
+        # 按帖子数排序（保留全部观点用于项目级分析）
+        all_opinions = sorted(
             data["opinions"].items(),
-            key=lambda x: x[1],
+            key=lambda x: len(x[1]),  # 按包含该观点的帖子数排序
             reverse=True
-        )[:3]
+        )
 
+        # 保存原始融合数据（每个观点带 post_ids，保留全部）
+        aggregated_opinions[key] = {
+            "category": data["category"],
+            "sentiment": data["sentiment"],
+            "heat": round(data["total_cii"], 1),
+            "mentions": mentions,
+            "post_source_count": post_source_count,
+            "comment_source_count": comment_source_count,
+            "post_ids": list(data["post_ids"]),
+            "opinions": [  # 全部观点（用于项目级分析）
+                {
+                    "text": op_text,
+                    "post_ids": list(op_post_ids),
+                }
+                for op_text, op_post_ids in all_opinions
+            ],
+        }
+
+        # 构建展示用的 item（也带 post_ids 用于反向追溯）
         item = {
             "topic": data["category"],
             "heat": round(data["total_cii"], 1),
             "mentions": mentions,
-            "sentiment": round(avg_sentiment, 2),
+            "sentiment": data["sentiment"],  # 直接使用原始情感值
             "source_distribution": source_distribution,
-            "summary": "; ".join([o[0] for o in top_opinions]) if top_opinions else "",
+            "summary": "; ".join([op[0] for op in all_opinions[:3]]) if all_opinions else "",
+            "post_ids": list(data["post_ids"]),  # 该话题涉及的帖子
         }
 
-        if avg_sentiment < -0.3:
+        # 按原始情感值分类（不再用平均值判断）
+        if data["sentiment"] == -1:
             issues.append(item)
-        elif avg_sentiment > 0.3:
+        elif data["sentiment"] == 1:
             features.append(item)
+        # sentiment == 0 的中性观点暂不展示
 
     # 按热度排序
     issues.sort(key=lambda x: x["heat"], reverse=True)
     features.sort(key=lambda x: x["heat"], reverse=True)
 
+    # 记录聚合效果
+    total_keys = len(aggregated_opinions)
+    positive_count = len([k for k in aggregated_opinions if k.endswith("|1")])
+    negative_count = len([k for k in aggregated_opinions if k.endswith("|-1")])
+    neutral_count = len([k for k in aggregated_opinions if k.endswith("|0")])
+    print(
+        f"[观点聚合] 按 (category, sentiment) 分组: "
+        f"总计 {total_keys} 个 (正面 {positive_count}, 负面 {negative_count}, 中性 {neutral_count})"
+    )
+    if aggregated_opinions:
+        print("[观点聚合] 前5个分组示例:")
+        for i, (key, data) in enumerate(list(aggregated_opinions.items())[:5]):
+            first_op = data['opinions'][0] if data['opinions'] else None
+            op_info = f", 首个观点='{first_op['text']}'({len(first_op['post_ids'])}帖)" if first_op else ""
+            print(f"  {key}: 热度={data['heat']}, 提及={data['mentions']}帖, 观点数={len(data['opinions'])}{op_info}")
+
     return {
         "top_issues": issues[:top_n],
         "top_features": features[:top_n],
+        "aggregated_opinions": aggregated_opinions,  # 原始融合数据
     }
 
 
@@ -963,7 +1050,7 @@ def aggregate_context_analysis(
     scenario_data: dict[str, dict] = defaultdict(lambda: {
         "label": "",
         "total_cii": 0.0,
-        "unique_post_ids": set(),
+        "post_ids": set(),
         "associated_issues": defaultdict(int),
         "associated_features": defaultdict(int),
     })
@@ -972,7 +1059,7 @@ def aggregate_context_analysis(
     audience_data: dict[str, dict] = defaultdict(lambda: {
         "label": "",
         "total_cii": 0.0,
-        "unique_post_ids": set(),
+        "post_ids": set(),
         "preferences": defaultdict(int),  # 关联的 market_factors 或 features
     })
 
@@ -998,7 +1085,7 @@ def aggregate_context_analysis(
                     data["label"] = scenario
                     data["total_cii"] += cii
                     if post_id:
-                        data["unique_post_ids"].add(post_id)
+                        data["post_ids"].add(post_id)
 
                     # 关联 issues 和 features
                     for issue in entity_issues:
@@ -1016,7 +1103,7 @@ def aggregate_context_analysis(
                     data["label"] = audience
                     data["total_cii"] += cii
                     if post_id:
-                        data["unique_post_ids"].add(post_id)
+                        data["post_ids"].add(post_id)
 
                     # 关联偏好（market_factors + features）
                     for factor in entity_market_factors:
@@ -1029,7 +1116,7 @@ def aggregate_context_analysis(
     # 格式化场景输出（置信度过滤）
     scenarios = []
     for data in scenario_data.values():
-        mentions = len(data["unique_post_ids"])
+        mentions = len(data["post_ids"])
         if mentions >= min_mentions:
             top_issues = sorted(
                 data["associated_issues"].items(),
@@ -1053,7 +1140,7 @@ def aggregate_context_analysis(
     # 格式化人群输出（置信度过滤）
     audiences = []
     for data in audience_data.values():
-        mentions = len(data["unique_post_ids"])
+        mentions = len(data["post_ids"])
         if mentions >= min_mentions:
             top_preferences = sorted(
                 data["preferences"].items(),
@@ -1483,6 +1570,8 @@ def aggregate_task_analysis(
             # KOL 声音
             "kol_voices": kol_voices,
         },
+        # 原始融合数据（用于项目级分析）
+        "aggregated_opinions": opinion_stats.get("aggregated_opinions", {}),
     }
 
     # 统计实体分类数量
@@ -1573,4 +1662,5 @@ def _empty_result() -> dict[str, Any]:
             },
             "kol_voices": [],
         },
+        "aggregated_opinions": {},
     }

@@ -256,6 +256,8 @@ export const useApi = () => {
   /**
    * 基于 useFetch 的数据获取
    * 支持 SSR，用于页面数据获取
+   *
+   * @param options.silent404 - 静默处理 404 错误（不显示 toast），适用于可选数据查询
    */
   const useApiData = <T = unknown>(path: MaybeRef<string>, options: Record<string, unknown> = {}) => {
     const fullPath = computed(() => buildApiPath(unref(path)))
@@ -263,6 +265,7 @@ export const useApi = () => {
     const userOnResponseError = options.onResponseError as
       ((ctx: unknown) => unknown | Promise<unknown>) | undefined
     const baseHeaders = normalizeHeaders(options.headers as HeadersInit | Record<string, string> | undefined)
+    const silent404 = options.silent404 as boolean | undefined
 
     return useFetch<T>(fullPath, {
       ...options,
@@ -290,6 +293,11 @@ export const useApi = () => {
       async onResponseError(context) {
         if (userOnResponseError) {
           await userOnResponseError(context)
+        }
+        // 静默处理 404 错误（适用于可选数据查询，如聚合结果可能不存在）
+        const status = context.response?.status
+        if (silent404 && status === 404) {
+          return
         }
         const { message } = handleApiError(context.response)
         showError(message)

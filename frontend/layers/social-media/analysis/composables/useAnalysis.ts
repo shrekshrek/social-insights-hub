@@ -253,12 +253,14 @@ export const useAnalysis = () => {
 
   /**
    * 获取任务级聚合分析结果
+   * 使用 silent404 静默处理 404 错误，因为聚合结果可能尚未生成
    */
   const getTaskAggregation = (taskId: MaybeRef<number>) => {
     return useApiData<TaskAnalysisResultResponse>(
       computed(() => `/social-media/analysis/tasks/${unref(taskId)}/aggregation`),
       {
         key: computed(() => `task-aggregation-${unref(taskId)}`),
+        silent404: true,
       }
     )
   }

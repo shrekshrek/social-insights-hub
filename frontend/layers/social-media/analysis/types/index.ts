@@ -387,10 +387,11 @@ export interface EntityStat {
   role: 'target' | 'competitor' | 'other'
   heat: number
   mentions: number
-  avg_sentiment: number
+  sentiment: -1 | 0 | 1
   source_distribution: SourceDistribution
   top_features: string[]
   top_issues: string[]
+  top_expectations: string[]
 }
 
 /** 观点统计 */

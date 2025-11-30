@@ -215,13 +215,13 @@ const getConflictDirectionLabel = (direction: string) => {
               <span class="text-gray-500 dark:text-gray-400">
                 提及 <span class="text-gray-700 dark:text-gray-300">{{ entity.mentions }}</span>
               </span>
-              <UBadge :color="getSentimentColor(entity.avg_sentiment)" variant="subtle" size="xs">
-                {{ entity.avg_sentiment >= 0 ? '+' : '' }}{{ entity.avg_sentiment.toFixed(2) }}
+              <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
+                {{ getSentimentLabel(entity.sentiment) }}
               </UBadge>
             </div>
           </div>
-          <!-- 特性和问题 -->
-          <div v-if="entity.top_features?.length || entity.top_issues?.length" class="mt-2 space-y-1 text-xs">
+          <!-- 特性、问题和期望 -->
+          <div v-if="entity.top_features?.length || entity.top_issues?.length || entity.top_expectations?.length" class="mt-2 space-y-1 text-xs">
             <div v-if="entity.top_features?.length" class="flex flex-wrap items-baseline gap-x-3">
               <span class="font-medium text-green-600 dark:text-green-400 shrink-0">特性：</span>
               <span v-for="f in entity.top_features.slice(0, 3)" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
@@ -229,6 +229,10 @@ const getConflictDirectionLabel = (direction: string) => {
             <div v-if="entity.top_issues?.length" class="flex flex-wrap items-baseline gap-x-3">
               <span class="font-medium text-red-600 dark:text-red-400 shrink-0">问题：</span>
               <span v-for="i in entity.top_issues.slice(0, 3)" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
+            </div>
+            <div v-if="entity.top_expectations?.length" class="flex flex-wrap items-baseline gap-x-3">
+              <span class="font-medium text-blue-600 dark:text-blue-400 shrink-0">期望：</span>
+              <span v-for="e in entity.top_expectations.slice(0, 3)" :key="e" class="text-gray-700 dark:text-gray-300">{{ e }}</span>
             </div>
           </div>
         </div>

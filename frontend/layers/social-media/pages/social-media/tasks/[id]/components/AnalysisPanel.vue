@@ -75,10 +75,19 @@ const formatNumber = (num?: number | null) => {
   return num.toLocaleString()
 }
 
-const formatDateTime = (value?: string | null) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  return isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN')
+const formatDateTime = (value?: string | null): { date: string; time: string } | null => {
+  if (!value) return null
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return null
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hour = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hour}:${min}`,
+  }
 }
 
 /** 阈值筛选 */
@@ -495,12 +504,13 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     {
       accessorKey: 'post_id_on_platform',
       header: '平台ID',
-      size: 120,
-      cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono truncate block max-w-[100px]', title: row.original.post_id_on_platform || '-' }, row.original.post_id_on_platform || '-'),
+      size: 80,
+      cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono truncate block max-w-[70px]', title: row.original.post_id_on_platform || '-' }, row.original.post_id_on_platform || '-'),
     },
     {
       accessorKey: 'content',
       header: '标题/内容',
+      size: 180,
       cell: ({ row }) =>
         h(ExpandableText, {
           title: row.original.title || '',
@@ -511,7 +521,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     {
       accessorKey: 'scores',
       header: '初筛',
-      size: 70,
+      size: 65,
       cell: ({ row }) => {
         const { spam_score, value_score, relevance_score } = row.original
         const scoreText = (label: string, value?: number | null) =>
@@ -534,7 +544,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     {
       accessorKey: 'sentiment',
       header: '情感',
-      size: 70,
+      size: 60,
       cell: ({ row }) => {
         const sentiment = row.original.sentiment
         if (sentiment == null) {
@@ -618,7 +628,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     {
       accessorKey: 'engagement',
       header: '互动',
-      size: 80,
+      size: 70,
       cell: ({ row }) => {
         const { likes_count, comments_count, shares_count, collected_count, views_count, danmaku_count } = row.original
         const items = [
@@ -644,9 +654,15 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     {
       accessorKey: 'published_at',
       header: '发布时间',
-      size: 140,
-      cell: ({ row }) =>
-        h('span', { class: 'text-xs text-gray-500 whitespace-nowrap' }, formatDateTime(row.original.published_at)),
+      size: 90,
+      cell: ({ row }) => {
+        const dt = formatDateTime(row.original.published_at)
+        if (!dt) return h('span', { class: 'text-xs text-gray-400' }, '-')
+        return h('div', { class: 'text-xs text-gray-500 leading-tight' }, [
+          h('div', {}, dt.date),
+          h('div', {}, dt.time),
+        ])
+      },
     },
   ]
 })
@@ -911,6 +927,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
   <UModal
     v-model:open="deepDialogOpen"
     title="设置原文深度分析阈值"
+    description="配置筛选条件以确定哪些帖子需要进行深度分析"
     :ui="{ width: 'sm:max-w-xl', footer: 'justify-end' }"
   >
     <template #body>
@@ -993,6 +1010,7 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
   <UModal
     v-model:open="commentDialogOpen"
     title="评论深度分析预览"
+    description="对已完成原文深度分析且有评论的帖子进行评论内容分析"
     :ui="{ width: 'sm:max-w-xl', footer: 'justify-end' }"
   >
     <template #body>

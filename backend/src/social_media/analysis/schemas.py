@@ -466,6 +466,7 @@ class CompetitorDetail(CustomBaseModel):
     )
     heat: float = Field(0, description="热度")
     mentions: int = Field(0, description="提及数")
+    post_ids: list[int] = Field(default_factory=list, description="关联帖子ID")
     top_features: list[str] = Field(default_factory=list, description="主要特性")
     top_issues: list[str] = Field(default_factory=list, description="主要问题")
 

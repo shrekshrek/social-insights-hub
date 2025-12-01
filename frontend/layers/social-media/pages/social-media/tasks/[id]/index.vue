@@ -155,10 +155,26 @@ const handleClearFilter = () => {
 };
 
 // 格式化函数
-const formatDateTime = (dateStr: string | null) => {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleString("zh-CN");
-};
+const formatDateTime = (dateStr: string | null): { date: string; time: string } | null => {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return null
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hour = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hour}:${min}`,
+  }
+}
+
+// 格式化日期时间（用于任务信息显示，完整格式）
+const formatFullDateTime = (dateStr: string | null) => {
+  if (!dateStr) return "-"
+  return new Date(dateStr).toLocaleString("zh-CN")
+}
 
 const formatNumber = (num: number) => {
   if (num >= 10000) {
@@ -210,6 +226,7 @@ const postsColumns = computed(() => {
       accessorKey: "id",
       header: () =>
         h("span", { style: { whiteSpace: "nowrap" } as const }, "ID"),
+      size: 40,
       cell: ({ row }: { row: { original: SocialPost } }) =>
         h(
           "span",
@@ -221,10 +238,11 @@ const postsColumns = computed(() => {
       accessorKey: "post_id_on_platform",
       header: () =>
         h("span", { style: { whiteSpace: "nowrap" } as const }, "平台ID"),
+      size: 80,
       cell: ({ row }: { row: { original: SocialPost } }) =>
         h(
           "span",
-          { class: "text-xs font-mono truncate max-w-[80px]", title: row.original.post_id_on_platform || "-" },
+          { class: "text-xs font-mono truncate block max-w-[70px]", title: row.original.post_id_on_platform || "-" },
           row.original.post_id_on_platform || "-"
         ),
     },
@@ -232,13 +250,15 @@ const postsColumns = computed(() => {
     accessorKey: "author_name",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "作者"),
+    size: 70,
     cell: ({ row }: { row: { original: SocialPost } }) =>
-      h("span", { class: "text-sm truncate" }, row.original.author_name || "-"),
+      h("span", { class: "text-sm truncate block max-w-[60px]" }, row.original.author_name || "-"),
   },
   {
     accessorKey: "title",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "标题/内容"),
+    size: 150,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(ExpandableText, {
         title: row.original.title || "",
@@ -250,10 +270,11 @@ const postsColumns = computed(() => {
     accessorKey: "likes_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "点赞"),
+    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
-        { class: "text-sm text-right block" },
+        { class: "text-xs text-right block" },
         formatNumber(row.original.likes_count)
       ),
   },
@@ -261,10 +282,11 @@ const postsColumns = computed(() => {
     accessorKey: "comments_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论"),
+    size: 70,
     cell: ({ row }: { row: { original: SocialPost } }) =>
-      h("div", { class: "text-sm text-right" }, [
+      h("div", { class: "text-xs text-right" }, [
         h("span", {}, formatNumber(row.original.comments_count)),
-        h("span", { class: "text-xs text-gray-400 ml-1" },
+        h("span", { class: "text-gray-400 ml-1" },
           `(${formatNumber(row.original.crawled_comments_count)})`
         ),
       ]),
@@ -274,10 +296,11 @@ const postsColumns = computed(() => {
     accessorKey: "shares_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "转发"),
+    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
-        { class: "text-sm text-right block" },
+        { class: "text-xs text-right block" },
         formatNumber(row.original.shares_count)
       ),
   }] : []),
@@ -286,10 +309,11 @@ const postsColumns = computed(() => {
     accessorKey: "collected_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "收藏"),
+    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
-        { class: "text-sm text-right block" },
+        { class: "text-xs text-right block" },
         formatNumber(row.original.collected_count)
       ),
   }] : []),
@@ -298,10 +322,11 @@ const postsColumns = computed(() => {
     accessorKey: "views_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "浏览"),
+    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
-        { class: "text-sm text-right block" },
+        { class: "text-xs text-right block" },
         formatNumber(row.original.views_count)
       ),
   }] : []),
@@ -310,10 +335,11 @@ const postsColumns = computed(() => {
     accessorKey: "danmaku_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "弹幕"),
+    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
-        { class: "text-sm text-right block" },
+        { class: "text-xs text-right block" },
         formatNumber(row.original.danmaku_count)
       ),
   }] : []),
@@ -321,12 +347,15 @@ const postsColumns = computed(() => {
     accessorKey: "published_at",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "发布时间"),
-    cell: ({ row }: { row: { original: SocialPost } }) =>
-      h(
-        "span",
-        { class: "text-xs" },
-        formatDateTime(row.original.published_at)
-      ),
+    size: 90,
+    cell: ({ row }: { row: { original: SocialPost } }) => {
+      const dt = formatDateTime(row.original.published_at)
+      if (!dt) return h("span", { class: "text-xs text-gray-400" }, "-")
+      return h("div", { class: "text-xs text-gray-500 leading-tight" }, [
+        h("div", {}, dt.date),
+        h("div", {}, dt.time),
+      ])
+    },
   },
   {
     accessorKey: "actions",
@@ -339,6 +368,7 @@ const postsColumns = computed(() => {
         },
         "操作"
       ),
+    size: 80,
     cell: ({ row }: { row: { original: SocialPost } }) => {
       const UButton = resolveComponent("UButton");
       const buttons = [];
@@ -392,6 +422,7 @@ const commentsColumns = computed(() => {
     accessorKey: "post_id",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "主贴ID"),
+    size: 50,
     cell: ({ row }: { row: { original: SocialComment } }) =>
       h("span", { class: "text-xs text-gray-500 font-mono" }, row.original.post_id),
   },
@@ -399,22 +430,25 @@ const commentsColumns = computed(() => {
     accessorKey: "post_id_on_platform",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "主贴平台ID"),
+    size: 80,
     cell: ({ row }: { row: { original: SocialComment } }) => {
       const postIdOnPlatform = postIdMap.value.get(row.original.post_id) || "-";
-      return h("span", { class: "text-xs font-mono truncate max-w-[80px]", title: postIdOnPlatform }, postIdOnPlatform);
+      return h("span", { class: "text-xs font-mono truncate block max-w-[70px]", title: postIdOnPlatform }, postIdOnPlatform);
     },
   },
   {
     accessorKey: "author_name",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "作者"),
+    size: 70,
     cell: ({ row }: { row: { original: SocialComment } }) =>
-      h("span", { class: "text-sm truncate" }, row.original.author_name || "-"),
+      h("span", { class: "text-sm truncate block max-w-[60px]" }, row.original.author_name || "-"),
   },
   {
     accessorKey: "content",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论内容"),
+    size: 180,
     cell: ({ row }: { row: { original: SocialComment } }) =>
       h(ExpandableText, {
         text: row.original.content || "",
@@ -425,10 +459,11 @@ const commentsColumns = computed(() => {
     accessorKey: "likes_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "点赞"),
+    size: 50,
     cell: ({ row }: { row: { original: SocialComment } }) =>
       h(
         "span",
-        { class: "text-sm text-right block" },
+        { class: "text-xs text-right block" },
         formatNumber(row.original.likes_count)
       ),
   },
@@ -436,12 +471,15 @@ const commentsColumns = computed(() => {
     accessorKey: "published_at",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论时间"),
-    cell: ({ row }: { row: { original: SocialComment } }) =>
-      h(
-        "span",
-        { class: "text-xs" },
-        formatDateTime(row.original.published_at)
-      ),
+    size: 90,
+    cell: ({ row }: { row: { original: SocialComment } }) => {
+      const dt = formatDateTime(row.original.published_at)
+      if (!dt) return h("span", { class: "text-xs text-gray-400" }, "-")
+      return h("div", { class: "text-xs text-gray-500 leading-tight" }, [
+        h("div", {}, dt.date),
+        h("div", {}, dt.time),
+      ])
+    },
   },
   ]
 })
@@ -688,7 +726,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
                     创建时间
                   </h3>
                   <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ formatDateTime(task.created_at) }}
+                    {{ formatFullDateTime(task.created_at) }}
                   </p>
                 </div>
                 <div>
@@ -696,7 +734,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
                     开始时间
                   </h3>
                   <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ formatDateTime(task.started_at) }}
+                    {{ formatFullDateTime(task.started_at) }}
                   </p>
                 </div>
                 <div>
@@ -704,7 +742,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
                     完成时间
                   </h3>
                   <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ formatDateTime(task.completed_at) }}
+                    {{ formatFullDateTime(task.completed_at) }}
                   </p>
                 </div>
               </div>

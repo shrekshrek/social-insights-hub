@@ -462,6 +462,7 @@ export interface ContextAnalysis {
 export interface CompetitorDetail {
   name: string
   sentiment: number
+  sentiment_distribution: SentimentDistribution
   heat: number
   mentions: number
   top_features: string[]

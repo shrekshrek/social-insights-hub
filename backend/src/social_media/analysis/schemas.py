@@ -461,6 +461,9 @@ class CompetitorDetail(CustomBaseModel):
     """竞品详情"""
     name: str = Field(..., description="竞品名称")
     sentiment: float = Field(0, description="情感倾向")
+    sentiment_distribution: SentimentDistribution = Field(
+        default_factory=SentimentDistribution, description="情感分布"
+    )
     heat: float = Field(0, description="热度")
     mentions: int = Field(0, description="提及数")
     top_features: list[str] = Field(default_factory=list, description="主要特性")

@@ -1,9 +1,101 @@
 <script setup lang="ts">
+import { watch, onMounted, nextTick } from 'vue'
+import type { EChartsOption } from 'echarts'
 import type { TaskAnalysisResultData } from '../types'
 
-defineProps<{
+const props = defineProps<{
   data: TaskAnalysisResultData
 }>()
+
+// 时间分布图表
+const { chartRef: timeChartRef, initChart: initTimeChart, setOption: setTimeOption, getInstance: getTimeInstance } = useCharts()
+
+/** 时间分布图表配置 */
+const getTimeChartOption = (): EChartsOption => {
+  const dist = props.data.charts.time_distribution || []
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: unknown) => {
+        const arr = params as Array<{ name: string; value: number }>
+        const p = arr?.[0]
+        return p ? `${p.name}<br/>数量: ${p.value}条` : ''
+      }
+    },
+    grid: {
+      left: '10px',
+      right: '10px',
+      bottom: '0px',
+      top: '10px',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dist.map(i => i.date.slice(5)),  // 只显示 MM-DD
+      axisLabel: {
+        rotate: 45,
+        fontSize: 10,
+        color: '#9ca3af'
+      },
+      axisLine: { lineStyle: { color: '#e5e7eb' } }
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
+      axisLabel: { fontSize: 10, color: '#9ca3af' }
+    },
+    series: [{
+      name: '发布数量',
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 6,
+      data: dist.map(i => i.count),
+      lineStyle: { color: '#3b82f6', width: 2 },
+      itemStyle: { color: '#3b82f6' },
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+            { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
+          ]
+        }
+      }
+    }]
+  }
+}
+
+/** 初始化时间分布图表 */
+const setupTimeChart = async () => {
+  await nextTick()
+  // 等待 DOM 渲染完成
+  await new Promise(resolve => setTimeout(resolve, 100))
+  if (timeChartRef.value && props.data.charts.time_distribution?.length) {
+    const instance = initTimeChart()
+    if (instance) {
+      setTimeOption(getTimeChartOption())
+    }
+  }
+}
+
+// 数据变化时更新图表
+watch(() => props.data.charts.time_distribution, async () => {
+  await nextTick()
+  if (timeChartRef.value && props.data.charts.time_distribution?.length) {
+    // 如果图表未初始化，先初始化
+    if (!getTimeInstance()) {
+      if (!initTimeChart()) return
+    }
+    setTimeOption(getTimeChartOption())
+  }
+}, { deep: true })
+
+onMounted(() => {
+  setupTimeChart()
+})
 
 /** 格式化百分比 */
 const formatPercent = (value: number) => {
@@ -193,37 +285,149 @@ const getConflictDirectionLabel = (direction: string) => {
     <section>
       <div class="flex items-center gap-2 mb-3">
         <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">舆情四象限分布</h3>
-        <UTooltip text="横轴: 情感值 (正/负)，纵轴: CII互动指数 (高/低)，以均值为分界">
+        <UTooltip text="按情感(正/负)和CII互动指数(高/低)划分，以均值为分界">
           <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400" />
         </UTooltip>
       </div>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div class="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+          <p class="text-xl font-bold text-red-600 dark:text-red-400">{{ data.charts.quadrant_summary.Q1_danger }}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">爆雷区</p>
+          <p class="text-xs text-gray-400 dark:text-gray-500">高互动/负面</p>
+        </div>
+        <div class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+          <p class="text-xl font-bold text-green-600 dark:text-green-400">{{ data.charts.quadrant_summary.Q2_brand }}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">品牌区</p>
+          <p class="text-xs text-gray-400 dark:text-gray-500">高互动/正面</p>
+        </div>
+        <div class="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+          <p class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ data.charts.quadrant_summary.Q3_complaint }}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">吐槽区</p>
+          <p class="text-xs text-gray-400 dark:text-gray-500">低互动/负面</p>
+        </div>
+        <div class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <p class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ data.charts.quadrant_summary.Q4_niche }}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">自嗨区</p>
+          <p class="text-xs text-gray-400 dark:text-gray-500">低互动/正面</p>
+        </div>
+        <div class="text-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+          <p class="text-xl font-bold text-gray-600 dark:text-gray-300">{{ data.charts.quadrant_summary.neutral }}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">中性区</p>
+          <p class="text-xs text-gray-400 dark:text-gray-500">情感中立</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 时间分布折线图 (ECharts) -->
+    <section v-if="data.charts.time_distribution?.length">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">内容发布时间分布</h3>
       <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div class="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded">
-            <p class="text-xl font-bold text-red-600 dark:text-red-400">{{ data.charts.quadrant_summary.Q1_danger }}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">爆雷区</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500">高互动/负面</p>
+        <ClientOnly>
+          <template #fallback>
+            <div class="flex items-center justify-center h-48">
+              <UIcon name="i-heroicons-arrow-path" class="animate-spin h-6 w-6 text-gray-400" />
+              <span class="ml-2 text-sm text-gray-400">正在加载图表...</span>
+            </div>
+          </template>
+          <div ref="timeChartRef" class="w-full h-48" />
+        </ClientOnly>
+        <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
+          <span>共 {{ data.charts.time_distribution.length }} 天</span>
+          <span>总计 {{ data.charts.time_distribution.reduce((sum, i) => sum + i.count, 0) }} 条内容</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 本品与竞品实体对比 -->
+    <section v-if="data.insights.target_entities?.length || data.insights.competitor_entities?.length">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">本品与竞品实体</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- 本品实体 -->
+        <div class="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-building-office-2" class="w-5 h-5 text-blue-500" />
+            <span class="font-medium text-gray-900 dark:text-white">本品实体</span>
+            <UBadge color="primary" variant="subtle" size="xs">{{ data.insights.target_entities?.length || 0 }}</UBadge>
           </div>
-          <div class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded">
-            <p class="text-xl font-bold text-green-600 dark:text-green-400">{{ data.charts.quadrant_summary.Q2_brand }}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">品牌区</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500">高互动/正面</p>
+          <div v-if="data.insights.target_entities?.length" class="space-y-3">
+            <div
+              v-for="entity in data.insights.target_entities.slice(0, 5)"
+              :key="entity.name"
+              class="p-2 bg-white dark:bg-gray-800 rounded"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-gray-800 dark:text-gray-200">{{ entity.name }}</span>
+                  <UBadge color="neutral" variant="subtle" size="xs">{{ entity.type }}</UBadge>
+                </div>
+                <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
+                  {{ getSentimentLabel(entity.sentiment) }}
+                </UBadge>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-gray-500 mb-1">
+                <span>热度 {{ entity.heat.toFixed(0) }}</span>
+                <span>提及 {{ entity.mentions }}</span>
+              </div>
+              <div v-if="entity.sentiment_distribution" class="text-xs">
+                <span class="text-green-600">正{{ entity.sentiment_distribution.positive }}</span>
+                <span class="text-gray-400 mx-1">/</span>
+                <span class="text-gray-500">中{{ entity.sentiment_distribution.neutral }}</span>
+                <span class="text-gray-400 mx-1">/</span>
+                <span class="text-red-600">负{{ entity.sentiment_distribution.negative }}</span>
+              </div>
+              <div v-if="entity.top_features?.length" class="text-xs text-green-600 dark:text-green-400 mt-1">
+                优点: {{ entity.top_features.slice(0, 2).join('、') }}
+              </div>
+              <div v-if="entity.top_issues?.length" class="text-xs text-red-600 dark:text-red-400">
+                问题: {{ entity.top_issues.slice(0, 2).join('、') }}
+              </div>
+            </div>
           </div>
-          <div class="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded">
-            <p class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ data.charts.quadrant_summary.Q3_complaint }}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">吐槽区</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500">低互动/负面</p>
+          <p v-else class="text-sm text-gray-400">暂无本品实体数据</p>
+        </div>
+
+        <!-- 竞品实体 -->
+        <div class="p-4 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-100 dark:border-orange-900/30">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-scale" class="w-5 h-5 text-orange-500" />
+            <span class="font-medium text-gray-900 dark:text-white">竞品实体</span>
+            <UBadge color="warning" variant="subtle" size="xs">{{ data.insights.competitor_entities?.length || 0 }}</UBadge>
           </div>
-          <div class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-            <p class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ data.charts.quadrant_summary.Q4_niche }}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">自嗨区</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500">低互动/正面</p>
+          <div v-if="data.insights.competitor_entities?.length" class="space-y-3">
+            <div
+              v-for="entity in data.insights.competitor_entities.slice(0, 5)"
+              :key="entity.name"
+              class="p-2 bg-white dark:bg-gray-800 rounded"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-gray-800 dark:text-gray-200">{{ entity.name }}</span>
+                  <UBadge color="neutral" variant="subtle" size="xs">{{ entity.type }}</UBadge>
+                </div>
+                <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
+                  {{ getSentimentLabel(entity.sentiment) }}
+                </UBadge>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-gray-500 mb-1">
+                <span>热度 {{ entity.heat.toFixed(0) }}</span>
+                <span>提及 {{ entity.mentions }}</span>
+              </div>
+              <div v-if="entity.sentiment_distribution" class="text-xs">
+                <span class="text-green-600">正{{ entity.sentiment_distribution.positive }}</span>
+                <span class="text-gray-400 mx-1">/</span>
+                <span class="text-gray-500">中{{ entity.sentiment_distribution.neutral }}</span>
+                <span class="text-gray-400 mx-1">/</span>
+                <span class="text-red-600">负{{ entity.sentiment_distribution.negative }}</span>
+              </div>
+              <div v-if="entity.top_features?.length" class="text-xs text-green-600 dark:text-green-400 mt-1">
+                优点: {{ entity.top_features.slice(0, 2).join('、') }}
+              </div>
+              <div v-if="entity.top_issues?.length" class="text-xs text-red-600 dark:text-red-400">
+                问题: {{ entity.top_issues.slice(0, 2).join('、') }}
+              </div>
+            </div>
           </div>
-          <div class="text-center p-3 bg-gray-100 dark:bg-gray-700 rounded">
-            <p class="text-xl font-bold text-gray-600 dark:text-gray-300">{{ data.charts.quadrant_summary.neutral }}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">中性区</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500">情感中立</p>
-          </div>
+          <p v-else class="text-sm text-gray-400">暂无竞品实体数据</p>
         </div>
       </div>
     </section>
@@ -312,7 +516,9 @@ const getConflictDirectionLabel = (direction: string) => {
                   <span class="text-xs text-gray-400">热度 {{ issue.heat.toFixed(0) }}</span>
                 </div>
               </div>
-              <p v-if="issue.summary" class="text-xs text-gray-600 dark:text-gray-400 mb-1">{{ issue.summary }}</p>
+              <ul v-if="issue.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
+                <li v-for="(opinion, idx) in issue.top_opinions" :key="idx">{{ opinion }}</li>
+              </ul>
               <div class="flex items-center gap-2 text-xs text-gray-400">
                 <span>来源: 帖子{{ (issue.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (issue.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
               </div>
@@ -341,7 +547,9 @@ const getConflictDirectionLabel = (direction: string) => {
                   <span class="text-xs text-gray-400">热度 {{ feature.heat.toFixed(0) }}</span>
                 </div>
               </div>
-              <p v-if="feature.summary" class="text-xs text-gray-600 dark:text-gray-400 mb-1">{{ feature.summary }}</p>
+              <ul v-if="feature.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
+                <li v-for="(opinion, idx) in feature.top_opinions" :key="idx">{{ opinion }}</li>
+              </ul>
               <div class="flex items-center gap-2 text-xs text-gray-400">
                 <span>来源: 帖子{{ (feature.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (feature.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
               </div>

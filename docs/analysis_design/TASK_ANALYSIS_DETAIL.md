@@ -168,11 +168,64 @@ graph TD
         "top_entities": [...],        # 热度排名前N的实体列表（展示用）
         "target_entities": [...],     # 本品实体列表
         "competitor_entities": [...], # 竞品实体列表
-        "aggregated_entities": {...}, # 完整融合数据（用于项目级分析）
+        "aggregated_entities": {...}, # 完整融合数据（用于项目级分析和派生计算）
     }
     ```
 
-### 4.4 核心指标计算
+### 4.4 观点聚合 (Opinion Aggregation)
+
+观点聚合处理 LLM 提取的 `general_opinions`，按 **category + sentiment** 分组。
+
+*   **设计理念：按情感分组**
+    *   观点的情感是**独立维度**：同一话题的正面/负面观点是对立声音
+    *   例如：话题"价格"下，"价格实惠"(正面) 和 "价格太贵"(负面) 必须分开统计
+    *   **分组键**：`{category}|{sentiment}`（如 `价格|-1`, `价格|1`）
+
+*   **观点数据结构**：
+    ```python
+    opinion_data[f"{category}|{sentiment}"] = {
+        "category": str,           # 话题类别
+        "sentiment": int,          # 情感值 (-1, 0, 1)
+        "total_cii": float,        # CII累加（去重后）
+        "cii_added_posts": set,    # 已贡献CII的帖子ID
+        "post_sources": set,       # 从帖子原文提取的帖子ID
+        "comment_sources": set,    # 从评论提取的帖子ID
+        "post_ids": set,           # 所有涉及的帖子ID
+        "opinions": dict,          # 具体观点 {text: set(post_ids)}
+    }
+    ```
+
+*   **聚合逻辑**：
+    1.  **分组键生成**：`key = f"{category}|{sentiment}"`
+    2.  **热度累加**：每帖只贡献一次 CII（通过 `cii_added_posts` 去重）
+    3.  **来源标记**：区分帖子原文 vs 评论来源
+    4.  **观点收集**：记录具体观点文本及其来源帖子
+
+*   **输出结构**：
+    ```python
+    return {
+        "top_issues": [...],           # 热门问题（负面观点，按热度排序）
+        "top_features": [...],         # 热门特性（正面观点，按热度排序）
+        "aggregated_opinions": {...},  # 完整融合数据（用于项目级分析）
+    }
+    ```
+
+    每个展示项包含：
+    ```python
+    {
+        "topic": str,                    # 话题类别
+        "heat": float,                   # 热度（CII累加）
+        "mentions": int,                 # 唯一帖子数
+        "sentiment": int,                # 情感值 (-1, 0, 1)
+        "source_distribution": {         # 来源分布
+            "post": float,               # 帖子来源占比
+            "comment": float             # 评论来源占比
+        },
+        "top_opinions": [str, ...],      # 热门观点列表（Top 3）
+    }
+    ```
+
+### 4.5 核心指标计算
 基于清洗后的 **Target** 数据桶计算：
 
 1.  **NSR 净情感率 (Net Sentiment Rate)**
@@ -182,33 +235,144 @@ graph TD
     *   **公式**：$ SHI = \text{Normalize}( \text{AvgWeightedSentiment}(\text{Top 20 Posts}) ) $
     *   *作用*：评估搜索结果首屏观感。
 
-### 4.5 深度洞察挖掘 (Deep Insights)
-基于清洗后的 **Target** 数据桶挖掘，并综合运用 **Heat** 和 **Mentions** 双重指标：
+### 4.6 派生分析 (Derived Analysis) - "先融合，后派生"架构
 
-1.  **舆论焦点地图 (Focus Map)**
-    *   **展示内容**：高热度的 **"实体+属性" 关键词** (来源于 `entities.name`, `features`, `issues`, `general_opinions`)。
-    *   **排序逻辑**：默认按 `Heat` (影响力) 降序，展示 Top 10。
-    *   **展示逻辑**：气泡大小 = `Heat`，颜色深浅 = `Mentions` (频次)。
-    *   *目的*：一眼识别“大家都在讨论什么具体点”（如 "发热" 或 "外观"）。
+派生分析采用**"先融合，后派生"**架构：先完成 `aggregated_entities` 和 `aggregated_opinions` 的基础聚合，再从中派生高级洞察。
 
-2.  **情感-互动四象限 (Quadrant)**
-    *   **展示内容**：具体的 **帖子 (Posts)**。每个点代表一篇帖子。
-    *   **X轴**：帖子情感分 ($Sentiment$)。
-    *   **Y轴**：帖子互动指数 ($CII$)。
-    *   *价值*：快速定位需要处理的**具体内容**（如：点击右上角 Q2 区域的点，找到高赞好评贴进行转发）。
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     LLM 深度分析结果                             │
+│  (entities, general_opinions, from posts & comments)            │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                    基础聚合层 (Primary Aggregation)               │
+│  ┌─────────────────────┐     ┌─────────────────────┐             │
+│  │ aggregate_entities  │     │ aggregate_opinions  │             │
+│  │ (按 canonical_name) │     │ (按 category|sent)  │             │
+│  └──────────┬──────────┘     └──────────┬──────────┘             │
+│             │                           │                         │
+│             ▼                           ▼                         │
+│  ┌─────────────────────┐     ┌─────────────────────┐             │
+│  │aggregated_entities  │     │aggregated_opinions  │             │
+│  │(完整实体融合数据)    │     │(完整观点融合数据)    │             │
+│  └──────────┬──────────┘     └──────────┬──────────┘             │
+└─────────────┼───────────────────────────┼─────────────────────────┘
+              │                           │
+              ▼                           ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                    派生分析层 (Derived Analysis)                  │
+│  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐     │
+│  │derive_context   │ │classify_kano    │ │analyze_         │     │
+│  │_analysis        │ │_model           │ │competition      │     │
+│  │(场景+人群)       │ │(KANO需求分层)   │ │(竞品分析)        │     │
+│  └─────────────────┘ └─────────────────┘ └─────────────────┘     │
+└───────────────────────────────────────────────────────────────────┘
+```
 
-3.  **KANO 需求分层 (双维判定)**
-    *   **展示内容**：分类后的 **特性/痛点关键词**。
-    *   **基本型 (Must-be)**：`High Mentions` (普遍) + `Negative Sentiment` (痛点)。**展示高频痛点**（如 "发热"）。
-    *   **兴奋型 (Attractive)**：`Low Mentions` (稀缺) + `High Avg_CII` (高共鸣) + `Positive Sentiment`。**展示惊喜功能**（如 "微距"）。
-    *   **期望型 (One-dimensional)**：`High Mentions` (普遍) + `High Expectations`。**展示用户愿望**（如 "降价"）。
+**架构优势**：
+1. **数据一致性**：所有派生分析使用相同的归一化实体数据
+2. **可追溯性**：每个维度都保留 `post_ids`，支持反向追溯
+3. **复用性**：`aggregated_entities` 可用于项目级跨任务分析
 
-4.  **场景与人群画像 (置信度过滤)**
-    *   **展示内容**：`Scenarios` 和 `Audience` 标签，附带 Heat/Mentions。
-    *   **过滤门槛**：仅保留 `Mentions >= 2` 的标签。
-    *   *理由*：排除“偶然爆款”带来的标签偏差，确保画像具有统计学上的代表性。
+#### 4.6.1 场景与人群画像派生 (derive_context_analysis)
 
-### 4.6 营销渗透率 (Marketing Penetration)
+从 `aggregated_entities` 派生场景和人群画像：
+
+*   **输入**：`aggregated_entities`（已完成实体归一化）
+*   **派生逻辑**：
+    ```
+    对于每个归一化实体：
+      - 遍历 entity.scenarios → 累加场景热度，关联该实体的 issues/features
+      - 遍历 entity.audience  → 累加人群热度，关联该实体的 market_factors/features
+    ```
+*   **输出**：
+    ```python
+    {
+        "scenarios": [
+            {
+                "label": "游戏",
+                "heat": 3000,
+                "mentions": 25,
+                "associated_issues": ["发热", "掉帧"],    # 关联问题
+                "associated_features": ["120Hz高刷"],     # 关联特性
+            }
+        ],
+        "audiences": [
+            {
+                "label": "学生党",
+                "heat": 2000,
+                "mentions": 15,
+                "preferences": ["性价比", "教育优惠"],    # 关联偏好
+            }
+        ]
+    }
+    ```
+*   **置信度过滤**：仅保留 `mentions >= 2` 的标签
+
+#### 4.6.2 KANO 需求分层派生 (classify_kano_model)
+
+从 `target_entities` 和 `opinion_stats` 派生 KANO 分类：
+
+*   **输入**：
+    - `target_entities`：本品实体列表（含 issues, features, expectations）
+    - `opinion_stats`：观点统计（top_issues, top_features）
+*   **分类规则**：
+    - **基本型 (Must-be)**：高频痛点
+        - 来源：`issues` + `negative opinions`
+        - 条件：`mentions >= 3` 且 `sentiment < -0.3`
+    - **兴奋型 (Attractive)**：惊喜功能
+        - 来源：`features` + `positive opinions`
+        - 条件：`mentions <= 5` 且 `heat > 平均heat` 且 `sentiment > 0.5`
+    - **期望型 (One-dimensional)**：改进期望
+        - 来源：`expectations`
+        - 条件：`mentions >= 2`
+
+#### 4.6.3 竞品分析派生 (analyze_competition)
+
+从 `entity_stats` 派生竞品对比分析：
+
+*   **输入**：`entity_stats`（含 target_entities, competitor_entities）
+*   **输出**：
+    ```python
+    {
+        "top_competitors": ["竞品A", "竞品B"],
+        "target_sentiment": 0.6,        # 本品平均情感
+        "competitor_sentiment": 0.4,    # 竞品平均情感
+        "comparison_sentiment": 0.2,    # 对比优势
+        "competitor_details": [
+            {
+                "name": "竞品A",
+                "sentiment": 0.5,
+                "heat": 2000,
+                "mentions": 8,
+                "top_features": ["性价比高"],
+                "top_issues": ["拍照一般"],
+            }
+        ]
+    }
+    ```
+
+### 4.7 直接聚合分析 (Direct Aggregation)
+
+以下分析直接从 `posts_data` 聚合，不依赖派生层：
+
+1.  **情感-互动四象限 (Quadrant)**
+    *   **数据源**：`posts_data`（每篇帖子的 sentiment 和 CII）
+    *   **X轴**：帖子情感分 ($Sentiment$)
+    *   **Y轴**：帖子互动指数 ($CII$)
+    *   **象限划分**：Q1爆雷区、Q2品牌区、Q3吐槽区、Q4小众区
+
+2.  **KOL 声音提取**
+    *   **数据源**：`posts_data`（高 CII 帖子）
+    *   **逻辑**：选取 CII Top 5 的帖子作为 KOL 声音
+
+3.  **时间分布与新鲜度**
+    *   **数据源**：`posts_data`（published_at 字段）
+    *   **输出**：时间分布图、最近7/30天帖子数、平均发布天数
+
+### 4.8 营销渗透率 (Marketing Penetration)
 *   **自来水占比**：`spam_score < 4` 的帖子占比。
 
 ---
@@ -299,7 +463,7 @@ graph TD
         "heat": 4500,
         "mentions": 15,
         "source_distribution": {"post": 0.2, "comment": 0.8}, // 80% 来自评论，说明是用户痛点而非博主痛点
-        "summary": "普遍认为定价过高"
+        "top_opinions": ["普遍认为定价过高", "不值这个价", "性价比低"]  // 热门观点列表
       },
       {
         "topic": "发热",
@@ -307,11 +471,11 @@ graph TD
         "heat": 3200,
         "mentions": 12,
         "source_distribution": {"post": 0.5, "comment": 0.5},
-        "summary": "玩游戏时背部烫手"
+        "top_opinions": ["玩游戏时背部烫手", "充电发烫"]
       }
     ],
     "top_features": [
-      {"topic": "外观", "sentiment": 1, "heat": 5000, "mentions": 20, "summary": "紫色版本很惊艳"}
+      {"topic": "外观", "sentiment": 1, "heat": 5000, "mentions": 20, "top_opinions": ["紫色版本很惊艳", "手感细腻"]}
     ],
     "context_analysis": {
       "scenarios": [

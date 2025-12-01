@@ -409,7 +409,7 @@ export interface OpinionStat {
   mentions: number
   sentiment: number
   source_distribution: SourceDistribution
-  summary: string
+  top_opinions: string[]  // 热门观点列表
 }
 
 /** KANO 模型单项 */

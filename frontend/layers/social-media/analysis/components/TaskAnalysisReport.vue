@@ -189,7 +189,7 @@ const getConflictDirectionLabel = (direction: string) => {
 
 <template>
   <div class="space-y-6">
-    <!-- 分析概览：元数据 + 数据量统计 -->
+    <!-- 分析概览：元数据 + 数据量统计 + 数据新鲜度 -->
     <section class="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-800 rounded-lg border border-blue-100 dark:border-gray-700">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <!-- 左侧：分析时间和关键词 -->
@@ -209,23 +209,46 @@ const getConflictDirectionLabel = (direction: string) => {
             </div>
           </div>
         </div>
-        <!-- 右侧：数据量统计 -->
-        <div class="flex items-center gap-4 text-sm">
-          <div class="flex items-center gap-1">
-            <span class="text-gray-500 dark:text-gray-400">总量</span>
-            <span class="font-mono font-medium text-gray-900 dark:text-white">{{ data.meta.data_volume.total }}</span>
+        <!-- 右侧：数据量统计 + 数据新鲜度 -->
+        <div class="flex items-center gap-6 text-sm">
+          <!-- 数据量 -->
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-1">
+              <span class="text-gray-500 dark:text-gray-400">总量</span>
+              <span class="font-mono font-medium text-gray-900 dark:text-white">{{ data.meta.data_volume.total }}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-gray-500 dark:text-gray-400">初筛</span>
+              <span class="font-mono font-medium text-blue-600 dark:text-blue-400">{{ data.meta.data_volume.screened }}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-gray-500 dark:text-gray-400">深度</span>
+              <span class="font-mono font-medium text-green-600 dark:text-green-400">{{ data.meta.data_volume.deep_analyzed }}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-gray-500 dark:text-gray-400">评论</span>
+              <span class="font-mono font-medium text-purple-600 dark:text-purple-400">{{ data.meta.data_volume.comment_analyzed }}</span>
+            </div>
           </div>
-          <div class="flex items-center gap-1">
-            <span class="text-gray-500 dark:text-gray-400">初筛</span>
-            <span class="font-mono font-medium text-blue-600 dark:text-blue-400">{{ data.meta.data_volume.screened }}</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <span class="text-gray-500 dark:text-gray-400">深度</span>
-            <span class="font-mono font-medium text-green-600 dark:text-green-400">{{ data.meta.data_volume.deep_analyzed }}</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <span class="text-gray-500 dark:text-gray-400">评论</span>
-            <span class="font-mono font-medium text-purple-600 dark:text-purple-400">{{ data.meta.data_volume.comment_analyzed }}</span>
+          <!-- 分隔线 -->
+          <div class="h-4 w-px bg-gray-300 dark:bg-gray-600" />
+          <!-- 数据新鲜度 -->
+          <div class="flex items-center gap-3">
+            <UTooltip text="数据新鲜度">
+              <UIcon name="i-heroicons-calendar-days" class="w-4 h-4 text-blue-500" />
+            </UTooltip>
+            <div class="flex items-center gap-1">
+              <span class="text-gray-500 dark:text-gray-400">7天</span>
+              <span class="font-mono font-medium text-gray-900 dark:text-white">{{ formatPercent(data.freshness.last_7_days) }}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-gray-500 dark:text-gray-400">30天</span>
+              <span class="font-mono font-medium text-gray-900 dark:text-white">{{ formatPercent(data.freshness.last_30_days) }}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-gray-500 dark:text-gray-400">均龄</span>
+              <span class="font-mono font-medium text-gray-900 dark:text-white">{{ data.freshness.avg_age_days.toFixed(0) }}天</span>
+            </div>
           </div>
         </div>
       </div>
@@ -858,27 +881,6 @@ const getConflictDirectionLabel = (direction: string) => {
             </div>
           </div>
           <p class="text-sm text-gray-600 dark:text-gray-400">{{ item.summary }}</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- 数据新鲜度 -->
-    <section>
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">数据新鲜度</h3>
-      <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <div class="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p class="text-lg font-bold text-gray-900 dark:text-white">{{ formatPercent(data.freshness.last_7_days) }}</p>
-            <p class="text-xs text-gray-500 dark:text-gray-400">近7天</p>
-          </div>
-          <div>
-            <p class="text-lg font-bold text-gray-900 dark:text-white">{{ formatPercent(data.freshness.last_30_days) }}</p>
-            <p class="text-xs text-gray-500 dark:text-gray-400">近30天</p>
-          </div>
-          <div>
-            <p class="text-lg font-bold text-gray-900 dark:text-white">{{ data.freshness.avg_age_days.toFixed(0) }}天</p>
-            <p class="text-xs text-gray-500 dark:text-gray-400">平均发布天数</p>
-          </div>
         </div>
       </div>
     </section>

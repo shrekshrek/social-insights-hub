@@ -739,7 +739,7 @@ const getConflictDirectionLabel = (direction: string) => {
             >
               <div class="flex items-center justify-between">
                 <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="flex items-center gap-2 shrink-0 text-xs">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
@@ -776,7 +776,7 @@ const getConflictDirectionLabel = (direction: string) => {
             >
               <div class="flex items-center justify-between">
                 <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="flex items-center gap-2 shrink-0 text-xs">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
@@ -813,7 +813,7 @@ const getConflictDirectionLabel = (direction: string) => {
             >
               <div class="flex items-center justify-between">
                 <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="flex items-center gap-2 shrink-0 text-xs">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
@@ -843,9 +843,6 @@ const getConflictDirectionLabel = (direction: string) => {
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-2">
           <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">高影响力内容 TOP {{ Math.min(data.insights.kol_voices.length, 10) }}</h3>
-          <UTooltip text="按互动指数(CII)排名的高影响力帖子">
-            <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400" />
-          </UTooltip>
         </div>
         <button
           v-if="data.insights.kol_voices.length > 5"

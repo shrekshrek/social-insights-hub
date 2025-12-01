@@ -1053,20 +1053,23 @@ def classify_kano_model(
     for entity in entities_data:
         heat = entity.get("heat", 0)
         mentions = entity.get("mentions", 0)
+        entity_post_ids = entity.get("post_ids", [])
 
         # 提取实体的 issues
         for issue in entity.get("top_issues", []):
             if issue not in entity_issues:
-                entity_issues[issue] = {"label": issue, "heat": 0, "mentions": 0}
+                entity_issues[issue] = {"label": issue, "heat": 0, "mentions": 0, "post_ids": set()}
             entity_issues[issue]["heat"] += heat
             entity_issues[issue]["mentions"] += mentions
+            entity_issues[issue]["post_ids"].update(entity_post_ids)
 
         # 提取实体的 features
         for feature in entity.get("top_features", []):
             if feature not in entity_features:
-                entity_features[feature] = {"label": feature, "heat": 0, "mentions": 0}
+                entity_features[feature] = {"label": feature, "heat": 0, "mentions": 0, "post_ids": set()}
             entity_features[feature]["heat"] += heat
             entity_features[feature]["mentions"] += mentions
+            entity_features[feature]["post_ids"].update(entity_post_ids)
 
     # 计算热度阈值（用于判断"高热度"）
     all_heats = [i.get("heat", 0) for i in all_issues + all_features]
@@ -1089,6 +1092,7 @@ def classify_kano_model(
                 "heat": item.get("heat", 0),
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
+                "post_ids": item.get("post_ids", []),
             })
 
     # 从实体 issues 中补充
@@ -1101,6 +1105,7 @@ def classify_kano_model(
                     "heat": data["heat"],
                     "mentions": data["mentions"],
                     "sentiment": -1,  # issues 默认负面
+                    "post_ids": list(data.get("post_ids", set())),
                 })
 
     # 2. Attractive (兴奋型)：低频 + 高热度 + 正面
@@ -1114,6 +1119,7 @@ def classify_kano_model(
                 "heat": heat,
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
+                "post_ids": item.get("post_ids", []),
             })
 
     # 从实体 features 中补充
@@ -1125,6 +1131,7 @@ def classify_kano_model(
                     "heat": data["heat"],
                     "mentions": data["mentions"],
                     "sentiment": 1,  # features 默认正面
+                    "post_ids": list(data.get("post_ids", set())),
                 })
 
     # 3. One-dimensional (期望型)：高频 + 高期望（正面特性）
@@ -1136,6 +1143,7 @@ def classify_kano_model(
                 "heat": item.get("heat", 0),
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
+                "post_ids": item.get("post_ids", []),
             })
 
     # 按热度排序
@@ -1382,7 +1390,7 @@ def analyze_competition(
 def extract_kol_voices(
     posts_data: list[dict[str, Any]],
     db: Session,
-    top_n: int = 5,
+    top_n: int = 10,
 ) -> list[dict[str, Any]]:
     """提取 KOL 声音
 

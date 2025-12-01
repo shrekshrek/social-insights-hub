@@ -604,7 +604,8 @@ async def get_task_post_analyses(
     page_size: int = 20,
     filter_analyzed: bool = True,
     search_query: str | None = None,
-    search_id: int | None = None
+    search_id: int | None = None,
+    post_ids: list[int] | None = None,
 ) -> tuple[List[Dict[str, Any]], int]:
     """获取任务下所有帖子的分析结果（带分页和搜索）
 
@@ -616,6 +617,7 @@ async def get_task_post_analyses(
         filter_analyzed: 是否只返回已分析的帖子（默认True）
         search_query: 关键词搜索（搜索标题和内容）
         search_id: 按帖子分析ID精确搜索
+        post_ids: 按帖子ID列表筛选
 
     Returns:
         (帖子分析列表, 总数)，每个帖子包含：
@@ -678,7 +680,10 @@ async def get_task_post_analyses(
         stmt = stmt.where(PostAnalysis.spam_score.isnot(None))
 
     # 搜索条件
-    if search_id is not None:
+    if post_ids:
+        # 按帖子ID列表筛选（优先级最高）
+        stmt = stmt.where(SocialPost.id.in_(post_ids))
+    elif search_id is not None:
         stmt = stmt.where(PostAnalysis.id == search_id)
     elif search_query:
         search_pattern = f"%{search_query}%"

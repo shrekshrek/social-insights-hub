@@ -393,6 +393,7 @@ class EntityStat(CustomBaseModel):
     top_features: list[str] = Field(default_factory=list, description="主要特性")
     top_issues: list[str] = Field(default_factory=list, description="主要问题")
     top_expectations: list[str] = Field(default_factory=list, description="主要期望")
+    post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
 
 
 class OpinionStat(CustomBaseModel):
@@ -403,6 +404,7 @@ class OpinionStat(CustomBaseModel):
     sentiment: float = Field(0, description="情感倾向")
     source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
     top_opinions: list[str] = Field(default_factory=list, description="热门观点列表")
+    post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
 
 
 # ==================== KANO 需求分层 Schema (§4.5.3) ====================
@@ -413,6 +415,7 @@ class KanoItem(CustomBaseModel):
     heat: float = Field(0, description="热度")
     mentions: int = Field(0, description="提及数")
     sentiment: float = Field(0, description="情感倾向")
+    post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
 
 
 class KanoModel(CustomBaseModel):

@@ -273,6 +273,7 @@ async def get_task_post_analyses(
     filter_analyzed: bool = Query(True, description="是否只返回已分析的帖子"),
     search_query: str | None = Query(None, description="关键词搜索（搜索标题和内容）"),
     search_id: int | None = Query(None, description="按帖子ID精确搜索"),
+    post_ids: str | None = Query(None, description="按帖子ID列表筛选（逗号分隔）"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -282,10 +283,19 @@ async def get_task_post_analyses(
     - 返回该任务下已分析的帖子列表
     - 包含帖子基本信息和分析结果
     - 支持分页查询和搜索
+    - 支持按帖子ID列表筛选（post_ids参数，逗号分隔）
     """
+    # 解析 post_ids 参数
+    post_ids_list: list[int] | None = None
+    if post_ids:
+        try:
+            post_ids_list = [int(pid.strip()) for pid in post_ids.split(",") if pid.strip()]
+        except ValueError:
+            pass  # 忽略无效的ID
+
     items, total = await service.get_task_post_analyses(
         db, task_id, current_user.id, page, page_size, filter_analyzed,
-        search_query=search_query, search_id=search_id
+        search_query=search_query, search_id=search_id, post_ids=post_ids_list
     )
 
     return PostAnalysisListResponse(

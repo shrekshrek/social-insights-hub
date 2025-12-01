@@ -416,6 +416,7 @@ class KanoItem(CustomBaseModel):
     mentions: int = Field(0, description="提及数")
     sentiment: float = Field(0, description="情感倾向")
     post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
+    top_opinions: list[str] = Field(default_factory=list, description="代表性观点（最多3条）")
 
 
 class KanoModel(CustomBaseModel):
@@ -439,6 +440,7 @@ class ScenarioStat(CustomBaseModel):
     mentions: int = Field(0, description="提及数")
     associated_issues: list[str] = Field(default_factory=list, description="关联问题")
     associated_features: list[str] = Field(default_factory=list, description="关联特性")
+    post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
 
 
 class AudienceStat(CustomBaseModel):
@@ -447,6 +449,7 @@ class AudienceStat(CustomBaseModel):
     heat: float = Field(0, description="热度")
     mentions: int = Field(0, description="提及数")
     preferences: list[str] = Field(default_factory=list, description="偏好")
+    post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
 
 
 class ContextAnalysis(CustomBaseModel):

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         description="DeepSeek API Key (required for AI features)"
     )
     DEEPSEEK_BASE_URL: str = Field(
-        default="https://api.deepseek.com/v1",
+        default="https://api.deepseek.com",
         description="DeepSeek API Base URL"
     )
 
@@ -68,15 +68,15 @@ class Settings(BaseSettings):
         description="Chat model input price: CNY/million tokens"
     )
     DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION: float = Field(
-        default=8.0,
+        default=3.0,
         description="Chat model output price: CNY/million tokens"
     )
     DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION: float = Field(
-        default=4.0,
+        default=2.0,
         description="Reasoner model input price: CNY/million tokens"
     )
     DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION: float = Field(
-        default=16.0,
+        default=3.0,
         description="Reasoner model output price: CNY/million tokens"
     )
 

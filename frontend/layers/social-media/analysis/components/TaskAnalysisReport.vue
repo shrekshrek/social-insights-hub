@@ -632,16 +632,27 @@ const getConflictDirectionLabel = (direction: string) => {
             >
               <div class="flex items-center justify-between mb-1">
                 <span class="font-medium text-gray-800 dark:text-gray-200">{{ scenario.label }}</span>
-                <div class="flex items-center gap-2 text-xs text-gray-400">
-                  <span>热度 {{ scenario.heat.toFixed(0) }}</span>
-                  <span>{{ scenario.mentions }}次</span>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ scenario.heat.toFixed(1) }}</span>
+                  </span>
+                  <ClickableCount
+                    :count="scenario.mentions"
+                    :post-ids="scenario.post_ids"
+                    :label="scenario.label"
+                    @click="openPostListModal"
+                  />
                 </div>
               </div>
-              <div v-if="scenario.associated_features?.length" class="text-xs text-green-600 dark:text-green-400">
-                关联特性: {{ scenario.associated_features.slice(0, 3).join('、') }}
-              </div>
-              <div v-if="scenario.associated_issues?.length" class="text-xs text-red-600 dark:text-red-400">
-                关联问题: {{ scenario.associated_issues.slice(0, 3).join('、') }}
+              <div v-if="scenario.associated_features?.length || scenario.associated_issues?.length" class="mt-1 space-y-1 text-xs">
+                <div v-if="scenario.associated_features?.length" class="flex flex-wrap items-baseline gap-x-3">
+                  <span class="font-medium text-green-600 dark:text-green-400 shrink-0">关联特性：</span>
+                  <span v-for="f in scenario.associated_features.slice(0, 3)" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
+                </div>
+                <div v-if="scenario.associated_issues?.length" class="flex flex-wrap items-baseline gap-x-3">
+                  <span class="font-medium text-red-600 dark:text-red-400 shrink-0">关联问题：</span>
+                  <span v-for="i in scenario.associated_issues.slice(0, 3)" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -662,13 +673,23 @@ const getConflictDirectionLabel = (direction: string) => {
             >
               <div class="flex items-center justify-between mb-1">
                 <span class="font-medium text-gray-800 dark:text-gray-200">{{ audience.label }}</span>
-                <div class="flex items-center gap-2 text-xs text-gray-400">
-                  <span>热度 {{ audience.heat.toFixed(0) }}</span>
-                  <span>{{ audience.mentions }}次</span>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ audience.heat.toFixed(1) }}</span>
+                  </span>
+                  <ClickableCount
+                    :count="audience.mentions"
+                    :post-ids="audience.post_ids"
+                    :label="audience.label"
+                    @click="openPostListModal"
+                  />
                 </div>
               </div>
-              <div v-if="audience.preferences?.length" class="text-xs text-blue-600 dark:text-blue-400">
-                偏好: {{ audience.preferences.slice(0, 4).join('、') }}
+              <div v-if="audience.preferences?.length" class="mt-1 text-xs">
+                <div class="flex flex-wrap items-baseline gap-x-3">
+                  <span class="font-medium text-blue-600 dark:text-blue-400 shrink-0">偏好：</span>
+                  <span v-for="p in audience.preferences.slice(0, 4)" :key="p" class="text-gray-700 dark:text-gray-300">{{ p }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -687,20 +708,19 @@ const getConflictDirectionLabel = (direction: string) => {
             <UIcon name="i-heroicons-exclamation-circle" class="w-5 h-5 text-red-500" />
             <span class="font-medium text-gray-900 dark:text-white">基本型需求（痛点）</span>
           </div>
-          <div v-if="data.insights.opportunities.kano_model.must_be.length" class="space-y-2">
+          <div v-if="data.insights.opportunities.kano_model.must_be.length" class="space-y-3">
             <div
               v-for="item in data.insights.opportunities.kano_model.must_be.slice(0, 5)"
               :key="item.label"
               class="text-sm"
             >
               <div class="flex items-center justify-between">
-                <span class="truncate text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
                 <div class="flex items-center gap-2 shrink-0">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
                     :label="item.label"
-                    size="xs"
                     @click="openPostListModal"
                   />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
@@ -708,6 +728,9 @@ const getConflictDirectionLabel = (direction: string) => {
                   </UBadge>
                 </div>
               </div>
+              <ul v-if="item.top_opinions?.length" class="mt-1 list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                <li v-for="op in item.top_opinions" :key="op">{{ op }}</li>
+              </ul>
               <div class="mt-1">
                 <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.must_be.map(i => i.heat))" size="xs" color="error" />
               </div>
@@ -722,20 +745,19 @@ const getConflictDirectionLabel = (direction: string) => {
             <UIcon name="i-heroicons-arrow-trending-up" class="w-5 h-5 text-blue-500" />
             <span class="font-medium text-gray-900 dark:text-white">期望型需求（愿望）</span>
           </div>
-          <div v-if="data.insights.opportunities.kano_model.one_dimensional.length" class="space-y-2">
+          <div v-if="data.insights.opportunities.kano_model.one_dimensional.length" class="space-y-3">
             <div
               v-for="item in data.insights.opportunities.kano_model.one_dimensional.slice(0, 5)"
               :key="item.label"
               class="text-sm"
             >
               <div class="flex items-center justify-between">
-                <span class="truncate text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
                 <div class="flex items-center gap-2 shrink-0">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
                     :label="item.label"
-                    size="xs"
                     @click="openPostListModal"
                   />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
@@ -743,6 +765,9 @@ const getConflictDirectionLabel = (direction: string) => {
                   </UBadge>
                 </div>
               </div>
+              <ul v-if="item.top_opinions?.length" class="mt-1 list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                <li v-for="op in item.top_opinions" :key="op">{{ op }}</li>
+              </ul>
               <div class="mt-1">
                 <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.one_dimensional.map(i => i.heat))" size="xs" color="info" />
               </div>
@@ -757,20 +782,19 @@ const getConflictDirectionLabel = (direction: string) => {
             <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-green-500" />
             <span class="font-medium text-gray-900 dark:text-white">兴奋型需求（惊喜）</span>
           </div>
-          <div v-if="data.insights.opportunities.kano_model.attractive.length" class="space-y-2">
+          <div v-if="data.insights.opportunities.kano_model.attractive.length" class="space-y-3">
             <div
               v-for="item in data.insights.opportunities.kano_model.attractive.slice(0, 5)"
               :key="item.label"
               class="text-sm"
             >
               <div class="flex items-center justify-between">
-                <span class="truncate text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
                 <div class="flex items-center gap-2 shrink-0">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
                     :label="item.label"
-                    size="xs"
                     @click="openPostListModal"
                   />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
@@ -778,6 +802,9 @@ const getConflictDirectionLabel = (direction: string) => {
                   </UBadge>
                 </div>
               </div>
+              <ul v-if="item.top_opinions?.length" class="mt-1 list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                <li v-for="op in item.top_opinions" :key="op">{{ op }}</li>
+              </ul>
               <div class="mt-1">
                 <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.attractive.map(i => i.heat))" size="xs" color="success" />
               </div>

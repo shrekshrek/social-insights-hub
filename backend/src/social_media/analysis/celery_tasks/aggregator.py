@@ -1097,6 +1097,7 @@ def classify_kano_model(
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
                 "post_ids": item.get("post_ids", []),
+                "top_opinions": item.get("top_opinions", []),
             })
 
     # 从实体 issues 中补充
@@ -1110,6 +1111,7 @@ def classify_kano_model(
                     "mentions": data["mentions"],
                     "sentiment": -1,  # issues 默认负面
                     "post_ids": list(data.get("post_ids", set())),
+                    "top_opinions": [],  # 实体级 issues 暂无具体观点
                 })
 
     # 2. Attractive (兴奋型)：低频 + 高热度 + 正面
@@ -1124,6 +1126,7 @@ def classify_kano_model(
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
                 "post_ids": item.get("post_ids", []),
+                "top_opinions": item.get("top_opinions", []),
             })
 
     # 从实体 features 中补充
@@ -1136,6 +1139,7 @@ def classify_kano_model(
                     "mentions": data["mentions"],
                     "sentiment": 1,  # features 默认正面
                     "post_ids": list(data.get("post_ids", set())),
+                    "top_opinions": [],  # 实体级 features 暂无具体观点
                 })
 
     # 3. One-dimensional (期望型)：高频 + 高期望（正面特性）
@@ -1148,6 +1152,7 @@ def classify_kano_model(
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
                 "post_ids": item.get("post_ids", []),
+                "top_opinions": item.get("top_opinions", []),
             })
 
     # 按热度排序
@@ -1289,6 +1294,7 @@ def derive_context_analysis(
                 "mentions": mentions,
                 "associated_issues": [i[0] for i in top_issues],
                 "associated_features": [f[0] for f in top_features],
+                "post_ids": list(data["post_ids"]),
             })
 
     # 格式化人群输出（置信度过滤）
@@ -1307,6 +1313,7 @@ def derive_context_analysis(
                 "heat": round(data["total_heat"], 1),
                 "mentions": mentions,
                 "preferences": [p[0] for p in top_preferences],
+                "post_ids": list(data["post_ids"]),
             })
 
     # 按热度排序

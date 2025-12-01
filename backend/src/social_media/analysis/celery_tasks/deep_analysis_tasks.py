@@ -52,6 +52,24 @@ def _fix_sentiment_in_result(data: dict) -> dict:
     return data
 
 
+def _filter_invalid_entities(data: dict) -> dict:
+    """过滤掉无效的实体（name或type为空的实体）
+
+    LLM 有时会返回空值的 entity，这些 entity 没有业务价值且会导致 Pydantic 验证失败。
+    """
+    if "entities" in data and isinstance(data["entities"], list):
+        valid_types = {"品牌", "产品", "服务", "人物", "其他"}
+        original_count = len(data["entities"])
+        data["entities"] = [
+            ent for ent in data["entities"]
+            if ent.get("name") and ent.get("type") in valid_types
+        ]
+        filtered_count = original_count - len(data["entities"])
+        if filtered_count > 0:
+            logger.warning(f"过滤掉 {filtered_count} 个无效实体（name或type为空）")
+    return data
+
+
 # ============================================================================
 # 原文深度分析 - 单个帖子分析
 # ============================================================================
@@ -92,7 +110,8 @@ def _analyze_single_post(
                 else:
                     extraction_data = json.loads(response_content)
 
-                # 修复 sentiment 字段
+                # 数据清洗：过滤无效实体、修复 sentiment 字段
+                extraction_data = _filter_invalid_entities(extraction_data)
                 extraction_data = _fix_sentiment_in_result(extraction_data)
 
                 # 验证数据结构
@@ -391,7 +410,8 @@ def _analyze_single_post_comments(
                 else:
                     extraction_data = json.loads(response_content)
 
-                # 修复 sentiment 字段
+                # 数据清洗：过滤无效实体、修复 sentiment 字段
+                extraction_data = _filter_invalid_entities(extraction_data)
                 extraction_data = _fix_sentiment_in_result(extraction_data)
 
                 # 验证数据结构

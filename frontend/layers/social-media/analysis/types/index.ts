@@ -421,6 +421,7 @@ export interface KanoItem {
   mentions: number
   sentiment: number
   post_ids: number[]  // 关联帖子ID，用于反向追溯
+  top_opinions: string[]  // 代表性观点（最多3条）
 }
 
 /** KANO 需求分层模型 */
@@ -442,6 +443,7 @@ export interface ScenarioStat {
   mentions: number
   associated_issues: string[]
   associated_features: string[]
+  post_ids: number[]
 }
 
 /** 人群画像统计 */
@@ -450,6 +452,7 @@ export interface AudienceStat {
   heat: number
   mentions: number
   preferences: string[]
+  post_ids: number[]
 }
 
 /** 场景与人群画像 */

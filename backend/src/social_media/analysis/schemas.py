@@ -402,7 +402,7 @@ class OpinionStat(CustomBaseModel):
     mentions: int = Field(0, description="唯一帖子提及数")
     sentiment: float = Field(0, description="情感倾向")
     source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
-    summary: str = Field("", description="观点摘要")
+    top_opinions: list[str] = Field(default_factory=list, description="热门观点列表")
 
 
 # ==================== KANO 需求分层 Schema (§4.5.3) ====================

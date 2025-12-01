@@ -967,7 +967,7 @@ def aggregate_opinions(
             "mentions": mentions,
             "sentiment": data["sentiment"],  # 直接使用原始情感值
             "source_distribution": source_distribution,
-            "summary": "; ".join([op[0] for op in all_opinions[:3]]) if all_opinions else "",
+            "top_opinions": [op[0] for op in all_opinions[:3]] if all_opinions else [],
             "post_ids": list(data["post_ids"]),  # 该话题涉及的帖子
         }
 

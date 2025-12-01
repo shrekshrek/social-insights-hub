@@ -465,6 +465,7 @@ export interface CompetitorDetail {
   sentiment_distribution: SentimentDistribution
   heat: number
   mentions: number
+  post_ids: number[]
   top_features: string[]
   top_issues: string[]
 }

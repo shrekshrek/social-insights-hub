@@ -389,126 +389,6 @@ const getConflictDirectionLabel = (direction: string) => {
       </div>
     </section>
 
-    <!-- 本品与竞品实体对比 -->
-    <section v-if="data.insights.target_entities?.length || data.insights.competitor_entities?.length">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">本品与竞品实体</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- 本品实体 -->
-        <div class="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-building-office-2" class="w-5 h-5 text-blue-500" />
-            <span class="font-medium text-gray-900 dark:text-white">本品实体</span>
-            <UBadge color="primary" variant="subtle" size="xs">{{ data.insights.target_entities?.length || 0 }}</UBadge>
-          </div>
-          <div v-if="data.insights.target_entities?.length" class="space-y-2">
-            <div
-              v-for="entity in data.insights.target_entities.slice(0, 5)"
-              :key="entity.name"
-              class="p-3 bg-white dark:bg-gray-800 rounded-lg"
-            >
-              <!-- 第一行：名称+类型 | 热度+提及+情感 -->
-              <div class="flex items-center justify-between flex-wrap gap-2">
-                <div class="flex items-center gap-2">
-                  <span class="font-medium text-gray-900 dark:text-white">{{ entity.name }}</span>
-                  <UBadge color="neutral" variant="subtle" size="xs">{{ entity.type }}</UBadge>
-                </div>
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">
-                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ entity.heat.toFixed(1) }}</span>
-                  </span>
-                  <ClickableCount
-                    :count="entity.mentions"
-                    :post-ids="entity.post_ids"
-                    :label="entity.name"
-                    @click="openPostListModal"
-                  />
-                  <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
-                    {{ getSentimentLabel(entity.sentiment) }}
-                  </UBadge>
-                </div>
-              </div>
-              <!-- 情感分布 -->
-              <div v-if="entity.sentiment_distribution" class="mt-2 flex items-center gap-2 text-xs">
-                <span class="text-gray-500 dark:text-gray-400">情感分布:</span>
-                <span class="text-green-600 dark:text-green-400">正面 {{ entity.sentiment_distribution.positive }}</span>
-                <span class="text-gray-500 dark:text-gray-400">中性 {{ entity.sentiment_distribution.neutral }}</span>
-                <span class="text-red-600 dark:text-red-400">负面 {{ entity.sentiment_distribution.negative }}</span>
-              </div>
-              <!-- 特性和问题 -->
-              <div v-if="entity.top_features?.length || entity.top_issues?.length" class="mt-2 space-y-1 text-xs">
-                <div v-if="entity.top_features?.length" class="flex flex-wrap items-baseline gap-x-3">
-                  <span class="font-medium text-green-600 dark:text-green-400 shrink-0">特性：</span>
-                  <span v-for="f in entity.top_features.slice(0, 3)" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
-                </div>
-                <div v-if="entity.top_issues?.length" class="flex flex-wrap items-baseline gap-x-3">
-                  <span class="font-medium text-red-600 dark:text-red-400 shrink-0">问题：</span>
-                  <span v-for="i in entity.top_issues.slice(0, 3)" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400">暂无本品实体数据</p>
-        </div>
-
-        <!-- 竞品实体 -->
-        <div class="p-4 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-100 dark:border-orange-900/30">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-scale" class="w-5 h-5 text-orange-500" />
-            <span class="font-medium text-gray-900 dark:text-white">竞品实体</span>
-            <UBadge color="warning" variant="subtle" size="xs">{{ data.insights.competitor_entities?.length || 0 }}</UBadge>
-          </div>
-          <div v-if="data.insights.competitor_entities?.length" class="space-y-2">
-            <div
-              v-for="entity in data.insights.competitor_entities.slice(0, 5)"
-              :key="entity.name"
-              class="p-3 bg-white dark:bg-gray-800 rounded-lg"
-            >
-              <!-- 第一行：名称+类型 | 热度+提及+情感 -->
-              <div class="flex items-center justify-between flex-wrap gap-2">
-                <div class="flex items-center gap-2">
-                  <span class="font-medium text-gray-900 dark:text-white">{{ entity.name }}</span>
-                  <UBadge color="neutral" variant="subtle" size="xs">{{ entity.type }}</UBadge>
-                </div>
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">
-                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ entity.heat.toFixed(1) }}</span>
-                  </span>
-                  <ClickableCount
-                    :count="entity.mentions"
-                    :post-ids="entity.post_ids"
-                    :label="entity.name"
-                    @click="openPostListModal"
-                  />
-                  <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
-                    {{ getSentimentLabel(entity.sentiment) }}
-                  </UBadge>
-                </div>
-              </div>
-              <!-- 情感分布 -->
-              <div v-if="entity.sentiment_distribution" class="mt-2 flex items-center gap-2 text-xs">
-                <span class="text-gray-500 dark:text-gray-400">情感分布:</span>
-                <span class="text-green-600 dark:text-green-400">正面 {{ entity.sentiment_distribution.positive }}</span>
-                <span class="text-gray-500 dark:text-gray-400">中性 {{ entity.sentiment_distribution.neutral }}</span>
-                <span class="text-red-600 dark:text-red-400">负面 {{ entity.sentiment_distribution.negative }}</span>
-              </div>
-              <!-- 特性和问题 -->
-              <div v-if="entity.top_features?.length || entity.top_issues?.length" class="mt-2 space-y-1 text-xs">
-                <div v-if="entity.top_features?.length" class="flex flex-wrap items-baseline gap-x-3">
-                  <span class="font-medium text-green-600 dark:text-green-400 shrink-0">特性：</span>
-                  <span v-for="f in entity.top_features.slice(0, 3)" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
-                </div>
-                <div v-if="entity.top_issues?.length" class="flex flex-wrap items-baseline gap-x-3">
-                  <span class="font-medium text-red-600 dark:text-red-400 shrink-0">问题：</span>
-                  <span v-for="i in entity.top_issues.slice(0, 3)" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400">暂无竞品实体数据</p>
-        </div>
-      </div>
-    </section>
-
     <!-- 实体排行 -->
     <section v-if="data.insights.top_entities.length > 0">
       <div class="flex items-center justify-between mb-3">
@@ -702,9 +582,12 @@ const getConflictDirectionLabel = (direction: string) => {
                 <span class="text-gray-500 dark:text-gray-400">
                   热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ comp.heat.toFixed(1) }}</span>
                 </span>
-                <span class="text-gray-500 dark:text-gray-400">
-                  <span class="text-gray-700 dark:text-gray-300">{{ comp.mentions }}</span>次
-                </span>
+                <ClickableCount
+                  :count="comp.mentions"
+                  :post-ids="comp.post_ids"
+                  :label="comp.name"
+                  @click="openPostListModal"
+                />
                 <UBadge :color="getSentimentColor(comp.sentiment)" variant="subtle" size="xs">
                   {{ getSentimentLabel(comp.sentiment) }}
                 </UBadge>

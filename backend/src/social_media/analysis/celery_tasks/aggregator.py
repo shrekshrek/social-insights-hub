@@ -1375,6 +1375,7 @@ def analyze_competition(
             "sentiment_distribution": comp.get("sentiment_distribution", {"positive": 0, "negative": 0, "neutral": 0}),
             "heat": comp.get("heat", 0),
             "mentions": comp.get("mentions", 0),
+            "post_ids": comp.get("post_ids", []),
             "top_features": comp.get("top_features", []),
             "top_issues": comp.get("top_issues", []),
         })

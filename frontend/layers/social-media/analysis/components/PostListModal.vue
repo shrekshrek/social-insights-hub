@@ -80,6 +80,7 @@ const handleClose = () => {
   <UModal
     :open="open"
     :title="title || `相关帖子 (${postIds.length})`"
+    :description="`共 ${postIds.length} 条帖子`"
     :ui="{ width: 'sm:max-w-4xl', footer: 'justify-end' }"
     @update:open="handleClose"
   >

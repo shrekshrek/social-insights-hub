@@ -26,19 +26,19 @@ const getSerpColor = (serp: number) => {
   return 'error'
 }
 
-/** 获取情感标签 */
+/** 获取情感标签（派生情感值范围 [-1, 1]） */
 const getSentimentLabel = (sentiment: number) => {
-  if (sentiment >= 1.5) return '强烈正面'
-  if (sentiment >= 0.5) return '正面'
-  if (sentiment >= -0.5) return '中性'
-  if (sentiment >= -1.5) return '负面'
-  return '强烈负面'
+  if (sentiment >= 0.6) return '正面'
+  if (sentiment >= 0.2) return '偏正面'
+  if (sentiment >= -0.2) return '中性'
+  if (sentiment >= -0.6) return '偏负面'
+  return '负面'
 }
 
-/** 获取情感颜色 */
+/** 获取情感颜色（派生情感值范围 [-1, 1]） */
 const getSentimentColor = (sentiment: number) => {
-  if (sentiment >= 0.5) return 'success'
-  if (sentiment >= -0.5) return 'neutral'
+  if (sentiment >= 0.2) return 'success'
+  if (sentiment >= -0.2) return 'neutral'
   return 'error'
 }
 
@@ -66,6 +66,48 @@ const getConflictDirectionLabel = (direction: string) => {
 
 <template>
   <div class="space-y-6">
+    <!-- 分析概览：元数据 + 数据量统计 -->
+    <section class="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-800 rounded-lg border border-blue-100 dark:border-gray-700">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <!-- 左侧：分析时间和关键词 -->
+        <div class="flex items-center gap-4">
+          <div v-if="data.meta.analyzed_at" class="flex items-center gap-2 text-sm">
+            <UIcon name="i-heroicons-clock" class="w-4 h-4 text-blue-500" />
+            <span class="text-gray-500 dark:text-gray-400">分析时间:</span>
+            <span class="text-gray-700 dark:text-gray-300">{{ new Date(data.meta.analyzed_at).toLocaleString('zh-CN') }}</span>
+          </div>
+          <div v-if="data.meta.keywords?.length" class="flex items-center gap-2 text-sm">
+            <UIcon name="i-heroicons-tag" class="w-4 h-4 text-blue-500" />
+            <span class="text-gray-500 dark:text-gray-400">关键词:</span>
+            <div class="flex gap-1">
+              <UBadge v-for="kw in data.meta.keywords.slice(0, 5)" :key="kw" color="primary" variant="subtle" size="xs">
+                {{ kw }}
+              </UBadge>
+            </div>
+          </div>
+        </div>
+        <!-- 右侧：数据量统计 -->
+        <div class="flex items-center gap-4 text-sm">
+          <div class="flex items-center gap-1">
+            <span class="text-gray-500 dark:text-gray-400">总量</span>
+            <span class="font-mono font-medium text-gray-900 dark:text-white">{{ data.meta.data_volume.total }}</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-gray-500 dark:text-gray-400">初筛</span>
+            <span class="font-mono font-medium text-blue-600 dark:text-blue-400">{{ data.meta.data_volume.screened }}</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-gray-500 dark:text-gray-400">深度</span>
+            <span class="font-mono font-medium text-green-600 dark:text-green-400">{{ data.meta.data_volume.deep_analyzed }}</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-gray-500 dark:text-gray-400">评论</span>
+            <span class="font-mono font-medium text-purple-600 dark:text-purple-400">{{ data.meta.data_volume.comment_analyzed }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- 核心指标卡片 -->
     <section>
       <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">核心指标</h3>
@@ -220,6 +262,13 @@ const getConflictDirectionLabel = (direction: string) => {
               </UBadge>
             </div>
           </div>
+          <!-- 情感分布 -->
+          <div v-if="entity.sentiment_distribution" class="mt-2 flex items-center gap-2 text-xs">
+            <span class="text-gray-500 dark:text-gray-400">情感分布:</span>
+            <span class="text-green-600 dark:text-green-400">正面 {{ entity.sentiment_distribution.positive }}</span>
+            <span class="text-gray-500 dark:text-gray-400">中性 {{ entity.sentiment_distribution.neutral }}</span>
+            <span class="text-red-600 dark:text-red-400">负面 {{ entity.sentiment_distribution.negative }}</span>
+          </div>
           <!-- 特性、问题和期望 -->
           <div v-if="entity.top_features?.length || entity.top_issues?.length || entity.top_expectations?.length" class="mt-2 space-y-1 text-xs">
             <div v-if="entity.top_features?.length" class="flex flex-wrap items-baseline gap-x-3">
@@ -235,6 +284,188 @@ const getConflictDirectionLabel = (direction: string) => {
               <span v-for="e in entity.top_expectations.slice(0, 3)" :key="e" class="text-gray-700 dark:text-gray-300">{{ e }}</span>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 热门观点：问题 vs 特性 -->
+    <section v-if="data.insights.top_issues?.length || data.insights.top_features?.length">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">热门观点</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- 热门问题（负面观点） -->
+        <div class="p-4 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-500" />
+            <span class="font-medium text-gray-900 dark:text-white">热门问题</span>
+            <span class="text-xs text-gray-400">(负面观点)</span>
+          </div>
+          <div v-if="data.insights.top_issues?.length" class="space-y-3">
+            <div
+              v-for="issue in data.insights.top_issues.slice(0, 5)"
+              :key="issue.topic"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ issue.topic }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-gray-400">{{ issue.mentions }}次</span>
+                  <span class="text-xs text-gray-400">热度 {{ issue.heat.toFixed(0) }}</span>
+                </div>
+              </div>
+              <p v-if="issue.summary" class="text-xs text-gray-600 dark:text-gray-400 mb-1">{{ issue.summary }}</p>
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span>来源: 帖子{{ (issue.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (issue.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400">暂无数据</p>
+        </div>
+
+        <!-- 热门特性（正面观点） -->
+        <div class="p-4 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-100 dark:border-green-900/30">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-star" class="w-5 h-5 text-green-500" />
+            <span class="font-medium text-gray-900 dark:text-white">热门特性</span>
+            <span class="text-xs text-gray-400">(正面观点)</span>
+          </div>
+          <div v-if="data.insights.top_features?.length" class="space-y-3">
+            <div
+              v-for="feature in data.insights.top_features.slice(0, 5)"
+              :key="feature.topic"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ feature.topic }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-gray-400">{{ feature.mentions }}次</span>
+                  <span class="text-xs text-gray-400">热度 {{ feature.heat.toFixed(0) }}</span>
+                </div>
+              </div>
+              <p v-if="feature.summary" class="text-xs text-gray-600 dark:text-gray-400 mb-1">{{ feature.summary }}</p>
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span>来源: 帖子{{ (feature.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (feature.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400">暂无数据</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 竞品分析 -->
+    <section v-if="data.insights.competition?.competitor_details?.length">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">竞品分析</h3>
+      <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+        <!-- 情感对比概览 -->
+        <div class="flex items-center justify-center gap-8 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+          <div class="text-center">
+            <p class="text-xs text-gray-500 mb-1">本品情感</p>
+            <UBadge :color="getSentimentColor(data.insights.competition.target_sentiment)" variant="subtle">
+              {{ data.insights.competition.target_sentiment >= 0 ? '+' : '' }}{{ data.insights.competition.target_sentiment.toFixed(2) }}
+            </UBadge>
+          </div>
+          <div class="text-center">
+            <p class="text-xs text-gray-500 mb-1">对比优势</p>
+            <UBadge :color="data.insights.competition.comparison_sentiment >= 0 ? 'success' : 'error'" variant="subtle">
+              {{ data.insights.competition.comparison_sentiment >= 0 ? '+' : '' }}{{ data.insights.competition.comparison_sentiment.toFixed(2) }}
+            </UBadge>
+          </div>
+          <div class="text-center">
+            <p class="text-xs text-gray-500 mb-1">竞品情感</p>
+            <UBadge :color="getSentimentColor(data.insights.competition.competitor_sentiment)" variant="subtle">
+              {{ data.insights.competition.competitor_sentiment >= 0 ? '+' : '' }}{{ data.insights.competition.competitor_sentiment.toFixed(2) }}
+            </UBadge>
+          </div>
+        </div>
+        <!-- 竞品详情 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div
+            v-for="comp in data.insights.competition.competitor_details.slice(0, 6)"
+            :key="comp.name"
+            class="p-3 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium text-gray-900 dark:text-white">{{ comp.name }}</span>
+              <UBadge :color="getSentimentColor(comp.sentiment)" variant="subtle" size="xs">
+                {{ getSentimentLabel(comp.sentiment) }}
+              </UBadge>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-gray-500 mb-2">
+              <span>热度 {{ comp.heat.toFixed(0) }}</span>
+              <span>提及 {{ comp.mentions }}</span>
+            </div>
+            <div v-if="comp.top_features?.length" class="text-xs mb-1">
+              <span class="text-green-600 dark:text-green-400">优点:</span>
+              <span class="text-gray-600 dark:text-gray-400">{{ comp.top_features.slice(0, 2).join('、') }}</span>
+            </div>
+            <div v-if="comp.top_issues?.length" class="text-xs">
+              <span class="text-red-600 dark:text-red-400">问题:</span>
+              <span class="text-gray-600 dark:text-gray-400">{{ comp.top_issues.slice(0, 2).join('、') }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 场景与人群画像 -->
+    <section v-if="data.insights.context_analysis?.scenarios?.length || data.insights.context_analysis?.audiences?.length">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">场景与人群画像</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- 使用场景 -->
+        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-map-pin" class="w-5 h-5 text-indigo-500" />
+            <span class="font-medium text-gray-900 dark:text-white">使用场景</span>
+          </div>
+          <div v-if="data.insights.context_analysis?.scenarios?.length" class="space-y-3">
+            <div
+              v-for="scenario in data.insights.context_analysis.scenarios.slice(0, 5)"
+              :key="scenario.label"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ scenario.label }}</span>
+                <div class="flex items-center gap-2 text-xs text-gray-400">
+                  <span>热度 {{ scenario.heat.toFixed(0) }}</span>
+                  <span>{{ scenario.mentions }}次</span>
+                </div>
+              </div>
+              <div v-if="scenario.associated_features?.length" class="text-xs text-green-600 dark:text-green-400">
+                关联特性: {{ scenario.associated_features.slice(0, 3).join('、') }}
+              </div>
+              <div v-if="scenario.associated_issues?.length" class="text-xs text-red-600 dark:text-red-400">
+                关联问题: {{ scenario.associated_issues.slice(0, 3).join('、') }}
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400">暂无数据</p>
+        </div>
+
+        <!-- 目标人群 -->
+        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-user-group" class="w-5 h-5 text-purple-500" />
+            <span class="font-medium text-gray-900 dark:text-white">目标人群</span>
+          </div>
+          <div v-if="data.insights.context_analysis?.audiences?.length" class="space-y-3">
+            <div
+              v-for="audience in data.insights.context_analysis.audiences.slice(0, 5)"
+              :key="audience.label"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ audience.label }}</span>
+                <div class="flex items-center gap-2 text-xs text-gray-400">
+                  <span>热度 {{ audience.heat.toFixed(0) }}</span>
+                  <span>{{ audience.mentions }}次</span>
+                </div>
+              </div>
+              <div v-if="audience.preferences?.length" class="text-xs text-blue-600 dark:text-blue-400">
+                偏好: {{ audience.preferences.slice(0, 4).join('、') }}
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400">暂无数据</p>
         </div>
       </div>
     </section>

@@ -502,12 +502,17 @@ def aggregate_entities(
     6. 排序：输出 Top N 实体及关联信息
 
     数据结构说明：
-    - key: "canonical_name|sentiment" 如 "iphone|1", "iphone|-1", "iphone|0"
-    - sentiment: 固定的情感值 (-1, 0, 1)
+    - key: canonical_name（只按实体名称分组，不按情感分组）
+    - sentiment_sum/sentiment_count: 用于计算派生情感值
     - post_ids: 所有涉及该实体的帖子ID集合（用于计算 mentions）
     - post_sources: 从帖子原文中提取该实体的帖子ID集合
     - comment_sources: 从评论中提取该实体的帖子ID集合
     - cii_added_posts: 已贡献CII的帖子ID（避免同一帖子重复累加CII）
+
+    设计理念：
+    - 实体的情感倾向不是独立维度，而是 features/issues 的对比结果
+    - 同一实体的正面/负面评价应该合并展示，给用户完整画像
+    - 派生情感值 = Σ(sentiment * cii) / Σ cii（CII加权情感）
 
     Args:
         posts_data: 帖子数据列表，每个包含 post_deep_result 和 cii
@@ -525,12 +530,16 @@ def aggregate_entities(
     task_keywords = task_keywords or []
 
     # 收集所有实体及其出现信息
-    # key 格式: "canonical_name|sentiment" 如 "iphone|1", "iphone|-1", "iphone|0"
+    # key 格式: canonical_name（只按实体名称分组，不按情感分组）
     entity_data: dict[str, dict] = defaultdict(lambda: {
         "name": "",
         "canonical_name": "",
         "type": "",
-        "sentiment": 0,  # 固定的情感值 (-1, 0, 1)
+        # 情感派生计算：sentiment_weighted_sum / total_cii
+        "sentiment_weighted_sum": 0.0,  # Σ(sentiment * cii)，用于计算加权情感
+        "positive_count": 0,   # 正面提及次数
+        "negative_count": 0,   # 负面提及次数
+        "neutral_count": 0,    # 中性提及次数
         "total_cii": 0.0,
         "cii_added_posts": set(),  # 已贡献CII的帖子（避免重复累加）
         "post_sources": set(),  # 从帖子原文提取的帖子ID
@@ -572,7 +581,7 @@ def aggregate_entities(
         return normalized
 
     def process_entity(entity: dict, post_id: int, cii: float, source: str):
-        """处理单个实体，按 (canonical_name, sentiment) 分组"""
+        """处理单个实体，只按 canonical_name 分组（不按情感分组）"""
         entity_name = entity.get("name", "")
         if not entity_name:
             return
@@ -580,8 +589,8 @@ def aggregate_entities(
         canonical = get_canonical_name(entity_name)
         sentiment = entity.get("sentiment", 0)
 
-        # 使用 canonical|sentiment 作为 key
-        key = f"{canonical}|{sentiment}"
+        # 只使用 canonical 作为 key（不再按情感分组）
+        key = canonical
         data = entity_data[key]
 
         # 更新实体基本信息
@@ -589,11 +598,19 @@ def aggregate_entities(
             data["name"] = entity_name
             data["canonical_name"] = canonical
             data["type"] = entity.get("type", "其他")
-            data["sentiment"] = sentiment  # 保留原始情感值
 
-        # CII 只累加一次（每个帖子对每个实体分组只贡献一次）
+        # 统计情感分布
+        if sentiment == 1:
+            data["positive_count"] += 1
+        elif sentiment == -1:
+            data["negative_count"] += 1
+        else:
+            data["neutral_count"] += 1
+
+        # CII 只累加一次（每个帖子对每个实体只贡献一次）
         if post_id and post_id not in data["cii_added_posts"]:
             data["total_cii"] += cii
+            data["sentiment_weighted_sum"] += sentiment * cii  # 加权情感累加
             data["cii_added_posts"].add(post_id)
 
         # 来源标记（使用集合去重）
@@ -651,14 +668,10 @@ def aggregate_entities(
 
     # 记录聚合效果
     merged_entity_count = len(entity_data)
-    positive_count = len([k for k in entity_data if k.endswith("|1")])
-    negative_count = len([k for k in entity_data if k.endswith("|-1")])
-    neutral_count = len([k for k in entity_data if k.endswith("|0")])
     if raw_entity_count > 0:
         print(
-            f"[实体聚合] 按 (name, sentiment) 分组: "
-            f"原始 {raw_entity_count} 个 -> 分组后 {merged_entity_count} 个 "
-            f"(正面 {positive_count}, 负面 {negative_count}, 中性 {neutral_count})"
+            f"[实体聚合] 按 canonical_name 分组: "
+            f"原始 {raw_entity_count} 个 -> 分组后 {merged_entity_count} 个实体"
         )
         # 输出相似度合并详情
         if merged_pairs:
@@ -685,6 +698,20 @@ def aggregate_entities(
         source_distribution = {
             "post": round(post_source_count / total_source_count, 2) if total_source_count > 0 else 0,
             "comment": round(comment_source_count / total_source_count, 2) if total_source_count > 0 else 0,
+        }
+
+        # 派生情感值：Σ(sentiment * cii) / Σ cii
+        # 范围 [-1, 1]，正值偏正面，负值偏负面
+        derived_sentiment = 0.0
+        if data["total_cii"] > 0:
+            derived_sentiment = round(data["sentiment_weighted_sum"] / data["total_cii"], 2)
+
+        # 情感分布（用于展示正/负/中性提及比例）
+        total_sentiment_count = data["positive_count"] + data["negative_count"] + data["neutral_count"]
+        sentiment_distribution = {
+            "positive": data["positive_count"],
+            "negative": data["negative_count"],
+            "neutral": data["neutral_count"],
         }
 
         # 角色分类
@@ -717,7 +744,8 @@ def aggregate_entities(
             "role": role,  # target / competitor / other
             "heat": round(data["total_cii"], 1),
             "mentions": mentions,  # 唯一帖子数
-            "sentiment": data["sentiment"],  # 直接使用固定情感值
+            "sentiment": derived_sentiment,  # 派生情感值 [-1, 1]
+            "sentiment_distribution": sentiment_distribution,  # 情感分布
             "source_distribution": source_distribution,
             "top_features": [f[0] for f in top_features],
             "top_issues": [i[0] for i in top_issues],
@@ -746,11 +774,20 @@ def aggregate_entities(
         mentions = len(data["post_ids"])
         if mentions == 0:
             continue
+        # 派生情感值
+        derived_sentiment = 0.0
+        if data["total_cii"] > 0:
+            derived_sentiment = round(data["sentiment_weighted_sum"] / data["total_cii"], 2)
         aggregated_entities[key] = {
             "name": data["name"],
             "canonical_name": data["canonical_name"],
             "type": data["type"],
-            "sentiment": data["sentiment"],
+            "sentiment": derived_sentiment,  # 派生情感值 [-1, 1]
+            "sentiment_distribution": {
+                "positive": data["positive_count"],
+                "negative": data["negative_count"],
+                "neutral": data["neutral_count"],
+            },
             "heat": round(data["total_cii"], 1),
             "mentions": mentions,
             "post_source_count": len(data["post_sources"]),
@@ -1114,22 +1151,28 @@ def classify_kano_model(
 
 
 # ============================================================================
-# 场景与人群画像聚合 (§4.5.4)
+# 场景与人群画像聚合 (§4.5.4) - 从 aggregated_entities 派生
 # ============================================================================
 
-def aggregate_context_analysis(
-    posts_data: list[dict[str, Any]],
+def derive_context_analysis(
+    aggregated_entities: dict[str, dict[str, Any]],
     min_mentions: int = 2,
     top_n: int = 10,
 ) -> dict[str, list[dict[str, Any]]]:
-    """聚合场景与人群画像
+    """从 aggregated_entities 派生场景与人群画像
 
-    从实体的 scenarios, audience 字段提取，并关联相关的 issues/features。
-    置信度过滤：仅保留 mentions >= min_mentions 的标签。
+    采用"先融合，后派生"架构：
+    - 输入: aggregate_entities() 返回的 aggregated_entities（已完成实体名称归一化）
+    - 输出: 场景和人群画像的聚合结果
+
+    优势：
+    1. 数据一致性：复用实体归一化结果，避免重复处理
+    2. 维度完整性：scenarios/audience 已关联到归一化实体
+    3. 追溯能力：通过 post_ids 支持反向追溯
 
     Args:
-        posts_data: 帖子数据列表
-        min_mentions: 最小提及数门槛（过滤偶然爆款）
+        aggregated_entities: aggregate_entities 返回的 aggregated_entities 字段
+        min_mentions: 最小提及数门槛（过滤偶然数据）
         top_n: 返回前 N 个
 
     Returns:
@@ -1141,7 +1184,7 @@ def aggregate_context_analysis(
     # 收集场景数据
     scenario_data: dict[str, dict] = defaultdict(lambda: {
         "label": "",
-        "total_cii": 0.0,
+        "total_heat": 0.0,
         "post_ids": set(),
         "associated_issues": defaultdict(int),
         "associated_features": defaultdict(int),
@@ -1150,60 +1193,67 @@ def aggregate_context_analysis(
     # 收集人群数据
     audience_data: dict[str, dict] = defaultdict(lambda: {
         "label": "",
-        "total_cii": 0.0,
+        "total_heat": 0.0,
         "post_ids": set(),
         "preferences": defaultdict(int),  # 关联的 market_factors 或 features
     })
 
-    for post in posts_data:
-        post_id = post.get("post_id")
-        cii = post.get("cii", 0)
+    # 遍历所有已归一化的实体
+    for canonical_name, entity in aggregated_entities.items():
+        entity_heat = entity.get("heat", 0)
+        entity_issues = entity.get("issues", [])  # [{"text": ..., "post_ids": [...]}]
+        entity_features = entity.get("features", [])
+        entity_market_factors = entity.get("market_factors", [])
+        entity_scenarios = entity.get("scenarios", [])
+        entity_audiences = entity.get("audience", [])
 
-        post_deep_result = post.get("post_deep_result") or {}
-        comment_deep_result = post.get("comment_deep_result") or {}
+        # 处理场景
+        for scenario_item in entity_scenarios:
+            scenario_text = scenario_item.get("text", "")
+            scenario_post_ids = scenario_item.get("post_ids", [])
 
-        # 处理帖子和评论的实体
-        for result in [post_deep_result, comment_deep_result]:
-            for entity in result.get("entities", []):
-                entity_issues = entity.get("issues", [])
-                entity_features = entity.get("features", [])
-                entity_market_factors = entity.get("market_factors", [])
+            if not scenario_text:
+                continue
 
-                # 处理场景
-                for scenario in entity.get("scenarios", []):
-                    if not scenario:
-                        continue
-                    data = scenario_data[scenario]
-                    data["label"] = scenario
-                    data["total_cii"] += cii
-                    if post_id:
-                        data["post_ids"].add(post_id)
+            data = scenario_data[scenario_text]
+            data["label"] = scenario_text
+            # 使用实体的 heat 作为场景热度贡献
+            data["total_heat"] += entity_heat
+            # 累加帖子ID
+            data["post_ids"].update(scenario_post_ids)
 
-                    # 关联 issues 和 features
-                    for issue in entity_issues:
-                        if issue:
-                            data["associated_issues"][issue] += 1
-                    for feature in entity_features:
-                        if feature:
-                            data["associated_features"][feature] += 1
+            # 关联 issues 和 features（来自同一实体）
+            for issue_item in entity_issues:
+                issue_text = issue_item.get("text", "")
+                if issue_text:
+                    data["associated_issues"][issue_text] += len(issue_item.get("post_ids", []))
+            for feature_item in entity_features:
+                feature_text = feature_item.get("text", "")
+                if feature_text:
+                    data["associated_features"][feature_text] += len(feature_item.get("post_ids", []))
 
-                # 处理人群
-                for audience in entity.get("audience", []):
-                    if not audience:
-                        continue
-                    data = audience_data[audience]
-                    data["label"] = audience
-                    data["total_cii"] += cii
-                    if post_id:
-                        data["post_ids"].add(post_id)
+        # 处理人群画像
+        for audience_item in entity_audiences:
+            audience_text = audience_item.get("text", "")
+            audience_post_ids = audience_item.get("post_ids", [])
 
-                    # 关联偏好（market_factors + features）
-                    for factor in entity_market_factors:
-                        if factor:
-                            data["preferences"][factor] += 1
-                    for feature in entity_features:
-                        if feature:
-                            data["preferences"][feature] += 1
+            if not audience_text:
+                continue
+
+            data = audience_data[audience_text]
+            data["label"] = audience_text
+            data["total_heat"] += entity_heat
+            data["post_ids"].update(audience_post_ids)
+
+            # 关联偏好（market_factors + features）
+            for factor_item in entity_market_factors:
+                factor_text = factor_item.get("text", "")
+                if factor_text:
+                    data["preferences"][factor_text] += len(factor_item.get("post_ids", []))
+            for feature_item in entity_features:
+                feature_text = feature_item.get("text", "")
+                if feature_text:
+                    data["preferences"][feature_text] += len(feature_item.get("post_ids", []))
 
     # 格式化场景输出（置信度过滤）
     scenarios = []
@@ -1223,7 +1273,7 @@ def aggregate_context_analysis(
 
             scenarios.append({
                 "label": data["label"],
-                "heat": round(data["total_cii"], 1),
+                "heat": round(data["total_heat"], 1),
                 "mentions": mentions,
                 "associated_issues": [i[0] for i in top_issues],
                 "associated_features": [f[0] for f in top_features],
@@ -1242,7 +1292,7 @@ def aggregate_context_analysis(
 
             audiences.append({
                 "label": data["label"],
-                "heat": round(data["total_cii"], 1),
+                "heat": round(data["total_heat"], 1),
                 "mentions": mentions,
                 "preferences": [p[0] for p in top_preferences],
             })
@@ -1250,6 +1300,12 @@ def aggregate_context_analysis(
     # 按热度排序
     scenarios.sort(key=lambda x: x["heat"], reverse=True)
     audiences.sort(key=lambda x: x["heat"], reverse=True)
+
+    # 记录派生结果
+    print(
+        f"[场景人群派生] 从 {len(aggregated_entities)} 个实体派生: "
+        f"场景 {len(scenarios)} 个, 人群 {len(audiences)} 个"
+    )
 
     return {
         "scenarios": scenarios[:top_n],
@@ -1284,12 +1340,12 @@ def analyze_competition(
     # 计算本品平均情感
     target_sentiment = 0.0
     if target_entities:
-        target_sentiment = sum(e.get("avg_sentiment", 0) for e in target_entities) / len(target_entities)
+        target_sentiment = sum(e.get("sentiment", 0) for e in target_entities) / len(target_entities)
 
     # 计算竞品平均情感
     competitor_sentiment = 0.0
     if competitor_entities:
-        competitor_sentiment = sum(e.get("avg_sentiment", 0) for e in competitor_entities) / len(competitor_entities)
+        competitor_sentiment = sum(e.get("sentiment", 0) for e in competitor_entities) / len(competitor_entities)
 
     # 对比情感 = 本品情感 - 竞品情感
     # 正值 = 本品口碑更好，负值 = 竞品口碑更好
@@ -1303,7 +1359,7 @@ def analyze_competition(
     for comp in competitor_entities[:5]:
         competitor_details.append({
             "name": comp.get("name", ""),
-            "sentiment": comp.get("avg_sentiment", 0),
+            "sentiment": comp.get("sentiment", 0),
             "heat": comp.get("heat", 0),
             "mentions": comp.get("mentions", 0),
             "top_features": comp.get("top_features", []),
@@ -1608,8 +1664,9 @@ def aggregate_task_analysis(
     target_entities = entity_stats.get("target_entities", [])
     kano_model = classify_kano_model(target_entities, opinion_stats)
 
-    # 9. 场景与人群画像 (§4.5.4)
-    context_analysis = aggregate_context_analysis(posts_data)
+    # 9. 场景与人群画像 (§4.5.4) - 从 aggregated_entities 派生
+    aggregated_entities = entity_stats.get("aggregated_entities", {})
+    context_analysis = derive_context_analysis(aggregated_entities)
 
     # 10. 竞品分析
     competition = analyze_competition(entity_stats)

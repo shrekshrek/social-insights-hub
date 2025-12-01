@@ -373,6 +373,13 @@ class SourceDistribution(CustomBaseModel):
     comment: float = Field(0.0, description="来自评论的占比 (0-1)")
 
 
+class SentimentDistribution(CustomBaseModel):
+    """情感分布"""
+    positive: int = Field(0, description="正面提及次数")
+    negative: int = Field(0, description="负面提及次数")
+    neutral: int = Field(0, description="中性提及次数")
+
+
 class EntityStat(CustomBaseModel):
     """实体统计"""
     name: str = Field(..., description="实体名称")
@@ -380,10 +387,12 @@ class EntityStat(CustomBaseModel):
     role: str = Field("other", description="主体角色: target(本品)/competitor(竞品)/other(其他有价值实体)")
     heat: float = Field(0, description="热度（CII加权）")
     mentions: int = Field(0, description="唯一帖子提及数")
-    avg_sentiment: float = Field(0, description="平均情感")
+    sentiment: float = Field(0, description="派生情感值 [-1, 1]，CII加权")
+    sentiment_distribution: SentimentDistribution = Field(default_factory=SentimentDistribution, description="情感分布")
     source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
     top_features: list[str] = Field(default_factory=list, description="主要特性")
     top_issues: list[str] = Field(default_factory=list, description="主要问题")
+    top_expectations: list[str] = Field(default_factory=list, description="主要期望")
 
 
 class OpinionStat(CustomBaseModel):

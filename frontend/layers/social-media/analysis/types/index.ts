@@ -380,6 +380,13 @@ export interface SourceDistribution {
   comment: number
 }
 
+/** 情感分布 */
+export interface SentimentDistribution {
+  positive: number
+  negative: number
+  neutral: number
+}
+
 /** 实体统计 */
 export interface EntityStat {
   name: string
@@ -387,7 +394,8 @@ export interface EntityStat {
   role: 'target' | 'competitor' | 'other'
   heat: number
   mentions: number
-  sentiment: -1 | 0 | 1
+  sentiment: number  // 派生情感值 [-1, 1]，CII 加权
+  sentiment_distribution: SentimentDistribution  // 情感分布
   source_distribution: SourceDistribution
   top_features: string[]
   top_issues: string[]

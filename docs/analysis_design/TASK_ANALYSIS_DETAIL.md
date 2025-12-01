@@ -100,26 +100,33 @@ graph TD
 ### 4.3 实体聚合与主体过滤 (Entity Aggregation & Subject Filtering) [关键分水岭]
 为了防止"竞品好评"被误算为"本品好评"，在此处进行实体聚合与清洗。后续所有分析基于清洗后的数据。
 
-*   **核心改进：按 (name, sentiment) 分组**
-    *   **问题**：同一实体可能同时有正面和负面评价，简单合并会导致情感值相互抵消。
-    *   **方案**：使用复合键 `"canonical_name|sentiment"` 分组（如 `"iphone|1"`, `"iphone|-1"`）。
-    *   **效果**：同一实体的正面/负面评价分别统计，避免混淆。
+*   **设计理念：只按 canonical_name 分组，情感派生计算**
+    *   **观点 vs 实体的本质区别**：
+        *   观点的情感是**独立维度**：同一话题的正面/负面观点是对立声音（如"价格实惠" vs "价格太贵"），必须分开统计。
+        *   实体的情感是**派生值**：情感来自 `features`（天然正面）和 `issues`（天然负面）的对比，不是独立维度。
+    *   **方案**：只按 `canonical_name` 分组，同一实体的所有提及合并。
+    *   **情感派生**：`sentiment = Σ(sentiment * cii) / Σ cii`（CII 加权情感值，范围 [-1, 1]）。
+    *   **效果**：用户看到实体的完整画像，而非被分散的正面/负面/中性三条记录。
 
 *   **实体数据结构**：
     ```python
-    entity_data[key] = {
+    entity_data[canonical_name] = {
         "name": str,           # 显示名称
         "canonical_name": str, # 标准化名称
         "type": str,           # 实体类型
-        "sentiment": int,      # 固定情感值 (-1, 0, 1)
+        # 情感派生计算
+        "sentiment_weighted_sum": float,  # Σ(sentiment * cii)
+        "positive_count": int,   # 正面提及次数
+        "negative_count": int,   # 负面提及次数
+        "neutral_count": int,    # 中性提及次数
         "total_cii": float,    # CII累加（去重后）
         "cii_added_posts": set,  # 已贡献CII的帖子ID（避免重复累加）
         "post_sources": set,     # 从帖子原文提取的帖子ID
         "comment_sources": set,  # 从评论提取的帖子ID
         "post_ids": set,         # 所有涉及的帖子ID
         # 实体维度信息（完整聚合，带帖子追溯）
-        "features": dict,      # 特性/功能/优点 {label: set(post_ids)}
-        "issues": dict,        # 问题/缺点/不满 {label: set(post_ids)}
+        "features": dict,      # 特性/功能/优点 {label: set(post_ids)} - 天然正面
+        "issues": dict,        # 问题/缺点/不满 {label: set(post_ids)} - 天然负面
         "expectations": dict,  # 改进期望/建议 {label: set(post_ids)}
         "audience": dict,      # 目标人群 {label: set(post_ids)}
         "scenarios": dict,     # 使用场景/用途 {label: set(post_ids)}
@@ -131,20 +138,26 @@ graph TD
 *   **聚合逻辑（纯代码实现）**：
     1.  **实体归一化 (Normalization)**：
         *   **相似度合并**：相似度 ≥ 0.8 的实体名称合并到同一 `canonical_name`。
-        *   **情感分组**：按 `(canonical_name, sentiment)` 复合键分组。
-    2.  **来源标记**：
+        *   **只按名称分组**：不再按情感分组，同一实体的所有提及合并。
+    2.  **情感统计**：
+        *   记录 `positive_count`, `negative_count`, `neutral_count` 用于展示情感分布。
+        *   累加 `sentiment_weighted_sum = Σ(sentiment * cii)` 用于计算加权情感。
+    3.  **来源标记**：
         *   `post_sources`: 从帖子原文提取该实体的帖子ID集合。
         *   `comment_sources`: 从评论提取该实体的帖子ID集合。
         *   用于分析"博主观点"与"大众观点"的差异。
-    3.  **双重加权**：
-        *   **Heat (热度)**：$\sum CII_p$（每帖每组只贡献一次，避免重复累加）。
+    4.  **双重加权**：
+        *   **Heat (热度)**：$\sum CII_p$（每帖只贡献一次，避免重复累加）。
         *   **Mentions (频次)**：$Count(Unique\_Posts)$（唯一帖子数）。
         *   *策略*：排序时优先使用 `Heat`，但需保留 `Mentions` 辅助判断"偶然爆款"与"普遍共识"。
-    4.  **维度聚合**：
+    5.  **维度聚合**：
         *   对 `features`, `issues`, `expectations`, `audience`, `scenarios`, `market_factors`, `competitors` 七个维度分别记录来源帖子ID。
         *   每个维度项记录包含该信息的帖子ID集合，支持追溯。
         *   输出时按帖子数排序，取 Top 5 高频项展示。
-    5.  **角色分类**：
+    6.  **派生情感计算**：
+        *   `sentiment = sentiment_weighted_sum / total_cii`（CII 加权）。
+        *   范围 [-1, 1]，正值偏正面，负值偏负面。
+    7.  **角色分类**：
         *   **Target**：`entity.name` 包含任务关键词（忽略大小写）。
         *   **Competitor**：收集 Target 实体的 `competitors` 字段提及的名称，或预设白名单匹配。
         *   **Other**：非目标/竞品的其他实体（人物、场景词等，仍有分析价值）。
@@ -259,7 +272,7 @@ graph TD
     "avg_age_days": 15.5 // 平均发布天数
   },
   "insights": {
-    // 实体排行（按 name+sentiment 分组，避免正负面混淆）
+    // 实体排行（只按名称分组，情感为派生值）
     "top_entities": [
       {
         "name": "iPhone 16",
@@ -267,7 +280,8 @@ graph TD
         "role": "target",           // target / competitor / other
         "heat": 4500,               // Σ CII (去重后)
         "mentions": 15,             // 唯一帖子数
-        "sentiment": 1,             // 固定情感值 (-1, 0, 1)
+        "sentiment": 0.35,          // 派生情感值 [-1, 1]，CII 加权
+        "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
         "source_distribution": {"post": 0.3, "comment": 0.7},
         "top_features": ["外观好看", "拍照清晰", "续航持久"],
         "top_issues": ["发热严重", "价格高"],
@@ -360,23 +374,25 @@ graph TD
   },
 
   // 完整融合数据（用于项目级再分析）
+  // key 格式: canonical_name（只按实体名称分组）
   "aggregated_entities": {
-    "iphone|1": {
+    "iphone": {  // 只按名称分组，不按情感分组
       "name": "iPhone 16",
       "canonical_name": "iphone",
       "type": "产品",
-      "sentiment": 1,
+      "sentiment": 0.35,           // 派生情感值 [-1, 1]，CII 加权
+      "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
       "heat": 4500,
       "mentions": 15,
       "post_source_count": 5,
       "comment_source_count": 10,
       "post_ids": [101, 102, 103, 105, 108],
       // 实体维度信息（带帖子追溯，用于项目级再融合）
-      "features": [
+      "features": [  // 天然正面
         {"text": "外观好看", "post_ids": [101, 102, 105]},
         {"text": "拍照清晰", "post_ids": [102, 108]}
       ],
-      "issues": [
+      "issues": [    // 天然负面
         {"text": "发热严重", "post_ids": [103, 105]}
       ],
       "expectations": [

@@ -691,27 +691,40 @@ const getConflictDirectionLabel = (direction: string) => {
         <!-- 竞品详情 -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div
-            v-for="comp in data.insights.competition.competitor_details.slice(0, 6)"
+            v-for="comp in data.insights.competition.competitor_details"
             :key="comp.name"
             class="p-3 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600"
           >
-            <div class="flex items-center justify-between mb-2">
+            <!-- 第一行：名称 | 热度+提及+情感 -->
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
               <span class="font-medium text-gray-900 dark:text-white">{{ comp.name }}</span>
-              <UBadge :color="getSentimentColor(comp.sentiment)" variant="subtle" size="xs">
-                {{ getSentimentLabel(comp.sentiment) }}
-              </UBadge>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-gray-500 dark:text-gray-400">
+                  热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ comp.heat.toFixed(1) }}</span>
+                </span>
+                <span class="text-gray-500 dark:text-gray-400">
+                  <span class="text-gray-700 dark:text-gray-300">{{ comp.mentions }}</span>次
+                </span>
+                <UBadge :color="getSentimentColor(comp.sentiment)" variant="subtle" size="xs">
+                  {{ getSentimentLabel(comp.sentiment) }}
+                </UBadge>
+              </div>
             </div>
-            <div class="flex items-center gap-3 text-xs text-gray-500 mb-2">
-              <span>热度 {{ comp.heat.toFixed(0) }}</span>
-              <span>{{ comp.mentions }}次</span>
+            <!-- 情感分布 -->
+            <div v-if="comp.sentiment_distribution" class="flex items-center gap-2 text-xs mb-2">
+              <span class="text-gray-500 dark:text-gray-400">情感分布:</span>
+              <span class="text-green-600 dark:text-green-400">正面 {{ comp.sentiment_distribution.positive }}</span>
+              <span class="text-gray-500 dark:text-gray-400">中性 {{ comp.sentiment_distribution.neutral }}</span>
+              <span class="text-red-600 dark:text-red-400">负面 {{ comp.sentiment_distribution.negative }}</span>
             </div>
+            <!-- 特性和问题 -->
             <div v-if="comp.top_features?.length" class="text-xs mb-1">
               <span class="text-green-600 dark:text-green-400">优点:</span>
-              <span class="text-gray-600 dark:text-gray-400">{{ comp.top_features.slice(0, 2).join('、') }}</span>
+              <span class="text-gray-600 dark:text-gray-400">{{ comp.top_features.slice(0, 3).join('、') }}</span>
             </div>
             <div v-if="comp.top_issues?.length" class="text-xs">
               <span class="text-red-600 dark:text-red-400">问题:</span>
-              <span class="text-gray-600 dark:text-gray-400">{{ comp.top_issues.slice(0, 2).join('、') }}</span>
+              <span class="text-gray-600 dark:text-gray-400">{{ comp.top_issues.slice(0, 3).join('、') }}</span>
             </div>
           </div>
         </div>

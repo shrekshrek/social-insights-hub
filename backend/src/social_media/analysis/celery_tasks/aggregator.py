@@ -2,6 +2,10 @@
 
 在 Finalizer 中调用，对任务下的所有帖子分析结果进行聚合计算。
 
+注意：本项目采用双重情感评分体系（详见设计文档 §1.1）
+- 宏观指标 (NSR, SERP, 四象限): 基于初筛情感 (-2 ~ +2)
+- 微观指标 (实体, 观点, KANO): 基于深度分析情感 (-1 ~ +1)
+
 功能：
 1. CII 互动指数计算
 2. NSR 净情感率计算
@@ -1368,6 +1372,7 @@ def analyze_competition(
         competitor_details.append({
             "name": comp.get("name", ""),
             "sentiment": comp.get("sentiment", 0),
+            "sentiment_distribution": comp.get("sentiment_distribution", {"positive": 0, "negative": 0, "neutral": 0}),
             "heat": comp.get("heat", 0),
             "mentions": comp.get("mentions", 0),
             "top_features": comp.get("top_features", []),

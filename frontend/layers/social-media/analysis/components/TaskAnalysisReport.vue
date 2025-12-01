@@ -1,11 +1,41 @@
 <script setup lang="ts">
-import { watch, onMounted, nextTick } from 'vue'
+import { watch, onMounted, nextTick, ref, computed } from 'vue'
 import type { EChartsOption } from 'echarts'
 import type { TaskAnalysisResultData } from '../types'
+import PostListModal from './PostListModal.vue'
+import ClickableCount from './ClickableCount.vue'
 
 const props = defineProps<{
   data: TaskAnalysisResultData
 }>()
+
+// 帖子列表弹窗状态
+const postListModalOpen = ref(false)
+const postListModalTitle = ref('')
+const postListModalPostIds = ref<number[]>([])
+
+/** 打开帖子列表弹窗 */
+const openPostListModal = (title: string, postIds: number[]) => {
+  if (!postIds || postIds.length === 0) return
+  postListModalTitle.value = title
+  postListModalPostIds.value = postIds
+  postListModalOpen.value = true
+}
+
+/** 获取 taskId */
+const taskId = computed(() => props.data.meta.task_id || 0)
+
+// 列表展开状态
+const topEntitiesExpanded = ref(false)
+const kolVoicesExpanded = ref(false)
+
+/** 获取四象限中某个象限的帖子IDs */
+const getQuadrantPostIds = (quadrant: string): number[] => {
+  const items = props.data.charts.quadrant || []
+  return items
+    .filter(item => item.quadrant === quadrant)
+    .map(item => item.post_id)
+}
 
 // 时间分布图表
 const { chartRef: timeChartRef, initChart: initTimeChart, setOption: setTimeOption, getInstance: getTimeInstance } = useCharts()
@@ -154,6 +184,7 @@ const getConflictDirectionLabel = (direction: string) => {
   if (direction === 'comment_positive') return '评论更正面'
   return '情感一致'
 }
+
 </script>
 
 <template>
@@ -290,31 +321,51 @@ const getConflictDirectionLabel = (direction: string) => {
         </UTooltip>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div class="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+        <button
+          class="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer"
+          :disabled="data.charts.quadrant_summary.Q1_danger === 0"
+          @click="openPostListModal('爆雷区帖子', getQuadrantPostIds('Q1_danger'))"
+        >
           <p class="text-xl font-bold text-red-600 dark:text-red-400">{{ data.charts.quadrant_summary.Q1_danger }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">爆雷区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">高互动/负面</p>
-        </div>
-        <div class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+        </button>
+        <button
+          class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors cursor-pointer"
+          :disabled="data.charts.quadrant_summary.Q2_brand === 0"
+          @click="openPostListModal('品牌区帖子', getQuadrantPostIds('Q2_brand'))"
+        >
           <p class="text-xl font-bold text-green-600 dark:text-green-400">{{ data.charts.quadrant_summary.Q2_brand }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">品牌区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">高互动/正面</p>
-        </div>
-        <div class="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+        </button>
+        <button
+          class="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors cursor-pointer"
+          :disabled="data.charts.quadrant_summary.Q3_complaint === 0"
+          @click="openPostListModal('吐槽区帖子', getQuadrantPostIds('Q3_complaint'))"
+        >
           <p class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ data.charts.quadrant_summary.Q3_complaint }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">吐槽区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">低互动/负面</p>
-        </div>
-        <div class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        </button>
+        <button
+          class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors cursor-pointer"
+          :disabled="data.charts.quadrant_summary.Q4_niche === 0"
+          @click="openPostListModal('自嗨区帖子', getQuadrantPostIds('Q4_niche'))"
+        >
           <p class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ data.charts.quadrant_summary.Q4_niche }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">自嗨区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">低互动/正面</p>
-        </div>
-        <div class="text-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+        </button>
+        <button
+          class="text-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors cursor-pointer"
+          :disabled="data.charts.quadrant_summary.neutral === 0"
+          @click="openPostListModal('中性区帖子', getQuadrantPostIds('neutral'))"
+        >
           <p class="text-xl font-bold text-gray-600 dark:text-gray-300">{{ data.charts.quadrant_summary.neutral }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">中性区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">情感中立</p>
-        </div>
+        </button>
       </div>
     </section>
 
@@ -349,37 +400,50 @@ const getConflictDirectionLabel = (direction: string) => {
             <span class="font-medium text-gray-900 dark:text-white">本品实体</span>
             <UBadge color="primary" variant="subtle" size="xs">{{ data.insights.target_entities?.length || 0 }}</UBadge>
           </div>
-          <div v-if="data.insights.target_entities?.length" class="space-y-3">
+          <div v-if="data.insights.target_entities?.length" class="space-y-2">
             <div
               v-for="entity in data.insights.target_entities.slice(0, 5)"
               :key="entity.name"
-              class="p-2 bg-white dark:bg-gray-800 rounded"
+              class="p-3 bg-white dark:bg-gray-800 rounded-lg"
             >
-              <div class="flex items-center justify-between mb-1">
+              <!-- 第一行：名称+类型 | 热度+提及+情感 -->
+              <div class="flex items-center justify-between flex-wrap gap-2">
                 <div class="flex items-center gap-2">
-                  <span class="font-medium text-gray-800 dark:text-gray-200">{{ entity.name }}</span>
+                  <span class="font-medium text-gray-900 dark:text-white">{{ entity.name }}</span>
                   <UBadge color="neutral" variant="subtle" size="xs">{{ entity.type }}</UBadge>
                 </div>
-                <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
-                  {{ getSentimentLabel(entity.sentiment) }}
-                </UBadge>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ entity.heat.toFixed(1) }}</span>
+                  </span>
+                  <ClickableCount
+                    :count="entity.mentions"
+                    :post-ids="entity.post_ids"
+                    :label="entity.name"
+                    @click="openPostListModal"
+                  />
+                  <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
+                    {{ getSentimentLabel(entity.sentiment) }}
+                  </UBadge>
+                </div>
               </div>
-              <div class="flex items-center gap-3 text-xs text-gray-500 mb-1">
-                <span>热度 {{ entity.heat.toFixed(0) }}</span>
-                <span>提及 {{ entity.mentions }}</span>
+              <!-- 情感分布 -->
+              <div v-if="entity.sentiment_distribution" class="mt-2 flex items-center gap-2 text-xs">
+                <span class="text-gray-500 dark:text-gray-400">情感分布:</span>
+                <span class="text-green-600 dark:text-green-400">正面 {{ entity.sentiment_distribution.positive }}</span>
+                <span class="text-gray-500 dark:text-gray-400">中性 {{ entity.sentiment_distribution.neutral }}</span>
+                <span class="text-red-600 dark:text-red-400">负面 {{ entity.sentiment_distribution.negative }}</span>
               </div>
-              <div v-if="entity.sentiment_distribution" class="text-xs">
-                <span class="text-green-600">正{{ entity.sentiment_distribution.positive }}</span>
-                <span class="text-gray-400 mx-1">/</span>
-                <span class="text-gray-500">中{{ entity.sentiment_distribution.neutral }}</span>
-                <span class="text-gray-400 mx-1">/</span>
-                <span class="text-red-600">负{{ entity.sentiment_distribution.negative }}</span>
-              </div>
-              <div v-if="entity.top_features?.length" class="text-xs text-green-600 dark:text-green-400 mt-1">
-                优点: {{ entity.top_features.slice(0, 2).join('、') }}
-              </div>
-              <div v-if="entity.top_issues?.length" class="text-xs text-red-600 dark:text-red-400">
-                问题: {{ entity.top_issues.slice(0, 2).join('、') }}
+              <!-- 特性和问题 -->
+              <div v-if="entity.top_features?.length || entity.top_issues?.length" class="mt-2 space-y-1 text-xs">
+                <div v-if="entity.top_features?.length" class="flex flex-wrap items-baseline gap-x-3">
+                  <span class="font-medium text-green-600 dark:text-green-400 shrink-0">特性：</span>
+                  <span v-for="f in entity.top_features.slice(0, 3)" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
+                </div>
+                <div v-if="entity.top_issues?.length" class="flex flex-wrap items-baseline gap-x-3">
+                  <span class="font-medium text-red-600 dark:text-red-400 shrink-0">问题：</span>
+                  <span v-for="i in entity.top_issues.slice(0, 3)" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -393,37 +457,50 @@ const getConflictDirectionLabel = (direction: string) => {
             <span class="font-medium text-gray-900 dark:text-white">竞品实体</span>
             <UBadge color="warning" variant="subtle" size="xs">{{ data.insights.competitor_entities?.length || 0 }}</UBadge>
           </div>
-          <div v-if="data.insights.competitor_entities?.length" class="space-y-3">
+          <div v-if="data.insights.competitor_entities?.length" class="space-y-2">
             <div
               v-for="entity in data.insights.competitor_entities.slice(0, 5)"
               :key="entity.name"
-              class="p-2 bg-white dark:bg-gray-800 rounded"
+              class="p-3 bg-white dark:bg-gray-800 rounded-lg"
             >
-              <div class="flex items-center justify-between mb-1">
+              <!-- 第一行：名称+类型 | 热度+提及+情感 -->
+              <div class="flex items-center justify-between flex-wrap gap-2">
                 <div class="flex items-center gap-2">
-                  <span class="font-medium text-gray-800 dark:text-gray-200">{{ entity.name }}</span>
+                  <span class="font-medium text-gray-900 dark:text-white">{{ entity.name }}</span>
                   <UBadge color="neutral" variant="subtle" size="xs">{{ entity.type }}</UBadge>
                 </div>
-                <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
-                  {{ getSentimentLabel(entity.sentiment) }}
-                </UBadge>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ entity.heat.toFixed(1) }}</span>
+                  </span>
+                  <ClickableCount
+                    :count="entity.mentions"
+                    :post-ids="entity.post_ids"
+                    :label="entity.name"
+                    @click="openPostListModal"
+                  />
+                  <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
+                    {{ getSentimentLabel(entity.sentiment) }}
+                  </UBadge>
+                </div>
               </div>
-              <div class="flex items-center gap-3 text-xs text-gray-500 mb-1">
-                <span>热度 {{ entity.heat.toFixed(0) }}</span>
-                <span>提及 {{ entity.mentions }}</span>
+              <!-- 情感分布 -->
+              <div v-if="entity.sentiment_distribution" class="mt-2 flex items-center gap-2 text-xs">
+                <span class="text-gray-500 dark:text-gray-400">情感分布:</span>
+                <span class="text-green-600 dark:text-green-400">正面 {{ entity.sentiment_distribution.positive }}</span>
+                <span class="text-gray-500 dark:text-gray-400">中性 {{ entity.sentiment_distribution.neutral }}</span>
+                <span class="text-red-600 dark:text-red-400">负面 {{ entity.sentiment_distribution.negative }}</span>
               </div>
-              <div v-if="entity.sentiment_distribution" class="text-xs">
-                <span class="text-green-600">正{{ entity.sentiment_distribution.positive }}</span>
-                <span class="text-gray-400 mx-1">/</span>
-                <span class="text-gray-500">中{{ entity.sentiment_distribution.neutral }}</span>
-                <span class="text-gray-400 mx-1">/</span>
-                <span class="text-red-600">负{{ entity.sentiment_distribution.negative }}</span>
-              </div>
-              <div v-if="entity.top_features?.length" class="text-xs text-green-600 dark:text-green-400 mt-1">
-                优点: {{ entity.top_features.slice(0, 2).join('、') }}
-              </div>
-              <div v-if="entity.top_issues?.length" class="text-xs text-red-600 dark:text-red-400">
-                问题: {{ entity.top_issues.slice(0, 2).join('、') }}
+              <!-- 特性和问题 -->
+              <div v-if="entity.top_features?.length || entity.top_issues?.length" class="mt-2 space-y-1 text-xs">
+                <div v-if="entity.top_features?.length" class="flex flex-wrap items-baseline gap-x-3">
+                  <span class="font-medium text-green-600 dark:text-green-400 shrink-0">特性：</span>
+                  <span v-for="f in entity.top_features.slice(0, 3)" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
+                </div>
+                <div v-if="entity.top_issues?.length" class="flex flex-wrap items-baseline gap-x-3">
+                  <span class="font-medium text-red-600 dark:text-red-400 shrink-0">问题：</span>
+                  <span v-for="i in entity.top_issues.slice(0, 3)" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -434,10 +511,19 @@ const getConflictDirectionLabel = (direction: string) => {
 
     <!-- 实体排行 -->
     <section v-if="data.insights.top_entities.length > 0">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">热门实体 TOP 10</h3>
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">热门实体</h3>
+        <button
+          v-if="data.insights.top_entities.length > 5"
+          class="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+          @click="topEntitiesExpanded = !topEntitiesExpanded"
+        >
+          {{ topEntitiesExpanded ? '收起' : `查看全部 ${Math.min(data.insights.top_entities.length, 10)} 项` }}
+        </button>
+      </div>
       <div class="space-y-2">
         <div
-          v-for="entity in data.insights.top_entities.slice(0, 10)"
+          v-for="entity in data.insights.top_entities.slice(0, topEntitiesExpanded ? 10 : 5)"
           :key="entity.name"
           class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
         >
@@ -454,13 +540,16 @@ const getConflictDirectionLabel = (direction: string) => {
                 {{ entity.role === 'target' ? '本品' : entity.role === 'competitor' ? '竞品' : '其他' }}
               </UBadge>
             </div>
-            <div class="flex items-center gap-3 text-sm">
+            <div class="flex items-center gap-2 text-xs">
               <span class="text-gray-500 dark:text-gray-400">
                 热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ entity.heat.toFixed(1) }}</span>
               </span>
-              <span class="text-gray-500 dark:text-gray-400">
-                提及 <span class="text-gray-700 dark:text-gray-300">{{ entity.mentions }}</span>
-              </span>
+              <ClickableCount
+                :count="entity.mentions"
+                :post-ids="entity.post_ids"
+                :label="entity.name"
+                @click="openPostListModal"
+              />
               <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
                 {{ getSentimentLabel(entity.sentiment) }}
               </UBadge>
@@ -511,9 +600,16 @@ const getConflictDirectionLabel = (direction: string) => {
             >
               <div class="flex items-center justify-between mb-1">
                 <span class="font-medium text-gray-800 dark:text-gray-200">{{ issue.topic }}</span>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-gray-400">{{ issue.mentions }}次</span>
-                  <span class="text-xs text-gray-400">热度 {{ issue.heat.toFixed(0) }}</span>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ issue.heat.toFixed(1) }}</span>
+                  </span>
+                  <ClickableCount
+                    :count="issue.mentions"
+                    :post-ids="issue.post_ids"
+                    :label="issue.topic"
+                    @click="openPostListModal"
+                  />
                 </div>
               </div>
               <ul v-if="issue.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
@@ -542,9 +638,16 @@ const getConflictDirectionLabel = (direction: string) => {
             >
               <div class="flex items-center justify-between mb-1">
                 <span class="font-medium text-gray-800 dark:text-gray-200">{{ feature.topic }}</span>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-gray-400">{{ feature.mentions }}次</span>
-                  <span class="text-xs text-gray-400">热度 {{ feature.heat.toFixed(0) }}</span>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ feature.heat.toFixed(1) }}</span>
+                  </span>
+                  <ClickableCount
+                    :count="feature.mentions"
+                    :post-ids="feature.post_ids"
+                    :label="feature.topic"
+                    @click="openPostListModal"
+                  />
                 </div>
               </div>
               <ul v-if="feature.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
@@ -600,7 +703,7 @@ const getConflictDirectionLabel = (direction: string) => {
             </div>
             <div class="flex items-center gap-3 text-xs text-gray-500 mb-2">
               <span>热度 {{ comp.heat.toFixed(0) }}</span>
-              <span>提及 {{ comp.mentions }}</span>
+              <span>{{ comp.mentions }}次</span>
             </div>
             <div v-if="comp.top_features?.length" class="text-xs mb-1">
               <span class="text-green-600 dark:text-green-400">优点:</span>
@@ -697,7 +800,13 @@ const getConflictDirectionLabel = (direction: string) => {
               <div class="flex items-center justify-between">
                 <span class="truncate text-gray-700 dark:text-gray-300">{{ item.label }}</span>
                 <div class="flex items-center gap-2 shrink-0">
-                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ item.mentions }}次</span>
+                  <ClickableCount
+                    :count="item.mentions"
+                    :post-ids="item.post_ids"
+                    :label="item.label"
+                    size="xs"
+                    @click="openPostListModal"
+                  />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
                     {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
                   </UBadge>
@@ -726,7 +835,13 @@ const getConflictDirectionLabel = (direction: string) => {
               <div class="flex items-center justify-between">
                 <span class="truncate text-gray-700 dark:text-gray-300">{{ item.label }}</span>
                 <div class="flex items-center gap-2 shrink-0">
-                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ item.mentions }}次</span>
+                  <ClickableCount
+                    :count="item.mentions"
+                    :post-ids="item.post_ids"
+                    :label="item.label"
+                    size="xs"
+                    @click="openPostListModal"
+                  />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
                     {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
                   </UBadge>
@@ -755,7 +870,13 @@ const getConflictDirectionLabel = (direction: string) => {
               <div class="flex items-center justify-between">
                 <span class="truncate text-gray-700 dark:text-gray-300">{{ item.label }}</span>
                 <div class="flex items-center gap-2 shrink-0">
-                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ item.mentions }}次</span>
+                  <ClickableCount
+                    :count="item.mentions"
+                    :post-ids="item.post_ids"
+                    :label="item.label"
+                    size="xs"
+                    @click="openPostListModal"
+                  />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
                     {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
                   </UBadge>
@@ -773,15 +894,24 @@ const getConflictDirectionLabel = (direction: string) => {
 
     <!-- 高影响力内容 -->
     <section v-if="data.insights.kol_voices.length > 0">
-      <div class="flex items-center gap-2 mb-3">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">高影响力内容 TOP 5</h3>
-        <UTooltip text="按互动指数(CII)排名的高影响力帖子">
-          <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400" />
-        </UTooltip>
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">高影响力内容 TOP {{ Math.min(data.insights.kol_voices.length, 10) }}</h3>
+          <UTooltip text="按互动指数(CII)排名的高影响力帖子">
+            <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400" />
+          </UTooltip>
+        </div>
+        <button
+          v-if="data.insights.kol_voices.length > 5"
+          class="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+          @click="kolVoicesExpanded = !kolVoicesExpanded"
+        >
+          {{ kolVoicesExpanded ? '收起' : `查看全部 ${Math.min(data.insights.kol_voices.length, 10)} 项` }}
+        </button>
       </div>
-      <div class="space-y-3">
+      <div class="space-y-2">
         <div
-          v-for="item in data.insights.kol_voices.slice(0, 5)"
+          v-for="item in data.insights.kol_voices.slice(0, kolVoicesExpanded ? 10 : 5)"
           :key="item.post_id"
           class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
         >
@@ -795,6 +925,13 @@ const getConflictDirectionLabel = (direction: string) => {
                 {{ getSentimentLabel(item.sentiment) }}
               </UBadge>
               <span class="text-xs text-gray-500 dark:text-gray-400">CII: {{ item.cii.toFixed(1) }}</span>
+              <button
+                class="inline-flex items-center gap-0.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                @click="openPostListModal(`${item.author} 的帖子`, [item.post_id])"
+              >
+                <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-3 h-3" />
+                原文
+              </button>
             </div>
           </div>
           <p class="text-sm text-gray-600 dark:text-gray-400">{{ item.summary }}</p>
@@ -822,5 +959,13 @@ const getConflictDirectionLabel = (direction: string) => {
         </div>
       </div>
     </section>
+
+    <!-- 帖子列表弹窗 -->
+    <PostListModal
+      v-model:open="postListModalOpen"
+      :task-id="taskId"
+      :post-ids="postListModalPostIds"
+      :title="postListModalTitle"
+    />
   </div>
 </template>

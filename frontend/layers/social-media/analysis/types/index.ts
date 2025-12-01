@@ -400,6 +400,7 @@ export interface EntityStat {
   top_features: string[]
   top_issues: string[]
   top_expectations: string[]
+  post_ids: number[]  // 关联帖子ID，用于反向追溯
 }
 
 /** 观点统计 */
@@ -410,6 +411,7 @@ export interface OpinionStat {
   sentiment: number
   source_distribution: SourceDistribution
   top_opinions: string[]  // 热门观点列表
+  post_ids: number[]  // 关联帖子ID，用于反向追溯
 }
 
 /** KANO 模型单项 */
@@ -418,6 +420,7 @@ export interface KanoItem {
   heat: number
   mentions: number
   sentiment: number
+  post_ids: number[]  // 关联帖子ID，用于反向追溯
 }
 
 /** KANO 需求分层模型 */

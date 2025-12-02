@@ -412,7 +412,197 @@ const getConflictDirectionLabel = (direction: string) => {
       </div>
     </section>
 
-    <!-- 实体排行 -->
+    <!-- 热门观点：问题 vs 特性 -->
+    <section v-if="data.insights.top_issues?.length || data.insights.top_features?.length">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">热门观点</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- 热门问题（负面观点） -->
+        <div class="p-4 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-500" />
+            <span class="font-medium text-gray-900 dark:text-white">热门问题</span>
+            <span class="text-xs text-gray-400">(负面观点)</span>
+          </div>
+          <div v-if="data.insights.top_issues?.length" class="space-y-3">
+            <div
+              v-for="issue in data.insights.top_issues.slice(0, 5)"
+              :key="issue.topic"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ issue.topic }}</span>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ issue.heat.toFixed(1) }}</span>
+                  </span>
+                  <ClickableCount
+                    :count="issue.mentions"
+                    :post-ids="issue.post_ids"
+                    :label="issue.topic"
+                    @click="openPostListModal"
+                  />
+                </div>
+              </div>
+              <ul v-if="issue.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
+                <li v-for="(opinion, idx) in issue.top_opinions" :key="idx">{{ opinion }}</li>
+              </ul>
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span>来源: 帖子{{ (issue.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (issue.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400">暂无数据</p>
+        </div>
+
+        <!-- 热门特性（正面观点） -->
+        <div class="p-4 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-100 dark:border-green-900/30">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-star" class="w-5 h-5 text-green-500" />
+            <span class="font-medium text-gray-900 dark:text-white">热门特性</span>
+            <span class="text-xs text-gray-400">(正面观点)</span>
+          </div>
+          <div v-if="data.insights.top_features?.length" class="space-y-3">
+            <div
+              v-for="feature in data.insights.top_features.slice(0, 5)"
+              :key="feature.topic"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ feature.topic }}</span>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ feature.heat.toFixed(1) }}</span>
+                  </span>
+                  <ClickableCount
+                    :count="feature.mentions"
+                    :post-ids="feature.post_ids"
+                    :label="feature.topic"
+                    @click="openPostListModal"
+                  />
+                </div>
+              </div>
+              <ul v-if="feature.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
+                <li v-for="(opinion, idx) in feature.top_opinions" :key="idx">{{ opinion }}</li>
+              </ul>
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span>来源: 帖子{{ (feature.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (feature.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400">暂无数据</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- KANO 模型 -->
+    <section v-if="data.insights.opportunities.kano_model">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">KANO 需求分层</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- 基本型需求 -->
+        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-exclamation-circle" class="w-5 h-5 text-red-500" />
+            <span class="font-medium text-gray-900 dark:text-white">基本型需求（痛点）</span>
+          </div>
+          <div v-if="data.insights.opportunities.kano_model.must_be.length" class="space-y-3">
+            <div
+              v-for="item in data.insights.opportunities.kano_model.must_be.slice(0, 5)"
+              :key="item.label"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <div class="flex items-center gap-2 shrink-0 text-xs">
+                  <ClickableCount
+                    :count="item.mentions"
+                    :post-ids="item.post_ids"
+                    :label="item.label"
+                    @click="openPostListModal"
+                  />
+                  <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
+                    {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
+                  </UBadge>
+                </div>
+              </div>
+              <div class="mt-1">
+                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.must_be.map(i => i.heat))" size="xs" color="error" />
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400 dark:text-gray-500">暂无数据</p>
+        </div>
+
+        <!-- 期望型需求 -->
+        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-arrow-trending-up" class="w-5 h-5 text-blue-500" />
+            <span class="font-medium text-gray-900 dark:text-white">期望型需求（愿望）</span>
+          </div>
+          <div v-if="data.insights.opportunities.kano_model.one_dimensional.length" class="space-y-3">
+            <div
+              v-for="item in data.insights.opportunities.kano_model.one_dimensional.slice(0, 5)"
+              :key="item.label"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <div class="flex items-center gap-2 shrink-0 text-xs">
+                  <ClickableCount
+                    :count="item.mentions"
+                    :post-ids="item.post_ids"
+                    :label="item.label"
+                    @click="openPostListModal"
+                  />
+                  <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
+                    {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
+                  </UBadge>
+                </div>
+              </div>
+              <div class="mt-1">
+                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.one_dimensional.map(i => i.heat))" size="xs" color="info" />
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400 dark:text-gray-500">暂无数据</p>
+        </div>
+
+        <!-- 兴奋型需求 -->
+        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-green-500" />
+            <span class="font-medium text-gray-900 dark:text-white">兴奋型需求（惊喜）</span>
+          </div>
+          <div v-if="data.insights.opportunities.kano_model.attractive.length" class="space-y-3">
+            <div
+              v-for="item in data.insights.opportunities.kano_model.attractive.slice(0, 5)"
+              :key="item.label"
+              class="text-sm"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <div class="flex items-center gap-2 shrink-0 text-xs">
+                  <ClickableCount
+                    :count="item.mentions"
+                    :post-ids="item.post_ids"
+                    :label="item.label"
+                    @click="openPostListModal"
+                  />
+                  <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
+                    {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
+                  </UBadge>
+                </div>
+              </div>
+              <div class="mt-1">
+                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.attractive.map(i => i.heat))" size="xs" color="success" />
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400 dark:text-gray-500">暂无数据</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 热门实体 -->
     <section v-if="data.insights.top_entities.length > 0">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">热门实体</h3>
@@ -498,88 +688,6 @@ const getConflictDirectionLabel = (direction: string) => {
               <span v-for="e in entity.top_expectations.slice(0, 3)" :key="e" class="text-gray-700 dark:text-gray-300">{{ e }}</span>
             </div>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 热门观点：问题 vs 特性 -->
-    <section v-if="data.insights.top_issues?.length || data.insights.top_features?.length">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">热门观点</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- 热门问题（负面观点） -->
-        <div class="p-4 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-500" />
-            <span class="font-medium text-gray-900 dark:text-white">热门问题</span>
-            <span class="text-xs text-gray-400">(负面观点)</span>
-          </div>
-          <div v-if="data.insights.top_issues?.length" class="space-y-3">
-            <div
-              v-for="issue in data.insights.top_issues.slice(0, 5)"
-              :key="issue.topic"
-              class="text-sm"
-            >
-              <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-gray-800 dark:text-gray-200">{{ issue.topic }}</span>
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">
-                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ issue.heat.toFixed(1) }}</span>
-                  </span>
-                  <ClickableCount
-                    :count="issue.mentions"
-                    :post-ids="issue.post_ids"
-                    :label="issue.topic"
-                    @click="openPostListModal"
-                  />
-                </div>
-              </div>
-              <ul v-if="issue.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
-                <li v-for="(opinion, idx) in issue.top_opinions" :key="idx">{{ opinion }}</li>
-              </ul>
-              <div class="flex items-center gap-2 text-xs text-gray-400">
-                <span>来源: 帖子{{ (issue.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (issue.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400">暂无数据</p>
-        </div>
-
-        <!-- 热门特性（正面观点） -->
-        <div class="p-4 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-100 dark:border-green-900/30">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-star" class="w-5 h-5 text-green-500" />
-            <span class="font-medium text-gray-900 dark:text-white">热门特性</span>
-            <span class="text-xs text-gray-400">(正面观点)</span>
-          </div>
-          <div v-if="data.insights.top_features?.length" class="space-y-3">
-            <div
-              v-for="feature in data.insights.top_features.slice(0, 5)"
-              :key="feature.topic"
-              class="text-sm"
-            >
-              <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-gray-800 dark:text-gray-200">{{ feature.topic }}</span>
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">
-                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ feature.heat.toFixed(1) }}</span>
-                  </span>
-                  <ClickableCount
-                    :count="feature.mentions"
-                    :post-ids="feature.post_ids"
-                    :label="feature.topic"
-                    @click="openPostListModal"
-                  />
-                </div>
-              </div>
-              <ul v-if="feature.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
-                <li v-for="(opinion, idx) in feature.top_opinions" :key="idx">{{ opinion }}</li>
-              </ul>
-              <div class="flex items-center gap-2 text-xs text-gray-400">
-                <span>来源: 帖子{{ (feature.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (feature.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400">暂无数据</p>
         </div>
       </div>
     </section>
@@ -735,123 +843,6 @@ const getConflictDirectionLabel = (direction: string) => {
             </div>
           </div>
           <p v-else class="text-sm text-gray-400">暂无数据</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- KANO 模型 -->
-    <section v-if="data.insights.opportunities.kano_model">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">KANO 需求分层</h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <!-- 基本型需求 -->
-        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-exclamation-circle" class="w-5 h-5 text-red-500" />
-            <span class="font-medium text-gray-900 dark:text-white">基本型需求（痛点）</span>
-          </div>
-          <div v-if="data.insights.opportunities.kano_model.must_be.length" class="space-y-3">
-            <div
-              v-for="item in data.insights.opportunities.kano_model.must_be.slice(0, 5)"
-              :key="item.label"
-              class="text-sm"
-            >
-              <div class="flex items-center justify-between">
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
-                <div class="flex items-center gap-2 shrink-0 text-xs">
-                  <ClickableCount
-                    :count="item.mentions"
-                    :post-ids="item.post_ids"
-                    :label="item.label"
-                    @click="openPostListModal"
-                  />
-                  <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
-                    {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
-                  </UBadge>
-                </div>
-              </div>
-              <ul v-if="item.top_opinions?.length" class="mt-1 list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-                <li v-for="op in item.top_opinions" :key="op">{{ op }}</li>
-              </ul>
-              <div class="mt-1">
-                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.must_be.map(i => i.heat))" size="xs" color="error" />
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400 dark:text-gray-500">暂无数据</p>
-        </div>
-
-        <!-- 期望型需求 -->
-        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-arrow-trending-up" class="w-5 h-5 text-blue-500" />
-            <span class="font-medium text-gray-900 dark:text-white">期望型需求（愿望）</span>
-          </div>
-          <div v-if="data.insights.opportunities.kano_model.one_dimensional.length" class="space-y-3">
-            <div
-              v-for="item in data.insights.opportunities.kano_model.one_dimensional.slice(0, 5)"
-              :key="item.label"
-              class="text-sm"
-            >
-              <div class="flex items-center justify-between">
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
-                <div class="flex items-center gap-2 shrink-0 text-xs">
-                  <ClickableCount
-                    :count="item.mentions"
-                    :post-ids="item.post_ids"
-                    :label="item.label"
-                    @click="openPostListModal"
-                  />
-                  <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
-                    {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
-                  </UBadge>
-                </div>
-              </div>
-              <ul v-if="item.top_opinions?.length" class="mt-1 list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-                <li v-for="op in item.top_opinions" :key="op">{{ op }}</li>
-              </ul>
-              <div class="mt-1">
-                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.one_dimensional.map(i => i.heat))" size="xs" color="info" />
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400 dark:text-gray-500">暂无数据</p>
-        </div>
-
-        <!-- 兴奋型需求 -->
-        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-green-500" />
-            <span class="font-medium text-gray-900 dark:text-white">兴奋型需求（惊喜）</span>
-          </div>
-          <div v-if="data.insights.opportunities.kano_model.attractive.length" class="space-y-3">
-            <div
-              v-for="item in data.insights.opportunities.kano_model.attractive.slice(0, 5)"
-              :key="item.label"
-              class="text-sm"
-            >
-              <div class="flex items-center justify-between">
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
-                <div class="flex items-center gap-2 shrink-0 text-xs">
-                  <ClickableCount
-                    :count="item.mentions"
-                    :post-ids="item.post_ids"
-                    :label="item.label"
-                    @click="openPostListModal"
-                  />
-                  <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
-                    {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(1) }}
-                  </UBadge>
-                </div>
-              </div>
-              <ul v-if="item.top_opinions?.length" class="mt-1 list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-                <li v-for="op in item.top_opinions" :key="op">{{ op }}</li>
-              </ul>
-              <div class="mt-1">
-                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.attractive.map(i => i.heat))" size="xs" color="success" />
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400 dark:text-gray-500">暂无数据</p>
         </div>
       </div>
     </section>

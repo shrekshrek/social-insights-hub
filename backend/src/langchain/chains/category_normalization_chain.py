@@ -35,14 +35,14 @@ CATEGORY_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位专业的话题归一化
 - 明显不同的主题（如"物流"和"包装"是不同话题）
 
 ## 输入格式
-话题列表，每个话题包含：name（名称）、count（出现次数）
+话题列表，每个话题包含：name（名称）、score（重要度，综合考虑影响力和讨论广泛性）
 
 ## 输出格式
 ```json
 {{
   "normalized_groups": [
     {{
-      "canonical_name": "代表性名称（选择出现次数最多或最简洁规范的名称）",
+      "canonical_name": "代表性名称（选择重要度最高或最简洁规范的名称）",
       "merged_categories": ["被合并的原始话题名称列表，包含canonical_name自身"]
     }}
   ],
@@ -54,7 +54,7 @@ CATEGORY_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位专业的话题归一化
 1. **保守合并**：只有确定是同义/近义时才合并，不确定的保持独立
 2. **选择简洁名称**：合并时优先选择简洁、规范的名称作为canonical_name
 3. **处理所有输入话题**：确保每个输入话题都出现在输出中（要么在merged_categories，要么在standalone_categories）
-4. **保留高频话题**：合并时优先选择出现次数多的名称作为canonical_name
+4. **保留高重要度话题**：合并时优先选择重要度高的名称作为canonical_name
 
 只输出JSON，不要有其他文字。
 """
@@ -90,13 +90,13 @@ def format_categories_for_normalization(categories: list[dict[str, Any]]) -> str
     """格式化话题列表用于归一化
 
     Args:
-        categories: 话题列表，每个包含 name, count 字段
+        categories: 话题列表，每个包含 name, score 字段
 
     Returns:
         str: 格式化后的话题列表字符串
     """
     return "\n".join([
-        f"- {c['name']} (出现次数: {c.get('count', 0)})"
+        f"- {c['name']} (重要度: {c.get('score', 0):.1f})"
         for c in categories
     ])
 

@@ -21,6 +21,7 @@
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
@@ -252,9 +253,10 @@ def aggregate_task_analysis(
     # 4. 时效性分布 (§4.2)
     time_distribution = calculate_time_distribution(posts_data)
 
-    # 5. 实体聚合（主体过滤 §4.3，包含 LLM 归一化）
+    # 5. 实体聚合 + 观点聚合（并行执行）
     # 如果提供了 project_id 和 user_id，创建 AnalysisJob 记录
     entity_job = None
+    opinion_job = None
     if project_id and user_id and enable_entity_normalization:
         entity_job = create_analysis_job_sync(
             db=db,
@@ -265,25 +267,6 @@ def aggregate_task_analysis(
             source_count=len(posts_data),
             status="processing",
         )
-
-    entity_stats = aggregate_entities(
-        posts_data,
-        task_keywords=task_keywords,
-        enable_llm_normalization=enable_entity_normalization,
-    )
-
-    # 更新实体归一化 AnalysisJob
-    if entity_job:
-        complete_analysis_job_sync(
-            db=db,
-            job=entity_job,
-            analyzed_count=len(entity_stats.get("aggregated_entities", [])),
-            token_usage=entity_stats.get("llm_token_stats"),
-        )
-
-    # 6. 观点聚合（包含 LLM 归一化）
-    opinion_job = None
-    if project_id and user_id and enable_entity_normalization:
         opinion_job = create_analysis_job_sync(
             db=db,
             project_id=project_id,
@@ -294,13 +277,49 @@ def aggregate_task_analysis(
             status="processing",
         )
 
-    opinion_stats = aggregate_opinions(
-        posts_data,
-        task_keywords=task_keywords,
-        enable_llm_normalization=enable_entity_normalization,
-    )
+    # 并行执行实体聚合和观点聚合（两者互相独立）
+    entity_stats = {}
+    opinion_stats = {}
 
-    # 更新观点归一化 AnalysisJob
+    def run_entity_aggregation():
+        return aggregate_entities(
+            posts_data,
+            task_keywords=task_keywords,
+            enable_llm_normalization=enable_entity_normalization,
+        )
+
+    def run_opinion_aggregation():
+        return aggregate_opinions(
+            posts_data,
+            task_keywords=task_keywords,
+            enable_llm_normalization=enable_entity_normalization,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_entity = executor.submit(run_entity_aggregation)
+        future_opinion = executor.submit(run_opinion_aggregation)
+
+        # 等待两个任务完成
+        for future in as_completed([future_entity, future_opinion]):
+            try:
+                if future == future_entity:
+                    entity_stats = future.result()
+                    logger.info(f"[并行聚合] 实体聚合完成")
+                else:
+                    opinion_stats = future.result()
+                    logger.info(f"[并行聚合] 观点聚合完成")
+            except Exception as e:
+                logger.error(f"[并行聚合] 聚合任务失败: {e}")
+                raise
+
+    # 更新 AnalysisJob 记录
+    if entity_job:
+        complete_analysis_job_sync(
+            db=db,
+            job=entity_job,
+            analyzed_count=len(entity_stats.get("aggregated_entities", [])),
+            token_usage=entity_stats.get("llm_token_stats"),
+        )
     if opinion_job:
         complete_analysis_job_sync(
             db=db,
@@ -313,9 +332,8 @@ def aggregate_task_analysis(
     quadrant_data = generate_quadrant_data(posts_data)
     quadrant_summary = get_quadrant_summary(quadrant_data)
 
-    # 8. KANO 需求分层 (§4.5.3)
-    target_entities = entity_stats.get("target_entities", [])
-    kano_model = classify_kano_model(target_entities, opinion_stats)
+    # 8. KANO 需求分层 (§4.5.3) - 基于观点聚合数据
+    kano_model = classify_kano_model(opinion_stats)
 
     # 9. 场景与人群画像 (§4.5.4) - 从 aggregated_entities 派生
     aggregated_entities = entity_stats.get("aggregated_entities", [])

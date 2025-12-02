@@ -26,6 +26,8 @@ class AnalysisType(str, Enum):
     SCREENING_POSTS = "screening_posts"      # 帖子初筛
     DEEP_POSTS = "deep_posts"                # 帖子深度分析
     DEEP_COMMENTS = "deep_comments"          # 评论深度分析
+    ENTITY_NORMALIZATION = "entity_normalization"    # 实体归一化
+    OPINION_NORMALIZATION = "opinion_normalization"  # 观点归一化
 
     # 项目级分析（task_id 为空）
     TOPIC_CLUSTERING = "topic_clustering"    # 主题聚类

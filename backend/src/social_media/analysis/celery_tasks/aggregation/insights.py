@@ -191,26 +191,26 @@ def derive_context_analysis(
 # ============================================================================
 
 def classify_kano_model(
-    entities_data: list[dict[str, Any]],
     opinions_data: dict[str, list[dict[str, Any]]],
     mentions_threshold: int = 3,
     heat_threshold_percentile: float = 0.7,
 ) -> dict[str, list[dict[str, Any]]]:
     """KANO 需求分层分类
 
+    基于聚合后的观点数据（话题级别）进行分类，与"热门观点"保持一致的数据源。
+
     分类规则 (§4.5.3)：
     - **基本型 (Must-be)**：High Mentions (普遍) + Negative Sentiment (痛点)
-      → 高频痛点，如 "发热"
-    - **兴奋型 (Attractive)**：Low Mentions (稀缺) + High Avg_CII (高共鸣) + Positive Sentiment
-      → 惊喜功能，如 "微距"
-    - **期望型 (One-dimensional)**：High Mentions (普遍) + High Expectations
-      → 用户愿望，如 "降价"
+      → 来自 top_issues（负面观点话题）
+    - **兴奋型 (Attractive)**：Low Mentions (稀缺) + High Heat (高共鸣) + Positive Sentiment
+      → 来自 top_features 中低频高热度的正面话题
+    - **期望型 (One-dimensional)**：High Mentions (普遍) + Positive Sentiment
+      → 来自 top_features 中高频的正面话题
 
     Args:
-        entities_data: 实体列表（仅 target 实体）
         opinions_data: 观点数据 {"top_issues": [...], "top_features": [...]}
-        mentions_threshold: 高频门槛
-        heat_threshold_percentile: 高热度百分位
+        mentions_threshold: 高频门槛（默认3次）
+        heat_threshold_percentile: 高热度百分位（默认70%）
 
     Returns:
         dict: {
@@ -223,44 +223,19 @@ def classify_kano_model(
     attractive = []
     one_dimensional = []
 
+    # 只使用观点聚合数据（话题级别），不混入实体级别的原始描述
     all_issues = opinions_data.get("top_issues", [])
     all_features = opinions_data.get("top_features", [])
 
-    # 从实体中提取 issues 和 features
-    entity_issues: dict[str, dict] = {}
-    entity_features: dict[str, dict] = {}
-
-    for entity in entities_data:
-        heat = entity.get("heat", 0)
-        mentions = entity.get("mentions", 0)
-        entity_post_ids = entity.get("post_ids", [])
-
-        for issue in entity.get("top_issues", []):
-            if issue not in entity_issues:
-                entity_issues[issue] = {"label": issue, "heat": 0, "mentions": 0, "post_ids": set()}
-            entity_issues[issue]["heat"] += heat
-            entity_issues[issue]["mentions"] += mentions
-            entity_issues[issue]["post_ids"].update(entity_post_ids)
-
-        for feature in entity.get("top_features", []):
-            if feature not in entity_features:
-                entity_features[feature] = {"label": feature, "heat": 0, "mentions": 0, "post_ids": set()}
-            entity_features[feature]["heat"] += heat
-            entity_features[feature]["mentions"] += mentions
-            entity_features[feature]["post_ids"].update(entity_post_ids)
-
-    # 计算热度阈值
+    # 计算热度阈值（用于区分兴奋型需求）
     all_heats = [i.get("heat", 0) for i in all_issues + all_features]
-    all_heats.extend([v["heat"] for v in entity_issues.values()])
-    all_heats.extend([v["heat"] for v in entity_features.values()])
-
     if all_heats:
         all_heats_sorted = sorted(all_heats)
         heat_threshold = all_heats_sorted[int(len(all_heats_sorted) * heat_threshold_percentile)]
     else:
         heat_threshold = 0
 
-    # 1. Must-be (基本型)：高频 + 负面
+    # 1. Must-be (基本型)：高频 + 负面（来自 top_issues）
     for item in all_issues:
         mentions = item.get("mentions", 0)
         if mentions >= mentions_threshold:
@@ -270,20 +245,7 @@ def classify_kano_model(
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
                 "post_ids": item.get("post_ids", []),
-                "top_opinions": item.get("top_opinions", []),
             })
-
-    for label, data in entity_issues.items():
-        if data["mentions"] >= mentions_threshold:
-            if not any(m["label"] == label for m in must_be):
-                must_be.append({
-                    "label": label,
-                    "heat": data["heat"],
-                    "mentions": data["mentions"],
-                    "sentiment": -1,
-                    "post_ids": list(data.get("post_ids", set())),
-                    "top_opinions": [],
-                })
 
     # 2. Attractive (兴奋型)：低频 + 高热度 + 正面
     for item in all_features:
@@ -296,22 +258,9 @@ def classify_kano_model(
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
                 "post_ids": item.get("post_ids", []),
-                "top_opinions": item.get("top_opinions", []),
             })
 
-    for label, data in entity_features.items():
-        if data["mentions"] < mentions_threshold and data["heat"] >= heat_threshold:
-            if not any(a["label"] == label for a in attractive):
-                attractive.append({
-                    "label": label,
-                    "heat": data["heat"],
-                    "mentions": data["mentions"],
-                    "sentiment": 1,
-                    "post_ids": list(data.get("post_ids", set())),
-                    "top_opinions": [],
-                })
-
-    # 3. One-dimensional (期望型)：高频 + 正面
+    # 3. One-dimensional (期望型)：高频 + 正面（来自 top_features）
     for item in all_features:
         mentions = item.get("mentions", 0)
         if mentions >= mentions_threshold:
@@ -321,7 +270,6 @@ def classify_kano_model(
                 "mentions": mentions,
                 "sentiment": item.get("sentiment", 0),
                 "post_ids": item.get("post_ids", []),
-                "top_opinions": item.get("top_opinions", []),
             })
 
     # 按热度排序

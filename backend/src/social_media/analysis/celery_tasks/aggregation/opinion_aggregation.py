@@ -15,6 +15,7 @@ aggregated_opinions 是后续 insights 分析的核心数据来源。
 """
 
 import logging
+import math
 from difflib import SequenceMatcher
 from typing import Any
 from collections import defaultdict
@@ -54,27 +55,68 @@ def _are_similar_categories(name1: str, name2: str, threshold: float = 0.8) -> b
 # Category 映射构建（程序相似度 + LLM同义词）
 # ============================================================================
 
+def _calculate_score(heat: float, mentions: int) -> float:
+    """计算综合评分：heat × log(mentions + 1)
+
+    综合考虑影响力（heat）和讨论广泛性（mentions）
+    """
+    return heat * math.log(mentions + 1)
+
+
 def _collect_raw_categories(posts_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """从 posts_data 收集所有原始 category 名称（去重，带出现次数）"""
-    category_counts: dict[str, int] = {}
+    """从 posts_data 收集所有原始 category 名称（去重，带提及数和热度）
+
+    热度计算规则：每个帖子的 CII 只对每个 category 累加一次（避免重复计算）
+    提及数规则：每个帖子只对每个 category 计数一次
+    """
+    # 内部数据结构：{category: {"mentions": int, "heat": float, "cii_added_posts": set}}
+    category_data: dict[str, dict] = {}
 
     for post in posts_data:
+        post_id = post.get("post_id")
+        cii = post.get("cii", 0) or 0
         post_deep_result = post.get("post_deep_result") or {}
         comment_deep_result = post.get("comment_deep_result") or {}
+
+        # 收集该帖子中出现的所有 categories（去重）
+        post_categories: set[str] = set()
 
         for opinion in post_deep_result.get("general_opinions", []):
             category = opinion.get("category", "")
             if category:
-                category_counts[category] = category_counts.get(category, 0) + 1
+                post_categories.add(category)
 
         for opinion in comment_deep_result.get("general_opinions", []):
             category = opinion.get("category", "")
             if category:
-                category_counts[category] = category_counts.get(category, 0) + 1
+                post_categories.add(category)
+
+        # 更新每个 category 的统计（每帖只计一次）
+        for category in post_categories:
+            if category not in category_data:
+                category_data[category] = {
+                    "mentions": 0,
+                    "heat": 0.0,
+                    "cii_added_posts": set(),
+                }
+
+            data = category_data[category]
+            data["mentions"] += 1  # 提及帖子数 +1
+
+            # CII 只累加一次（每帖每 category）
+            if post_id and post_id not in data["cii_added_posts"]:
+                data["heat"] += cii
+                data["cii_added_posts"].add(post_id)
 
     return [
-        {"name": name, "type": "话题", "count": count}
-        for name, count in category_counts.items()
+        {
+            "name": name,
+            "type": "话题",
+            "mentions": data["mentions"],
+            "heat": round(data["heat"], 1),
+            "score": round(_calculate_score(data["heat"], data["mentions"]), 1),
+        }
+        for name, data in category_data.items()
     ]
 
 
@@ -87,8 +129,8 @@ def _build_similarity_mapping(raw_categories: list[dict], threshold: float = 0.8
     name_mapping: dict[str, str] = {}
     canonical_list: list[str] = []
 
-    # 按出现次数排序，高频词优先成为标准名称
-    sorted_categories = sorted(raw_categories, key=lambda x: x["count"], reverse=True)
+    # 按综合评分排序，高评分词优先成为标准名称
+    sorted_categories = sorted(raw_categories, key=lambda x: x.get("score", 0), reverse=True)
 
     for item in sorted_categories:
         name = item["name"]
@@ -124,26 +166,72 @@ def _build_llm_mapping(
     if not raw_categories:
         return {}, None
 
-    # 按出现次数排序，取 Top N
-    sorted_categories = sorted(raw_categories, key=lambda x: x["count"], reverse=True)[:max_categories]
+    # 按综合评分排序，取 Top N
+    sorted_categories = sorted(raw_categories, key=lambda x: x.get("score", 0), reverse=True)[:max_categories]
+
+    # 格式化输入内容
+    formatted_input = format_categories_for_normalization(sorted_categories)
+    keywords_str = ", ".join(task_keywords) if task_keywords else "无"
+
+    # 打印 LLM 输入
+    print("\n" + "=" * 80)
+    print("[观点归一化] LLM 输入内容")
+    print("=" * 80)
+    print(f"任务关键词: {keywords_str}")
+    print(f"输入话题数量: {len(sorted_categories)}")
+    print("-" * 40)
+    print(formatted_input)
+    print("=" * 80 + "\n")
 
     # 调用 LLM（使用带统计的版本）
     chain = create_category_normalization_chain()
     response, token_stats = invoke_chain_with_stats_sync(
         chain,
         {
-            "keywords": ", ".join(task_keywords) if task_keywords else "无",
-            "categories": format_categories_for_normalization(sorted_categories),
+            "keywords": keywords_str,
+            "categories": formatted_input,
         },
         llm_type="chat",
     )
     response_text = response.content if hasattr(response, "content") else str(response)
     result = parse_category_normalization_response(response_text)
 
+    # 打印 LLM 输出
+    print("\n" + "=" * 80)
+    print("[观点归一化] LLM 输出内容")
+    print("=" * 80)
+    print(response_text)
+    print("=" * 80)
+
+    # 统计融合效果
+    normalized_groups = result.get("normalized_groups", [])
+    standalone_categories = result.get("standalone_categories", [])
+    output_count = len(normalized_groups) + len(standalone_categories)
+
+    print("\n" + "-" * 40)
+    print(f"[观点归一化] 融合统计:")
+    print(f"  输入话题数: {len(sorted_categories)}")
+    print(f"  归一化组数: {len(normalized_groups)}")
+    print(f"  独立话题数: {len(standalone_categories)}")
+    print(f"  输出话题数: {output_count}")
+    print(f"  合并减少数: {len(sorted_categories) - output_count}")
+
+    # 打印每个归一化组的详情
+    if normalized_groups:
+        print("\n  归一化组详情:")
+        for i, group in enumerate(normalized_groups, 1):
+            canonical = group.get("canonical_name", "")
+            merged = group.get("merged_categories", [])
+            print(f"    [{i}] {canonical} <- {merged}")
+
+    print("-" * 40 + "\n")
+
+    summary = token_stats.get('summary', {})
     logger.info(
         f"[观点归一化] LLM 调用完成: "
-        f"tokens={token_stats.get('total_tokens', 0)}, "
-        f"cost=¥{token_stats.get('total_cost_cny', 0):.4f}"
+        f"tokens={summary.get('total_tokens', 0)}, "
+        f"cost=¥{summary.get('total_cost_cny', 0):.4f}, "
+        f"输入={len(sorted_categories)} -> 输出={output_count}"
     )
 
     return result.get("category_mapping", {}), token_stats
@@ -178,15 +266,28 @@ def build_category_mapping(
 
     # 1. 收集原始 category 名称
     raw_categories = _collect_raw_categories(posts_data)
-    logger.info(f"[Category映射] 收集到 {len(raw_categories)} 个唯一话题")
+    raw_count = len(raw_categories)
 
     if not raw_categories:
         return {}, None
 
     # 2. 程序相似度映射
     similarity_mapping = _build_similarity_mapping(raw_categories)
-    similarity_merged = len(raw_categories) - len(set(similarity_mapping.values()))
-    logger.info(f"[Category映射] 程序相似度合并: {similarity_merged} 对")
+    after_similarity_count = len(set(similarity_mapping.values()))
+    similarity_merged = raw_count - after_similarity_count
+
+    # 打印程序归一化统计
+    print("\n" + "=" * 80)
+    print("[观点归一化] 程序相似度归一化统计")
+    print("=" * 80)
+    print(f"  原始唯一话题数: {raw_count}")
+    print(f"  程序合并后数量: {after_similarity_count}")
+    print(f"  程序合并减少数: {similarity_merged}")
+    print(f"  发送给 LLM 数量: min({after_similarity_count}, 50) = {min(after_similarity_count, 50)}")
+    print("=" * 80 + "\n")
+
+    logger.info(f"[Category映射] 收集到 {raw_count} 个唯一话题")
+    logger.info(f"[Category映射] 程序相似度合并: {similarity_merged} 对 -> {after_similarity_count} 个")
 
     # 3. LLM 同义词映射（可选）
     if enable_llm and len(raw_categories) >= 5:
@@ -361,13 +462,18 @@ def aggregate_opinions(
             reverse=True
         )
 
+        # 计算综合评分
+        heat = round(data["total_cii"], 1)
+        score = round(_calculate_score(data["total_cii"], mentions), 1)
+
         # 构建完整融合数据（数组格式）
         opinion_dict = {
             "category": data["category"],
             "canonical_category": data["canonical_category"],
             "sentiment": data["sentiment"],
-            "heat": round(data["total_cii"], 1),
+            "heat": heat,
             "mentions": mentions,
+            "score": score,
             "post_source_count": post_source_count,
             "comment_source_count": comment_source_count,
             "post_ids": list(data["post_ids"]),
@@ -386,8 +492,9 @@ def aggregate_opinions(
         # 构建展示用 item
         item = {
             "topic": data["category"],
-            "heat": round(data["total_cii"], 1),
+            "heat": heat,
             "mentions": mentions,
+            "score": score,
             "sentiment": data["sentiment"],
             "source_distribution": source_distribution,
             "top_opinions": [op[0] for op in all_opinions[:3]] if all_opinions else [],
@@ -402,10 +509,10 @@ def aggregate_opinions(
         elif data["sentiment"] == 1:
             features.append(item)
 
-    # 按热度排序
-    issues.sort(key=lambda x: x["heat"], reverse=True)
-    features.sort(key=lambda x: x["heat"], reverse=True)
-    aggregated_opinions.sort(key=lambda x: x["heat"], reverse=True)
+    # 按综合评分排序
+    issues.sort(key=lambda x: x["score"], reverse=True)
+    features.sort(key=lambda x: x["score"], reverse=True)
+    aggregated_opinions.sort(key=lambda x: x["score"], reverse=True)
 
     # 统计日志
     positive_count = len([o for o in aggregated_opinions if o["sentiment"] == 1])

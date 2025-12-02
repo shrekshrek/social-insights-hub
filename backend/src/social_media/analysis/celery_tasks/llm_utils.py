@@ -58,13 +58,26 @@ def invoke_llm_with_stats_sync(llm, messages: list, llm_type: str = "chat") -> t
 
     real_cost = input_cost + output_cost
 
-    # 返回简化的统计字典
+    # 返回符合 TokenUsageStats schema 的统计字典
     stats = {
-        'input_tokens': real_input_tokens,
-        'output_tokens': real_output_tokens,
-        'total_tokens': real_total_tokens,
-        'total_cost_cny': real_cost,
-        'duration_seconds': duration_seconds,
+        'summary': {
+            'total_calls': 1,
+            'total_input_tokens': real_input_tokens,
+            'total_output_tokens': real_output_tokens,
+            'total_tokens': real_total_tokens,
+            'total_cost_cny': real_cost,
+            'total_duration_seconds': duration_seconds,
+            'avg_tokens_per_call': real_total_tokens,
+            'avg_cost_per_call': real_cost,
+        },
+        'call_details': [{
+            'call_index': 0,
+            'input_tokens': real_input_tokens,
+            'output_tokens': real_output_tokens,
+            'total_tokens': real_total_tokens,
+            'cost_cny': real_cost,
+            'duration_seconds': duration_seconds,
+        }],
     }
 
     return response, stats
@@ -117,13 +130,26 @@ def invoke_chain_with_stats_sync(chain, input_dict: Dict[str, Any], llm_type: st
 
     real_cost = input_cost + output_cost
 
-    # 返回简化的统计字典
+    # 返回符合 TokenUsageStats schema 的统计字典
     stats = {
-        'input_tokens': real_input_tokens,
-        'output_tokens': real_output_tokens,
-        'total_tokens': real_total_tokens,
-        'total_cost_cny': real_cost,
-        'duration_seconds': duration_seconds,
+        'summary': {
+            'total_calls': 1,
+            'total_input_tokens': real_input_tokens,
+            'total_output_tokens': real_output_tokens,
+            'total_tokens': real_total_tokens,
+            'total_cost_cny': real_cost,
+            'total_duration_seconds': duration_seconds,
+            'avg_tokens_per_call': real_total_tokens,
+            'avg_cost_per_call': real_cost,
+        },
+        'call_details': [{
+            'call_index': 0,
+            'input_tokens': real_input_tokens,
+            'output_tokens': real_output_tokens,
+            'total_tokens': real_total_tokens,
+            'cost_cny': real_cost,
+            'duration_seconds': duration_seconds,
+        }],
     }
 
     return response, stats

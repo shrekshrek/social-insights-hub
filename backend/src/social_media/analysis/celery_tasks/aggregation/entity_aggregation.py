@@ -13,6 +13,7 @@ aggregated_entities 是后续 insights 和 charts 分析的核心数据来源。
 """
 
 import logging
+import math
 from difflib import SequenceMatcher
 from typing import Any
 from collections import defaultdict
@@ -108,289 +109,67 @@ def extract_competitor_names(
 # 名称映射构建（程序相似度 + LLM同义词）
 # ============================================================================
 
-def _collect_raw_entity_names(posts_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """从 posts_data 收集所有原始实体名称（去重，带类型和出现次数）"""
-    entity_counts: dict[str, dict] = {}  # name -> {type, count}
+def _collect_raw_entities_full(posts_data: list[dict[str, Any]]) -> tuple[dict[str, dict], dict[int, float]]:
+    """从 posts_data 收集所有原始实体的完整聚合数据（只遍历一次）
 
-    for post in posts_data:
-        post_deep_result = post.get("post_deep_result") or {}
-        comment_deep_result = post.get("comment_deep_result") or {}
+    返回:
+        - 按原始实体名称索引的字典，包含完整的聚合信息
+        - post_id -> cii 的映射，用于合并时正确计算 total_cii
 
-        for entity in post_deep_result.get("entities", []):
-            name = entity.get("name", "")
-            if name:
-                if name not in entity_counts:
-                    entity_counts[name] = {"type": entity.get("type", "其他"), "count": 0}
-                entity_counts[name]["count"] += 1
-
-        for entity in comment_deep_result.get("entities", []):
-            name = entity.get("name", "")
-            if name:
-                if name not in entity_counts:
-                    entity_counts[name] = {"type": entity.get("type", "其他"), "count": 0}
-                entity_counts[name]["count"] += 1
-
-    return [
-        {"name": name, "type": data["type"], "count": data["count"]}
-        for name, data in entity_counts.items()
-    ]
-
-
-def _build_similarity_mapping(raw_entities: list[dict], threshold: float = 0.8) -> dict[str, str]:
-    """构建程序相似度映射（相似度 >= threshold 合并）
-
-    Returns:
-        dict: {原始名称: 标准名称}
+    后续可直接用于：
+    1. 构建名称映射（基于 heat 排序）
+    2. 根据映射合并数据（无需再遍历 posts_data）
     """
-    name_mapping: dict[str, str] = {}
-    canonical_list: list[str] = []  # 已确定的标准名称
+    raw_entity_data: dict[str, dict] = {}
+    post_cii_map: dict[int, float] = {}  # 记录每个帖子的 CII
 
-    # 按出现次数排序，高频词优先成为标准名称
-    sorted_entities = sorted(raw_entities, key=lambda x: x["count"], reverse=True)
-
-    for entity in sorted_entities:
-        name = entity["name"]
-
-        # 检查是否与已有标准名称相似（复用 _are_similar_entities）
-        matched_canonical = None
-        for canonical in canonical_list:
-            if _are_similar_entities(name, canonical, threshold):
-                matched_canonical = canonical
-                break
-
-        if matched_canonical:
-            name_mapping[name] = matched_canonical
-        else:
-            name_mapping[name] = name
-            canonical_list.append(name)
-
-    return name_mapping
-
-
-def _build_llm_mapping(
-    raw_entities: list[dict],
-    task_keywords: list[str],
-    max_entities: int = 100,
-) -> tuple[dict[str, str], dict[str, Any] | None]:
-    """调用 LLM 构建同义词映射
-
-    Returns:
-        tuple: (entity_mapping, token_stats)
-            - entity_mapping: {原始名称: 标准名称}
-            - token_stats: token 使用统计（如果调用了 LLM）
-    """
-    if not raw_entities:
-        return {}, None
-
-    # 按出现次数排序，取 Top N
-    sorted_entities = sorted(raw_entities, key=lambda x: x["count"], reverse=True)[:max_entities]
-
-    # 格式化输入
-    entities_list = [
-        {
-            "name": e["name"],
-            "type": e["type"],
-            "heat": e["count"],  # 用 count 作为热度
-            "mentions": e["count"],
-        }
-        for e in sorted_entities
-    ]
-
-    # 调用 LLM（使用带统计的版本）
-    chain = create_entity_normalization_chain()
-    response, token_stats = invoke_chain_with_stats_sync(
-        chain,
-        {
-            "keywords": ", ".join(task_keywords) if task_keywords else "无",
-            "entities": format_entities_for_normalization(entities_list),
-        },
-        llm_type="chat",
-    )
-    response_text = response.content if hasattr(response, "content") else str(response)
-    result = parse_normalization_response(response_text)
-
-    logger.info(
-        f"[实体归一化] LLM 调用完成: "
-        f"tokens={token_stats.get('total_tokens', 0)}, "
-        f"cost=¥{token_stats.get('total_cost_cny', 0):.4f}"
-    )
-
-    return result.get("entity_mapping", {}), token_stats
-
-
-def build_entity_name_mapping(
-    posts_data: list[dict[str, Any]],
-    task_keywords: list[str],
-    enable_llm: bool = True,
-    max_entities: int = 100,
-) -> tuple[dict[str, str], dict[str, Any] | None]:
-    """构建实体名称映射（程序相似度 + LLM同义词）
-
-    处理流程：
-    1. 收集原始实体名称
-    2. 程序相似度合并（>=0.8）
-    3. LLM 同义词合并（可选）
-    4. 合并两个映射
-
-    Args:
-        posts_data: 帖子数据列表
-        task_keywords: 任务关键词
-        enable_llm: 是否启用 LLM 归一化
-        max_entities: LLM 最多处理的实体数量
-
-    Returns:
-        tuple: (name_mapping, token_stats)
-            - name_mapping: {原始名称: 标准名称}
-            - token_stats: token 使用统计（如果调用了 LLM）
-    """
-    token_stats = None
-
-    # 1. 收集原始实体名称
-    raw_entities = _collect_raw_entity_names(posts_data)
-    logger.info(f"[名称映射] 收集到 {len(raw_entities)} 个唯一实体名称")
-
-    if not raw_entities:
-        return {}, None
-
-    # 2. 程序相似度映射
-    similarity_mapping = _build_similarity_mapping(raw_entities)
-    similarity_merged = len(raw_entities) - len(set(similarity_mapping.values()))
-    logger.info(f"[名称映射] 程序相似度合并: {similarity_merged} 对")
-
-    # 3. LLM 同义词映射（可选）
-    if enable_llm and len(raw_entities) >= 5:
-        try:
-            llm_mapping, token_stats = _build_llm_mapping(raw_entities, task_keywords, max_entities)
-            if llm_mapping:
-                # 合并映射：LLM 映射优先级更高
-                # 但 LLM 只返回它处理过的实体，未处理的保持程序映射
-                for name, canonical in llm_mapping.items():
-                    # 如果 LLM 返回了映射，使用 LLM 的结果
-                    if name in similarity_mapping:
-                        old_canonical = similarity_mapping[name]
-                        # 将所有映射到 old_canonical 的名称都更新为新的 canonical
-                        # 使用 list() 避免在迭代时修改 dict
-                        for k, v in list(similarity_mapping.items()):
-                            if v == old_canonical:
-                                similarity_mapping[k] = canonical
-
-                final_unique = len(set(similarity_mapping.values()))
-                logger.info(f"[名称映射] LLM 归一化后: {final_unique} 个唯一实体")
-        except Exception as e:
-            logger.warning(f"[名称映射] LLM 归一化失败，使用程序映射: {e}")
-
-    return similarity_mapping, token_stats
-
-
-# ============================================================================
-# 实体聚合主函数
-# ============================================================================
-
-def aggregate_entities(
-    posts_data: list[dict[str, Any]],
-    task_keywords: list[str] | None = None,
-    enable_llm_normalization: bool = True,
-    top_n: int = 10,
-) -> dict[str, Any]:
-    """聚合任务内的实体，生成焦点地图
-
-    处理流程：
-    1. 构建名称映射（程序相似度 + LLM同义词）
-    2. 使用映射进行聚合
-    3. 情感分组、来源标记、主体过滤
-    4. 输出 aggregated_entities 数组
-
-    Args:
-        posts_data: 帖子数据列表，每个包含 post_deep_result 和 cii
-        task_keywords: 任务关键词列表，用于主体过滤
-        enable_llm_normalization: 是否启用 LLM 归一化
-        top_n: 返回前多少个实体
-
-    Returns:
-        dict: {
-            "top_entities": 热度排名前N的实体列表（展示用）,
-            "target_entities": 本品实体列表,
-            "competitor_entities": 竞品实体列表,
-            "aggregated_entities": 完整融合数据（数组格式）,
-            "llm_token_stats": LLM token 使用统计（如果调用了 LLM）,
-        }
-    """
-    task_keywords = task_keywords or []
-
-    # ========================================
-    # 1. 构建名称映射（先归一化）
-    # ========================================
-    name_mapping, llm_token_stats = build_entity_name_mapping(
-        posts_data,
-        task_keywords,
-        enable_llm=enable_llm_normalization,
-    )
-
-    # ========================================
-    # 2. 使用映射进行聚合
-    # ========================================
-    # 内部用 dict，O(1) 查找
-    entity_data: dict[str, dict] = defaultdict(lambda: {
-        "name": "",
-        "canonical_name": "",
-        "type": "",
-        "sentiment_weighted_sum": 0.0,
-        "positive_count": 0,
-        "negative_count": 0,
-        "neutral_count": 0,
-        "total_cii": 0.0,
-        "cii_added_posts": set(),
-        "post_sources": set(),
-        "comment_sources": set(),
-        "post_ids": set(),
-        "features": defaultdict(set),
-        "issues": defaultdict(set),
-        "expectations": defaultdict(set),
-        "audience": defaultdict(set),
-        "scenarios": defaultdict(set),
-        "market_factors": defaultdict(set),
-        "competitors": defaultdict(set),
-        "merged_from": set(),  # 记录合并来源
-    })
-
-    def get_canonical_name(name: str) -> str:
-        """获取标准名称（从预构建的映射中查找）"""
-        return name_mapping.get(name, name)
+    def get_or_create_entity(name: str, entity_type: str) -> dict:
+        """获取或创建实体数据结构"""
+        if name not in raw_entity_data:
+            raw_entity_data[name] = {
+                "name": name,
+                "type": entity_type,
+                "heat": 0.0,
+                "cii_added_posts": set(),
+                "sentiment_weighted_sum": 0.0,
+                "positive_count": 0,
+                "negative_count": 0,
+                "neutral_count": 0,
+                "post_sources": set(),
+                "comment_sources": set(),
+                "post_ids": set(),
+                "features": defaultdict(set),
+                "issues": defaultdict(set),
+                "expectations": defaultdict(set),
+                "audience": defaultdict(set),
+                "scenarios": defaultdict(set),
+                "market_factors": defaultdict(set),
+                "competitors": defaultdict(set),
+            }
+        return raw_entity_data[name]
 
     def process_entity(entity: dict, post_id: int, cii: float, source: str):
-        """处理单个实体"""
-        entity_name = entity.get("name", "")
-        if not entity_name:
+        """处理单个实体（收集到原始实体数据中）"""
+        name = entity.get("name", "")
+        if not name:
             return
 
-        canonical = get_canonical_name(entity_name)
+        data = get_or_create_entity(name, entity.get("type", "其他"))
         sentiment = entity.get("sentiment", 0)
 
-        data = entity_data[canonical]
+        # CII 只累加一次（per post per entity）
+        if post_id and post_id not in data["cii_added_posts"]:
+            data["heat"] += cii
+            data["sentiment_weighted_sum"] += sentiment * cii
+            data["cii_added_posts"].add(post_id)
 
-        # 更新基本信息
-        if not data["name"]:
-            data["name"] = canonical
-            data["canonical_name"] = canonical
-            data["type"] = entity.get("type", "其他")
-
-        # 记录合并来源
-        if entity_name != canonical:
-            data["merged_from"].add(entity_name)
-
-        # 统计情感分布
+        # 情感分布
         if sentiment == 1:
             data["positive_count"] += 1
         elif sentiment == -1:
             data["negative_count"] += 1
         else:
             data["neutral_count"] += 1
-
-        # CII 只累加一次
-        if post_id and post_id not in data["cii_added_posts"]:
-            data["total_cii"] += cii
-            data["sentiment_weighted_sum"] += sentiment * cii
-            data["cii_added_posts"].add(post_id)
 
         # 来源标记
         if post_id:
@@ -424,28 +203,405 @@ def aggregate_entities(
                 if comp:
                     data["competitors"][comp].add(post_id)
 
-    # 遍历所有帖子
-    raw_entity_count = 0
+    # 遍历所有帖子（只遍历一次！）
     for post in posts_data:
         post_id = post.get("post_id")
-        cii = post.get("cii", 0)
+        cii = post.get("cii", 1.0)
+
+        # 记录每个帖子的 CII
+        if post_id:
+            post_cii_map[post_id] = cii
 
         post_deep_result = post.get("post_deep_result") or {}
         comment_deep_result = post.get("comment_deep_result") or {}
 
-        post_entities = post_deep_result.get("entities", [])
-        raw_entity_count += len(post_entities)
-        for entity in post_entities:
+        for entity in post_deep_result.get("entities", []):
             process_entity(entity, post_id, cii, "post")
 
-        comment_entities = comment_deep_result.get("entities", [])
-        raw_entity_count += len(comment_entities)
-        for entity in comment_entities:
+        for entity in comment_deep_result.get("entities", []):
             process_entity(entity, post_id, cii, "comment")
 
-    logger.info(
-        f"[实体聚合] 原始 {raw_entity_count} 条 -> 聚合后 {len(entity_data)} 个实体"
+    return raw_entity_data, post_cii_map
+
+
+def _calculate_score(heat: float, mentions: int) -> float:
+    """计算综合评分：heat × log(mentions + 1)
+
+    综合考虑影响力（heat）和讨论广泛性（mentions）
+    """
+    return heat * math.log(mentions + 1)
+
+
+def _extract_for_llm(raw_entity_data: dict[str, dict]) -> list[dict[str, Any]]:
+    """从原始实体数据中提取 LLM 归一化所需的信息
+
+    提取 name, type, mentions, heat, score
+    - mentions: 提及帖子数（post_ids 的数量）
+    - heat: CII 加权热度
+    - score: 综合评分 = heat × log(mentions + 1)
+    """
+    return [
+        {
+            "name": data["name"],
+            "type": data["type"],
+            "mentions": len(data["post_ids"]),
+            "heat": round(data["heat"], 1),
+            "score": round(_calculate_score(data["heat"], len(data["post_ids"])), 1),
+        }
+        for data in raw_entity_data.values()
+    ]
+
+
+def _build_similarity_mapping(raw_entities: list[dict], threshold: float = 0.8) -> dict[str, str]:
+    """构建程序相似度映射（相似度 >= threshold 合并）
+
+    Returns:
+        dict: {原始名称: 标准名称}
+    """
+    name_mapping: dict[str, str] = {}
+    canonical_list: list[str] = []  # 已确定的标准名称
+
+    # 按综合评分排序，高分优先成为标准名称
+    sorted_entities = sorted(raw_entities, key=lambda x: x.get("score", 0), reverse=True)
+
+    for entity in sorted_entities:
+        name = entity["name"]
+
+        # 检查是否与已有标准名称相似（复用 _are_similar_entities）
+        matched_canonical = None
+        for canonical in canonical_list:
+            if _are_similar_entities(name, canonical, threshold):
+                matched_canonical = canonical
+                break
+
+        if matched_canonical:
+            name_mapping[name] = matched_canonical
+        else:
+            name_mapping[name] = name
+            canonical_list.append(name)
+
+    return name_mapping
+
+
+def _build_llm_mapping(
+    raw_entities: list[dict],
+    task_keywords: list[str],
+    max_entities: int = 50,
+) -> tuple[dict[str, str], dict[str, Any] | None]:
+    """调用 LLM 构建同义词映射
+
+    Returns:
+        tuple: (entity_mapping, token_stats)
+            - entity_mapping: {原始名称: 标准名称}
+            - token_stats: token 使用统计（如果调用了 LLM）
+    """
+    if not raw_entities:
+        return {}, None
+
+    # 按综合评分排序，取 Top N
+    sorted_entities = sorted(raw_entities, key=lambda x: x.get("score", 0), reverse=True)[:max_entities]
+
+    # 格式化输入：name, type, score（综合评分）
+    entities_list = [
+        {
+            "name": e["name"],
+            "type": e["type"],
+            "score": e.get("score", 0),  # 综合评分 = heat × log(mentions + 1)
+        }
+        for e in sorted_entities
+    ]
+
+    # 格式化输入内容
+    formatted_input = format_entities_for_normalization(entities_list)
+    keywords_str = ", ".join(task_keywords) if task_keywords else "无"
+
+    # 打印 LLM 输入
+    print("\n" + "=" * 80)
+    print("[实体归一化] LLM 输入内容")
+    print("=" * 80)
+    print(f"任务关键词: {keywords_str}")
+    print(f"输入实体数量: {len(entities_list)}")
+    print("-" * 40)
+    print(formatted_input)
+    print("=" * 80 + "\n")
+
+    # 调用 LLM
+    chain = create_entity_normalization_chain()
+    response, token_stats = invoke_chain_with_stats_sync(
+        chain,
+        {
+            "keywords": keywords_str,
+            "entities": formatted_input,
+        },
+        llm_type="chat",
     )
+    response_text = response.content if hasattr(response, "content") else str(response)
+    result = parse_normalization_response(response_text)
+
+    # 打印 LLM 输出
+    print("\n" + "=" * 80)
+    print("[实体归一化] LLM 输出内容")
+    print("=" * 80)
+    print(response_text)
+    print("=" * 80)
+
+    # 统计融合效果
+    normalized_groups = result.get("normalized_groups", [])
+    standalone_entities = result.get("standalone_entities", [])
+    output_count = len(normalized_groups) + len(standalone_entities)
+
+    print("\n" + "-" * 40)
+    print(f"[实体归一化] 融合统计:")
+    print(f"  输入实体数: {len(entities_list)}")
+    print(f"  归一化组数: {len(normalized_groups)}")
+    print(f"  独立实体数: {len(standalone_entities)}")
+    print(f"  输出实体数: {output_count}")
+    print(f"  合并减少数: {len(entities_list) - output_count}")
+
+    # 打印每个归一化组的详情
+    if normalized_groups:
+        print("\n  归一化组详情:")
+        for i, group in enumerate(normalized_groups, 1):
+            canonical = group.get("canonical_name", "")
+            merged = group.get("merged_entities", [])
+            print(f"    [{i}] {canonical} <- {merged}")
+
+    print("-" * 40 + "\n")
+
+    summary = token_stats.get('summary', {})
+    logger.info(
+        f"[实体归一化] LLM: {len(entities_list)} -> {output_count} 个, "
+        f"tokens={summary.get('total_tokens', 0)}, cost=¥{summary.get('total_cost_cny', 0):.4f}"
+    )
+
+    return result.get("entity_mapping", {}), token_stats
+
+
+def build_entity_name_mapping(
+    raw_entities: list[dict[str, Any]],
+    task_keywords: list[str],
+    enable_llm: bool = True,
+    max_entities: int = 50,
+) -> tuple[dict[str, str], dict[str, Any] | None]:
+    """构建实体名称映射（程序相似度 + LLM同义词）
+
+    处理流程：
+    1. 程序相似度合并（>=0.8）
+    2. LLM 同义词合并（可选）
+    3. 合并两个映射
+
+    Args:
+        raw_entities: 预收集的原始实体列表，每个包含 name, type, heat
+        task_keywords: 任务关键词
+        enable_llm: 是否启用 LLM 归一化
+        max_entities: LLM 最多处理的实体数量
+
+    Returns:
+        tuple: (name_mapping, token_stats)
+            - name_mapping: {原始名称: 标准名称}
+            - token_stats: token 使用统计（如果调用了 LLM）
+    """
+    token_stats = None
+    raw_count = len(raw_entities)
+
+    if not raw_entities:
+        return {}, None
+
+    # 程序相似度映射
+    similarity_mapping = _build_similarity_mapping(raw_entities)
+    after_similarity_count = len(set(similarity_mapping.values()))
+    similarity_merged = raw_count - after_similarity_count
+
+    # 打印程序归一化统计
+    print("\n" + "=" * 80)
+    print("[实体归一化] 程序相似度归一化统计")
+    print("=" * 80)
+    print(f"  原始唯一实体数: {raw_count}")
+    print(f"  程序合并后数量: {after_similarity_count}")
+    print(f"  程序合并减少数: {similarity_merged}")
+    print(f"  发送给 LLM 数量: min({after_similarity_count}, 50) = {min(after_similarity_count, 50)}")
+    print("=" * 80 + "\n")
+
+    logger.info(f"[实体归一化] 程序相似度: {raw_count} -> {after_similarity_count} 个")
+
+    # 3. LLM 同义词映射（可选）
+    if enable_llm and len(raw_entities) >= 5:
+        try:
+            llm_mapping, token_stats = _build_llm_mapping(raw_entities, task_keywords, max_entities)
+            if llm_mapping:
+                # 合并映射：LLM 映射优先级更高
+                # 但 LLM 只返回它处理过的实体，未处理的保持程序映射
+                for name, canonical in llm_mapping.items():
+                    # 如果 LLM 返回了映射，使用 LLM 的结果
+                    if name in similarity_mapping:
+                        old_canonical = similarity_mapping[name]
+                        # 将所有映射到 old_canonical 的名称都更新为新的 canonical
+                        # 使用 list() 避免在迭代时修改 dict
+                        for k, v in list(similarity_mapping.items()):
+                            if v == old_canonical:
+                                similarity_mapping[k] = canonical
+
+                final_unique = len(set(similarity_mapping.values()))
+                logger.info(f"[名称映射] LLM 归一化后: {final_unique} 个唯一实体")
+        except Exception as e:
+            logger.warning(f"[名称映射] LLM 归一化失败，使用程序映射: {e}")
+
+    return similarity_mapping, token_stats
+
+
+# ============================================================================
+# 根据名称映射合并原始实体数据
+# ============================================================================
+
+def _merge_by_mapping(
+    raw_entity_data: dict[str, dict],
+    name_mapping: dict[str, str],
+    post_cii_map: dict[int, float],
+) -> dict[str, dict]:
+    """根据名称映射合并原始实体数据
+
+    Args:
+        raw_entity_data: 原始实体数据（按原始名称索引）
+        name_mapping: 名称映射 {原始名称: 标准名称}
+        post_cii_map: {post_id: cii} 映射，用于正确计算合并后的 total_cii
+
+    Returns:
+        合并后的实体数据（按标准名称索引）
+    """
+    merged_data: dict[str, dict] = {}
+
+    def get_or_create_merged(canonical: str, entity_type: str) -> dict:
+        """获取或创建合并后的实体数据结构"""
+        if canonical not in merged_data:
+            merged_data[canonical] = {
+                "name": canonical,
+                "canonical_name": canonical,
+                "type": entity_type,
+                "sentiment_weighted_sum": 0.0,
+                "positive_count": 0,
+                "negative_count": 0,
+                "neutral_count": 0,
+                "total_cii": 0.0,
+                "cii_added_posts": set(),
+                "post_sources": set(),
+                "comment_sources": set(),
+                "post_ids": set(),
+                "features": defaultdict(set),
+                "issues": defaultdict(set),
+                "expectations": defaultdict(set),
+                "audience": defaultdict(set),
+                "scenarios": defaultdict(set),
+                "market_factors": defaultdict(set),
+                "competitors": defaultdict(set),
+                "merged_from": set(),
+            }
+        return merged_data[canonical]
+
+    def merge_dict_of_sets(target: dict, source: dict):
+        """合并两个 defaultdict(set) 字典"""
+        for key, post_ids in source.items():
+            target[key].update(post_ids)
+
+    for original_name, raw_data in raw_entity_data.items():
+        # 获取标准名称
+        canonical = name_mapping.get(original_name, original_name)
+
+        # 获取或创建合并目标
+        merged = get_or_create_merged(canonical, raw_data["type"])
+
+        # 记录合并来源
+        if original_name != canonical:
+            merged["merged_from"].add(original_name)
+
+        # 合并数值字段（这些是累加的）
+        merged["positive_count"] += raw_data["positive_count"]
+        merged["negative_count"] += raw_data["negative_count"]
+        merged["neutral_count"] += raw_data["neutral_count"]
+
+        # 合并 CII（使用 post_cii_map 精确计算，同一个帖子只算一次）
+        for post_id in raw_data["cii_added_posts"]:
+            if post_id not in merged["cii_added_posts"]:
+                merged["cii_added_posts"].add(post_id)
+                # 使用精确的帖子 CII
+                cii = post_cii_map.get(post_id, 1.0)
+                merged["total_cii"] += cii
+
+        # 情感加权和：直接累加（已经按 CII 加权）
+        merged["sentiment_weighted_sum"] += raw_data["sentiment_weighted_sum"]
+
+        # 合并集合字段
+        merged["post_sources"].update(raw_data["post_sources"])
+        merged["comment_sources"].update(raw_data["comment_sources"])
+        merged["post_ids"].update(raw_data["post_ids"])
+
+        # 合并维度信息
+        merge_dict_of_sets(merged["features"], raw_data["features"])
+        merge_dict_of_sets(merged["issues"], raw_data["issues"])
+        merge_dict_of_sets(merged["expectations"], raw_data["expectations"])
+        merge_dict_of_sets(merged["audience"], raw_data["audience"])
+        merge_dict_of_sets(merged["scenarios"], raw_data["scenarios"])
+        merge_dict_of_sets(merged["market_factors"], raw_data["market_factors"])
+        merge_dict_of_sets(merged["competitors"], raw_data["competitors"])
+
+    return merged_data
+
+
+# ============================================================================
+# 实体聚合主函数
+# ============================================================================
+
+def aggregate_entities(
+    posts_data: list[dict[str, Any]],
+    task_keywords: list[str] | None = None,
+    enable_llm_normalization: bool = True,
+    top_n: int = 10,
+) -> dict[str, Any]:
+    """聚合任务内的实体，生成焦点地图
+
+    优化后的处理流程（只遍历 posts_data 一次）：
+    1. 收集所有原始实体的完整聚合数据
+    2. 基于收集的数据构建名称映射（程序相似度 + LLM）
+    3. 根据映射合并原始数据
+    4. 输出 aggregated_entities 数组
+
+    Args:
+        posts_data: 帖子数据列表，每个包含 post_deep_result 和 cii
+        task_keywords: 任务关键词列表，用于主体过滤
+        enable_llm_normalization: 是否启用 LLM 归一化
+        top_n: 返回前多少个实体
+
+    Returns:
+        dict: {
+            "top_entities": 热度排名前N的实体列表（展示用）,
+            "target_entities": 本品实体列表,
+            "competitor_entities": 竞品实体列表,
+            "aggregated_entities": 完整融合数据（数组格式）,
+            "llm_token_stats": LLM token 使用统计（如果调用了 LLM）,
+        }
+    """
+    task_keywords = task_keywords or []
+
+    # ========================================
+    # 1. 收集原始实体完整数据（只遍历一次！）
+    # ========================================
+    raw_entity_data, post_cii_map = _collect_raw_entities_full(posts_data)
+
+    # ========================================
+    # 2. 基于收集的数据构建名称映射
+    # ========================================
+    raw_entities_for_llm = _extract_for_llm(raw_entity_data)
+    name_mapping, llm_token_stats = build_entity_name_mapping(
+        raw_entities_for_llm,
+        task_keywords,
+        enable_llm=enable_llm_normalization,
+    )
+
+    # ========================================
+    # 3. 根据映射合并原始数据（无需再遍历 posts_data）
+    # ========================================
+    entity_data = _merge_by_mapping(raw_entity_data, name_mapping, post_cii_map)
+
+    logger.info(f"[实体聚合] {len(raw_entity_data)} 个唯一实体 -> 归一化后 {len(entity_data)} 个")
 
     # ========================================
     # 3. 提取竞品名称、角色分类
@@ -480,12 +636,16 @@ def aggregate_entities(
         top_issues = sorted(data["issues"].items(), key=lambda x: len(x[1]), reverse=True)[:5]
         top_expectations = sorted(data["expectations"].items(), key=lambda x: len(x[1]), reverse=True)[:5]
 
+        heat = round(data["total_cii"], 1)
+        score = round(_calculate_score(data["total_cii"], mentions), 1)
+
         result = {
             "name": data["name"],
             "type": data["type"],
             "role": role,
-            "heat": round(data["total_cii"], 1),
+            "heat": heat,
             "mentions": mentions,
+            "score": score,
             "sentiment": derived_sentiment,
             "sentiment_distribution": {
                 "positive": data["positive_count"],
@@ -512,7 +672,7 @@ def aggregate_entities(
         if formatted:
             formatted_entities.append(formatted)
 
-    formatted_entities.sort(key=lambda x: x["heat"], reverse=True)
+    formatted_entities.sort(key=lambda x: x["score"], reverse=True)
 
     top_entities = formatted_entities[:top_n]
     target_entities = [e for e in formatted_entities if e["role"] == "target"][:top_n]
@@ -529,6 +689,9 @@ def aggregate_entities(
         if data["total_cii"] > 0:
             derived_sentiment = round(data["sentiment_weighted_sum"] / data["total_cii"], 2)
 
+        heat = round(data["total_cii"], 1)
+        score = round(_calculate_score(data["total_cii"], mentions), 1)
+
         entity_dict = {
             "name": data["name"],
             "canonical_name": data["canonical_name"],
@@ -539,8 +702,9 @@ def aggregate_entities(
                 "negative": data["negative_count"],
                 "neutral": data["neutral_count"],
             },
-            "heat": round(data["total_cii"], 1),
+            "heat": heat,
             "mentions": mentions,
+            "score": score,
             "post_source_count": len(data["post_sources"]),
             "comment_source_count": len(data["comment_sources"]),
             "post_ids": list(data["post_ids"]),
@@ -580,7 +744,7 @@ def aggregate_entities(
 
         aggregated_entities.append(entity_dict)
 
-    aggregated_entities.sort(key=lambda x: x["heat"], reverse=True)
+    aggregated_entities.sort(key=lambda x: x["score"], reverse=True)
 
     result = {
         "top_entities": top_entities,

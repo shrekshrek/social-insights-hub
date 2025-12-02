@@ -176,6 +176,29 @@ const deepCommentsTask = computed<AnalysisJob | undefined>(() =>
   ),
 )
 
+// 实体归一化任务（用于显示报告生成进度）
+const entityNormalizationTask = computed<AnalysisJob | undefined>(() =>
+  (analysisHistory.value?.items || []).find(
+    (item) =>
+      item.analysis_type === 'entity_normalization' &&
+      ['pending', 'processing'].includes(item.status)
+  ),
+)
+
+// 观点归一化任务（用于显示报告生成进度）
+const opinionNormalizationTask = computed<AnalysisJob | undefined>(() =>
+  (analysisHistory.value?.items || []).find(
+    (item) =>
+      item.analysis_type === 'opinion_normalization' &&
+      ['pending', 'processing'].includes(item.status)
+  ),
+)
+
+// 是否有聚合相关任务在运行
+const hasAggregationRunning = computed(() =>
+  !!entityNormalizationTask.value || !!opinionNormalizationTask.value
+)
+
 // 依赖状态：是否有初筛结果
 const hasScreeningResult = computed(() => (preview.value?.screened_count ?? 0) > 0)
 // 依赖状态：是否有原文深度结果
@@ -226,13 +249,23 @@ const handleGenerateReport = async () => {
   if (!ensureNotRunning()) return
 
   actionLoading.aggregate = true
+  // 启动轮询以跟踪聚合进度
+  startPolling()
+
   try {
     await runTaskAggregation(props.taskId)
     await refreshAnalysisResult()
+    toast.add({
+      title: '报告生成成功',
+      description: '分析报告已更新',
+      color: 'success',
+    })
   } catch {
     // 错误已由 apiRequest 处理并显示 toast
   } finally {
     actionLoading.aggregate = false
+    // 刷新历史记录以更新进度状态
+    await refreshHistory()
   }
 }
 
@@ -1181,8 +1214,55 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
       </div>
     </template>
 
+    <!-- 报告生成进度 -->
+    <div v-if="actionLoading.aggregate || hasAggregationRunning" class="space-y-4 py-4">
+      <div class="text-center mb-4">
+        <UIcon name="i-heroicons-sparkles" class="w-8 h-8 mx-auto mb-2 text-primary-500 animate-pulse" />
+        <p class="text-gray-600 dark:text-gray-400 font-medium">正在生成分析报告...</p>
+        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">实体归一化和观点归一化正在并行处理</p>
+      </div>
+
+      <!-- 实体归一化状态 -->
+      <div class="flex items-center gap-2 p-2 border rounded-lg bg-blue-50 dark:bg-blue-900/20">
+        <UIcon name="i-heroicons-cube" class="w-4 h-4 text-blue-500" />
+        <span class="text-sm font-medium">实体归一化</span>
+        <UBadge
+          v-if="entityNormalizationTask"
+          :color="entityNormalizationTask.status === 'completed' ? 'success' : 'primary'"
+          size="xs"
+        >
+          {{ entityNormalizationTask.status === 'completed' ? '已完成' : '分析中' }}
+        </UBadge>
+        <UBadge v-else color="neutral" size="xs">等待中</UBadge>
+        <UIcon
+          v-if="entityNormalizationTask && entityNormalizationTask.status !== 'completed'"
+          name="i-heroicons-arrow-path"
+          class="w-3 h-3 animate-spin text-blue-500"
+        />
+      </div>
+
+      <!-- 观点归一化状态 -->
+      <div class="flex items-center gap-2 p-2 border rounded-lg bg-purple-50 dark:bg-purple-900/20">
+        <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-4 h-4 text-purple-500" />
+        <span class="text-sm font-medium">观点归一化</span>
+        <UBadge
+          v-if="opinionNormalizationTask"
+          :color="opinionNormalizationTask.status === 'completed' ? 'success' : 'secondary'"
+          size="xs"
+        >
+          {{ opinionNormalizationTask.status === 'completed' ? '已完成' : '分析中' }}
+        </UBadge>
+        <UBadge v-else color="neutral" size="xs">等待中</UBadge>
+        <UIcon
+          v-if="opinionNormalizationTask && opinionNormalizationTask.status !== 'completed'"
+          name="i-heroicons-arrow-path"
+          class="w-3 h-3 animate-spin text-purple-500"
+        />
+      </div>
+    </div>
+
     <!-- 加载状态 -->
-    <div v-if="analysisResultLoading" class="text-center py-12">
+    <div v-else-if="analysisResultLoading" class="text-center py-12">
       <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto mb-3 text-gray-400" />
       <p class="text-gray-500 dark:text-gray-400">加载报告中...</p>
     </div>

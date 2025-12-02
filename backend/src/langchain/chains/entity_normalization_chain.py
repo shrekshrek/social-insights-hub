@@ -35,14 +35,14 @@ ENTITY_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位专业的实体归一化�
 - 品牌和其产品（如"小米"和"小米手机"是不同实体）
 
 ## 输入格式
-实体列表，每个实体包含：name（名称）、type（类型：品牌/产品/服务/人物/其他）、heat（热度）、mentions（提及数）
+实体列表，每个实体包含：name（名称）、type（类型：品牌/产品/服务/人物/其他）、score（重要度，综合考虑影响力和讨论广泛性）
 
 ## 输出格式
 ```json
 {{
   "normalized_groups": [
     {{
-      "canonical_name": "代表性名称（选择热度最高或最规范的名称）",
+      "canonical_name": "代表性名称（选择重要度最高或最规范的名称）",
       "type": "实体类型",
       "merged_entities": ["被合并的原始实体名称列表，包含canonical_name自身"]
     }}
@@ -53,7 +53,7 @@ ENTITY_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位专业的实体归一化�
 
 ## 注意事项
 1. **保守合并**：只有确定是同义/近义时才合并，不确定的保持独立
-2. **保留热度高的实体**：合并时优先选择热度高的名称作为canonical_name
+2. **保留重要度高的实体**：合并时优先选择重要度高的名称作为canonical_name
 3. **类型必须一致**：不同类型的实体绝不能合并
 4. **处理所有输入实体**：确保每个输入实体都出现在输出中（要么在merged_entities，要么在standalone_entities）
 
@@ -91,13 +91,13 @@ def format_entities_for_normalization(entities: list[dict[str, Any]]) -> str:
     """格式化实体列表用于归一化
 
     Args:
-        entities: 实体列表，每个包含 name, type, heat, mentions 字段
+        entities: 实体列表，每个包含 name, type, score 字段
 
     Returns:
         str: 格式化后的实体列表字符串
     """
     return "\n".join([
-        f"- {e['name']} (类型: {e.get('type', '其他')}, 热度: {e.get('heat', 0):.1f}, 提及: {e.get('mentions', 0)})"
+        f"- {e['name']} (类型: {e.get('type', '其他')}, 重要度: {e.get('score', 0):.1f})"
         for e in entities
     ])
 

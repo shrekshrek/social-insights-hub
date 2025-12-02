@@ -15,8 +15,6 @@ aggregated_opinions 是后续 insights 分析的核心数据来源。
 """
 
 import logging
-import math
-from difflib import SequenceMatcher
 from typing import Any
 from collections import defaultdict
 
@@ -26,42 +24,17 @@ from src.langchain.chains.category_normalization_chain import (
     parse_category_normalization_response,
 )
 from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
+from src.social_media.analysis.celery_tasks.aggregation.utils import (
+    calculate_score,
+    build_similarity_mapping,
+)
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Category 名称处理工具函数
-# ============================================================================
-
-def _normalize_category_name(name: str) -> str:
-    """标准化 category 名称（小写、去空格）"""
-    return name.lower().strip()
-
-
-def _are_similar_categories(name1: str, name2: str, threshold: float = 0.8) -> bool:
-    """判断两个 category 名称是否相似（用于合并）
-
-    默认阈值 0.8：适中的合并策略
-    - 会合并: "价格" vs "价格问题", "性能" vs "性能表现"
-    - 不会合并: "价格" vs "定价"（需要 LLM 处理）
-    """
-    n1 = _normalize_category_name(name1)
-    n2 = _normalize_category_name(name2)
-    return SequenceMatcher(None, n1, n2).ratio() >= threshold
-
-
-# ============================================================================
 # Category 映射构建（程序相似度 + LLM同义词）
 # ============================================================================
-
-def _calculate_score(heat: float, mentions: int) -> float:
-    """计算综合评分：heat × log(mentions + 1)
-
-    综合考虑影响力（heat）和讨论广泛性（mentions）
-    """
-    return heat * math.log(mentions + 1)
-
 
 def _collect_raw_categories(posts_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """从 posts_data 收集所有原始 category 名称（去重，带提及数和热度）
@@ -114,41 +87,10 @@ def _collect_raw_categories(posts_data: list[dict[str, Any]]) -> list[dict[str, 
             "type": "话题",
             "mentions": data["mentions"],
             "heat": round(data["heat"], 1),
-            "score": round(_calculate_score(data["heat"], data["mentions"]), 1),
+            "score": round(calculate_score(data["heat"], data["mentions"]), 1),
         }
         for name, data in category_data.items()
     ]
-
-
-def _build_similarity_mapping(raw_categories: list[dict], threshold: float = 0.8) -> dict[str, str]:
-    """构建程序相似度映射（相似度 >= threshold 合并）
-
-    Returns:
-        dict: {原始名称: 标准名称}
-    """
-    name_mapping: dict[str, str] = {}
-    canonical_list: list[str] = []
-
-    # 按综合评分排序，高评分词优先成为标准名称
-    sorted_categories = sorted(raw_categories, key=lambda x: x.get("score", 0), reverse=True)
-
-    for item in sorted_categories:
-        name = item["name"]
-
-        # 检查是否与已有标准名称相似
-        matched_canonical = None
-        for canonical in canonical_list:
-            if _are_similar_categories(name, canonical, threshold):
-                matched_canonical = canonical
-                break
-
-        if matched_canonical:
-            name_mapping[name] = matched_canonical
-        else:
-            name_mapping[name] = name
-            canonical_list.append(name)
-
-    return name_mapping
 
 
 def _build_llm_mapping(
@@ -272,7 +214,7 @@ def build_category_mapping(
         return {}, None
 
     # 2. 程序相似度映射
-    similarity_mapping = _build_similarity_mapping(raw_categories)
+    similarity_mapping = build_similarity_mapping(raw_categories)
     after_similarity_count = len(set(similarity_mapping.values()))
     similarity_merged = raw_count - after_similarity_count
 
@@ -464,7 +406,7 @@ def aggregate_opinions(
 
         # 计算综合评分
         heat = round(data["total_cii"], 1)
-        score = round(_calculate_score(data["total_cii"], mentions), 1)
+        score = round(calculate_score(data["total_cii"], mentions), 1)
 
         # 构建完整融合数据（数组格式）
         opinion_dict = {

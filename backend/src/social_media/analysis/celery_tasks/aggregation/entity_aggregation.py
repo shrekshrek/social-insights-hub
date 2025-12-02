@@ -13,8 +13,6 @@ aggregated_entities 是后续 insights 和 charts 分析的核心数据来源。
 """
 
 import logging
-import math
-from difflib import SequenceMatcher
 from typing import Any
 from collections import defaultdict
 
@@ -24,6 +22,12 @@ from src.langchain.chains.entity_normalization_chain import (
     parse_normalization_response,
 )
 from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
+from src.social_media.analysis.celery_tasks.aggregation.utils import (
+    calculate_score,
+    normalize_name,
+    are_similar,
+    build_similarity_mapping,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,28 +36,11 @@ logger = logging.getLogger(__name__)
 # 实体名称处理工具函数
 # ============================================================================
 
-def _normalize_entity_name(name: str) -> str:
-    """标准化实体名称（小写、去空格）"""
-    return name.lower().strip()
-
-
-def _are_similar_entities(name1: str, name2: str, threshold: float = 0.8) -> bool:
-    """判断两个实体名称是否相似（用于合并）
-
-    默认阈值 0.8：适中的合并策略
-    - 会合并: "甲醛检测" vs "甲醛检测服务", "iPhone16" vs "iPhone 16"
-    - 不会合并: "华为" vs "Huawei"（需要 LLM 处理）
-    """
-    n1 = _normalize_entity_name(name1)
-    n2 = _normalize_entity_name(name2)
-    return SequenceMatcher(None, n1, n2).ratio() >= threshold
-
-
 def _contains_keyword(entity_name: str, keywords: list[str]) -> bool:
     """检查实体名称是否包含任一关键词（忽略大小写）"""
-    normalized_name = _normalize_entity_name(entity_name)
+    normalized_name = normalize_name(entity_name)
     for keyword in keywords:
-        normalized_keyword = _normalize_entity_name(keyword)
+        normalized_keyword = normalize_name(keyword)
         if normalized_keyword in normalized_name or normalized_name in normalized_keyword:
             return True
     return False
@@ -79,9 +66,9 @@ def classify_entity_role(
     if _contains_keyword(entity_name, task_keywords):
         return "target"
 
-    normalized_name = _normalize_entity_name(entity_name)
+    normalized_entity = normalize_name(entity_name)
     for comp_name in competitor_names:
-        if _are_similar_entities(normalized_name, comp_name, threshold=0.8):
+        if are_similar(normalized_entity, comp_name, threshold=0.8):
             return "competitor"
 
     return "other"
@@ -100,7 +87,7 @@ def extract_competitor_names(
             competitors = data.get("competitors", {})
             for comp in competitors.keys():
                 if comp:
-                    competitor_names.add(_normalize_entity_name(comp))
+                    competitor_names.add(normalize_name(comp))
 
     return competitor_names
 
@@ -224,14 +211,6 @@ def _collect_raw_entities_full(posts_data: list[dict[str, Any]]) -> tuple[dict[s
     return raw_entity_data, post_cii_map
 
 
-def _calculate_score(heat: float, mentions: int) -> float:
-    """计算综合评分：heat × log(mentions + 1)
-
-    综合考虑影响力（heat）和讨论广泛性（mentions）
-    """
-    return heat * math.log(mentions + 1)
-
-
 def _extract_for_llm(raw_entity_data: dict[str, dict]) -> list[dict[str, Any]]:
     """从原始实体数据中提取 LLM 归一化所需的信息
 
@@ -246,41 +225,10 @@ def _extract_for_llm(raw_entity_data: dict[str, dict]) -> list[dict[str, Any]]:
             "type": data["type"],
             "mentions": len(data["post_ids"]),
             "heat": round(data["heat"], 1),
-            "score": round(_calculate_score(data["heat"], len(data["post_ids"])), 1),
+            "score": round(calculate_score(data["heat"], len(data["post_ids"])), 1),
         }
         for data in raw_entity_data.values()
     ]
-
-
-def _build_similarity_mapping(raw_entities: list[dict], threshold: float = 0.8) -> dict[str, str]:
-    """构建程序相似度映射（相似度 >= threshold 合并）
-
-    Returns:
-        dict: {原始名称: 标准名称}
-    """
-    name_mapping: dict[str, str] = {}
-    canonical_list: list[str] = []  # 已确定的标准名称
-
-    # 按综合评分排序，高分优先成为标准名称
-    sorted_entities = sorted(raw_entities, key=lambda x: x.get("score", 0), reverse=True)
-
-    for entity in sorted_entities:
-        name = entity["name"]
-
-        # 检查是否与已有标准名称相似（复用 _are_similar_entities）
-        matched_canonical = None
-        for canonical in canonical_list:
-            if _are_similar_entities(name, canonical, threshold):
-                matched_canonical = canonical
-                break
-
-        if matched_canonical:
-            name_mapping[name] = matched_canonical
-        else:
-            name_mapping[name] = name
-            canonical_list.append(name)
-
-    return name_mapping
 
 
 def _build_llm_mapping(
@@ -408,7 +356,7 @@ def build_entity_name_mapping(
         return {}, None
 
     # 程序相似度映射
-    similarity_mapping = _build_similarity_mapping(raw_entities)
+    similarity_mapping = build_similarity_mapping(raw_entities)
     after_similarity_count = len(set(similarity_mapping.values()))
     similarity_merged = raw_count - after_similarity_count
 
@@ -637,7 +585,7 @@ def aggregate_entities(
         top_expectations = sorted(data["expectations"].items(), key=lambda x: len(x[1]), reverse=True)[:5]
 
         heat = round(data["total_cii"], 1)
-        score = round(_calculate_score(data["total_cii"], mentions), 1)
+        score = round(calculate_score(data["total_cii"], mentions), 1)
 
         result = {
             "name": data["name"],
@@ -690,7 +638,7 @@ def aggregate_entities(
             derived_sentiment = round(data["sentiment_weighted_sum"] / data["total_cii"], 2)
 
         heat = round(data["total_cii"], 1)
-        score = round(_calculate_score(data["total_cii"], mentions), 1)
+        score = round(calculate_score(data["total_cii"], mentions), 1)
 
         entity_dict = {
             "name": data["name"],

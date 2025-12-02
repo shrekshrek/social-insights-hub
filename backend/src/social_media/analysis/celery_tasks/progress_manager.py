@@ -104,12 +104,18 @@ class AnalysisProgressManager:
             current_count = self.redis_client.incrby(self.key_analyzed, count)
 
             # 2. 追加调用详情到列表（一次API调用记录一条）
+            input_tokens = token_stats.get('input_tokens', 0)
+            output_tokens = token_stats.get('output_tokens', 0)
+            total_tokens = token_stats.get('total_tokens', 0)
+            cost_cny = token_stats.get('total_cost_cny', 0.0)
+            duration_seconds = token_stats.get('duration_seconds', 0.0)
+
             call_detail = {
-                "input_tokens": token_stats['input_tokens'],
-                "output_tokens": token_stats['output_tokens'],
-                "total_tokens": token_stats['total_tokens'],
-                "cost_cny": token_stats['total_cost_cny'],
-                "duration_seconds": token_stats['duration_seconds'],
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "cost_cny": cost_cny,
+                "duration_seconds": duration_seconds,
                 "batch_size": count,  # 记录本批次处理了多少条
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -118,19 +124,19 @@ class AnalysisProgressManager:
             # 3. 累积Token统计（使用Hash）- API调用次数只加1
             self.redis_client.hincrby(self.key_token_usage, "total_calls", 1)
             self.redis_client.hincrbyfloat(
-                self.key_token_usage, "total_input_tokens", token_stats['input_tokens']
+                self.key_token_usage, "total_input_tokens", input_tokens
             )
             self.redis_client.hincrbyfloat(
-                self.key_token_usage, "total_output_tokens", token_stats['output_tokens']
+                self.key_token_usage, "total_output_tokens", output_tokens
             )
             self.redis_client.hincrbyfloat(
-                self.key_token_usage, "total_tokens", token_stats['total_tokens']
+                self.key_token_usage, "total_tokens", total_tokens
             )
             self.redis_client.hincrbyfloat(
-                self.key_token_usage, "total_cost_cny", token_stats['total_cost_cny']
+                self.key_token_usage, "total_cost_cny", cost_cny
             )
             self.redis_client.hincrbyfloat(
-                self.key_token_usage, "total_duration_seconds", token_stats['duration_seconds']
+                self.key_token_usage, "total_duration_seconds", duration_seconds
             )
 
             # 4. 检查是否需要批量同步到DB
@@ -320,13 +326,19 @@ class AnalysisProgressManager:
             if analysis_job:
                 current_usage = analysis_job.token_usage or {"summary": {}, "call_details": []}
 
+                input_tokens = token_stats.get('input_tokens', 0)
+                output_tokens = token_stats.get('output_tokens', 0)
+                total_tokens = token_stats.get('total_tokens', 0)
+                cost_cny = token_stats.get('total_cost_cny', 0.0)
+                duration_seconds = token_stats.get('duration_seconds', 0.0)
+
                 new_call_detail = {
                     "call_index": len(current_usage.get("call_details", [])),
-                    "input_tokens": token_stats['input_tokens'],
-                    "output_tokens": token_stats['output_tokens'],
-                    "total_tokens": token_stats['total_tokens'],
-                    "cost_cny": token_stats['total_cost_cny'],
-                    "duration_seconds": token_stats['duration_seconds'],
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": total_tokens,
+                    "cost_cny": cost_cny,
+                    "duration_seconds": duration_seconds,
                     "batch_size": count,
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
@@ -334,11 +346,11 @@ class AnalysisProgressManager:
 
                 summary = current_usage.setdefault("summary", {})
                 summary["total_calls"] = summary.get("total_calls", 0) + 1  # 一次API调用
-                summary["total_input_tokens"] = summary.get("total_input_tokens", 0) + token_stats['input_tokens']
-                summary["total_output_tokens"] = summary.get("total_output_tokens", 0) + token_stats['output_tokens']
-                summary["total_tokens"] = summary.get("total_tokens", 0) + token_stats['total_tokens']
-                summary["total_cost_cny"] = summary.get("total_cost_cny", 0.0) + token_stats['total_cost_cny']
-                summary["total_duration_seconds"] = summary.get("total_duration_seconds", 0.0) + token_stats['duration_seconds']
+                summary["total_input_tokens"] = summary.get("total_input_tokens", 0) + input_tokens
+                summary["total_output_tokens"] = summary.get("total_output_tokens", 0) + output_tokens
+                summary["total_tokens"] = summary.get("total_tokens", 0) + total_tokens
+                summary["total_cost_cny"] = summary.get("total_cost_cny", 0.0) + cost_cny
+                summary["total_duration_seconds"] = summary.get("total_duration_seconds", 0.0) + duration_seconds
 
                 if summary["total_calls"] > 0:
                     summary["avg_tokens_per_call"] = summary["total_tokens"] / summary["total_calls"]

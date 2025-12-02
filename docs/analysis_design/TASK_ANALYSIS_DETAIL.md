@@ -114,6 +114,37 @@ graph TD
 ### 4.3 实体聚合与主体过滤 (Entity Aggregation & Subject Filtering) [关键分水岭]
 为了防止"竞品好评"被误算为"本品好评"，在此处进行实体聚合与清洗。后续所有分析基于清洗后的数据。
 
+#### 4.3.0 共享工具模块 (Shared Utils)
+
+实体聚合和观点聚合共用一套工具函数，位于 `aggregation/utils.py`：
+
+```python
+# 综合评分计算：结合影响力(heat)和讨论广泛性(mentions)
+def calculate_score(heat: float, mentions: int) -> float:
+    return heat * math.log(mentions + 1)
+
+# 名称归一化：去除空格、转小写
+def normalize_name(name: str) -> str:
+    return re.sub(r"\s+", "", name.lower())
+
+# 相似度判断：支持完全包含和字符相似度
+def are_similar(name1: str, name2: str, threshold: float = 0.8) -> bool:
+    n1 = normalize_name(name1)
+    n2 = normalize_name(name2)
+    if n1 == n2: return True
+    if n1 in n2 or n2 in n1: return True
+    return SequenceMatcher(None, n1, n2).ratio() >= threshold
+
+# 构建相似度映射：按 score 排序，高分优先成为标准名称
+def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[str, str]:
+    ...
+```
+
+**设计优势**：
+- 代码复用：避免实体/观点模块重复实现
+- 逻辑一致：确保归一化规则统一
+- 易于维护：单点修改影响全局
+
 *   **设计理念：只按 canonical_name 分组，情感派生计算**
     *   **观点 vs 实体的本质区别**：
         *   观点的情感是**独立维度**：同一话题的正面/负面观点是对立声音（如"价格实惠" vs "价格太贵"），必须分开统计。
@@ -160,10 +191,12 @@ graph TD
         *   `post_sources`: 从帖子原文提取该实体的帖子ID集合。
         *   `comment_sources`: 从评论提取该实体的帖子ID集合。
         *   用于分析"博主观点"与"大众观点"的差异。
-    4.  **双重加权**：
+    4.  **三重指标与综合评分**：
         *   **Heat (热度)**：$\sum CII_p$（每帖只贡献一次，避免重复累加）。
         *   **Mentions (频次)**：$Count(Unique\_Posts)$（唯一帖子数）。
-        *   *策略*：排序时优先使用 `Heat`，但需保留 `Mentions` 辅助判断"偶然爆款"与"普遍共识"。
+        *   **Score (综合评分)**：$Heat \times \log(Mentions + 1)$
+        *   *策略*：排序统一使用 `Score`，综合考虑影响力（Heat）和讨论广泛性（Mentions）。
+        *   *设计意图*：避免"偶然爆款"（高 Heat 低 Mentions）压过"普遍共识"（中 Heat 高 Mentions）。
     5.  **维度聚合**：
         *   对 `features`, `issues`, `expectations`, `audience`, `scenarios`, `market_factors`, `competitors` 七个维度分别记录来源帖子ID。
         *   每个维度项记录包含该信息的帖子ID集合，支持追溯。
@@ -179,10 +212,11 @@ graph TD
 *   **输出结构**：
     ```python
     return {
-        "top_entities": [...],        # 热度排名前N的实体列表（展示用）
-        "target_entities": [...],     # 本品实体列表
-        "competitor_entities": [...], # 竞品实体列表
-        "aggregated_entities": {...}, # 完整融合数据（用于项目级分析和派生计算）
+        "top_entities": [...],        # 综合评分排名前N的实体列表（展示用，按 score 排序）
+        "target_entities": [...],     # 本品实体列表（按 score 排序）
+        "competitor_entities": [...], # 竞品实体列表（按 score 排序）
+        "aggregated_entities": [...], # 完整融合数据（数组格式，用于项目级分析和派生计算）
+        "llm_token_stats": {...},     # LLM token 使用统计（如果调用了 LLM）
     }
     ```
 
@@ -218,9 +252,10 @@ graph TD
 *   **输出结构**：
     ```python
     return {
-        "top_issues": [...],           # 热门问题（负面观点，按热度排序）
-        "top_features": [...],         # 热门特性（正面观点，按热度排序）
-        "aggregated_opinions": {...},  # 完整融合数据（用于项目级分析）
+        "top_issues": [...],           # 热门问题（负面观点，按 score 排序）
+        "top_features": [...],         # 热门特性（正面观点，按 score 排序）
+        "aggregated_opinions": [...],  # 完整融合数据（数组格式，用于项目级分析）
+        "llm_token_stats": {...},      # LLM token 使用统计（如果调用了 LLM）
     }
     ```
 
@@ -230,12 +265,14 @@ graph TD
         "topic": str,                    # 话题类别
         "heat": float,                   # 热度（CII累加）
         "mentions": int,                 # 唯一帖子数
+        "score": float,                  # 综合评分 = heat × log(mentions + 1)
         "sentiment": int,                # 情感值 (-1, 0, 1)
         "source_distribution": {         # 来源分布
             "post": float,               # 帖子来源占比
             "comment": float             # 评论来源占比
         },
         "top_opinions": [str, ...],      # 热门观点列表（Top 3）
+        "post_ids": [int, ...],          # 帖子ID列表（用于追溯）
     }
     ```
 
@@ -327,21 +364,21 @@ graph TD
 
 #### 4.6.2 KANO 需求分层派生 (classify_kano_model)
 
-从 `target_entities` 和 `opinion_stats` 派生 KANO 分类：
+从 `aggregated_opinions` 派生 KANO 分类：
 
-*   **输入**：
-    - `target_entities`：本品实体列表（含 issues, features, expectations）
-    - `opinion_stats`：观点统计（top_issues, top_features）
+*   **输入**：`opinions_data`（包含 `top_issues` 和 `top_features`）
+*   **数据源说明**：只使用话题级别的观点数据，与"热门观点"保持一致
 *   **分类规则**：
-    - **基本型 (Must-be)**：高频痛点
-        - 来源：`issues` + `negative opinions`
-        - 条件：`mentions >= 3` 且 `sentiment < -0.3`
-    - **兴奋型 (Attractive)**：惊喜功能
-        - 来源：`features` + `positive opinions`
-        - 条件：`mentions <= 5` 且 `heat > 平均heat` 且 `sentiment > 0.5`
-    - **期望型 (One-dimensional)**：改进期望
-        - 来源：`expectations`
-        - 条件：`mentions >= 2`
+    - **基本型 (Must-be)**：普遍痛点
+        - 来源：`top_issues`（负面观点）
+        - 条件：`mentions >= 3`
+    - **兴奋型 (Attractive)**：稀缺惊喜
+        - 来源：`top_features`（正面观点）
+        - 条件：`mentions < 3` 且 `heat >= 中位数(50%)`
+    - **期望型 (One-dimensional)**：普遍愿望
+        - 来源：`top_features`（正面观点）
+        - 条件：`mentions >= 3`
+*   **设计调整**：热度阈值从 70% 降至 50%，确保有足够的兴奋型需求被识别
 
 #### 4.6.3 竞品分析派生 (analyze_competition)
 
@@ -450,7 +487,7 @@ graph TD
     "avg_age_days": 15.5 // 平均发布天数
   },
   "insights": {
-    // 实体排行（只按名称分组，情感为派生值）
+    // 实体排行（只按名称分组，情感为派生值，按 score 排序）
     "top_entities": [
       {
         "name": "iPhone 16",
@@ -458,38 +495,44 @@ graph TD
         "role": "target",           // target / competitor / other
         "heat": 4500,               // Σ CII (去重后)
         "mentions": 15,             // 唯一帖子数
+        "score": 12532.5,           // 综合评分 = heat × log(mentions + 1)
         "sentiment": 0.35,          // 派生情感值 [-1, 1]，CII 加权
         "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
         "source_distribution": {"post": 0.3, "comment": 0.7},
         "top_features": ["外观好看", "拍照清晰", "续航持久"],
         "top_issues": ["发热严重", "价格高"],
-        "top_expectations": ["降价", "改善散热"]
+        "top_expectations": ["降价", "改善散热"],
+        "post_ids": [101, 102, 103, 105, 108]  // 帖子ID列表（用于追溯）
       }
     ],
-    "target_entities": [...],     // 本品实体列表
-    "competitor_entities": [...], // 竞品实体列表
+    "target_entities": [...],     // 本品实体列表（按 score 排序）
+    "competitor_entities": [...], // 竞品实体列表（按 score 排序）
 
-    // 观点排行（按 category+sentiment 分组）
+    // 观点排行（按 category+sentiment 分组，按 score 排序）
     "top_issues": [
       {
         "topic": "价格",
         "sentiment": -1,            // 固定情感值 (-1, 0, 1)
         "heat": 4500,
         "mentions": 15,
+        "score": 12532.5,           // 综合评分 = heat × log(mentions + 1)
         "source_distribution": {"post": 0.2, "comment": 0.8}, // 80% 来自评论，说明是用户痛点而非博主痛点
-        "top_opinions": ["普遍认为定价过高", "不值这个价", "性价比低"]  // 热门观点列表
+        "top_opinions": ["普遍认为定价过高", "不值这个价", "性价比低"],  // 热门观点列表
+        "post_ids": [101, 102, 105, 108]  // 帖子ID列表（用于追溯）
       },
       {
         "topic": "发热",
         "sentiment": -1,
         "heat": 3200,
         "mentions": 12,
+        "score": 8191.2,
         "source_distribution": {"post": 0.5, "comment": 0.5},
-        "top_opinions": ["玩游戏时背部烫手", "充电发烫"]
+        "top_opinions": ["玩游戏时背部烫手", "充电发烫"],
+        "post_ids": [103, 105, 108]
       }
     ],
     "top_features": [
-      {"topic": "外观", "sentiment": 1, "heat": 5000, "mentions": 20, "top_opinions": ["紫色版本很惊艳", "手感细腻"]}
+      {"topic": "外观", "sentiment": 1, "heat": 5000, "mentions": 20, "score": 15197.5, "top_opinions": ["紫色版本很惊艳", "手感细腻"], "post_ids": [101, 102, 103]}
     ],
     "context_analysis": {
       "scenarios": [
@@ -551,10 +594,9 @@ graph TD
     ]
   },
 
-  // 完整融合数据（用于项目级再分析）
-  // key 格式: canonical_name（只按实体名称分组）
-  "aggregated_entities": {
-    "iphone": {  // 只按名称分组，不按情感分组
+  // 完整融合数据（数组格式，按 score 排序，用于项目级再分析）
+  "aggregated_entities": [
+    {
       "name": "iPhone 16",
       "canonical_name": "iphone",
       "type": "产品",
@@ -562,9 +604,11 @@ graph TD
       "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
       "heat": 4500,
       "mentions": 15,
+      "score": 12532.5,            // 综合评分 = heat × log(mentions + 1)
       "post_source_count": 5,
       "comment_source_count": 10,
       "post_ids": [101, 102, 103, 105, 108],
+      "merged_from": ["iphone 16", "iPhone16"],  // 合并来源（如果有归一化）
       // 实体维度信息（带帖子追溯，用于项目级再融合）
       "features": [  // 天然正面
         {"text": "外观好看", "post_ids": [101, 102, 105]},
@@ -589,27 +633,51 @@ graph TD
         {"text": "华为", "post_ids": [103, 105]}
       ]
     }
-  },
-  "aggregated_opinions": {
-    "价格|-1": {
+  ],
+  "aggregated_opinions": [
+    {
       "category": "价格",
+      "canonical_category": "价格",
       "sentiment": -1,
       "heat": 4500,
       "mentions": 15,
+      "score": 12532.5,            // 综合评分 = heat × log(mentions + 1)
       "post_source_count": 3,
       "comment_source_count": 12,
       "post_ids": [101, 102, 105, 108],
+      "merged_from": ["价格", "定价", "售价"],  // 合并来源（如果有归一化）
       "opinions": [  // 全部观点（带帖子追溯，用于项目级再融合）
         {"text": "定价过高", "post_ids": [101, 102, 105]},
         {"text": "不值这个价", "post_ids": [102, 108]},
         {"text": "性价比低", "post_ids": [105]}
       ]
     }
-  }
+  ]
 }
 ```
 
-## 6. 开发实现建议
+## 6. 前端报告布局
+
+分析报告的展示顺序经过优化，按用户关注度和数据依赖关系排列：
+
+```
+1. 热门观点（问题 vs 特性）  -- 用户最关注的核心洞察
+2. KANO 需求分层             -- 基于观点数据的派生分析
+3. 热门实体                  -- 实体画像和维度信息
+4. 竞品分析                  -- 基于实体数据的对比分析
+5. 场景与人群画像            -- 基于实体数据的派生分析
+6. 高影响力内容 (KOL)        -- 关键意见领袖
+7. 情感-互动四象限           -- 可视化分析
+8. 时间分布                  -- 数据时效性
+```
+
+**设计原则**：
+- 观点优先：用户最想了解的是"大家怎么说"
+- KANO 紧随观点：因为 KANO 分类直接基于观点数据
+- 实体次之：实体画像提供更深入的结构化分析
+- 竞品/场景人群最后：这些是派生分析，依赖实体数据
+
+## 7. 开发实现建议
 
 1.  **参数透传**：确保 `time_range` 参数能从 API 传到 Celery Coordinator。
 2.  **时间筛选**：在 `Coordinator` 分发子任务时，根据 `time_range` 过滤 `post_ids`。
@@ -620,3 +688,7 @@ graph TD
     *   实现 KANO 分类逻辑。
     *   实现营销渗透率计算。
 4.  **Prompt 优化**：修改评论提取 Prompt，支持传入 `summary` 而非 `full_text`。
+5.  **代码规范**：
+    *   共享工具函数统一放在 `aggregation/utils.py`
+    *   所有排序统一使用 `score` 字段
+    *   LLM 归一化和程序归一化并行执行，提高效率

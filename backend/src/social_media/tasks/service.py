@@ -210,6 +210,8 @@ async def process_json_upload(
                 # 使用适配器转换并验证
                 transformed = adapter.transform_post(raw_data)
                 adapter.validate_post(transformed)
+                # 规范化内容字段
+                transformed = adapter.normalize_content(transformed)
             else:
                 # 直接使用原始数据（假设已是统一格式）
                 transformed = raw_data
@@ -220,6 +222,9 @@ async def process_json_upload(
                         f"Platform '{platform_code}' has no adapter. "
                         f"Data keys: {list(raw_data.keys())[:10]}"
                     )
+            # 如果 content 为空则跳过不存入
+            if not transformed.get("content"):
+                continue
             posts_data.append(transformed)
 
         created_posts = await crud.create_posts_bulk(

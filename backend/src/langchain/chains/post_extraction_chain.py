@@ -63,7 +63,7 @@ POST_EXTRACTION_SYSTEM_TEMPLATE = """你是舆情分析专家，从社交媒体�
   "summary": ""
 }}
 
-只输出JSON，无额外文本。
+只输出JSON，不要有其他文字。
 """
 
 POST_EXTRACTION_USER_TEMPLATE = """请提取以下文本的品牌/产品信息和通用观点，并生成总结：

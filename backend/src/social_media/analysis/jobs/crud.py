@@ -220,10 +220,10 @@ async def get_analysis_progress(
             detail="You don't have access to this analysis job"
         )
 
-    # 计算进度
+    # 计算进度（限制最大100%）
     progress = 0.0
     if job.source_count > 0:
-        progress = (job.analyzed_count / job.source_count) * 100
+        progress = min((job.analyzed_count / job.source_count) * 100, 100.0)
 
     # 估算剩余时间
     estimated_time_remaining = None

@@ -255,7 +255,6 @@ export const useAnalysis = () => {
         method: 'POST',
       }
     )
-    showSuccess('分析报告生成成功')
     return result
   }
 

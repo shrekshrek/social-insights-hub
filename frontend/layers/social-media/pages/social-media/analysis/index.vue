@@ -53,6 +53,8 @@ const typeOptions = [
   { label: '帖子初筛', value: 'screening_posts' },
   { label: '帖子深度', value: 'deep_posts' },
   { label: '评论深度', value: 'deep_comments' },
+  { label: '实体归一化', value: 'entity_normalization' },
+  { label: '观点归一化', value: 'opinion_normalization' },
   { label: '主题聚类', value: 'topic_clustering' },
   { label: '竞品分析', value: 'competitive' },
 ]
@@ -102,6 +104,8 @@ const getAnalysisTypeLabel = (type: string) => {
     screening_posts: '帖子初筛',
     deep_posts: '帖子深度',
     deep_comments: '评论深度',
+    entity_normalization: '实体归一化',
+    opinion_normalization: '观点归一化',
     topic_clustering: '主题聚类',
     competitive: '竞品分析',
   }

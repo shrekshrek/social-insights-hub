@@ -261,13 +261,11 @@ def _build_llm_mapping(
 
     # 格式化输入内容
     formatted_input = format_entities_for_normalization(entities_list)
-    keywords_str = ", ".join(task_keywords) if task_keywords else "无"
 
     # 打印 LLM 输入
     print("\n" + "=" * 80)
     print("[实体归一化] LLM 输入内容")
     print("=" * 80)
-    print(f"任务关键词: {keywords_str}")
     print(f"输入实体数量: {len(entities_list)}")
     print("-" * 40)
     print(formatted_input)
@@ -278,7 +276,6 @@ def _build_llm_mapping(
     response, token_stats = invoke_chain_with_stats_sync(
         chain,
         {
-            "keywords": keywords_str,
             "entities": formatted_input,
         },
         llm_type="chat",

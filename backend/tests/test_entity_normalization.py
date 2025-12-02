@@ -86,13 +86,10 @@ def test_llm_normalization():
         {"name": "空气净化", "type": "服务", "heat": 40.0, "mentions": 50},
     ]
 
-    task_keywords = ["甲醛", "空气质量"]
-
     logger.info("=" * 60)
     logger.info("开始 LLM 实体归一化测试")
     logger.info("=" * 60)
     logger.info(f"输入实体数量: {len(test_entities)}")
-    logger.info(f"任务关键词: {task_keywords}")
 
     # 格式化输入
     formatted = format_entities_for_normalization(test_entities)
@@ -102,7 +99,6 @@ def test_llm_normalization():
     logger.info("\n调用 LLM 进行归一化...")
     chain = create_entity_normalization_chain()
     response = chain.invoke({
-        "keywords": ", ".join(task_keywords),
         "entities": formatted,
     })
 

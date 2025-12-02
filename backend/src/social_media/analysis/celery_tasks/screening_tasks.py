@@ -37,7 +37,7 @@ from src.langchain.chains.screening_chain import (
     create_screening_chain,
     format_posts_for_screening,
 )
-from src.social_media.analysis.celery_tasks.aggregator import calculate_cii
+from src.social_media.analysis.celery_tasks.aggregation import calculate_cii
 
 settings = get_settings()
 logger = logging.getLogger(__name__)

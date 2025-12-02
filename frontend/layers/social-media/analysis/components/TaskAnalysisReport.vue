@@ -465,6 +465,24 @@ const getConflictDirectionLabel = (direction: string) => {
             <span class="text-gray-500 dark:text-gray-400">中性 {{ entity.sentiment_distribution.neutral }}</span>
             <span class="text-red-600 dark:text-red-400">负面 {{ entity.sentiment_distribution.negative }}</span>
           </div>
+          <!-- 归一化信息（别名、关联实体） -->
+          <div v-if="entity.normalized_info" class="mt-2 space-y-1 text-xs">
+            <div v-if="entity.normalized_info.aliases?.length" class="flex flex-wrap items-baseline gap-x-2">
+              <span class="text-gray-400 dark:text-gray-500 shrink-0">别名:</span>
+              <span v-for="alias in entity.normalized_info.aliases.slice(0, 3)" :key="alias" class="text-gray-500 dark:text-gray-400">{{ alias }}</span>
+            </div>
+            <div v-if="entity.normalized_info.related?.length" class="flex flex-wrap items-baseline gap-x-2">
+              <span class="text-gray-400 dark:text-gray-500 shrink-0">关联:</span>
+              <span v-for="rel in entity.normalized_info.related.slice(0, 3)" :key="rel" class="text-indigo-500 dark:text-indigo-400">{{ rel }}</span>
+            </div>
+            <div v-if="entity.normalized_info.merged_from?.length" class="flex flex-wrap items-baseline gap-x-2">
+              <UTooltip :text="`已合并 ${entity.normalized_info.merged_from.length} 个相似实体`">
+                <span class="text-gray-400 dark:text-gray-500 italic">
+                  (合并自: {{ entity.normalized_info.merged_from.slice(0, 2).join('、') }}{{ entity.normalized_info.merged_from.length > 2 ? '...' : '' }})
+                </span>
+              </UTooltip>
+            </div>
+          </div>
           <!-- 特性、问题和期望 -->
           <div v-if="entity.top_features?.length || entity.top_issues?.length || entity.top_expectations?.length" class="mt-2 space-y-1 text-xs">
             <div v-if="entity.top_features?.length" class="flex flex-wrap items-baseline gap-x-3">

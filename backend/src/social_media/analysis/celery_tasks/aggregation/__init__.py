@@ -1,23 +1,19 @@
-"""分析模块异步任务
+"""聚合分析子模块
 
-包含所有AI分析相关的Celery任务：
-- 任务级初筛任务（screening_tasks）
-- 任务级深度分析任务（deep_analysis_tasks）
-- 项目级聚类任务（clustering_tasks）
-- 项目级竞品分析任务（competitive_tasks）
+负责任务级分析结果的聚合、归一化和洞察派生。
 
-子模块：
-- aggregation/: 任务级分析聚合（实体聚合、观点聚合、指标计算、派生洞察）
+模块结构：
+- orchestrator.py: 主聚合函数 aggregate_task_analysis
+- entity_aggregation.py: 实体聚合与 LLM 归一化
+- opinion_aggregation.py: 观点聚合与 LLM 归一化
+- metrics.py: 基础指标计算（CII、NSR、SERP等）
+- insights.py: 派生洞察（KANO、场景人群、竞品、KOL）
 """
 
-from .aggregation import (
-    # Orchestrator
-    aggregate_task_analysis,
-    # Entity
-    aggregate_entities,
-    # Opinion
-    aggregate_opinions,
-    # Metrics
+from .orchestrator import aggregate_task_analysis
+from .entity_aggregation import aggregate_entities
+from .opinion_aggregation import aggregate_opinions
+from .metrics import (
     calculate_cii,
     calculate_cii_for_post,
     calculate_nsr,
@@ -25,7 +21,8 @@ from .aggregation import (
     calculate_marketing_density,
     calculate_sentiment_conflict,
     calculate_time_distribution,
-    # Insights
+)
+from .insights import (
     derive_context_analysis,
     classify_kano_model,
     analyze_competition,

@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""话题/Category 归一化 Chain
+
+对聚合后的观点话题（category）进行同义词合并，减少冗余。
+"""
+
+import json
+import logging
+from typing import Any
+
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
+
+from src.langchain.llm import get_llm
+
+logger = logging.getLogger(__name__)
+
+
+CATEGORY_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位专业的话题归一化专家，负责对从社交媒体舆情数据中提取的观点话题（category）进行同义词合并。
+
+## 任务目标
+识别并合并语义相同或高度相似的话题名称，减少冗余，提升分析报告的可读性。
+
+## 归一化规则
+
+### 可以合并的情况
+- 相同概念的不同表述（如"价格"="定价"="价格问题"）
+- 简称和完整表述（如"性能"="性能表现"）
+- 同一主题的不同说法（如"售后"="售后服务"="售后问题"）
+- 近义话题（如"外观"="颜值"="外观设计"）
+
+### 不能合并的情况
+- 相关但不同的话题（如"价格"和"性价比"是不同话题）
+- 上下位关系（如"质量"和"做工质量"可能需要区分）
+- 明显不同的主题（如"物流"和"包装"是不同话题）
+
+## 输入格式
+话题列表，每个话题包含：name（名称）、count（出现次数）
+
+## 输出格式
+```json
+{{
+  "normalized_groups": [
+    {{
+      "canonical_name": "代表性名称（选择出现次数最多或最简洁规范的名称）",
+      "merged_categories": ["被合并的原始话题名称列表，包含canonical_name自身"]
+    }}
+  ],
+  "standalone_categories": ["无法归一化的独立话题名称列表"]
+}}
+```
+
+## 注意事项
+1. **保守合并**：只有确定是同义/近义时才合并，不确定的保持独立
+2. **选择简洁名称**：合并时优先选择简洁、规范的名称作为canonical_name
+3. **处理所有输入话题**：确保每个输入话题都出现在输出中（要么在merged_categories，要么在standalone_categories）
+4. **保留高频话题**：合并时优先选择出现次数多的名称作为canonical_name
+
+只输出JSON，不要有其他文字。
+"""
+
+CATEGORY_NORMALIZATION_USER_TEMPLATE = """请对以下话题列表进行归一化处理：
+
+业务背景关键词：{keywords}
+
+话题列表：
+{categories}
+
+请输出归一化后的JSON结果。
+"""
+
+
+def create_category_normalization_chain() -> Runnable:
+    """创建话题归一化的LangChain链
+
+    Returns:
+        Runnable: 用于话题归一化的LangChain可执行链
+    """
+    llm = get_llm(llm_type="chat")
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", CATEGORY_NORMALIZATION_SYSTEM_TEMPLATE),
+        ("user", CATEGORY_NORMALIZATION_USER_TEMPLATE),
+    ])
+
+    return prompt | llm
+
+
+def format_categories_for_normalization(categories: list[dict[str, Any]]) -> str:
+    """格式化话题列表用于归一化
+
+    Args:
+        categories: 话题列表，每个包含 name, count 字段
+
+    Returns:
+        str: 格式化后的话题列表字符串
+    """
+    return "\n".join([
+        f"- {c['name']} (出现次数: {c.get('count', 0)})"
+        for c in categories
+    ])
+
+
+def parse_category_normalization_response(response_text: str) -> dict[str, Any]:
+    """解析LLM归一化响应
+
+    Args:
+        response_text: LLM返回的文本
+
+    Returns:
+        dict: 包含 normalized_groups, standalone_categories, category_mapping
+    """
+    # 清理可能的 markdown 代码块
+    if "```json" in response_text:
+        response_text = response_text.split("```json")[1].split("```")[0]
+    elif "```" in response_text:
+        response_text = response_text.split("```")[1].split("```")[0]
+
+    result = json.loads(response_text.strip())
+
+    # 构建话题映射表（原名称 -> 归一化名称）
+    category_mapping = {}
+    for group in result.get("normalized_groups", []):
+        canonical_name = group.get("canonical_name", "")
+        for merged in group.get("merged_categories", []):
+            category_mapping[merged] = canonical_name
+
+    for standalone in result.get("standalone_categories", []):
+        category_mapping[standalone] = standalone
+
+    result["category_mapping"] = category_mapping
+    return result

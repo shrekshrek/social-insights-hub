@@ -387,6 +387,15 @@ export interface SentimentDistribution {
   neutral: number
 }
 
+/** 实体归一化信息 */
+export interface EntityNormalizedInfo {
+  aliases: string[]           // 别名列表（被合并的同义名称）
+  parent: string | null       // 父级实体（上位概念）
+  children: string[]          // 子级实体（下位概念）
+  related: string[]           // 关联实体（语义相关但不同义）
+  merged_from: string[]       // 合并来源（被合并的原始实体名称）
+}
+
 /** 实体统计 */
 export interface EntityStat {
   name: string
@@ -401,6 +410,7 @@ export interface EntityStat {
   top_issues: string[]
   top_expectations: string[]
   post_ids: number[]  // 关联帖子ID，用于反向追溯
+  normalized_info?: EntityNormalizedInfo  // LLM 归一化信息（可选）
 }
 
 /** 观点统计 */

@@ -193,7 +193,7 @@ def derive_context_analysis(
 def classify_kano_model(
     opinions_data: dict[str, list[dict[str, Any]]],
     mentions_threshold: int = 3,
-    heat_threshold_percentile: float = 0.7,
+    heat_threshold_percentile: float = 0.5,
 ) -> dict[str, list[dict[str, Any]]]:
     """KANO 需求分层分类
 

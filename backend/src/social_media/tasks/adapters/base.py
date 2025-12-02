@@ -194,6 +194,28 @@ class PlatformAdapter(ABC):
             "raw_data": raw_data,
         }
 
+    def normalize_content(self, transformed: dict[str, Any]) -> dict[str, Any]:
+        """规范化内容字段
+
+        规则：
+        1. 当 raw_data.transcript.text 有值时，content = transcript.text
+        2. 当 title == content 时，清空 content
+        """
+        raw_data = transformed.get("raw_data")
+        if raw_data and isinstance(raw_data, dict):
+            transcript = raw_data.get("transcript")
+            if transcript and isinstance(transcript, dict):
+                transcript_text = transcript.get("text")
+                if transcript_text:
+                    transformed["content"] = transcript_text
+
+        title = transformed.get("title")
+        content = transformed.get("content")
+        if title and content and title == content:
+            transformed["content"] = None
+
+        return transformed
+
     def validate_post(self, transformed: dict[str, Any]) -> None:
         """验证转换后的帖子数据
 

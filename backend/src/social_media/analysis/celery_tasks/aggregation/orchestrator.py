@@ -313,18 +313,19 @@ def aggregate_task_analysis(
                 raise
 
     # 更新 AnalysisJob 记录
+    # 归一化是一次性任务，完成后 analyzed_count = source_count
     if entity_job:
         complete_analysis_job_sync(
             db=db,
             job=entity_job,
-            analyzed_count=len(entity_stats.get("aggregated_entities", [])),
+            analyzed_count=entity_job.source_count,
             token_usage=entity_stats.get("llm_token_stats"),
         )
     if opinion_job:
         complete_analysis_job_sync(
             db=db,
             job=opinion_job,
-            analyzed_count=len(opinion_stats.get("aggregated_opinions", [])),
+            analyzed_count=opinion_job.source_count,
             token_usage=opinion_stats.get("llm_token_stats"),
         )
 

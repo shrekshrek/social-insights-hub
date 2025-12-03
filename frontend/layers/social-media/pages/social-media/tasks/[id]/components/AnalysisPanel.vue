@@ -266,6 +266,8 @@ const handleGenerateReport = async () => {
     actionLoading.aggregate = false
     // 刷新历史记录以更新进度状态
     await refreshHistory()
+    // 聚合是同步完成的，需要显式停止轮询
+    stopPolling()
   }
 }
 

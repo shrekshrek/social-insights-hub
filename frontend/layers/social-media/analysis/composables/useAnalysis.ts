@@ -46,6 +46,8 @@ export const useAnalysis = () => {
           const p = unref(params) || {}
           return `analysis-jobs-${JSON.stringify(p)}`
         }),
+        // 禁用缓存，确保轮询时能获取最新数据
+        getCachedData: () => undefined,
       }
     )
   }
@@ -268,6 +270,8 @@ export const useAnalysis = () => {
       {
         key: computed(() => `task-aggregation-${unref(taskId)}`),
         silent404: true,
+        // 禁用缓存，确保能获取最新的聚合结果
+        getCachedData: () => undefined,
       }
     )
   }

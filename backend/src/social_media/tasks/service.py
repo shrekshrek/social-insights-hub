@@ -202,8 +202,8 @@ async def process_json_upload(
         task.started_at = datetime.now(timezone.utc)
         await db.flush()
 
-        # 6. 转换并导入原文数据
-        posts_data = []
+        # 6. 转换并导入原文数据（按 post_id_on_platform 去重）
+        posts_data_dict: dict[str, dict] = {}  # 用字典去重，key 是 post_id_on_platform
         for post in upload_data.contents:
             raw_data = post.model_dump()
             if adapter:
@@ -225,7 +225,12 @@ async def process_json_upload(
             # 如果 content 为空则跳过不存入
             if not transformed.get("content"):
                 continue
-            posts_data.append(transformed)
+            # 按 post_id_on_platform 去重（保留第一条）
+            platform_id = transformed.get("post_id_on_platform")
+            if platform_id and platform_id not in posts_data_dict:
+                posts_data_dict[platform_id] = transformed
+
+        posts_data = list(posts_data_dict.values())
 
         created_posts = await crud.create_posts_bulk(
             db,
@@ -240,8 +245,8 @@ async def process_json_upload(
             for post in created_posts
         }
 
-        # 8. 转换并导入评论数据
-        comments_to_create = []
+        # 8. 转换并导入评论数据（按 comment_id_on_platform 去重）
+        comments_dict: dict[str, tuple[int, dict]] = {}  # 用字典去重，key 是 comment_id_on_platform
         for comment in upload_data.comments:
             raw_data = comment.model_dump()
             if adapter:
@@ -275,7 +280,12 @@ async def process_json_upload(
                     # 找不到对应的原文，跳过该评论
                     continue
 
-            comments_to_create.append((post_id, transformed))
+            # 按 comment_id_on_platform 去重（保留第一条）
+            comment_platform_id = transformed.get("comment_id_on_platform")
+            if comment_platform_id and comment_platform_id not in comments_dict:
+                comments_dict[comment_platform_id] = (post_id, transformed)
+
+        comments_to_create = list(comments_dict.values())
 
         created_comments = await crud.create_comments_bulk(
             db,

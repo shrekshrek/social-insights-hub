@@ -58,7 +58,6 @@ const openDeepResultModal = (postId: number, type: 'post' | 'comment') => {
 // 使用共用的表格列定义
 const { columns } = usePostAnalysisColumns({
   onOpenDeepResult: openDeepResultModal,
-  showFullEngagement: false,
   contentColumnSize: 160,
 })
 

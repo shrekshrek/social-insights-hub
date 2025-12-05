@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch, onMounted, onUnmounted } from 'vue'
 import type {
-  PostAnalysisWithPostInfo,
   AnalysisJob,
   DeepAnalysisPreview,
   TaskAnalysisResultData,
@@ -502,7 +501,6 @@ const openDeepResultModal = (postId: number, type: 'post' | 'comment') => {
 // 使用共用的表格列定义
 const { columns } = usePostAnalysisColumns({
   onOpenDeepResult: openDeepResultModal,
-  showFullEngagement: true,
   contentColumnSize: 180,
 })
 </script>

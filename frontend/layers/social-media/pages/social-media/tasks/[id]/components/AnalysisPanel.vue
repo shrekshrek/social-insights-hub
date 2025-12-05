@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { h, computed, reactive, ref, watch, onMounted, onUnmounted, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import { computed, reactive, ref, watch, onMounted, onUnmounted } from 'vue'
 import type {
   PostAnalysisWithPostInfo,
   AnalysisJob,
   DeepAnalysisPreview,
   TaskAnalysisResultData,
 } from '../../../../../analysis/types'
-import ExpandableText from '../../../../../analysis/components/ExpandableText.vue'
-import PostDeepAnalysisResult from '../../../../../analysis/components/PostDeepAnalysisResult.vue'
-import CommentDeepAnalysisResult from '../../../../../analysis/components/CommentDeepAnalysisResult.vue'
+import { usePostAnalysisColumns } from '../../../../../analysis/composables/usePostAnalysisColumns'
+import DeepResultModal from '../../../../../analysis/components/DeepResultModal.vue'
 import TaskAnalysisReport from '../../../../../analysis/components/TaskAnalysisReport.vue'
 
 const props = defineProps<{
@@ -68,27 +66,6 @@ watch([page, pageSize, filterAnalyzed, searchQuery, searchId], () => {
 
 const rows = computed(() => postAnalysisData.value?.items || [])
 const total = computed(() => postAnalysisData.value?.total || 0)
-
-const formatNumber = (num?: number | null) => {
-  if (num == null) return '-'
-  if (num >= 10000) return `${(num / 10000).toFixed(1)}万`
-  return num.toLocaleString()
-}
-
-const formatDateTime = (value?: string | null): { date: string; time: string } | null => {
-  if (!value) return null
-  const d = new Date(value)
-  if (isNaN(d.getTime())) return null
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const hour = String(d.getHours()).padStart(2, '0')
-  const min = String(d.getMinutes()).padStart(2, '0')
-  return {
-    date: `${year}-${month}-${day}`,
-    time: `${hour}:${min}`,
-  }
-}
 
 /** 阈值筛选 */
 const thresholds = reactive({
@@ -506,7 +483,7 @@ const handleDeleteAnalyses = async () => {
   }
 }
 
-// 深度分析结果弹窗
+// 深度分析结果弹窗状态
 const deepResultModalOpen = ref(false)
 const deepResultModalType = ref<'post' | 'comment'>('post')
 const deepResultModalPostId = ref<number | null>(null)
@@ -522,184 +499,11 @@ const openDeepResultModal = (postId: number, type: 'post' | 'comment') => {
   deepResultModalOpen.value = true
 }
 
-/** 统一表格列定义 */
-const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
-  if (!import.meta.client) return []
-
-  const UBadge = resolveComponent('UBadge')
-  const UIcon = resolveComponent('UIcon')
-
-  return [
-    {
-      accessorKey: 'post_id',
-      header: 'ID',
-      size: 40,
-      cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.post_id),
-    },
-    {
-      accessorKey: 'post_id_on_platform',
-      header: '平台ID',
-      size: 80,
-      cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono truncate block max-w-[70px]', title: row.original.post_id_on_platform || '-' }, row.original.post_id_on_platform || '-'),
-    },
-    {
-      accessorKey: 'content',
-      header: '标题/内容',
-      size: 180,
-      cell: ({ row }) =>
-        h(ExpandableText, {
-          title: row.original.title || '',
-          content: row.original.content || '',
-          maxLength: 30,
-        }),
-    },
-    {
-      accessorKey: 'scores',
-      header: '初筛',
-      size: 65,
-      cell: ({ row }) => {
-        const { spam_score, value_score, relevance_score } = row.original
-        const scoreText = (label: string, value?: number | null) =>
-          h('div', { class: 'flex items-center gap-1 text-xs' }, [
-            h('span', { class: 'text-gray-500' }, label),
-            h(
-              'span',
-              { class: value == null ? 'text-gray-400' : 'font-medium' },
-              value == null ? '-' : value.toFixed(1),
-            ),
-          ])
-
-        return h('div', { class: 'space-y-0.5' }, [
-          scoreText('广告', spam_score),
-          scoreText('价值', value_score),
-          scoreText('相关', relevance_score),
-        ])
-      },
-    },
-    {
-      accessorKey: 'sentiment',
-      header: '情感',
-      size: 60,
-      cell: ({ row }) => {
-        const sentiment = row.original.sentiment
-        if (sentiment == null) {
-          return h('span', { class: 'text-gray-400 text-xs' }, '-')
-        }
-        // 五级情感：-2强烈负面, -1轻度负面, 0中性, 1轻度正面, 2强烈正面
-        const sentimentMap: Record<number, { color: string; label: string }> = {
-          [-2]: { color: 'error', label: '强烈负面' },
-          [-1]: { color: 'warning', label: '轻度负面' },
-          [0]: { color: 'neutral', label: '中性' },
-          [1]: { color: 'info', label: '轻度正面' },
-          [2]: { color: 'success', label: '强烈正面' },
-        }
-        const config = sentimentMap[sentiment] || { color: 'neutral', label: '中性' }
-        return h(UBadge, { size: 'xs', color: config.color, variant: 'subtle' }, () => config.label)
-      },
-    },
-    {
-      accessorKey: 'cii',
-      header: 'CII',
-      size: 50,
-      cell: ({ row }) => {
-        const cii = row.original.cii
-        if (cii == null) {
-          return h('span', { class: 'text-gray-400 text-xs' }, '-')
-        }
-        // CII 0-100, 根据值显示不同颜色
-        const getColor = (value: number) => {
-          if (value >= 70) return 'text-green-600'
-          if (value >= 40) return 'text-yellow-600'
-          return 'text-gray-600'
-        }
-        return h('span', { class: `text-sm font-medium ${getColor(cii)}` }, cii.toFixed(1))
-      },
-    },
-    {
-      accessorKey: 'deep_analysis',
-      header: '深度',
-      size: 50,
-      cell: ({ row }) => {
-        const { post_deep_result, comment_deep_result, post_id } = row.original
-        const hasPostDeep = !!post_deep_result
-        const hasCommentDeep = !!comment_deep_result
-
-        if (!hasPostDeep && !hasCommentDeep) {
-          return h('span', { class: 'text-gray-400 text-xs' }, '-')
-        }
-
-        return h('div', { class: 'space-y-1' }, [
-          // 原文深度标签
-          hasPostDeep
-            ? h(
-                'button',
-                {
-                  class: 'flex items-center gap-1 text-xs text-green-600 hover:text-green-700 cursor-pointer',
-                  onClick: () => openDeepResultModal(post_id, 'post'),
-                },
-                [
-                  h(UIcon, { name: 'i-heroicons-document-text', class: 'w-3 h-3' }),
-                  h('span', {}, '原文'),
-                ]
-              )
-            : null,
-          // 评论深度标签
-          hasCommentDeep
-            ? h(
-                'button',
-                {
-                  class: 'flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 cursor-pointer',
-                  onClick: () => openDeepResultModal(post_id, 'comment'),
-                },
-                [
-                  h(UIcon, { name: 'i-heroicons-chat-bubble-left-right', class: 'w-3 h-3' }),
-                  h('span', {}, '评论'),
-                ]
-              )
-            : null,
-        ])
-      },
-    },
-    {
-      accessorKey: 'engagement',
-      header: '互动',
-      size: 70,
-      cell: ({ row }) => {
-        const { likes_count, comments_count, shares_count, collected_count, views_count, danmaku_count } = row.original
-        const items = [
-          h('div', {}, `赞 ${formatNumber(likes_count)}`),
-          h('div', {}, `评 ${formatNumber(comments_count)}`),
-        ]
-        // 仅在有数据时显示对应项
-        if (shares_count > 0) {
-          items.push(h('div', {}, `转 ${formatNumber(shares_count)}`))
-        }
-        if (collected_count > 0) {
-          items.push(h('div', {}, `藏 ${formatNumber(collected_count)}`))
-        }
-        if (views_count > 0) {
-          items.push(h('div', {}, `览 ${formatNumber(views_count)}`))
-        }
-        if (danmaku_count > 0) {
-          items.push(h('div', {}, `弹 ${formatNumber(danmaku_count)}`))
-        }
-        return h('div', { class: 'text-xs space-y-0.5 text-gray-600 dark:text-gray-400' }, items)
-      },
-    },
-    {
-      accessorKey: 'published_at',
-      header: '发布时间',
-      size: 90,
-      cell: ({ row }) => {
-        const dt = formatDateTime(row.original.published_at)
-        if (!dt) return h('span', { class: 'text-xs text-gray-400' }, '-')
-        return h('div', { class: 'text-xs text-gray-500 leading-tight' }, [
-          h('div', {}, dt.date),
-          h('div', {}, dt.time),
-        ])
-      },
-    },
-  ]
+// 使用共用的表格列定义
+const { columns } = usePostAnalysisColumns({
+  onOpenDeepResult: openDeepResultModal,
+  showFullEngagement: true,
+  contentColumnSize: 180,
 })
 </script>
 
@@ -1103,48 +907,12 @@ const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
     </template>
   </UModal>
 
-  <!-- 深度分析结果弹窗 -->
-  <UModal
+  <!-- 深度分析结果弹窗（使用共用组件） -->
+  <DeepResultModal
     v-model:open="deepResultModalOpen"
-    :title="deepResultModalType === 'post' ? '原文深度分析结果' : '评论深度分析结果'"
-    :ui="{ width: 'sm:max-w-2xl', footer: 'justify-end' }"
-  >
-    <template #body>
-      <div v-if="selectedPostForDeepResult" class="space-y-4">
-        <!-- 帖子标题 -->
-        <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
-            {{ selectedPostForDeepResult.title || '无标题' }}
-          </p>
-        </div>
-
-        <!-- 原文深度结果 -->
-        <PostDeepAnalysisResult
-          v-if="deepResultModalType === 'post' && selectedPostForDeepResult.post_deep_result"
-          :data="selectedPostForDeepResult.post_deep_result"
-        />
-
-        <!-- 评论深度结果 -->
-        <CommentDeepAnalysisResult
-          v-else-if="deepResultModalType === 'comment' && selectedPostForDeepResult.comment_deep_result"
-          :data="selectedPostForDeepResult.comment_deep_result"
-        />
-
-        <div v-else class="text-center text-gray-500 py-4">
-          暂无分析结果
-        </div>
-      </div>
-    </template>
-
-    <template #footer>
-      <UButton
-        label="关闭"
-        color="neutral"
-        variant="outline"
-        @click="deepResultModalOpen = false"
-      />
-    </template>
-  </UModal>
+    :post-data="selectedPostForDeepResult"
+    :type="deepResultModalType"
+  />
 
   <!-- 删除分析结果确认对话框 -->
   <UModal

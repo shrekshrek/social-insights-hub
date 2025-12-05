@@ -180,11 +180,12 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
         return {"distribution": [], "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0}}
 
     now = datetime.now(timezone.utc)
-    date_counts: Counter = Counter()
+    date_posts: dict[str, list[int]] = {}  # 日期 -> 帖子ID列表
     ages_days = []
 
     for post in posts_data:
         published_at = post.get("published_at")
+        post_id = post.get("post_id")
         if not published_at:
             continue
 
@@ -200,14 +201,20 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
             published_at = published_at.replace(tzinfo=timezone.utc)
 
         date_str = published_at.strftime("%Y-%m-%d")
-        date_counts[date_str] += 1
+        if date_str not in date_posts:
+            date_posts[date_str] = []
+        if post_id:
+            date_posts[date_str].append(post_id)
         age_days = (now - published_at).days
         ages_days.append(age_days)
 
     if not ages_days:
         return {"distribution": [], "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0}}
 
-    distribution = [{"date": date, "count": count} for date, count in sorted(date_counts.items())]
+    distribution = [
+        {"date": date, "count": len(post_ids), "post_ids": post_ids}
+        for date, post_ids in sorted(date_posts.items())
+    ]
     total = len(ages_days)
 
     return {

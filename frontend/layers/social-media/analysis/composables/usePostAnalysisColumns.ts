@@ -11,8 +11,6 @@ import ExpandableText from '../components/ExpandableText.vue'
 export interface PostAnalysisColumnsOptions {
   /** 点击深度分析按钮的回调 */
   onOpenDeepResult?: (postId: number, type: 'post' | 'comment') => void
-  /** 是否显示完整的互动数据（包括浏览量、弹幕数等） */
-  showFullEngagement?: boolean
   /** 标题/内容列的宽度 */
   contentColumnSize?: number
 }
@@ -50,7 +48,6 @@ const formatDateTime = (value?: string | null): { date: string; time: string } |
 export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {}) {
   const {
     onOpenDeepResult,
-    showFullEngagement = false,
     contentColumnSize = 160,
   } = options
 
@@ -232,14 +229,11 @@ export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {})
           if (collected_count > 0) {
             items.push(h('div', {}, `藏 ${formatNumber(collected_count)}`))
           }
-          // 完整模式下显示更多指标
-          if (showFullEngagement) {
-            if (views_count > 0) {
-              items.push(h('div', {}, `览 ${formatNumber(views_count)}`))
-            }
-            if (danmaku_count > 0) {
-              items.push(h('div', {}, `弹 ${formatNumber(danmaku_count)}`))
-            }
+          if (views_count > 0) {
+            items.push(h('div', {}, `览 ${formatNumber(views_count)}`))
+          }
+          if (danmaku_count > 0) {
+            items.push(h('div', {}, `弹 ${formatNumber(danmaku_count)}`))
           }
           return h('div', { class: 'text-xs space-y-0.5 text-gray-600 dark:text-gray-400' }, items)
         },

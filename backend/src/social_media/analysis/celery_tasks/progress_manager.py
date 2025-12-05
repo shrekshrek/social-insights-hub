@@ -104,11 +104,13 @@ class AnalysisProgressManager:
             current_count = self.redis_client.incrby(self.key_analyzed, count)
 
             # 2. 追加调用详情到列表（一次API调用记录一条）
-            input_tokens = token_stats.get('input_tokens', 0)
-            output_tokens = token_stats.get('output_tokens', 0)
-            total_tokens = token_stats.get('total_tokens', 0)
-            cost_cny = token_stats.get('total_cost_cny', 0.0)
-            duration_seconds = token_stats.get('duration_seconds', 0.0)
+            # token_stats 格式: { 'summary': { 'total_input_tokens': ..., ... }, 'call_details': [...] }
+            summary = token_stats.get('summary', {})
+            input_tokens = summary.get('total_input_tokens', 0)
+            output_tokens = summary.get('total_output_tokens', 0)
+            total_tokens = summary.get('total_tokens', 0)
+            cost_cny = summary.get('total_cost_cny', 0.0)
+            duration_seconds = summary.get('total_duration_seconds', 0.0)
 
             call_detail = {
                 "input_tokens": input_tokens,
@@ -326,11 +328,13 @@ class AnalysisProgressManager:
             if analysis_job:
                 current_usage = analysis_job.token_usage or {"summary": {}, "call_details": []}
 
-                input_tokens = token_stats.get('input_tokens', 0)
-                output_tokens = token_stats.get('output_tokens', 0)
-                total_tokens = token_stats.get('total_tokens', 0)
-                cost_cny = token_stats.get('total_cost_cny', 0.0)
-                duration_seconds = token_stats.get('duration_seconds', 0.0)
+                # token_stats 格式: { 'summary': { 'total_input_tokens': ..., ... }, 'call_details': [...] }
+                stats_summary = token_stats.get('summary', {})
+                input_tokens = stats_summary.get('total_input_tokens', 0)
+                output_tokens = stats_summary.get('total_output_tokens', 0)
+                total_tokens = stats_summary.get('total_tokens', 0)
+                cost_cny = stats_summary.get('total_cost_cny', 0.0)
+                duration_seconds = stats_summary.get('total_duration_seconds', 0.0)
 
                 new_call_detail = {
                     "call_index": len(current_usage.get("call_details", [])),

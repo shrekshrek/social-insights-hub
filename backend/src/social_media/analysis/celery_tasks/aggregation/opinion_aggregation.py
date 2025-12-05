@@ -19,9 +19,8 @@ from typing import Any
 from collections import defaultdict
 
 from src.langchain.chains.category_normalization_chain import (
-    create_category_normalization_chain,
     format_categories_for_normalization,
-    parse_category_normalization_response,
+    normalize_categories_with_review_sync,
 )
 from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
 from src.social_media.analysis.celery_tasks.aggregation.utils import (
@@ -97,8 +96,9 @@ def _build_llm_mapping(
     raw_categories: list[dict],
     task_keywords: list[str],
     max_categories: int = 50,
+    enable_review: bool = True,
 ) -> tuple[dict[str, str], dict[str, Any] | None]:
-    """调用 LLM 构建同义词映射
+    """调用 LLM 构建同义词映射（两阶段：初步归一化 + 复查修正）
 
     Returns:
         tuple: (category_mapping, token_stats)
@@ -119,28 +119,18 @@ def _build_llm_mapping(
     print("[观点归一化] LLM 输入内容")
     print("=" * 80)
     print(f"输入话题数量: {len(sorted_categories)}")
+    print(f"启用复查: {enable_review}")
     print("-" * 40)
     print(formatted_input)
     print("=" * 80 + "\n")
 
-    # 调用 LLM（使用带统计的版本）
-    chain = create_category_normalization_chain()
-    response, token_stats = invoke_chain_with_stats_sync(
-        chain,
-        {
-            "categories": formatted_input,
-        },
+    # 调用两阶段归一化
+    result, token_stats = normalize_categories_with_review_sync(
+        formatted_input,
+        invoke_chain_with_stats_sync,
+        enable_review=enable_review,
         llm_type="chat",
     )
-    response_text = response.content if hasattr(response, "content") else str(response)
-    result = parse_category_normalization_response(response_text)
-
-    # 打印 LLM 输出
-    print("\n" + "=" * 80)
-    print("[观点归一化] LLM 输出内容")
-    print("=" * 80)
-    print(response_text)
-    print("=" * 80)
 
     # 统计融合效果
     normalized_groups = result.get("normalized_groups", [])
@@ -165,9 +155,10 @@ def _build_llm_mapping(
 
     print("-" * 40 + "\n")
 
-    summary = token_stats.get('summary', {})
+    summary = token_stats.get('summary', {}) if token_stats else {}
     logger.info(
         f"[观点归一化] LLM 调用完成: "
+        f"calls={summary.get('total_calls', 0)}, "
         f"tokens={summary.get('total_tokens', 0)}, "
         f"cost=¥{summary.get('total_cost_cny', 0):.4f}, "
         f"输入={len(sorted_categories)} -> 输出={output_count}"

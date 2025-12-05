@@ -360,6 +360,7 @@ export interface QuadrantSummary {
 export interface TimeDistributionItem {
   date: string
   count: number
+  post_ids: number[]
 }
 
 /** 数据新鲜度 */

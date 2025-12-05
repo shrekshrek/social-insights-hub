@@ -45,11 +45,18 @@ const getTimeChartOption = (): EChartsOption => {
   const dist = props.data.charts.time_distribution || []
   return {
     tooltip: {
-      trigger: 'axis',
+      trigger: 'item',
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e5e7eb',
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: { color: '#374151', fontSize: 12 },
       formatter: (params: unknown) => {
-        const arr = params as Array<{ name: string; value: number }>
-        const p = arr?.[0]
-        return p ? `${p.name}<br/>数量: ${p.value}条` : ''
+        const p = params as { name: string; value: number; dataIndex: number }
+        if (!p) return ''
+        const fullDate = dist[p.dataIndex]?.date || p.name
+        return `<div style="font-weight: 500; margin-bottom: 4px;">${fullDate}</div>
+                <div>发布数量: <span style="color: #3b82f6; font-weight: 600;">${p.value}</span> 条</div>`
       }
     },
     grid: {
@@ -80,10 +87,15 @@ const getTimeChartOption = (): EChartsOption => {
       type: 'line',
       smooth: true,
       symbol: 'circle',
-      symbolSize: 6,
+      symbolSize: 8,
+      showSymbol: true,
+      emphasis: {
+        scale: true,
+        itemStyle: { shadowBlur: 10, shadowColor: 'rgba(59, 130, 246, 0.5)' }
+      },
       data: dist.map(i => i.count),
       lineStyle: { color: '#3b82f6', width: 2 },
-      itemStyle: { color: '#3b82f6' },
+      itemStyle: { color: '#3b82f6', borderColor: '#fff', borderWidth: 2 },
       areaStyle: {
         color: {
           type: 'linear',
@@ -98,6 +110,17 @@ const getTimeChartOption = (): EChartsOption => {
   }
 }
 
+/** 处理时间分布图表点击事件 */
+const handleTimeChartClick = (params: { dataIndex: number }) => {
+  const dist = props.data.charts.time_distribution || []
+  const item = dist[params.dataIndex]
+  if (!item) return
+  const postIds = item.post_ids
+  if (postIds && postIds.length > 0) {
+    openPostListModal(`${item.date} 发布的内容`, postIds)
+  }
+}
+
 /** 初始化时间分布图表 */
 const setupTimeChart = async () => {
   await nextTick()
@@ -107,6 +130,9 @@ const setupTimeChart = async () => {
     const instance = initTimeChart()
     if (instance) {
       setTimeOption(getTimeChartOption())
+      // 添加点击事件监听
+      instance.off('click')
+      instance.on('click', handleTimeChartClick)
     }
   }
 }
@@ -116,8 +142,12 @@ watch(() => props.data.charts.time_distribution, async () => {
   await nextTick()
   if (timeChartRef.value && props.data.charts.time_distribution?.length) {
     // 如果图表未初始化，先初始化
-    if (!getTimeInstance()) {
-      if (!initTimeChart()) return
+    let instance = getTimeInstance()
+    if (!instance) {
+      instance = initTimeChart()
+      if (!instance) return
+      // 添加点击事件监听
+      instance.on('click', handleTimeChartClick)
     }
     setTimeOption(getTimeChartOption())
   }

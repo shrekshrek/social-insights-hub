@@ -107,9 +107,11 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed, watch, resolveComponent } from "vue";
+import { h, ref, computed, watch, type Component } from "vue";
 import type { PermissionWithMeta as Permission } from "../../../types";
 import type { TableColumn } from "@nuxt/ui";
+// @ts-expect-error: #components is a virtual module provided by Nuxt
+import { UBadge, UButton } from "#components";
 
 // 页面元数据
 definePageMeta({
@@ -261,18 +263,17 @@ const columns: TableColumn<Permission>[] = [
     accessorKey: "target",
     header: "目标:操作",
     cell: ({ row }) => {
-      const UBadge = resolveComponent("UBadge");
       const target = row.getValue("target") as string;
       const action = row.original.action as string;
       return h("div", { class: "flex items-center space-x-2" }, [
         h(
-          UBadge,
+          UBadge as Component,
           { color: "primary", variant: "soft" },
           () => target || "未知"
         ),
         h("span", { class: "text-gray-400" }, ":"),
         h(
-          UBadge,
+          UBadge as Component,
           { color: "success", variant: "soft" },
           () => action || "未知"
         ),
@@ -294,12 +295,11 @@ const columns: TableColumn<Permission>[] = [
     accessorKey: "resource",
     header: "权限类型",
     cell: ({ row }) => {
-      const UBadge = resolveComponent("UBadge");
       const permission = row.original;
       const { label, color } = getPermissionCategory(permission);
       
       return h(
-        UBadge,
+        UBadge as Component,
         {
           color,
           variant: "soft",
@@ -312,9 +312,7 @@ const columns: TableColumn<Permission>[] = [
     id: "view",
     header: "查看详情",
     cell: ({ row }) => {
-      const UButton = resolveComponent("UButton");
-
-      return h(UButton, {
+      return h(UButton as Component, {
         color: "neutral",
         variant: "ghost",
         size: "sm",

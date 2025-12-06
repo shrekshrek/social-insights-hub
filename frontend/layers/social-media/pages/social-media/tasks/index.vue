@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { h, ref, computed, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
+// @ts-expect-error: #components is a virtual module provided by Nuxt
+import { UBadge, UButton } from '#components'
 
 definePageMeta({
   layout: 'default',
@@ -107,10 +110,8 @@ const statusOptions = [
 
 // 表格列定义 - 使用 computed 以避免 SSR 水合问题
 const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
-  if (!import.meta.client) return []
-
-  const UBadge = resolveComponent('UBadge')
-  const UButton = resolveComponent('UButton')
+  const Badge = UBadge as Component
+  const Button = UButton as Component
 
   return [
     {
@@ -125,7 +126,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         if (!row.original.project_name || !row.original.project_id) {
           return h('span', { class: 'text-gray-400' }, '-')
         }
-        return h(UButton, {
+        return h(Button, {
           variant: 'link',
           size: 'xs',
           class: 'p-0 font-normal',
@@ -136,12 +137,12 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'platform_name',
       header: '平台',
-      cell: ({ row }) => h(UBadge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
+      cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
     },
     {
       accessorKey: 'status',
       header: '状态',
-      cell: ({ row }) => h(UBadge, {
+      cell: ({ row }) => h(Badge, {
         color: getStatusColor(row.original.status),
         variant: 'solid',
         size: 'xs'
@@ -163,14 +164,14 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       accessorKey: 'actions',
       header: '操作',
       cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
-        h(UButton, {
+        h(Button, {
           size: 'xs',
           variant: 'ghost',
           icon: 'i-heroicons-eye',
           onClick: () => navigateTo(`/social-media/tasks/${row.original.id}`),
         }, () => '查看'),
         row.original.status === 'pending' && row.original.data_source === 'local_upload'
-          ? h(UButton, {
+          ? h(Button, {
               size: 'xs',
               variant: 'ghost',
               icon: 'i-heroicons-arrow-up-tray',
@@ -178,7 +179,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               onClick: () => navigateTo(`/social-media/tasks/${row.original.id}/upload`),
             }, () => '上传')
           : null,
-        h(UButton, {
+        h(Button, {
           size: 'xs',
           variant: 'ghost',
           icon: 'i-heroicons-trash',

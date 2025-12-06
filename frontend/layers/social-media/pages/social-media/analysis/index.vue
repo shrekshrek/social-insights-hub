@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { h, computed, ref, resolveComponent } from 'vue'
+import { h, computed, ref, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
+// @ts-expect-error: #components is a virtual module provided by Nuxt
+import { UBadge, UButton, UProgress } from '#components'
 import type { AnalysisJob, AnalysisType, AnalysisStatus } from '../../../analysis/types'
 
 definePageMeta({
@@ -166,11 +168,9 @@ const handleDelete = async (job: AnalysisJob) => {
 
 // 表格列定义
 const columns = computed<TableColumn<AnalysisJob>[]>(() => {
-  if (!import.meta.client) return []
-
-  const UBadge = resolveComponent('UBadge')
-  const UButton = resolveComponent('UButton')
-  const UProgress = resolveComponent('UProgress')
+  const Badge = UBadge as Component
+  const Button = UButton as Component
+  const Progress = UProgress as Component
 
   return [
     {
@@ -181,7 +181,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
     {
       accessorKey: 'analysis_type',
       header: '分析类型',
-      cell: ({ row }) => h(UBadge, {
+      cell: ({ row }) => h(Badge, {
         color: 'neutral',
         variant: 'subtle',
         size: 'xs',
@@ -193,13 +193,13 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       cell: ({ row }) => {
         const job = row.original
         return h('div', { class: 'space-y-1' }, [
-          h(UBadge, {
+          h(Badge, {
             color: getStatusColor(job.status),
             variant: 'solid',
             size: 'xs',
           }, () => getStatusLabel(job.status)),
           ['pending', 'processing'].includes(job.status) && job.source_count > 0
-            ? h(UProgress, {
+            ? h(Progress, {
                 modelValue: job.source_count ? (job.analyzed_count / job.source_count) * 100 : 0,
                 max: 100,
                 size: 'xs',
@@ -226,7 +226,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
         if (!row.original.project_name) {
           return h('span', { class: 'text-gray-400' }, '-')
         }
-        return h(UButton, {
+        return h(Button, {
           variant: 'link',
           size: 'xs',
           class: 'p-0 font-normal',
@@ -241,7 +241,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
         if (!row.original.task_name) {
           return h('span', { class: 'text-gray-400' }, '项目级')
         }
-        return h(UButton, {
+        return h(Button, {
           variant: 'link',
           size: 'xs',
           class: 'p-0 font-normal',
@@ -295,14 +295,14 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
 
         return h('div', { class: 'flex items-center gap-2' }, [
           isRunning
-            ? h(UButton, {
+            ? h(Button, {
                 size: 'xs',
                 color: 'warning',
                 variant: 'ghost',
                 icon: 'i-heroicons-stop',
                 onClick: () => handleCancel(job),
               }, () => '取消')
-            : h(UButton, {
+            : h(Button, {
                 size: 'xs',
                 color: 'error',
                 variant: 'ghost',

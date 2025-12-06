@@ -3,7 +3,9 @@
  *
  * 提供统一的表格列定义，可在 AnalysisPanel 和 PostListModal 中共用
  */
-import { h, resolveComponent, type Component } from 'vue'
+import { computed, h, type Component } from 'vue'
+// @ts-expect-error: #components is a virtual module provided by Nuxt
+import { UBadge, UIcon } from '#components'
 import type { TableColumn } from '@nuxt/ui'
 import type { PostAnalysisWithPostInfo } from '../types'
 import ExpandableText from '../components/ExpandableText.vue'
@@ -52,10 +54,8 @@ export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {})
   } = options
 
   const columns = computed<TableColumn<PostAnalysisWithPostInfo>[]>(() => {
-    if (!import.meta.client) return []
-
-    const UBadge = resolveComponent('UBadge') as Component
-    const UIcon = resolveComponent('UIcon') as Component
+    const Badge = UBadge as Component
+    const Icon = UIcon as Component
 
     return [
       // ID 列
@@ -86,7 +86,7 @@ export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {})
                   class: 'flex items-center gap-0.5 text-xs text-primary-500 hover:text-primary-600',
                   onClick: (e: Event) => e.stopPropagation()
                 }, [
-                  h(UIcon, { name: 'i-heroicons-arrow-top-right-on-square', class: 'w-3 h-3' }),
+                  h(Icon, { name: 'i-heroicons-arrow-top-right-on-square', class: 'w-3 h-3' }),
                   h('span', '原文')
                 ])
               : null
@@ -147,7 +147,7 @@ export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {})
             [2]: { color: 'success', label: '强烈正面' },
           }
           const config = sentimentMap[sentiment] || { color: 'neutral', label: '中性' }
-          return h(UBadge, { size: 'xs', color: config.color, variant: 'subtle' }, () => config.label)
+          return h(Badge, { size: 'xs', color: config.color, variant: 'subtle' }, () => config.label)
         },
       },
       // CII 列
@@ -191,7 +191,7 @@ export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {})
                     onClick: () => onOpenDeepResult?.(post_id, 'post'),
                   },
                   [
-                    h(UIcon, { name: 'i-heroicons-document-text', class: 'w-3 h-3' }),
+                    h(Icon, { name: 'i-heroicons-document-text', class: 'w-3 h-3' }),
                     h('span', '原文'),
                   ]
                 )
@@ -204,7 +204,7 @@ export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {})
                     onClick: () => onOpenDeepResult?.(post_id, 'comment'),
                   },
                   [
-                    h(UIcon, { name: 'i-heroicons-chat-bubble-left-right', class: 'w-3 h-3' }),
+                    h(Icon, { name: 'i-heroicons-chat-bubble-left-right', class: 'w-3 h-3' }),
                     h('span', '评论'),
                   ]
                 )

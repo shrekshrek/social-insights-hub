@@ -94,9 +94,11 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed, watch, resolveComponent } from "vue";
+import { h, ref, computed, watch, type Component } from "vue";
 import type { Role, PermissionWithMeta as Permission } from "../../../types";
 import type { TableColumn } from "@nuxt/ui";
+// @ts-expect-error: #components is a virtual module provided by Nuxt
+import { UBadge, UButton } from "#components";
 import { isCoreRole } from "../../../utils/permissions";
 
 // 页面元数据
@@ -242,10 +244,9 @@ const columns: TableColumn<Role>[] = [
     accessorKey: "permissions",
     header: "权限数量",
     cell: ({ row }) => {
-      const UBadge = resolveComponent("UBadge");
       const permissions = row.getValue("permissions") as Permission[] || [];
       return h(
-        UBadge,
+        UBadge as Component,
         { color: "primary", variant: "soft" },
         () => `${permissions.length} 个权限`
       );
@@ -255,10 +256,9 @@ const columns: TableColumn<Role>[] = [
     accessorKey: "is_system",
     header: "类型",
     cell: ({ row }) => {
-      const UBadge = resolveComponent("UBadge");
       const isSystem = row.getValue("is_system") as boolean;
       return h(
-        UBadge,
+        UBadge as Component,
         {
           color: isSystem ? "warning" : "neutral",
           variant: "soft",
@@ -271,18 +271,17 @@ const columns: TableColumn<Role>[] = [
     id: "actions",
     header: "操作",
     cell: ({ row }) => {
-      const UButton = resolveComponent("UButton");
       const isCore = isCoreRole(row.original.name);
 
       return h("div", { class: "flex items-center gap-2" }, [
-        h(UButton, {
+        h(UButton as Component, {
           color: "neutral",
           variant: "ghost",
           size: "sm",
           icon: "i-heroicons-eye",
           onClick: () => navigateTo(`/rbac/roles/${row.original.id}`),
         }),
-        h(UButton, {
+        h(UButton as Component, {
           color: "primary",
           variant: "ghost",
           size: "sm",
@@ -290,7 +289,7 @@ const columns: TableColumn<Role>[] = [
           onClick: () => navigateTo(`/rbac/roles/${row.original.id}/permissions`),
         }),
         !isCore &&
-          h(UButton, {
+          h(UButton as Component, {
             color: "neutral",
             variant: "ghost",
             size: "sm",
@@ -298,7 +297,7 @@ const columns: TableColumn<Role>[] = [
             onClick: () => navigateTo(`/rbac/roles/${row.original.id}/edit`),
           }),
         !isCore &&
-          h(UButton, {
+          h(UButton as Component, {
             color: "error",
             variant: "ghost",
             size: "sm",

@@ -91,9 +91,11 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed, watch, resolveComponent } from "vue";
+import { h, ref, computed, watch, type Component } from "vue";
 import type { User } from "../../types";
 import type { TableColumn } from "@nuxt/ui";
+// @ts-expect-error: #components is a virtual module provided by Nuxt
+import { UAvatar, UBadge, UButton } from "#components";
 import { getRoleDisplayName } from "../../../rbac/utils/permissions";  // 明确的跨模块依赖
 
 // 页面元数据
@@ -207,10 +209,9 @@ const columns: TableColumn<User>[] = [
     accessorKey: "username",
     header: "用户信息",
     cell: ({ row }) => {
-      const UAvatar = resolveComponent("UAvatar");
       const username = row.getValue("username") as string;
       return h("div", { class: "flex items-center space-x-3" }, [
-        h(UAvatar, {
+        h(UAvatar as Component, {
           size: "sm",
           text: username.charAt(0).toUpperCase(),
         }),
@@ -233,7 +234,6 @@ const columns: TableColumn<User>[] = [
     accessorKey: "roles",
     header: "角色",
     cell: ({ row }) => {
-      const UBadge = resolveComponent("UBadge");
       const roles = row.getValue("roles") as string[];
 
       if (!roles || roles.length === 0) {
@@ -245,7 +245,7 @@ const columns: TableColumn<User>[] = [
         { class: "flex flex-wrap gap-1" },
         roles.map((roleName) =>
           h(
-            UBadge,
+            UBadge as Component,
             {
               key: roleName,
               color: "primary",
@@ -273,31 +273,29 @@ const columns: TableColumn<User>[] = [
     id: "actions",
     header: "操作",
     cell: ({ row }) => {
-      const UButton = resolveComponent("UButton");
-
       return h("div", { class: "flex items-center gap-2" }, [
-        h(UButton, {
+        h(UButton as Component, {
           color: "neutral",
           variant: "ghost",
           size: "sm",
           icon: "i-heroicons-eye",
           onClick: () => navigateTo(`/users/${row.original.id}`),
         }),
-        h(UButton, {
+        h(UButton as Component, {
           color: "primary",
           variant: "ghost",
           size: "sm",
           icon: "i-heroicons-user-group",
           onClick: () => navigateTo(`/users/${row.original.id}/roles`),
         }),
-        h(UButton, {
+        h(UButton as Component, {
           color: "neutral",
           variant: "ghost",
           size: "sm",
           icon: "i-heroicons-pencil-square",
           onClick: () => navigateTo(`/users/${row.original.id}/edit`),
         }),
-        h(UButton, {
+        h(UButton as Component, {
           color: "error",
           variant: "ghost",
           size: "sm",

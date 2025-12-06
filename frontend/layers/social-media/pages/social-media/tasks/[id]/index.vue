@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed, ref, h, type Component, defineAsyncComponent } from 'vue'
+// @ts-expect-error: #components is a virtual module provided by Nuxt
+import { UButton } from '#components'
 import ExpandableText from '../../../../analysis/components/ExpandableText.vue'
 
 definePageMeta({
@@ -212,7 +215,7 @@ const platformsWithDanmaku = ['bili']                // 有弹幕数据：B站
 
 // 原文表格列定义 - 使用 computed 避免 SSR 水合问题
 const postsColumns = computed(() => {
-  if (!import.meta.client) return []
+  const Button = UButton as Component
 
   // 根据平台决定是否显示各列
   const platformCode = task.value?.platform_code || ''
@@ -370,14 +373,13 @@ const postsColumns = computed(() => {
       ),
     size: 80,
     cell: ({ row }: { row: { original: SocialPost } }) => {
-      const UButton = resolveComponent("UButton");
       const buttons = [];
 
       // 查看原文按钮
       if (row.original.url) {
         buttons.push(
           h(
-            UButton,
+            Button,
             {
               size: "xs",
               variant: "ghost",
@@ -393,7 +395,7 @@ const postsColumns = computed(() => {
       if (row.original.crawled_comments_count > 0) {
         buttons.push(
           h(
-            UButton,
+            Button,
             {
               size: "xs",
               variant: "ghost",
@@ -415,8 +417,6 @@ const postsColumns = computed(() => {
 
 // 评论表格列定义 - 使用 computed 避免 SSR 水合问题
 const commentsColumns = computed(() => {
-  if (!import.meta.client) return []
-
   return [
   {
     accessorKey: "post_id",

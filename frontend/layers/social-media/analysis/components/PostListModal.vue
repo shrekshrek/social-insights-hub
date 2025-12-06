@@ -108,7 +108,7 @@ const handleClose = () => {
         </UTable>
 
         <!-- 分页 -->
-        <div v-if="total > pageSize" class="flex justify-between items-center mt-4 pt-4 border-t">
+        <div v-if="total > pageSize" class="flex justify-between items-center mt-4 pt-4">
           <span class="text-xs text-gray-500">
             显示 {{ (page - 1) * pageSize + 1 }} 到 {{ Math.min(page * pageSize, total) }} 共 {{ total }} 条
           </span>

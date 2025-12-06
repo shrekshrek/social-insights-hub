@@ -367,7 +367,8 @@ def aggregate_task_analysis(
             "sentiment_conflict": sentiment_conflict,
         },
         "charts": {
-            "quadrant": quadrant_data[:50],
+            # 保留完整象限列表以便前端反向追溯帖子
+            "quadrant": quadrant_data,
             "quadrant_summary": quadrant_summary,
             "time_distribution": time_distribution.get("distribution", []),
         },

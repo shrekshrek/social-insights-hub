@@ -233,7 +233,7 @@ def _extract_for_llm(raw_entity_data: dict[str, dict]) -> list[dict[str, Any]]:
 def _build_llm_mapping(
     raw_entities: list[dict],
     task_keywords: list[str],
-    max_entities: int = 50,
+    max_entities: int = 60,
     enable_review: bool = True,
 ) -> tuple[dict[str, str], dict[str, Any] | None]:
     """调用 LLM 构建同义词映射（两阶段：初步归一化 + 复查修正）

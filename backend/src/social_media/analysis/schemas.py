@@ -351,6 +351,7 @@ class TimeDistributionItem(CustomBaseModel):
     """时间分布数据项"""
     date: str = Field(..., description="日期 (YYYY-MM-DD)")
     count: int = Field(0, description="帖子数量")
+    post_ids: list[int] = Field(default_factory=list, description="该日期对应的帖子ID列表，用于反向追溯")
 
 
 class Freshness(CustomBaseModel):
@@ -584,5 +585,4 @@ class PostAnalysisListResponse(CustomBaseModel):
     total: int
     page: int
     page_size: int
-
 

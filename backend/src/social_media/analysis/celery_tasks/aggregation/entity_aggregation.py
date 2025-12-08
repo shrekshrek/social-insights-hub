@@ -23,10 +23,10 @@ from src.langchain.chains.entity_normalization_chain import (
     format_entities_for_clustering,
     cluster_entities_with_review_sync,
 )
-from src.langchain.chains.attribute_cleaning_chain import (
-    create_attribute_cleaning_chain,
-    format_attributes_for_cleaning,
-    parse_cleaning_response,
+from src.langchain.chains.attribute_normalization_chain import (
+    create_attribute_normalization_chain,
+    format_attributes_for_normalization,
+    parse_normalization_response,
 )
 from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
 from src.social_media.analysis.celery_tasks.aggregation.utils import (
@@ -34,6 +34,7 @@ from src.social_media.analysis.celery_tasks.aggregation.utils import (
     normalize_name,
     are_similar,
     build_similarity_mapping,
+    run_parallel_normalization,
 )
 
 logger = logging.getLogger(__name__)
@@ -447,133 +448,96 @@ def _clean_entity_attributes_sync(
     logger.info(f"[属性清洗] 开始清洗 {len(entities_to_clean)} 个 Top 实体的属性 (Top K={top_k_attrs}, 并发)")
     print(f"\n[属性清洗] 开始清洗 {len(entities_to_clean)} 个 Top 实体的属性 (Top K={top_k_attrs}, 并发)")
     
-    # 定义单个清洗任务
-    def clean_single_field(entity_name, field, raw_map):
-        if not raw_map:
-            return None
-            
-        # 过滤低频词 (至少出现1次，测试环境调整)
-        # 同时按频次降序排序，为 Top K 截断做准备
-        sorted_terms = sorted(
-            [(k, v) for k, v in raw_map.items() if len(v) >= 1],
-            key=lambda x: len(x[1]),
-            reverse=True
-        )
-        
-        # 如果有效词太少 (<2)，不清洗，直接使用原始数据
-        if len(sorted_terms) < 2:
-            return None
-            
-        # 截取 Top K 发送给 LLM
-        terms_to_clean = sorted_terms[:top_k_attrs]
-        # 剩下的长尾词 (不清洗，保持原样)
-        tail_terms = sorted_terms[top_k_attrs:]
-        
-        # 构建待清洗的映射
-        valid_terms_map = {k: v for k, v in terms_to_clean}
-        
-        # 格式化输入
-        formatted_attrs = format_attributes_for_cleaning(valid_terms_map)
-        
-        # [Debug] 打印输入
-        debug_input = f"[属性清洗 DEBUG] 实体 '{entity_name}' 字段 '{field}' 输入:\n{formatted_attrs}"
-        logger.info(debug_input)
-        print(f"\n{debug_input}")
-        
-        try:
-            # 调用 LLM
-            response, stats = invoke_with_stats_fn(
-                cleaning_chain,
-                {"attributes": formatted_attrs},
-                llm_type
+    # 准备任务列表
+    tasks = []
+    for entity in entities_to_clean:
+        entity_name = entity["name"]
+        for field in fields_to_clean:
+            raw_map = entity.get(field, {})
+            if not raw_map:
+                continue
+                
+            # 过滤低频词
+            sorted_terms = sorted(
+                [(k, v) for k, v in raw_map.items() if len(v) >= 1],
+                key=lambda x: len(x[1]),
+                reverse=True
             )
             
-            response_text = response.content if hasattr(response, "content") else str(response)
-            clusters = parse_cleaning_response(response_text)
-            
-            # [Debug] 打印输出
-            import json
-            debug_output = f"[属性清洗 DEBUG] 实体 '{entity_name}' 字段 '{field}' 输出:\n{json.dumps(clusters, ensure_ascii=False, indent=2)}"
-            logger.info(debug_output)
-            print(f"\n{debug_output}")
-            
-            if not clusters:
-                return None
+            if len(sorted_terms) < 2:
+                continue
                 
-            # 重建映射：{standard_term: all_post_ids}
-            new_map = defaultdict(set)
+            # 截取 Top K
+            terms_to_clean = sorted_terms[:top_k_attrs]
+            tail_terms = sorted_terms[top_k_attrs:]
             
-            # 1. 加入清洗后的聚类
-            cleaned_original_terms = set()  # 记录已被清洗的词
-            for cluster in clusters:
-                label = cluster.get("label")
-                originals = cluster.get("original_terms", [])
-                
-                if not label:
-                    continue
-                    
-                for term in originals:
-                    if term in raw_map:
-                        new_map[label].update(raw_map[term])
-                        cleaned_original_terms.add(term)
-                        
-            # 2. 加入虽在 Top K 但未被 LLM 归入任何聚类的词 (通常不应发生，但为了保险)
-            for term, post_ids in terms_to_clean:
-                if term not in cleaned_original_terms:
-                    new_map[term].update(post_ids)
-                    
-            # 3. 加入长尾词 (保留原始数据)
-            for term, post_ids in tail_terms:
-                new_map[term].update(post_ids)
+            # 构建待清洗映射
+            valid_terms_map = {k: v for k, v in terms_to_clean}
+            formatted_attrs = format_attributes_for_normalization(valid_terms_map)
             
-            return {
+            tasks.append({
+                "task_id": f"{entity_name}|{field}",
                 "entity_name": entity_name,
                 "field": field,
-                "new_map": new_map,
-                "stats": stats
-            }
-                
-        except Exception as e:
-            logger.error(f"[属性清洗] 实体 {entity_name} 字段 {field} 清洗失败: {e}")
-            return None
+                "raw_map": raw_map,
+                "tail_terms": tail_terms,
+                "terms_to_clean": terms_to_clean,
+                "attributes": formatted_attrs # input for chain
+            })
 
-    # 提交所有任务
-    tasks = []
-    # 使用 max_workers=10 (或根据实际 LLM API 并发限制调整)
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        for entity in entities_to_clean:
-            for field in fields_to_clean:
-                raw_map = entity.get(field, {})
-                if raw_map:
-                    tasks.append(executor.submit(clean_single_field, entity["name"], field, raw_map))
+    # 使用通用并行执行器
+    results, stats = run_parallel_normalization(
+        tasks=tasks,
+        chain_factory=create_attribute_normalization_chain,
+        invoke_func=invoke_with_stats_fn,
+        parse_response_func=parse_normalization_response,
+        llm_type=llm_type,
+        max_workers=10
+    )
+    
+    token_stats = stats # 直接使用返回的统计
+
+    # 处理结果并更新 entity_data
+    for res in results:
+        task = res["task"]
+        clusters = res["parsed_result"]
         
-        # 收集结果
-        for future in as_completed(tasks):
-            result = future.result()
-            if result:
-                # 更新实体数据
-                # 注意：这里需要再次查找 entity 对象，因为是引用传递，直接修改即可
-                # 但我们需要找到对应的 entity 对象。由于 entity_data 是 dict，我们可以通过 name 找到吗？
-                # entity_data 是 {canonical_name: data}
-                # clean_single_field 返回了 entity_name (canonical_name)
-                entity_name = result["entity_name"]
-                field = result["field"]
-                new_map = result["new_map"]
-                stats = result["stats"]
+        entity_name = task["entity_name"]
+        field = task["field"]
+        raw_map = task["raw_map"]
+        tail_terms = task["tail_terms"]
+        terms_to_clean = task["terms_to_clean"]
+        
+        if not clusters:
+            continue
+            
+        # 重建映射
+        new_map = defaultdict(set)
+        cleaned_original_terms = set()
+        
+        # 1. 加入清洗后的聚类
+        for cluster in clusters:
+            label = cluster.get("label")
+            originals = cluster.get("original_terms", [])
+            
+            if not label: continue
                 
-                if entity_name in entity_data:
-                    entity_data[entity_name][field] = new_map
+            for term in originals:
+                if term in raw_map:
+                    new_map[label].update(raw_map[term])
+                    cleaned_original_terms.add(term)
+                    
+        # 2. 加入未聚类的 Top K 词
+        for term, post_ids in terms_to_clean:
+            if term not in cleaned_original_terms:
+                new_map[term].update(post_ids)
                 
-                # 合并统计
-                if stats:
-                    s = stats.get('summary', {})
-                    token_stats['summary']['total_calls'] += s.get('total_calls', 0)
-                    token_stats['summary']['total_input_tokens'] = token_stats['summary'].get('total_input_tokens', 0) + s.get('total_input_tokens', 0)
-                    token_stats['summary']['total_output_tokens'] = token_stats['summary'].get('total_output_tokens', 0) + s.get('total_output_tokens', 0)
-                    token_stats['summary']['total_tokens'] += s.get('total_tokens', 0)
-                    token_stats['summary']['total_cost_cny'] += s.get('total_cost_cny', 0.0)
-                    token_stats['summary']['total_duration_seconds'] = token_stats['summary'].get('total_duration_seconds', 0.0) + s.get('total_duration_seconds', 0.0)
-                    token_stats['call_details'].extend(stats.get('call_details', []))
+        # 3. 加入长尾词
+        for term, post_ids in tail_terms:
+            new_map[term].update(post_ids)
+            
+        if entity_name in entity_data:
+            entity_data[entity_name][field] = new_map
 
     return entity_data, token_stats
 

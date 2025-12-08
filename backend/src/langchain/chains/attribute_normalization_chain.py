@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""属性清洗 Chain
+"""属性归一化 Chain
 
-对实体的属性列表（features, issues, expectations）进行语义聚类和清洗。
+对实体的属性列表（features, issues, expectations）进行语义聚类和标准化。
 将松散的短语合并为标准化的描述。
 """
 
@@ -17,7 +17,7 @@ from src.langchain.llm import get_llm
 logger = logging.getLogger(__name__)
 
 
-ATTRIBUTE_CLEANING_SYSTEM_TEMPLATE = """你是一位数据清洗与归纳专家。
+ATTRIBUTE_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位数据清洗与归纳专家。
 你的任务是对输入的产品评价短语列表进行**语义聚类**和**标准化**。
 
 ## 任务要求
@@ -46,30 +46,30 @@ ATTRIBUTE_CLEANING_SYSTEM_TEMPLATE = """你是一位数据清洗与归纳专家�
 只输出JSON，不要有其他文字。
 """
 
-ATTRIBUTE_CLEANING_USER_TEMPLATE = """请对以下评价短语进行清洗和聚类：
+ATTRIBUTE_NORMALIZATION_USER_TEMPLATE = """请对以下评价短语进行清洗和聚类：
 
 {attributes}
 """
 
 
-def create_attribute_cleaning_chain() -> Runnable:
-    """创建属性清洗的LangChain链
+def create_attribute_normalization_chain() -> Runnable:
+    """创建属性归一化的LangChain链
 
     Returns:
-        Runnable: 用于属性清洗的LangChain可执行链
+        Runnable: 用于属性归一化的LangChain可执行链
     """
     llm = get_llm(llm_type="chat")
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", ATTRIBUTE_CLEANING_SYSTEM_TEMPLATE),
-        ("user", ATTRIBUTE_CLEANING_USER_TEMPLATE),
+        ("system", ATTRIBUTE_NORMALIZATION_SYSTEM_TEMPLATE),
+        ("user", ATTRIBUTE_NORMALIZATION_USER_TEMPLATE),
     ])
 
     return prompt | llm
 
 
-def format_attributes_for_cleaning(attributes_map: dict[str, set]) -> str:
-    """格式化属性列表用于清洗
+def format_attributes_for_normalization(attributes_map: dict[str, set]) -> str:
+    """格式化属性列表用于归一化
 
     Args:
         attributes_map: {原始短语: post_ids_set}
@@ -91,14 +91,14 @@ def format_attributes_for_cleaning(attributes_map: dict[str, set]) -> str:
     return "\n".join(lines)
 
 
-def parse_cleaning_response(response_text: str) -> List[dict[str, Any]]:
-    """解析清洗响应
+def parse_normalization_response(response_text: str) -> List[dict[str, Any]]:
+    """解析归一化响应
 
     Args:
         response_text: LLM返回的文本
 
     Returns:
-        List[dict]: 清洗后的聚类列表 [{"label": str, "original_terms": list}]
+        List[dict]: 归一化后的聚类列表 [{"label": str, "original_terms": list}]
     """
     if "```json" in response_text:
         response_text = response_text.split("```json")[1].split("```")[0]
@@ -109,6 +109,6 @@ def parse_cleaning_response(response_text: str) -> List[dict[str, Any]]:
         result = json.loads(response_text.strip())
         return result.get("clusters", [])
     except json.JSONDecodeError:
-        logger.error(f"Failed to decode JSON from Attribute Cleaning response: {response_text[:100]}...")
+        logger.error(f"Failed to decode JSON from Attribute Normalization response: {response_text[:100]}...")
         return []
 

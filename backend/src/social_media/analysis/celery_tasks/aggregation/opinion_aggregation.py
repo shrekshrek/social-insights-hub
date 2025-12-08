@@ -1,466 +1,248 @@
 """观点聚合模块 (Opinion Aggregation)
 
-负责观点的聚合和归一化。
-aggregated_opinions 是后续 insights 分析的核心数据来源。
+负责通用观点 (General Opinions) 的聚合与归一化，生成标准化的舆论观点。
+这是 Track B (观点归一化) 的核心实现。
 
 处理流程：
-1. 收集原始 category 名称
-2. 构建 category 映射（程序相似度 + LLM同义词）
-3. 使用映射按 (category, sentiment) 进行聚合
-4. 输出 aggregated_opinions 数组
-
-注意：KANO 需求分层已移至 insights.py，因为它同时依赖 entity 和 opinion 数据。
-
-参考设计文档: docs/analysis_design/TASK_ANALYSIS_DETAIL.md §4.4
+1. 收集所有通用观点，按 category|sentiment 分组
+2. 对每个分组调用 LLM 进行属性清洗（复用 attribute_cleaning_chain）
+3. 生成标准化的 aggregated_opinions 列表
 """
 
 import logging
-from typing import Any
-from collections import defaultdict
+import time
+from collections import defaultdict, Counter
+from typing import Any, List, Dict
 
-from src.langchain.chains.category_normalization_chain import (
-    format_categories_for_normalization,
-    normalize_categories_with_review_sync,
+from src.langchain.chains.opinion_normalization_chain import (
+    create_opinion_normalization_chain,
+    format_opinions_for_normalization,
+    parse_normalization_response
 )
 from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
-from src.social_media.analysis.celery_tasks.aggregation.utils import (
-    calculate_score,
-    build_similarity_mapping,
-)
+from src.social_media.analysis.celery_tasks.aggregation.utils import calculate_score
 
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# Category 映射构建（程序相似度 + LLM同义词）
-# ============================================================================
+def _normalize_category(category: str) -> str:
+    """标准化分类名称 (简单规则，后续可扩展)"""
+    if not category:
+        return "其他"
+    return category.strip()
 
-def _collect_raw_categories(posts_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """从 posts_data 收集所有原始 category 名称（去重，带提及数和热度）
-
-    热度计算规则：每个帖子的 CII 只对每个 category 累加一次（避免重复计算）
-    提及数规则：每个帖子只对每个 category 计数一次
-    """
-    # 内部数据结构：{category: {"mentions": int, "heat": float, "cii_added_posts": set}}
-    category_data: dict[str, dict] = {}
-
-    for post in posts_data:
-        post_id = post.get("post_id")
-        cii = post.get("cii", 0) or 0
-        post_deep_result = post.get("post_deep_result") or {}
-        comment_deep_result = post.get("comment_deep_result") or {}
-
-        # 收集该帖子中出现的所有 categories（去重）
-        post_categories: set[str] = set()
-
-        for opinion in post_deep_result.get("general_opinions", []):
-            category = opinion.get("category", "")
-            if category:
-                post_categories.add(category)
-
-        for opinion in comment_deep_result.get("general_opinions", []):
-            category = opinion.get("category", "")
-            if category:
-                post_categories.add(category)
-
-        # 更新每个 category 的统计（每帖只计一次）
-        for category in post_categories:
-            if category not in category_data:
-                category_data[category] = {
-                    "mentions": 0,
-                    "heat": 0.0,
-                    "cii_added_posts": set(),
-                }
-
-            data = category_data[category]
-            data["mentions"] += 1  # 提及帖子数 +1
-
-            # CII 只累加一次（每帖每 category）
-            if post_id and post_id not in data["cii_added_posts"]:
-                data["heat"] += cii
-                data["cii_added_posts"].add(post_id)
-
-    return [
-        {
-            "name": name,
-            "type": "话题",
-            "mentions": data["mentions"],
-            "heat": round(data["heat"], 1),
-            "score": round(calculate_score(data["heat"], data["mentions"]), 1),
-        }
-        for name, data in category_data.items()
-    ]
-
-
-def _build_llm_mapping(
-    raw_categories: list[dict],
-    task_keywords: list[str],
-    max_categories: int = 50,
-    enable_review: bool = True,
-) -> tuple[dict[str, str], dict[str, Any] | None]:
-    """调用 LLM 构建同义词映射（两阶段：初步归一化 + 复查修正）
-
-    Returns:
-        tuple: (category_mapping, token_stats)
-            - category_mapping: {原始名称: 标准名称}
-            - token_stats: token 使用统计（如果调用了 LLM）
-    """
-    if not raw_categories:
-        return {}, None
-
-    # 按综合评分排序，取 Top N
-    sorted_categories = sorted(raw_categories, key=lambda x: x.get("score", 0), reverse=True)[:max_categories]
-
-    # 格式化输入内容
-    formatted_input = format_categories_for_normalization(sorted_categories)
-
-    # 打印 LLM 输入
-    print("\n" + "=" * 80)
-    print("[观点归一化] LLM 输入内容")
-    print("=" * 80)
-    print(f"输入话题数量: {len(sorted_categories)}")
-    print(f"启用复查: {enable_review}")
-    print("-" * 40)
-    print(formatted_input)
-    print("=" * 80 + "\n")
-
-    # 调用两阶段归一化
-    result, token_stats = normalize_categories_with_review_sync(
-        formatted_input,
-        invoke_chain_with_stats_sync,
-        enable_review=enable_review,
-        llm_type="chat",
-    )
-
-    # 统计融合效果
-    normalized_groups = result.get("normalized_groups", [])
-    standalone_categories = result.get("standalone_categories", [])
-    output_count = len(normalized_groups) + len(standalone_categories)
-
-    print("\n" + "-" * 40)
-    print(f"[观点归一化] 融合统计:")
-    print(f"  输入话题数: {len(sorted_categories)}")
-    print(f"  归一化组数: {len(normalized_groups)}")
-    print(f"  独立话题数: {len(standalone_categories)}")
-    print(f"  输出话题数: {output_count}")
-    print(f"  合并减少数: {len(sorted_categories) - output_count}")
-
-    # 打印每个归一化组的详情
-    if normalized_groups:
-        print("\n  归一化组详情:")
-        for i, group in enumerate(normalized_groups, 1):
-            canonical = group.get("canonical_name", "")
-            merged = group.get("merged_categories", [])
-            print(f"    [{i}] {canonical} <- {merged}")
-
-    print("-" * 40 + "\n")
-
-    summary = token_stats.get('summary', {}) if token_stats else {}
-    logger.info(
-        f"[观点归一化] LLM 调用完成: "
-        f"calls={summary.get('total_calls', 0)}, "
-        f"tokens={summary.get('total_tokens', 0)}, "
-        f"cost=¥{summary.get('total_cost_cny', 0):.4f}, "
-        f"输入={len(sorted_categories)} -> 输出={output_count}"
-    )
-
-    return result.get("category_mapping", {}), token_stats
-
-
-def build_category_mapping(
-    posts_data: list[dict[str, Any]],
-    task_keywords: list[str],
-    enable_llm: bool = True,
-    max_categories: int = 50,
-) -> tuple[dict[str, str], dict[str, Any] | None]:
-    """构建 category 名称映射（程序相似度 + LLM同义词）
-
-    处理流程：
-    1. 收集原始 category 名称
-    2. 程序相似度合并（>=0.8）
-    3. LLM 同义词合并（可选）
-    4. 合并两个映射
-
-    Args:
-        posts_data: 帖子数据列表
-        task_keywords: 任务关键词
-        enable_llm: 是否启用 LLM 归一化
-        max_categories: LLM 最多处理的 category 数量
-
-    Returns:
-        tuple: (category_mapping, token_stats)
-            - category_mapping: {原始名称: 标准名称}
-            - token_stats: token 使用统计（如果调用了 LLM）
-    """
-    token_stats = None
-
-    # 1. 收集原始 category 名称
-    raw_categories = _collect_raw_categories(posts_data)
-    raw_count = len(raw_categories)
-
-    if not raw_categories:
-        return {}, None
-
-    # 2. 程序相似度映射
-    similarity_mapping = build_similarity_mapping(raw_categories)
-    after_similarity_count = len(set(similarity_mapping.values()))
-    similarity_merged = raw_count - after_similarity_count
-
-    # 打印程序归一化统计
-    print("\n" + "=" * 80)
-    print("[观点归一化] 程序相似度归一化统计")
-    print("=" * 80)
-    print(f"  原始唯一话题数: {raw_count}")
-    print(f"  程序合并后数量: {after_similarity_count}")
-    print(f"  程序合并减少数: {similarity_merged}")
-    print(f"  发送给 LLM 数量: min({after_similarity_count}, 50) = {min(after_similarity_count, 50)}")
-    print("=" * 80 + "\n")
-
-    logger.info(f"[Category映射] 收集到 {raw_count} 个唯一话题")
-    logger.info(f"[Category映射] 程序相似度合并: {similarity_merged} 对 -> {after_similarity_count} 个")
-
-    # 3. LLM 同义词映射（可选）
-    if enable_llm and len(raw_categories) >= 5:
-        try:
-            llm_mapping, token_stats = _build_llm_mapping(raw_categories, task_keywords, max_categories)
-            if llm_mapping:
-                # 合并映射：LLM 映射优先级更高
-                for name, canonical in llm_mapping.items():
-                    if name in similarity_mapping:
-                        old_canonical = similarity_mapping[name]
-                        # 使用 list() 避免在迭代时修改 dict
-                        for k, v in list(similarity_mapping.items()):
-                            if v == old_canonical:
-                                similarity_mapping[k] = canonical
-
-                final_unique = len(set(similarity_mapping.values()))
-                logger.info(f"[Category映射] LLM 归一化后: {final_unique} 个唯一话题")
-        except Exception as e:
-            logger.warning(f"[Category映射] LLM 归一化失败，使用程序映射: {e}")
-
-    return similarity_mapping, token_stats
-
-
-# ============================================================================
-# 观点聚合主函数
-# ============================================================================
 
 def aggregate_opinions(
     posts_data: list[dict[str, Any]],
-    task_keywords: list[str] | None = None,
-    enable_llm_normalization: bool = True,
-    top_n: int = 10,
-) -> dict[str, Any]:
-    """聚合任务内的观点，按 (category, sentiment) 分组融合
-
-    处理流程：
-    1. 构建 category 映射（程序相似度 + LLM同义词）
-    2. 使用映射按 (category, sentiment) 进行聚合
-    3. 输出 aggregated_opinions 数组
-
+    top_k_opinions: int = 100,  # 每个分组限制送入 LLM 的观点数量
+    llm_type: str = "chat",
+) -> Dict[str, Any]:
+    """聚合任务内的通用观点，生成标准化观点结果
+    
     Args:
-        posts_data: 帖子数据列表
-        task_keywords: 任务关键词列表
-        enable_llm_normalization: 是否启用 LLM 归一化
-        top_n: 返回前多少个观点
-
+        posts_data: 帖子数据列表 (需包含 general_opinions)
+        top_k_opinions: 每个分组截取最高频的前 K 个观点进行清洗
+        
     Returns:
         dict: {
-            "top_issues": 负面观点 TOP N,
-            "top_features": 正面观点 TOP N,
-            "aggregated_opinions": 完整融合数据（数组格式）,
-            "llm_token_stats": LLM token 使用统计（如果调用了 LLM）,
+            "topics": [...],  # 保持字段名兼容，实际是 aggregated_opinions
+            "llm_token_stats": {...}
         }
     """
-    task_keywords = task_keywords or []
-
-    # ========================================
-    # 1. 构建 category 映射（先归一化）
-    # ========================================
-    category_mapping, llm_token_stats = build_category_mapping(
-        posts_data,
-        task_keywords,
-        enable_llm=enable_llm_normalization,
-    )
-
-    def get_canonical_category(category: str) -> str:
-        """获取标准 category 名称"""
-        return category_mapping.get(category, category)
-
-    # ========================================
-    # 2. 使用映射进行聚合
-    # ========================================
-    # 内部用 dict，O(1) 查找
-    # key 格式: "canonical_category|sentiment"
-    opinion_data: dict[str, dict] = defaultdict(lambda: {
-        "category": "",
-        "canonical_category": "",
-        "sentiment": 0,
-        "total_cii": 0.0,
-        "cii_added_posts": set(),
-        "post_sources": set(),
-        "comment_sources": set(),
-        "post_ids": set(),
-        "opinions": defaultdict(set),  # 观点文本 -> 帖子ID集合
-        "merged_from": set(),  # 记录合并来源
-    })
-
-    def process_opinions(opinions: list, post_id: int, cii: float, source: str):
-        """处理观点列表，按 (canonical_category, sentiment) 分组"""
-        for opinion in opinions:
-            raw_category = opinion.get("category", "其他")
-            sentiment = opinion.get("sentiment", 0)
-            canonical = get_canonical_category(raw_category)
-
-            key = f"{canonical}|{sentiment}"
-            data = opinion_data[key]
-
-            # 更新基本信息
-            if not data["category"]:
-                data["category"] = canonical
-                data["canonical_category"] = canonical
-                data["sentiment"] = sentiment
-
-            # 记录合并来源
-            if raw_category != canonical:
-                data["merged_from"].add(raw_category)
-
-            # CII 只累加一次
-            if post_id and post_id not in data["cii_added_posts"]:
-                data["total_cii"] += cii
-                data["cii_added_posts"].add(post_id)
-
-            # 来源标记
-            if post_id:
-                if source == "post":
-                    data["post_sources"].add(post_id)
-                else:
-                    data["comment_sources"].add(post_id)
-                data["post_ids"].add(post_id)
-
-            # 收集观点文本
-            for op_text in opinion.get("opinions", []):
-                if op_text and post_id:
-                    data["opinions"][op_text].add(post_id)
-
-    # 遍历所有帖子
-    raw_opinion_count = 0
-    for post in posts_data:
-        post_id = post.get("post_id")
-        cii = post.get("cii", 0) or 0
-
-        post_deep_result = post.get("post_deep_result") or {}
-        comment_deep_result = post.get("comment_deep_result") or {}
-
-        post_opinions = post_deep_result.get("general_opinions", [])
-        raw_opinion_count += len(post_opinions)
-        process_opinions(post_opinions, post_id, cii, "post")
-
-        comment_opinions = comment_deep_result.get("general_opinions", [])
-        raw_opinion_count += len(comment_opinions)
-        process_opinions(comment_opinions, post_id, cii, "comment")
-
-    logger.info(
-        f"[观点聚合] 原始 {raw_opinion_count} 条 -> 聚合后 {len(opinion_data)} 个分组"
-    )
-
-    # ========================================
-    # 3. 格式化输出
-    # ========================================
-    issues = []  # 负面观点 (sentiment == -1)
-    features = []  # 正面观点 (sentiment == 1)
-    aggregated_opinions = []  # 数组格式
-
-    for key, data in opinion_data.items():
-        mentions = len(data["post_ids"])
-        if mentions == 0:
-            continue
-
-        post_source_count = len(data["post_sources"])
-        comment_source_count = len(data["comment_sources"])
-        total_source_count = post_source_count + comment_source_count
-
-        source_distribution = {
-            "post": round(post_source_count / total_source_count, 2) if total_source_count > 0 else 0,
-            "comment": round(comment_source_count / total_source_count, 2) if total_source_count > 0 else 0,
-        }
-
-        # 按帖子数排序观点
-        all_opinions = sorted(
-            data["opinions"].items(),
-            key=lambda x: len(x[1]),
-            reverse=True
-        )
-
-        # 计算综合评分
-        heat = round(data["total_cii"], 1)
-        score = round(calculate_score(data["total_cii"], mentions), 1)
-
-        # 构建完整融合数据（数组格式）
-        opinion_dict = {
-            "category": data["category"],
-            "canonical_category": data["canonical_category"],
-            "sentiment": data["sentiment"],
-            "heat": heat,
-            "mentions": mentions,
-            "score": score,
-            "post_source_count": post_source_count,
-            "comment_source_count": comment_source_count,
-            "post_ids": list(data["post_ids"]),
-            "opinions": [
-                {"text": op_text, "post_ids": list(op_post_ids)}
-                for op_text, op_post_ids in all_opinions
-            ],
-        }
-
-        # 添加合并来源信息
-        if data["merged_from"]:
-            opinion_dict["merged_from"] = list(data["merged_from"])
-
-        aggregated_opinions.append(opinion_dict)
-
-        # 构建展示用 item
-        item = {
-            "topic": data["category"],
-            "heat": heat,
-            "mentions": mentions,
-            "score": score,
-            "sentiment": data["sentiment"],
-            "source_distribution": source_distribution,
-            "top_opinions": [op[0] for op in all_opinions[:3]] if all_opinions else [],
-            "post_ids": list(data["post_ids"]),
-        }
-        if data["merged_from"]:
-            item["merged_from"] = list(data["merged_from"])
-
-        # 按情感分类
-        if data["sentiment"] == -1:
-            issues.append(item)
-        elif data["sentiment"] == 1:
-            features.append(item)
-
-    # 按综合评分排序
-    issues.sort(key=lambda x: x["score"], reverse=True)
-    features.sort(key=lambda x: x["score"], reverse=True)
-    aggregated_opinions.sort(key=lambda x: x["score"], reverse=True)
-
-    # 统计日志
-    positive_count = len([o for o in aggregated_opinions if o["sentiment"] == 1])
-    negative_count = len([o for o in aggregated_opinions if o["sentiment"] == -1])
-    neutral_count = len([o for o in aggregated_opinions if o["sentiment"] == 0])
-    logger.info(
-        f"[观点聚合] 按 (category, sentiment) 分组: "
-        f"总计 {len(aggregated_opinions)} 个 (正面 {positive_count}, 负面 {negative_count}, 中性 {neutral_count})"
-    )
-
-    result = {
-        "top_issues": issues[:top_n],
-        "top_features": features[:top_n],
-        "aggregated_opinions": aggregated_opinions,
+    start_time = time.time()
+    token_stats = {
+        'summary': {'total_calls': 0, 'total_tokens': 0, 'total_cost_cny': 0.0},
+        'call_details': []
     }
 
-    # 添加 LLM token 统计（如果有）
-    if llm_token_stats:
-        result["llm_token_stats"] = llm_token_stats
+    # ========================================
+    # 1. 收集与分组 (Category + Sentiment)
+    # ========================================
+    # 结构: {group_key: {raw_term: set(post_ids)}}
+    grouped_raw_opinions: Dict[str, Dict[str, set]] = defaultdict(lambda: defaultdict(set))
+    # 结构: {group_key: {raw_term: heat}}
+    grouped_term_heat: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    
+    # 记录每个帖子已经贡献过的 term (避免重复计算热度)
+    # post_id -> set(term_key)
+    post_contribution_map = defaultdict(set)
 
-    return result
+    total_posts = len(posts_data)
+    valid_posts_count = 0
+
+    for post in posts_data:
+        post_id = post.get("post_id")
+        cii = post.get("cii", 1.0)
+        
+        # 收集来源: post_deep_result 和 comment_deep_result
+        sources = []
+        if post.get("post_deep_result"):
+            sources.append(post["post_deep_result"])
+        if post.get("comment_deep_result"):
+            sources.append(post["comment_deep_result"])
+            
+        has_opinion = False
+        for source in sources:
+            opinions = source.get("general_opinions", [])
+            if isinstance(opinions, list):
+                for op_obj in opinions:
+                    if not isinstance(op_obj, dict):
+                        continue
+                        
+                    raw_category = op_obj.get("category", "")
+                    sentiment = op_obj.get("sentiment", 0)
+                    terms = op_obj.get("opinions", [])
+                    
+                    category = _normalize_category(raw_category)
+                    group_key = f"{category}|{sentiment}"
+                    
+                    for term in terms:
+                        if term and isinstance(term, str) and len(term) > 1:
+                            term_key = f"{group_key}|{term}"
+                            
+                            grouped_raw_opinions[group_key][term].add(post_id)
+                            
+                            # 热度累加 (Per Post Per Term 去重)
+                            if post_id and term_key not in post_contribution_map[post_id]:
+                                grouped_term_heat[group_key][term] += cii
+                                post_contribution_map[post_id].add(term_key)
+                                
+                            has_opinion = True
+        
+        if has_opinion:
+            valid_posts_count += 1
+
+    logger.info(f"[观点聚合] 从 {valid_posts_count}/{total_posts} 个帖子中收集到 {len(grouped_raw_opinions)} 个分组")
+
+    if not grouped_raw_opinions:
+        return {"topics": [], "llm_token_stats": token_stats}
+
+    # ========================================
+    # 2. 组内归纳 (LLM Opinion Normalization)
+    # ========================================
+    aggregated_opinions = []
+    
+    try:
+        normalization_chain = create_opinion_normalization_chain()
+        
+        for group_key, raw_map in grouped_raw_opinions.items():
+            category, sentiment_str = group_key.split("|")
+            sentiment = int(sentiment_str)
+            
+            # 过滤低频词
+            min_freq = 2 if len(raw_map) > 20 else 1
+            filtered_map = {k: v for k, v in raw_map.items() if len(v) >= min_freq}
+            
+            if not filtered_map:
+                continue
+                
+            # 按频次排序并截取 Top K
+            sorted_items = sorted(filtered_map.items(), key=lambda x: len(x[1]), reverse=True)
+            top_k_map = dict(sorted_items[:top_k_opinions])
+            
+            # 格式化输入
+            formatted_input = format_opinions_for_normalization(top_k_map)
+            
+            logger.info(f"[观点聚合] 归一化分组 '{group_key}': {len(top_k_map)} 个观点")
+            
+            # 调用 LLM
+            response, stats = invoke_chain_with_stats_sync(
+                normalization_chain,
+                {
+                    "category": category,
+                    "opinions": formatted_input
+                },
+                llm_type
+            )
+            
+            # 合并统计
+            if stats:
+                s = stats.get('summary', {})
+                token_stats['summary']['total_calls'] += s.get('total_calls', 0)
+                token_stats['summary']['total_tokens'] += s.get('total_tokens', 0)
+                token_stats['summary']['total_cost_cny'] += s.get('total_cost_cny', 0.0)
+                token_stats['call_details'].extend(stats.get('call_details', []))
+                
+            response_text = response.content if hasattr(response, "content") else str(response)
+            clusters = parse_normalization_response(response_text)
+            
+            # ========================================
+            # 3. 数据回填与聚合
+            # ========================================
+            # 处理聚类结果
+            processed_terms = set()
+            
+            for cluster in clusters:
+                label = cluster.get("label")
+                originals = cluster.get("original_terms", [])
+                
+                if not label or not originals:
+                    continue
+                    
+                # 聚合该 label 下的所有数据
+                merged_heat = 0.0
+                merged_post_ids = set()
+                merged_originals = []
+                
+                for term in originals:
+                    if term in raw_map:
+                        merged_heat += grouped_term_heat[group_key][term]
+                        merged_post_ids.update(raw_map[term])
+                        # 记录原始词及其频次
+                        merged_originals.append({"text": term, "count": len(raw_map[term])})
+                        processed_terms.add(term)
+                
+                if not merged_post_ids:
+                    continue
+
+                mentions = len(merged_post_ids)
+                score = calculate_score(merged_heat, mentions)
+                
+                aggregated_opinions.append({
+                    "category": category,
+                    "sentiment": sentiment,
+                    "label": label,  # 标准观点
+                    "name": label,   # 兼容旧字段
+                    "heat": round(merged_heat, 1),
+                    "mentions": mentions,
+                    "score": round(score, 1),
+                    "post_ids": list(merged_post_ids),
+                    "sub_opinions": merged_originals, # 兼容旧字段
+                    "original_terms": merged_originals
+                })
+            
+            # 处理未被聚类的 Top K 词 (作为独立观点)
+            # 也可以选择忽略，这里选择保留大头
+            for term, post_ids in top_k_map.items():
+                if term not in processed_terms:
+                    heat = grouped_term_heat[group_key][term]
+                    mentions = len(post_ids)
+                    score = calculate_score(heat, mentions)
+                    
+                    aggregated_opinions.append({
+                        "category": category,
+                        "sentiment": sentiment,
+                        "label": term,
+                        "name": term,
+                        "heat": round(heat, 1),
+                        "mentions": mentions,
+                        "score": round(score, 1),
+                        "post_ids": list(post_ids),
+                        "sub_opinions": [{"text": term, "count": mentions}],
+                        "original_terms": [{"text": term, "count": mentions}]
+                    })
+                    
+    except Exception as e:
+        logger.error(f"[观点聚合] 聚合失败: {e}", exc_info=True)
+
+    # 按综合评分排序
+    aggregated_opinions.sort(key=lambda x: x["score"], reverse=True)
+
+    # 计算总耗时
+    execution_duration = time.time() - start_time
+    token_stats['summary']['total_duration_seconds'] = execution_duration
+
+    return {
+        "topics": aggregated_opinions, # 保持字段名兼容
+        "llm_token_stats": token_stats
+    }

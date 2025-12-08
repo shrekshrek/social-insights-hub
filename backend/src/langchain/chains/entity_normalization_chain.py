@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""实体归一化 Chain
+"""实体归一化/聚类 Chain
 
 对聚合后的实体进行同义词合并，减少冗余。
 支持两阶段归一化：初步归一化 + 复查修正。
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # ==================== 第一阶段：初步归一化与打标 ====================
 
-ENTITY_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责处理社交媒体实体数据。
+ENTITY_CLUSTERING_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责处理社交媒体实体数据。
 当前分析的核心主题（锚点）是：【{task_keywords}】。
 
 你的任务是：
@@ -75,7 +75,7 @@ ENTITY_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位语义分析专家，负�
 只输出JSON，不要有其他文字。
 """
 
-ENTITY_NORMALIZATION_USER_TEMPLATE = """请对以下实体列表进行处理：
+ENTITY_CLUSTERING_USER_TEMPLATE = """请对以下实体列表进行处理：
 
 {entities}
 """
@@ -123,8 +123,8 @@ ENTITY_REVIEW_USER_TEMPLATE = """请审核以下处理结果：
 """
 
 
-def create_entity_normalization_chain() -> Runnable:
-    """创建实体归一化的LangChain链（第一阶段）
+def create_entity_clustering_chain() -> Runnable:
+    """创建实体归一化/聚类的LangChain链（第一阶段）
 
     Returns:
         Runnable: 用于实体归一化的LangChain可执行链
@@ -132,8 +132,8 @@ def create_entity_normalization_chain() -> Runnable:
     llm = get_llm(llm_type="chat")
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", ENTITY_NORMALIZATION_SYSTEM_TEMPLATE),
-        ("user", ENTITY_NORMALIZATION_USER_TEMPLATE),
+        ("system", ENTITY_CLUSTERING_SYSTEM_TEMPLATE),
+        ("user", ENTITY_CLUSTERING_USER_TEMPLATE),
     ])
 
     return prompt | llm
@@ -155,8 +155,8 @@ def create_entity_review_chain() -> Runnable:
     return prompt | llm
 
 
-def format_entities_for_normalization(entities: list[dict[str, Any]]) -> str:
-    """格式化实体列表用于归一化
+def format_entities_for_clustering(entities: list[dict[str, Any]]) -> str:
+    """格式化实体列表用于归一化/聚类
 
     Args:
         entities: 实体列表，每个包含 name, type, score, hint 字段
@@ -173,8 +173,8 @@ def format_entities_for_normalization(entities: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def parse_normalization_response(response_text: str) -> dict[str, Any]:
-    """解析LLM归一化响应
+def parse_clustering_response(response_text: str) -> dict[str, Any]:
+    """解析LLM归一化/聚类响应
 
     Args:
         response_text: LLM返回的文本
@@ -220,12 +220,12 @@ def parse_normalization_response(response_text: str) -> dict[str, Any]:
     return result
 
 
-async def normalize_entities_with_review(
+async def cluster_entities_with_review(
     entities: list[dict[str, Any]],
     task_keywords: list[str] | None = None,
     enable_review: bool = True
 ) -> dict[str, Any]:
-    """执行两阶段实体归一化（异步版本）
+    """执行两阶段实体归一化/聚类（异步版本）
 
     Args:
         entities: 实体列表
@@ -246,16 +246,16 @@ async def normalize_entities_with_review(
     # 转换关键词为字符串
     keywords_str = ", ".join(task_keywords) if task_keywords else "未指定"
 
-    formatted_entities = format_entities_for_normalization(entities)
+    formatted_entities = format_entities_for_clustering(entities)
 
     # 第一阶段：初步归一化
     logger.info(f"实体归一化第一阶段：处理 {len(entities)} 个实体")
-    normalization_chain = create_entity_normalization_chain()
+    normalization_chain = create_entity_clustering_chain()
     first_response = await normalization_chain.ainvoke({
         "entities": formatted_entities,
         "task_keywords": keywords_str
     })
-    first_result = parse_normalization_response(first_response.content)
+    first_result = parse_clustering_response(first_response.content)
 
     if not enable_review:
         logger.info("复查阶段已禁用，返回第一阶段结果")
@@ -277,21 +277,21 @@ async def normalize_entities_with_review(
         "task_keywords": keywords_str
     })
 
-    final_result = parse_normalization_response(review_response.content)
+    final_result = parse_clustering_response(review_response.content)
     logger.info(f"实体归一化完成：{len(final_result.get('normalized_groups', []))} 个合并组，"
                 f"{len(final_result.get('standalone_entities', []))} 个独立实体")
 
     return final_result
 
 
-def normalize_entities_with_review_sync(
+def cluster_entities_with_review_sync(
     formatted_entities: str,
     invoke_with_stats_fn,
     task_keywords: list[str] | None = None,
     enable_review: bool = True,
     llm_type: str = "chat"
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """执行两阶段实体归一化（同步版本，支持 token 统计）
+    """执行两阶段实体归一化/聚类（同步版本，支持 token 统计）
 
     设计用于 Celery 任务环境，使用调用方提供的 invoke_with_stats_fn 来追踪 token。
 
@@ -335,7 +335,7 @@ def normalize_entities_with_review_sync(
 
     # 第一阶段：初步归一化
     logger.info("实体归一化第一阶段：初步归一化")
-    normalization_chain = create_entity_normalization_chain()
+    normalization_chain = create_entity_clustering_chain()
     first_response, first_stats = invoke_with_stats_fn(
         normalization_chain,
         {
@@ -347,7 +347,7 @@ def normalize_entities_with_review_sync(
     merge_stats(first_stats)
 
     first_response_text = first_response.content if hasattr(first_response, "content") else str(first_response)
-    first_result = parse_normalization_response(first_response_text)
+    first_result = parse_clustering_response(first_response_text)
 
     if not enable_review:
         logger.info("复查阶段已禁用，返回第一阶段结果")
@@ -375,7 +375,7 @@ def normalize_entities_with_review_sync(
     merge_stats(review_stats)
 
     review_response_text = review_response.content if hasattr(review_response, "content") else str(review_response)
-    final_result = parse_normalization_response(review_response_text)
+    final_result = parse_clustering_response(review_response_text)
 
     # 更新合并统计的平均值
     if combined_stats['summary']['total_calls'] > 0:

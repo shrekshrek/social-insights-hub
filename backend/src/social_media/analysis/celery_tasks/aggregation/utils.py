@@ -8,6 +8,131 @@ import re
 from difflib import SequenceMatcher
 
 
+import logging
+from typing import Any, List, Callable, Dict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from langchain_core.runnables import Runnable
+
+logger = logging.getLogger(__name__)
+
+
+def run_parallel_normalization(
+    tasks: List[dict],
+    chain_factory: Callable[[], Runnable],
+    invoke_func: Callable,
+    parse_response_func: Callable[[str], Any],
+    llm_type: str = "chat",
+    max_workers: int = 10,
+    task_name_key: str = "task_id",
+) -> tuple[List[dict], dict]:
+    """通用并行归一化执行器
+    
+    统一处理并行调用 LLM、异常捕获和 Token 统计汇总。
+    
+    Args:
+        tasks: 任务列表，每个 task 必须包含 chain 需要的 input_variables
+        chain_factory: 创建 chain 的工厂函数
+        invoke_func: invoke_chain_with_stats_sync 函数
+        parse_response_func: 响应解析函数
+        llm_type: LLM 类型
+        max_workers: 最大并发数
+        task_name_key: 用于日志记录的任务标识键名 (如 'group_key' 或 'entity_name')
+        
+    Returns:
+        tuple: (results, combined_token_stats)
+            - results: List[{ "task": original_task, "parsed_result": result, "stats": stats }]
+            - combined_token_stats: 汇总后的 token 统计字典
+    """
+    results = []
+    combined_stats = {
+        'summary': {
+            'total_calls': 0,
+            'total_input_tokens': 0,
+            'total_output_tokens': 0,
+            'total_tokens': 0,
+            'total_cost_cny': 0.0,
+            'total_duration_seconds': 0.0,
+        },
+        'call_details': [],
+    }
+    
+    if not tasks:
+        return results, combined_stats
+
+    logger.info(f"[并行归一化] 准备执行 {len(tasks)} 个任务 (max_workers={max_workers})")
+
+    # 定义单个执行任务
+    def _run_single_task(task_input):
+        task_id = task_input.get(task_name_key, "unknown")
+        try:
+            # 在线程中创建 chain (确保线程安全)
+            chain = chain_factory()
+            
+            # 调用 LLM
+            # 注意：invoke_func (invoke_chain_with_stats_sync) 的签名通常是 (chain, inputs, llm_type)
+            # task_input 中包含了 chain 需要的所有参数
+            response, stats = invoke_func(chain, task_input, llm_type)
+            
+            response_text = response.content if hasattr(response, "content") else str(response)
+            parsed_result = parse_response_func(response_text)
+            
+            return {
+                "task": task_input,
+                "parsed_result": parsed_result,
+                "stats": stats,
+                "success": True
+            }
+        except Exception as e:
+            logger.error(f"[并行归一化] 任务 '{task_id}' 失败: {e}", exc_info=True)
+            return {
+                "task": task_input,
+                "error": str(e),
+                "success": False
+            }
+
+    # 并行执行
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 提交所有任务
+        future_to_task = {executor.submit(_run_single_task, task): task for task in tasks}
+        
+        for future in as_completed(future_to_task):
+            try:
+                result = future.result()
+                if not result["success"]:
+                    continue
+                    
+                results.append(result)
+                
+                # 汇总统计
+                stats = result.get("stats")
+                if stats:
+                    s = stats.get('summary', {})
+                    combined_stats['summary']['total_calls'] += s.get('total_calls', 0)
+                    combined_stats['summary']['total_input_tokens'] = combined_stats['summary'].get('total_input_tokens', 0) + s.get('total_input_tokens', 0)
+                    combined_stats['summary']['total_output_tokens'] = combined_stats['summary'].get('total_output_tokens', 0) + s.get('total_output_tokens', 0)
+                    combined_stats['summary']['total_tokens'] += s.get('total_tokens', 0)
+                    combined_stats['summary']['total_cost_cny'] += s.get('total_cost_cny', 0.0)
+                    # duration 不需要累加用于计费，但用于统计总的计算资源占用
+                    combined_stats['summary']['total_duration_seconds'] += s.get('total_duration_seconds', 0.0)
+                    combined_stats['call_details'].extend(stats.get('call_details', []))
+                    
+            except Exception as e:
+                logger.error(f"[并行归一化] 线程执行异常: {e}", exc_info=True)
+
+    # 重新计算平均值
+    total_calls = combined_stats['summary']['total_calls']
+    if total_calls > 0:
+        combined_stats['summary']['avg_tokens_per_call'] = (
+            combined_stats['summary']['total_tokens'] / total_calls
+        )
+        combined_stats['summary']['avg_cost_per_call'] = (
+            combined_stats['summary']['total_cost_cny'] / total_calls
+        )
+
+    return results, combined_stats
+
+
 def calculate_score(heat: float, mentions: int) -> float:
     """计算综合评分：heat × log(mentions + 1)
 

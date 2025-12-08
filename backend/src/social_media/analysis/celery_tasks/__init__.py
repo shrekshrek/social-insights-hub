@@ -15,8 +15,8 @@ from .aggregation import (
     aggregate_task_analysis,
     # Entity
     aggregate_entities,
-    # Opinion
-    aggregate_opinions,
+    # Topic
+    aggregate_topics,
     # Metrics
     calculate_cii,
     calculate_cii_for_post,
@@ -37,8 +37,8 @@ __all__ = [
     "aggregate_task_analysis",
     # Entity
     "aggregate_entities",
-    # Opinion
-    "aggregate_opinions",
+    # Topic
+    "aggregate_topics",
     # Metrics
     "calculate_cii",
     "calculate_cii_for_post",

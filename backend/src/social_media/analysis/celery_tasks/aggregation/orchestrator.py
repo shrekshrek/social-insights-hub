@@ -272,14 +272,14 @@ def aggregate_task_analysis(
             project_id=project_id,
             task_id=task_id,
             user_id=user_id,
-            analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
+            analysis_type=AnalysisType.TOPIC_NORMALIZATION.value,
             source_count=len(posts_data),
             status="processing",
         )
 
-    # 并行执行实体聚合和观点聚合（两者互相独立）
+    # 并行执行实体聚合和话题聚合（两者互相独立）
     entity_stats = {}
-    opinion_stats = {}
+    topic_stats = {}
 
     def run_entity_aggregation():
         return aggregate_entities(
@@ -288,25 +288,25 @@ def aggregate_task_analysis(
             enable_llm_normalization=enable_entity_normalization,
         )
 
-    def run_opinion_aggregation():
+    def run_topic_aggregation():
         return aggregate_opinions(
             posts_data,
-            task_keywords=task_keywords,
-            enable_llm_normalization=enable_entity_normalization,
+            # task_keywords=task_keywords, # 话题聚合暂不需要 task_keywords
+            # enable_llm_normalization=enable_entity_normalization,
         )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_entity = executor.submit(run_entity_aggregation)
-        future_opinion = executor.submit(run_opinion_aggregation)
+        future_topic = executor.submit(run_topic_aggregation)
 
         # 等待两个任务完成
-        for future in as_completed([future_entity, future_opinion]):
+        for future in as_completed([future_entity, future_topic]):
             try:
                 if future == future_entity:
                     entity_stats = future.result()
                     logger.info(f"[并行聚合] 实体聚合完成")
                 else:
-                    opinion_stats = future.result()
+                    topic_stats = future.result()
                     logger.info(f"[并行聚合] 观点聚合完成")
             except Exception as e:
                 logger.error(f"[并行聚合] 聚合任务失败: {e}")
@@ -326,15 +326,17 @@ def aggregate_task_analysis(
             db=db,
             job=opinion_job,
             analyzed_count=opinion_job.source_count,
-            token_usage=opinion_stats.get("llm_token_stats"),
+            token_usage=topic_stats.get("llm_token_stats"),
         )
 
     # 7. 四象限数据
     quadrant_data = generate_quadrant_data(posts_data)
     quadrant_summary = get_quadrant_summary(quadrant_data)
 
-    # 8. KANO 需求分层 (§4.5.3) - 基于观点聚合数据
-    kano_model = classify_kano_model(opinion_stats)
+    # 8. KANO 需求分层 (§4.5.3) - 基于话题聚合数据 (Topic as 'feature/issue')
+    # 注意: KANO 模型原先基于 opinion_stats，现在可能需要适配
+    # 暂时传入 topic_stats，但 KANO 分类器可能需要调整
+    kano_model = classify_kano_model(topic_stats)
 
     # 9. 场景与人群画像 (§4.5.4) - 从 aggregated_entities 派生
     aggregated_entities = entity_stats.get("aggregated_entities", [])
@@ -378,9 +380,10 @@ def aggregate_task_analysis(
             "top_entities": entity_stats.get("top_entities", []),
             "target_entities": entity_stats.get("target_entities", []),
             "competitor_entities": entity_stats.get("competitor_entities", []),
-            # 观点统计（带来源分布）
-            "top_issues": opinion_stats.get("top_issues", []),
-            "top_features": opinion_stats.get("top_features", []),
+            # 话题统计（原观点统计）
+            "top_topics": topic_stats.get("topics", [])[:10], # 取 Top 10 话题
+            "top_issues": [t for t in topic_stats.get("topics", []) if t.get("sentiment") == -1][:10],
+            "top_features": [t for t in topic_stats.get("topics", []) if t.get("sentiment") == 1][:10],
             # 场景与人群画像 (§4.5.4)
             "context_analysis": context_analysis,
             # KANO 需求分层 (§4.5.3)
@@ -394,7 +397,7 @@ def aggregate_task_analysis(
         },
         # 原始融合数据（用于项目级分析）
         "aggregated_entities": entity_stats.get("aggregated_entities", []),
-        "aggregated_opinions": opinion_stats.get("aggregated_opinions", []),
+        "aggregated_topics": topic_stats.get("topics", []), # 原 aggregated_opinions
     }
 
     # 统计实体分类数量

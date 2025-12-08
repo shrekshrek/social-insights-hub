@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""实体归一化功能测试
+"""实体聚类/归一化功能测试
 
-测试 LLM 实体归一化的同义词合并与多维打标功能。
+测试 LLM 实体聚类与归一化的同义词合并与多维打标功能。
 """
 
 import sys
@@ -16,10 +16,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv('.env.test')
 
-from src.langchain.chains.entity_normalization_chain import (
-    create_entity_normalization_chain,
-    format_entities_for_normalization,
-    parse_normalization_response,
+from src.langchain.chains.entity_clustering_chain import (
+    create_entity_clustering_chain,
+    format_entities_for_clustering,
+    parse_clustering_response,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,34 +33,34 @@ def test_format_entities():
         {"name": "测甲醛", "type": "服务", "heat": 45.2, "mentions": 60},
         {"name": "华为", "type": "品牌", "heat": 100.0, "mentions": 200, "hint": "常与 小米, 苹果 对比"},
     ]
-    formatted = format_entities_for_normalization(entities)
+    formatted = format_entities_for_clustering(entities)
     logger.info(f"格式化结果:\n{formatted}")
     assert "甲醛检测" in formatted
     assert "[线索]: 常与 测甲醛 对比" in formatted
     assert "华为" in formatted
-    logger.info("✅ format_entities_for_normalization 测试通过")
+    logger.info("✅ format_entities_for_clustering 测试通过")
     return formatted
 
 
 def test_parse_response():
     """测试响应解析函数"""
     mock_response = '''```json
-{
-  "normalized_groups": [
     {
-      "canonical_name": "甲醛检测",
-      "tags": {
-        "role": "FOCUS",
-        "category": "服务",
-        "parent": "室内环保"
-      },
-      "merged_entities": ["甲醛检测", "测甲醛", "甲醛测试"]
+      "normalized_groups": [
+        {
+          "canonical_name": "甲醛检测",
+          "tags": {
+            "role": "FOCUS",
+            "category": "服务",
+            "parent": "室内环保"
+          },
+          "merged_entities": ["甲醛检测", "测甲醛", "甲醛测试"]
+        }
+      ],
+      "standalone_entities": ["华为", "小米手机"]
     }
-  ],
-  "standalone_entities": ["华为", "小米手机"]
-}
-```'''
-    result = parse_normalization_response(mock_response)
+    ```'''
+    result = parse_clustering_response(mock_response)
     logger.info(f"解析结果: {json.dumps(result, ensure_ascii=False, indent=2)}")
 
     assert "normalized_groups" in result
@@ -78,12 +78,12 @@ def test_parse_response():
     assert tags["role"] == "FOCUS"
     assert tags["parent"] == "室内环保"
 
-    logger.info("✅ parse_normalization_response 测试通过")
+    logger.info("✅ parse_clustering_response 测试通过")
     return result
 
 
-def test_llm_normalization():
-    """测试 LLM 实体归一化（需要真实 API 调用）"""
+def test_llm_clustering():
+    """测试 LLM 实体聚类/归一化（需要真实 API 调用）"""
     # 准备测试数据：包含同义词的实体列表
     test_entities = [
         {"name": "Mate60", "type": "产品", "heat": 85.5, "mentions": 120, "hint": "常与 iPhone 15 对比"},
@@ -98,18 +98,18 @@ def test_llm_normalization():
     keywords_str = ", ".join(task_keywords)
 
     logger.info("=" * 60)
-    logger.info("开始 LLM 实体归一化测试")
+    logger.info("开始 LLM 实体聚类测试")
     logger.info("=" * 60)
     logger.info(f"输入实体数量: {len(test_entities)}")
     logger.info(f"锚点关键词: {keywords_str}")
 
     # 格式化输入
-    formatted = format_entities_for_normalization(test_entities)
+    formatted = format_entities_for_clustering(test_entities)
     logger.info(f"\n格式化后的输入:\n{formatted}")
 
     # 调用 LLM
-    logger.info("\n调用 LLM 进行归一化...")
-    chain = create_entity_normalization_chain()
+    logger.info("\n调用 LLM 进行聚类...")
+    chain = create_entity_clustering_chain()
     response = chain.invoke({
         "entities": formatted,
         "task_keywords": keywords_str
@@ -119,7 +119,7 @@ def test_llm_normalization():
     logger.info(f"\nLLM 原始响应:\n{response_text}")
 
     # 解析响应
-    result = parse_normalization_response(response_text)
+    result = parse_clustering_response(response_text)
 
     logger.info("\n" + "=" * 60)
     logger.info("归一化结果 (含标签)")
@@ -153,12 +153,12 @@ def test_llm_normalization():
         assert tags_mapping[iphone_key]["role"] == "RIVAL"
         logger.info("✅ iPhone 15 角色正确 (RIVAL)")
 
-    logger.info("\n✅ LLM 实体归一化测试完成")
+    logger.info("\n✅ LLM 实体聚类测试完成")
     return result
 
 
-def test_aggregated_entities_normalization():
-    """测试 aggregate_entities 的完整流程（包含 LLM 归一化与打标、属性清洗）"""
+def test_aggregated_entities_clustering():
+    """测试 aggregate_entities 的完整流程（包含 LLM 聚类与打标、属性清洗）"""
     from src.social_media.analysis.celery_tasks.aggregation.entity_aggregation import (
         aggregate_entities,
     )
@@ -287,9 +287,9 @@ def test_aggregated_entities_normalization():
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="实体归一化功能测试")
+    parser = argparse.ArgumentParser(description="实体聚类功能测试")
     parser.add_argument("--unit-only", action="store_true", help="仅运行单元测试（不调用 LLM）")
-    parser.add_argument("--full", action="store_true", help="运行完整测试（包括 aggregated_entities 归一化）")
+    parser.add_argument("--full", action="store_true", help="运行完整测试（包括 aggregated_entities 聚类）")
     args = parser.parse_args()
 
     # 单元测试（不需要 LLM）
@@ -305,12 +305,12 @@ if __name__ == "__main__":
 
     # LLM 测试
     logger.info("\n")
-    test_llm_normalization()
+    test_llm_clustering()
 
     # 完整流程测试
     if args.full:
         logger.info("\n")
-        test_aggregated_entities_normalization()
+        test_aggregated_entities_clustering()
 
     logger.info("\n" + "=" * 60)
     logger.info("✅ 所有测试完成")

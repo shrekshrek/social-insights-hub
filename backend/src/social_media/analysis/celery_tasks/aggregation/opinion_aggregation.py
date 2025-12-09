@@ -96,11 +96,19 @@ def aggregate_opinions(
 
     # 调用 LLM 进行类别映射 (如果类别数 > 5)
     category_map: Dict[str, str] = {}
-    if len(raw_category_counts) > 5:
+    raw_category_count = len(raw_category_counts)
+    
+    if raw_category_count > 5:
         try:
-            logger.info(f"[观点聚合] 开始类别归一化: {len(raw_category_counts)} 个原始类别")
+            logger.info(f"[观点聚合] 开始类别归一化: {raw_category_count} 个原始类别")
             cat_norm_chain = create_category_normalization_chain()
             formatted_cats = format_categories_for_normalization(dict(raw_category_counts))
+            
+            # 打印输入
+            print("\n" + "="*60)
+            print(f"[类别归一化] 输入 ({raw_category_count} 个类别):")
+            print(formatted_cats)
+            print("="*60)
             
             cat_response, cat_stats = invoke_chain_with_stats_sync(
                 cat_norm_chain,
@@ -114,10 +122,28 @@ def aggregate_opinions(
             
             response_text = cat_response.content if hasattr(cat_response, "content") else str(cat_response)
             category_map = parse_category_normalization_response(response_text)
-            logger.info(f"[观点聚合] 类别归一化完成: 映射规则 {len(category_map)} 条")
+            
+            # 打印输出
+            unique_categories = set(category_map.values())
+            print(f"\n[类别归一化] 输出 ({raw_category_count} -> {len(unique_categories)} 个标准类别):")
+            # 按标准类别分组显示
+            from collections import defaultdict
+            grouped = defaultdict(list)
+            for orig, std in category_map.items():
+                grouped[std].append(orig)
+            for std_cat, orig_cats in grouped.items():
+                if len(orig_cats) > 1:
+                    print(f"  {std_cat} <- {orig_cats}")
+                else:
+                    print(f"  {std_cat}")
+            print("="*60 + "\n")
+            
+            logger.info(f"[观点聚合] 类别归一化完成: {raw_category_count} -> {len(unique_categories)} 个标准类别")
             
         except Exception as e:
             logger.error(f"[观点聚合] 类别归一化失败: {e}", exc_info=True)
+    else:
+        logger.info(f"[观点聚合] 类别数 <= 5，跳过类别归一化")
 
     def get_normalized_category(raw: str) -> str:
         if not raw: return "其他"
@@ -235,6 +261,16 @@ def aggregate_opinions(
             "top_k_map": top_k_map
         })
 
+    # 打印观点归一化输入统计
+    if tasks:
+        print("\n" + "="*60)
+        print(f"[观点归一化] 输入 ({len(tasks)} 个分组需要 LLM 归一化):")
+        for t in tasks:
+            term_count = len(t["top_k_map"])
+            sentiment_label = {1: "正面", 0: "中性", -1: "负面"}.get(t["sentiment"], "未知")
+            print(f"  [{t['category']}|{sentiment_label}] {term_count} 个观点")
+        print("="*60)
+
     # 使用通用并行执行器
     results, stats = run_parallel_normalization(
         tasks=tasks,
@@ -246,6 +282,18 @@ def aggregate_opinions(
     )
     
     token_stats = stats # 直接使用返回的统计
+    
+    # 打印观点归一化输出统计
+    if results:
+        print(f"\n[观点归一化] 输出 ({len(results)} 个分组处理完成):")
+        for res in results:
+            task = res["task"]
+            clusters = res["parsed_result"]
+            input_count = len(task["top_k_map"])
+            output_count = len(clusters) if clusters else 0
+            sentiment_label = {1: "正面", 0: "中性", -1: "负面"}.get(task["sentiment"], "未知")
+            print(f"  [{task['category']}|{sentiment_label}] {input_count} -> {output_count} 个聚类")
+        print("="*60 + "\n")
 
     # 处理结果并更新 aggregated_opinions
     for res in results:

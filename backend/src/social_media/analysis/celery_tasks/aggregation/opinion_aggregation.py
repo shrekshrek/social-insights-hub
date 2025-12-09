@@ -27,7 +27,9 @@ from src.langchain.chains.opinion_normalization_chain import (
 from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
 from src.social_media.analysis.celery_tasks.aggregation.utils import (
     calculate_score, 
-    run_parallel_normalization
+    run_parallel_normalization,
+    merge_token_stats,
+    filter_low_frequency_terms
 )
 
 logger = logging.getLogger(__name__)
@@ -99,11 +101,7 @@ def aggregate_opinions(
             
             # 合并统计
             if cat_stats:
-                s = cat_stats.get('summary', {})
-                token_stats['summary']['total_calls'] += s.get('total_calls', 0)
-                token_stats['summary']['total_tokens'] += s.get('total_tokens', 0)
-                token_stats['summary']['total_cost_cny'] += s.get('total_cost_cny', 0.0)
-                token_stats['call_details'].extend(cat_stats.get('call_details', []))
+                merge_token_stats(token_stats, cat_stats)
             
             response_text = cat_response.content if hasattr(cat_response, "content") else str(cat_response)
             category_map = parse_category_normalization_response(response_text)
@@ -193,17 +191,32 @@ def aggregate_opinions(
         category, sentiment_str = group_key.split("|")
         sentiment = int(sentiment_str)
         
-        # 过滤低频词
-        min_freq = 2 if len(raw_map) > 20 else 1
-        filtered_map = {k: v for k, v in raw_map.items() if len(v) >= min_freq}
+        # 过滤低频词 (移除：小样本场景下保留长尾词交给 LLM 聚类)
+        # filtered_map = filter_low_frequency_terms(raw_map)
         
-        if not filtered_map:
-            continue
-            
-        # 按频次排序并截取 Top K
-        sorted_items = sorted(filtered_map.items(), key=lambda x: len(x[1]), reverse=True)
+        # 按频次排序并截取 Top K (直接使用 raw_map)
+        sorted_items = sorted(raw_map.items(), key=lambda x: len(x[1]), reverse=True)
         top_k_map = dict(sorted_items[:top_k_opinions])
         
+        # 优化：如果不同词条数 <= 5，不需要 LLM 聚类，直接作为结果
+        if len(top_k_map) <= 5:
+            for term, post_ids in top_k_map.items():
+                heat = grouped_term_heat[group_key][term]
+                mentions = len(post_ids)
+                score = calculate_score(heat, mentions)
+                aggregated_opinions.append({
+                    "category": category,
+                    "sentiment": sentiment,
+                    "name": term,
+                    "label": term,
+                    "heat": round(heat, 1),
+                    "mentions": mentions,
+                    "score": round(score, 1),
+                    "post_ids": list(post_ids),
+                    "original_terms": [{"text": term, "count": mentions}],
+                })
+            continue
+
         # 格式化输入
         formatted_input = format_opinions_for_normalization(top_k_map)
         
@@ -277,14 +290,13 @@ def aggregate_opinions(
             aggregated_opinions.append({
                 "category": category,
                 "sentiment": sentiment,
-                "label": label,  # 标准观点
-                "name": label,   # 兼容旧字段
+                "name": label,   # 统一使用 name
+                "label": label,  # 兼容旧字段
                 "heat": round(merged_heat, 1),
                 "mentions": mentions,
                 "score": round(score, 1),
                 "post_ids": list(merged_post_ids),
-                "sub_opinions": merged_originals, # 兼容旧字段
-                "original_terms": merged_originals
+                "original_terms": merged_originals, # 统一使用 original_terms
             })
         
         # 处理未被聚类的 Top K 词 (作为独立观点)
@@ -297,14 +309,13 @@ def aggregate_opinions(
                 aggregated_opinions.append({
                     "category": category,
                     "sentiment": sentiment,
-                    "label": term,
-                    "name": term,
+                    "name": term,   # 统一使用 name
+                    "label": term,  # 兼容旧字段
                     "heat": round(heat, 1),
                     "mentions": mentions,
                     "score": round(score, 1),
                     "post_ids": list(post_ids),
-                    "sub_opinions": [{"text": term, "count": mentions}],
-                    "original_terms": [{"text": term, "count": mentions}]
+                    "original_terms": [{"text": term, "count": mentions}], # 统一使用 original_terms
                 })
 
     # 按综合评分排序

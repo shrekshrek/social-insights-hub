@@ -35,6 +35,8 @@ from src.social_media.analysis.celery_tasks.aggregation.utils import (
     are_similar,
     build_similarity_mapping,
     run_parallel_normalization,
+    merge_token_stats,
+    filter_low_frequency_terms,
 )
 
 logger = logging.getLogger(__name__)
@@ -434,7 +436,7 @@ def _clean_entity_attributes_sync(
         # 预先创建 chain 可能会有线程安全问题，但在 LangChain Runnable 中通常是安全的。
         # 为了更安全，可以在每个线程中创建，或者确保 Runnable 是无状态的。
         # 这里为了简单，假设 Runnable 是线程安全的 (ChatPromptTemplate + ChatModel 通常是)。
-        cleaning_chain = create_attribute_cleaning_chain()
+        _ = create_attribute_normalization_chain()
     except Exception as e:
         logger.warning(f"[属性清洗] 初始化 LLM 失败，跳过清洗: {e}")
         return entity_data, token_stats
@@ -457,16 +459,29 @@ def _clean_entity_attributes_sync(
             if not raw_map:
                 continue
                 
-            # 过滤低频词
+            # 过滤低频词 (移除：小样本场景下保留长尾词交给 LLM 聚类)
+            # filtered_map = filter_low_frequency_terms(raw_map)
+            
+            # 按频次排序 (直接使用 raw_map)
             sorted_terms = sorted(
-                [(k, v) for k, v in raw_map.items() if len(v) >= 1],
+                [(k, v) for k, v in raw_map.items()],
                 key=lambda x: len(x[1]),
                 reverse=True
             )
             
-            if len(sorted_terms) < 2:
-                continue
+            # 优化：如果不同词条数 <= 5，不需要 LLM 聚类，直接保留原样
+            if len(sorted_terms) <= 5:
+                # 直接将这些词条保留，不调用 LLM
+                # 重新构建 map，保留这 <= 5 个词
+                # 注意：这里我们实际上是跳过了"清洗"步骤，保留了原始数据
+                # 如果之前 raw_map 有更多词，这里只保留了 sorted_terms (即全部)
+                # 但 sorted_terms 本身就是 raw_map 的全部内容（因为移除了低频过滤）
                 
+                # 由于这是 update 操作，我们需要确保 entity_data 中的数据保持原样
+                # 实际上不需要做任何操作，只要不把 task 加入 tasks 列表即可
+                # 原始数据已经在 entity_data 中了
+                continue
+            
             # 截取 Top K
             terms_to_clean = sorted_terms[:top_k_attrs]
             tail_terms = sorted_terms[top_k_attrs:]
@@ -582,7 +597,7 @@ def _merge_by_mapping(
                 "scenarios": defaultdict(set),
                 "market_factors": defaultdict(set),
                 "competitors": defaultdict(set),
-                "merged_from": set(),
+                "original_terms": [],  # 统一使用 original_terms 替代 merged_from
             }
         return merged_data[canonical]
 
@@ -598,9 +613,14 @@ def _merge_by_mapping(
         # 获取或创建合并目标
         merged = get_or_create_merged(canonical, raw_data["type"])
 
-        # 记录合并来源
-        if original_name != canonical:
-            merged["merged_from"].add(original_name)
+        # 记录原始词条及其频次 (统一结构)
+        # 即使是 canonical 本身，如果出现在原始数据中，也记录下来
+        term_count = len(raw_data["post_ids"])
+        if term_count > 0:
+            merged["original_terms"].append({
+                "text": original_name,
+                "count": term_count
+            })
 
         # 合并数值字段（这些是累加的）
         merged["positive_count"] += raw_data["positive_count"]
@@ -697,23 +717,7 @@ def aggregate_entities(
         
         # 合并 token 统计
         if cleaning_stats and llm_token_stats:
-            s1 = llm_token_stats.get('summary', {})
-            s2 = cleaning_stats.get('summary', {})
-            
-            # 累加所有数值字段
-            s1['total_calls'] += s2.get('total_calls', 0)
-            s1['total_input_tokens'] += s2.get('total_input_tokens', 0)
-            s1['total_output_tokens'] += s2.get('total_output_tokens', 0)
-            s1['total_tokens'] += s2.get('total_tokens', 0)
-            s1['total_cost_cny'] += s2.get('total_cost_cny', 0.0)
-            s1['total_duration_seconds'] += s2.get('total_duration_seconds', 0.0)
-            
-            # 重新计算平均值
-            if s1['total_calls'] > 0:
-                s1['avg_tokens_per_call'] = s1['total_tokens'] / s1['total_calls']
-                s1['avg_cost_per_call'] = s1['total_cost_cny'] / s1['total_calls']
-                
-            llm_token_stats['call_details'].extend(cleaning_stats.get('call_details', []))
+            merge_token_stats(llm_token_stats, cleaning_stats)
         elif cleaning_stats:
             llm_token_stats = cleaning_stats
 
@@ -777,9 +781,11 @@ def aggregate_entities(
         if data.get("tags"):
             result["tags"] = data["tags"]
 
-        # 添加合并来源信息
-        if data["merged_from"]:
-            result["merged_from"] = list(data["merged_from"])
+        # 添加原始词条信息 (统一结构)
+        if data.get("original_terms"):
+            # 按频次排序
+            sorted_terms = sorted(data["original_terms"], key=lambda x: x["count"], reverse=True)
+            result["original_terms"] = sorted_terms
 
         return result
 
@@ -860,9 +866,11 @@ def aggregate_entities(
         if data.get("tags"):
             entity_dict["tags"] = data["tags"]
 
-        # 添加合并来源信息
-        if data["merged_from"]:
-            entity_dict["merged_from"] = list(data["merged_from"])
+        # 添加原始词条信息 (统一结构)
+        if data.get("original_terms"):
+            # 按频次排序
+            sorted_terms = sorted(data["original_terms"], key=lambda x: x["count"], reverse=True)
+            entity_dict["original_terms"] = sorted_terms
 
         aggregated_entities.append(entity_dict)
 

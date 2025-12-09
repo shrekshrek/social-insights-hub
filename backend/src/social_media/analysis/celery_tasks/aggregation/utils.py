@@ -133,6 +133,67 @@ def run_parallel_normalization(
     return results, combined_stats
 
 
+def merge_token_stats(target: dict, source: dict) -> None:
+    """合并 Token 统计数据（原地更新 target）
+    
+    Args:
+        target: 目标统计字典（将被更新）
+        source: 源统计字典
+    """
+    if not source:
+        return
+        
+    s_target = target.setdefault('summary', {})
+    s_source = source.get('summary', {})
+    
+    # 初始化默认值
+    for key in ['total_calls', 'total_tokens', 'total_input_tokens', 'total_output_tokens', 
+                'total_cost_cny', 'total_duration_seconds']:
+        s_target.setdefault(key, 0)
+    
+    # 累加数值字段
+    s_target['total_calls'] += s_source.get('total_calls', 0)
+    s_target['total_input_tokens'] += s_source.get('total_input_tokens', 0)
+    s_target['total_output_tokens'] += s_source.get('total_output_tokens', 0)
+    s_target['total_tokens'] += s_source.get('total_tokens', 0)
+    s_target['total_cost_cny'] += s_source.get('total_cost_cny', 0.0)
+    s_target['total_duration_seconds'] += s_source.get('total_duration_seconds', 0.0)
+    
+    # 合并调用详情
+    if 'call_details' in source:
+        target.setdefault('call_details', []).extend(source['call_details'])
+        
+    # 重新计算平均值
+    total_calls = s_target['total_calls']
+    if total_calls > 0:
+        s_target['avg_tokens_per_call'] = s_target['total_tokens'] / total_calls
+        s_target['avg_cost_per_call'] = s_target['total_cost_cny'] / total_calls
+
+
+def filter_low_frequency_terms(
+    raw_map: dict[str, Any], 
+    min_count_rule: Callable[[int], int] | None = None
+) -> dict[str, Any]:
+    """过滤低频词条
+    
+    Args:
+        raw_map: 原始词条映射 {term: value} (value 只要有 len() 即可)
+        min_count_rule: 自定义阈值规则函数 (total_items -> min_count)，默认逻辑：>20条时阈值为2，否则1
+        
+    Returns:
+        dict: 过滤后的词条映射
+    """
+    if not raw_map:
+        return {}
+        
+    if min_count_rule is None:
+        min_count = 2 if len(raw_map) > 20 else 1
+    else:
+        min_count = min_count_rule(len(raw_map))
+        
+    return {k: v for k, v in raw_map.items() if len(v) >= min_count}
+
+
 def calculate_score(heat: float, mentions: int) -> float:
     """计算综合评分：heat × log(mentions + 1)
 

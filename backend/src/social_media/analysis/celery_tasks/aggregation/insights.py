@@ -6,15 +6,20 @@
 - 竞品分析 (analyze_competition)
 - KOL 声音提取 (extract_kol_voices)
 
+设计原则：
+- **小样本优先**: 适应 100 篇左右的小样本数据，避免过度复杂的统计推断。
+- **定性优于定量**: 提供“发现线索”而非“统计报表”，利用 post_ids 进行集合运算。
+- **结构化复用**: 充分利用 aggregated_entities 和 aggregated_opinions 的清洗成果。
+
 参考设计文档: docs/analysis_design/TASK_ANALYSIS_DETAIL.md
 """
 
 import logging
-from typing import Any
+from typing import Any, List, Dict
 from collections import defaultdict
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from src.social_media.tasks.models import SocialPost
 
@@ -27,324 +32,158 @@ logger = logging.getLogger(__name__)
 
 def derive_context_analysis(
     aggregated_entities: list[dict[str, Any]],
-    min_mentions: int = 2,
-    top_n: int = 10,
+    top_n: int = 5,
 ) -> dict[str, list[dict[str, Any]]]:
     """从 aggregated_entities 派生场景与人群画像
-
-    采用"先融合，后派生"架构：
-    - 输入: aggregate_entities() 返回的 aggregated_entities（已完成实体名称归一化，数组格式）
-    - 输出: 场景和人群画像的聚合结果
-
-    优势：
-    1. 数据一致性：复用实体归一化结果，避免重复处理
-    2. 维度完整性：scenarios/audience 已关联到归一化实体
-    3. 追溯能力：通过 post_ids 支持反向追溯
-
-    Args:
-        aggregated_entities: aggregate_entities 返回的 aggregated_entities 字段（数组格式）
-        min_mentions: 最小提及数门槛（过滤偶然数据）
-        top_n: 返回前 N 个
-
-    Returns:
-        dict: {
-            "scenarios": [{"label": "游戏", "heat": 3000, "associated_issues": [...], ...}],
-            "audiences": [{"label": "学生党", "heat": 2000, "preferences": [...]}],
-        }
+    
+    直接从归一化后的实体中提取 Scenarios 和 Audience，并按热度排序。
+    不做复杂的交叉分析，但保留 post_ids 以支持前端反查。
     """
-    # 收集场景数据
-    scenario_data: dict[str, dict] = defaultdict(lambda: {
-        "label": "",
-        "total_heat": 0.0,
-        "post_ids": set(),
-        "associated_issues": defaultdict(int),
-        "associated_features": defaultdict(int),
-    })
-
-    # 收集人群数据
-    audience_data: dict[str, dict] = defaultdict(lambda: {
-        "label": "",
-        "total_heat": 0.0,
-        "post_ids": set(),
-        "preferences": defaultdict(int),  # 关联的 market_factors 或 features
-    })
-
-    # 遍历所有已归一化的实体（数组格式）
-    for entity in aggregated_entities:
-        entity_heat = entity.get("heat", 0)
-        entity_issues = entity.get("issues", [])  # [{"text": ..., "post_ids": [...]}]
-        entity_features = entity.get("features", [])
-        entity_market_factors = entity.get("market_factors", [])
-        entity_scenarios = entity.get("scenarios", [])
-        entity_audiences = entity.get("audience", [])
-
-        # 处理场景
-        for scenario_item in entity_scenarios:
-            scenario_text = scenario_item.get("text", "")
-            scenario_post_ids = scenario_item.get("post_ids", [])
-
-            if not scenario_text:
-                continue
-
-            data = scenario_data[scenario_text]
-            data["label"] = scenario_text
-            # 使用实体的 heat 作为场景热度贡献
-            data["total_heat"] += entity_heat
-            # 累加帖子ID
-            data["post_ids"].update(scenario_post_ids)
-
-            # 关联 issues 和 features（来自同一实体）
-            for issue_item in entity_issues:
-                issue_text = issue_item.get("text", "")
-                if issue_text:
-                    data["associated_issues"][issue_text] += len(issue_item.get("post_ids", []))
-            for feature_item in entity_features:
-                feature_text = feature_item.get("text", "")
-                if feature_text:
-                    data["associated_features"][feature_text] += len(feature_item.get("post_ids", []))
-
-        # 处理人群画像
-        for audience_item in entity_audiences:
-            audience_text = audience_item.get("text", "")
-            audience_post_ids = audience_item.get("post_ids", [])
-
-            if not audience_text:
-                continue
-
-            data = audience_data[audience_text]
-            data["label"] = audience_text
-            data["total_heat"] += entity_heat
-            data["post_ids"].update(audience_post_ids)
-
-            # 关联偏好（market_factors + features）
-            for factor_item in entity_market_factors:
-                factor_text = factor_item.get("text", "")
-                if factor_text:
-                    data["preferences"][factor_text] += len(factor_item.get("post_ids", []))
-            for feature_item in entity_features:
-                feature_text = feature_item.get("text", "")
-                if feature_text:
-                    data["preferences"][feature_text] += len(feature_item.get("post_ids", []))
-
-    # 格式化场景输出（置信度过滤）
     scenarios = []
-    for data in scenario_data.values():
-        mentions = len(data["post_ids"])
-        if mentions >= min_mentions:
-            top_issues = sorted(
-                data["associated_issues"].items(),
-                key=lambda x: x[1],
-                reverse=True
-            )[:5]
-            top_features = sorted(
-                data["associated_features"].items(),
-                key=lambda x: x[1],
-                reverse=True
-            )[:5]
-
-            scenarios.append({
-                "label": data["label"],
-                "heat": round(data["total_heat"], 1),
-                "mentions": mentions,
-                "associated_issues": [i[0] for i in top_issues],
-                "associated_features": [f[0] for f in top_features],
-                "post_ids": list(data["post_ids"]),
-            })
-
-    # 格式化人群输出（置信度过滤）
     audiences = []
-    for data in audience_data.values():
-        mentions = len(data["post_ids"])
-        if mentions >= min_mentions:
-            top_preferences = sorted(
-                data["preferences"].items(),
-                key=lambda x: x[1],
-                reverse=True
-            )[:5]
+    
+    # 提取所有场景和人群实体
+    # aggregated_entities 中 type 可能为 "场景" 或 "人群"
+    # 或者通过 tags.category 判断
+    # 但更直接的是利用 aggregated_entities 结构中的 scenarios/audience 字段
+    # 注意：aggregated_entities 是以 Entity 为核心的，我们需要的是以 Scenario/Audience 为核心的聚合
+    
+    # 重新聚合：Term -> Info
+    scenario_map: Dict[str, Dict] = {}
+    audience_map: Dict[str, Dict] = {}
+    
+    for entity in aggregated_entities:
+        # 1. 聚合 scenarios 字段
+        if entity.get("scenarios"):
+            for item in entity["scenarios"]:
+                text = item["text"]
+                pids = item["post_ids"]
+                if text not in scenario_map:
+                    scenario_map[text] = {"label": text, "post_ids": set(), "heat": 0.0}
+                scenario_map[text]["post_ids"].update(pids)
+                # 简单估算热度：每个提及算 1 分，或者累加 entity 的 heat (不准确)
+                # 这里直接用提及数作为简单热度，因为 post_ids 已经去重
+                
+        # 2. 聚合 audience 字段
+        if entity.get("audience"):
+            for item in entity["audience"]:
+                text = item["text"]
+                pids = item["post_ids"]
+                if text not in audience_map:
+                    audience_map[text] = {"label": text, "post_ids": set(), "heat": 0.0}
+                audience_map[text]["post_ids"].update(pids)
 
-            audiences.append({
-                "label": data["label"],
-                "heat": round(data["total_heat"], 1),
+    def _format_list(source_map: Dict[str, Dict]) -> List[Dict]:
+        result = []
+        for label, data in source_map.items():
+            mentions = len(data["post_ids"])
+            if mentions < 1: continue
+            
+            result.append({
+                "label": label,
+                "heat": float(mentions), # 简化：直接用声量作为热度
                 "mentions": mentions,
-                "preferences": [p[0] for p in top_preferences],
-                "post_ids": list(data["post_ids"]),
+                "post_ids": list(data["post_ids"])
             })
-
-    # 按热度排序
-    scenarios.sort(key=lambda x: x["heat"], reverse=True)
-    audiences.sort(key=lambda x: x["heat"], reverse=True)
-
-    # 记录派生结果
-    logger.info(
-        f"[场景人群派生] 从 {len(aggregated_entities)} 个实体派生: "
-        f"场景 {len(scenarios)} 个, 人群 {len(audiences)} 个"
-    )
+        return sorted(result, key=lambda x: x["mentions"], reverse=True)[:top_n]
 
     return {
-        "scenarios": scenarios[:top_n],
-        "audiences": audiences[:top_n],
+        "scenarios": _format_list(scenario_map),
+        "audiences": _format_list(audience_map),
     }
 
 
 # ============================================================================
-# KANO 需求分层 (§4.5.3) - 派生分析
+# KANO 需求分层 (§4.5.3) - 简化版
 # ============================================================================
 
 def classify_kano_model(
-    opinions_data: dict[str, list[dict[str, Any]]],
-    mentions_threshold: int = 3,
-    heat_threshold_percentile: float = 0.5,
+    aggregated_opinions: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
-    """KANO 需求分层分类
-
-    基于聚合后的观点数据（话题级别）进行分类，与"热门观点"保持一致的数据源。
-
-    分类规则 (§4.5.3)：
-    - **基本型 (Must-be)**：High Mentions (普遍) + Negative Sentiment (痛点)
-      → 来自 top_issues（负面观点话题）
-    - **兴奋型 (Attractive)**：Low Mentions (稀缺) + High Heat (高共鸣) + Positive Sentiment
-      → 来自 top_features 中低频高热度的正面话题
-    - **期望型 (One-dimensional)**：High Mentions (普遍) + Positive Sentiment
-      → 来自 top_features 中高频的正面话题
-
-    Args:
-        opinions_data: 观点数据 {"top_issues": [...], "top_features": [...]}
-        mentions_threshold: 高频门槛（默认3次）
-        heat_threshold_percentile: 高热度百分位（默认70%）
-
-    Returns:
-        dict: {
-            "must_be": [...],  # 基本型需求（痛点）
-            "attractive": [...],  # 兴奋型需求（惊喜）
-            "one_dimensional": [...],  # 期望型需求（愿望）
-        }
+    """产品特性分类 (简化版 KANO)
+    
+    基于 aggregated_opinions 的情感和热度进行直观分类。
+    不再区分复杂的“期望型/魅力型”，而是简化为用户最关心的三类点。
     """
-    must_be = []
-    attractive = []
-    one_dimensional = []
+    
+    # 定义容器
+    pain_points = []   # 痛点 (Issues): 负面评价
+    delighters = []    # 爽点 (Delighters): 正面评价
+    basics = []        # 关注点 (Basics): 热度高但情感中性 (大家都在讨论的参数/配置)
 
-    # 只使用观点聚合数据（话题级别），不混入实体级别的原始描述
-    all_issues = opinions_data.get("top_issues", [])
-    all_features = opinions_data.get("top_features", [])
+    for op in aggregated_opinions:
+        # 过滤掉非产品相关的观点 (可选，根据 category 判断)
+        # 这里假设所有 opinion 都是相关的
+        
+        sentiment = op.get("sentiment", 0)
+        heat = op.get("heat", 0)
+        item = {
+            "label": op["name"], # 统一使用 name
+            "heat": heat,
+            "mentions": op["mentions"],
+            "sentiment": sentiment,
+            "category": op.get("category", "其他"),
+            "post_ids": op["post_ids"]
+        }
+        
+        if sentiment <= -0.5:
+            pain_points.append(item)
+        elif sentiment >= 0.5:
+            delighters.append(item)
+        else:
+            # 中性观点，如果热度够高才算 Basic
+            if op["mentions"] >= 2: # 至少提及2次
+                basics.append(item)
 
-    # 计算热度阈值（用于区分兴奋型需求）
-    all_heats = [i.get("heat", 0) for i in all_issues + all_features]
-    if all_heats:
-        all_heats_sorted = sorted(all_heats)
-        heat_threshold = all_heats_sorted[int(len(all_heats_sorted) * heat_threshold_percentile)]
-    else:
-        heat_threshold = 0
-
-    # 1. Must-be (基本型)：高频 + 负面（来自 top_issues）
-    for item in all_issues:
-        mentions = item.get("mentions", 0)
-        if mentions >= mentions_threshold:
-            must_be.append({
-                "label": item.get("topic", ""),
-                "heat": item.get("heat", 0),
-                "mentions": mentions,
-                "sentiment": item.get("sentiment", 0),
-                "post_ids": item.get("post_ids", []),
-            })
-
-    # 2. Attractive (兴奋型)：低频 + 高热度 + 正面
-    for item in all_features:
-        mentions = item.get("mentions", 0)
-        heat = item.get("heat", 0)
-        if mentions < mentions_threshold and heat >= heat_threshold:
-            attractive.append({
-                "label": item.get("topic", ""),
-                "heat": heat,
-                "mentions": mentions,
-                "sentiment": item.get("sentiment", 0),
-                "post_ids": item.get("post_ids", []),
-            })
-
-    # 3. One-dimensional (期望型)：高频 + 正面（来自 top_features）
-    for item in all_features:
-        mentions = item.get("mentions", 0)
-        if mentions >= mentions_threshold:
-            one_dimensional.append({
-                "label": item.get("topic", ""),
-                "heat": item.get("heat", 0),
-                "mentions": mentions,
-                "sentiment": item.get("sentiment", 0),
-                "post_ids": item.get("post_ids", []),
-            })
-
-    # 按热度排序
-    must_be.sort(key=lambda x: x["heat"], reverse=True)
-    attractive.sort(key=lambda x: x["heat"], reverse=True)
-    one_dimensional.sort(key=lambda x: x["heat"], reverse=True)
+    # 排序并截取 Top 10
+    pain_points.sort(key=lambda x: x["heat"], reverse=True)
+    delighters.sort(key=lambda x: x["heat"], reverse=True)
+    basics.sort(key=lambda x: x["heat"], reverse=True)
 
     return {
-        "must_be": must_be[:10],
-        "attractive": attractive[:10],
-        "one_dimensional": one_dimensional[:10],
+        "must_be": pain_points[:10],       # 对应 痛点/急需改进
+        "attractive": delighters[:10],     # 对应 爽点/卖点
+        "one_dimensional": basics[:10],    # 对应 基础关注/热议参数
     }
 
 
 # ============================================================================
-# 竞品分析 (Competition Analysis)
+# 竞品分析
 # ============================================================================
 
 def analyze_competition(
-    entity_stats: dict[str, list[dict[str, Any]]],
+    aggregated_entities: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """分析竞品情况
-
-    基于实体分类结果，计算竞品对比情感。
-
-    Args:
-        entity_stats: aggregate_entities 的返回结果
-
-    Returns:
-        dict: {
-            "top_competitors": ["竞品A", "竞品B"],
-            "comparison_sentiment": -0.2,  # 与竞品对比的相对情感
-            "competitor_details": [...]
-        }
+    """竞品分析 (简化版)
+    
+    仅提取被标记为 COMPETITOR 的实体，并按声量排序。
+    移除复杂的维度级情感对比。
     """
-    target_entities = entity_stats.get("target_entities", [])
-    competitor_entities = entity_stats.get("competitor_entities", [])
-
-    # 计算本品平均情感
-    target_sentiment = 0.0
-    if target_entities:
-        target_sentiment = sum(e.get("sentiment", 0) for e in target_entities) / len(target_entities)
-
-    # 计算竞品平均情感
-    competitor_sentiment = 0.0
-    if competitor_entities:
-        competitor_sentiment = sum(e.get("sentiment", 0) for e in competitor_entities) / len(competitor_entities)
-
-    # 对比情感 = 本品情感 - 竞品情感
-    # 正值 = 本品口碑更好，负值 = 竞品口碑更好
-    comparison_sentiment = target_sentiment - competitor_sentiment if competitor_entities else 0.0
-
-    # 提取竞品名称
-    top_competitors = [e.get("name", "") for e in competitor_entities[:5]]
-
-    # 竞品详情
-    competitor_details = []
-    for comp in competitor_entities[:5]:
-        competitor_details.append({
-            "name": comp.get("name", ""),
-            "sentiment": comp.get("sentiment", 0),
-            "sentiment_distribution": comp.get("sentiment_distribution", {"positive": 0, "negative": 0, "neutral": 0}),
-            "heat": comp.get("heat", 0),
-            "mentions": comp.get("mentions", 0),
-            "post_ids": comp.get("post_ids", []),
-            "top_features": comp.get("top_features", []),
-            "top_issues": comp.get("top_issues", []),
-        })
-
+    competitors = []
+    
+    for entity in aggregated_entities:
+        # 检查是否为竞品 (通过 tags.role 或 之前的 role 字段兼容)
+        is_competitor = False
+        if entity.get("tags", {}).get("role") == "COMPETITOR":
+            is_competitor = True
+        
+        if is_competitor:
+            competitors.append({
+                "name": entity["name"],
+                "heat": entity["heat"],
+                "mentions": entity["mentions"],
+                "sentiment": entity["sentiment"],
+                "post_ids": entity["post_ids"]
+            })
+            
+    # 按声量排序
+    competitors.sort(key=lambda x: x["mentions"], reverse=True)
+    
     return {
-        "top_competitors": top_competitors,
-        "comparison_sentiment": round(comparison_sentiment, 2),
-        "target_sentiment": round(target_sentiment, 2),
-        "competitor_sentiment": round(competitor_sentiment, 2),
-        "competitor_details": competitor_details,
+        "top_competitors": competitors[:10],
+        # 保留汇总字段结构，但填入默认值或简单统计
+        "comparison_sentiment": 0.0, 
+        "competitor_count": len(competitors)
     }
 
 
@@ -355,76 +194,39 @@ def analyze_competition(
 def extract_kol_voices(
     posts_data: list[dict[str, Any]],
     db: Session,
-    top_n: int = 10,
+    top_n: int = 5
 ) -> list[dict[str, Any]]:
-    """提取 KOL 声音
-
-    KOL 定义：高影响力帖子的作者
-    - 按 CII 排序，取 Top N 帖子
-    - 提取作者、情感、摘要
-
-    Args:
-        posts_data: 帖子数据列表
-        db: 数据库会话（用于获取作者信息）
-        top_n: 返回前 N 个 KOL
-
-    Returns:
-        list: [{"author": "大V", "sentiment": 0.5, "summary": "...", "post_id": 123, "cii": 100}]
+    """提取 KOL (关键意见领袖) 的声音
+    
+    逻辑：
+    1. 识别高影响力帖子 (CII Top N)
+    2. 提取其核心观点摘要
     """
-    # 筛选有深度分析结果的帖子
-    analyzed_posts = [
-        p for p in posts_data
-        if p.get("post_deep_result") and p.get("sentiment") is not None
-    ]
-
-    if not analyzed_posts:
-        return []
-
     # 按 CII 排序
-    sorted_posts = sorted(analyzed_posts, key=lambda x: x.get("cii", 0), reverse=True)
-
-    # 获取帖子作者信息
-    post_ids = [p["post_id"] for p in sorted_posts[:top_n * 2]]  # 多取一些以防重复作者
-
-    # 查询帖子的作者信息
-    stmt = select(SocialPost).where(SocialPost.id.in_(post_ids))
-    posts = {p.id: p for p in db.execute(stmt).scalars().all()}
-
-    # 构建 KOL 声音列表（去重作者）
-    kol_voices = []
-    seen_authors = set()
-
-    for post_data in sorted_posts:
-        if len(kol_voices) >= top_n:
-            break
-
-        post_id = post_data.get("post_id")
-        post = posts.get(post_id)
-
-        if not post:
-            continue
-
-        author = post.author_name or "匿名用户"
-
-        # 跳过重复作者
-        if author in seen_authors:
-            continue
-        seen_authors.add(author)
-
-        # 获取摘要
-        deep_result = post_data.get("post_deep_result") or {}
-        summary = deep_result.get("summary", "")
-
-        # 截断摘要
-        if len(summary) > 100:
-            summary = summary[:100] + "..."
-
-        kol_voices.append({
-            "author": author,
-            "sentiment": post_data.get("sentiment", 0),
-            "summary": summary,
-            "post_id": post_id,
-            "cii": round(post_data.get("cii", 0), 1),
-        })
-
-    return kol_voices
+    sorted_posts = sorted(posts_data, key=lambda x: x.get("cii", 0), reverse=True)
+    top_posts = sorted_posts[:top_n]
+    
+    results = []
+    for post_info in top_posts:
+        post_id = post_info.get("post_id")
+        if not post_id: continue
+        
+        # 查询帖子详情 (为了获取作者名和标题)
+        stmt = select(SocialPost).where(SocialPost.id == post_id)
+        post = db.execute(stmt).scalar_one_or_none()
+        
+        if post:
+            deep_res = post_info.get("post_deep_result") or {}
+            summary = deep_res.get("summary", "")
+            
+            results.append({
+                "post_id": post.id,
+                "author": post.author_name or "未知作者",
+                "title": post.title or (post.content[:20] + "..." if post.content else ""),
+                "cii": post_info.get("cii", 0),
+                "sentiment": post_info.get("sentiment", 0),
+                "summary": summary,
+                "platform": post.platform
+            })
+            
+    return results

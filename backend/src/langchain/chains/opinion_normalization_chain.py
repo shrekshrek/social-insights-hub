@@ -34,14 +34,11 @@ OPINION_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位资深的舆情分析师�
 ```json
 {{
   "clusters": [
-    {{
-      "label": "标准观点 (如：定价过高)",
-      "original_terms": ["原始观点1", "原始观点2"]
-    }}
+    {{"name": "标准观点", "original_terms": ["原始观点1", "原始观点2"]}}
   ]
 }}
 ```
-只输出JSON，不要有其他文字。
+只输出JSON。
 """
 
 OPINION_NORMALIZATION_USER_TEMPLATE = """请对以下【{category}】类别的用户观点进行归纳和标准化：

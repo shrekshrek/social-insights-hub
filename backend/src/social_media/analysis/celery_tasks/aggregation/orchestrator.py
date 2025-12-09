@@ -336,14 +336,17 @@ def aggregate_task_analysis(
     # 8. KANO 需求分层 (§4.5.3) - 基于话题聚合数据 (Topic as 'feature/issue')
     # 注意: KANO 模型原先基于 opinion_stats，现在可能需要适配
     # 暂时传入 topic_stats，但 KANO 分类器可能需要调整
-    kano_model = classify_kano_model(topic_stats)
+    # 简化逻辑：直接传入 aggregated_opinions 列表
+    aggregated_opinions_list = topic_stats.get("topics", [])
+    kano_model = classify_kano_model(aggregated_opinions_list)
 
     # 9. 场景与人群画像 (§4.5.4) - 从 aggregated_entities 派生
     aggregated_entities = entity_stats.get("aggregated_entities", [])
     context_analysis = derive_context_analysis(aggregated_entities)
 
     # 10. 竞品分析
-    competition = analyze_competition(entity_stats)
+    # 简化逻辑：直接传入 aggregated_entities 列表
+    competition = analyze_competition(aggregated_entities)
 
     # 11. KOL 声音提取
     kol_voices = extract_kol_voices(posts_data, db)
@@ -411,6 +414,24 @@ def aggregate_task_analysis(
         f"反差风险={sentiment_conflict['risk_level']}, "
         f"Target实体={target_count}, Competitor实体={competitor_count}"
     )
+
+    # --- DEBUG: 保存聚合数据到文件 ---
+    import json
+    import os
+    
+    # 获取项目根目录 (假设运行在 backend 目录下，往上找)
+    # 或者直接保存到当前工作目录，通常是 backend
+    debug_file_path = "debug_analysis_result.json"
+    
+    try:
+        with open(debug_file_path, "w", encoding="utf-8") as f:
+            json.dump(result_data, f, indent=2, ensure_ascii=False, default=str)
+        
+        logger.info(f"[DEBUG] 聚合结果已保存至: {os.path.abspath(debug_file_path)}")
+        
+    except Exception as e:
+        logger.error(f"[DEBUG] 保存调试文件失败: {e}")
+    # -----------------------------
 
     return result_data
 

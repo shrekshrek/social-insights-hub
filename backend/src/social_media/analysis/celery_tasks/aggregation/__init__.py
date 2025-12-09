@@ -12,7 +12,7 @@
 
 from .orchestrator import aggregate_task_analysis
 from .entity_aggregation import aggregate_entities
-from .topic_aggregation import aggregate_topics
+from .opinion_aggregation import aggregate_opinions
 from .metrics import (
     calculate_cii,
     calculate_cii_for_post,
@@ -35,7 +35,7 @@ __all__ = [
     # Entity
     "aggregate_entities",
     # Topic
-    "aggregate_topics",
+    "aggregate_opinions",
     # Metrics
     "calculate_cii",
     "calculate_cii_for_post",

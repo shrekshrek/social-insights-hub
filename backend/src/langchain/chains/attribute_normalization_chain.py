@@ -35,14 +35,11 @@ ATTRIBUTE_NORMALIZATION_SYSTEM_TEMPLATE = """你是一位数据清洗与归纳�
 ```json
 {{
   "clusters": [
-    {{
-      "label": "标准短语 (如：续航差)",
-      "original_terms": ["原始短语1", "原始短语2"]
-    }}
+    {{"name": "标准短语", "original_terms": ["原始短语1", "原始短语2"]}}
   ]
 }}
 ```
-只输出JSON，不要有其他文字。
+只输出JSON。
 """
 
 ATTRIBUTE_NORMALIZATION_USER_TEMPLATE = """请对以下评价短语进行清洗和聚类：

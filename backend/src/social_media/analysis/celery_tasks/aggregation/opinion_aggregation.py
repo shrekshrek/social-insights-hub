@@ -12,7 +12,7 @@
 import logging
 import time
 from collections import defaultdict, Counter
-from typing import Any, List, Dict
+from typing import Any, Dict
 
 from src.langchain.chains.category_normalization_chain import (
     create_category_normalization_chain,
@@ -29,7 +29,6 @@ from src.social_media.analysis.celery_tasks.aggregation.utils import (
     calculate_score, 
     run_parallel_normalization,
     merge_token_stats,
-    filter_low_frequency_terms
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +39,16 @@ def _normalize_category(category: str) -> str:
     if not category:
         return "其他"
     return category.strip()
+
+
+def _should_keep_original_terms(name: str, original_terms: list) -> bool:
+    """判断是否需要保留 original_terms（只有真正发生合并时才保留）"""
+    if not original_terms:
+        return False
+    if len(original_terms) > 1:
+        return True  # 多个来源 → 保留
+    # 只有一个元素时，检查是否与 name 不同
+    return original_terms[0].get("text") != name
 
 
 def aggregate_opinions(
@@ -191,10 +200,7 @@ def aggregate_opinions(
         category, sentiment_str = group_key.split("|")
         sentiment = int(sentiment_str)
         
-        # 过滤低频词 (移除：小样本场景下保留长尾词交给 LLM 聚类)
-        # filtered_map = filter_low_frequency_terms(raw_map)
-        
-        # 按频次排序并截取 Top K (直接使用 raw_map)
+        # 按频次排序并截取 Top K
         sorted_items = sorted(raw_map.items(), key=lambda x: len(x[1]), reverse=True)
         top_k_map = dict(sorted_items[:top_k_opinions])
         
@@ -204,16 +210,15 @@ def aggregate_opinions(
                 heat = grouped_term_heat[group_key][term]
                 mentions = len(post_ids)
                 score = calculate_score(heat, mentions)
+                # 不需要 original_terms（单个词条且名称相同）
                 aggregated_opinions.append({
                     "category": category,
                     "sentiment": sentiment,
                     "name": term,
-                    "label": term,
                     "heat": round(heat, 1),
                     "mentions": mentions,
                     "score": round(score, 1),
                     "post_ids": list(post_ids),
-                    "original_terms": [{"text": term, "count": mentions}],
                 })
             continue
 
@@ -263,7 +268,7 @@ def aggregate_opinions(
         processed_terms = set()
         
         for cluster in clusters:
-            label = cluster.get("label")
+            label = cluster.get("name")
             originals = cluster.get("original_terms", [])
             
             if not label: continue
@@ -287,19 +292,22 @@ def aggregate_opinions(
             mentions = len(merged_post_ids)
             score = calculate_score(merged_heat, mentions)
             
-            aggregated_opinions.append({
+            opinion_item = {
                 "category": category,
                 "sentiment": sentiment,
-                "name": label,   # 统一使用 name
-                "label": label,  # 兼容旧字段
+                "name": label,
                 "heat": round(merged_heat, 1),
                 "mentions": mentions,
                 "score": round(score, 1),
                 "post_ids": list(merged_post_ids),
-                "original_terms": merged_originals, # 统一使用 original_terms
-            })
+            }
+            # 只有真正发生合并时才保留 original_terms
+            if _should_keep_original_terms(label, merged_originals):
+                opinion_item["original_terms"] = merged_originals
+            
+            aggregated_opinions.append(opinion_item)
         
-        # 处理未被聚类的 Top K 词 (作为独立观点)
+        # 处理未被聚类的 Top K 词 (作为独立观点，不需要 original_terms)
         for term, post_ids in top_k_map.items():
             if term not in processed_terms:
                 heat = grouped_term_heat[group_key][term]
@@ -309,13 +317,11 @@ def aggregate_opinions(
                 aggregated_opinions.append({
                     "category": category,
                     "sentiment": sentiment,
-                    "name": term,   # 统一使用 name
-                    "label": term,  # 兼容旧字段
+                    "name": term,
                     "heat": round(heat, 1),
                     "mentions": mentions,
                     "score": round(score, 1),
                     "post_ids": list(post_ids),
-                    "original_terms": [{"text": term, "count": mentions}], # 统一使用 original_terms
                 })
 
     # 按综合评分排序

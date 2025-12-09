@@ -374,10 +374,17 @@ def aggregate_opinions(
 
     # 按综合评分排序
     aggregated_opinions.sort(key=lambda x: x["score"], reverse=True)
+    
+    # 只保留 Top 60 个话题
+    total_count = len(aggregated_opinions)
+    aggregated_opinions = aggregated_opinions[:60]
 
     # 计算总耗时
     execution_duration = time.time() - start_time
     token_stats['summary']['total_duration_seconds'] = execution_duration
+    
+    # 打印最终统计
+    print(f"[话题聚合] 最终输出: {len(aggregated_opinions)} 个话题 (共 {total_count} 个，保留 Top 60)")
 
     return {
         "topics": aggregated_opinions, # 保持字段名兼容

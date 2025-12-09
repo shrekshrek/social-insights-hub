@@ -960,6 +960,12 @@ def aggregate_entities(
         aggregated_entities.append(entity_dict)
 
     aggregated_entities.sort(key=lambda x: x["score"], reverse=True)
+    
+    # 只保留 Top 40 个实体
+    total_entity_count = len(aggregated_entities)
+    aggregated_entities = aggregated_entities[:40]
+    
+    logger.info(f"[实体聚合] 最终输出: {len(aggregated_entities)} 个实体 (共 {total_entity_count} 个，保留 Top 40)")
 
     result = {
         "top_entities": top_entities,

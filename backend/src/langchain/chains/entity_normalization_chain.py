@@ -25,26 +25,23 @@ ENTITY_CLUSTERING_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责�
 
 你的任务是：
 1. **归一化**：合并指向同一事物的同义词实体，减少冗余。
-2. **多维打标**：基于核心主题和提供的[线索]，为每个实体组输出三个维度的标签。
+2. **多维打标**：基于核心主题和提供的[线索]，为每个实体输出三个维度的标签。
 
 ## 标签定义体系 (Facet System)
 
-       ### 1. Role (与主题的关系)
-       回答“它是谁？”
-       - `Target` (我方/主体): 用户关注的核心分析对象（如本品牌、本品、子产品）。
-         - 例：主题="华为"，实体="Mate60" -> Target
-       - `Competitor` (竞品/对手): 与主体构成直接竞争关系的品牌或产品。
-         - 例：主题="华为"，实体="小米" -> Competitor
-       - `Context` (背景/中立): 提及的场景、行业大词、无关实体或通用词。
-         - 例：主题="华为"，实体="5G技术" -> Context
+### 1. role (与主题的关系)
+回答"它是谁？"
+- `Target` (我方/主体): 用户关注的核心分析对象（如本品牌、本品、子产品）。
+- `Competitor` (竞品/对手): 与主体构成直接竞争关系的品牌或产品。
+- `Context` (背景/中立): 提及的场景、行业大词、无关实体或通用词。
 
-### 2. Category (自然品类)
-回答“它是什么东西？”
+### 2. category (自然品类)
+回答"它是什么东西？"
 - 提取实体的物理属性或自然分类（如：手机、耳机、地点、人物、服务）。
 - 请使用最简短的词。
 
-### 3. Parent (归属/上级)
-回答“它归并在哪里？”
+### 3. parent (归属/上级)
+回答"它归属在哪里？"
 - 实体所属的品牌或上级系列。
 - **动态逻辑**：
   - 如果实体是产品 -> 填品牌名（如"华为"）。
@@ -58,18 +55,15 @@ ENTITY_CLUSTERING_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责�
 ## 输出格式
 ```json
 {{
-  "normalized_groups": [
+  "entities": [
     {{
-      "canonical_name": "代表性名称",
-      "tags": {{
-        "role": "Target/Competitor/Context",
-        "category": "品类词",
-        "parent": "归属词"
-      }},
-      "merged_entities": ["被合并的原始实体名称列表"]
+      "name": "标准名称（代表性名称）",
+      "original_names": ["被合并的原始实体名称列表"],
+      "role": "Target/Competitor/Context",
+      "category": "品类词",
+      "parent": "归属词"
     }}
-  ],
-  "standalone_entities": ["独立实体名称列表 (仅当不需要打标签时使用，建议优先归入 normalized_groups 以获得标签)"]
+  ]
 }}
 ```
 只输出JSON，不要有其他文字。
@@ -95,19 +89,32 @@ ENTITY_REVIEW_SYSTEM_TEMPLATE = """你是一位实体归一化审核专家。
 - **错误合并**：有没有把竞品合并到本品里了？（严禁把 Competitor 合并进 Target）
 
 ### 2. 检查标签 (Tag Refinement)
-- **Role 准确性**：
+- **role 准确性**：
   - 显然的竞品是否被标记为了 `Competitor`？（参考[线索]中的对比信息）
   - 主题相关的实体是否被标记为了 `Target`？
-- **Category 一致性**：
-  - 也就是同一类东西，不要有的填"电话"，有的填"手机"，请统一术语。
-- **Parent 准确性**：
+- **category 一致性**：
+  - 同一类东西，不要有的填"电话"，有的填"手机"，请统一术语。
+- **parent 准确性**：
   - 品牌归属是否正确？
 
 ## 输出要求
 - 输出修正后的完整结果。
-- **必须**为所有实体保留 `tags` 字段。
+- **必须**为所有实体保留标签字段。
 - 输出格式必须与输入相同（JSON）。
 
+```json
+{{
+  "entities": [
+    {{
+      "name": "标准名称",
+      "original_names": ["原始名称1", "原始名称2"],
+      "role": "Target/Competitor/Context",
+      "category": "品类词",
+      "parent": "归属词"
+    }}
+  ]
+}}
+```
 只输出JSON，不要有其他文字。
 """
 
@@ -180,7 +187,7 @@ def parse_clustering_response(response_text: str) -> dict[str, Any]:
         response_text: LLM返回的文本
 
     Returns:
-        dict: 包含 normalized_groups, standalone_entities, entity_mapping, tags_mapping
+        dict: 包含 entities, entity_mapping, tags_mapping
     """
     # 清理可能的 markdown 代码块
     if "```json" in response_text:
@@ -192,28 +199,29 @@ def parse_clustering_response(response_text: str) -> dict[str, Any]:
         result = json.loads(response_text.strip())
     except json.JSONDecodeError:
         logger.error(f"Failed to decode JSON from LLM response: {response_text[:100]}...")
-        return {"normalized_groups": [], "standalone_entities": [], "entity_mapping": {}, "tags_mapping": {}}
+        return {"entities": [], "entity_mapping": {}, "tags_mapping": {}}
 
     # 构建实体映射表（原名称 -> 归一化名称）
     entity_mapping = {}
     # 构建标签映射表（归一化名称 -> tags）
     tags_mapping = {}
 
-    for group in result.get("normalized_groups", []):
-        canonical_name = group.get("canonical_name", "")
-        tags = group.get("tags", {})
-        
-        # 记录标签
-        if canonical_name:
-            tags_mapping[canonical_name] = tags
+    for entity in result.get("entities", []):
+        name = entity.get("name", "")
+        if not name:
+            continue
+            
+        # 构建 tags
+        tags = {
+            "role": entity.get("role", "Context"),
+            "category": entity.get("category", ""),
+            "parent": entity.get("parent", ""),
+        }
+        tags_mapping[name] = tags
 
-        for merged in group.get("merged_entities", []):
-            entity_mapping[merged] = canonical_name
-
-    for standalone in result.get("standalone_entities", []):
-        # 独立实体通常没有 tags，除非 LLM 返回结构变了。
-        # 如果需要 tag，应该尽量放入 normalized_groups 中（即使 merged_entities 只有它自己）
-        entity_mapping[standalone] = standalone
+        # 构建映射：每个 original_name -> name
+        for original in entity.get("original_names", [name]):
+            entity_mapping[original] = name
 
     result["entity_mapping"] = entity_mapping
     result["tags_mapping"] = tags_mapping
@@ -233,12 +241,11 @@ async def cluster_entities_with_review(
         enable_review: 是否启用复查阶段，默认启用
 
     Returns:
-        dict: 归一化结果
+        dict: 归一化结果，包含 entities, entity_mapping, tags_mapping
     """
     if not entities:
         return {
-            "normalized_groups": [],
-            "standalone_entities": [],
+            "entities": [],
             "entity_mapping": {},
             "tags_mapping": {}
         }
@@ -267,8 +274,7 @@ async def cluster_entities_with_review(
 
     # 格式化第一阶段结果用于复查
     first_pass_json = json.dumps({
-        "normalized_groups": first_result.get("normalized_groups", []),
-        "standalone_entities": first_result.get("standalone_entities", [])
+        "entities": first_result.get("entities", [])
     }, ensure_ascii=False, indent=2)
 
     review_response = await review_chain.ainvoke({
@@ -278,8 +284,7 @@ async def cluster_entities_with_review(
     })
 
     final_result = parse_clustering_response(review_response.content)
-    logger.info(f"实体归一化完成：{len(final_result.get('normalized_groups', []))} 个合并组，"
-                f"{len(final_result.get('standalone_entities', []))} 个独立实体")
+    logger.info(f"实体归一化完成：{len(final_result.get('entities', []))} 个实体")
 
     return final_result
 
@@ -359,8 +364,7 @@ def cluster_entities_with_review_sync(
 
     # 格式化第一阶段结果用于复查
     first_pass_json = json.dumps({
-        "normalized_groups": first_result.get("normalized_groups", []),
-        "standalone_entities": first_result.get("standalone_entities", [])
+        "entities": first_result.get("entities", [])
     }, ensure_ascii=False, indent=2)
 
     review_response, review_stats = invoke_with_stats_fn(
@@ -377,6 +381,8 @@ def cluster_entities_with_review_sync(
     review_response_text = review_response.content if hasattr(review_response, "content") else str(review_response)
     final_result = parse_clustering_response(review_response_text)
 
+    logger.info(f"[实体归一化] 两步归一化完成，输出 {len(final_result.get('entities', []))} 个实体")
+
     # 更新合并统计的平均值
     if combined_stats['summary']['total_calls'] > 0:
         combined_stats['summary']['avg_tokens_per_call'] = (
@@ -386,7 +392,6 @@ def cluster_entities_with_review_sync(
             combined_stats['summary']['total_cost_cny'] / combined_stats['summary']['total_calls']
         )
 
-    logger.info(f"实体归一化完成：{len(final_result.get('normalized_groups', []))} 个合并组，"
-                f"{len(final_result.get('standalone_entities', []))} 个独立实体")
+    logger.info(f"实体归一化完成：{len(final_result.get('entities', []))} 个实体")
 
     return final_result, combined_stats

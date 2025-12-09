@@ -243,10 +243,6 @@ def are_similar(name1: str, name2: str, threshold: float = 0.8) -> bool:
     if n1 == n2:
         return True
 
-    # 包含关系
-    if n1 in n2 or n2 in n1:
-        return True
-
     # 字符相似度
     ratio = SequenceMatcher(None, n1, n2).ratio()
     return ratio >= threshold

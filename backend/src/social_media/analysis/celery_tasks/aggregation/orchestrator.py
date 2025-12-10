@@ -45,9 +45,10 @@ from .metrics import (
 from .entity_aggregation import aggregate_entities
 from .opinion_aggregation import aggregate_opinions
 from .insights import (
-    derive_context_analysis,
+    perform_ipa_analysis,
+    build_context_graph,
+    analyze_competitor_radar,
     classify_kano_model,
-    analyze_competition,
     extract_kol_voices,
 )
 
@@ -333,22 +334,26 @@ def aggregate_task_analysis(
     quadrant_data = generate_quadrant_data(posts_data)
     quadrant_summary = get_quadrant_summary(quadrant_data)
 
-    # 8. KANO 需求分层 (§4.5.3) - 基于话题聚合数据 (Topic as 'feature/issue')
-    # 注意: KANO 模型原先基于 opinion_stats，现在可能需要适配
-    # 暂时传入 topic_stats，但 KANO 分类器可能需要调整
-    # 简化逻辑：直接传入 aggregated_opinions 列表
-    aggregated_opinions_list = topic_stats.get("topics", [])
-    kano_model = classify_kano_model(aggregated_opinions_list)
-
-    # 9. 场景与人群画像 (§4.5.4) - 从 aggregated_entities 派生
+    # 8. 高级派生分析 (基于 DERIVED_ANALYSIS_DESIGN.md)
     aggregated_entities = entity_stats.get("aggregated_entities", [])
-    context_analysis = derive_context_analysis(aggregated_entities)
+    aggregated_opinions = topic_stats.get("topics", [])
+    
+    # (1) 产品力诊断 (IPA)
+    ipa_result = perform_ipa_analysis(aggregated_entities, aggregated_opinions)
+    
+    # (2) 关联网络 (Context Graph) - 以 Top 1 Target 实体为中心
+    target_entities = entity_stats.get("target_entities", [])
+    top_target = target_entities[0] if target_entities else None
+    context_graph = build_context_graph(top_target, aggregated_entities, aggregated_opinions)
+    
+    # (3) 竞品雷达 (Competitor Radar)
+    competitor_entities = entity_stats.get("competitor_entities", [])
+    competitor_radar = analyze_competitor_radar(top_target, competitor_entities, aggregated_entities)
+    
+    # (4) KANO 需求分层
+    kano_model = classify_kano_model(aggregated_opinions, aggregated_entities)
 
-    # 10. 竞品分析
-    # 简化逻辑：直接传入 aggregated_entities 列表
-    competition = analyze_competition(aggregated_entities)
-
-    # 11. KOL 声音提取
+    # (5) KOL 声音提取
     kol_voices = extract_kol_voices(posts_data, db)
 
     # 12. 组装结果
@@ -372,35 +377,35 @@ def aggregate_task_analysis(
             "sentiment_conflict": sentiment_conflict,
         },
         "charts": {
-            # 保留完整象限列表以便前端反向追溯帖子
+            # 保留完整象限列表以便前端反向追溯帖子 (宏观概览)
             "quadrant": quadrant_data,
             "quadrant_summary": quadrant_summary,
             "time_distribution": time_distribution.get("distribution", []),
+            # 新增图表
+            "ipa_analysis": ipa_result,
+            "competitor_radar": competitor_radar,
+            "context_graph": context_graph
         },
         "freshness": time_distribution.get("freshness", {}),
         "insights": {
             # 实体分类（§4.3 主体过滤结果）
             "top_entities": entity_stats.get("top_entities", []),
-            "target_entities": entity_stats.get("target_entities", []),
-            "competitor_entities": entity_stats.get("competitor_entities", []),
+            "target_entities": target_entities,
+            "competitor_entities": competitor_entities,
             # 话题统计（原观点统计）
             "top_topics": topic_stats.get("topics", [])[:10], # 取 Top 10 话题
             "top_issues": [t for t in topic_stats.get("topics", []) if t.get("sentiment") == -1][:10],
             "top_features": [t for t in topic_stats.get("topics", []) if t.get("sentiment") == 1][:10],
-            # 场景与人群画像 (§4.5.4)
-            "context_analysis": context_analysis,
             # KANO 需求分层 (§4.5.3)
             "opportunities": {
                 "kano_model": kano_model,
             },
-            # 竞品分析
-            "competition": competition,
             # KOL 声音
             "kol_voices": kol_voices,
         },
         # 原始融合数据（用于项目级分析）
-        "aggregated_entities": entity_stats.get("aggregated_entities", []),
-        "aggregated_topics": topic_stats.get("topics", []), # 原 aggregated_opinions
+        "aggregated_entities": aggregated_entities,
+        "aggregated_topics": aggregated_opinions, # 原 aggregated_opinions
     }
 
     # 统计实体分类数量

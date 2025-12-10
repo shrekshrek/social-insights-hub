@@ -595,10 +595,13 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
   },
 
   // 完整融合数据（数组格式，按 score 排序，用于项目级再分析）
+  // 限制：保留 Top 40 个实体
   "aggregated_entities": [
     {
       "name": "iPhone 16",
-      "canonical_name": "iphone",
+      "role": "Target",            // Target/Competitor/Context/Other
+      "category": "产品名",         // 实体类别 (如：品类词、属性词)
+      "parent": "智能手机",         // 归属父类
       "type": "产品",
       "sentiment": 0.35,           // 派生情感值 [-1, 1]，CII 加权
       "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
@@ -608,48 +611,65 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
       "post_source_count": 5,
       "comment_source_count": 10,
       "post_ids": [101, 102, 103, 105, 108],
-      "merged_from": ["iphone 16", "iPhone16"],  // 合并来源（如果有归一化）
+      
+      // 原始词条信息（只有真正发生合并时才保留）
+      "original_terms": [
+         {"text": "iPhone16", "count": 10},
+         {"text": "苹果16", "count": 5}
+      ],
+
       // 实体维度信息（带帖子追溯，用于项目级再融合）
+      // 清洗策略：Top 3 实体全量清洗，Top 4-10 核心字段清洗，其余保留 Raw Top 20
       "features": [  // 天然正面
-        {"text": "外观好看", "post_ids": [101, 102, 105]},
-        {"text": "拍照清晰", "post_ids": [102, 108]}
+        {"text": "外观好看", "count": 3, "post_ids": [101, 102, 105]},
+        {"text": "拍照清晰", "count": 2, "post_ids": [102, 108]}
       ],
       "issues": [    // 天然负面
-        {"text": "发热严重", "post_ids": [103, 105]}
+        {"text": "发热严重", "count": 2, "post_ids": [103, 105]}
       ],
       "expectations": [
-        {"text": "降价", "post_ids": [101, 102, 103, 105, 108]}
+        {"text": "降价", "count": 5, "post_ids": [101, 102, 103, 105, 108]}
       ],
       "audience": [
-        {"text": "年轻人", "post_ids": [101, 102]}
+        {"text": "年轻人", "count": 2, "post_ids": [101, 102]}
       ],
       "scenarios": [
-        {"text": "日常拍照", "post_ids": [101, 105]}
+        {"text": "日常拍照", "count": 2, "post_ids": [101, 105]}
       ],
       "market_factors": [
-        {"text": "价格高", "post_ids": [101, 102, 103]}
+        {"text": "价格高", "count": 3, "post_ids": [101, 102, 103]}
       ],
       "competitors": [
-        {"text": "华为", "post_ids": [103, 105]}
+        {"text": "华为", "count": 2, "post_ids": [103, 105]}
       ]
     }
   ],
+  
+  // 完整融合数据（数组格式，按 score 排序，用于项目级再分析）
+  // 限制：保留 Top 60 个话题
   "aggregated_opinions": [
     {
-      "category": "价格",
-      "canonical_category": "价格",
+      "name": "价格",              // 话题名称
+      "category": "价格",          // 话题类别
       "sentiment": -1,
+      "sentiment_distribution": {"positive": 0, "negative": 15, "neutral": 0},
       "heat": 4500,
       "mentions": 15,
       "score": 12532.5,            // 综合评分 = heat × log(mentions + 1)
       "post_source_count": 3,
       "comment_source_count": 12,
       "post_ids": [101, 102, 105, 108],
-      "merged_from": ["价格", "定价", "售价"],  // 合并来源（如果有归一化）
+      
+      // 原始词条信息（只有真正发生合并时才保留）
+      "original_terms": [
+         {"text": "定价", "count": 10},
+         {"text": "售价", "count": 5}
+      ],
+      
       "opinions": [  // 全部观点（带帖子追溯，用于项目级再融合）
-        {"text": "定价过高", "post_ids": [101, 102, 105]},
-        {"text": "不值这个价", "post_ids": [102, 108]},
-        {"text": "性价比低", "post_ids": [105]}
+        {"text": "定价过高", "count": 3, "post_ids": [101, 102, 105]},
+        {"text": "不值这个价", "count": 2, "post_ids": [102, 108]},
+        {"text": "性价比低", "count": 1, "post_ids": [105]}
       ]
     }
   ]

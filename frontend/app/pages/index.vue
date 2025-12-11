@@ -3,7 +3,7 @@
     <!-- 欢迎横幅 -->
     <UCard class="bg-gradient-to-r from-blue-600 to-indigo-600 border-0">
       <div class="text-center text-white">
-        <h1 class="text-4xl font-bold mb-4">全栈项目脚手架</h1>
+        <h1 class="text-4xl font-bold mb-4">脉冲信息中心</h1>
         <p class="text-xl text-blue-100 mb-6">
           基于 Nuxt 4 + FastAPI 的现代化全栈开发解决方案
         </p>
@@ -121,7 +121,7 @@ const { session, loggedIn } = useUserSession();
 const permissions = usePermissions();
 
 useHead({
-  title: '全栈项目脚手架',
+  title: '脉冲',
   meta: [
     { name: 'description', content: '基于 Nuxt 4 + FastAPI 的现代化全栈开发解决方案' }
   ]

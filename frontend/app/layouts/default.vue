@@ -10,7 +10,7 @@
             to="/"
             class="text-xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
           >
-            全栈项目脚手架
+            脉冲信息中心
           </NuxtLink>
 
           <!-- 桌面端导航 -->
@@ -240,7 +240,7 @@
       <UContainer>
         <div class="py-6 text-center">
           <p class="text-sm text-gray-600 dark:text-gray-400">
-            © 2024 全栈项目脚手架. 保留所有权利。
+            © 2024 脉冲信息中心. 保留所有权利。
           </p>
         </div>
       </UContainer>

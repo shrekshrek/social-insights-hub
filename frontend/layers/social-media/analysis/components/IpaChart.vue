@@ -92,6 +92,7 @@ const getOption = (): EChartsOption => {
   return {
     tooltip: {
       trigger: 'item',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formatter: (params: any) => {
         // params.data 结构: { value: [x, y, score, name, post_ids, originalX, originalY], ... }
         const item = params.data
@@ -152,11 +153,13 @@ const getOption = (): EChartsOption => {
       ...seriesData.map((s): SeriesOption => ({
         name: s.name,
         type: 'scatter',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         symbolSize: (data: any) => {
           // data 可能是 [x, y, score, name, post_ids] 数组（取决于转换方式）
           // 或者直接是原始对象（如果ECharts未能解析）
           // 这里我们安全地获取 score
-          const score = Array.isArray(data) ? data[2] : (data?.score || 0)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const score = Array.isArray(data) ? data[2] : ((data as any)?.score || 0)
           
           // 根据 score 调整大小，最小 10，最大 30
           // 简单映射，假设 score 范围 0-1000+
@@ -189,9 +192,11 @@ const getOption = (): EChartsOption => {
             // 保留原始属性以便 tooltip 使用
             ...item
           }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         }) as any[], // 类型断言绕过 ECharts 严格类型检查
         label: {
           show: true,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           formatter: (params: any) => {
             const name = params.data.name
             return name.length > 5 ? name.slice(0, 5) + '...' : name
@@ -208,6 +213,7 @@ const getOption = (): EChartsOption => {
           focus: 'self',
           label: {
             show: true,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter: (params: any) => params.data.name // 高亮时显示全名
           }
         }
@@ -235,6 +241,7 @@ const getOption = (): EChartsOption => {
 }
 
 // 点击处理
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const handleClick = (params: any) => {
   if (params.componentType === 'series') {
     const item = params.data as IpaPoint
@@ -269,24 +276,24 @@ onMounted(() => {
       <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">产品力诊断 (IPA)</h3>
       <div class="flex gap-2 text-xs">
         <div class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="w-2 h-2 rounded-full bg-emerald-500" />
           <span class="text-gray-500">优势区</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-red-500"></span>
+          <span class="w-2 h-2 rounded-full bg-red-500" />
           <span class="text-gray-500">改进区</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+          <span class="w-2 h-2 rounded-full bg-blue-500" />
           <span class="text-gray-500">机会区</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+          <span class="w-2 h-2 rounded-full bg-gray-400" />
           <span class="text-gray-500">维持区</span>
         </div>
       </div>
     </div>
-    <div ref="chartRef" class="w-full h-96"></div>
+    <div ref="chartRef" class="w-full h-96" />
   </div>
 </template>
 

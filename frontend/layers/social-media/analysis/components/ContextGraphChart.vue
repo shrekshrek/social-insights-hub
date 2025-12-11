@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onMounted, nextTick, ref } from 'vue'
+import { watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
 import type { ContextGraph, ContextNode } from '../types'
 
@@ -33,21 +33,21 @@ const getOption = (): EChartsOption => {
   // 周边节点
   nodes.forEach(node => {
     chartNodes.push({
-      name: node.name,
+      // 附加数据用于点击
+      ...node,
       symbolSize: 20 + (node.weight * 20), // 根据权重调整大小
       itemStyle: {
         color: node.type === 'audience' ? '#8b5cf6' : node.type === 'scenario' ? '#10b981' : '#f59e0b'
       },
       label: { show: true, position: 'right' },
-      category: node.type,
-      // 附加数据用于点击
-      ...node
+      category: node.type
     })
   })
 
   return {
     tooltip: {
       trigger: 'item',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formatter: (params: any) => {
         if (params.dataType === 'edge') return ''
         const node = params.data
@@ -67,7 +67,8 @@ const getOption = (): EChartsOption => {
       {
         type: 'graph',
         layout: 'force',
-        data: chartNodes,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: chartNodes as any[],
         links: edges.map(e => ({
           source: e.source,
           target: e.target,
@@ -92,6 +93,7 @@ const getOption = (): EChartsOption => {
 }
 
 // 点击处理
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const handleClick = (params: any) => {
   if (params.dataType === 'node' && params.data.category !== 'center') {
     const node = params.data as ContextNode
@@ -126,24 +128,24 @@ onMounted(() => {
       <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">关联网络 (人-货-场)</h3>
       <div class="flex gap-2 text-xs">
         <div class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+          <span class="w-2 h-2 rounded-full bg-blue-500" />
           <span class="text-gray-500">本品</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+          <span class="w-2 h-2 rounded-full bg-purple-500" />
           <span class="text-gray-500">人群</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="w-2 h-2 rounded-full bg-emerald-500" />
           <span class="text-gray-500">场景</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span class="w-2 h-2 rounded-full bg-amber-500" />
           <span class="text-gray-500">话题</span>
         </div>
       </div>
     </div>
-    <div ref="chartRef" class="w-full h-64"></div>
+    <div ref="chartRef" class="w-full h-64" />
   </div>
 </template>
 

@@ -361,11 +361,92 @@ class Freshness(CustomBaseModel):
     avg_age_days: float = Field(0.0, description="平均发布天数")
 
 
+# ==================== 新增派生分析图表 Schema ====================
+
+class IpaPoint(CustomBaseModel):
+    """IPA 分析点"""
+    name: str
+    x: int = Field(..., description="声量 (关注度)")
+    y: float = Field(..., description="情感 (满意度)")
+    score: float = Field(..., description="综合评分")
+    post_ids: list[int] = Field(default_factory=list)
+
+
+class IpaQuadrants(CustomBaseModel):
+    """IPA 象限数据"""
+    strength: list[IpaPoint] = Field(default_factory=list, description="优势区")
+    improvement: list[IpaPoint] = Field(default_factory=list, description="改进区")
+    maintain: list[IpaPoint] = Field(default_factory=list, description="维持区")
+    opportunity: list[IpaPoint] = Field(default_factory=list, description="机会区")
+
+
+class IpaThresholds(CustomBaseModel):
+    """IPA 阈值"""
+    x: float
+    y: float
+
+
+class IpaAnalysis(CustomBaseModel):
+    """IPA 分析结果"""
+    quadrants: IpaQuadrants = Field(default_factory=IpaQuadrants)
+    thresholds: IpaThresholds = Field(default_factory=lambda: IpaThresholds(x=0, y=0))
+
+
+class ContextNode(CustomBaseModel):
+    """关联网络节点"""
+    name: str
+    type: str = Field(..., description="类型: audience/scenario/topic")
+    weight: float = Field(..., description="关联权重")
+    co_occurrence: int = Field(..., description="共现次数")
+    sentiment: float | None = None
+    post_ids: list[int] = Field(default_factory=list)
+
+
+class ContextEdge(CustomBaseModel):
+    """关联网络边"""
+    source: str
+    target: str
+    value: float
+
+
+class ContextGraph(CustomBaseModel):
+    """关联网络图"""
+    center_node: str | None = None
+    nodes: list[ContextNode] = Field(default_factory=list)
+    edges: list[ContextEdge] = Field(default_factory=list)
+
+
+class SentimentDistribution(CustomBaseModel):
+    """情感分布"""
+    positive: int = Field(0, description="正面提及次数")
+    negative: int = Field(0, description="负面提及次数")
+    neutral: int = Field(0, description="中性提及次数")
+
+
+class CompetitorSeries(CustomBaseModel):
+    """竞品雷达系列数据"""
+    name: str
+    data: list[float] | None = None  # 雷达图数据
+    sentiment: float | None = None  # 柱状图数据
+    sentiment_distribution: SentimentDistribution | None = None  # 柱状图数据
+
+
+class CompetitorRadar(CustomBaseModel):
+    """竞品雷达分析"""
+    mode: Literal["radar", "bar", "none"] = "none"
+    dimensions: list[str] | None = None
+    series: list[CompetitorSeries] = Field(default_factory=list)
+
+
 class TaskAnalysisCharts(CustomBaseModel):
     """图表数据"""
     quadrant: list[QuadrantItem] = Field(default_factory=list, description="四象限数据")
     quadrant_summary: QuadrantSummary = Field(default_factory=QuadrantSummary, description="四象限统计")
     time_distribution: list[TimeDistributionItem] = Field(default_factory=list, description="时间分布")
+    # 新增图表字段
+    ipa_analysis: IpaAnalysis | None = None
+    context_graph: ContextGraph | None = None
+    competitor_radar: CompetitorRadar | None = None
 
 
 class SourceDistribution(CustomBaseModel):
@@ -379,6 +460,15 @@ class SentimentDistribution(CustomBaseModel):
     positive: int = Field(0, description="正面提及次数")
     negative: int = Field(0, description="负面提及次数")
     neutral: int = Field(0, description="中性提及次数")
+
+
+class EntityNormalizedInfo(CustomBaseModel):
+    """实体归一化信息"""
+    aliases: list[str] = Field(default_factory=list)
+    parent: str | None = None
+    children: list[str] = Field(default_factory=list)
+    related: list[str] = Field(default_factory=list)
+    merged_from: list[str] = Field(default_factory=list)
 
 
 class EntityStat(CustomBaseModel):
@@ -395,29 +485,39 @@ class EntityStat(CustomBaseModel):
     top_issues: list[str] = Field(default_factory=list, description="主要问题")
     top_expectations: list[str] = Field(default_factory=list, description="主要期望")
     post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
+    normalized_info: EntityNormalizedInfo | None = None
 
 
 class OpinionStat(CustomBaseModel):
     """观点统计"""
-    topic: str = Field(..., description="话题/类别")
+    name: str = Field(..., description="话题/类别名称") # unified to name
+    topic: str | None = None # legacy compatibility
+    category: str | None = None
     heat: float = Field(0, description="热度")
     mentions: int = Field(0, description="唯一帖子提及数")
     sentiment: float = Field(0, description="情感倾向")
     source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
-    top_opinions: list[str] = Field(default_factory=list, description="热门观点列表")
+    top_opinions: list[str] | None = None  # legacy compatibility
+    opinions: list[dict] | None = None # new structure: [{"text": "...", "count": 1}]
     post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
+    # Add count fields
+    post_source_count: int = 0
+    comment_source_count: int = 0
 
 
 # ==================== KANO 需求分层 Schema (§4.5.3) ====================
 
 class KanoItem(CustomBaseModel):
     """KANO 模型单项"""
-    label: str = Field(..., description="标签名称")
-    heat: float = Field(0, description="热度")
+    name: str = Field(..., description="标签名称") # unified to name
+    label: str | None = None # legacy
+    score: float = Field(0, description="综合评分") # renamed from heat
+    heat: float | None = None # legacy
     mentions: int = Field(0, description="提及数")
     sentiment: float = Field(0, description="情感倾向")
+    source_type: str = "opinion"
     post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
-    top_opinions: list[str] = Field(default_factory=list, description="代表性观点（最多3条）")
+    top_opinions: list[str] | None = None  # legacy
 
 
 class KanoModel(CustomBaseModel):
@@ -504,9 +604,9 @@ class TaskAnalysisInsights(CustomBaseModel):
     competitor_entities: list[EntityStat] = Field(default_factory=list, description="竞品实体")
     top_issues: list[OpinionStat] = Field(default_factory=list, description="热门问题（负面）")
     top_features: list[OpinionStat] = Field(default_factory=list, description="热门特性（正面）")
-    context_analysis: ContextAnalysis = Field(default_factory=ContextAnalysis, description="场景与人群画像")
+    # context_analysis: ContextAnalysis # 已废弃，数据移至 charts.context_graph
     opportunities: Opportunities = Field(default_factory=Opportunities, description="机会洞察")
-    competition: Competition = Field(default_factory=Competition, description="竞品分析")
+    # competition: Competition # 已废弃，数据移至 charts.competitor_radar
     kol_voices: list[KolVoice] = Field(default_factory=list, description="KOL 声音")
 
 

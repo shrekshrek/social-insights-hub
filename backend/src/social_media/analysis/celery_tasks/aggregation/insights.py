@@ -455,7 +455,7 @@ def extract_kol_voices(
                 "cii": post_info.get("cii", 0),
                 "sentiment": post_info.get("sentiment", 0),
                 "summary": summary,
-                "platform": post.platform
+                "platform": post.platform.value if hasattr(post.platform, "value") else str(post.platform)
             })
             
     return results

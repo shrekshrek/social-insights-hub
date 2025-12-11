@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onMounted, nextTick, ref } from 'vue'
+import { watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
 import type { CompetitorRadar } from '../types'
 
@@ -80,6 +80,7 @@ const getOption = (): EChartsOption => {
         type: 'value',
         axisLabel: { formatter: '{value}%' }
       },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       series: barSeries as any
     }
   }
@@ -110,7 +111,7 @@ onMounted(() => {
         {{ data?.mode === 'radar' ? '竞品雷达 (多维对比)' : '竞品情感对比' }}
       </h3>
     </div>
-    <div ref="chartRef" class="w-full h-64"></div>
+    <div ref="chartRef" class="w-full h-64" />
   </div>
 </template>
 

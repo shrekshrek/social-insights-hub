@@ -218,6 +218,9 @@ const getConflictDirectionLabel = (direction: string) => {
   return '情感一致'
 }
 
+const hasContextGraph = computed(() => !!props.data.charts.context_graph?.nodes?.length)
+const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar && props.data.charts.competitor_radar.mode !== 'none'))
+
 </script>
 
 <template>
@@ -642,6 +645,23 @@ const getConflictDirectionLabel = (direction: string) => {
       </div>
     </section>
 
+    <!-- 关联网络与竞品分析 (并排展示) -->
+    <div v-if="hasContextGraph || hasCompetitorRadar" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- 关联网络 (Context Graph) -->
+      <section v-if="hasContextGraph" :class="{'lg:col-span-2': !hasCompetitorRadar}">
+        <ClientOnly>
+          <ContextGraphChart :data="data.charts.context_graph" @click-node="openPostListModal" />
+        </ClientOnly>
+      </section>
+
+      <!-- 竞品分析 -->
+      <section v-if="hasCompetitorRadar" :class="{'lg:col-span-2': !hasContextGraph}">
+        <ClientOnly>
+          <CompetitorRadarChart :data="data.charts.competitor_radar" />
+        </ClientOnly>
+      </section>
+    </div>
+
     <!-- 热门实体 -->
     <section v-if="data.insights.top_entities.length > 0">
       <div class="flex items-center justify-between mb-3">
@@ -729,23 +749,6 @@ const getConflictDirectionLabel = (direction: string) => {
             </div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- 关联网络 (Context Graph) -->
-    <section v-if="data.charts.context_graph?.nodes?.length">
-      <ClientOnly>
-        <ContextGraphChart :data="data.charts.context_graph" @click-node="openPostListModal" />
-      </ClientOnly>
-    </section>
-
-    <!-- 竞品分析 -->
-    <section v-if="data.charts.competitor_radar && data.charts.competitor_radar.mode !== 'none'">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">竞品分析</h3>
-      <div class="mb-4">
-        <ClientOnly>
-          <CompetitorRadarChart :data="data.charts.competitor_radar" />
-        </ClientOnly>
       </div>
     </section>
 

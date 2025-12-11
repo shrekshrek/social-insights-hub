@@ -23,9 +23,10 @@ from .metrics import (
     calculate_time_distribution,
 )
 from .insights import (
-    derive_context_analysis,
+    perform_ipa_analysis,
+    build_context_graph,
+    analyze_competitor_radar,
     classify_kano_model,
-    analyze_competition,
     extract_kol_voices,
 )
 
@@ -45,8 +46,9 @@ __all__ = [
     "calculate_sentiment_conflict",
     "calculate_time_distribution",
     # Insights
-    "derive_context_analysis",
+    "perform_ipa_analysis",
+    "build_context_graph",
+    "analyze_competitor_radar",
     "classify_kano_model",
-    "analyze_competition",
     "extract_kol_voices",
 ]

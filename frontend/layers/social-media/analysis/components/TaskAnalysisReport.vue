@@ -4,6 +4,9 @@ import type { EChartsOption } from 'echarts'
 import type { TaskAnalysisResultData } from '../types'
 import PostListModal from './PostListModal.vue'
 import ClickableCount from './ClickableCount.vue'
+import IpaChart from './IpaChart.vue'
+import ContextGraphChart from './ContextGraphChart.vue'
+import CompetitorRadarChart from './CompetitorRadarChart.vue'
 
 const props = defineProps<{
   data: TaskAnalysisResultData
@@ -442,6 +445,13 @@ const getConflictDirectionLabel = (direction: string) => {
       </div>
     </section>
 
+    <!-- 产品力诊断 (IPA) -->
+    <section v-if="data.charts.ipa_analysis?.quadrants">
+      <ClientOnly>
+        <IpaChart :data="data.charts.ipa_analysis" @click-point="openPostListModal" />
+      </ClientOnly>
+    </section>
+
     <!-- 热门观点：问题 vs 特性 -->
     <section v-if="data.insights.top_issues?.length || data.insights.top_features?.length">
       <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">热门观点</h3>
@@ -456,11 +466,11 @@ const getConflictDirectionLabel = (direction: string) => {
           <div v-if="data.insights.top_issues?.length" class="space-y-3">
             <div
               v-for="issue in data.insights.top_issues.slice(0, 5)"
-              :key="issue.topic"
+              :key="issue.name"
               class="text-sm"
             >
               <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-gray-800 dark:text-gray-200">{{ issue.topic }}</span>
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ issue.name }}</span>
                 <div class="flex items-center gap-2 text-xs">
                   <span class="text-gray-500 dark:text-gray-400">
                     热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ issue.heat.toFixed(1) }}</span>
@@ -468,16 +478,16 @@ const getConflictDirectionLabel = (direction: string) => {
                   <ClickableCount
                     :count="issue.mentions"
                     :post-ids="issue.post_ids"
-                    :label="issue.topic"
+                    :label="issue.name"
                     @click="openPostListModal"
                   />
                 </div>
               </div>
-              <ul v-if="issue.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
-                <li v-for="(opinion, idx) in issue.top_opinions" :key="idx">{{ opinion }}</li>
+              <ul v-if="issue.opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
+                <li v-for="(op, idx) in issue.opinions.slice(0, 3)" :key="idx">{{ op.text }} ({{ op.count }})</li>
               </ul>
               <div class="flex items-center gap-2 text-xs text-gray-400">
-                <span>来源: 帖子{{ (issue.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (issue.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
+                <span>帖子 {{ issue.post_source_count || 0 }} / 评论 {{ issue.comment_source_count || 0 }}</span>
               </div>
             </div>
           </div>
@@ -494,11 +504,11 @@ const getConflictDirectionLabel = (direction: string) => {
           <div v-if="data.insights.top_features?.length" class="space-y-3">
             <div
               v-for="feature in data.insights.top_features.slice(0, 5)"
-              :key="feature.topic"
+              :key="feature.name"
               class="text-sm"
             >
               <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-gray-800 dark:text-gray-200">{{ feature.topic }}</span>
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ feature.name }}</span>
                 <div class="flex items-center gap-2 text-xs">
                   <span class="text-gray-500 dark:text-gray-400">
                     热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ feature.heat.toFixed(1) }}</span>
@@ -506,16 +516,16 @@ const getConflictDirectionLabel = (direction: string) => {
                   <ClickableCount
                     :count="feature.mentions"
                     :post-ids="feature.post_ids"
-                    :label="feature.topic"
+                    :label="feature.name"
                     @click="openPostListModal"
                   />
                 </div>
               </div>
-              <ul v-if="feature.top_opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
-                <li v-for="(opinion, idx) in feature.top_opinions" :key="idx">{{ opinion }}</li>
+              <ul v-if="feature.opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
+                <li v-for="(op, idx) in feature.opinions.slice(0, 3)" :key="idx">{{ op.text }} ({{ op.count }})</li>
               </ul>
               <div class="flex items-center gap-2 text-xs text-gray-400">
-                <span>来源: 帖子{{ (feature.source_distribution?.post * 100 || 0).toFixed(0) }}% / 评论{{ (feature.source_distribution?.comment * 100 || 0).toFixed(0) }}%</span>
+                <span>帖子 {{ feature.post_source_count || 0 }} / 评论 {{ feature.comment_source_count || 0 }}</span>
               </div>
             </div>
           </div>
@@ -537,16 +547,16 @@ const getConflictDirectionLabel = (direction: string) => {
           <div v-if="data.insights.opportunities.kano_model.must_be.length" class="space-y-3">
             <div
               v-for="item in data.insights.opportunities.kano_model.must_be.slice(0, 5)"
-              :key="item.label"
+              :key="item.name"
               class="text-sm"
             >
               <div class="flex items-center justify-between">
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.name }}</span>
                 <div class="flex items-center gap-2 shrink-0 text-xs">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
-                    :label="item.label"
+                    :label="item.name"
                     @click="openPostListModal"
                   />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
@@ -555,7 +565,7 @@ const getConflictDirectionLabel = (direction: string) => {
                 </div>
               </div>
               <div class="mt-1">
-                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.must_be.map(i => i.heat))" size="xs" color="error" />
+                <UProgress :model-value="item.score" :max="Math.max(...data.insights.opportunities.kano_model.must_be.map(i => i.score))" size="xs" color="error" />
               </div>
             </div>
           </div>
@@ -571,16 +581,16 @@ const getConflictDirectionLabel = (direction: string) => {
           <div v-if="data.insights.opportunities.kano_model.one_dimensional.length" class="space-y-3">
             <div
               v-for="item in data.insights.opportunities.kano_model.one_dimensional.slice(0, 5)"
-              :key="item.label"
+              :key="item.name"
               class="text-sm"
             >
               <div class="flex items-center justify-between">
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.name }}</span>
                 <div class="flex items-center gap-2 shrink-0 text-xs">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
-                    :label="item.label"
+                    :label="item.name"
                     @click="openPostListModal"
                   />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
@@ -589,7 +599,7 @@ const getConflictDirectionLabel = (direction: string) => {
                 </div>
               </div>
               <div class="mt-1">
-                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.one_dimensional.map(i => i.heat))" size="xs" color="info" />
+                <UProgress :model-value="item.score" :max="Math.max(...data.insights.opportunities.kano_model.one_dimensional.map(i => i.score))" size="xs" color="info" />
               </div>
             </div>
           </div>
@@ -605,16 +615,16 @@ const getConflictDirectionLabel = (direction: string) => {
           <div v-if="data.insights.opportunities.kano_model.attractive.length" class="space-y-3">
             <div
               v-for="item in data.insights.opportunities.kano_model.attractive.slice(0, 5)"
-              :key="item.label"
+              :key="item.name"
               class="text-sm"
             >
               <div class="flex items-center justify-between">
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ item.name }}</span>
                 <div class="flex items-center gap-2 shrink-0 text-xs">
                   <ClickableCount
                     :count="item.mentions"
                     :post-ids="item.post_ids"
-                    :label="item.label"
+                    :label="item.name"
                     @click="openPostListModal"
                   />
                   <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
@@ -623,7 +633,7 @@ const getConflictDirectionLabel = (direction: string) => {
                 </div>
               </div>
               <div class="mt-1">
-                <UProgress :model-value="item.heat" :max="Math.max(...data.insights.opportunities.kano_model.attractive.map(i => i.heat))" size="xs" color="success" />
+                <UProgress :model-value="item.score" :max="Math.max(...data.insights.opportunities.kano_model.attractive.map(i => i.score))" size="xs" color="success" />
               </div>
             </div>
           </div>
@@ -722,158 +732,20 @@ const getConflictDirectionLabel = (direction: string) => {
       </div>
     </section>
 
-    <!-- 竞品分析 -->
-    <section v-if="data.insights.competition?.competitor_details?.length">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">竞品分析</h3>
-      <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <!-- 情感对比概览 -->
-        <div class="flex items-center justify-center gap-8 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
-          <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">本品情感</p>
-            <UBadge :color="getSentimentColor(data.insights.competition.target_sentiment)" variant="subtle">
-              {{ data.insights.competition.target_sentiment >= 0 ? '+' : '' }}{{ data.insights.competition.target_sentiment.toFixed(2) }}
-            </UBadge>
-          </div>
-          <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">对比优势</p>
-            <UBadge :color="data.insights.competition.comparison_sentiment >= 0 ? 'success' : 'error'" variant="subtle">
-              {{ data.insights.competition.comparison_sentiment >= 0 ? '+' : '' }}{{ data.insights.competition.comparison_sentiment.toFixed(2) }}
-            </UBadge>
-          </div>
-          <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">竞品情感</p>
-            <UBadge :color="getSentimentColor(data.insights.competition.competitor_sentiment)" variant="subtle">
-              {{ data.insights.competition.competitor_sentiment >= 0 ? '+' : '' }}{{ data.insights.competition.competitor_sentiment.toFixed(2) }}
-            </UBadge>
-          </div>
-        </div>
-        <!-- 竞品详情 -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div
-            v-for="comp in data.insights.competition.competitor_details"
-            :key="comp.name"
-            class="p-3 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600"
-          >
-            <!-- 第一行：名称 | 热度+提及+情感 -->
-            <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-              <span class="font-medium text-gray-900 dark:text-white">{{ comp.name }}</span>
-              <div class="flex items-center gap-2 text-xs">
-                <span class="text-gray-500 dark:text-gray-400">
-                  热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ comp.heat.toFixed(1) }}</span>
-                </span>
-                <ClickableCount
-                  :count="comp.mentions"
-                  :post-ids="comp.post_ids"
-                  :label="comp.name"
-                  @click="openPostListModal"
-                />
-                <UBadge :color="getSentimentColor(comp.sentiment)" variant="subtle" size="xs">
-                  {{ getSentimentLabel(comp.sentiment) }}
-                </UBadge>
-              </div>
-            </div>
-            <!-- 情感分布 -->
-            <div v-if="comp.sentiment_distribution" class="flex items-center gap-2 text-xs mb-2">
-              <span class="text-gray-500 dark:text-gray-400">情感分布:</span>
-              <span class="text-green-600 dark:text-green-400">正面 {{ comp.sentiment_distribution.positive }}</span>
-              <span class="text-gray-500 dark:text-gray-400">中性 {{ comp.sentiment_distribution.neutral }}</span>
-              <span class="text-red-600 dark:text-red-400">负面 {{ comp.sentiment_distribution.negative }}</span>
-            </div>
-            <!-- 特性和问题 -->
-            <div v-if="comp.top_features?.length" class="text-xs mb-1">
-              <span class="text-green-600 dark:text-green-400">优点:</span>
-              <span class="text-gray-600 dark:text-gray-400">{{ comp.top_features.slice(0, 3).join('、') }}</span>
-            </div>
-            <div v-if="comp.top_issues?.length" class="text-xs">
-              <span class="text-red-600 dark:text-red-400">问题:</span>
-              <span class="text-gray-600 dark:text-gray-400">{{ comp.top_issues.slice(0, 3).join('、') }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- 关联网络 (Context Graph) -->
+    <section v-if="data.charts.context_graph?.nodes?.length">
+      <ClientOnly>
+        <ContextGraphChart :data="data.charts.context_graph" @click-node="openPostListModal" />
+      </ClientOnly>
     </section>
 
-    <!-- 场景与人群画像 -->
-    <section v-if="data.insights.context_analysis?.scenarios?.length || data.insights.context_analysis?.audiences?.length">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">场景与人群画像</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- 使用场景 -->
-        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-map-pin" class="w-5 h-5 text-indigo-500" />
-            <span class="font-medium text-gray-900 dark:text-white">使用场景</span>
-          </div>
-          <div v-if="data.insights.context_analysis?.scenarios?.length" class="space-y-3">
-            <div
-              v-for="scenario in data.insights.context_analysis.scenarios.slice(0, 5)"
-              :key="scenario.label"
-              class="text-sm"
-            >
-              <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-gray-800 dark:text-gray-200">{{ scenario.label }}</span>
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">
-                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ scenario.heat.toFixed(1) }}</span>
-                  </span>
-                  <ClickableCount
-                    :count="scenario.mentions"
-                    :post-ids="scenario.post_ids"
-                    :label="scenario.label"
-                    @click="openPostListModal"
-                  />
-                </div>
-              </div>
-              <div v-if="scenario.associated_features?.length || scenario.associated_issues?.length" class="mt-1 space-y-1 text-xs">
-                <div v-if="scenario.associated_features?.length" class="flex flex-wrap items-baseline gap-x-3">
-                  <span class="font-medium text-green-600 dark:text-green-400 shrink-0">关联特性：</span>
-                  <span v-for="f in scenario.associated_features.slice(0, 3)" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
-                </div>
-                <div v-if="scenario.associated_issues?.length" class="flex flex-wrap items-baseline gap-x-3">
-                  <span class="font-medium text-red-600 dark:text-red-400 shrink-0">关联问题：</span>
-                  <span v-for="i in scenario.associated_issues.slice(0, 3)" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400">暂无数据</p>
-        </div>
-
-        <!-- 目标人群 -->
-        <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-user-group" class="w-5 h-5 text-purple-500" />
-            <span class="font-medium text-gray-900 dark:text-white">目标人群</span>
-          </div>
-          <div v-if="data.insights.context_analysis?.audiences?.length" class="space-y-3">
-            <div
-              v-for="audience in data.insights.context_analysis.audiences.slice(0, 5)"
-              :key="audience.label"
-              class="text-sm"
-            >
-              <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-gray-800 dark:text-gray-200">{{ audience.label }}</span>
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">
-                    热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ audience.heat.toFixed(1) }}</span>
-                  </span>
-                  <ClickableCount
-                    :count="audience.mentions"
-                    :post-ids="audience.post_ids"
-                    :label="audience.label"
-                    @click="openPostListModal"
-                  />
-                </div>
-              </div>
-              <div v-if="audience.preferences?.length" class="mt-1 text-xs">
-                <div class="flex flex-wrap items-baseline gap-x-3">
-                  <span class="font-medium text-blue-600 dark:text-blue-400 shrink-0">偏好：</span>
-                  <span v-for="p in audience.preferences.slice(0, 4)" :key="p" class="text-gray-700 dark:text-gray-300">{{ p }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <p v-else class="text-sm text-gray-400">暂无数据</p>
-        </div>
+    <!-- 竞品分析 -->
+    <section v-if="data.charts.competitor_radar && data.charts.competitor_radar.mode !== 'none'">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">竞品分析</h3>
+      <div class="mb-4">
+        <ClientOnly>
+          <CompetitorRadarChart :data="data.charts.competitor_radar" />
+        </ClientOnly>
       </div>
     </section>
 

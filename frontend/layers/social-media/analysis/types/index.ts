@@ -370,11 +370,76 @@ export interface Freshness {
   avg_age_days: number
 }
 
+/** IPA 分析点 */
+export interface IpaPoint {
+  name: string
+  x: number
+  y: number
+  score: number
+  post_ids: number[]
+}
+
+/** IPA 分析结果 */
+export interface IpaAnalysis {
+  quadrants: {
+    strength: IpaPoint[]
+    improvement: IpaPoint[]
+    maintain: IpaPoint[]
+    opportunity: IpaPoint[]
+  }
+  thresholds: {
+    x: number
+    y: number
+  }
+}
+
+/** 关联网络节点 */
+export interface ContextNode {
+  name: string
+  type: string
+  weight: number
+  co_occurrence: number
+  sentiment?: number
+  post_ids: number[]
+}
+
+/** 关联网络边 */
+export interface ContextEdge {
+  source: string
+  target: string
+  value: number
+}
+
+/** 关联网络图 */
+export interface ContextGraph {
+  center_node: string
+  nodes: ContextNode[]
+  edges: ContextEdge[]
+}
+
+/** 竞品雷达系列数据 */
+export interface CompetitorSeries {
+  name: string
+  data?: number[] // 雷达图数据
+  sentiment?: number // 柱状图数据
+  sentiment_distribution?: SentimentDistribution // 柱状图数据
+}
+
+/** 竞品雷达分析 */
+export interface CompetitorRadar {
+  mode: 'radar' | 'bar' | 'none'
+  dimensions?: string[]
+  series: CompetitorSeries[]
+}
+
 /** 图表数据 */
 export interface TaskAnalysisCharts {
   quadrant: QuadrantItem[]
   quadrant_summary: QuadrantSummary
   time_distribution: TimeDistributionItem[]
+  ipa_analysis?: IpaAnalysis
+  context_graph?: ContextGraph
+  competitor_radar?: CompetitorRadar
 }
 
 /** 来源分布 */
@@ -416,25 +481,35 @@ export interface EntityStat {
   normalized_info?: EntityNormalizedInfo  // LLM 归一化信息（可选）
 }
 
+/** 观点明细 */
+export interface OpinionDetail {
+  text: string
+  count: number
+  post_ids: number[]
+}
+
 /** 观点统计 */
 export interface OpinionStat {
-  topic: string
+  name: string
+  category?: string
   heat: number
   mentions: number
+  score?: number
   sentiment: number
-  source_distribution: SourceDistribution
-  top_opinions: string[]  // 热门观点列表
+  post_source_count?: number
+  comment_source_count?: number
+  opinions: OpinionDetail[]  // 观点列表
   post_ids: number[]  // 关联帖子ID，用于反向追溯
 }
 
 /** KANO 模型单项 */
 export interface KanoItem {
-  label: string
-  heat: number
+  name: string
+  score: number
   mentions: number
   sentiment: number
+  source_type: string
   post_ids: number[]  // 关联帖子ID，用于反向追溯
-  top_opinions: string[]  // 代表性观点（最多3条）
 }
 
 /** KANO 需求分层模型 */
@@ -447,52 +522,6 @@ export interface KanoModel {
 /** 机会洞察 */
 export interface Opportunities {
   kano_model: KanoModel
-}
-
-/** 场景统计 */
-export interface ScenarioStat {
-  label: string
-  heat: number
-  mentions: number
-  associated_issues: string[]
-  associated_features: string[]
-  post_ids: number[]
-}
-
-/** 人群画像统计 */
-export interface AudienceStat {
-  label: string
-  heat: number
-  mentions: number
-  preferences: string[]
-  post_ids: number[]
-}
-
-/** 场景与人群画像 */
-export interface ContextAnalysis {
-  scenarios: ScenarioStat[]
-  audiences: AudienceStat[]
-}
-
-/** 竞品详情 */
-export interface CompetitorDetail {
-  name: string
-  sentiment: number
-  sentiment_distribution: SentimentDistribution
-  heat: number
-  mentions: number
-  post_ids: number[]
-  top_features: string[]
-  top_issues: string[]
-}
-
-/** 竞品分析 */
-export interface Competition {
-  top_competitors: string[]
-  comparison_sentiment: number
-  target_sentiment: number
-  competitor_sentiment: number
-  competitor_details: CompetitorDetail[]
 }
 
 /** KOL 声音 */
@@ -511,9 +540,7 @@ export interface TaskAnalysisInsights {
   competitor_entities: EntityStat[]
   top_issues: OpinionStat[]
   top_features: OpinionStat[]
-  context_analysis: ContextAnalysis
   opportunities: Opportunities
-  competition: Competition
   kol_voices: KolVoice[]
 }
 

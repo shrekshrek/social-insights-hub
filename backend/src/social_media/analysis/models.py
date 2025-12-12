@@ -27,7 +27,6 @@ class AnalysisType(str, Enum):
     DEEP_POSTS = "deep_posts"                # 帖子深度分析
     DEEP_COMMENTS = "deep_comments"          # 评论深度分析
     ENTITY_NORMALIZATION = "entity_normalization"    # 实体归一化
-    TOPIC_NORMALIZATION = "topic_normalization"      # 话题归一化（旧名称，兼容）
     OPINION_NORMALIZATION = "opinion_normalization"  # 观点归一化
     AGGREGATION = "aggregation"              # 聚合分析
 
@@ -340,6 +339,3 @@ class AnalysisJob(Base):
         return self.task_id is None
 
 
-# ===== 向后兼容的别名（过渡期使用，后续删除）=====
-TaskAnalysisResult = AnalysisJob
-ProjectAnalysisResult = AnalysisJob

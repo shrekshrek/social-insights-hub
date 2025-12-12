@@ -501,7 +501,7 @@ class EntityStat(CustomBaseModel):
 
 class OpinionStat(CustomBaseModel):
     """观点统计"""
-    name: str = Field(..., description="话题/类别名称")
+    name: str = Field(..., description="观点名称")
     category: str | None = None
     heat: float = Field(0, description="热度")
     mentions: int = Field(0, description="唯一帖子提及数")
@@ -510,42 +510,11 @@ class OpinionStat(CustomBaseModel):
     source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
     post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
     original_terms: list[dict] | None = None  # 原始词条（仅在合并时存在）
-    # legacy compatibility
-    topic: str | None = None
-    top_opinions: list[str] | None = None
-    opinions: list[dict] | None = None
     post_source_count: int = 0
     comment_source_count: int = 0
 
 
-# ==================== KANO 需求分层 Schema (§4.5.3) ====================
-
-class KanoItem(CustomBaseModel):
-    """KANO 模型单项"""
-    name: str = Field(..., description="标签名称") # unified to name
-    label: str | None = None # legacy
-    score: float = Field(0, description="综合评分") # renamed from heat
-    heat: float | None = None # legacy
-    mentions: int = Field(0, description="提及数")
-    sentiment: float = Field(0, description="情感倾向")
-    source_type: str = "opinion"
-    post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
-    top_opinions: list[str] | None = None  # legacy
-
-
-class KanoModel(CustomBaseModel):
-    """KANO 需求分层模型"""
-    must_be: list[KanoItem] = Field(default_factory=list, description="基本型需求（痛点）")
-    attractive: list[KanoItem] = Field(default_factory=list, description="兴奋型需求（惊喜）")
-    one_dimensional: list[KanoItem] = Field(default_factory=list, description="期望型需求（愿望）")
-
-
-class Opportunities(CustomBaseModel):
-    """机会洞察"""
-    kano_model: KanoModel = Field(default_factory=KanoModel, description="KANO 需求分层")
-
-
-# ==================== 场景与人群画像 Schema (§4.5.4) ====================
+# ==================== 场景与人群画像 Schema ====================
 
 class ScenarioStat(CustomBaseModel):
     """场景统计"""
@@ -617,12 +586,7 @@ class TaskAnalysisInsights(CustomBaseModel):
     top_entities: list[EntityStat] = Field(default_factory=list, description="热门实体（全部）")
     target_entities: list[EntityStat] = Field(default_factory=list, description="本品实体")
     competitor_entities: list[EntityStat] = Field(default_factory=list, description="竞品实体")
-    top_topics: list[OpinionStat] = Field(default_factory=list, description="热门话题") # 统一替换 top_issues/top_features
-    # top_issues: list[OpinionStat] = Field(default_factory=list, description="热门问题（负面）") # 已废弃
-    # top_features: list[OpinionStat] = Field(default_factory=list, description="热门特性（正面）") # 已废弃
-    # context_analysis: ContextAnalysis # 已废弃，数据移至 charts.context_graph
-    opportunities: Opportunities = Field(default_factory=Opportunities, description="机会洞察")
-    # competition: Competition # 已废弃，数据移至 charts.competitor_radar
+    top_topics: list[OpinionStat] = Field(default_factory=list, description="热门话题")
     kol_voices: list[KolVoice] = Field(default_factory=list, description="KOL 声音")
 
 

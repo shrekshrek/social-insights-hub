@@ -4,7 +4,7 @@
 
 注意：本项目采用双重情感评分体系（详见设计文档 §1.1）
 - 宏观指标 (NSR, SERP, 四象限): 基于初筛情感 (-2 ~ +2)
-- 微观指标 (实体, 观点, KANO): 基于深度分析情感 (-1 ~ +1)
+- 微观指标 (实体, 观点): 基于深度分析情感 (-1 ~ +1)
 
 本模块功能：
 1. 四象限数据生成
@@ -15,7 +15,7 @@
 - metrics.py: 基础指标计算（CII、NSR、SERP等）
 - entity_aggregation.py: 实体聚合与LLM归一化 → aggregated_entities
 - opinion_aggregation.py: 观点聚合与LLM归一化 → aggregated_opinions
-- insights.py: 派生洞察（KANO、场景人群、竞品、KOL）
+- insights.py: 派生洞察（IPA、关联网络、竞品雷达、KOL）
 
 参考设计文档: docs/analysis_design/TASK_ANALYSIS_DETAIL.md
 """
@@ -283,7 +283,7 @@ def aggregate_task_analysis(
             project_id=project_id,
             task_id=task_id,
             user_id=user_id,
-            analysis_type=AnalysisType.TOPIC_NORMALIZATION.value,
+            analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
             source_count=len(posts_data),
             status="processing",
         )
@@ -346,7 +346,7 @@ def aggregate_task_analysis(
 
     # 8. 高级派生分析 (基于 DERIVED_ANALYSIS_DESIGN.md)
     aggregated_entities = entity_stats.get("aggregated_entities", [])
-    aggregated_opinions = topic_stats.get("topics", [])
+    aggregated_opinions = topic_stats.get("opinions", [])
     
     # 获取分类后的实体（展示用简化格式）
     target_entities = entity_stats.get("target_entities", [])
@@ -423,7 +423,7 @@ def aggregate_task_analysis(
             "target_entities": target_entities,
             "competitor_entities": competitor_entities,
             # 话题统计（原观点统计）
-            "top_topics": topic_stats.get("topics", []), # 返回所有聚合后的话题 (Top 60)，由前端进行正负面筛选
+            "top_topics": topic_stats.get("opinions", []),  # 返回所有聚合后的观点，由前端进行正负面筛选
             # KOL 声音
             "kol_voices": kol_voices,
         },
@@ -443,24 +443,6 @@ def aggregate_task_analysis(
         f"反差风险={sentiment_conflict['risk_level']}, "
         f"Target实体={target_count}, Competitor实体={competitor_count}"
     )
-
-    # --- DEBUG: 保存聚合数据到文件 ---
-    import json
-    import os
-    
-    # 获取项目根目录 (假设运行在 backend 目录下，往上找)
-    # 或者直接保存到当前工作目录，通常是 backend
-    debug_file_path = "debug_analysis_result.json"
-    
-    try:
-        with open(debug_file_path, "w", encoding="utf-8") as f:
-            json.dump(result_data, f, indent=2, ensure_ascii=False, default=str)
-        
-        logger.info(f"[DEBUG] 聚合结果已保存至: {os.path.abspath(debug_file_path)}")
-        
-    except Exception as e:
-        logger.error(f"[DEBUG] 保存调试文件失败: {e}")
-    # -----------------------------
 
     return result_data
 

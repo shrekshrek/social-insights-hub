@@ -628,7 +628,7 @@ async def run_task_aggregation(
 ) -> RunAnalysisResponse:
     """运行聚合分析，生成任务级分析报告（异步 Celery 任务）
 
-    调用 Aggregator 计算聚合数据（NSR、SERP、实体、KANO等），
+    调用 Aggregator 计算聚合数据（NSR、SERP、实体、观点等），
     结果存储在 DataTask.analysis_result 中。
 
     与初筛/深度分析一致，采用 Celery 异步执行，避免阻塞 API。

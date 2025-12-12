@@ -7,7 +7,7 @@
 - entity_aggregation.py: 实体聚合与 LLM 归一化
 - opinion_aggregation.py: 观点聚合与 LLM 归一化
 - metrics.py: 基础指标计算（CII、NSR、SERP等）
-- insights.py: 派生洞察（KANO、场景人群、竞品、KOL）
+- insights.py: 派生洞察（IPA、关联网络、竞品雷达、KOL）
 """
 
 from .orchestrator import aggregate_task_analysis
@@ -26,7 +26,6 @@ from .insights import (
     perform_ipa_analysis,
     build_context_graph,
     analyze_competitor_radar,
-    classify_kano_model,
     extract_kol_voices,
 )
 
@@ -49,6 +48,5 @@ __all__ = [
     "perform_ipa_analysis",
     "build_context_graph",
     "analyze_competitor_radar",
-    "classify_kano_model",
     "extract_kol_voices",
 ]

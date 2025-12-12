@@ -128,6 +128,7 @@ export type AnalysisType =
   | 'deep_comments'
   | 'entity_normalization'
   | 'opinion_normalization'
+  | 'aggregation'
   | 'topic_clustering'
   | 'competitive'
 
@@ -373,10 +374,10 @@ export interface Freshness {
 /** IPA 分析点 */
 export interface IpaPoint {
   name: string
-  x: number
-  y: number
-  score: number
-  mentions: number // 新增：声量
+  x: number        // 关注度 (Mentions)
+  y: number        // 情感满意度 (Sentiment)
+  z: number        // 气泡大小 (Log Smoothed Heat)
+  heat: number     // 影响力 (Heat)
   post_ids: number[]
 }
 
@@ -424,6 +425,7 @@ export interface CompetitorSeries {
   data?: number[] // 雷达图数据
   sentiment?: number // 柱状图数据
   sentiment_distribution?: SentimentDistribution // 柱状图数据
+  products?: string[] // 品牌聚合时包含的产品列表
 }
 
 /** 竞品雷达分析 */
@@ -465,6 +467,18 @@ export interface EntityNormalizedInfo {
   merged_from: string[]       // 合并来源（被合并的原始实体名称）
 }
 
+/** 实体多维标签 */
+export interface EntityTags {
+  role: string  // Target/Competitor/Context
+  parent: string  // 品牌归属
+}
+
+/** 原始词条（合并前的原始名称） */
+export interface OriginalTerm {
+  text: string
+  count: number
+}
+
 /** 实体统计 */
 export interface EntityStat {
   name: string
@@ -472,6 +486,7 @@ export interface EntityStat {
   role: 'target' | 'competitor' | 'other'
   heat: number
   mentions: number
+  score: number  // 综合评分
   sentiment: number  // 派生情感值 [-1, 1]，CII 加权
   sentiment_distribution: SentimentDistribution  // 情感分布
   source_distribution: SourceDistribution
@@ -479,6 +494,8 @@ export interface EntityStat {
   top_issues: string[]
   top_expectations: string[]
   post_ids: number[]  // 关联帖子ID，用于反向追溯
+  tags?: EntityTags  // 多维标签（可选）
+  original_terms?: OriginalTerm[]  // 原始词条（可选，仅在合并时存在）
   normalized_info?: EntityNormalizedInfo  // LLM 归一化信息（可选）
 }
 
@@ -495,43 +512,30 @@ export interface OpinionStat {
   category?: string
   heat: number
   mentions: number
-  score?: number
+  score: number  // 综合评分
   sentiment: number
+  source_distribution?: SourceDistribution  // 来源分布
+  post_ids: number[]  // 关联帖子ID，用于反向追溯
+  original_terms?: OriginalTerm[]  // 原始词条（可选，仅在合并时存在）
+  // legacy compatibility
   post_source_count?: number
   comment_source_count?: number
-  opinions: OpinionDetail[]  // 观点列表
-  post_ids: number[]  // 关联帖子ID，用于反向追溯
+  opinions?: OpinionDetail[]  // 观点列表（可选）
 }
 
-/** KANO 模型单项 */
-export interface KanoItem {
-  name: string
-  score: number
-  mentions: number
-  sentiment: number
-  source_type: string
-  post_ids: number[]  // 关联帖子ID，用于反向追溯
-}
-
-/** KANO 需求分层模型 */
-export interface KanoModel {
-  must_be: KanoItem[]
-  attractive: KanoItem[]
-  one_dimensional: KanoItem[]
-}
-
-/** 机会洞察 */
-export interface Opportunities {
-  kano_model: KanoModel
-}
+/** 机会洞察（已移除 KANO 模型，保留接口兼容） */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface Opportunities extends Record<string, unknown> {}
 
 /** KOL 声音 */
 export interface KolVoice {
   author: string
+  title: string
   sentiment: number
   summary: string
   post_id: number
   cii: number
+  platform: string
 }
 
 /** 洞察数据 */
@@ -540,7 +544,7 @@ export interface TaskAnalysisInsights {
   target_entities: EntityStat[]
   competitor_entities: EntityStat[]
   top_topics: OpinionStat[] // 替换原来的 top_issues 和 top_features
-  opportunities: Opportunities
+  opportunities?: Opportunities // 可选，已移除 KANO 模型
   kol_voices: KolVoice[]
 }
 
@@ -568,10 +572,5 @@ export interface TaskAnalysisResultResponse {
   result: TaskAnalysisResultData
 }
 
-/** 运行聚合分析响应 */
-export interface RunAggregationResponse {
-  success: boolean
-  task_id: number
-  analyzed_at: string
-  result: TaskAnalysisResultData
-}
+/** 运行聚合分析响应（与其他分析任务一致，异步执行） */
+export type RunAggregationResponse = RunAnalysisResponse

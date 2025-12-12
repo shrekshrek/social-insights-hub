@@ -52,8 +52,8 @@ const getOption = (): EChartsOption => {
   // 3. 计算偏移后的坐标 (向日葵螺旋布局)
   // 缩放因子：根据坐标轴大致范围调整，使偏移在视觉上接近正圆
   // 假设 X轴范围 ~20, Y轴范围 ~2
-  const scaleX = 1.9 // X轴偏移系数
-  const scaleY = 0.8 // Y轴偏移系数
+  const scaleX = 2.2 // X轴偏移系数
+  const scaleY = 0.7 // Y轴偏移系数
   const baseSpacing = 0.2 // 基础间距
 
   const processedPoints = new Map<string, { x: number, y: number }>() // name -> {x, y}

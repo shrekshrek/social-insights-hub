@@ -146,6 +146,10 @@ def aggregate_opinions(
     grouped_raw_opinions: Dict[str, Dict[str, set]] = defaultdict(lambda: defaultdict(set))
     # 结构: {group_key: {raw_term: heat}}
     grouped_term_heat: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    # 新增：追踪来源类型 {group_key: {raw_term: {"post": set, "comment": set}}}
+    grouped_term_sources: Dict[str, Dict[str, Dict[str, set]]] = defaultdict(
+        lambda: defaultdict(lambda: {"post": set(), "comment": set()})
+    )
     
     # 记录每个帖子已经贡献过的 term (避免重复计算热度)
     # post_id -> set(term_key)
@@ -162,15 +166,15 @@ def aggregate_opinions(
         # 计算单帖影响力分数
         impact = calculate_impact_score(cii, value_score)
         
-        # 收集来源: post_deep_result 和 comment_deep_result
+        # 收集来源: post_deep_result 和 comment_deep_result（带来源类型标记）
         sources = []
         if post.get("post_deep_result"):
-            sources.append(post["post_deep_result"])
+            sources.append(("post", post["post_deep_result"]))
         if post.get("comment_deep_result"):
-            sources.append(post["comment_deep_result"])
+            sources.append(("comment", post["comment_deep_result"]))
             
         has_opinion = False
-        for source in sources:
+        for source_type, source in sources:
             opinions = source.get("general_opinions", [])
             if isinstance(opinions, list):
                 for op_obj in opinions:
@@ -190,6 +194,8 @@ def aggregate_opinions(
                             term_key = f"{group_key}|{term}"
                             
                             grouped_raw_opinions[group_key][term].add(post_id)
+                            # 追踪来源类型
+                            grouped_term_sources[group_key][term][source_type].add(post_id)
                             
                             # 热度累加 (Per Post Per Term 去重)
                             # 使用 Impact Score 累加作为热度
@@ -229,6 +235,15 @@ def aggregate_opinions(
                 heat = grouped_term_heat[group_key][term]
                 mentions = len(post_ids)
                 score = calculate_score(heat, mentions)
+                # 计算来源分布
+                term_sources = grouped_term_sources[group_key][term]
+                post_count = len(term_sources["post"])
+                comment_count = len(term_sources["comment"])
+                total_sources = post_count + comment_count
+                source_dist = {
+                    "post": round(post_count / total_sources, 2) if total_sources > 0 else 0,
+                    "comment": round(comment_count / total_sources, 2) if total_sources > 0 else 0,
+                }
                 # 不需要 original_terms（单个词条且名称相同）
                 aggregated_opinions.append({
                     "category": category,
@@ -238,6 +253,9 @@ def aggregate_opinions(
                     "mentions": mentions,
                     "score": round(score, 1),
                     "post_ids": list(post_ids),
+                    "source_distribution": source_dist,
+                    "post_source_count": post_count,
+                    "comment_source_count": comment_count,
                 })
             continue
 
@@ -295,6 +313,8 @@ def aggregate_opinions(
             merged_heat = 0.0
             merged_post_ids = set()
             merged_originals = []
+            merged_post_sources = set()
+            merged_comment_sources = set()
             
             for term in originals:
                 if term in top_k_map:
@@ -302,6 +322,10 @@ def aggregate_opinions(
                     merged_post_ids.update(top_k_map[term])
                     # 记录原始词及其频次
                     merged_originals.append({"text": term, "count": len(top_k_map[term])})
+                    # 合并来源类型
+                    term_sources = grouped_term_sources[group_key][term]
+                    merged_post_sources.update(term_sources["post"])
+                    merged_comment_sources.update(term_sources["comment"])
                     processed_terms.add(term)
             
             if not merged_post_ids:
@@ -309,6 +333,15 @@ def aggregate_opinions(
 
             mentions = len(merged_post_ids)
             score = calculate_score(merged_heat, mentions)
+            
+            # 计算来源分布
+            post_count = len(merged_post_sources)
+            comment_count = len(merged_comment_sources)
+            total_sources = post_count + comment_count
+            source_dist = {
+                "post": round(post_count / total_sources, 2) if total_sources > 0 else 0,
+                "comment": round(comment_count / total_sources, 2) if total_sources > 0 else 0,
+            }
             
             opinion_item = {
                 "category": category,
@@ -318,6 +351,9 @@ def aggregate_opinions(
                 "mentions": mentions,
                 "score": round(score, 1),
                 "post_ids": list(merged_post_ids),
+                "source_distribution": source_dist,
+                "post_source_count": post_count,
+                "comment_source_count": comment_count,
             }
             # 只有真正发生合并时才保留 original_terms
             if _should_keep_original_terms(label, merged_originals):
@@ -331,6 +367,15 @@ def aggregate_opinions(
                 heat = grouped_term_heat[group_key][term]
                 mentions = len(post_ids)
                 score = calculate_score(heat, mentions)
+                # 计算来源分布
+                term_sources = grouped_term_sources[group_key][term]
+                post_count = len(term_sources["post"])
+                comment_count = len(term_sources["comment"])
+                total_sources = post_count + comment_count
+                source_dist = {
+                    "post": round(post_count / total_sources, 2) if total_sources > 0 else 0,
+                    "comment": round(comment_count / total_sources, 2) if total_sources > 0 else 0,
+                }
                 
                 aggregated_opinions.append({
                     "category": category,
@@ -340,6 +385,9 @@ def aggregate_opinions(
                     "mentions": mentions,
                     "score": round(score, 1),
                     "post_ids": list(post_ids),
+                    "source_distribution": source_dist,
+                    "post_source_count": post_count,
+                    "comment_source_count": comment_count,
                 })
 
     # 按综合评分排序

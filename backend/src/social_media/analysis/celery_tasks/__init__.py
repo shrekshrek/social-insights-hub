@@ -29,7 +29,6 @@ from .aggregation import (
     perform_ipa_analysis,
     build_context_graph,
     analyze_competitor_radar,
-    classify_kano_model,
     extract_kol_voices,
 )
 
@@ -52,6 +51,5 @@ __all__ = [
     "perform_ipa_analysis",
     "build_context_graph",
     "analyze_competitor_radar",
-    "classify_kano_model",
     "extract_kol_voices",
 ]

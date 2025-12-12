@@ -102,14 +102,14 @@ const getOption = (): EChartsOption => {
         // 注意：item.x 和 item.y 是我们在 map 中保留的原始属性，可以直接使用
         const displayX = item.x
         const displayY = item.y?.toFixed(2) ?? '0.00'
-        const score = item.score?.toFixed(1) ?? '0.0'
+        const heat = item.heat?.toFixed(1) ?? '0.0'
         
         return `
           <div class="font-medium mb-1">${item.name}</div>
           <div class="text-xs text-gray-500">
-            声量: ${displayX} <br/>
+            关注度: ${displayX} <br/>
             情感: ${displayY} <br/>
-            综合分: ${score}
+            影响力: ${heat}
           </div>
         `
       }
@@ -123,7 +123,7 @@ const getOption = (): EChartsOption => {
     },
     xAxis: {
       type: 'value',
-      name: '声量 (关注度)',
+      name: '关注度 (Mentions)', // 更新 X 轴标签
       nameLocation: 'middle',
       nameGap: 25,
       splitLine: {
@@ -155,16 +155,22 @@ const getOption = (): EChartsOption => {
         type: 'scatter',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         symbolSize: (data: any) => {
-          // data 可能是 [x, y, score, name, post_ids] 数组（取决于转换方式）
-          // 或者直接是原始对象（如果ECharts未能解析）
-          // 这里我们安全地获取 score
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const score = Array.isArray(data) ? data[2] : ((data as any)?.score || 0)
+          // data 是 [x, y, z(size), name, post_ids, originalX, originalY]
+          // 这里 data[2] 是后端计算好的 z 值 (log smoothed heat)
+          // 范围通常在 1~10 之间
           
-          // 根据 score 调整大小，最小 10，最大 30
-          // 简单映射，假设 score 范围 0-1000+
-          const size = 10 + Math.log(score + 1) * 2
-          return Math.min(Math.max(size, 8), 25)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let zVal = Array.isArray(data) ? data[2] : ((data as any)?.z || 0)
+          
+          if (isNaN(zVal)) zVal = 1
+
+          // 直接作为基础大小，适当放大
+          // 后端 zVal ≈ 2 (heat=10) -> size ≈ 6
+          // 后端 zVal ≈ 9 (heat=10000) -> size ≈ 27
+          // 加上基础大小 4px
+          const size = 4 + (zVal * 3)
+          
+          return Math.min(Math.max(size, 8), 40) // 限制在 8px - 40px 之间
         },
         itemStyle: {
           color: s.color,
@@ -174,7 +180,7 @@ const getOption = (): EChartsOption => {
         },
         // 转换为 ECharts 标准格式: [x, y, score, name, post_ids, originalX, originalY]
         // 这样 ECharts 可以正确处理，且 symbolSize 回调中的 data 会是这个数组
-        data: s.data.map(item => {
+        data: s.data.filter(item => item && typeof item.x === 'number' && typeof item.y === 'number').map(item => {
           // 获取预计算的布局坐标
           const pos = processedPoints.get(item.name) || { x: item.x, y: item.y }
           
@@ -183,7 +189,7 @@ const getOption = (): EChartsOption => {
             value: [
               pos.x, 
               pos.y, 
-              item.score, 
+              item.z || 1, // 索引 2: 使用后端计算的 z 值 (Bubble Size)
               item.name, 
               item.post_ids,
               item.x, // 索引 5: 原始 X

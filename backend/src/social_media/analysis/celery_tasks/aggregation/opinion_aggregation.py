@@ -26,7 +26,8 @@ from src.langchain.chains.opinion_normalization_chain import (
 )
 from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
 from src.social_media.analysis.celery_tasks.aggregation.utils import (
-    calculate_score, 
+    calculate_score,
+    calculate_impact_score,
     run_parallel_normalization,
     merge_token_stats,
 )
@@ -70,7 +71,14 @@ def aggregate_opinions(
     """
     start_time = time.time()
     token_stats = {
-        'summary': {'total_calls': 0, 'total_tokens': 0, 'total_cost_cny': 0.0},
+        'summary': {
+            'total_calls': 0,
+            'total_input_tokens': 0,
+            'total_output_tokens': 0,
+            'total_tokens': 0,
+            'total_cost_cny': 0.0,
+            'total_duration_seconds': 0.0,
+        },
         'call_details': []
     }
 
@@ -104,12 +112,6 @@ def aggregate_opinions(
             cat_norm_chain = create_category_normalization_chain()
             formatted_cats = format_categories_for_normalization(dict(raw_category_counts))
             
-            # 打印输入
-            print("\n" + "="*60)
-            print(f"[类别归一化] 输入 ({raw_category_count} 个类别):")
-            print(formatted_cats)
-            print("="*60)
-            
             cat_response, cat_stats = invoke_chain_with_stats_sync(
                 cat_norm_chain,
                 {"categories": formatted_cats},
@@ -123,21 +125,7 @@ def aggregate_opinions(
             response_text = cat_response.content if hasattr(cat_response, "content") else str(cat_response)
             category_map = parse_category_normalization_response(response_text)
             
-            # 打印输出
             unique_categories = set(category_map.values())
-            print(f"\n[类别归一化] 输出 ({raw_category_count} -> {len(unique_categories)} 个标准类别):")
-            # 按标准类别分组显示
-            from collections import defaultdict
-            grouped = defaultdict(list)
-            for orig, std in category_map.items():
-                grouped[std].append(orig)
-            for std_cat, orig_cats in grouped.items():
-                if len(orig_cats) > 1:
-                    print(f"  {std_cat} <- {orig_cats}")
-                else:
-                    print(f"  {std_cat}")
-            print("="*60 + "\n")
-            
             logger.info(f"[观点聚合] 类别归一化完成: {raw_category_count} -> {len(unique_categories)} 个标准类别")
             
         except Exception as e:
@@ -169,6 +157,10 @@ def aggregate_opinions(
     for post in posts_data:
         post_id = post.get("post_id")
         cii = post.get("cii", 1.0)
+        value_score = post.get("value_score")
+        
+        # 计算单帖影响力分数
+        impact = calculate_impact_score(cii, value_score)
         
         # 收集来源: post_deep_result 和 comment_deep_result
         sources = []
@@ -200,8 +192,9 @@ def aggregate_opinions(
                             grouped_raw_opinions[group_key][term].add(post_id)
                             
                             # 热度累加 (Per Post Per Term 去重)
+                            # 使用 Impact Score 累加作为热度
                             if post_id and term_key not in post_contribution_map[post_id]:
-                                grouped_term_heat[group_key][term] += cii
+                                grouped_term_heat[group_key][term] += impact
                                 post_contribution_map[post_id].add(term_key)
                                 
                             has_opinion = True
@@ -257,19 +250,8 @@ def aggregate_opinions(
             "category": category,
             "opinions": formatted_input, # input for chain
             "sentiment": sentiment,
-            "raw_map": raw_map,
             "top_k_map": top_k_map
         })
-
-    # 打印观点归一化输入统计
-    if tasks:
-        print("\n" + "="*60)
-        print(f"[观点归一化] 输入 ({len(tasks)} 个分组需要 LLM 归一化):")
-        for t in tasks:
-            term_count = len(t["top_k_map"])
-            sentiment_label = {1: "正面", 0: "中性", -1: "负面"}.get(t["sentiment"], "未知")
-            print(f"  [{t['category']}|{sentiment_label}] {term_count} 个观点")
-        print("="*60)
 
     # 使用通用并行执行器
     results, stats = run_parallel_normalization(
@@ -281,19 +263,8 @@ def aggregate_opinions(
         max_workers=10
     )
     
-    token_stats = stats # 直接使用返回的统计
-    
-    # 打印观点归一化输出统计
-    if results:
-        print(f"\n[观点归一化] 输出 ({len(results)} 个分组处理完成):")
-        for res in results:
-            task = res["task"]
-            clusters = res["parsed_result"]
-            input_count = len(task["top_k_map"])
-            output_count = len(clusters) if clusters else 0
-            sentiment_label = {1: "正面", 0: "中性", -1: "负面"}.get(task["sentiment"], "未知")
-            print(f"  [{task['category']}|{sentiment_label}] {input_count} -> {output_count} 个聚类")
-        print("="*60 + "\n")
+    # 合并观点归一化的统计（保留之前类别归一化的统计）
+    merge_token_stats(token_stats, stats)
 
     # 处理结果并更新 aggregated_opinions
     for res in results:
@@ -301,7 +272,6 @@ def aggregate_opinions(
         clusters = res["parsed_result"]
         
         group_key = task["group_key"]
-        raw_map = task["raw_map"]
         top_k_map = task["top_k_map"]
         category = task["category"]
         sentiment = task["sentiment"]
@@ -327,11 +297,11 @@ def aggregate_opinions(
             merged_originals = []
             
             for term in originals:
-                if term in raw_map:
+                if term in top_k_map:
                     merged_heat += grouped_term_heat[group_key][term]
-                    merged_post_ids.update(raw_map[term])
+                    merged_post_ids.update(top_k_map[term])
                     # 记录原始词及其频次
-                    merged_originals.append({"text": term, "count": len(raw_map[term])})
+                    merged_originals.append({"text": term, "count": len(top_k_map[term])})
                     processed_terms.add(term)
             
             if not merged_post_ids:
@@ -381,10 +351,13 @@ def aggregate_opinions(
 
     # 计算总耗时
     execution_duration = time.time() - start_time
+    # 保存 API 累计耗时（如果有）
+    if token_stats['summary'].get('total_duration_seconds', 0) > 0:
+        token_stats['summary']['total_api_duration_seconds'] = token_stats['summary']['total_duration_seconds']
+    # 使用实际执行时间覆盖
     token_stats['summary']['total_duration_seconds'] = execution_duration
     
-    # 打印最终统计
-    print(f"[话题聚合] 最终输出: {len(aggregated_opinions)} 个话题 (共 {total_count} 个，保留 Top 60)")
+    logger.info(f"[观点聚合] 最终输出: {len(aggregated_opinions)} 个话题 (共 {total_count} 个，保留 Top 60)")
 
     return {
         "topics": aggregated_opinions, # 保持字段名兼容

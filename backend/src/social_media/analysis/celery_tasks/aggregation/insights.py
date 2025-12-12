@@ -1,11 +1,10 @@
 """派生洞察模块
 
 从 aggregated_entities 和 aggregated_opinions 派生的高级洞察，包含：
-1. 产品力诊断 (IPA Analysis)
-2. "人-货-场" 关联网络 (Context Graph)
-3. 精细化竞品雷达 (Competitor Radar)
-4. KANO 需求分层 (KANO Model)
-5. KOL 声音提取 (KOL Voices)
+1. 产品力诊断 (IPA Analysis) - 基于 opinions + target 实体的 features/issues
+2. "人-货-场-竞" 关联网络 (Context Graph) - 增强版，包含竞品和产品属性节点
+3. 精细化竞品雷达 (Competitor Radar) - 支持品牌聚合
+4. KOL 声音提取 (KOL Voices)
 
 设计原则：
 - **小样本优先**: 适应 100 篇左右的小样本数据，引入动态阈值和降级策略。
@@ -32,18 +31,70 @@ logger = logging.getLogger(__name__)
 # 1. 产品力诊断 (IPA Analysis)
 # ============================================================================
 
+def _extract_entity_attributes_for_ipa(
+    target_entity: Optional[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """从 Target 实体中提取 features/issues 作为 IPA 候选项
+    
+    将实体属性转换为统一格式：{name, mentions, sentiment, heat, post_ids, source_type}
+    """
+    if not target_entity:
+        return []
+    
+    candidates = []
+    
+    # 提取 features（正面属性，sentiment 设为正值）
+    for feature in target_entity.get("features", []):
+        if isinstance(feature, dict) and feature.get("text"):
+            post_ids = feature.get("post_ids", [])
+            mentions = len(post_ids)
+            if mentions >= 1:
+                candidates.append({
+                    "name": feature["text"],
+                    "mentions": mentions,
+                    "sentiment": 0.5,  # features 默认正面
+                    "heat": mentions * 1.0,  # 简化：用 mentions 近似 heat
+                    "post_ids": post_ids,
+                    "source_type": "feature"
+                })
+    
+    # 提取 issues（负面属性，sentiment 设为负值）
+    for issue in target_entity.get("issues", []):
+        if isinstance(issue, dict) and issue.get("text"):
+            post_ids = issue.get("post_ids", [])
+            mentions = len(post_ids)
+            if mentions >= 1:
+                candidates.append({
+                    "name": issue["text"],
+                    "mentions": mentions,
+                    "sentiment": -0.5,  # issues 默认负面
+                    "heat": mentions * 1.0,
+                    "post_ids": post_ids,
+                    "source_type": "issue"
+                })
+    
+    return candidates
+
+
 def perform_ipa_analysis(
-    aggregated_entities: list[dict[str, Any]],
     aggregated_opinions: list[dict[str, Any]],
+    target_entity: Optional[dict[str, Any]] = None,
     min_mentions: int = 3
 ) -> dict[str, Any]:
     """执行 IPA (Importance-Performance Analysis) 产品力诊断
     
+    数据来源：
+    1. aggregated_opinions - 通用观点（按 category 分组）
+    2. target_entity.features/issues - Target 实体的产品属性（新增）
+    
     坐标系：
-    - X轴 (重要性): mentions (声量)
+    - X轴 (重要性): mentions (提及次数)
     - Y轴 (表现): sentiment (情感值 -1 ~ 1)
+    - 气泡大小: heat (Total Impact)
     
     Args:
+        aggregated_opinions: 聚合后的观点列表
+        target_entity: Target 实体（可选，用于提取产品属性）
         min_mentions: 最小提及次数，过滤小样本噪点
     """
     quadrants = {
@@ -53,26 +104,23 @@ def perform_ipa_analysis(
         "opportunity": []   # Q4 机会区 (Low Importance, High Performance)
     }
     
-    # 1. 收集所有属性类实体和话题
-    candidates = []
+    # IPA 数据来源：
+    # 1. aggregated_opinions（通用观点）
+    # 2. target_entity 的 features/issues（产品属性）
+    candidates = list(aggregated_opinions)
     
-    # 从实体中提取属性
-    for entity in aggregated_entities:
-        # 只关注产品属性类实体
-        if entity.get("category") in ["属性", "产品属性"] or entity.get("type") == "产品属性":
-            candidates.append(entity)
-            
-    # 从话题中提取
-    # 话题本身通常就是对属性的讨论
-    candidates.extend(aggregated_opinions)
+    # 增加 Target 实体的产品属性
+    entity_attrs = _extract_entity_attributes_for_ipa(target_entity)
+    candidates.extend(entity_attrs)
     
     if not candidates:
-        return {"quadrants": quadrants}
+        return {"quadrants": quadrants, "thresholds": {"x": 0, "y": 0}}
         
     # 2. 计算阈值 (动态计算中位数)
-    all_mentions = [c["mentions"] for c in candidates if c["mentions"] >= min_mentions]
+    # 使用 mentions 作为 X 轴依据 (更符合 IPA "Importance" 定义)
+    all_mentions = [c.get("mentions", 0) for c in candidates if c.get("mentions", 0) >= min_mentions]
     if not all_mentions:
-        return {"quadrants": quadrants}
+        return {"quadrants": quadrants, "thresholds": {"x": 0, "y": 0}}
         
     # 简单的中位数计算
     all_mentions.sort()
@@ -95,12 +143,18 @@ def perform_ipa_analysis(
             continue
             
         sentiment = item.get("sentiment", 0.0)
+        heat = item.get("heat", 0.0)
+        
+        # 计算适合前端展示的 Z 值 (Bubble Size)
+        # 使用对数平滑：log(heat + 1)
+        z_val = math.log(max(0, heat) + 1)
         
         point = {
             "name": name,
-            "x": mentions, # Importance
+            "x": mentions, # Importance (Mentions)
             "y": round(sentiment, 2), # Performance
-            "score": item.get("score", 0),
+            "z": round(z_val, 2), # Bubble Size (Log Smoothed Impact)
+            "heat": round(heat, 2),
             "post_ids": list(item.get("post_ids", [])) # 支持溯源
         }
         
@@ -119,12 +173,35 @@ def perform_ipa_analysis(
             
         processed_names.add(name)
         
-    # 按 score 排序
-    for key in quadrants:
-        quadrants[key].sort(key=lambda x: x["score"], reverse=True)
-        
+    # 4. 排序并限制返回数量 (防止图表拥挤)
+    # 策略：保留所有点，不限制数量，但会进行排序
+    
+    final_quadrants = {
+        "strength": [],
+        "improvement": [],
+        "maintain": [],
+        "opportunity": []
+    }
+    
+    # 合并所有点进行总排序，或者按象限配额
+    # 这里采用总排序策略：按 heat (综合热度)
+    all_points = []
+    for q_name, points in quadrants.items():
+        for p in points:
+            p["quadrant_label"] = q_name # 标记原始象限
+            all_points.append(p)
+            
+    # 按 heat 降序排序
+    all_points.sort(key=lambda x: x["heat"], reverse=True)
+    
+    
+    # 重新分配回象限
+    for p in all_points:
+        q_label = p.pop("quadrant_label")
+        final_quadrants[q_label].append(p)
+
     return {
-        "quadrants": quadrants,
+        "quadrants": final_quadrants,
         "thresholds": {
             "x": avg_mentions,
             "y": sentiment_threshold
@@ -133,18 +210,32 @@ def perform_ipa_analysis(
 
 
 # ============================================================================
-# 2. "人-货-场" 关联网络 (Context Graph)
+# 2. "人-货-场-竞" 关联网络 (Context Graph)
 # ============================================================================
 
 def build_context_graph(
     target_entity: Optional[dict[str, Any]],
-    aggregated_entities: list[dict[str, Any]],
     aggregated_opinions: list[dict[str, Any]],
-    top_n_neighbors: int = 5
+    competitor_entities: Optional[list[dict[str, Any]]] = None,
+    top_n_per_type: int = 3
 ) -> dict[str, Any]:
     """构建以 Target 实体为中心的星形关联网络
     
+    节点类型：
+    - audience: 人群（来自 target_entity.audience）
+    - scenario: 场景（来自 target_entity.scenarios）
+    - feature: 产品优点（来自 target_entity.features）
+    - issue: 产品问题（来自 target_entity.issues）
+    - topic: 话题（来自 aggregated_opinions）
+    - competitor: 竞品（来自 competitor_entities）
+    
     基于 post_ids 的 Jaccard 相似度计算共现关系。
+    
+    Args:
+        target_entity: Target 实体
+        aggregated_opinions: 聚合后的观点
+        competitor_entities: 竞品实体列表
+        top_n_per_type: 每种类型最多保留的节点数
     """
     if not target_entity:
         return {}
@@ -155,78 +246,118 @@ def build_context_graph(
     if not center_pids:
         return {"center_node": center_name, "nodes": [], "edges": []}
 
-    nodes = []
-    edges = []
+    # 按类型分组的候选节点池
+    candidates_by_type: dict[str, list[dict]] = {
+        "audience": [],
+        "scenario": [],
+        "feature": [],
+        "issue": [],
+        "topic": [],
+        "competitor": []
+    }
     
-    # 候选节点池：人群、场景、主要痛点/爽点
-    candidates = []
+    # 1. 提取人群 (来自 Target 实体的属性)
+    for aud_item in target_entity.get("audience", []):
+        if isinstance(aud_item, dict) and aud_item.get("text"):
+            candidates_by_type["audience"].append({
+                "name": aud_item["text"],
+                "type": "audience",
+                "post_ids": set(aud_item.get("post_ids", []))
+            })
     
-    # 1. 提取人群和场景 (来自实体)
-    for entity in aggregated_entities:
-        if entity["name"] == center_name: continue
-        
-        cat = entity.get("category", "")
-        role = entity.get("role", "")
-        
-        if cat in ["人群", "场景"] or role in ["Context"]:
-            candidates.append({
-                "name": entity["name"],
-                "type": "audience" if cat == "人群" else "scenario",
-                "post_ids": set(entity.get("post_ids", []))
+    # 2. 提取场景
+    for scn_item in target_entity.get("scenarios", []):
+        if isinstance(scn_item, dict) and scn_item.get("text"):
+            candidates_by_type["scenario"].append({
+                "name": scn_item["text"],
+                "type": "scenario",
+                "post_ids": set(scn_item.get("post_ids", []))
+            })
+    
+    # 3. 提取产品优点 (features)
+    for feat_item in target_entity.get("features", []):
+        if isinstance(feat_item, dict) and feat_item.get("text"):
+            candidates_by_type["feature"].append({
+                "name": feat_item["text"],
+                "type": "feature",
+                "sentiment": 0.5,  # features 默认正面
+                "post_ids": set(feat_item.get("post_ids", []))
+            })
+    
+    # 4. 提取产品问题 (issues)
+    for issue_item in target_entity.get("issues", []):
+        if isinstance(issue_item, dict) and issue_item.get("text"):
+            candidates_by_type["issue"].append({
+                "name": issue_item["text"],
+                "type": "issue",
+                "sentiment": -0.5,  # issues 默认负面
+                "post_ids": set(issue_item.get("post_ids", []))
             })
             
-    # 2. 提取主要话题 (来自 Top Opinions)
-    # 选取 Mentions 较高的 Top 10 话题作为节点
+    # 5. 提取主要话题 (来自 Top Opinions)
     for topic in aggregated_opinions[:10]:
-         candidates.append({
+        candidates_by_type["topic"].append({
             "name": topic["name"],
-            "type": "topic", # 可能是 issue 或 feature，统称 topic
+            "type": "topic",
             "sentiment": topic.get("sentiment", 0),
             "post_ids": set(topic.get("post_ids", []))
         })
-        
-    # 3. 计算 Jaccard 相似度并排序
-    # J(A,B) = |A ∩ B| / |A ∪ B|
-    # 但对于关联分析，有时 P(B|A) (置信度) 更有意义：在讨论 A (本品) 的时候，有多大概率讨论 B
-    # 这里采用一种加权混合：Co-occurrence count * Jaccard
     
-    related_nodes = []
-    for cand in candidates:
-        cand_pids = cand["post_ids"]
-        if not cand_pids: continue
-        
-        intersection = center_pids.intersection(cand_pids)
-        union = center_pids.union(cand_pids)
-        
-        co_occurrence = len(intersection)
-        if co_occurrence < 1: continue # 至少共现1次
-        
-        jaccard = co_occurrence / len(union)
-        
-        # 权重设计：偏向于共现次数多的，同时参考关联紧密度
-        weight = jaccard 
-        
-        related_nodes.append({
-            "name": cand["name"],
-            "type": cand["type"],
-            "weight": weight,
-            "co_occurrence": co_occurrence,
-            "sentiment": cand.get("sentiment"),
-            "post_ids": list(intersection) # 仅保留共现的帖子用于溯源，而非该节点的所有帖子
-        })
-        
-    # 按权重排序取 Top N
-    related_nodes.sort(key=lambda x: x["weight"], reverse=True)
-    top_nodes = related_nodes[:top_n_neighbors]
+    # 6. 提取竞品 (来自 competitor_entities)
+    if competitor_entities:
+        for comp in competitor_entities:
+            if comp.get("name") and comp.get("name") != center_name:
+                candidates_by_type["competitor"].append({
+                    "name": comp["name"],
+                    "type": "competitor",
+                    "sentiment": comp.get("sentiment", 0),
+                    "post_ids": set(comp.get("post_ids", []))
+                })
     
-    # 格式化输出
-    for node in top_nodes:
-        nodes.append(node)
-        edges.append({
-            "source": center_name,
-            "target": node["name"],
-            "value": round(node["weight"], 3)
-        })
+    # 计算 Jaccard 相似度并按类型分组排序
+    def _calc_jaccard_nodes(candidates: list[dict]) -> list[dict]:
+        """计算候选节点的 Jaccard 相似度"""
+        result = []
+        for cand in candidates:
+            cand_pids = cand["post_ids"]
+            if not cand_pids:
+                continue
+            
+            intersection = center_pids.intersection(cand_pids)
+            union = center_pids.union(cand_pids)
+            
+            co_occurrence = len(intersection)
+            if co_occurrence < 1:
+                continue
+            
+            jaccard = co_occurrence / len(union)
+            
+            result.append({
+                "name": cand["name"],
+                "type": cand["type"],
+                "weight": jaccard,
+                "co_occurrence": co_occurrence,
+                "sentiment": cand.get("sentiment"),
+                "post_ids": list(intersection)
+            })
+        
+        # 按权重降序排序
+        result.sort(key=lambda x: x["weight"], reverse=True)
+        return result
+    
+    # 每种类型取 Top N
+    nodes = []
+    edges = []
+    
+    for node_type, candidates in candidates_by_type.items():
+        ranked = _calc_jaccard_nodes(candidates)
+        for node in ranked[:top_n_per_type]:
+            nodes.append(node)
+            edges.append({
+                "source": center_name,
+                "target": node["name"],
+                "value": round(node["weight"], 3)
+            })
         
     return {
         "center_node": center_name,
@@ -239,31 +370,143 @@ def build_context_graph(
 # 3. 精细化竞品雷达 (Competitor Radar)
 # ============================================================================
 
+def _get_entity_parent(entity: dict) -> str:
+    """获取实体的 parent（品牌归属）
+    
+    优先使用 tags.parent，否则使用实体名称本身
+    """
+    tags = entity.get("tags", {})
+    parent = tags.get("parent", "")
+    # "Self" 表示自身就是品牌，用实体名称
+    if not parent or parent.lower() == "self":
+        return entity.get("name", "Unknown")
+    return parent
+
+
+def _aggregate_entities_by_parent(
+    entities: list[dict[str, Any]],
+    role_filter: str | None = None
+) -> dict[str, dict[str, Any]]:
+    """按 parent（品牌）聚合实体
+    
+    Args:
+        entities: 实体列表
+        role_filter: 可选的角色过滤（如 "target", "competitor"）
+    
+    Returns:
+        {parent_name: aggregated_stats}
+    """
+    brand_stats: dict[str, dict] = {}
+    
+    for entity in entities:
+        # 角色过滤
+        if role_filter:
+            entity_role = entity.get("role", "").lower()
+            tags_role = entity.get("tags", {}).get("role", "").lower()
+            if entity_role != role_filter and tags_role != role_filter:
+                continue
+        
+        parent = _get_entity_parent(entity)
+        
+        if parent not in brand_stats:
+            brand_stats[parent] = {
+                "name": parent,
+                "mentions": 0,
+                "heat": 0.0,
+                "sentiment_weighted_sum": 0.0,
+                "sentiment_weight": 0.0,
+                "positive_count": 0,
+                "negative_count": 0,
+                "neutral_count": 0,
+                "product_count": 0,
+                "products": [],  # 记录包含的产品
+                "post_ids": set(),
+            }
+        
+        stats = brand_stats[parent]
+        stats["mentions"] += entity.get("mentions", 0)
+        stats["heat"] += entity.get("heat", 0)
+        stats["product_count"] += 1
+        stats["products"].append(entity.get("name", ""))
+        stats["post_ids"].update(entity.get("post_ids", []))
+        
+        # 加权情感（按 mentions 加权）
+        entity_mentions = entity.get("mentions", 1)
+        stats["sentiment_weighted_sum"] += entity.get("sentiment", 0) * entity_mentions
+        stats["sentiment_weight"] += entity_mentions
+        
+        # 情感分布累加
+        dist = entity.get("sentiment_distribution", {})
+        stats["positive_count"] += dist.get("positive", 0)
+        stats["negative_count"] += dist.get("negative", 0)
+        stats["neutral_count"] += dist.get("neutral", 0)
+    
+    # 计算聚合后的情感和分布
+    for parent, stats in brand_stats.items():
+        if stats["sentiment_weight"] > 0:
+            stats["sentiment"] = round(stats["sentiment_weighted_sum"] / stats["sentiment_weight"], 2)
+        else:
+            stats["sentiment"] = 0.0
+        
+        stats["sentiment_distribution"] = {
+            "positive": stats["positive_count"],
+            "negative": stats["negative_count"],
+            "neutral": stats["neutral_count"],
+        }
+        
+        # 清理临时字段
+        del stats["sentiment_weighted_sum"]
+        del stats["sentiment_weight"]
+        del stats["positive_count"]
+        del stats["negative_count"]
+        del stats["neutral_count"]
+        
+        stats["post_ids"] = list(stats["post_ids"])
+    
+    return brand_stats
+
+
 def analyze_competitor_radar(
     target_entity: Optional[dict[str, Any]],
     competitor_entities: list[dict[str, Any]],
     aggregated_entities: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """竞品雷达分析 (带自动降级策略)
+    """竞品雷达分析 (带品牌聚合和自动降级策略)
     
-    对比维度：从 aggregated_entities 的属性中提取通用维度 (parent 或 category)
+    改进：使用 tags.parent 将同品牌产品聚合后对比品牌整体表现
     """
     if not target_entity or not competitor_entities:
         return {"mode": "none"}
-        
-    # 取 Top 1 竞品
-    top_competitor = competitor_entities[0]
     
-    # 1. 定义对比维度
-    # 尝试提取两者共有的属性维度
-    # 这里简化处理，预定义几个常见维度，或者根据 entity.features/issues 动态聚合
-    # 由于 aggregated_entities 结构中 features 是列表，我们需要反查属性的 parent 类别
-    # 这种反查比较复杂，这里采用 simplified 策略：
-    # 检查两个实体的 sentiment, heat, 以及是否有特定的属性词
+    # 1. 按 parent 聚合实体
+    # 聚合 Target 品牌
+    target_brands = _aggregate_entities_by_parent(aggregated_entities, role_filter="target")
+    # 聚合 Competitor 品牌
+    competitor_brands = _aggregate_entities_by_parent(aggregated_entities, role_filter="competitor")
     
-    # 策略升级：Mode A (Radar) 需要足够的数据支撑
-    # 检查是否有足够的 mentions
-    has_enough_data = top_competitor.get("mentions", 0) >= 5
+    # 2. 确定对比对象
+    # Target: 优先使用聚合后的品牌，否则使用原实体
+    target_parent = _get_entity_parent(target_entity)
+    if target_parent in target_brands and target_brands[target_parent]["product_count"] > 1:
+        # 品牌下有多个产品，使用聚合数据
+        target_data = target_brands[target_parent]
+        target_name = f"{target_parent} ({target_data['product_count']}个产品)"
+    else:
+        # 只有一个产品或没有聚合数据，使用原实体
+        target_data = target_entity
+        target_name = target_entity["name"]
+    
+    # Competitor: 优先使用聚合后的品牌
+    competitor_parent = _get_entity_parent(competitor_entities[0])
+    if competitor_parent in competitor_brands and competitor_brands[competitor_parent]["product_count"] > 1:
+        competitor_data = competitor_brands[competitor_parent]
+        competitor_name = f"{competitor_parent} ({competitor_data['product_count']}个产品)"
+    else:
+        competitor_data = competitor_entities[0]
+        competitor_name = competitor_entities[0]["name"]
+    
+    # 3. 检查数据充足性
+    has_enough_data = competitor_data.get("mentions", 0) >= 5
     
     if not has_enough_data:
         # Mode B: Bar Chart (降级为简单的正负面占比对比)
@@ -271,29 +514,22 @@ def analyze_competitor_radar(
             "mode": "bar",
             "series": [
                 {
-                    "name": target_entity["name"],
-                    "sentiment": target_entity.get("sentiment", 0),
-                    "sentiment_distribution": target_entity.get("sentiment_distribution", {})
+                    "name": target_name,
+                    "sentiment": target_data.get("sentiment", 0),
+                    "sentiment_distribution": target_data.get("sentiment_distribution", {}),
+                    "products": target_data.get("products", [target_entity["name"]]),
                 },
                 {
-                    "name": top_competitor["name"],
-                    "sentiment": top_competitor.get("sentiment", 0),
-                    "sentiment_distribution": top_competitor.get("sentiment_distribution", {})
+                    "name": competitor_name,
+                    "sentiment": competitor_data.get("sentiment", 0),
+                    "sentiment_distribution": competitor_data.get("sentiment_distribution", {}),
+                    "products": competitor_data.get("products", [competitor_entities[0]["name"]]),
                 }
             ]
         }
     
-    # Mode A: Radar (尝试构建维度)
-    # 这里我们模拟几个核心维度，实际项目中应该基于 Tag 体系聚合
-    # 临时逻辑：使用 sentiment_distribution 的拆解作为维度替代
-    # 或者如果后续有属性维度的归一化数据，可以在这里扩展
-    
-    # 目前使用 5 维基础雷达：
-    # 1. 声量 (Mentions - Log归一化)
-    # 2. 情感 (Sentiment - 归一化到 0-1)
-    # 3. 互动 (Heat - Log归一化)
-    # 4. 好评度 (Positive Ratio)
-    # 5. 差评度 (Negative Ratio - 反向，越低越好 -> 1-ratio)
+    # Mode A: Radar
+    # 5 维雷达：声量、情感、互动、好评率、差评控制
     
     def _get_radar_score(entity: dict, max_mentions: int, max_heat: float) -> list[float]:
         # 1. 声量 (0-1)
@@ -320,120 +556,50 @@ def analyze_competitor_radar(
         ]
 
     # 计算最大值用于归一化
-    max_mentions = max(target_entity.get("mentions", 0), top_competitor.get("mentions", 0))
-    max_heat = max(target_entity.get("heat", 0), top_competitor.get("heat", 0))
+    max_mentions = max(target_data.get("mentions", 0), competitor_data.get("mentions", 0))
+    max_heat = max(target_data.get("heat", 0), competitor_data.get("heat", 0))
     
     return {
         "mode": "radar",
         "dimensions": ["声量影响", "综合情感", "互动热度", "好评率", "差评控制"],
         "series": [
             {
-                "name": target_entity["name"],
-                "data": _get_radar_score(target_entity, max_mentions, max_heat)
+                "name": target_name,
+                "data": _get_radar_score(target_data, max_mentions, max_heat),
+                "products": target_data.get("products", [target_entity["name"]]),
             },
             {
-                "name": top_competitor["name"],
-                "data": _get_radar_score(top_competitor, max_mentions, max_heat)
+                "name": competitor_name,
+                "data": _get_radar_score(competitor_data, max_mentions, max_heat),
+                "products": competitor_data.get("products", [competitor_entities[0]["name"]]),
             }
         ]
     }
 
 
 # ============================================================================
-# 4. KANO 需求模型 (KANO Model)
+# 4. KOL 声音提取
 # ============================================================================
 
-def classify_kano_model(
-    aggregated_opinions: list[dict[str, Any]],
-    aggregated_entities: list[dict[str, Any]]
-) -> dict[str, list[dict[str, Any]]]:
-    """新版 KANO 模型
-    
-    分类逻辑：
-    1. Must-be (基本型): 
-       - 来源: issues (负面痛点)
-       - 特征: mentions 高 (Top 20%), 情感极负
-    2. One-dimensional (期望型):
-       - 来源: features & opinions
-       - 特征: mentions 中高, 情感偏正
-    3. Attractive (兴奋型):
-       - 来源: features 或 expectations
-       - 特征: mentions 低 (3-5次) 但 sentiment 极高 (>0.8)
-    """
-    
-    must_be = []
-    one_dimensional = []
-    attractive = []
-    
-    # 辅助函数：标准化 item 结构
-    def _make_item(source_item: dict, source_type: str) -> dict:
-        return {
-            "name": source_item.get("name") or source_item.get("text"), # 兼容 opinion 和 feature 结构
-            "score": source_item.get("score", 0),
-            "mentions": source_item.get("mentions") or source_item.get("count", 0),
-            "sentiment": source_item.get("sentiment", 0),
-            "source_type": source_type,
-            "post_ids": list(source_item.get("post_ids", [])) # 支持溯源
-        }
-
-    # 1. 处理 aggregated_opinions (主体数据)
-    # 计算 Mentions 的 80 分位数
-    mentions_list = [op["mentions"] for op in aggregated_opinions]
-    if not mentions_list:
-        return {"must_be": [], "one_dimensional": [], "attractive": []}
-        
-    mentions_list.sort()
-    high_mention_threshold = mentions_list[int(len(mentions_list) * 0.8)] if len(mentions_list) > 5 else 2
-    
-    for op in aggregated_opinions:
-        item = _make_item(op, "opinion")
-        mentions = item["mentions"]
-        sentiment = item["sentiment"]
-        
-        # Must-be: 高频负面
-        if mentions >= high_mention_threshold and sentiment <= -0.5:
-            must_be.append(item)
-        # Attractive: 低频高赞
-        elif 3 <= mentions < high_mention_threshold and sentiment >= 0.8:
-            attractive.append(item)
-        # One-dimensional: 中高频正面
-        elif mentions >= 3 and sentiment > 0:
-            one_dimensional.append(item)
-            
-    # 2. 补充来自 aggregated_entities 的 features/issues 信息
-    # 这部分可能与 opinion 重叠，简单去重
-    existing_names = {i["name"] for i in must_be + one_dimensional + attractive}
-    
-    # 遍历所有实体的 features/issues 会比较多，这里只取 aggregated_entities 中 Top 实体的属性
-    # 简化处理：假设 aggregated_opinions 已经包含了大部分核心观点
-    # 如果 opinion 覆盖不足，可以开启以下逻辑
-    
-    # ... (省略实体属性补充逻辑，避免数据冗余) ...
-    
-    # 排序
-    must_be.sort(key=lambda x: x["mentions"], reverse=True)
-    one_dimensional.sort(key=lambda x: x["score"], reverse=True)
-    attractive.sort(key=lambda x: x["sentiment"], reverse=True) # 兴奋点按情感排序
-    
-    return {
-        "must_be": must_be[:10],
-        "one_dimensional": one_dimensional[:10],
-        "attractive": attractive[:10]
-    }
-
-
-# ============================================================================
-# 5. KOL 声音提取 (Legacy - Keep)
-# ============================================================================
+from src.social_media.analysis.celery_tasks.aggregation.utils import calculate_impact_score
 
 def extract_kol_voices(
     posts_data: list[dict[str, Any]],
     db: Session,
     top_n: int = 5
 ) -> list[dict[str, Any]]:
-    """提取 KOL (关键意见领袖) 的声音"""
-    # 按 CII 排序
-    sorted_posts = sorted(posts_data, key=lambda x: x.get("cii", 0), reverse=True)
+    """提取 KOL (关键意见领袖) 的声音
+    
+    使用 Impact Score (互动 x 质量) 进行排序，避免标题党霸榜
+    """
+    
+    def get_impact(p):
+        cii = p.get("cii", 0)
+        value_score = p.get("value_score")
+        return calculate_impact_score(cii, value_score)
+
+    # 按 Impact Score 排序
+    sorted_posts = sorted(posts_data, key=get_impact, reverse=True)
     top_posts = sorted_posts[:top_n]
     
     results = []

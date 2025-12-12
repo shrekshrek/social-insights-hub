@@ -25,28 +25,21 @@ ENTITY_CLUSTERING_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责�
 
 你的任务是：
 1. **归一化**：合并指向同一事物的同义词实体，减少冗余。
-2. **多维打标**：基于核心主题和提供的[线索]，为每个实体输出三个维度的标签。
+2. **打标**：基于核心主题和提供的[线索]，为每个实体输出两个维度的标签。
 
-## 标签定义体系 (Facet System)
+## 标签定义
 
 ### 1. role (与主题的关系)
-回答"它是谁？"
 - `Target` (我方/主体): 用户关注的核心分析对象（如本品牌、本品、子产品）。
 - `Competitor` (竞品/对手): 与主体构成直接竞争关系的品牌或产品。
 - `Context` (背景/中立): 提及的场景、行业大词、无关实体或通用词。
 
-### 2. category (自然品类)
-回答"它是什么东西？"
-- 提取实体的物理属性或自然分类（如：手机、耳机、地点、人物、服务）。
-- 请使用最简短的词。
-
-### 3. parent (归属/上级)
-回答"它归属在哪里？"
+### 2. parent (品牌归属)
 - 实体所属的品牌或上级系列。
-- **动态逻辑**：
-  - 如果实体是产品 -> 填品牌名（如"华为"）。
-  - 如果实体是品牌 -> 填"Self"或所属集团。
-  - 如果实体是通用词 -> 填所属大类（如"户外装备"）。
+- **填写规则**：
+  - 产品 → 填品牌名（如 "Mate 60" → "华为"）
+  - 品牌 → 填 "Self"
+  - 通用词/场景 → 留空 ""
 
 ## 合并规则
 - 指向同一事物的不同表述必须合并（如 "Mate60 Pro" 和 "华为Mate60"）。
@@ -60,8 +53,7 @@ ENTITY_CLUSTERING_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责�
       "name": "标准名称（代表性名称）",
       "original_names": ["被合并的原始实体名称列表"],
       "role": "Target/Competitor/Context",
-      "category": "品类词",
-      "parent": "归属词"
+      "parent": "品牌名或空字符串"
     }}
   ]
 }}
@@ -80,26 +72,24 @@ ENTITY_CLUSTERING_USER_TEMPLATE = """请对以下实体列表进行处理：
 ENTITY_REVIEW_SYSTEM_TEMPLATE = """你是一位实体归一化审核专家。
 当前分析的核心主题（锚点）是：【{task_keywords}】。
 
-你的任务是审核第一阶段的结果，重点检查**合并错误**和**标签一致性**。
+你的任务是审核第一阶段的结果，重点检查**合并错误**和**标签准确性**。
 
 ## 审核清单
 
-### 1. 检查合并 (Normalization Check)
+### 1. 检查合并
 - **遗漏合并**：有没有把同义词分开了？（如 "iPhone 15" 和 "苹果15"）
 - **错误合并**：有没有把竞品合并到本品里了？（严禁把 Competitor 合并进 Target）
 
-### 2. 检查标签 (Tag Refinement)
+### 2. 检查标签
 - **role 准确性**：
   - 显然的竞品是否被标记为了 `Competitor`？（参考[线索]中的对比信息）
   - 主题相关的实体是否被标记为了 `Target`？
-- **category 一致性**：
-  - 同一类东西，不要有的填"电话"，有的填"手机"，请统一术语。
 - **parent 准确性**：
   - 品牌归属是否正确？
 
 ## 输出要求
 - 输出修正后的完整结果。
-- **必须**为所有实体保留标签字段。
+- **必须**为所有实体保留 role 和 parent 字段。
 - 输出格式必须与输入相同（JSON）。
 
 ```json
@@ -109,8 +99,7 @@ ENTITY_REVIEW_SYSTEM_TEMPLATE = """你是一位实体归一化审核专家。
       "name": "标准名称",
       "original_names": ["原始名称1", "原始名称2"],
       "role": "Target/Competitor/Context",
-      "category": "品类词",
-      "parent": "归属词"
+      "parent": "品牌名或空字符串"
     }}
   ]
 }}
@@ -211,10 +200,9 @@ def parse_clustering_response(response_text: str) -> dict[str, Any]:
         if not name:
             continue
             
-        # 构建 tags
+        # 构建 tags (role 和 parent 由 LLM 生成)
         tags = {
             "role": entity.get("role", "Context"),
-            "category": entity.get("category", ""),
             "parent": entity.get("parent", ""),
         }
         tags_mapping[name] = tags
@@ -391,7 +379,5 @@ def cluster_entities_with_review_sync(
         combined_stats['summary']['avg_cost_per_call'] = (
             combined_stats['summary']['total_cost_cny'] / combined_stats['summary']['total_calls']
         )
-
-    logger.info(f"实体归一化完成：{len(final_result.get('entities', []))} 个实体")
 
     return final_result, combined_stats

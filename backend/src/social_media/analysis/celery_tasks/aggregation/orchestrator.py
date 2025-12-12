@@ -48,7 +48,6 @@ from .insights import (
     perform_ipa_analysis,
     build_context_graph,
     analyze_competitor_radar,
-    classify_kano_model,
     extract_kol_voices,
 )
 
@@ -216,20 +215,31 @@ def aggregate_task_analysis(
             "cii": cii,
             "sentiment": None,
             "spam_score": None,  # 用于营销浓度计算
+            "value_score": None, # 用于影响力计算
             "published_at": post.published_at,  # 用于时效性分布
             "post_deep_result": None,
             "comment_deep_result": None,
         }
 
         if analysis:
+            # 基础数据回填
             if analysis.spam_score is not None:
                 screened_posts += 1
                 post_info["sentiment"] = analysis.sentiment
                 post_info["spam_score"] = analysis.spam_score
+                post_info["value_score"] = analysis.value_score
 
             if analysis.post_deep_result:
                 deep_analyzed_posts += 1
                 post_info["post_deep_result"] = analysis.post_deep_result
+                
+                # 【Unified Sentiment】优先使用深度分析的情感值覆盖初筛值
+                # 检查深度分析中是否包含情感倾向
+                # 如果是 Entity Sentiment Aggregation 后的结果会更好，但这里直接用 post_deep_result.sentiment
+                # 如果结构中没有 sentiment 字段，则尝试计算
+                deep_sentiment = analysis.post_deep_result.get("sentiment")
+                if deep_sentiment is not None:
+                    post_info["sentiment"] = deep_sentiment
 
             if analysis.comment_deep_result:
                 comment_analyzed_posts += 1
@@ -338,22 +348,24 @@ def aggregate_task_analysis(
     aggregated_entities = entity_stats.get("aggregated_entities", [])
     aggregated_opinions = topic_stats.get("topics", [])
     
-    # (1) 产品力诊断 (IPA)
-    ipa_result = perform_ipa_analysis(aggregated_entities, aggregated_opinions)
-    
-    # (2) 关联网络 (Context Graph) - 以 Top 1 Target 实体为中心
+    # 获取分类后的实体
     target_entities = entity_stats.get("target_entities", [])
     top_target = target_entities[0] if target_entities else None
-    context_graph = build_context_graph(top_target, aggregated_entities, aggregated_opinions)
+    competitor_entities = entity_stats.get("competitor_entities", [])
+    
+    # (1) 关联网络 (Context Graph) - 以 Top 1 Target 实体为中心
+    # 节点包括：人群、场景、产品属性(features/issues)、话题、竞品
+    context_graph = build_context_graph(
+        top_target, aggregated_opinions, competitor_entities
+    )
+    
+    # (2) 产品力诊断 (IPA) - 使用 opinions + target 实体的 features/issues
+    ipa_result = perform_ipa_analysis(aggregated_opinions, top_target)
     
     # (3) 竞品雷达 (Competitor Radar)
-    competitor_entities = entity_stats.get("competitor_entities", [])
     competitor_radar = analyze_competitor_radar(top_target, competitor_entities, aggregated_entities)
-    
-    # (4) KANO 需求分层
-    kano_model = classify_kano_model(aggregated_opinions, aggregated_entities)
 
-    # (5) KOL 声音提取
+    # (4) KOL 声音提取
     kol_voices = extract_kol_voices(posts_data, db)
 
     # 12. 组装结果
@@ -393,13 +405,7 @@ def aggregate_task_analysis(
             "target_entities": target_entities,
             "competitor_entities": competitor_entities,
             # 话题统计（原观点统计）
-            "top_topics": topic_stats.get("topics", [])[:10], # 取 Top 10 话题
-            "top_issues": [t for t in topic_stats.get("topics", []) if t.get("sentiment") == -1][:10],
-            "top_features": [t for t in topic_stats.get("topics", []) if t.get("sentiment") == 1][:10],
-            # KANO 需求分层 (§4.5.3)
-            "opportunities": {
-                "kano_model": kano_model,
-            },
+            "top_topics": topic_stats.get("topics", []), # 返回所有聚合后的话题 (Top 60)，由前端进行正负面筛选
             # KOL 声音
             "kol_voices": kol_voices,
         },
@@ -492,18 +498,10 @@ def _empty_result() -> dict[str, Any]:
             "top_entities": [],
             "target_entities": [],
             "competitor_entities": [],
-            "top_issues": [],
-            "top_features": [],
+            "top_topics": [], # 原 top_issues 和 top_features 已移除
             "context_analysis": {
                 "scenarios": [],
                 "audiences": [],
-            },
-            "opportunities": {
-                "kano_model": {
-                    "must_be": [],
-                    "attractive": [],
-                    "one_dimensional": [],
-                },
             },
             "competition": {
                 "top_competitors": [],

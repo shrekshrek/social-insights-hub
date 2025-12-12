@@ -366,9 +366,10 @@ class Freshness(CustomBaseModel):
 class IpaPoint(CustomBaseModel):
     """IPA 分析点"""
     name: str
-    x: int = Field(..., description="声量 (关注度)")
+    x: float = Field(..., description="声量 (关注度) / Impact Score") # 允许浮点数
     y: float = Field(..., description="情感 (满意度)")
     score: float = Field(..., description="综合评分")
+    mentions: int = Field(0, description="声量（提及数）")
     post_ids: list[int] = Field(default_factory=list)
 
 
@@ -602,8 +603,9 @@ class TaskAnalysisInsights(CustomBaseModel):
     top_entities: list[EntityStat] = Field(default_factory=list, description="热门实体（全部）")
     target_entities: list[EntityStat] = Field(default_factory=list, description="本品实体")
     competitor_entities: list[EntityStat] = Field(default_factory=list, description="竞品实体")
-    top_issues: list[OpinionStat] = Field(default_factory=list, description="热门问题（负面）")
-    top_features: list[OpinionStat] = Field(default_factory=list, description="热门特性（正面）")
+    top_topics: list[OpinionStat] = Field(default_factory=list, description="热门话题") # 统一替换 top_issues/top_features
+    # top_issues: list[OpinionStat] = Field(default_factory=list, description="热门问题（负面）") # 已废弃
+    # top_features: list[OpinionStat] = Field(default_factory=list, description="热门特性（正面）") # 已废弃
     # context_analysis: ContextAnalysis # 已废弃，数据移至 charts.context_graph
     opportunities: Opportunities = Field(default_factory=Opportunities, description="机会洞察")
     # competition: Competition # 已废弃，数据移至 charts.competitor_radar

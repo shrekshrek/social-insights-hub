@@ -141,10 +141,6 @@
 这些分析属于 **后处理 (Post-processing)**，不需要新的 LLM 调用，纯 Python 逻辑计算。
 建议在 `OpinionAggregationTask` 完成后，或者作为独立的 API 端点按需计算。
 
-### 3.2 接口层 (API)
-新增端点：`GET /api/v1/tasks/{task_id}/analysis/derived`
-返回包含上述四个模块结果的 JSON 对象。
-
 ### 3.3 展示层 (Frontend)
 *   **Dashboard**: 核心展示 IPA 象限图和 KANO 模型。
 *   **Entity Detail**: 点击实体时，展示关联网络和竞品雷达。

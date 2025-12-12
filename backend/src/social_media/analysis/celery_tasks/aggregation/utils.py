@@ -170,43 +170,43 @@ def merge_token_stats(target: dict, source: dict) -> None:
         s_target['avg_cost_per_call'] = s_target['total_cost_cny'] / total_calls
 
 
-def filter_low_frequency_terms(
-    raw_map: dict[str, Any], 
-    min_count_rule: Callable[[int], int] | None = None
-) -> dict[str, Any]:
-    """过滤低频词条
-    
+def calculate_impact_score(cii: float, value_score: float | None) -> float:
+    """计算单帖贡献的影响力分数
+
+    Impact = CII * Quality_Factor
+    Quality_Factor = 0.5 + (Value_Score / 10.0)
+
     Args:
-        raw_map: 原始词条映射 {term: value} (value 只要有 len() 即可)
-        min_count_rule: 自定义阈值规则函数 (total_items -> min_count)，默认逻辑：>20条时阈值为2，否则1
-        
+        cii: 互动指数
+        value_score: 内容价值分 (0-10)，若为 None 则默认为 5 (中等价值)
+
     Returns:
-        dict: 过滤后的词条映射
+        float: 影响力分数
     """
-    if not raw_map:
-        return {}
-        
-    if min_count_rule is None:
-        min_count = 2 if len(raw_map) > 20 else 1
-    else:
-        min_count = min_count_rule(len(raw_map))
-        
-    return {k: v for k, v in raw_map.items() if len(v) >= min_count}
+    if value_score is None:
+        value_score = 5.0
+    
+    # 确保 value_score 在合理范围内
+    value_score = max(0.0, min(10.0, float(value_score)))
+    
+    quality_factor = 0.5 + (value_score / 10.0)
+    return cii * quality_factor
 
 
 def calculate_score(heat: float, mentions: int) -> float:
-    """计算综合评分：heat × log(mentions + 1)
+    """计算综合评分：log(heat + 1) * log(mentions + 1)
 
     综合考虑影响力（heat）和讨论广泛性（mentions）
+    使用双对数公式，平滑长尾效应，避免 heat 绝对值过大导致 mentions 权重失效
 
     Args:
-        heat: CII 加权热度
+        heat: 累加影响力 (Total Impact) = Sum(CII * Quality_Factor)
         mentions: 提及次数（唯一帖子数）
 
     Returns:
         float: 综合评分
     """
-    return heat * math.log(mentions + 1)
+    return math.log(max(0, heat) + 1) * math.log(mentions + 1)
 
 
 def normalize_name(name: str) -> str:

@@ -218,7 +218,7 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
     total = len(ages_days)
 
     return {
-        "distribution": distribution[-30:],
+        "distribution": distribution,  # 返回全量数据，不再截断
         "freshness": {
             "last_7_days": round(sum(1 for age in ages_days if age <= 7) / total, 3),
             "last_30_days": round(sum(1 for age in ages_days if age <= 30) / total, 3),

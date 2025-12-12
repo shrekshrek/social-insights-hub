@@ -177,16 +177,18 @@ def calculate_sentiment_conflict(posts_data: list[dict[str, Any]]) -> dict[str, 
 def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, Any]:
     """计算时效性分布"""
     if not posts_data:
-        return {"distribution": [], "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0}}
+        return {"distribution": [], "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0}, "skipped_count": 0}
 
     now = datetime.now(timezone.utc)
     date_posts: dict[str, list[int]] = {}  # 日期 -> 帖子ID列表
     ages_days = []
+    skipped_count = 0  # 跳过的帖子数（无发布时间）
 
     for post in posts_data:
         published_at = post.get("published_at")
         post_id = post.get("post_id")
         if not published_at:
+            skipped_count += 1
             continue
 
         if isinstance(published_at, str):
@@ -209,7 +211,7 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
         ages_days.append(age_days)
 
     if not ages_days:
-        return {"distribution": [], "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0}}
+        return {"distribution": [], "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0}, "skipped_count": skipped_count}
 
     distribution = [
         {"date": date, "count": len(post_ids), "post_ids": post_ids}
@@ -223,5 +225,6 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
             "last_7_days": round(sum(1 for age in ages_days if age <= 7) / total, 3),
             "last_30_days": round(sum(1 for age in ages_days if age <= 30) / total, 3),
             "avg_age_days": round(sum(ages_days) / total, 1),
-        }
+        },
+        "skipped_count": skipped_count  # 跳过的帖子数（无发布时间）
     }

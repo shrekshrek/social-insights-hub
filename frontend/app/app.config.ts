@@ -10,6 +10,14 @@ export default defineAppConfig({
       error: 'red',
       neutral: 'gray'
     },
+    // 全局图标配置 - 使用 heroicons 替代默认的 lucide (官方推荐方式)
+    // https://ui.nuxt.com/getting-started/icons
+    icons: {
+      chevronLeft: 'i-heroicons-chevron-left',
+      chevronRight: 'i-heroicons-chevron-right',
+      chevronDoubleLeft: 'i-heroicons-chevron-double-left',
+      chevronDoubleRight: 'i-heroicons-chevron-double-right'
+    },
     // Input组件全局配置 - 确保占满宽度
     input: {
       slots: {

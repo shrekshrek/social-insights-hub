@@ -23,18 +23,18 @@ const quadrants = [
 ]
 
 const getOption = (): EChartsOption => {
-  if (!props.data) return {}
+  if (!props.data?.quadrants) return {}
 
-  const { quadrants: qData, thresholds } = props.data
+  const { quadrants: qData } = props.data
   
   // --- 预处理：解决重叠点 (Collision Resolution) ---
   // 1. 收集所有点
   const allPoints: (IpaPoint & { seriesIndex: number })[] = []
   const seriesData = [
-    { name: '优势区', data: qData.strength, color: '#10b981' },
-    { name: '改进区', data: qData.improvement, color: '#ef4444' },
-    { name: '维持区', data: qData.maintain, color: '#9ca3af' },
-    { name: '机会区', data: qData.opportunity, color: '#3b82f6' }
+    { name: '优势区', data: qData.strength || [], color: '#10b981' },
+    { name: '改进区', data: qData.improvement || [], color: '#ef4444' },
+    { name: '维持区', data: qData.maintain || [], color: '#9ca3af' },
+    { name: '机会区', data: qData.opportunity || [], color: '#3b82f6' }
   ]
   
   seriesData.forEach((s, idx) => {
@@ -90,19 +90,22 @@ const getOption = (): EChartsOption => {
   })
   
   return {
+    animation: false,  // 关闭动画，避免 resize 时的渲染问题
     tooltip: {
       trigger: 'item',
+      confine: true,  // 限制在图表区域内
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formatter: (params: any) => {
-        // params.data 结构: { value: [x, y, score, name, post_ids, originalX, originalY], ... }
-        const item = params.data
-        if (!item) return ''
+        // 安全检查：确保 params 和 data 存在
+        if (!params || !params.data) return ''
         
-        // 优先使用原始值（如果存在），否则使用 value 中的值（可能是抖动后的）
-        // 注意：item.x 和 item.y 是我们在 map 中保留的原始属性，可以直接使用
-        const displayX = item.x
-        const displayY = item.y?.toFixed(2) ?? '0.00'
-        const heat = item.heat?.toFixed(1) ?? '0.0'
+        const item = params.data
+        if (!item || !item.name) return ''
+        
+        // 安全获取数值
+        const displayX = item.x ?? 0
+        const displayY = typeof item.y === 'number' ? item.y.toFixed(2) : '0.00'
+        const heat = typeof item.heat === 'number' ? item.heat.toFixed(1) : '0.0'
         
         return `
           <div class="font-medium mb-1">${item.name}</div>
@@ -115,11 +118,11 @@ const getOption = (): EChartsOption => {
       }
     },
     grid: {
-      top: 30,
-      right: 30,
-      bottom: 30,
-      left: 30,
-      containLabel: true
+      top: 10,
+      right: 10,
+      bottom: 40,
+      left: 50,  // 给 Y 轴标签留足空间
+      containLabel: false  // 手动控制边距
     },
     xAxis: {
       type: 'value',
@@ -138,6 +141,8 @@ const getOption = (): EChartsOption => {
     yAxis: {
       type: 'value',
       name: '情感 (满意度)',
+      nameLocation: 'middle',
+      nameGap: 35,
       min: -1,
       max: 1.5,
       splitLine: {
@@ -150,6 +155,7 @@ const getOption = (): EChartsOption => {
       }
     },
     series: [
+      // 数据 series（已用颜色区分四象限，无需额外辅助线）
       ...seriesData.map((s): SeriesOption => ({
         name: s.name,
         type: 'scatter',
@@ -204,7 +210,8 @@ const getOption = (): EChartsOption => {
           show: true,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           formatter: (params: any) => {
-            const name = params.data.name
+            const name = params?.data?.name || ''
+            if (!name) return ''
             return name.length > 5 ? name.slice(0, 5) + '...' : name
           },
           position: 'right',
@@ -220,28 +227,10 @@ const getOption = (): EChartsOption => {
           label: {
             show: true,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter: (params: any) => params.data.name // 高亮时显示全名
+            formatter: (params: any) => params?.data?.name || '' // 高亮时显示全名
           }
         }
-      })),
-      // 辅助线 (中心线)
-      {
-        type: 'line',
-        markLine: {
-          silent: true,
-          symbol: 'none',
-          label: { show: false },
-          lineStyle: {
-            color: '#9ca3af',
-            type: 'solid',
-            width: 1
-          },
-          data: [
-            { xAxis: thresholds.x },
-            { yAxis: thresholds.y }
-          ]
-        }
-      }
+      }))
     ]
   }
 }
@@ -265,7 +254,10 @@ const updateChart = async () => {
       instance = initChart()
       instance?.on('click', handleClick)
     }
-    setOption(getOption())
+    const option = getOption()
+    if (option && Object.keys(option).length > 0) {
+      setOption(option)
+    }
   }
 }
 

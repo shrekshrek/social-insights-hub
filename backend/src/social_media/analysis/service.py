@@ -632,13 +632,17 @@ async def run_task_aggregation(
     结果存储在 DataTask.analysis_result 中。
 
     与初筛/深度分析一致，采用 Celery 异步执行，避免阻塞 API。
+    
+    注意：聚合分析本身不涉及 LLM API 调用，因此不创建 AnalysisJob 记录。
+    但会预先创建实体归一化和观点归一化的 AnalysisJob（状态为 pending），
+    以便前端可以立即检测到任务在运行。
 
     Args:
         task_id: 任务ID
         current_user_id: 当前用户ID
 
     Returns:
-        RunAnalysisResponse: 包含 job_id 和 celery_task_id
+        RunAnalysisResponse: 包含 celery_task_id
     """
     from src.social_media.tasks import crud as task_crud
     from src.social_media.projects import crud as project_crud
@@ -675,31 +679,37 @@ async def run_task_aggregation(
             detail="没有已分析的帖子，请先运行初筛或深度分析"
         )
 
-    # 创建分析任务记录
-    analysis_job = await create_analysis_job_async(
+    # 预先创建实体归一化和观点归一化的 AnalysisJob（状态为 pending）
+    # 这样前端可以立即检测到任务在运行，不需要等待 Celery 任务内部创建
+    entity_job = await create_analysis_job_async(
         db=db,
         project_id=task.project_id,
         task_id=task_id,
         user_id=current_user_id,
-        analysis_type="aggregation",
+        analysis_type="entity_normalization",
+        source_count=analyzed_count,
+    )
+    opinion_job = await create_analysis_job_async(
+        db=db,
+        project_id=task.project_id,
+        task_id=task_id,
+        user_id=current_user_id,
+        analysis_type="opinion_normalization",
         source_count=analyzed_count,
     )
 
-    # 启动 Celery 任务（参数命名与其他分析任务一致）
+    # 启动 Celery 任务，传递预创建的 job_id
     celery_result = run_aggregation_task.delay(
-        result_id=analysis_job.id,
         task_id=task_id,
         project_id=task.project_id,
         user_id=current_user_id,
+        entity_job_id=entity_job.id,
+        opinion_job_id=opinion_job.id,
     )
-
-    # 更新 celery_task_id
-    analysis_job.celery_task_id = celery_result.id
-    await db.commit()
 
     return RunAnalysisResponse(
         celery_task_id=celery_result.id,
-        job_id=analysis_job.id,
+        job_id=entity_job.id,  # 返回实体归一化的 job_id 用于跟踪
         status="pending",
         message=f"聚合分析任务已启动，将分析 {analyzed_count} 条数据"
     )

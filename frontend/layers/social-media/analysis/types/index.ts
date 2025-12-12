@@ -228,7 +228,7 @@ export interface RunCompetitiveRequest {
 
 export interface RunAnalysisResponse {
   celery_task_id: string
-  job_id: number
+  job_id: number | null  // 聚合分析不创建 AnalysisJob，可能为 null
   status: AnalysisStatus
   message: string
 }
@@ -440,6 +440,7 @@ export interface TaskAnalysisCharts {
   quadrant: QuadrantItem[]
   quadrant_summary: QuadrantSummary
   time_distribution: TimeDistributionItem[]
+  time_distribution_skipped?: number  // 无发布时间的帖子数
   ipa_analysis?: IpaAnalysis
   context_graph?: ContextGraph
   competitor_radar?: CompetitorRadar

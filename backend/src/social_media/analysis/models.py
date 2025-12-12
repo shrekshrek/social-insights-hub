@@ -21,14 +21,17 @@ if TYPE_CHECKING:
 
 
 class AnalysisType(str, Enum):
-    """分析类型枚举"""
+    """分析类型枚举
+    
+    仅包含涉及 LLM API 调用的分析类型。
+    聚合分析（aggregation）不涉及 LLM，不应创建 AnalysisJob 记录。
+    """
     # 任务级分析（需要 task_id）
     SCREENING_POSTS = "screening_posts"      # 帖子初筛
     DEEP_POSTS = "deep_posts"                # 帖子深度分析
     DEEP_COMMENTS = "deep_comments"          # 评论深度分析
     ENTITY_NORMALIZATION = "entity_normalization"    # 实体归一化
     OPINION_NORMALIZATION = "opinion_normalization"  # 观点归一化
-    AGGREGATION = "aggregation"              # 聚合分析
 
     # 项目级分析（task_id 为空）
     TOPIC_CLUSTERING = "topic_clustering"    # 主题聚类

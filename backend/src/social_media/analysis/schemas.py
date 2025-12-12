@@ -257,7 +257,7 @@ class RunCompetitiveRequest(CustomBaseModel):
 class RunAnalysisResponse(CustomBaseModel):
     """启动分析任务响应"""
     celery_task_id: str
-    job_id: int
+    job_id: int | None = None  # 聚合分析不创建 AnalysisJob，所以可能为 None
     status: str
     message: str
 

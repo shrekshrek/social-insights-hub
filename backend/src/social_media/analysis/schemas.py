@@ -366,10 +366,10 @@ class Freshness(CustomBaseModel):
 class IpaPoint(CustomBaseModel):
     """IPA 分析点"""
     name: str
-    x: float = Field(..., description="声量 (关注度) / Impact Score") # 允许浮点数
-    y: float = Field(..., description="情感 (满意度)")
-    score: float = Field(..., description="综合评分")
-    mentions: int = Field(0, description="声量（提及数）")
+    x: float = Field(..., description="关注度 (Mentions)")
+    y: float = Field(..., description="满意度 (Sentiment)")
+    z: float = Field(0, description="气泡大小 (Log Smoothed Heat)")
+    heat: float = Field(0, description="影响力 (Heat)")
     post_ids: list[int] = Field(default_factory=list)
 
 
@@ -430,6 +430,7 @@ class CompetitorSeries(CustomBaseModel):
     data: list[float] | None = None  # 雷达图数据
     sentiment: float | None = None  # 柱状图数据
     sentiment_distribution: SentimentDistribution | None = None  # 柱状图数据
+    products: list[str] | None = None  # 品牌聚合时包含的产品列表
 
 
 class CompetitorRadar(CustomBaseModel):
@@ -472,6 +473,12 @@ class EntityNormalizedInfo(CustomBaseModel):
     merged_from: list[str] = Field(default_factory=list)
 
 
+class EntityTags(CustomBaseModel):
+    """实体多维标签"""
+    role: str = Field("Context", description="角色: Target/Competitor/Context")
+    parent: str = Field("", description="品牌归属")
+
+
 class EntityStat(CustomBaseModel):
     """实体统计"""
     name: str = Field(..., description="实体名称")
@@ -479,6 +486,7 @@ class EntityStat(CustomBaseModel):
     role: str = Field("other", description="主体角色: target(本品)/competitor(竞品)/other(其他有价值实体)")
     heat: float = Field(0, description="热度（CII加权）")
     mentions: int = Field(0, description="唯一帖子提及数")
+    score: float = Field(0, description="综合评分")
     sentiment: float = Field(0, description="派生情感值 [-1, 1]，CII加权")
     sentiment_distribution: SentimentDistribution = Field(default_factory=SentimentDistribution, description="情感分布")
     source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
@@ -486,22 +494,26 @@ class EntityStat(CustomBaseModel):
     top_issues: list[str] = Field(default_factory=list, description="主要问题")
     top_expectations: list[str] = Field(default_factory=list, description="主要期望")
     post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
+    tags: EntityTags | None = None  # 多维标签
+    original_terms: list[dict] | None = None  # 原始词条（仅在合并时存在）
     normalized_info: EntityNormalizedInfo | None = None
 
 
 class OpinionStat(CustomBaseModel):
     """观点统计"""
-    name: str = Field(..., description="话题/类别名称") # unified to name
-    topic: str | None = None # legacy compatibility
+    name: str = Field(..., description="话题/类别名称")
     category: str | None = None
     heat: float = Field(0, description="热度")
     mentions: int = Field(0, description="唯一帖子提及数")
+    score: float = Field(0, description="综合评分")
     sentiment: float = Field(0, description="情感倾向")
     source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
-    top_opinions: list[str] | None = None  # legacy compatibility
-    opinions: list[dict] | None = None # new structure: [{"text": "...", "count": 1}]
     post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
-    # Add count fields
+    original_terms: list[dict] | None = None  # 原始词条（仅在合并时存在）
+    # legacy compatibility
+    topic: str | None = None
+    top_opinions: list[str] | None = None
+    opinions: list[dict] | None = None
     post_source_count: int = 0
     comment_source_count: int = 0
 
@@ -590,10 +602,12 @@ class Competition(CustomBaseModel):
 class KolVoice(CustomBaseModel):
     """KOL 声音"""
     author: str = Field(..., description="作者名称")
+    title: str = Field("", description="帖子标题")
     sentiment: float = Field(0, description="情感倾向")
     summary: str = Field("", description="观点摘要")
     post_id: int = Field(..., description="帖子ID")
     cii: float = Field(0, description="互动指数")
+    platform: str = Field("", description="平台来源")
 
 
 # ==================== 洞察数据 Schema ====================

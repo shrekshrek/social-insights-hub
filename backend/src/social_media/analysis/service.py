@@ -625,24 +625,24 @@ async def run_task_aggregation(
     db: AsyncSession,
     task_id: int,
     current_user_id: int
-) -> dict[str, Any]:
-    """运行聚合分析，生成任务级分析报告
+) -> RunAnalysisResponse:
+    """运行聚合分析，生成任务级分析报告（异步 Celery 任务）
 
     调用 Aggregator 计算聚合数据（NSR、SERP、实体、KANO等），
     结果存储在 DataTask.analysis_result 中。
+
+    与初筛/深度分析一致，采用 Celery 异步执行，避免阻塞 API。
 
     Args:
         task_id: 任务ID
         current_user_id: 当前用户ID
 
     Returns:
-        聚合分析结果
+        RunAnalysisResponse: 包含 job_id 和 celery_task_id
     """
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.tasks.models import DataTask
     from src.social_media.projects import crud as project_crud
-    from .celery_tasks.aggregation import aggregate_task_analysis
-    from src.database import SyncSessionLocal
+    from .celery_tasks.aggregation_tasks import run_aggregation_task
 
     # 验证任务是否存在
     task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
@@ -675,43 +675,34 @@ async def run_task_aggregation(
             detail="没有已分析的帖子，请先运行初筛或深度分析"
         )
 
-    # 使用同步 session 调用 Aggregator（因为 Aggregator 是同步的）
-    sync_db = SyncSessionLocal()
-    try:
-        # 运行聚合（函数内部会读取关键词）
-        aggregation_result = aggregate_task_analysis(
-            db=sync_db,
-            task_id=task_id,
-            project_id=task.project_id,
-            user_id=current_user_id,
-        )
+    # 创建分析任务记录
+    analysis_job = await create_analysis_job_async(
+        db=db,
+        project_id=task.project_id,
+        task_id=task_id,
+        user_id=current_user_id,
+        analysis_type="aggregation",
+        source_count=analyzed_count,
+    )
 
-        # 更新 DataTask 的 analysis_result
-        now = datetime.now(timezone.utc)
-        update_stmt = (
-            select(DataTask)
-            .where(DataTask.id == task_id)
-        )
-        task_result = sync_db.execute(update_stmt)
-        data_task = task_result.scalar_one()
-        data_task.analysis_result = aggregation_result
-        data_task.analysis_result_at = now
-        sync_db.commit()
+    # 启动 Celery 任务（参数命名与其他分析任务一致）
+    celery_result = run_aggregation_task.delay(
+        result_id=analysis_job.id,
+        task_id=task_id,
+        project_id=task.project_id,
+        user_id=current_user_id,
+    )
 
-        return {
-            "success": True,
-            "task_id": task_id,
-            "analyzed_at": now.isoformat(),
-            "result": aggregation_result,
-        }
-    except Exception as e:
-        sync_db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"聚合分析失败: {str(e)}"
-        )
-    finally:
-        sync_db.close()
+    # 更新 celery_task_id
+    analysis_job.celery_task_id = celery_result.id
+    await db.commit()
+
+    return RunAnalysisResponse(
+        celery_task_id=celery_result.id,
+        job_id=analysis_job.id,
+        status="pending",
+        message=f"聚合分析任务已启动，将分析 {analyzed_count} 条数据"
+    )
 
 
 async def get_task_aggregation(

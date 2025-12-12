@@ -29,6 +29,7 @@ celery_app = Celery(
     include=[
         "src.social_media.analysis.celery_tasks.screening_tasks",
         "src.social_media.analysis.celery_tasks.deep_analysis_tasks",
+        "src.social_media.analysis.celery_tasks.aggregation_tasks",
         # Future task modules:
         # "src.social_media.analysis.celery_tasks.clustering_tasks",
         # "src.social_media.analysis.celery_tasks.competitive_tasks",

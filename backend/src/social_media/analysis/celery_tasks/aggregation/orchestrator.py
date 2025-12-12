@@ -348,22 +348,40 @@ def aggregate_task_analysis(
     aggregated_entities = entity_stats.get("aggregated_entities", [])
     aggregated_opinions = topic_stats.get("topics", [])
     
-    # 获取分类后的实体
+    # 获取分类后的实体（展示用简化格式）
     target_entities = entity_stats.get("target_entities", [])
-    top_target = target_entities[0] if target_entities else None
     competitor_entities = entity_stats.get("competitor_entities", [])
+    
+    # 从 aggregated_entities 中找到完整的 Top 1 Target 实体（包含完整的 features/issues）
+    # 展示用的 target_entities 只有字符串数组，缺少 post_ids
+    top_target_full = None
+    if target_entities:
+        top_target_name = target_entities[0].get("name")
+        for entity in aggregated_entities:
+            if entity.get("name") == top_target_name:
+                top_target_full = entity
+                break
+    
+    # 从 aggregated_entities 中找到完整的 competitor 实体
+    competitor_entities_full = []
+    for comp in competitor_entities:
+        comp_name = comp.get("name")
+        for entity in aggregated_entities:
+            if entity.get("name") == comp_name:
+                competitor_entities_full.append(entity)
+                break
     
     # (1) 关联网络 (Context Graph) - 以 Top 1 Target 实体为中心
     # 节点包括：人群、场景、产品属性(features/issues)、话题、竞品
     context_graph = build_context_graph(
-        top_target, aggregated_opinions, competitor_entities
+        top_target_full, aggregated_opinions, competitor_entities_full
     )
     
     # (2) 产品力诊断 (IPA) - 使用 opinions + target 实体的 features/issues
-    ipa_result = perform_ipa_analysis(aggregated_opinions, top_target)
+    ipa_result = perform_ipa_analysis(aggregated_opinions, top_target_full)
     
     # (3) 竞品雷达 (Competitor Radar)
-    competitor_radar = analyze_competitor_radar(top_target, competitor_entities, aggregated_entities)
+    competitor_radar = analyze_competitor_radar(top_target_full, competitor_entities_full, aggregated_entities)
 
     # (4) KOL 声音提取
     kol_voices = extract_kol_voices(posts_data, db)
@@ -448,7 +466,7 @@ def aggregate_task_analysis(
 
 
 def _empty_result() -> dict[str, Any]:
-    """返回空结果结构"""
+    """返回空结果结构（与正常结果保持一致）"""
     return {
         "meta": {
             "task_id": None,
@@ -488,6 +506,10 @@ def _empty_result() -> dict[str, Any]:
                 "neutral": 0,
             },
             "time_distribution": [],
+            # 新增图表（与正常结果一致）
+            "ipa_analysis": {"quadrants": {}, "thresholds": {"x": 0, "y": 0}},
+            "competitor_radar": {"mode": "none"},
+            "context_graph": {"center_node": None, "nodes": [], "edges": []},
         },
         "freshness": {
             "last_7_days": 0.0,
@@ -498,20 +520,10 @@ def _empty_result() -> dict[str, Any]:
             "top_entities": [],
             "target_entities": [],
             "competitor_entities": [],
-            "top_topics": [], # 原 top_issues 和 top_features 已移除
-            "context_analysis": {
-                "scenarios": [],
-                "audiences": [],
-            },
-            "competition": {
-                "top_competitors": [],
-                "comparison_sentiment": 0.0,
-                "target_sentiment": 0.0,
-                "competitor_sentiment": 0.0,
-                "competitor_details": [],
-            },
+            "top_topics": [],
             "kol_voices": [],
         },
+        # 原始融合数据（与正常结果字段名一致）
         "aggregated_entities": [],
-        "aggregated_opinions": [],
+        "aggregated_topics": [],
     }

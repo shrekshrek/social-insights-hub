@@ -32,11 +32,16 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 def _extract_entity_attributes_for_ipa(
-    target_entity: Optional[dict[str, Any]]
+    target_entity: Optional[dict[str, Any]],
+    avg_heat_per_mention: float = 50.0  # 由调用方传入 opinions 的平均值
 ) -> list[dict[str, Any]]:
     """从 Target 实体中提取 features/issues 作为 IPA 候选项
     
     将实体属性转换为统一格式：{name, mentions, sentiment, heat, post_ids, source_type}
+    
+    Args:
+        target_entity: 目标实体数据
+        avg_heat_per_mention: 平均每个 mention 的 heat 值（由 opinions 计算得出）
     """
     if not target_entity:
         return []
@@ -53,7 +58,7 @@ def _extract_entity_attributes_for_ipa(
                     "name": feature["text"],
                     "mentions": mentions,
                     "sentiment": 0.5,  # features 默认正面
-                    "heat": mentions * 1.0,  # 简化：用 mentions 近似 heat
+                    "heat": round(mentions * avg_heat_per_mention, 1),
                     "post_ids": post_ids,
                     "source_type": "feature"
                 })
@@ -68,7 +73,7 @@ def _extract_entity_attributes_for_ipa(
                     "name": issue["text"],
                     "mentions": mentions,
                     "sentiment": -0.5,  # issues 默认负面
-                    "heat": mentions * 1.0,
+                    "heat": round(mentions * avg_heat_per_mention, 1),
                     "post_ids": post_ids,
                     "source_type": "issue"
                 })
@@ -109,8 +114,14 @@ def perform_ipa_analysis(
     # 2. target_entity 的 features/issues（产品属性）
     candidates = list(aggregated_opinions)
     
+    # 计算 opinions 的平均 heat per mention，用于估算 features/issues 的 heat
+    # 这样 features/issues 和 opinions 的点位大小在同一数量级
+    total_heat = sum(op.get("heat", 0) for op in aggregated_opinions)
+    total_mentions = sum(op.get("mentions", 1) for op in aggregated_opinions)
+    avg_heat_per_mention = total_heat / max(total_mentions, 1) if aggregated_opinions else 50.0
+    
     # 增加 Target 实体的产品属性
-    entity_attrs = _extract_entity_attributes_for_ipa(target_entity)
+    entity_attrs = _extract_entity_attributes_for_ipa(target_entity, avg_heat_per_mention)
     candidates.extend(entity_attrs)
     
     if not candidates:
@@ -130,6 +141,20 @@ def perform_ipa_analysis(
     # Y轴分割线通常固定为 0 (中性)
     sentiment_threshold = 0.0
     
+    # 收集所有有效点的 heat 值，用于归一化 z 值
+    valid_heats = [
+        c.get("heat", 0.0) for c in candidates 
+        if c.get("name") and c.get("mentions", 0) >= min_mentions
+    ]
+    heat_min = min(valid_heats) if valid_heats else 0
+    heat_max = max(valid_heats) if valid_heats else 1
+    heat_range = heat_max - heat_min if heat_max > heat_min else 1
+    
+    # Z 值映射参数：归一化到 [Z_MIN, Z_MAX] 范围
+    # 前端会用 size = 4 + z * 3，限制在 [8, 40]
+    # 所以 z 应该在 [1.5, 12] 左右，确保 size 在 [8.5, 40] 之间
+    Z_MIN, Z_MAX = 2.0, 10.0
+    
     # 3. 划分象限
     processed_names = set() # 去重
     
@@ -145,15 +170,16 @@ def perform_ipa_analysis(
         sentiment = item.get("sentiment", 0.0)
         heat = item.get("heat", 0.0)
         
-        # 计算适合前端展示的 Z 值 (Bubble Size)
-        # 使用对数平滑：log(heat + 1)
-        z_val = math.log(max(0, heat) + 1)
+        # 计算 Z 值 (Bubble Size)
+        # 使用平方根归一化：先归一化到 [0,1]，再用 sqrt 使中小值差异更明显，最后映射到 [Z_MIN, Z_MAX]
+        normalized = (heat - heat_min) / heat_range
+        z_val = Z_MIN + (Z_MAX - Z_MIN) * math.sqrt(normalized)
         
         point = {
             "name": name,
             "x": mentions, # Importance (Mentions)
             "y": round(sentiment, 2), # Performance
-            "z": round(z_val, 2), # Bubble Size (Log Smoothed Impact)
+            "z": round(z_val, 2), # Bubble Size (Normalized)
             "heat": round(heat, 2),
             "post_ids": list(item.get("post_ids", [])) # 支持溯源
         }
@@ -469,66 +495,84 @@ def _aggregate_entities_by_parent(
 def analyze_competitor_radar(
     target_entity: Optional[dict[str, Any]],
     competitor_entities: list[dict[str, Any]],
-    aggregated_entities: list[dict[str, Any]]
+    aggregated_entities: list[dict[str, Any]],
+    max_competitors: int = 4  # 最多显示的竞品数量（加上本品最多5条线）
 ) -> dict[str, Any]:
-    """竞品雷达分析 (带品牌聚合和自动降级策略)
+    """竞品雷达分析 (带品牌聚合，支持多品牌对比)
     
-    改进：使用 tags.parent 将同品牌产品聚合后对比品牌整体表现
+    改进：
+    1. 使用 tags.parent 将同品牌产品聚合后对比品牌整体表现
+    2. 支持多个竞品品牌（数据充足时）
     """
     if not target_entity or not competitor_entities:
         return {"mode": "none"}
     
     # 1. 按 parent 聚合实体
-    # 聚合 Target 品牌
     target_brands = _aggregate_entities_by_parent(aggregated_entities, role_filter="target")
-    # 聚合 Competitor 品牌
     competitor_brands = _aggregate_entities_by_parent(aggregated_entities, role_filter="competitor")
     
-    # 2. 确定对比对象
-    # Target: 优先使用聚合后的品牌，否则使用原实体
+    # 2. 准备 Target 数据
     target_parent = _get_entity_parent(target_entity)
     if target_parent in target_brands and target_brands[target_parent]["product_count"] > 1:
-        # 品牌下有多个产品，使用聚合数据
         target_data = target_brands[target_parent]
         target_name = f"{target_parent} ({target_data['product_count']}个产品)"
     else:
-        # 只有一个产品或没有聚合数据，使用原实体
         target_data = target_entity
         target_name = target_entity["name"]
     
-    # Competitor: 优先使用聚合后的品牌
-    competitor_parent = _get_entity_parent(competitor_entities[0])
-    if competitor_parent in competitor_brands and competitor_brands[competitor_parent]["product_count"] > 1:
-        competitor_data = competitor_brands[competitor_parent]
-        competitor_name = f"{competitor_parent} ({competitor_data['product_count']}个产品)"
-    else:
-        competitor_data = competitor_entities[0]
-        competitor_name = competitor_entities[0]["name"]
+    # 3. 准备所有竞品数据（按 mentions 排序，取前 N 个）
+    # 先按品牌聚合，再按 mentions 排序
+    competitor_data_list = []
+    seen_parents = set()
     
-    # 3. 检查数据充足性
-    has_enough_data = competitor_data.get("mentions", 0) >= 5
+    for comp in competitor_entities:
+        comp_parent = _get_entity_parent(comp)
+        if comp_parent in seen_parents:
+            continue
+        seen_parents.add(comp_parent)
+        
+        if comp_parent in competitor_brands and competitor_brands[comp_parent]["product_count"] > 1:
+            brand_data = competitor_brands[comp_parent]
+            competitor_data_list.append({
+                "data": brand_data,
+                "name": f"{comp_parent} ({brand_data['product_count']}个产品)",
+                "products": brand_data.get("products", []),
+                "mentions": brand_data.get("mentions", 0),
+            })
+        else:
+            competitor_data_list.append({
+                "data": comp,
+                "name": comp["name"],
+                "products": [comp["name"]],
+                "mentions": comp.get("mentions", 0),
+            })
+    
+    # 按 mentions 排序并限制数量
+    competitor_data_list.sort(key=lambda x: x["mentions"], reverse=True)
+    competitor_data_list = competitor_data_list[:max_competitors]
+    
+    # 4. 检查是否有足够数据做雷达图
+    # 至少需要1个竞品有>=5 mentions
+    has_enough_data = any(c["mentions"] >= 5 for c in competitor_data_list)
     
     if not has_enough_data:
         # Mode B: Bar Chart (降级为简单的正负面占比对比)
-        return {
-            "mode": "bar",
-            "series": [
-                {
-                    "name": target_name,
-                    "sentiment": target_data.get("sentiment", 0),
-                    "sentiment_distribution": target_data.get("sentiment_distribution", {}),
-                    "products": target_data.get("products", [target_entity["name"]]),
-                },
-                {
-                    "name": competitor_name,
-                    "sentiment": competitor_data.get("sentiment", 0),
-                    "sentiment_distribution": competitor_data.get("sentiment_distribution", {}),
-                    "products": competitor_data.get("products", [competitor_entities[0]["name"]]),
-                }
-            ]
-        }
+        series = [{
+            "name": target_name,
+            "sentiment": target_data.get("sentiment", 0),
+            "sentiment_distribution": target_data.get("sentiment_distribution", {}),
+            "products": target_data.get("products", [target_entity["name"]]),
+        }]
+        for comp in competitor_data_list:
+            series.append({
+                "name": comp["name"],
+                "sentiment": comp["data"].get("sentiment", 0),
+                "sentiment_distribution": comp["data"].get("sentiment_distribution", {}),
+                "products": comp["products"],
+            })
+        return {"mode": "bar", "series": series}
     
-    # Mode A: Radar
+    # Mode A: Radar（多品牌）
     # 5 维雷达：声量、情感、互动、好评率、差评控制
     
     def _get_radar_score(entity: dict, max_mentions: int, max_heat: float) -> list[float]:
@@ -555,25 +599,29 @@ def analyze_competitor_radar(
             round(neg_control_score, 2)
         ]
 
-    # 计算最大值用于归一化
-    max_mentions = max(target_data.get("mentions", 0), competitor_data.get("mentions", 0))
-    max_heat = max(target_data.get("heat", 0), competitor_data.get("heat", 0))
+    # 计算所有品牌的最大值用于归一化
+    all_data = [target_data] + [c["data"] for c in competitor_data_list]
+    max_mentions = max(d.get("mentions", 0) for d in all_data)
+    max_heat = max(d.get("heat", 0) for d in all_data)
+    
+    # 构建 series（本品 + 所有竞品）
+    series = [{
+        "name": target_name,
+        "data": _get_radar_score(target_data, max_mentions, max_heat),
+        "products": target_data.get("products", [target_entity["name"]]),
+    }]
+    
+    for comp in competitor_data_list:
+        series.append({
+            "name": comp["name"],
+            "data": _get_radar_score(comp["data"], max_mentions, max_heat),
+            "products": comp["products"],
+        })
     
     return {
         "mode": "radar",
         "dimensions": ["声量影响", "综合情感", "互动热度", "好评率", "差评控制"],
-        "series": [
-            {
-                "name": target_name,
-                "data": _get_radar_score(target_data, max_mentions, max_heat),
-                "products": target_data.get("products", [target_entity["name"]]),
-            },
-            {
-                "name": competitor_name,
-                "data": _get_radar_score(competitor_data, max_mentions, max_heat),
-                "products": competitor_data.get("products", [competitor_entities[0]["name"]]),
-            }
-        ]
+        "series": series
     }
 
 

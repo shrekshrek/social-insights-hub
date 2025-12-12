@@ -170,9 +170,18 @@ const opinionNormalizationTask = computed<AnalysisJob | undefined>(() =>
   ),
 )
 
+// 聚合主任务（用于显示进度）
+const aggregationTask = computed<AnalysisJob | undefined>(() =>
+  (analysisHistory.value?.items || []).find(
+    (item) =>
+      item.analysis_type === 'aggregation' &&
+      ['pending', 'processing'].includes(item.status)
+  ),
+)
+
 // 是否有聚合相关任务在运行
 const hasAggregationRunning = computed(() =>
-  !!entityNormalizationTask.value || !!opinionNormalizationTask.value
+  !!aggregationTask.value || !!entityNormalizationTask.value || !!opinionNormalizationTask.value
 )
 
 // 依赖状态：是否有初筛结果
@@ -220,7 +229,7 @@ const reportGeneratedAt = computed(() => {
   return new Date(analysisResultData.value.analyzed_at).toLocaleString('zh-CN')
 })
 
-/** 生成分析报告 */
+/** 生成分析报告（异步执行，与初筛/深度分析一致） */
 const handleGenerateReport = async () => {
   if (!ensureNotRunning()) return
 
@@ -229,21 +238,19 @@ const handleGenerateReport = async () => {
   startPolling()
 
   try {
-    await runTaskAggregation(props.taskId)
-    await refreshAnalysisResult()
+    const result = await runTaskAggregation(props.taskId)
     toast.add({
-      title: '报告生成成功',
-      description: '分析报告已更新',
-      color: 'success',
+      title: '分析任务已启动',
+      description: result?.message || '后台正在生成报告，请稍候...',
+      color: 'primary',
     })
+    // 刷新历史记录以显示新任务
+    await refreshHistory()
   } catch {
     // 错误已由 apiRequest 处理并显示 toast
+    stopPolling()
   } finally {
     actionLoading.aggregate = false
-    // 刷新历史记录以更新进度状态
-    await refreshHistory()
-    // 聚合是同步完成的，需要显式停止轮询
-    stopPolling()
   }
 }
 
@@ -277,6 +284,19 @@ watch(hasRunningTask, (isRunning) => {
   } else {
     stopPolling()
     refreshAll()
+  }
+})
+
+// 聚合任务完成时自动刷新分析报告
+watch(hasAggregationRunning, (isRunning, wasRunning) => {
+  if (wasRunning && !isRunning) {
+    // 聚合任务刚完成，刷新分析结果
+    refreshAnalysisResult()
+    toast.add({
+      title: '报告生成完成',
+      description: '分析报告已更新',
+      color: 'success',
+    })
   }
 })
 

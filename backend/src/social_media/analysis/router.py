@@ -308,8 +308,8 @@ async def get_task_post_analyses(
 
 @router.post(
     "/tasks/{task_id}/aggregation",
-    response_model=RunAggregationResponse,
-    status_code=status.HTTP_200_OK,
+    response_model=RunAnalysisResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="运行聚合分析",
 )
 async def run_task_aggregation(
@@ -318,15 +318,15 @@ async def run_task_aggregation(
     current_user: User = Depends(get_current_user),
 ):
     """
-    运行聚合分析，生成任务级分析报告
+    运行聚合分析，生成任务级分析报告（异步执行）
 
     - 基于已完成的初筛/深度分析数据，计算聚合指标
     - 生成 NSR、SERP、四象限、实体排行、KANO模型等
+    - 任务异步执行，返回 job_id 用于查询进度
     - 结果存储在任务中，可通过 GET /aggregation 获取
     - 可多次调用，每次会覆盖之前的结果
     """
-    result = await service.run_task_aggregation(db, task_id, current_user.id)
-    return RunAggregationResponse.model_validate(result)
+    return await service.run_task_aggregation(db, task_id, current_user.id)
 
 
 @router.get(

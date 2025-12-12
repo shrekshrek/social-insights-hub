@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { watch, onMounted, nextTick, ref, computed } from 'vue'
-import type { EChartsOption } from 'echarts'
+import { ref, computed } from 'vue'
 import type { TaskAnalysisResultData } from '../types'
 import PostListModal from './PostListModal.vue'
 import ClickableCount from './ClickableCount.vue'
 import IpaChart from './IpaChart.vue'
 import ContextGraphChart from './ContextGraphChart.vue'
 import CompetitorRadarChart from './CompetitorRadarChart.vue'
+import TimeDistributionChart from './TimeDistributionChart.vue'
 
 const props = defineProps<{
   data: TaskAnalysisResultData
@@ -40,125 +40,10 @@ const getQuadrantPostIds = (quadrant: string): number[] => {
     .map(item => item.post_id)
 }
 
-// 时间分布图表
-const { chartRef: timeChartRef, initChart: initTimeChart, setOption: setTimeOption, getInstance: getTimeInstance } = useCharts()
-
-/** 时间分布图表配置 */
-const getTimeChartOption = (): EChartsOption => {
-  const dist = props.data.charts.time_distribution || []
-  return {
-    tooltip: {
-      trigger: 'item',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#e5e7eb',
-      borderWidth: 1,
-      padding: [8, 12],
-      textStyle: { color: '#374151', fontSize: 12 },
-      formatter: (params: unknown) => {
-        const p = params as { name: string; value: number; dataIndex: number }
-        if (!p) return ''
-        const fullDate = dist[p.dataIndex]?.date || p.name
-        return `<div style="font-weight: 500; margin-bottom: 4px;">${fullDate}</div>
-                <div>发布数量: <span style="color: #3b82f6; font-weight: 600;">${p.value}</span> 条</div>`
-      }
-    },
-    grid: {
-      left: '10px',
-      right: '10px',
-      bottom: '0px',
-      top: '10px',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: dist.map(i => i.date.slice(5)),  // 只显示 MM-DD
-      axisLabel: {
-        rotate: 45,
-        fontSize: 10,
-        color: '#9ca3af'
-      },
-      axisLine: { lineStyle: { color: '#e5e7eb' } }
-    },
-    yAxis: {
-      type: 'value',
-      splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
-      axisLabel: { fontSize: 10, color: '#9ca3af' }
-    },
-    series: [{
-      name: '发布数量',
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 8,
-      showSymbol: true,
-      emphasis: {
-        scale: true,
-        itemStyle: { shadowBlur: 10, shadowColor: 'rgba(59, 130, 246, 0.5)' }
-      },
-      data: dist.map(i => i.count),
-      lineStyle: { color: '#3b82f6', width: 2 },
-      itemStyle: { color: '#3b82f6', borderColor: '#fff', borderWidth: 2 },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
-            { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
-          ]
-        }
-      }
-    }]
-  }
-}
-
 /** 处理时间分布图表点击事件 */
-const handleTimeChartClick = (params: { dataIndex: number }) => {
-  const dist = props.data.charts.time_distribution || []
-  const item = dist[params.dataIndex]
-  if (!item) return
-  const postIds = item.post_ids
-  if (postIds && postIds.length > 0) {
-    openPostListModal(`${item.date} 发布的内容`, postIds)
-  }
+const handleTimeChartClick = (date: string, postIds: number[]) => {
+  openPostListModal(`${date} 发布的内容`, postIds)
 }
-
-/** 初始化时间分布图表 */
-const setupTimeChart = async () => {
-  await nextTick()
-  // 等待 DOM 渲染完成
-  await new Promise(resolve => setTimeout(resolve, 100))
-  if (timeChartRef.value && props.data.charts.time_distribution?.length) {
-    const instance = initTimeChart()
-    if (instance) {
-      setTimeOption(getTimeChartOption())
-      // 添加点击事件监听
-      instance.off('click')
-      instance.on('click', handleTimeChartClick)
-    }
-  }
-}
-
-// 数据变化时更新图表
-watch(() => props.data.charts.time_distribution, async () => {
-  await nextTick()
-  if (timeChartRef.value && props.data.charts.time_distribution?.length) {
-    // 如果图表未初始化，先初始化
-    let instance = getTimeInstance()
-    if (!instance) {
-      instance = initTimeChart()
-      if (!instance) return
-      // 添加点击事件监听
-      instance.on('click', handleTimeChartClick)
-    }
-    setTimeOption(getTimeChartOption())
-  }
-}, { deep: true })
-
-onMounted(() => {
-  setupTimeChart()
-})
 
 /** 格式化百分比 */
 const formatPercent = (value: number) => {
@@ -428,24 +313,15 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
       </div>
     </section>
 
-    <!-- 时间分布折线图 (ECharts) -->
+    <!-- 时间分布折线图 -->
     <section v-if="data.charts.time_distribution?.length">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">内容发布时间分布</h3>
-      <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <ClientOnly>
-          <template #fallback>
-            <div class="flex items-center justify-center h-48">
-              <UIcon name="i-heroicons-arrow-path" class="animate-spin h-6 w-6 text-gray-400" />
-              <span class="ml-2 text-sm text-gray-400">正在加载图表...</span>
-            </div>
-          </template>
-          <div ref="timeChartRef" class="w-full h-48" />
-        </ClientOnly>
-        <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
-          <span>共 {{ data.charts.time_distribution.length }} 天</span>
-          <span>总计 {{ data.charts.time_distribution.reduce((sum, i) => sum + i.count, 0) }} 条内容</span>
-        </div>
-      </div>
+      <ClientOnly>
+        <TimeDistributionChart
+          :data="data.charts.time_distribution"
+          :skipped-count="data.charts.time_distribution_skipped"
+          @click-date="handleTimeChartClick"
+        />
+      </ClientOnly>
     </section>
 
     <!-- 产品力诊断 (IPA) -->
@@ -538,7 +414,7 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
     </section>
 
     <!-- 关联网络与竞品分析 (并排展示) -->
-    <div v-if="hasContextGraph || hasCompetitorRadar" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div v-if="hasContextGraph || hasCompetitorRadar" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <!-- 关联网络 (Context Graph) -->
       <section v-if="hasContextGraph" :class="{'lg:col-span-2': !hasCompetitorRadar}">
         <ClientOnly>

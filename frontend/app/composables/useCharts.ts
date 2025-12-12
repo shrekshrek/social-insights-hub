@@ -147,8 +147,16 @@ export const useCharts = (options: UseChartsOptions = {}) => {
    * 手动触发图表重绘
    */
   const resize = () => {
-    if (chartInstance.value) {
-      chartInstance.value.resize()
+    if (chartInstance.value && !chartInstance.value.isDisposed()) {
+      try {
+        // 获取当前 option，确保有数据才 resize
+        const option = chartInstance.value.getOption()
+        if (option && option.series && (option.series as unknown[]).length > 0) {
+          chartInstance.value.resize()
+        }
+      } catch {
+        // 静默忽略 resize 错误（通常是图表状态不一致）
+      }
     }
   }
 

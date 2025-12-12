@@ -81,19 +81,24 @@ async def create_analysis_job_async(
         user_id: 用户ID
         analysis_type: 分析类型 (AnalysisType 枚举值)
         source_count: 源数据数量
-        celery_task_id: Celery 任务ID
+        celery_task_id: Celery 任务ID，为空时生成唯一伪 ID（后续可更新为真实 ID）
         analysis_config: 分析配置参数
         status: 初始状态，默认 "pending"
 
     Returns:
         AnalysisJob: 创建的分析任务记录
     """
+    # 生成伪 celery_task_id（避免唯一约束冲突）
+    # 格式与同步版本一致：pending-{type}-{uuid}
+    if not celery_task_id:
+        celery_task_id = f"pending-{analysis_type}-{uuid.uuid4().hex[:8]}"
+    
     job = AnalysisJob(
         project_id=project_id,
         task_id=task_id,
         user_id=user_id,
         analysis_type=analysis_type,
-        celery_task_id=celery_task_id or "",
+        celery_task_id=celery_task_id,
         status=status,
         source_count=source_count,
         analysis_config=analysis_config,
@@ -148,16 +153,26 @@ def complete_analysis_job_sync(
     return job
 
 
-def start_analysis_job_sync(db: Session, job: AnalysisJob) -> AnalysisJob:
+def start_analysis_job_sync(db: Session, job_or_id: AnalysisJob | int) -> AnalysisJob | None:
     """同步标记任务开始处理
 
     Args:
         db: 同步数据库会话
-        job: 要更新的任务
+        job_or_id: AnalysisJob 对象或 job_id
 
     Returns:
-        AnalysisJob: 更新后的任务
+        AnalysisJob: 更新后的任务，如果找不到则返回 None
     """
+    if isinstance(job_or_id, int):
+        from sqlalchemy import select
+        stmt = select(AnalysisJob).where(AnalysisJob.id == job_or_id)
+        result = db.execute(stmt)
+        job = result.scalar_one_or_none()
+        if not job:
+            return None
+    else:
+        job = job_or_id
+    
     job.status = "processing"
     job.started_at = datetime.now(timezone.utc)
     db.commit()

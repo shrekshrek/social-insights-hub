@@ -32,6 +32,7 @@ from src.social_media.analysis.models import PostAnalysis, AnalysisType
 from src.social_media.analysis.jobs import (
     create_analysis_job_sync,
     complete_analysis_job_sync,
+    start_analysis_job_sync,
 )
 from src.social_media.tasks.models import SocialPost, DataTask
 from .metrics import (
@@ -155,6 +156,8 @@ def aggregate_task_analysis(
     project_id: int | None = None,
     user_id: int | None = None,
     enable_entity_normalization: bool = True,
+    entity_job_id: int | None = None,
+    opinion_job_id: int | None = None,
 ) -> dict[str, Any]:
     """执行任务级分析聚合
 
@@ -164,6 +167,8 @@ def aggregate_task_analysis(
         project_id: 项目ID（用于创建 AnalysisJob 记录）
         user_id: 用户ID（用于创建 AnalysisJob 记录）
         enable_entity_normalization: 是否启用 LLM 实体归一化（会增加成本）
+        entity_job_id: 预创建的实体归一化 AnalysisJob ID
+        opinion_job_id: 预创建的观点归一化 AnalysisJob ID
 
     Returns:
         dict: 聚合结果，存入 AnalysisJob.result_data
@@ -265,28 +270,39 @@ def aggregate_task_analysis(
     time_distribution = calculate_time_distribution(posts_data)
 
     # 5. 实体聚合 + 观点聚合（并行执行）
-    # 如果提供了 project_id 和 user_id，创建 AnalysisJob 记录
+    # 使用预创建的 AnalysisJob（由 service.py 创建），或创建新的（向后兼容）
     entity_job = None
     opinion_job = None
-    if project_id and user_id and enable_entity_normalization:
-        entity_job = create_analysis_job_sync(
-            db=db,
-            project_id=project_id,
-            task_id=task_id,
-            user_id=user_id,
-            analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
-            source_count=len(posts_data),
-            status="processing",
-        )
-        opinion_job = create_analysis_job_sync(
-            db=db,
-            project_id=project_id,
-            task_id=task_id,
-            user_id=user_id,
-            analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
-            source_count=len(posts_data),
-            status="processing",
-        )
+    if enable_entity_normalization:
+        if entity_job_id:
+            # 使用预创建的 job，更新状态为 processing
+            entity_job = start_analysis_job_sync(db, entity_job_id)
+        elif project_id and user_id:
+            # 向后兼容：内部创建 job
+            entity_job = create_analysis_job_sync(
+                db=db,
+                project_id=project_id,
+                task_id=task_id,
+                user_id=user_id,
+                analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
+                source_count=len(posts_data),
+                status="processing",
+            )
+        
+        if opinion_job_id:
+            # 使用预创建的 job，更新状态为 processing
+            opinion_job = start_analysis_job_sync(db, opinion_job_id)
+        elif project_id and user_id:
+            # 向后兼容：内部创建 job
+            opinion_job = create_analysis_job_sync(
+                db=db,
+                project_id=project_id,
+                task_id=task_id,
+                user_id=user_id,
+                analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
+                source_count=len(posts_data),
+                status="processing",
+            )
 
     # 并行执行实体聚合和话题聚合（两者互相独立）
     entity_stats = {}
@@ -411,6 +427,7 @@ def aggregate_task_analysis(
             "quadrant": quadrant_data,
             "quadrant_summary": quadrant_summary,
             "time_distribution": time_distribution.get("distribution", []),
+            "time_distribution_skipped": time_distribution.get("skipped_count", 0),  # 无发布时间的帖子数
             # 新增图表
             "ipa_analysis": ipa_result,
             "competitor_radar": competitor_radar,

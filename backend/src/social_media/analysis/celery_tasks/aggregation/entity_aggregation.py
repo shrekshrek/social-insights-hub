@@ -67,7 +67,7 @@ def classify_entity_role(
     competitor_names: set[str],
 ) -> str:
     """对实体进行主体角色分类
-    
+
     优先使用 LLM 打的 tags.role，否则基于关键词匹配进行兜底判断。
     """
     # 优先使用 LLM 打的标签
@@ -470,7 +470,7 @@ def build_entity_name_mapping(
                     "mentions": mentions,
                     "heat": impact,  # LLM 输入仍用 heat 字段名（对外接口）
                     "score": calculate_score(impact, mentions),
-                    "hint": ""
+                    "hint": "" 
                 }
                 llm_input_entities.append(new_entity)
             

@@ -32,6 +32,7 @@ const getOption = (): EChartsOption => {
     })
     
     return {
+      animation: false,  // 关闭动画，避免 resize 时的问题
       tooltip: {
         trigger: 'item',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

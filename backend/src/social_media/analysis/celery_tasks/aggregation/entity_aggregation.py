@@ -15,6 +15,7 @@ aggregated_entities 是后续 insights 和 charts 分析的核心数据来源。
 
 import logging
 import time
+import math
 from typing import Any
 from collections import defaultdict, Counter
 
@@ -30,6 +31,7 @@ from src.langchain.chains.attribute_normalization_chain import (
 from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
 from src.social_media.analysis.celery_tasks.aggregation.utils import (
     calculate_score,
+    calculate_impact_score,
     normalize_name,
     are_similar,
     build_similarity_mapping,
@@ -64,9 +66,9 @@ def classify_entity_role(
     task_keywords: list[str],
     competitor_names: set[str],
 ) -> str:
-    """对实体进行主体角色分类 (Legacy / Fallback)
-
-    主要用于旧版展示逻辑或 LLM 标签缺失时的兜底。
+    """对实体进行主体角色分类
+    
+    优先使用 LLM 打的 tags.role，否则基于关键词匹配进行兜底判断。
     """
     # 优先使用 LLM 打的标签
     tags = entity_data.get("tags", {})
@@ -123,14 +125,10 @@ def _collect_raw_entities_full(posts_data: list[dict[str, Any]]) -> tuple[dict[s
 
     返回:
         - 按原始实体名称索引的字典，包含完整的聚合信息
-        - post_id -> cii 的映射，用于合并时正确计算 total_cii
-
-    后续可直接用于：
-    1. 构建名称映射（基于 heat 排序）
-    2. 根据映射合并数据（无需再遍历 posts_data）
+        - post_id -> impact_score 的映射，用于合并时正确计算 total_impact
     """
     raw_entity_data: dict[str, dict] = {}
-    post_cii_map: dict[int, float] = {}  # 记录每个帖子的 CII
+    post_impact_map: dict[int, float] = {}  # 记录每个帖子的 Impact Score
 
     def get_or_create_entity(name: str, entity_type: str) -> dict:
         """获取或创建实体数据结构"""
@@ -138,8 +136,8 @@ def _collect_raw_entities_full(posts_data: list[dict[str, Any]]) -> tuple[dict[s
             raw_entity_data[name] = {
                 "name": name,
                 "type": entity_type,
-                "heat": 0.0,
-                "cii_added_posts": set(),
+                "total_impact": 0.0, # 累加的 Impact Score
+                "impact_added_posts": set(), # 去重：确保同一帖子的 Impact 只计算一次
                 "post_sentiments": {},  # {post_id: sentiment} 用于合并时正确计算
                 "positive_count": 0,
                 "negative_count": 0,
@@ -159,7 +157,7 @@ def _collect_raw_entities_full(posts_data: list[dict[str, Any]]) -> tuple[dict[s
             }
         return raw_entity_data[name]
 
-    def process_entity(entity: dict, post_id: int, cii: float, source: str):
+    def process_entity(entity: dict, post_id: int, impact: float, source: str):
         """处理单个实体（收集到原始实体数据中）"""
         name = entity.get("name", "")
         if not name:
@@ -168,11 +166,11 @@ def _collect_raw_entities_full(posts_data: list[dict[str, Any]]) -> tuple[dict[s
         data = get_or_create_entity(name, entity.get("type", "其他"))
         sentiment = entity.get("sentiment", 0)
 
-        # CII 只累加一次（per post per entity）
-        if post_id and post_id not in data["cii_added_posts"]:
-            data["heat"] += cii
+        # Impact 只累加一次（per post per entity）
+        if post_id and post_id not in data["impact_added_posts"]:
+            data["total_impact"] += impact
             data["post_sentiments"][post_id] = sentiment  # 存储情感用于合并时计算
-            data["cii_added_posts"].add(post_id)
+            data["impact_added_posts"].add(post_id)
 
         # 情感分布
         if sentiment == 1:
@@ -220,21 +218,25 @@ def _collect_raw_entities_full(posts_data: list[dict[str, Any]]) -> tuple[dict[s
     for post in posts_data:
         post_id = post.get("post_id")
         cii = post.get("cii", 1.0)
+        value_score = post.get("value_score")
+        
+        # 计算单帖影响力分数 (Impact Score)
+        impact = calculate_impact_score(cii, value_score)
 
-        # 记录每个帖子的 CII
+        # 记录每个帖子的 Impact Score
         if post_id:
-            post_cii_map[post_id] = cii
+            post_impact_map[post_id] = impact
 
         post_deep_result = post.get("post_deep_result") or {}
         comment_deep_result = post.get("comment_deep_result") or {}
 
         for entity in post_deep_result.get("entities", []):
-            process_entity(entity, post_id, cii, "post")
+            process_entity(entity, post_id, impact, "post")
 
         for entity in comment_deep_result.get("entities", []):
-            process_entity(entity, post_id, cii, "comment")
+            process_entity(entity, post_id, impact, "comment")
 
-    return raw_entity_data, post_cii_map
+    return raw_entity_data, post_impact_map
 
 
 def _build_llm_mapping(
@@ -297,7 +299,7 @@ def _merge_entity_data(
     raw_entity_data: dict[str, dict],
     name_mapping: dict[str, str],
     tags_mapping: dict[str, dict] | None = None,
-    post_cii_map: dict[int, float] | None = None,
+    post_impact_map: dict[int, float] | None = None,
 ) -> dict[str, dict]:
     """通用实体数据合并函数
     
@@ -305,14 +307,14 @@ def _merge_entity_data(
         raw_entity_data: 原始实体数据 {original_name: entity_dict}
         name_mapping: 名称映射 {original_name: canonical_name}
         tags_mapping: 标签映射 {canonical_name: tags_dict} (可选)
-        post_cii_map: 帖子 CII 映射 {post_id: cii} (可选，若无则默认为1.0或使用heat)
+        post_impact_map: 帖子 Impact Score 映射 {post_id: impact} (可选)
         
     Returns:
         合并后的实体数据 {canonical_name: merged_entity_dict}
     """
     merged_data: dict[str, dict] = {}
     tags_mapping = tags_mapping or {}
-    post_cii_map = post_cii_map or {}
+    post_impact_map = post_impact_map or {}
 
     def get_or_create_merged(canonical: str, entity_type: str) -> dict:
         """获取或创建合并后的实体数据结构"""
@@ -329,9 +331,9 @@ def _merge_entity_data(
                 "positive_count": 0,
                 "negative_count": 0,
                 "neutral_count": 0,
-                "total_cii": 0.0,
-                "heat": 0.0, # 如果没有 post_cii_map，则累加原始 heat
-                "cii_added_posts": set(),
+                "total_impact": 0.0, # Total Impact (原始热度)
+                "total_weight": 0.0, # 用于情感计算的平滑权重和
+                "impact_added_posts": set(), # 去重：确保同一帖子的 Impact 只计算一次
                 "post_sources": set(),
                 "comment_sources": set(),
                 "post_ids": set(),
@@ -372,20 +374,29 @@ def _merge_entity_data(
         merged["negative_count"] += raw_data["negative_count"]
         merged["neutral_count"] += raw_data["neutral_count"]
 
-        # 合并 CII 和 sentiment_weighted_sum（同一个帖子只算一次）
+        # 合并 Impact 和 sentiment_weighted_sum（同一个帖子只算一次）
         post_sentiments = raw_data.get("post_sentiments", {})
-        if post_cii_map:
-            for post_id in raw_data["cii_added_posts"]:
-                if post_id not in merged["cii_added_posts"]:
-                    merged["cii_added_posts"].add(post_id)
-                    cii = post_cii_map.get(post_id, 1.0)
-                    merged["total_cii"] += cii
+        if post_impact_map:
+            for post_id in raw_data["impact_added_posts"]:
+                if post_id not in merged["impact_added_posts"]:
+                    merged["impact_added_posts"].add(post_id)
+                    impact = post_impact_map.get(post_id, 1.0)
+                    
+                    # 1. 累加原始 Impact (用于热度展示)
+                    merged["total_impact"] += impact
+                    
+                    # 2. 计算对数平滑权重 (用于情感计算)
+                    # 使用 log10(max(impact, 1)) + 1
+                    # Impact=1 -> Weight=1; Impact=10 -> Weight=2; Impact=10000 -> Weight=5
+                    smoothed_weight = math.log10(max(impact, 1)) + 1
+                    merged["total_weight"] += smoothed_weight
+                    
                     # 使用该帖子的 sentiment 正确计算加权和
                     sentiment = post_sentiments.get(post_id, 0)
-                    merged["sentiment_weighted_sum"] += sentiment * cii
+                    merged["sentiment_weighted_sum"] += sentiment * smoothed_weight
         else:
-            # 预处理阶段：直接累加 heat（近似值，用于排序）
-            merged["heat"] += raw_data.get("heat", 0.0)
+            # 预处理阶段：直接累加 total_impact（近似值，用于排序）
+            merged["total_impact"] += raw_data.get("total_impact", 0.0)
 
         # 合并集合字段
         merged["post_sources"].update(raw_data["post_sources"])
@@ -425,9 +436,9 @@ def build_entity_name_mapping(
     # 为每个实体计算 score（确保程序相似度映射排序正确）
     for entity in raw_entities:
         if "score" not in entity:
-            heat = entity.get("heat", 0.0)
+            impact = entity.get("total_impact", 0.0)
             mentions = len(entity.get("post_ids", set()))
-            entity["score"] = calculate_score(heat, mentions)
+            entity["score"] = calculate_score(impact, mentions)
 
     # 程序相似度映射 (阈值 0.7)
     similarity_mapping = build_similarity_mapping(raw_entities, threshold=0.7)
@@ -443,27 +454,24 @@ def build_entity_name_mapping(
             # 构建一个临时字典适配 _merge_entity_data 的输入格式
             raw_data_map = {e["name"]: e for e in raw_entities}
             
-            # 调用通用合并函数 (无 post_cii_map，所以 heat 是近似累加，这对 Top 50 排序足够了)
+            # 调用通用合并函数 (无 post_impact_map，total_impact 是近似累加，用于 Top 50 排序足够)
             pre_merged_data = _merge_entity_data(raw_data_map, similarity_mapping)
 
             # 构建 LLM 输入列表
             llm_input_entities = []
             for canonical, entity in pre_merged_data.items():
+                impact = entity.get("total_impact", 0.0)
+                mentions = len(entity["post_ids"])
+                
                 # 创建副本用于 LLM 输入
                 new_entity = {
                     "name": canonical,
                     "type": entity["type"],
-                    "mentions": len(entity["post_ids"]), # 使用合并后的 mentions
-                    "heat": entity.get("heat", 0.0),     # 使用合并后的 heat
-                    # 重新计算 Score
-                    "score": calculate_score(entity.get("heat", 0.0), len(entity["post_ids"])),
-                    # 尝试保留原始最大的 hint (虽然这里简化了，但通常够用)
-                    "hint": "" 
+                    "mentions": mentions,
+                    "heat": impact,  # LLM 输入仍用 heat 字段名（对外接口）
+                    "score": calculate_score(impact, mentions),
+                    "hint": ""
                 }
-                
-                # 补充 hint: 从原始数据中找回该 canonical 下最大的那个实体的 hint
-                # 这是一个优化点，如果需要更精确的 hint，可以在 _merge_entity_data 里处理，但目前先这样
-                
                 llm_input_entities.append(new_entity)
             
             # 按重新计算后的 Score 排序
@@ -519,7 +527,14 @@ def _clean_entity_attributes_sync(
         (清洗后的实体数据, token统计)
     """
     token_stats = {
-        'summary': {'total_calls': 0, 'total_tokens': 0, 'total_cost_cny': 0.0},
+        'summary': {
+            'total_calls': 0,
+            'total_input_tokens': 0,
+            'total_output_tokens': 0,
+            'total_tokens': 0,
+            'total_cost_cny': 0.0,
+            'total_duration_seconds': 0.0,
+        },
         'call_details': []
     }
     
@@ -540,7 +555,7 @@ def _clean_entity_attributes_sync(
     all_top_scores = top_n_scores | top_3_scores
     entities_to_clean = [
         e for e in entity_data.values() 
-        if calculate_score(e["total_cii"], len(e["post_ids"])) in all_top_scores
+        if calculate_score(e["total_impact"], len(e["post_ids"])) in all_top_scores
     ]
     
     logger.info(f"[属性清洗] 开始清洗 {len(entities_to_clean)} 个 Top 实体的属性 (Top 3 清洗全部字段, Top 4-10 清洗核心字段)")
@@ -549,7 +564,7 @@ def _clean_entity_attributes_sync(
     tasks = []
     for entity in entities_to_clean:
         entity_name = entity["name"]
-        entity_score = calculate_score(entity["total_cii"], len(entity["post_ids"]))
+        entity_score = calculate_score(entity["total_impact"], len(entity["post_ids"]))
         
         # Top 3 实体清洗所有字段，其余只清洗核心字段
         fields_to_clean = all_fields if entity_score in top_3_scores else core_fields
@@ -701,7 +716,7 @@ def aggregate_entities(
     # ========================================
     # 1. 收集原始实体完整数据（只遍历一次！）
     # ========================================
-    raw_entity_data, post_cii_map = _collect_raw_entities_full(posts_data)
+    raw_entity_data, post_impact_map = _collect_raw_entities_full(posts_data)
 
     # ========================================
     # 2. 基于收集的数据构建名称映射与标签
@@ -723,7 +738,7 @@ def aggregate_entities(
         raw_entity_data, 
         name_mapping, 
         tags_mapping, 
-        post_cii_map
+        post_impact_map
     )
 
     # 只保留 LLM 处理过的实体（有 tags 的）
@@ -739,7 +754,7 @@ def aggregate_entities(
     # ========================================
     # 先确定 Top N 实体的分数线
     all_scores = [
-        calculate_score(e["total_cii"], len(e["post_ids"])) 
+        calculate_score(e["total_impact"], len(e["post_ids"])) 
         for e in entity_data.values()
     ]
     all_scores.sort(reverse=True)
@@ -800,8 +815,9 @@ def aggregate_entities(
         }
 
         derived_sentiment = 0.0
-        if data["total_cii"] > 0:
-            derived_sentiment = round(data["sentiment_weighted_sum"] / data["total_cii"], 2)
+        # 使用平滑权重计算情感
+        if data["total_weight"] > 0:
+            derived_sentiment = round(data["sentiment_weighted_sum"] / data["total_weight"], 2)
 
         role = classify_entity_role(data["name"], data, task_keywords, competitor_names)
 
@@ -814,8 +830,9 @@ def aggregate_entities(
         top_issues = get_sorted_keys(data["issues"])[:5]
         top_expectations = get_sorted_keys(data["expectations"])[:5]
 
-        heat = round(data["total_cii"], 1)
-        score = round(calculate_score(data["total_cii"], mentions), 1)
+        # heat 使用原始 Total Impact
+        heat = round(data["total_impact"], 1)
+        score = round(calculate_score(data["total_impact"], mentions), 1)
 
         result = {
             "name": data["name"],
@@ -870,11 +887,12 @@ def aggregate_entities(
             continue
 
         derived_sentiment = 0.0
-        if data["total_cii"] > 0:
-            derived_sentiment = round(data["sentiment_weighted_sum"] / data["total_cii"], 2)
+        # 使用平滑权重计算情感
+        if data["total_weight"] > 0:
+            derived_sentiment = round(data["sentiment_weighted_sum"] / data["total_weight"], 2)
 
-        heat = round(data["total_cii"], 1)
-        score = round(calculate_score(data["total_cii"], mentions), 1)
+        heat = round(data["total_impact"], 1)
+        score = round(calculate_score(data["total_impact"], mentions), 1)
         
         # 判断是否是 Top N 实体（已被 LLM 清洗过属性）
         # 通过检查属性字段的数据结构判断：dict 结构说明已清洗，set 结构说明未清洗
@@ -919,8 +937,8 @@ def aggregate_entities(
             return result
 
         # Top N 实体：属性已被 LLM 清洗，无数量限制
-        # 非 Top N 实体：属性只保留前 20 个
-        attr_limit = None if is_top_entity else 20
+        # 非 Top N 实体：属性只保留前 10 个
+        attr_limit = None if is_top_entity else 10
 
         entity_dict = {
             "name": data["name"],

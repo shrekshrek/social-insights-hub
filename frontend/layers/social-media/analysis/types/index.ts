@@ -376,6 +376,7 @@ export interface IpaPoint {
   x: number
   y: number
   score: number
+  mentions: number // 新增：声量
   post_ids: number[]
 }
 
@@ -538,8 +539,7 @@ export interface TaskAnalysisInsights {
   top_entities: EntityStat[]
   target_entities: EntityStat[]
   competitor_entities: EntityStat[]
-  top_issues: OpinionStat[]
-  top_features: OpinionStat[]
+  top_topics: OpinionStat[] // 替换原来的 top_issues 和 top_features
   opportunities: Opportunities
   kol_voices: KolVoice[]
 }

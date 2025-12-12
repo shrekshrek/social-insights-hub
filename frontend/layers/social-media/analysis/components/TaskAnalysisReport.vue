@@ -456,8 +456,8 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
     </section>
 
     <!-- 热门观点：问题 vs 特性 -->
-    <section v-if="data.insights.top_issues?.length || data.insights.top_features?.length">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">热门观点</h3>
+    <section v-if="data.insights.top_topics?.length">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">热门话题</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- 热门问题（负面观点） -->
         <div class="p-4 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
@@ -466,9 +466,9 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
             <span class="font-medium text-gray-900 dark:text-white">热门问题</span>
             <span class="text-xs text-gray-400">(负面观点)</span>
           </div>
-          <div v-if="data.insights.top_issues?.length" class="space-y-3">
+          <div v-if="data.insights.top_topics.filter(t => t.sentiment < 0).length" class="space-y-3">
             <div
-              v-for="issue in data.insights.top_issues.slice(0, 5)"
+              v-for="issue in data.insights.top_topics.filter(t => t.sentiment < 0).slice(0, 5)"
               :key="issue.name"
               class="text-sm"
             >
@@ -504,9 +504,9 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
             <span class="font-medium text-gray-900 dark:text-white">热门特性</span>
             <span class="text-xs text-gray-400">(正面观点)</span>
           </div>
-          <div v-if="data.insights.top_features?.length" class="space-y-3">
+          <div v-if="data.insights.top_topics.filter(t => t.sentiment > 0).length" class="space-y-3">
             <div
-              v-for="feature in data.insights.top_features.slice(0, 5)"
+              v-for="feature in data.insights.top_topics.filter(t => t.sentiment > 0).slice(0, 5)"
               :key="feature.name"
               class="text-sm"
             >

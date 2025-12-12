@@ -11,7 +11,6 @@
 | **产品力诊断** | `ipa_analysis` | 识别优劣势，指导产品迭代 | 研发、产品经理 |
 | **关联网络** | `context_graph` | 挖掘"人-货-场"营销机会 | 市场营销、内容创作 |
 | **竞品雷达** | `competitor_radar` | 多维度参数级对标 | 竞对分析、策略制定 |
-| **KANO模型** | `kano_model` | 挖掘深层需求与机会点 | 需求管理、功能规划 |
 
 ---
 
@@ -107,34 +106,6 @@
     }
     ```
 
-### 2.4 KANO 需求模型 (KANO Model)
-利用情感倾向和提及频率分布挖掘需求层次。
-
-*   **输入数据**：
-    *   `aggregated_opinions` (话题列表)。
-    *   `aggregated_entities` 中的 `issues`, `features`, `expectations` 字段。
-*   **分类逻辑**：
-    1.  **基本型 (Must-be)**：
-        *   来源：`issues` (负面痛点)。
-        *   特征：`mentions` 高 (Top 20%)，情感极负。
-        *   含义：做不到用户就骂，必须解决。
-    2.  **期望型 (One-dimensional)**：
-        *   来源：`features` (正面爽点) & `aggregated_opinions`。
-        *   特征：`mentions` 中高，情感偏正。
-        *   含义：越多越好，构争力核心。
-    3.  **兴奋型 (Attractive)**：
-        *   来源：`features` 或 `expectations`。
-        *   特征：`mentions` 低 (3-5次) 但 `sentiment` 极高 (>0.8)。
-        *   含义：小众惊喜，差异化机会。
-*   **输出结构**：
-    ```json
-    {
-      "must_be": [{"name": "不发热", "score": 95}, ...],
-      "one_dimensional": [{"name": "拍照清晰", "score": 80}, ...],
-      "attractive": [{"name": "紫色外观", "score": 90}, ...]
-    }
-    ```
-
 ## 3. 实现规划
 
 ### 3.1 数据层 (Backend)
@@ -142,6 +113,6 @@
 建议在 `OpinionAggregationTask` 完成后，或者作为独立的 API 端点按需计算。
 
 ### 3.3 展示层 (Frontend)
-*   **Dashboard**: 核心展示 IPA 象限图和 KANO 模型。
-*   **Entity Detail**: 点击实体时，展示关联网络和竞品雷达。
+*   **Dashboard**: 核心展示 IPA 象限图和竞品雷达。
+*   **Entity Detail**: 点击实体时，展示关联网络。
 

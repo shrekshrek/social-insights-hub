@@ -85,7 +85,7 @@ class DataTask(Base):
     analysis_result: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
-        comment="任务级AI分析聚合结果（NSR、SERP、实体、KANO等）"
+        comment="任务级AI分析聚合结果（NSR、SERP、实体、IPA等）"
     )
     analysis_result_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

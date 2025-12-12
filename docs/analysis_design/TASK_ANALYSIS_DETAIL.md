@@ -44,7 +44,7 @@ graph TD
 
 *   **微观提取 (Extraction Phase)**: 采用 **3级评分 (-1 ~ +1)**
     *   **范围**: `-1`(负面), `0`(中性), `1`(正面)
-    *   **用途**: **实体画像**、**观点聚合**、**KANO 模型分析**。
+    *   **用途**: **实体画像**、**观点聚合**、**IPA 产品诊断**。
     *   **设计意图**: 在提取具体实体和细粒度观点时，降低颗粒度能显著减少 LLM 的幻觉和分类不稳定性，确保聚合结果的准确性。痛点即为负面，爽点即为正面，无需过度区分程度。
 
 ---
@@ -252,9 +252,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 *   **输出结构**：
     ```python
     return {
-        "top_issues": [...],           # 热门问题（负面观点，按 score 排序）
-        "top_features": [...],         # 热门特性（正面观点，按 score 排序）
-        "aggregated_opinions": [...],  # 完整融合数据（数组格式，用于项目级分析）
+        "opinions": [...],             # 聚合后的观点列表（按 score 排序）
         "llm_token_stats": {...},      # LLM token 使用统计（如果调用了 LLM）
     }
     ```
@@ -262,7 +260,8 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     每个展示项包含：
     ```python
     {
-        "topic": str,                    # 话题类别
+        "name": str,                     # 观点名称
+        "category": str,                 # 话题类别
         "heat": float,                   # 热度（CII累加）
         "mentions": int,                 # 唯一帖子数
         "score": float,                  # 综合评分 = heat × log(mentions + 1)
@@ -271,8 +270,9 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
             "post": float,               # 帖子来源占比
             "comment": float             # 评论来源占比
         },
-        "top_opinions": [str, ...],      # 热门观点列表（Top 3）
         "post_ids": [int, ...],          # 帖子ID列表（用于追溯）
+        "post_source_count": int,        # 帖子来源数量
+        "comment_source_count": int,     # 评论来源数量
     }
     ```
 
@@ -315,9 +315,9 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 ┌───────────────────────────────────────────────────────────────────┐
 │                    派生分析层 (Derived Analysis)                  │
 │  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐     │
-│  │derive_context   │ │classify_kano    │ │analyze_         │     │
-│  │_analysis        │ │_model           │ │competition      │     │
-│  │(场景+人群)       │ │(KANO需求分层)   │ │(竞品分析)        │     │
+│  │derive_context   │ │perform_ipa      │ │analyze_         │     │
+│  │_analysis        │ │_analysis        │ │competition      │     │
+│  │(场景+人群)       │ │(产品诊断)        │ │(竞品分析)        │     │
 │  └─────────────────┘ └─────────────────┘ └─────────────────┘     │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -362,25 +362,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     ```
 *   **置信度过滤**：仅保留 `mentions >= 2` 的标签
 
-#### 4.6.2 KANO 需求分层派生 (classify_kano_model)
-
-从 `aggregated_opinions` 派生 KANO 分类：
-
-*   **输入**：`opinions_data`（包含 `top_issues` 和 `top_features`）
-*   **数据源说明**：只使用话题级别的观点数据，与"热门观点"保持一致
-*   **分类规则**：
-    - **基本型 (Must-be)**：普遍痛点
-        - 来源：`top_issues`（负面观点）
-        - 条件：`mentions >= 3`
-    - **兴奋型 (Attractive)**：稀缺惊喜
-        - 来源：`top_features`（正面观点）
-        - 条件：`mentions < 3` 且 `heat >= 中位数(50%)`
-    - **期望型 (One-dimensional)**：普遍愿望
-        - 来源：`top_features`（正面观点）
-        - 条件：`mentions >= 3`
-*   **设计调整**：热度阈值从 70% 降至 50%，确保有足够的兴奋型需求被识别
-
-#### 4.6.3 竞品分析派生 (analyze_competition)
+#### 4.6.2 竞品分析派生 (analyze_competition)
 
 从 `entity_stats` 派生竞品对比分析：
 
@@ -508,31 +490,44 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     "target_entities": [...],     // 本品实体列表（按 score 排序）
     "competitor_entities": [...], // 竞品实体列表（按 score 排序）
 
-    // 观点排行（按 category+sentiment 分组，按 score 排序）
-    "top_issues": [
+    // 观点排行（按 name+sentiment 分组，按 score 排序）
+    "top_topics": [
       {
-        "topic": "价格",
+        "name": "价格",             // 观点名称
+        "category": "价格",         // 话题类别
         "sentiment": -1,            // 固定情感值 (-1, 0, 1)
         "heat": 4500,
         "mentions": 15,
         "score": 12532.5,           // 综合评分 = heat × log(mentions + 1)
         "source_distribution": {"post": 0.2, "comment": 0.8}, // 80% 来自评论，说明是用户痛点而非博主痛点
-        "top_opinions": ["普遍认为定价过高", "不值这个价", "性价比低"],  // 热门观点列表
-        "post_ids": [101, 102, 105, 108]  // 帖子ID列表（用于追溯）
+        "post_ids": [101, 102, 105, 108],  // 帖子ID列表（用于追溯）
+        "post_source_count": 3,
+        "comment_source_count": 12
       },
       {
-        "topic": "发热",
+        "name": "发热",
+        "category": "质量",
         "sentiment": -1,
         "heat": 3200,
         "mentions": 12,
         "score": 8191.2,
         "source_distribution": {"post": 0.5, "comment": 0.5},
-        "top_opinions": ["玩游戏时背部烫手", "充电发烫"],
-        "post_ids": [103, 105, 108]
+        "post_ids": [103, 105, 108],
+        "post_source_count": 6,
+        "comment_source_count": 6
+      },
+      {
+        "name": "外观",
+        "category": "设计",
+        "sentiment": 1,
+        "heat": 5000,
+        "mentions": 20,
+        "score": 15197.5,
+        "source_distribution": {"post": 0.6, "comment": 0.4},
+        "post_ids": [101, 102, 103],
+        "post_source_count": 12,
+        "comment_source_count": 8
       }
-    ],
-    "top_features": [
-      {"topic": "外观", "sentiment": 1, "heat": 5000, "mentions": 20, "score": 15197.5, "top_opinions": ["紫色版本很惊艳", "手感细腻"], "post_ids": [101, 102, 103]}
     ],
     "context_analysis": {
       "scenarios": [
@@ -558,20 +553,6 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
           "preferences": ["性价比", "教育优惠"] // 关联最强的 market_factors 或 features
         }
       ]
-    },
-    "opportunities": {
-      "kano_model": {
-        "must_be": [
-          {"label": "发热控制", "heat": 8000, "mentions": 50, "sentiment": -0.8}, // 痛点强烈
-          {"label": "降价", "heat": 6000, "mentions": 40, "sentiment": -0.6}
-        ],
-        "attractive": [
-          {"label": "紫色外观", "heat": 5000, "mentions": 5, "sentiment": 0.9} // 惊喜点 (低频高热)
-        ],
-        "one_dimensional": [
-          {"label": "长续航", "heat": 2000, "mentions": 30, "sentiment": 0.5} // 期望点
-        ]
-      }
     },
     "competition": {
       "top_competitors": ["竞品A", "竞品B"],
@@ -649,13 +630,13 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
   // 限制：保留 Top 60 个话题
   "aggregated_opinions": [
     {
-      "name": "价格",              // 话题名称
+      "name": "价格",              // 观点名称
       "category": "价格",          // 话题类别
       "sentiment": -1,
-      "sentiment_distribution": {"positive": 0, "negative": 15, "neutral": 0},
       "heat": 4500,
       "mentions": 15,
       "score": 12532.5,            // 综合评分 = heat × log(mentions + 1)
+      "source_distribution": {"post": 0.2, "comment": 0.8},
       "post_source_count": 3,
       "comment_source_count": 12,
       "post_ids": [101, 102, 105, 108],
@@ -664,12 +645,6 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
       "original_terms": [
          {"text": "定价", "count": 10},
          {"text": "售价", "count": 5}
-      ],
-      
-      "opinions": [  // 全部观点（带帖子追溯，用于项目级再融合）
-        {"text": "定价过高", "count": 3, "post_ids": [101, 102, 105]},
-        {"text": "不值这个价", "count": 2, "post_ids": [102, 108]},
-        {"text": "性价比低", "count": 1, "post_ids": [105]}
       ]
     }
   ]
@@ -682,7 +657,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 
 ```
 1. 热门观点（问题 vs 特性）  -- 用户最关注的核心洞察
-2. KANO 需求分层             -- 基于观点数据的派生分析
+2. IPA 产品诊断              -- 基于观点数据的产品力分析
 3. 热门实体                  -- 实体画像和维度信息
 4. 竞品分析                  -- 基于实体数据的对比分析
 5. 场景与人群画像            -- 基于实体数据的派生分析
@@ -693,7 +668,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 
 **设计原则**：
 - 观点优先：用户最想了解的是"大家怎么说"
-- KANO 紧随观点：因为 KANO 分类直接基于观点数据
+- IPA 紧随观点：IPA 诊断直接基于观点和实体数据
 - 实体次之：实体画像提供更深入的结构化分析
 - 竞品/场景人群最后：这些是派生分析，依赖实体数据
 
@@ -702,10 +677,9 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 1.  **参数透传**：确保 `time_range` 参数能从 API 传到 Celery Coordinator。
 2.  **时间筛选**：在 `Coordinator` 分发子任务时，根据 `time_range` 过滤 `post_ids`。
 3.  **Aggregator 扩充**：
-    *   **实现主体过滤**：确保 NSR 和 KANO 分析只针对本品，隔离竞品数据。
+    *   **实现主体过滤**：确保 NSR 和 IPA 分析只针对本品，隔离竞品数据。
     *   **实现 SERP 计算**：计算 Top 20 帖子的加权情感。
     *   实现共现矩阵 (Scenario-Context)。
-    *   实现 KANO 分类逻辑。
     *   实现营销渗透率计算。
 4.  **Prompt 优化**：修改评论提取 Prompt，支持传入 `summary` 而非 `full_text`。
 5.  **代码规范**：

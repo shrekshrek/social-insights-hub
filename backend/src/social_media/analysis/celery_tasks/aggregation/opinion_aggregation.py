@@ -65,7 +65,7 @@ def aggregate_opinions(
         
     Returns:
         dict: {
-            "topics": [...],  # 保持字段名兼容，实际是 aggregated_opinions
+            "opinions": [...],  # 聚合后的观点列表
             "llm_token_stats": {...}
         }
     """
@@ -211,7 +211,7 @@ def aggregate_opinions(
     logger.info(f"[观点聚合] 从 {valid_posts_count}/{total_posts} 个帖子中收集到 {len(grouped_raw_opinions)} 个分组")
 
     if not grouped_raw_opinions:
-        return {"topics": [], "llm_token_stats": token_stats}
+        return {"opinions": [], "llm_token_stats": token_stats}
 
     # ========================================
     # 2. 组内归纳 (LLM Opinion Normalization, Parallel)
@@ -408,6 +408,6 @@ def aggregate_opinions(
     logger.info(f"[观点聚合] 最终输出: {len(aggregated_opinions)} 个话题 (共 {total_count} 个，保留 Top 60)")
 
     return {
-        "topics": aggregated_opinions, # 保持字段名兼容
+        "opinions": aggregated_opinions,
         "llm_token_stats": token_stats
     }

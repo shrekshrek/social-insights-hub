@@ -523,9 +523,6 @@ export interface OpinionStat {
   opinions?: OpinionDetail[]  // 观点列表（可选）
 }
 
-/** 机会洞察（已移除 KANO 模型，保留接口兼容） */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface Opportunities extends Record<string, unknown> {}
 
 /** KOL 声音 */
 export interface KolVoice {
@@ -543,8 +540,7 @@ export interface TaskAnalysisInsights {
   top_entities: EntityStat[]
   target_entities: EntityStat[]
   competitor_entities: EntityStat[]
-  top_topics: OpinionStat[] // 替换原来的 top_issues 和 top_features
-  opportunities?: Opportunities // 可选，已移除 KANO 模型
+  top_topics: OpinionStat[]
   kol_voices: KolVoice[]
 }
 

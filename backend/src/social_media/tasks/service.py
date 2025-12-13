@@ -172,12 +172,21 @@ async def process_json_upload(
             detail=f"Task with id {task_id} not found"
         )
 
-    # 2. 验证任务状态
-    if task.status != "pending":
+    # 2. 验证任务状态（允许 pending 和 completed 状态上传，completed 会覆盖现有数据）
+    if task.status not in ("pending", "completed"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Task status is '{task.status}', cannot upload data. Task must be in 'pending' status."
+            detail=f"Task status is '{task.status}', cannot upload data. Task must be in 'pending' or 'completed' status."
         )
+    
+    # 如果是 completed 状态，先清除现有数据
+    is_reupload = task.status == "completed"
+    if is_reupload:
+        await crud.delete_task_posts_and_comments(db, task_id)
+        # 同时清除分析结果
+        task.analysis_result = None
+        task.analysis_result_at = None
+        await db.flush()
 
     # 3. 验证数据源
     if task.data_source != "local_upload":

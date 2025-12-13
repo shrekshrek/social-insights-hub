@@ -200,7 +200,8 @@ def perform_ipa_analysis(
         processed_names.add(name)
         
     # 4. 排序并限制返回数量 (防止图表拥挤)
-    # 策略：保留所有点，不限制数量，但会进行排序
+    # 策略：对相同坐标(x,y)的点，只保留前 N 个（按 heat 排序）
+    MAX_POINTS_PER_COORD = 10
     
     final_quadrants = {
         "strength": [],
@@ -209,8 +210,7 @@ def perform_ipa_analysis(
         "opportunity": []
     }
     
-    # 合并所有点进行总排序，或者按象限配额
-    # 这里采用总排序策略：按 heat (综合热度)
+    # 合并所有点进行总排序
     all_points = []
     for q_name, points in quadrants.items():
         for p in points:
@@ -220,9 +220,19 @@ def perform_ipa_analysis(
     # 按 heat 降序排序
     all_points.sort(key=lambda x: x["heat"], reverse=True)
     
+    # 对相同坐标的点进行限制：每个 (x, y) 坐标最多保留 MAX_POINTS_PER_COORD 个
+    coord_counts: dict[tuple, int] = {}  # (x, y) -> count
+    filtered_points = []
+    
+    for p in all_points:
+        coord = (p["x"], p["y"])
+        count = coord_counts.get(coord, 0)
+        if count < MAX_POINTS_PER_COORD:
+            filtered_points.append(p)
+            coord_counts[coord] = count + 1
     
     # 重新分配回象限
-    for p in all_points:
+    for p in filtered_points:
         q_label = p.pop("quadrant_label")
         final_quadrants[q_label].append(p)
 
@@ -328,7 +338,7 @@ def build_context_graph(
             "sentiment": topic.get("sentiment", 0),
             "post_ids": set(topic.get("post_ids", []))
         })
-    
+        
     # 6. 提取竞品 (来自 competitor_entities)
     if competitor_entities:
         for comp in competitor_entities:
@@ -348,16 +358,16 @@ def build_context_graph(
             cand_pids = cand["post_ids"]
             if not cand_pids:
                 continue
-            
+        
             intersection = center_pids.intersection(cand_pids)
             union = center_pids.union(cand_pids)
             
             co_occurrence = len(intersection)
             if co_occurrence < 1:
                 continue
-            
+        
             jaccard = co_occurrence / len(union)
-            
+        
             result.append({
                 "name": cand["name"],
                 "type": cand["type"],
@@ -365,7 +375,7 @@ def build_context_graph(
                 "co_occurrence": co_occurrence,
                 "sentiment": cand.get("sentiment"),
                 "post_ids": list(intersection)
-            })
+        })
         
         # 按权重降序排序
         result.sort(key=lambda x: x["weight"], reverse=True)
@@ -506,7 +516,7 @@ def analyze_competitor_radar(
     """
     if not target_entity or not competitor_entities:
         return {"mode": "none"}
-    
+        
     # 1. 按 parent 聚合实体
     target_brands = _aggregate_entities_by_parent(aggregated_entities, role_filter="target")
     competitor_brands = _aggregate_entities_by_parent(aggregated_entities, role_filter="competitor")

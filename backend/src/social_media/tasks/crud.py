@@ -169,6 +169,41 @@ async def delete_task(db: AsyncSession, task: DataTask) -> None:
     await db.flush()
 
 
+async def delete_task_posts_and_comments(db: AsyncSession, task_id: int) -> dict:
+    """删除任务的所有帖子和评论（硬删除，用于重新上传数据）
+    
+    Args:
+        db: 数据库会话
+        task_id: 任务ID
+        
+    Returns:
+        删除统计：{"posts_deleted": int, "comments_deleted": int}
+    """
+    from sqlalchemy import delete
+    
+    # 先删除评论
+    comments_result = await db.execute(
+        delete(SocialComment).where(SocialComment.task_id == task_id)
+    )
+    comments_deleted = comments_result.rowcount
+    
+    # 再删除帖子
+    posts_result = await db.execute(
+        delete(SocialPost).where(SocialPost.task_id == task_id)
+    )
+    posts_deleted = posts_result.rowcount
+    
+    # 同时删除帖子分析结果
+    from src.social_media.analysis.models import PostAnalysis
+    await db.execute(
+        delete(PostAnalysis).where(PostAnalysis.task_id == task_id)
+    )
+    
+    await db.flush()
+    
+    return {"posts_deleted": posts_deleted, "comments_deleted": comments_deleted}
+
+
 # ==================== SocialPost CRUD ====================
 
 async def get_post_by_id(

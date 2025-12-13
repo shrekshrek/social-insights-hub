@@ -28,8 +28,9 @@ class BilibiliAdapter(PlatformAdapter):
 
     def transform_post(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """转换B站视频数据"""
-        # 优先使用 bvid，其次用 video_id (aid)
-        post_id = self.safe_str(raw_data.get("bvid")) or self.safe_str(raw_data.get("video_id"))
+        # 优先使用 video_id (aid)，因为评论关联时只有 video_id
+        # bvid 仍保留在 raw_data 中用于展示
+        post_id = self.safe_str(raw_data.get("video_id")) or self.safe_str(raw_data.get("bvid"))
 
         # 处理封面图
         cover_url = self.safe_str(raw_data.get("video_cover_url"))

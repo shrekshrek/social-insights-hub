@@ -33,8 +33,8 @@ const getOption = (): EChartsOption => {
     tooltip: {
       trigger: 'item',
       confine: true,
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#e5e7eb',
+      // backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      // borderColor: '#e5e7eb',
       borderWidth: 1,
       padding: [8, 12],
       textStyle: { color: '#374151', fontSize: 12 },
@@ -139,9 +139,7 @@ const totalCount = computed(() => props.data?.reduce((sum, i) => sum + i.count, 
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
     <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">内容发布时间分布</h3>
-    <div class="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-      <div ref="chartRef" class="w-full h-48" />
-    </div>
+    <div ref="chartRef" class="w-full h-48" />
     <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
       <span>共 {{ totalDays }} 天</span>
       <div class="flex items-center gap-3">

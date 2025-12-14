@@ -56,6 +56,9 @@ const getOption = (): EChartsOption => {
 
   const { center_node, nodes, edges } = props.data
   
+  // 用于去重的节点名称集合
+  const addedNodeNames = new Set<string>()
+  
   // 转换节点
   // 中心节点
   const chartNodes = [
@@ -67,10 +70,15 @@ const getOption = (): EChartsOption => {
       category: 'center'
     }
   ]
+  addedNodeNames.add(center_node)
   
-  // 周边节点（根据可见性过滤）
+  // 周边节点（根据可见性过滤，并进行去重）
   nodes.forEach(node => {
     if (!visibleCategories.value.has(node.type)) return
+    
+    // 跳过已存在的节点名称（防止重复）
+    if (addedNodeNames.has(node.name)) return
+    addedNodeNames.add(node.name)
     
     chartNodes.push({
       // 附加数据用于点击

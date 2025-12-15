@@ -25,9 +25,10 @@ deploy:production:
       ssh $DEPLOY_USER@$DEPLOY_HOST "
         cd /app &&
         git pull origin main &&
-        docker-compose -f docker-compose.prod.yml up -d --build &&
+        # 使用 .env.production 作为变量来源，确保 APP_NAME/PROJECT_NAME 等插值生效
+        docker-compose --env-file .env.production -f docker-compose.prod.yml up -d --build &&
         sleep 10 &&
-        curl -f http://localhost/api/v1/docs || echo 'Warning: API docs not accessible'
+        curl -f http://localhost/health || echo 'Warning: backend health check failed'
       "
   only:
     - main  # 只在main分支触发

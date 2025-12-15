@@ -223,6 +223,35 @@ components: [
 
 **SSR/CSR 一致性**: 服务端渲染和客户端渲染的 HTML 必须完全一致，否则会导致 Hydration Mismatch。
 
+#### 组件使用最佳实践 (Rendering)
+
+1. **渲染函数 (`h`) 中使用组件**:
+   - **禁止**: 使用 `resolveComponent` (会导致类型丢失和潜在的解析问题)
+   - **推荐**: 直接从 `#components` 导入组件对象
+
+   ```typescript
+   // ❌ 错误
+   import { resolveComponent } from 'vue'
+   const UButton = resolveComponent('UButton')
+
+   // ✅ 正确 (保留类型检查和 Tree-shaking)
+   import { UButton } from '#components'
+   
+   h(UButton, { ... })
+   ```
+
+2. **导航跳转**:
+   - **禁止**: 在模板或 JSX 中使用 `onClick: () => navigateTo(...)` (容易导致类型错误和无障碍问题)
+   - **推荐**: 使用 Nuxt UI 组件原生的 `to` 属性 (渲染为 `<a>` 标签，SEO 和 A11y 友好)
+
+   ```typescript
+   // ❌ 错误
+   h(UButton, { onClick: () => navigateTo('/users') })
+
+   // ✅ 正确
+   h(UButton, { to: '/users' })
+   ```
+
 #### 数据获取方法选择
 
 | 场景 | 推荐方法 | 原因 |

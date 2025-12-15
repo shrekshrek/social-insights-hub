@@ -217,8 +217,8 @@ BASE_ROLES = [
 ]
 
 
-async def init_permissions_legacy(db: AsyncSession) -> dict[str, models.Permission]:
-    """初始化权限数据 - 基于target+action的新逻辑"""
+async def init_permissions(db: AsyncSession) -> dict[str, models.Permission]:
+    """初始化权限数据 - 基于 target:action 格式"""
     permissions = {}
 
     for perm_data in BASE_PERMISSIONS:
@@ -407,7 +407,7 @@ async def init_rbac_data(db: AsyncSession) -> None:
         logger.info(f"✅ 更新权限: {len(to_update)} 个")
 
     # 7. 重新获取所有权限用于角色初始化
-    updated_permissions = await init_permissions_legacy(db)
+    updated_permissions = await init_permissions(db)
 
     # 8. 初始化角色
     await init_roles(db, updated_permissions)

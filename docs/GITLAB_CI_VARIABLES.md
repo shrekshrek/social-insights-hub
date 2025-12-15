@@ -112,10 +112,10 @@ cat gitlab_deploy
 ### 3. 验证部署结果
 ```bash
 # 在服务器上检查容器状态
-docker-compose -f docker-compose.prod.yml ps
+docker-compose --env-file .env.production -f docker-compose.prod.yml ps
 
 # 查看服务日志
-docker-compose -f docker-compose.prod.yml logs -f
+docker-compose --env-file .env.production -f docker-compose.prod.yml logs -f
 ```
 
 ## 🔄 切换为自动部署

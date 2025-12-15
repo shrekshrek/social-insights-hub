@@ -2,6 +2,16 @@
 # Use a Node.js version that is compatible with Nuxt 4
 FROM node:18-slim AS build-stage
 
+# Build-time args from docker-compose.prod.yml
+ARG APP_NAME
+ARG PROJECT_NAME
+ARG NUXT_PUBLIC_APP_NAME
+
+# Expose to Nuxt build environment
+ENV APP_NAME=${APP_NAME}
+ENV PROJECT_NAME=${PROJECT_NAME}
+ENV NUXT_PUBLIC_APP_NAME=${NUXT_PUBLIC_APP_NAME}
+
 # Set working directory
 WORKDIR /app
 

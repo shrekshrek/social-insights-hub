@@ -81,7 +81,3 @@ class ChangePassword(CustomBaseModel):
         if not re.search(r"\d", v):
             raise ValueError("新密码必须包含数字")
         return v
-
-
-class Msg(CustomBaseModel):
-    msg: str

@@ -6,7 +6,7 @@ export type {
   TokenData,
   PasswordResetRequest,
   PasswordReset,
-  Msg,
+  MessageResponse,
   LoginRequest,
   RegisterRequest,
   AuthStatus,

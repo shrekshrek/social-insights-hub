@@ -2,20 +2,31 @@
  * ECharts 图表组合函数
  * 
  * 提供统一的图表初始化、配置和管理功能
- * 支持响应式、主题切换和自动清理
+ * 
+ * 功能特性：
+ * - ✅ 自动响应窗口和容器大小变化 (ResizeObserver)
+ * - ✅ 暗色模式自动切换
+ * - ✅ 加载动画
+ * - ✅ 自动清理（组件卸载时）
+ * - ✅ 防抖处理
+ * - ✅ 导出图片
+ * 
+ * 注意：使用 shallowRef 存储 ECharts 实例，避免 Vue 响应式系统干扰
  */
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
+import { shallowRef, markRaw } from 'vue'
 
 interface UseChartsOptions {
   /**
-   * 图表主题
-   * @default 'default'
+   * 图表主题（'light' | 'dark' | 'auto'）
+   * 'auto' 会根据系统/应用的暗色模式自动切换
+   * @default 'auto'
    */
-  theme?: string | object
+  theme?: 'light' | 'dark' | 'auto' | string | object
   
   /**
-   * 是否自动响应窗口大小变化
+   * 是否自动响应容器大小变化
    * @default true
    */
   autoResize?: boolean
@@ -39,23 +50,40 @@ interface UseChartsOptions {
 
 export const useCharts = (options: UseChartsOptions = {}) => {
   const {
-    theme = 'default',
+    theme = 'auto',
     autoResize = true,
     resizeDelay = 100,
     initOptions = {}
   } = options
 
-  // 图表实例
-  const chartInstance = ref<ECharts | null>(null)
+  // 图表实例（使用 shallowRef 避免 Vue 响应式系统深度代理 ECharts 内部属性）
+  const chartInstance = shallowRef<ECharts | null>(null)
   
   // 图表容器引用
   const chartRef = ref<HTMLElement>()
+  
+  // 当前容器元素
+  let currentContainer: HTMLElement | null = null
   
   // 加载状态
   const loading = ref(false)
   
   // 错误状态
   const error = ref<string | null>(null)
+  
+  // 暗色模式检测
+  const colorMode = useColorMode()
+  
+  // 保存用户设置的原始配置（用于主题切换时恢复）
+  let savedOption: EChartsOption | null = null
+  
+  // 计算当前主题
+  const currentTheme = computed(() => {
+    if (theme === 'auto') {
+      return colorMode.value === 'dark' ? 'dark' : undefined
+    }
+    return theme === 'light' ? undefined : theme
+  })
 
   /**
    * 初始化图表
@@ -68,18 +96,24 @@ export const useCharts = (options: UseChartsOptions = {}) => {
       if (!element) {
         throw new Error('图表容器不存在')
       }
+      
+      currentContainer = element
 
       // 如果已存在实例，先销毁
       if (chartInstance.value) {
         chartInstance.value.dispose()
       }
 
-      // 创建新实例
-      chartInstance.value = echarts.init(element, theme, initOptions)
+      // 创建新实例（使用 markRaw 避免响应式代理）
+      chartInstance.value = markRaw(echarts.init(
+        element, 
+        currentTheme.value as string | object | undefined, 
+        initOptions
+      ))
       
       // 设置自动响应
       if (autoResize) {
-        setupAutoResize()
+        setupAutoResize(element)
       }
       
       return chartInstance.value
@@ -105,6 +139,9 @@ export const useCharts = (options: UseChartsOptions = {}) => {
       
       loading.value = true
       error.value = null
+      
+      // 保存配置（用于主题切换时恢复）
+      savedOption = option
       
       chartInstance.value.setOption(option, opts)
       
@@ -147,16 +184,8 @@ export const useCharts = (options: UseChartsOptions = {}) => {
    * 手动触发图表重绘
    */
   const resize = () => {
-    if (chartInstance.value && !chartInstance.value.isDisposed()) {
-      try {
-        // 获取当前 option，确保有数据才 resize
-        const option = chartInstance.value.getOption()
-        if (option && option.series && (option.series as unknown[]).length > 0) {
-          chartInstance.value.resize()
-        }
-      } catch {
-        // 静默忽略 resize 错误（通常是图表状态不一致）
-      }
+    if (chartInstance.value) {
+      chartInstance.value.resize()
     }
   }
 
@@ -173,39 +202,89 @@ export const useCharts = (options: UseChartsOptions = {}) => {
    * 销毁图表实例
    */
   const dispose = () => {
+    // 清理 ResizeObserver
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
+    
+    // 清理 window resize 监听
+    if (resizeHandler) {
+      window.removeEventListener('resize', resizeHandler)
+      resizeHandler = null
+    }
+    
+    // 销毁图表实例
     if (chartInstance.value) {
       chartInstance.value.dispose()
       chartInstance.value = null
     }
     
-    // 清理事件监听
-    if (autoResize && resizeHandler) {
-      window.removeEventListener('resize', resizeHandler)
-      resizeHandler = null
-    }
+    currentContainer = null
   }
 
   // 响应式处理
   let resizeHandler: (() => void) | null = null
+  let resizeObserver: ResizeObserver | null = null
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null
   
-  const setupAutoResize = () => {
+  // 防抖 resize
+  const debouncedResize = () => {
+    if (resizeTimer) {
+      clearTimeout(resizeTimer)
+    }
+    resizeTimer = setTimeout(() => {
+      resize()
+    }, resizeDelay)
+  }
+  
+  const setupAutoResize = (element: HTMLElement) => {
+    // 清理旧的监听
     if (resizeHandler) {
       window.removeEventListener('resize', resizeHandler)
     }
-    
-    // 防抖处理
-    let resizeTimer: NodeJS.Timeout | null = null
-    resizeHandler = () => {
-      if (resizeTimer) {
-        clearTimeout(resizeTimer)
-      }
-      resizeTimer = setTimeout(() => {
-        resize()
-      }, resizeDelay)
+    if (resizeObserver) {
+      resizeObserver.disconnect()
     }
     
+    // 使用 ResizeObserver 监听容器大小变化（更精确）
+    resizeObserver = new ResizeObserver(debouncedResize)
+    resizeObserver.observe(element)
+    
+    // 同时监听 window resize（作为后备）
+    resizeHandler = debouncedResize
     window.addEventListener('resize', resizeHandler)
   }
+  
+  // 监听暗色模式变化，自动重新初始化图表
+  // 使用 { flush: 'post' } 确保在 DOM 更新后执行
+  watch(currentTheme, (newTheme, oldTheme) => {
+    // 跳过初始化时的触发（oldTheme 为 undefined）
+    if (oldTheme === undefined) return
+    
+    // 确保所有条件都满足
+    if (!chartInstance.value || !currentContainer || !savedOption) return
+    
+    try {
+      // 重新初始化（使用新主题，markRaw 避免响应式代理）
+      chartInstance.value.dispose()
+      chartInstance.value = markRaw(echarts.init(
+        currentContainer, 
+        newTheme as string | object | undefined, 
+        initOptions
+      ))
+      
+      // 恢复用户保存的原始配置
+      chartInstance.value.setOption(savedOption)
+      
+      // 重新设置 resize 监听
+      if (autoResize) {
+        setupAutoResize(currentContainer)
+      }
+    } catch (err) {
+      console.error('主题切换失败:', err)
+    }
+  }, { flush: 'post' })
 
   /**
    * 获取图表实例（用于高级操作）
@@ -225,6 +304,24 @@ export const useCharts = (options: UseChartsOptions = {}) => {
       return chartInstance.value.getDataURL(opts)
     }
     return null
+  }
+  
+  /**
+   * 绑定事件
+   */
+  const on = (eventName: string, handler: (...args: unknown[]) => void) => {
+    if (chartInstance.value) {
+      chartInstance.value.on(eventName, handler)
+    }
+  }
+  
+  /**
+   * 解绑事件
+   */
+  const off = (eventName: string, handler?: (...args: unknown[]) => void) => {
+    if (chartInstance.value) {
+      chartInstance.value.off(eventName, handler)
+    }
   }
 
   // 组件卸载时自动清理
@@ -249,122 +346,12 @@ export const useCharts = (options: UseChartsOptions = {}) => {
     showLoading,
     hideLoading,
     
+    // 事件绑定
+    on,
+    off,
+    
     // 高级功能
     getInstance,
     getDataURL,
   }
 }
-
-/**
- * 预设的图表配置
- */
-export const chartPresets = {
-  /**
-   * 柱状图预设
-   */
-  bar: (data: { categories: string[]; series: { name: string; data: number[] }[] }): EChartsOption => ({
-    title: {
-      text: '柱状图',
-      left: 'center'
-    },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      }
-    },
-    legend: {
-      data: data.series.map(s => s.name),
-      top: '10%'
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: data.categories
-    },
-    yAxis: {
-      type: 'value'
-    },
-    series: data.series.map(s => ({
-      name: s.name,
-      type: 'bar',
-      data: s.data
-    }))
-  }),
-
-  /**
-   * 饼图预设
-   */
-  pie: (data: { name: string; value: number }[], title: string = '饼图'): EChartsOption => ({
-    title: {
-      text: title,
-      left: 'center'
-    },
-    tooltip: {
-      trigger: 'item',
-      formatter: '{a} <br/>{b} : {c} ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      left: 'left',
-      data: data.map(d => d.name)
-    },
-    series: [
-      {
-        name: title,
-        type: 'pie',
-        radius: '55%',
-        center: ['50%', '60%'],
-        data,
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        }
-      }
-    ]
-  }),
-
-  /**
-   * 折线图预设
-   */
-  line: (data: { categories: string[]; series: { name: string; data: number[] }[] }): EChartsOption => ({
-    title: {
-      text: '折线图',
-      left: 'center'
-    },
-    tooltip: {
-      trigger: 'axis'
-    },
-    legend: {
-      data: data.series.map(s => s.name),
-      top: '10%'
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: data.categories
-    },
-    yAxis: {
-      type: 'value'
-    },
-    series: data.series.map(s => ({
-      name: s.name,
-      type: 'line',
-      data: s.data
-    }))
-  })
-} 

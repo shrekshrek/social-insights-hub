@@ -162,7 +162,7 @@ async def create_role(db: AsyncSession, role: schemas.RoleCreate) -> models.Role
         raise RoleAlreadyExistsException(role.name)
 
     # 创建角色
-    role_data = role.dict(exclude={"permission_ids"})
+    role_data = role.model_dump(exclude={"permission_ids"})
     db_role = models.Role(**role_data)
     db.add(db_role)
     await db.flush()  # 获取角色ID

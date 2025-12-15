@@ -617,16 +617,6 @@ dev = [
     { name = "ruff" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "greenlet" },
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-env" },
-    { name = "ruff" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13.2" },
@@ -661,16 +651,6 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.30.5" },
 ]
 provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "greenlet", specifier = ">=3.2.3" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "pytest", specifier = ">=8.4.0" },
-    { name = "pytest-asyncio", specifier = ">=0.23.8" },
-    { name = "pytest-env", specifier = ">=1.1.5" },
-    { name = "ruff", specifier = ">=0.12.12" },
-]
 
 [[package]]
 name = "flower"

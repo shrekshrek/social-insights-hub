@@ -56,7 +56,7 @@ export const useUserStore = defineStore('user', {
     },
     
     /**
-     * 设置用户信息（兼容方法）
+     * 设置用户信息（支持 User 或 UserProfile 类型）
      */
     setUser(user: User | UserProfile) {
       // 如果传入的是User类型，转换为UserProfile
@@ -82,7 +82,7 @@ export const useUserStore = defineStore('user', {
     },
     
     /**
-     * 清除用户信息（兼容方法）
+     * 清除用户信息
      */
     clearUser() {
       this.profile = null

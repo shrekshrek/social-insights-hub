@@ -8,7 +8,7 @@
           <UButton
             variant="ghost"
             icon="i-heroicons-arrow-left"
-            @click="navigateTo('/users')"
+            to="/users"
           />
           <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">

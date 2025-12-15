@@ -225,7 +225,7 @@ const handleSubmit = async () => {
         <UButton
           variant="outline"
           :disabled="submitting"
-          @click="navigateTo('/social-media/projects')"
+          to="/social-media/projects"
         >
           取消
         </UButton>

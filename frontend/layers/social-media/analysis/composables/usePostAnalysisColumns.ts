@@ -4,7 +4,6 @@
  * 提供统一的表格列定义，可在 AnalysisPanel 和 PostListModal 中共用
  */
 import { computed, h, type Component } from 'vue'
-// @ts-expect-error: #components is a virtual module provided by Nuxt
 import { UBadge, UIcon } from '#components'
 import type { TableColumn } from '@nuxt/ui'
 import type { PostAnalysisWithPostInfo } from '../types'

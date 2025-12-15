@@ -15,7 +15,7 @@
       <div class="flex items-center gap-3">
         <UButton
           icon="i-heroicons-plus"
-          @click="navigateTo('/rbac/roles/create')"
+          to="/rbac/roles/create"
         >
           新增角色
         </UButton>
@@ -97,7 +97,6 @@
 import { h, ref, computed, watch, type Component } from "vue";
 import type { Role, PermissionWithMeta as Permission } from "../../../types";
 import type { TableColumn } from "@nuxt/ui";
-// @ts-expect-error: #components is a virtual module provided by Nuxt
 import { UBadge, UButton } from "#components";
 import { isCoreRole } from "../../../utils/permissions";
 
@@ -279,14 +278,14 @@ const columns: TableColumn<Role>[] = [
           variant: "ghost",
           size: "sm",
           icon: "i-heroicons-eye",
-          onClick: () => navigateTo(`/rbac/roles/${row.original.id}`),
+          to: `/rbac/roles/${row.original.id}`,
         }),
         h(UButton as Component, {
           color: "primary",
           variant: "ghost",
           size: "sm",
           icon: "i-heroicons-key",
-          onClick: () => navigateTo(`/rbac/roles/${row.original.id}/permissions`),
+          to: `/rbac/roles/${row.original.id}/permissions`,
         }),
         !isCore &&
           h(UButton as Component, {
@@ -294,7 +293,7 @@ const columns: TableColumn<Role>[] = [
             variant: "ghost",
             size: "sm",
             icon: "i-heroicons-pencil-square",
-            onClick: () => navigateTo(`/rbac/roles/${row.original.id}/edit`),
+            to: `/rbac/roles/${row.original.id}/edit`,
           }),
         !isCore &&
           h(UButton as Component, {

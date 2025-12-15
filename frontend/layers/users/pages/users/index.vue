@@ -13,7 +13,7 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <UButton icon="i-heroicons-plus" @click="navigateTo('/users/create')">
+        <UButton icon="i-heroicons-plus" to="/users/create">
           新增用户
         </UButton>
         <UButton
@@ -94,7 +94,6 @@
 import { h, ref, computed, watch, type Component } from "vue";
 import type { User } from "../../types";
 import type { TableColumn } from "@nuxt/ui";
-// @ts-expect-error: #components is a virtual module provided by Nuxt
 import { UAvatar, UBadge, UButton } from "#components";
 import { getRoleDisplayName } from "../../../rbac/utils/permissions";  // 明确的跨模块依赖
 

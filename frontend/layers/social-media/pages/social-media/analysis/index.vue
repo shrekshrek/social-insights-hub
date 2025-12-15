@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { h, computed, ref, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-// @ts-expect-error: #components is a virtual module provided by Nuxt
 import { UBadge, UButton, UProgress } from '#components'
 import type { AnalysisJob, AnalysisType, AnalysisStatus } from '../../../analysis/types'
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, h, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-// @ts-expect-error: #components is a virtual module provided by Nuxt
 import { UBadge, UButton } from '#components'
 
 definePageMeta({
@@ -177,7 +176,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           <UButton
             variant="ghost"
             icon="i-heroicons-arrow-left"
-            @click="navigateTo('/social-media/projects')"
+            to="/social-media/projects"
           />
           <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
@@ -194,7 +193,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         <div v-if="project" class="flex items-center gap-3">
           <UButton
             icon="i-heroicons-plus"
-            @click="navigateTo(`/social-media/tasks/create?project_id=${projectId}`)"
+            :to="`/social-media/tasks/create?project_id=${projectId}`"
           >
             新建任务
           </UButton>
@@ -320,7 +319,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           </p>
           <UButton
             class="mt-4"
-            @click="navigateTo(`/social-media/tasks/create?project_id=${projectId}`)"
+            :to="`/social-media/tasks/create?project_id=${projectId}`"
           >
             创建第一个任务
           </UButton>

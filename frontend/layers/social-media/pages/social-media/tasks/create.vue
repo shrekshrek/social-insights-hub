@@ -389,7 +389,7 @@ const handleSubmit = async () => {
         <UButton
           variant="outline"
           :disabled="submitting"
-          @click="navigateTo(cancelReturnPath)"
+          :to="cancelReturnPath"
         >
           取消
         </UButton>

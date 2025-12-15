@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, h, type Component, defineAsyncComponent } from 'vue'
-// @ts-expect-error: #components is a virtual module provided by Nuxt
 import { UButton } from '#components'
 import ExpandableText from '../../../../analysis/components/ExpandableText.vue'
 
@@ -496,7 +495,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
         <UButton
           variant="ghost"
           icon="i-heroicons-arrow-left"
-          @click="navigateTo(backPath)"
+          :to="backPath"
         />
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
@@ -511,7 +510,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
           <UButton
             v-if="task.status === 'pending' && task.data_source === 'local_upload'"
             icon="i-heroicons-arrow-up-tray"
-            @click="navigateTo(`/social-media/tasks/${taskId}/upload`)"
+            :to="`/social-media/tasks/${taskId}/upload`"
           >
             上传数据
           </UButton>

@@ -146,7 +146,7 @@ const columns: TableColumn<SocialProject>[] = [
       <div class="flex items-center gap-3">
         <UButton
           icon="i-heroicons-plus"
-          @click="navigateTo('/social-media/projects/create')"
+          to="/social-media/projects/create"
         >
           新建项目
         </UButton>

@@ -36,8 +36,8 @@
           <p><strong>权限定义</strong>：所有权限通过代码定义（<code>backend/src/rbac/init_data.py</code>），确保版本控制和环境一致性。</p>
           <p><strong>权限分配</strong>：使用角色管理页面为角色分配权限，使用用户管理页面为用户分配角色。</p>
           <div class="flex gap-2 mt-3">
-            <UButton size="sm" @click="navigateTo('/rbac/roles')">管理角色权限</UButton>
-            <UButton size="sm" variant="outline" @click="navigateTo('/users')">管理用户角色</UButton>
+            <UButton size="sm" to="/rbac/roles">管理角色权限</UButton>
+            <UButton size="sm" variant="outline" to="/users">管理用户角色</UButton>
           </div>
         </div>
       </template>
@@ -107,11 +107,10 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed, watch, type Component } from "vue";
+import { h, ref, computed, watch } from "vue";
+import { UBadge, UButton } from "#components";
 import type { PermissionWithMeta as Permission } from "../../../types";
 import type { TableColumn } from "@nuxt/ui";
-// @ts-expect-error: #components is a virtual module provided by Nuxt
-import { UBadge, UButton } from "#components";
 
 // 页面元数据
 definePageMeta({
@@ -267,13 +266,13 @@ const columns: TableColumn<Permission>[] = [
       const action = row.original.action as string;
       return h("div", { class: "flex items-center space-x-2" }, [
         h(
-          UBadge as Component,
+          UBadge,
           { color: "primary", variant: "soft" },
           () => target || "未知"
         ),
         h("span", { class: "text-gray-400" }, ":"),
         h(
-          UBadge as Component,
+          UBadge,
           { color: "success", variant: "soft" },
           () => action || "未知"
         ),
@@ -299,7 +298,7 @@ const columns: TableColumn<Permission>[] = [
       const { label, color } = getPermissionCategory(permission);
       
       return h(
-        UBadge as Component,
+        UBadge,
         {
           color,
           variant: "soft",
@@ -312,12 +311,12 @@ const columns: TableColumn<Permission>[] = [
     id: "view",
     header: "查看详情",
     cell: ({ row }) => {
-      return h(UButton as Component, {
+      return h(UButton, {
         color: "neutral",
         variant: "ghost",
         size: "sm",
         icon: "i-heroicons-eye",
-        onClick: () => navigateTo(`/rbac/permissions/${row.original.id}`),
+        to: `/rbac/permissions/${row.original.id}`,
       });
     },
   },

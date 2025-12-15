@@ -1,6 +1,6 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from pydantic import Field, field_validator
-from typing import List
+from typing import Annotated, List
 
 
 class Settings(BaseSettings):
@@ -168,11 +168,14 @@ class Settings(BaseSettings):
 
     # API settings
     API_PREFIX: str = "/api/v1"
-    PROJECT_NAME: str = "Full-Stack Starter API"
+    # PROJECT_NAME 用于内部标识（Docker/数据库隔离）
+    PROJECT_NAME: str = "fullstack_scaffold"
+    # APP_NAME 用于对外展示（API title / 网站 title）
+    APP_NAME: str | None = None
     VERSION: str = "0.1.0"
 
     # CORS settings
-    BACKEND_CORS_ORIGINS: List[str] = Field(
+    BACKEND_CORS_ORIGINS: Annotated[List[str], NoDecode] = Field(
         default=["http://localhost:3000", "http://localhost:8000"],
         description="Allowed CORS origins",
     )
@@ -204,12 +207,34 @@ class Settings(BaseSettings):
                 )
         return v
 
+    @field_validator("APP_NAME", mode="before")
+    @classmethod
+    def default_app_name(cls, v: str | None) -> str | None:
+        """Fallback to PROJECT_NAME when APP_NAME not provided."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        return v.strip()
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
-        """Parse CORS origins from string or list"""
+        """Parse CORS origins from comma string or JSON list."""
         if isinstance(v, str):
-            return [i.strip() for i in v.split(",")]
+            value = v.strip()
+            if not value:
+                return []
+            if value.startswith("["):
+                # JSON array string
+                import json
+
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        return [str(i).strip() for i in parsed if str(i).strip()]
+                except Exception:
+                    # Fall back to comma split
+                    pass
+            return [i.strip() for i in value.split(",") if i.strip()]
         return v
 
     # Model config

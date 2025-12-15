@@ -61,27 +61,30 @@ const main = async () => {
     process.exit(1)
   }
 
+  const composeCmd = 'docker-compose --env-file .env.production -f docker-compose.prod.yml'
+
   console.log('🛑 Stopping existing production containers...')
   try {
-    run('docker-compose -f docker-compose.prod.yml down')
+    run(`${composeCmd} down`)
   } catch (error) {
     console.warn('ℹ️  No existing containers to stop.')
   }
 
   console.log('🏗️ Building production images...')
-  run('docker-compose -f docker-compose.prod.yml build --no-cache')
+  // 默认使用 Docker 缓存构建，提升日常部署速度
+  run(`${composeCmd} build`)
 
   console.log('🚀 Starting production services...')
-  run('docker-compose -f docker-compose.prod.yml up -d')
+  run(`${composeCmd} up -d`)
 
   console.log('⏳ Waiting for services to start...')
   await wait(10_000)
 
   console.log('🔍 Checking service status...')
-  run('docker-compose -f docker-compose.prod.yml ps')
+  run(`${composeCmd} ps`)
 
   console.log('🏥 Checking backend health...')
-  const urls = ['http://localhost/api/v1/docs', 'http://localhost:8000/docs']
+  const urls = ['http://localhost/health', 'http://localhost:8000/health']
   let healthy = false
 
   for (const url of urls) {
@@ -99,7 +102,7 @@ const main = async () => {
 
   if (!healthy) {
     console.error('⚠️ Backend health check failed. Showing recent logs...')
-    run('docker-compose -f docker-compose.prod.yml logs --tail=20 backend')
+    run(`${composeCmd} logs --tail=20 backend`)
   }
 
   console.log('==================================')
@@ -108,10 +111,11 @@ const main = async () => {
   console.log('📍 Services:')
   console.log('   🌐 Application: http://localhost')
   console.log('   🔧 API: http://localhost/api/v1')
-  console.log('   📖 API Docs: http://localhost/api/v1/docs')
+  console.log('   📖 API Docs: http://localhost/docs')
+  console.log('   🏥 Health: http://localhost/health')
   console.log('')
   console.log('📊 To view logs:')
-  console.log('   docker-compose -f docker-compose.prod.yml logs -f')
+  console.log(`   ${composeCmd} logs -f`)
   console.log('')
   console.log('🛑 To stop:')
   console.log('   pnpm prod:down')

@@ -123,7 +123,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
             return JSONResponse(
                 status_code=e.status_code,
-                content=error_response.dict(),
+                content=error_response.model_dump(),
                 headers={"X-Request-ID": request_id_context.get()},
             )
 
@@ -145,7 +145,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
             return JSONResponse(
                 status_code=e.status_code,
-                content=error_response.dict(),
+                content=error_response.model_dump(),
                 headers={"X-Request-ID": request_id_context.get()},
             )
 
@@ -162,7 +162,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
             return JSONResponse(
                 status_code=422,
-                content=error_response.dict(),
+                content=error_response.model_dump(),
                 headers={"X-Request-ID": request_id_context.get()},
             )
 
@@ -177,7 +177,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
             return JSONResponse(
                 status_code=500,
-                content=error_response.dict(),
+                content=error_response.model_dump(),
                 headers={"X-Request-ID": request_id_context.get()},
             )
 
@@ -192,7 +192,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
             return JSONResponse(
                 status_code=500,
-                content=error_response.dict(),
+                content=error_response.model_dump(),
                 headers={"X-Request-ID": request_id_context.get()},
             )
 

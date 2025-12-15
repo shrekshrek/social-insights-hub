@@ -4,7 +4,7 @@
  */
 
 import type { User, UserCreate } from "~/types/user"
-import type { Msg, PasswordResetRequest, PasswordReset } from "~/types/auth"
+import type { MessageResponse, PasswordResetRequest, PasswordReset } from "~/types/auth"
 
 export const useAuthApi = () => {
   const { showSuccess } = useApi()
@@ -110,7 +110,7 @@ export const useAuthApi = () => {
    */
   const requestPasswordReset = async (data: PasswordResetRequest) => {
     try {
-      const result = await $fetch<Msg>('/api/v1/auth/request-password-reset', {
+      const result = await $fetch<MessageResponse>('/api/v1/auth/request-password-reset', {
         method: 'POST',
         body: data,
       })
@@ -119,7 +119,7 @@ export const useAuthApi = () => {
     } catch {
       // 为了安全，不暴露具体错误
       showSuccess('如果该邮箱已注册，重置链接已发送')
-      return { msg: 'Request processed' } as Msg
+      return { message: 'Request processed' } as MessageResponse
     }
   }
   
@@ -127,7 +127,7 @@ export const useAuthApi = () => {
    * 重置密码 - 直接调用后端API
    */
   const resetPassword = async (data: PasswordReset) => {
-    const result = await $fetch<Msg>('/api/v1/auth/reset-password', {
+    const result = await $fetch<MessageResponse>('/api/v1/auth/reset-password', {
       method: 'POST',
       body: data,
     })
@@ -144,7 +144,7 @@ export const useAuthApi = () => {
       throw new Error('未登录')
     }
     
-    const result = await $fetch<Msg>('/api/v1/auth/change-password', {
+    const result = await $fetch<MessageResponse>('/api/v1/auth/change-password', {
       method: 'POST',
       body: data,
       headers: {

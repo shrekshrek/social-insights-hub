@@ -35,15 +35,18 @@
     ```bash
     cp .env.example .env
     ```
-2.  **设置项目名称** (重要！):
+2.  **设置项目标识与显示名称** (重要！):
     
-    编辑 `.env` 文件，设置唯一的 `PROJECT_NAME`：
+    编辑 `.env` 文件，设置唯一的 `PROJECT_NAME`（用于 Docker/数据库隔离）与可选的 `APP_NAME`（对外显示）：
     ```bash
     # 使用有意义的项目名称，如: crm, admin, api_v2
     PROJECT_NAME=your_project_name
+
+    # 可选：应用显示名称（API 文档 title / 网站 title）
+    APP_NAME=你的应用名称
     ```
     
-    > 💡 **多项目开发**: 如果你基于此脚手架开发多个项目，每个项目的 `PROJECT_NAME` 必须不同。这样可以避免 Docker 容器和数据库冲突，让多个项目同时运行。
+> 💡 **多项目开发**: 如果你基于此脚手架开发多个项目，每个项目的 `PROJECT_NAME` 必须不同。这样可以避免 Docker 容器和数据库冲突，让多个项目同时运行。`APP_NAME` 仅影响展示，可按需设置。
 
 3.  **一键安装与构建**:
     ```bash
@@ -95,6 +98,9 @@ pnpm dev
 | `pnpm prod:up` | 在生产模式下（后台）启动所有服务。 |
 | `pnpm prod:down`| 停止并移除所有生产模式下的服务。 |
 
+> ℹ️ **生产迁移提示**：生产 compose 启动不会自动跑数据库迁移。
+> 如果你新增/修改了模型并生成 Alembic 迁移，部署后请手动执行一次：`pnpm be:migrate:up`。
+
 ---
 
 ## 📚 文档导航
@@ -112,6 +118,7 @@ pnpm dev
 **⚙️ 专项功能**：
 - 权限管理：[`docs/PERMISSION_MANAGEMENT.md`](docs/PERMISSION_MANAGEMENT.md)
 - 配置管理：[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
+- CI/CD 部署：[`docs/GITLAB_CI_VARIABLES.md`](docs/GITLAB_CI_VARIABLES.md)
 - Claude配置：[`CLAUDE.md`](CLAUDE.md)
 
 ---

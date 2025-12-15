@@ -156,7 +156,7 @@ async def get_user(user_id: int):
     - 这两个 `relationship` **必须**使用 `back_populates` 参数互相引用，以确保 SQLAlchemy 能正确同步两者状态。
 
 #### 数据库命名约定
-- **表名**: 使用小写蛇形 (`snake_case`) 且为单数形式 (e.g., `user`, `post_like`)。
+- **表名**: 使用小写蛇形复数 (`snake_case_plural`) (e.g., `users`, `post_likes`)。
 - **字段名**:
   - 时间戳 (`datetime`) 字段使用 `_at` 后缀 (e.g., `created_at`, `updated_at`)。
   - 日期 (`date`) 字段使用 `_date` 后缀 (e.g., `start_date`)。

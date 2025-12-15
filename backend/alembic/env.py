@@ -14,14 +14,19 @@ from alembic import context
 config = context.config
 
 # --- .env loading ---
-# Construct the path to the .env file in the project root
-# alembic/env.py -> alembic/ -> backend/ -> .env
-env_path = Path(__file__).parent.parent.parent / ".env"
-if env_path.is_file():
+# Support both layouts:
+# - monorepo: backend/alembic/env.py -> repo root /.env
+# - container: /app/alembic/env.py -> /app/.env (optional)
+env_candidates = [
+    Path(__file__).resolve().parent.parent.parent / ".env",
+    Path(__file__).resolve().parent.parent / ".env",
+]
+env_path = next((p for p in env_candidates if p.is_file()), None)
+if env_path:
     print(f"Loading environment variables from: {env_path}")
     load_dotenv(dotenv_path=env_path)
 else:
-    print(f"Warning: .env file not found at {env_path}")
+    print("Info: .env file not found, relying on existing environment variables.")
 
 # Set the database URL from the environment variable
 db_url = os.getenv("DATABASE_URL")

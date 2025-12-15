@@ -20,9 +20,9 @@ export interface PasswordReset {
   new_password: string;
 }
 
-// 与后端 Msg schema 同步的消息类型
-export interface Msg {
-  msg: string;
+// 与后端 MessageResponse schema 同步的消息类型
+export interface MessageResponse {
+  message: string;
 }
 
 // 登录请求类型（用于表单）

@@ -14,6 +14,7 @@ if (!fs.existsSync(envPath)) {
 
 const envContent = fs.readFileSync(envPath, 'utf-8')
 const projectNameMatch = envContent.match(/^PROJECT_NAME=(.*)$/m)
+const appNameMatch = envContent.match(/^APP_NAME=(.*)$/m)
 
 if (!projectNameMatch || !projectNameMatch[1]?.trim()) {
   console.error('❌ 错误: PROJECT_NAME 未设置')
@@ -24,4 +25,5 @@ if (!projectNameMatch || !projectNameMatch[1]?.trim()) {
 }
 
 const projectName = projectNameMatch[1].trim()
-console.log(`✅ 环境检查通过 - PROJECT_NAME: ${projectName}`)
+const appName = appNameMatch?.[1]?.trim() || projectName
+console.log(`✅ 环境检查通过 - PROJECT_NAME: ${projectName}, APP_NAME: ${appName}`)

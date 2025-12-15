@@ -1,256 +1,49 @@
 # 📋 配置管理指南
 
-## 🎯 概述
+本项目以 `.env.example` / `.env.production.example` 为准；本文只保留“需要改什么 + 怎么验证”，避免重复粘贴整份模板。
 
-本项目使用统一的配置管理策略，确保开发、测试和生产环境之间的配置一致性和安全性。
+## ✅ 30 秒配置
 
-## 📁 配置文件
+### 开发（本地）
+1. `cp .env.example .env`
+2. 编辑 `.env`：只需要改 `PROJECT_NAME`（必填）与 `APP_NAME`（可选）
+3. `pnpm dev`
 
-- `.env` - 开发环境配置
-- `.env.example` - 开发环境配置模板
-- `.env.production` - 生产环境统一配置 ⭐
-- `.env.production.example` - 生产环境配置模板
+### 生产（服务器）
+1. `cp .env.production.example .env.production`
+2. 编辑 `.env.production`：替换所有 `CHANGE_THIS...`
+3. `pnpm prod:deploy`（或 `pnpm build && pnpm prod:up`）
+4. 如有新增迁移：`pnpm be:migrate:up`
 
+## 🔑 必改项（生产环境）
 
-## 🛠️ 环境配置详解
+- `POSTGRES_PASSWORD`：强密码
+- `DATABASE_URL`：保持 `postgresql+psycopg://`，并确保密码与 `POSTGRES_PASSWORD` 一致
+- `SECRET_KEY`：`openssl rand -hex 32`
+- `NUXT_SESSION_PASSWORD`：`openssl rand -base64 32`（至少 32 字符）
+- `BACKEND_CORS_ORIGINS`：填真实域名，支持逗号分隔或 JSON 数组（推荐逗号分隔）
+- `NUXT_PUBLIC_API_BASE`：建议填带协议的完整地址（如 `https://example.com/api/v1`）
+- `APP_NAME`：对外展示名（可选）
 
-### 开发环境 (.env)
+> ℹ️ `DATABASE_URL` 推荐使用 `psycopg`：Alembic 迁移走同步驱动；应用运行时会自动转换为 `postgresql+asyncpg://` 用于异步访问。
 
-开发环境配置用于本地开发，包含所有服务的配置：
-
-```bash
-# ===== 项目标识 (多项目隔离) =====
-PROJECT_NAME=fullstack_scaffold  # 每个项目使用唯一名称
-
-# ===== 环境标识 =====
-ENVIRONMENT=development
-
-# ===== PostgreSQL 配置 =====
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=${PROJECT_NAME}_db  # 根据项目名动态生成
-
-# ===== 后端配置 =====
-DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
-REDIS_URL=redis://redis:6379
-SECRET_KEY=your-secret-key-for-development-only
-PROJECT_NAME=Full-Stack Starter API
-API_PREFIX=/api/v1
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# ===== 前端配置 =====
-NUXT_PUBLIC_API_BASE=http://localhost:8000/api/v1
-NUXT_SESSION_PASSWORD=this-is-a-32-character-string-for-dev-only!
-```
-
-### 生产环境 (.env.production)
-
-生产环境配置用于服务器部署，包含所有安全敏感的配置：
-
-> 📝 **注意**: 生产环境通常使用固定的数据库名（如 `fastapi_db`），因为生产环境一般是一台服务器部署一个项目，不需要像开发环境那样支持多项目隔离。
+## 🧪 验证与自查
 
 ```bash
-# ===== 环境标识 =====
-ENVIRONMENT=production
-
-# ===== PostgreSQL 配置 =====
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=CHANGE_THIS_STRONG_PASSWORD
-POSTGRES_DB=fastapi_db  # 生产环境使用固定名称
-
-# ===== 后端配置 =====
-DATABASE_URL=postgresql+psycopg://postgres:CHANGE_THIS_STRONG_PASSWORD@postgres_db:5432/fastapi_db
-REDIS_URL=redis://redis:6379
-SECRET_KEY=CHANGE_THIS_USE_OPENSSL_RAND_HEX_32_TO_GENERATE
-PROJECT_NAME=Production API
-API_PREFIX=/api/v1
-ACCESS_TOKEN_EXPIRE_MINUTES=15
-BACKEND_CORS_ORIGINS=["https://yourdomain.com"]
-
-# ===== 前端配置 =====
-NUXT_PUBLIC_API_BASE=https://yourdomain.com/api/v1
-NUXT_SESSION_PASSWORD=CHANGE_THIS_MUST_BE_AT_LEAST_32_CHARS_USE_OPENSSL
-
-```
-
-> ℹ️ **提示**：应用在初始化数据库引擎时会自动将 `postgresql+psycopg://` 的连接字符串转换为异步驱动 `postgresql+asyncpg://`，因此无需手动修改上述配置。
-
-> ⚠️ **注意**：`NUXT_PUBLIC_API_BASE` 必须是带协议的完整地址（如 `https://example.com/api/v1`），否则前端代理会拒绝请求并返回 500。
-
-## 🔐 安全密钥生成
-
-### 生成安全密钥的命令
-
-```bash
-# 生成后端JWT密钥（32字节十六进制）
-openssl rand -hex 32
-
-# 生成前端Session密码（32字符Base64）
-openssl rand -base64 32
-
-# 生成数据库强密码（24字符Base64）
-openssl rand -base64 24
-```
-
-### 密钥更新步骤
-
-1. **生成新密钥**
-   ```bash
-   # 生成所有需要的密钥
-   echo "SECRET_KEY: $(openssl rand -hex 32)"
-   echo "NUXT_SESSION_PASSWORD: $(openssl rand -base64 32)"
-   echo "POSTGRES_PASSWORD: $(openssl rand -base64 24)"
-   ```
-
-2. **更新配置文件**
-   - 打开 `.env.production`
-   - 替换所有 `CHANGE_THIS_` 开头的占位符
-   - 确保 `DATABASE_URL` 中的密码与 `POSTGRES_PASSWORD` 一致
-
-3. **验证配置**
-   ```bash
-   # 检查配置文件语法
-   docker-compose -f docker-compose.prod.yml config
-   ```
-
-## 🚀 Docker Compose 集成
-
-### 配置加载机制
-
-Docker Compose 通过 `env_file` 指令加载配置：
-
-```yaml
-# docker-compose.prod.yml
-services:
-  backend:
-    env_file:
-      - .env.production  # 统一配置文件
-  
-  frontend:
-    env_file:
-      - .env.production  # 统一配置文件
-  
-  postgres_db:
-    env_file:
-      - .env.production  # 统一配置文件
-```
-
-### 环境变量优先级
-
-1. Docker Compose 文件中的 `environment` 定义（最高优先级）
-2. `env_file` 指定的文件
-3. Shell 环境变量
-4. `.env` 文件（Docker Compose 默认加载）
-
-## 📝 配置最佳实践
-
-### 1. 密钥管理
-- **永不提交**: 绝不将包含真实密钥的配置文件提交到Git
-- **定期轮换**: 定期更新生产环境的密钥
-- **强密码**: 使用密码生成器创建强密码
-- **备份密钥**: 安全地备份生产环境密钥
-
-### 2. 环境隔离
-- **开发配置**: 使用弱密钥，方便开发调试
-- **生产配置**: 使用强密钥，确保安全性
-- **测试配置**: 可以复制开发配置，独立的数据库
-
-### 3. 配置验证
-```bash
-# 验证开发环境配置
+# 验证开发 compose 配置
 docker-compose config
 
-# 验证生产环境配置
-docker-compose -f docker-compose.prod.yml config
-
-# 检查环境变量
-docker-compose run backend env | grep -E "(DATABASE|SECRET|API)"
+# 验证生产 compose 配置
+docker-compose --env-file .env.production -f docker-compose.prod.yml config
 ```
 
-### 4. 配置文档化
-- 在 `.env.example` 中记录所有配置项
-- 为每个配置项添加注释说明
-- 标记必需和可选的配置项
-
-## 🔄 配置更新流程
-
-### 添加新配置项
-
-1. **更新模板文件**
-   ```bash
-   # 编辑开发环境模板
-   nano .env.example
-   
-   # 编辑生产环境模板
-   nano .env.production.example
-   ```
-
-2. **更新实际配置**
-   ```bash
-   # 更新开发环境
-   nano .env
-   
-   # 更新生产环境（仅在服务器上）
-   nano .env.production
-   ```
-
-3. **更新代码**
-   - 后端: 更新 `backend/src/config.py`
-   - 前端: 更新 `frontend/nuxt.config.ts`
-
-4. **更新文档**
-   - 更新本文档
-   - 更新 `README.md` 中的配置说明
-
-## 🐛 故障排除
-
-### 常见配置问题
-
-#### 1. 数据库连接失败
 ```bash
-# 检查数据库配置
-echo $DATABASE_URL
+# 数据库连通性（容器内）
+docker-compose exec postgres_db sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1;"'
 
-# 测试连接
-docker-compose exec backend python -c "from src.database import engine; print('Connected!')"
+# 服务健康检查
+curl http://localhost/health
 ```
-
-#### 2. 前后端通信失败
-```bash
-# 检查API地址配置
-echo $NUXT_PUBLIC_API_BASE
-
-# 检查CORS配置
-echo $BACKEND_CORS_ORIGINS
-```
-
-#### 3. 认证失败
-```bash
-# 检查密钥长度
-echo -n $SECRET_KEY | wc -c           # 应该是64字符（32字节十六进制）
-echo -n $NUXT_SESSION_PASSWORD | wc -c # 应该至少32字符
-```
-
-### 配置检查清单
-
-- [ ] 所有 `CHANGE_THIS_` 占位符已替换
-- [ ] `DATABASE_URL` 中的密码与 `POSTGRES_PASSWORD` 一致
-- [ ] `NUXT_SESSION_PASSWORD` 至少32字符
-- [ ] `SECRET_KEY` 使用 `openssl rand -hex 32` 生成
-- [ ] `BACKEND_CORS_ORIGINS` 包含正确的域名
-
-## 📊 配置对照表
-
-| 配置项 | 开发环境默认值 | 生产环境要求 | 说明 |
-|--------|---------------|-------------|------|
-| `ENVIRONMENT` | development | production | 环境标识 |
-| `POSTGRES_PASSWORD` | postgres | 强密码 | 数据库密码 |
-| `SECRET_KEY` | 弱密钥 | 64字符十六进制 | JWT签名密钥 |
-| `NUXT_SESSION_PASSWORD` | 32字符示例 | 32+字符强密码 | Session加密 |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | 30 | 15 | Token过期时间 |
-| `BACKEND_CORS_ORIGINS` | ["http://localhost:3000"] | ["https://yourdomain.com"] | 允许的源 |
 
 ## 🔗 相关文档
 

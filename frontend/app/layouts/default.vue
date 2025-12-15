@@ -10,7 +10,7 @@
             to="/"
             class="text-xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
           >
-            脉冲信息中心
+            {{ appName }}
           </NuxtLink>
 
           <!-- 桌面端导航 -->
@@ -21,18 +21,18 @@
                 variant="ghost"
                 size="sm"
                 :icon="
-                  $colorMode.value === 'dark'
+                  colorMode.value === 'dark'
                     ? 'i-heroicons-sun'
                     : 'i-heroicons-moon'
                 "
                 :aria-label="
-                  $colorMode.value === 'dark'
+                  colorMode.value === 'dark'
                     ? '切换到浅色模式'
                     : '切换到深色模式'
                 "
                 @click="
-                  $colorMode.preference =
-                    $colorMode.value === 'dark' ? 'light' : 'dark'
+                  colorMode.preference =
+                    colorMode.value === 'dark' ? 'light' : 'dark'
                 "
               />
               <template #fallback>
@@ -95,18 +95,18 @@
                 variant="ghost"
                 size="sm"
                 :icon="
-                  $colorMode.value === 'dark'
+                  colorMode.value === 'dark'
                     ? 'i-heroicons-sun'
                     : 'i-heroicons-moon'
                 "
                 :aria-label="
-                  $colorMode.value === 'dark'
+                  colorMode.value === 'dark'
                     ? '切换到浅色模式'
                     : '切换到深色模式'
                 "
                 @click="
-                  $colorMode.preference =
-                    $colorMode.value === 'dark' ? 'light' : 'dark'
+                  colorMode.preference =
+                    colorMode.value === 'dark' ? 'light' : 'dark'
                 "
               />
               <template #fallback>
@@ -240,7 +240,7 @@
       <UContainer>
         <div class="py-6 text-center">
           <p class="text-sm text-gray-600 dark:text-gray-400">
-            © 2024 脉冲信息中心. 保留所有权利。
+            © 2024 {{ appName }}. 保留所有权利。
           </p>
         </div>
       </UContainer>
@@ -256,8 +256,12 @@ import { getNavigationItems, getRoutePermissions } from "~/config/routes";
 const { loggedIn, session } = useUserSession();
 const { logout } = useAuthApi();
 const permissions = usePermissions();
+const colorMode = useColorMode();
 
-// 计算属性以兼容原有代码
+const config = useRuntimeConfig();
+const appName = computed(() => config.public.appName || '全栈脚手架');
+
+// 认证状态和用户数据（用于导航逻辑）
 const status = computed(() => loggedIn.value ? 'authenticated' : 'unauthenticated');
 const data = computed(() => ({ user: session.value?.user }));
 

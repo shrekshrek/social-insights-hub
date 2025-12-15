@@ -23,7 +23,7 @@
 ### 1.1. 技术栈
 
 -   **核心框架**: [Nuxt 4](https://nuxt.com/)
--   **UI 库**: [@nuxt/ui v3](https://ui.nuxt.com/) (基于 Tailwind CSS)
+-   **UI 库**: [@nuxt/ui v4](https://ui.nuxt.com/) (基于 Tailwind CSS)
 -   **状态管理**: [Pinia](https://pinia.vuejs.org/)
 -   **认证**: [nuxt-auth-utils](https://nuxt.com/modules/auth-utils)
 -   **数据可视化**: [ECharts](https://echarts.apache.org/en/index.html)
@@ -50,21 +50,23 @@ frontend/
 │   ├── rbac/                 # 角色权限管理模块
 │   ├── users/                # 用户管理模块
 │   └── ui-kit/               # 共享UI组件库
-├── pages/                     # 全局页面
-├── components/                # 全局通用组件
-├── composables/               # 全局组合式函数
-│   ├── useApi.ts             # 统一API请求 (核心)
-│   └── usePermissions.ts     # 权限检查 (核心)
+├── app/                       # Nuxt 4 主应用目录
+│   ├── pages/                # 全局页面
+│   ├── components/           # 全局通用组件
+│   ├── composables/          # 全局组合式函数
+│   │   ├── useApi.ts         # 统一API请求 (核心)
+│   │   └── usePermissions.ts # 权限检查 (核心)
+│   ├── middleware/           # 全局中间件
+│   │   └── route-guard.global.ts
+│   ├── plugins/              # Nuxt 插件
+│   │   └── auth-init.client.ts
+│   ├── layouts/              # 全局布局
+│   └── error.vue             # 全局错误页面
 ├── config/                    # 全局配置文件
 │   ├── routes.ts             # 路由权限配置
 │   └── permissions.ts        # 权限元数据定义
-├── middleware/                # 全局中间件
-│   └── route-guard.global.ts # 统一路由守卫
-├── plugins/                   # Nuxt 插件
-│   └── auth-init.client.ts   # 认证初始化
-├── stores/                    # 全局状态管理
-├── nuxt.config.ts             # 主配置文件
-└── error.vue                  # 全局错误页面
+├── nuxt.config.ts            # 主配置文件
+└── types/                    # TypeScript 类型
 ```
 
 ### 2.2. Layer 设计原则

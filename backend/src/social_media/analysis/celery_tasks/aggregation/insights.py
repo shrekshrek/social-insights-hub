@@ -54,14 +54,19 @@ def _extract_entity_attributes_for_ipa(
             post_ids = feature.get("post_ids", [])
             mentions = len(post_ids)
             if mentions >= 1:
-                candidates.append({
+                item = {
                     "name": feature["text"],
                     "mentions": mentions,
                     "sentiment": 0.5,  # features 默认正面
                     "heat": round(mentions * avg_heat_per_mention, 1),
                     "post_ids": post_ids,
                     "source_type": "feature"
-                })
+                }
+                # 透传原始词条（仅当该属性发生过合并时才会存在）
+                original_terms = feature.get("original_terms")
+                if original_terms and isinstance(original_terms, list) and len(original_terms) > 0:
+                    item["original_terms"] = original_terms
+                candidates.append(item)
     
     # 提取 issues（负面属性，sentiment 设为负值）
     for issue in target_entity.get("issues", []):
@@ -69,14 +74,19 @@ def _extract_entity_attributes_for_ipa(
             post_ids = issue.get("post_ids", [])
             mentions = len(post_ids)
             if mentions >= 1:
-                candidates.append({
+                item = {
                     "name": issue["text"],
                     "mentions": mentions,
                     "sentiment": -0.5,  # issues 默认负面
                     "heat": round(mentions * avg_heat_per_mention, 1),
                     "post_ids": post_ids,
                     "source_type": "issue"
-                })
+                }
+                # 透传原始词条（仅当该属性发生过合并时才会存在）
+                original_terms = issue.get("original_terms")
+                if original_terms and isinstance(original_terms, list) and len(original_terms) > 0:
+                    item["original_terms"] = original_terms
+                candidates.append(item)
     
     return candidates
 
@@ -183,6 +193,11 @@ def perform_ipa_analysis(
             "heat": round(heat, 2),
             "post_ids": list(item.get("post_ids", [])) # 支持溯源
         }
+        
+        # 如果是观点集合，添加原始观点列表
+        original_terms = item.get("original_terms")
+        if original_terms and isinstance(original_terms, list) and len(original_terms) > 0:
+            point["original_terms"] = original_terms
         
         # 判定逻辑
         is_high_importance = mentions >= avg_mentions

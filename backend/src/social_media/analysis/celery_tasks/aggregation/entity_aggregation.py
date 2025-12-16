@@ -826,9 +826,39 @@ def aggregate_entities(
             if not data_dict: return []
             return sorted(data_dict.keys(), key=lambda k: get_item_count(data_dict[k]), reverse=True)
 
-        top_features = get_sorted_keys(data["features"])[:5]
-        top_issues = get_sorted_keys(data["issues"])[:5]
-        top_expectations = get_sorted_keys(data["expectations"])[:5]
+        # 辅助函数：构建 Top 属性详细项（用于前端展示 original_terms）
+        def build_top_attr_items(data_dict, max_items: int = 5):
+            if not data_dict:
+                return []
+            sorted_items = sorted(
+                data_dict.items(),
+                key=lambda x: get_item_count(x[1]),
+                reverse=True
+            )[:max_items]
+
+            result_items = []
+            for text, item in sorted_items:
+                if isinstance(item, dict) and "post_ids" in item:
+                    attr_item = {
+                        "text": text,
+                        "post_ids": list(item.get("post_ids", [])),
+                    }
+                    sorted_terms = sorted(item.get("original_terms", []), key=lambda x: x.get("count", 0), reverse=True)
+                    # 只有真正发生合并时才保留 original_terms
+                    if sorted_terms and should_keep_original_terms(text, sorted_terms):
+                        attr_item["original_terms"] = sorted_terms
+                    result_items.append(attr_item)
+                else:
+                    # 旧结构 (Set) -> 无 original_terms
+                    result_items.append({
+                        "text": text,
+                        "post_ids": list(item),
+                    })
+            return result_items
+
+        top_features = build_top_attr_items(data["features"], 5)
+        top_issues = build_top_attr_items(data["issues"], 5)
+        top_expectations = build_top_attr_items(data["expectations"], 5)
 
         # heat 使用原始 Total Impact
         heat = round(data["total_impact"], 1)

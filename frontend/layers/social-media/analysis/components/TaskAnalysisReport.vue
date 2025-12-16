@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { TaskAnalysisResultData } from '../types'
+import type { EntityAttrItem, TaskAnalysisResultData } from '../types'
 import PostListModal from './PostListModal.vue'
 import ClickableCount from './ClickableCount.vue'
 import IpaChart from './IpaChart.vue'
 import ContextGraphChart from './ContextGraphChart.vue'
 import CompetitorRadarChart from './CompetitorRadarChart.vue'
 import TimeDistributionChart from './TimeDistributionChart.vue'
+import OriginalTermsPopover from './OriginalTermsPopover.vue'
 
 const props = defineProps<{
   data: TaskAnalysisResultData
@@ -27,6 +28,18 @@ const openPostListModal = (title: string, postIds: number[]) => {
 
 /** 获取 taskId */
 const taskId = computed(() => props.data.meta.task_id || 0)
+
+// ==================== 热门实体属性：原始观点追溯（层1+2，方案B） ====================
+const MAX_ORIGINAL_TERMS_IN_POPOVER = 15
+
+type EntityAttrKind = 'features' | 'issues' | 'expectations'
+
+// 直接使用后端下发的详细项数组（不兼容老报告）
+const getEntityAttrItems = (entity: { top_features?: EntityAttrItem[]; top_issues?: EntityAttrItem[]; top_expectations?: EntityAttrItem[] }, kind: EntityAttrKind): EntityAttrItem[] => {
+  if (kind === 'features') return (entity.top_features || []).slice(0, 5)
+  if (kind === 'issues') return (entity.top_issues || []).slice(0, 5)
+  return (entity.top_expectations || []).slice(0, 5)
+}
 
 // 列表展开状态
 const topEntitiesExpanded = ref(false)
@@ -349,7 +362,11 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
               class="text-sm"
             >
               <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-gray-800 dark:text-gray-200">{{ issue.name }}</span>
+                <OriginalTermsPopover
+                  :text="issue.name"
+                  :original-terms="issue.original_terms"
+                  :max-items="MAX_ORIGINAL_TERMS_IN_POPOVER"
+                />
                 <div class="flex items-center gap-2 text-xs">
                   <span class="text-gray-500 dark:text-gray-400">
                     热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ issue.heat.toFixed(1) }}</span>
@@ -387,7 +404,11 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
               class="text-sm"
             >
               <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-gray-800 dark:text-gray-200">{{ feature.name }}</span>
+                <OriginalTermsPopover
+                  :text="feature.name"
+                  :original-terms="feature.original_terms"
+                  :max-items="MAX_ORIGINAL_TERMS_IN_POPOVER"
+                />
                 <div class="flex items-center gap-2 text-xs">
                   <span class="text-gray-500 dark:text-gray-400">
                     热度 <span class="font-mono text-gray-700 dark:text-gray-300">{{ feature.heat.toFixed(1) }}</span>
@@ -505,15 +526,45 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
           <div v-if="entity.top_features?.length || entity.top_issues?.length || entity.top_expectations?.length" class="mt-2 space-y-1 text-xs">
             <div v-if="entity.top_features?.length" class="flex flex-wrap items-baseline gap-x-3">
               <span class="font-medium text-green-600 dark:text-green-400 shrink-0">特性：</span>
-              <span v-for="f in entity.top_features.slice(0, 5)" :key="f" class="text-gray-700 dark:text-gray-300">{{ f }}</span>
+              <span
+                v-for="item in getEntityAttrItems(entity, 'features')"
+                :key="item.text"
+                class="text-gray-700 dark:text-gray-300"
+              >
+                <OriginalTermsPopover
+                  :text="item.text"
+                  :original-terms="item.original_terms"
+                  :max-items="MAX_ORIGINAL_TERMS_IN_POPOVER"
+                />
+              </span>
             </div>
             <div v-if="entity.top_issues?.length" class="flex flex-wrap items-baseline gap-x-3">
               <span class="font-medium text-red-600 dark:text-red-400 shrink-0">问题：</span>
-              <span v-for="i in entity.top_issues.slice(0, 5)" :key="i" class="text-gray-700 dark:text-gray-300">{{ i }}</span>
+              <span
+                v-for="item in getEntityAttrItems(entity, 'issues')"
+                :key="item.text"
+                class="text-gray-700 dark:text-gray-300"
+              >
+                <OriginalTermsPopover
+                  :text="item.text"
+                  :original-terms="item.original_terms"
+                  :max-items="MAX_ORIGINAL_TERMS_IN_POPOVER"
+                />
+              </span>
             </div>
             <div v-if="entity.top_expectations?.length" class="flex flex-wrap items-baseline gap-x-3">
               <span class="font-medium text-blue-600 dark:text-blue-400 shrink-0">期望：</span>
-              <span v-for="e in entity.top_expectations.slice(0, 5)" :key="e" class="text-gray-700 dark:text-gray-300">{{ e }}</span>
+              <span
+                v-for="item in getEntityAttrItems(entity, 'expectations')"
+                :key="item.text"
+                class="text-gray-700 dark:text-gray-300"
+              >
+                <OriginalTermsPopover
+                  :text="item.text"
+                  :original-terms="item.original_terms"
+                  :max-items="MAX_ORIGINAL_TERMS_IN_POPOVER"
+                />
+              </span>
             </div>
           </div>
         </div>

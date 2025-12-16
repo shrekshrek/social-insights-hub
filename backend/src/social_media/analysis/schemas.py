@@ -363,6 +363,12 @@ class Freshness(CustomBaseModel):
 
 # ==================== 新增派生分析图表 Schema ====================
 
+class OriginalTerm(CustomBaseModel):
+    """原始观点词条"""
+    text: str
+    count: int = 1
+
+
 class IpaPoint(CustomBaseModel):
     """IPA 分析点"""
     name: str
@@ -371,6 +377,9 @@ class IpaPoint(CustomBaseModel):
     z: float = Field(0, description="气泡大小 (Log Smoothed Heat)")
     heat: float = Field(0, description="影响力 (Heat)")
     post_ids: list[int] = Field(default_factory=list)
+    original_terms: list[OriginalTerm] | None = Field(
+        None, description="原始观点列表（仅当该点为观点集合时存在）"
+    )
 
 
 class IpaQuadrants(CustomBaseModel):
@@ -490,9 +499,10 @@ class EntityStat(CustomBaseModel):
     sentiment: float = Field(0, description="派生情感值 [-1, 1]，CII加权")
     sentiment_distribution: SentimentDistribution = Field(default_factory=SentimentDistribution, description="情感分布")
     source_distribution: SourceDistribution = Field(default_factory=SourceDistribution, description="来源分布")
-    top_features: list[str] = Field(default_factory=list, description="主要特性")
-    top_issues: list[str] = Field(default_factory=list, description="主要问题")
-    top_expectations: list[str] = Field(default_factory=list, description="主要期望")
+    # 直接返回详细项（含 original_terms），用于 UI 溯源展示
+    top_features: list[dict] = Field(default_factory=list, description="主要特性（详细项，含原始词条）")
+    top_issues: list[dict] = Field(default_factory=list, description="主要问题（详细项，含原始词条）")
+    top_expectations: list[dict] = Field(default_factory=list, description="主要期望（详细项，含原始词条）")
     post_ids: list[int] = Field(default_factory=list, description="关联帖子ID，用于反向追溯")
     tags: EntityTags | None = None  # 多维标签
     original_terms: list[dict] | None = None  # 原始词条（仅在合并时存在）

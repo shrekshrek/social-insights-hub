@@ -94,6 +94,9 @@ const getOption = (): EChartsOption => {
     tooltip: {
       trigger: 'item',
       confine: true,  // 限制在图表区域内
+      // 保持 tooltip 随鼠标移动（不允许进入/滚动），但展示内容不截断
+      // 注意：如果内容过多，可能会超出可视区域（这是 ECharts tooltip 的固有限制）
+      extraCssText: 'max-width:420px;',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formatter: (params: any) => {
         // 安全检查：确保 params 和 data 存在
@@ -107,7 +110,8 @@ const getOption = (): EChartsOption => {
         const displayY = typeof item.y === 'number' ? item.y.toFixed(2) : '0.00'
         const heat = typeof item.heat === 'number' ? item.heat.toFixed(1) : '0.0'
         
-        return `
+        // 构建基础信息
+        let html = `
           <div class="font-medium mb-1">${item.name}</div>
           <div class="text-xs text-gray-500">
             关注度: ${displayX} <br/>
@@ -115,6 +119,28 @@ const getOption = (): EChartsOption => {
             影响力: ${heat}
           </div>
         `
+        
+        // 如果是观点集合，显示原始观点列表
+        const originalTerms = item.original_terms
+        if (originalTerms && Array.isArray(originalTerms) && originalTerms.length > 0) {
+          html += `
+            <div class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+              <div class="text-xs text-gray-400 mb-1">包含 ${originalTerms.length} 个原始观点:</div>
+              <div class="text-xs text-gray-500">
+          `
+          // 最多展示前 15 个，避免 tooltip 过长
+          const MAX_TERMS = 15
+          const displayTerms = originalTerms.slice(0, MAX_TERMS)
+          displayTerms.forEach((term: { text: string; count: number }) => {
+            html += `<div>• ${term.text} (${term.count})</div>`
+          })
+          if (originalTerms.length > MAX_TERMS) {
+            html += `<div class="text-gray-400">... 等共 ${originalTerms.length} 个</div>`
+          }
+          html += `</div></div>`
+        }
+        
+        return html
       }
     },
     grid: {

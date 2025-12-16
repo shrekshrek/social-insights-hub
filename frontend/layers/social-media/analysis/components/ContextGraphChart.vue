@@ -143,7 +143,8 @@ const getOption = (): EChartsOption => {
             opacity: 0.6
           }
         })),
-        roam: true,
+        // 禁用滚轮缩放，仅保留拖拽平移
+        roam: 'move',
         label: {
           show: true,
           fontSize: 10

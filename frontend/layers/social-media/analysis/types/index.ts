@@ -371,6 +371,19 @@ export interface Freshness {
   avg_age_days: number
 }
 
+/** 原始观点词条 */
+export interface OriginalTerm {
+  text: string
+  count: number
+}
+
+/** 实体属性项（features/issues/expectations 等） */
+export interface EntityAttrItem {
+  text: string
+  post_ids: number[]
+  original_terms?: OriginalTerm[]
+}
+
 /** IPA 分析点 */
 export interface IpaPoint {
   name: string
@@ -379,6 +392,7 @@ export interface IpaPoint {
   z: number        // 气泡大小 (Log Smoothed Heat)
   heat: number     // 影响力 (Heat)
   post_ids: number[]
+  original_terms?: OriginalTerm[]  // 原始观点列表（仅当该点为观点集合时存在）
 }
 
 /** IPA 分析结果 */
@@ -491,9 +505,10 @@ export interface EntityStat {
   sentiment: number  // 派生情感值 [-1, 1]，CII 加权
   sentiment_distribution: SentimentDistribution  // 情感分布
   source_distribution: SourceDistribution
-  top_features: string[]
-  top_issues: string[]
-  top_expectations: string[]
+  // 详细项（包含 original_terms，用于 UI 溯源展示）
+  top_features: EntityAttrItem[]
+  top_issues: EntityAttrItem[]
+  top_expectations: EntityAttrItem[]
   post_ids: number[]  // 关联帖子ID，用于反向追溯
   tags?: EntityTags  // 多维标签（可选）
   original_terms?: OriginalTerm[]  // 原始词条（可选，仅在合并时存在）

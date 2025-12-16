@@ -444,9 +444,9 @@ def aggregate_task_analysis(
             # KOL 声音
             "kol_voices": kol_voices,
         },
-        # 原始融合数据（用于项目级分析）
+        # 原始融合数据（用于后续项目级分析/深挖；不要求下发给前端）
         "aggregated_entities": aggregated_entities,
-        "aggregated_topics": aggregated_opinions, # 原 aggregated_opinions
+        "aggregated_opinions": aggregated_opinions,
     }
 
     # 统计实体分类数量
@@ -524,5 +524,5 @@ def _empty_result() -> dict[str, Any]:
         },
         # 原始融合数据（与正常结果字段名一致）
         "aggregated_entities": [],
-        "aggregated_topics": [],
+        "aggregated_opinions": [],
     }

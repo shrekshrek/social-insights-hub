@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_async_db
+from src.schemas import MessageResponse
 from src.auth.dependencies import get_current_user
 from src.auth.models import User
 
@@ -39,6 +40,9 @@ from .schemas import (
     DeepAnalysisPreviewResponse,
     TaskAnalysisResultResponse,
     RunAggregationResponse,
+    CreateProjectSnapshotRequest,
+    ProjectSnapshotResponse,
+    ProjectSnapshotListResponse,
 )
 
 
@@ -406,6 +410,131 @@ async def delete_task_analyses(
 
 
 # ==================== 项目级分析操作（预留）====================
+
+@router.post(
+    "/projects/{project_id}/snapshots",
+    response_model=ProjectSnapshotResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="手动生成项目级合并分析快照",
+)
+async def create_project_snapshot(
+    project_id: int,
+    request: CreateProjectSnapshotRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    手动生成项目级合并分析快照（同步完成）
+
+    - 前端通过任务列表勾选多个任务，提交 task_ids
+    - 后端基于各任务的 analysis_result.aggregated_* 合并生成项目级 top entities/topics
+    - 结果存入 project_analysis_snapshots 表，支持历史快照查看/删除
+    """
+    snapshot = await service.create_project_snapshot(
+        db=db,
+        project_id=project_id,
+        task_ids=request.task_ids,
+        current_user_id=current_user.id,
+        name=request.name,
+    )
+    return ProjectSnapshotResponse.model_validate(snapshot)
+
+
+@router.get(
+    "/projects/{project_id}/snapshots",
+    response_model=ProjectSnapshotListResponse,
+    summary="获取项目级合并分析快照列表",
+)
+async def list_project_snapshots(
+    project_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取项目下的历史快照列表（按创建时间倒序）"""
+    from src.social_media.projects import crud as project_crud
+    from .models import ProjectAnalysisSnapshot
+    from sqlalchemy import select
+
+    has_access = await project_crud.check_project_access(db, project_id, current_user.id)
+    if not has_access:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this project")
+
+    stmt = (
+        select(ProjectAnalysisSnapshot)
+        .where(ProjectAnalysisSnapshot.project_id == project_id)
+        .order_by(ProjectAnalysisSnapshot.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    items = list(result.scalars().all())
+    return ProjectSnapshotListResponse(items=[ProjectSnapshotResponse.model_validate(i) for i in items])
+
+
+@router.get(
+    "/projects/{project_id}/snapshots/{snapshot_id}",
+    response_model=ProjectSnapshotResponse,
+    summary="获取项目级合并分析快照详情",
+)
+async def get_project_snapshot(
+    project_id: int,
+    snapshot_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取单个快照详情"""
+    from src.social_media.projects import crud as project_crud
+    from .models import ProjectAnalysisSnapshot
+    from sqlalchemy import select
+
+    has_access = await project_crud.check_project_access(db, project_id, current_user.id)
+    if not has_access:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this project")
+
+    stmt = (
+        select(ProjectAnalysisSnapshot)
+        .where(ProjectAnalysisSnapshot.id == snapshot_id)
+        .where(ProjectAnalysisSnapshot.project_id == project_id)
+    )
+    result = await db.execute(stmt)
+    snapshot = result.scalar_one_or_none()
+    if not snapshot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
+    return ProjectSnapshotResponse.model_validate(snapshot)
+
+
+@router.delete(
+    "/projects/{project_id}/snapshots/{snapshot_id}",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="删除项目级合并分析快照",
+)
+async def delete_project_snapshot(
+    project_id: int,
+    snapshot_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """删除单个快照（硬删除）"""
+    from src.social_media.projects import crud as project_crud
+    from .models import ProjectAnalysisSnapshot
+    from sqlalchemy import select
+
+    has_access = await project_crud.check_project_access(db, project_id, current_user.id)
+    if not has_access:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this project")
+
+    stmt = (
+        select(ProjectAnalysisSnapshot)
+        .where(ProjectAnalysisSnapshot.id == snapshot_id)
+        .where(ProjectAnalysisSnapshot.project_id == project_id)
+    )
+    result = await db.execute(stmt)
+    snapshot = result.scalar_one_or_none()
+    if not snapshot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
+
+    await db.delete(snapshot)
+    await db.commit()
+    return MessageResponse(message=f"Snapshot {snapshot_id} deleted successfully")
 
 @router.post(
     "/projects/{project_id}/clustering",

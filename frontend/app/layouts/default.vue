@@ -52,7 +52,15 @@
                   v-for="item in navigationLinks"
                   :key="item.path"
                   :to="item.path"
-                  class="text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  :class="[
+                    'text-sm transition-colors',
+                    isNavigationItemActive(item.path)
+                      ? 'text-blue-600 dark:text-blue-400 font-semibold'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400',
+                  ]"
+                  :aria-current="
+                    isNavigationItemActive(item.path) ? 'page' : undefined
+                  "
                 >
                   {{ item.label }}
                 </NuxtLink>
@@ -155,7 +163,15 @@
                   v-for="item in navigationLinks"
                   :key="item.path"
                   :to="item.path"
-                  class="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors"
+                  :class="[
+                    'block px-3 py-2 text-base font-medium rounded-md transition-colors',
+                    isNavigationItemActive(item.path)
+                      ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800',
+                  ]"
+                  :aria-current="
+                    isNavigationItemActive(item.path) ? 'page' : undefined
+                  "
                   @click="isMobileMenuOpen = false"
                 >
                   {{ item.label }}
@@ -291,6 +307,10 @@ const isMobileMenuOpen = ref(false);
 
 // 监听路由变化，关闭移动端菜单
 const route = useRoute();
+const isNavigationItemActive = (itemPath: string) => {
+  const currentPath = route.path;
+  return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
+};
 watch(route, () => {
   isMobileMenuOpen.value = false;
 });

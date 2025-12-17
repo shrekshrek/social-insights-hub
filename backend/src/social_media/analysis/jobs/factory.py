@@ -64,7 +64,7 @@ def create_analysis_job_sync(
 async def create_analysis_job_async(
     db: AsyncSession,
     project_id: int,
-    task_id: int,
+    task_id: int | None,
     user_id: int,
     analysis_type: str,
     source_count: int,

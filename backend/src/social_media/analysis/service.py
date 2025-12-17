@@ -10,7 +10,7 @@ from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
-from .models import PostAnalysis, AnalysisJob
+from .models import PostAnalysis, AnalysisJob, ProjectAnalysisSnapshot
 from .jobs import create_analysis_job_async
 from .jobs import (
     get_analysis_jobs,
@@ -26,6 +26,8 @@ from .schemas import (
     AnalysisProgressResponse,
     AnalysisStatsResponse,
 )
+
+from .project_snapshot import build_project_snapshot_result
 
 
 # ==================== Task-Level Analysis ====================
@@ -189,6 +191,77 @@ async def run_post_deep_analysis(
         status="pending",
         message=f"帖子深度分析任务已启动，共{len(post_ids)}条数据"
     )
+
+
+# ==================== Project Snapshot (Manual) ====================
+
+async def create_project_snapshot(
+    db: AsyncSession,
+    project_id: int,
+    task_ids: list[int],
+    current_user_id: int,
+    name: str | None = None,
+) -> ProjectAnalysisSnapshot:
+    """手动生成项目级合并分析快照（同步完成，写入 project_analysis_snapshots 表）。"""
+    from src.social_media.projects import crud as project_crud
+    from src.social_media.tasks.models import DataTask
+
+    # 权限校验
+    has_access = await project_crud.check_project_access(db, project_id, current_user_id)
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project",
+        )
+
+    # 任务校验：必须属于该项目且未删除
+    if not task_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="task_ids is required")
+
+    stmt = (
+        select(DataTask)
+        .where(DataTask.id.in_(task_ids))
+        .where(DataTask.project_id == project_id)
+        .where(DataTask.is_deleted == False)
+    )
+    result = await db.execute(stmt)
+    tasks = list(result.scalars().all())
+
+    found_ids = {t.id for t in tasks}
+    missing = [tid for tid in task_ids if tid not in found_ids]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Some tasks not found in this project: {missing}",
+        )
+
+    # 必须已有任务级聚合结果
+    task_results: list[dict[str, Any]] = []
+    for t in tasks:
+        if not t.analysis_result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Task {t.id} has no analysis_result. Please run task aggregation first.",
+            )
+        task_results.append(t.analysis_result)
+
+    snapshot_result = build_project_snapshot_result(
+        project_id=project_id,
+        included_task_ids=task_ids,
+        task_results=task_results,
+    )
+
+    snapshot = ProjectAnalysisSnapshot(
+        name=name,
+        project_id=project_id,
+        user_id=current_user_id,
+        included_task_ids=task_ids,
+        result_data=snapshot_result,
+    )
+    db.add(snapshot)
+    await db.commit()
+    await db.refresh(snapshot)
+    return snapshot
 
 
 async def run_comment_deep_analysis(

@@ -67,6 +67,11 @@ const formatDate = (dateStr: string) => {
 // 表格列定义
 const columns: TableColumn<SocialProject>[] = [
   {
+    accessorKey: "id",
+    header: "ID",
+    cell: ({ row }) => h("span", { class: "text-xs text-gray-500 font-mono" }, row.original.id),
+  },
+  {
     accessorKey: "name",
     header: "项目名称",
     cell: ({ row }) => h("span", { class: "font-medium" }, row.original.name),

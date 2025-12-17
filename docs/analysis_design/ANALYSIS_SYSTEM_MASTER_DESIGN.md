@@ -1,5 +1,8 @@
 # 项目级多任务整合分析方案 (Project-Level Analysis Scheme)
 
+> 工程细化版（含：默认全量 + 可选过滤层 + 项目级归一化字典）详见：
+> `docs/analysis_design/PROJECT_ANALYSIS_DETAIL.md`
+
 ## 1. 核心理念：小样本下的全景拼图 (Puzzle Assembly with Small Data)
 
 在**“多平台 + 单关键词 + 多任务”**且**“单任务小样本 (Top 50-100篇)”**的约束条件下，项目级分析必须正视数据的**稀疏性**和**偏差性**。我们不能通过 Top 100 数据拟合全网的连续趋势，而是应该通过**跨平台拼图**来还原舆情的**“当前状态”**和**“结构特征”**。

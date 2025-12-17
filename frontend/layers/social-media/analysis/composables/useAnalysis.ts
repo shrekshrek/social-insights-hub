@@ -312,6 +312,35 @@ export const useAnalysis = () => {
     return result
   }
 
+  /**
+   * 手动生成项目级合并分析快照（同步完成）
+   */
+  const createProjectSnapshot = async (projectId: number, taskIds: number[], name?: string) => {
+    const result = await apiRequest<{ id: number; name: string | null }>(
+      `/social-media/analysis/projects/${projectId}/snapshots`,
+      {
+        method: 'POST',
+        body: { task_ids: taskIds, name: name || null },
+      }
+    )
+    showSuccess('项目快照已生成')
+    return result
+  }
+
+  /**
+   * 删除项目级合并分析快照
+   */
+  const deleteProjectSnapshot = async (projectId: number, snapshotId: number) => {
+    await apiRequest(
+      `/social-media/analysis/projects/${projectId}/snapshots/${snapshotId}`,
+      {
+        method: 'DELETE',
+      }
+    )
+    showSuccess('快照已删除')
+    return true
+  }
+
   return {
     // 全局分析任务
     getAnalysisJobs,
@@ -333,5 +362,9 @@ export const useAnalysis = () => {
     // 项目级分析操作（预留）
     runTopicClustering,
     runCompetitiveAnalysis,
+
+    // 项目级合并快照（Phase 1）
+    createProjectSnapshot,
+    deleteProjectSnapshot,
   }
 }

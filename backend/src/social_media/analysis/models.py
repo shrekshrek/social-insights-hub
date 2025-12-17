@@ -342,3 +342,73 @@ class AnalysisJob(Base):
         return self.task_id is None
 
 
+class ProjectAnalysisSnapshot(Base):
+    """项目级手动合并分析快照
+
+    设计意图：
+    - 与 AnalysisJob（LLM/Celery 任务流水）分离
+    - 专门用于保存“勾选多个任务 -> 生成一份合并报告”的历史快照
+    """
+
+    __tablename__ = "project_analysis_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="快照名称（可选）",
+    )
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("social_projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="关联的项目ID",
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+        comment="创建快照的用户ID",
+    )
+
+    included_task_ids: Mapped[list[int]] = mapped_column(
+        JSON,
+        nullable=False,
+        comment="参与合并的任务ID列表",
+    )
+
+    result_data: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+        comment="快照结果数据",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    project: Mapped["SocialProject"] = relationship(
+        "src.social_media.projects.models.SocialProject",
+        foreign_keys=[project_id],
+        lazy="selectin",
+    )
+    user: Mapped["User"] = relationship(
+        "src.auth.models.User",
+        foreign_keys=[user_id],
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        Index("idx_project_snapshots_project", "project_id"),
+        Index("idx_project_snapshots_created_at", "created_at"),
+    )
+
+

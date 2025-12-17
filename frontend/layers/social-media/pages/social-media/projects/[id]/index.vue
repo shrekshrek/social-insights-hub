@@ -2,6 +2,7 @@
 import { computed, ref, h, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
+import type { DataTaskWithRelations } from '../../../../tasks/types'
 
 definePageMeta({
   layout: 'default',
@@ -12,6 +13,8 @@ const projectId = computed(() => Number(route.params.id))
 
 const { getProject, deleteProject } = useSocialProjects()
 const { getTasks } = useTasks()
+const { createProjectSnapshot, deleteProjectSnapshot } = useAnalysis()
+const { useApiData } = useApi()
 
 // 获取项目详情（使用顶层 await）
 const { data: project, pending: _projectLoading, refresh: refreshProject } = await getProject(projectId.value)
@@ -27,11 +30,98 @@ const { data: tasksData, pending: tasksLoading, refresh: refreshTasks } = await 
 
 const tasks = computed(() => tasksData.value?.items || [])
 
+// ==================== 项目快照（Phase 1）====================
+
+// 已选择的任务（用于生成快照）
+const selectedTaskIds = ref<number[]>([])
+const setTaskSelected = (taskId: number, checked: boolean) => {
+  const s = new Set(selectedTaskIds.value)
+  if (checked) s.add(taskId)
+  else s.delete(taskId)
+  selectedTaskIds.value = Array.from(s)
+}
+const allTaskIds = computed(() => (tasks.value as DataTaskWithRelations[]).map(t => t.id))
+const allSelected = computed(() => allTaskIds.value.length > 0 && allTaskIds.value.every(id => selectedTaskIds.value.includes(id)))
+const toggleSelectAll = (checked: boolean) => {
+  selectedTaskIds.value = checked ? Array.from(new Set(allTaskIds.value)) : []
+}
+
+// 快照列表
+interface ProjectSnapshot {
+  id: number
+  name: string | null
+  project_id: number
+  user_id: number
+  included_task_ids: number[]
+  result_data: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+interface ProjectSnapshotListResponse {
+  items: ProjectSnapshot[]
+}
+const { data: snapshotsData, pending: snapshotsLoading, refresh: refreshSnapshots } = useApiData<ProjectSnapshotListResponse>(
+  computed(() => `/social-media/analysis/projects/${projectId.value}/snapshots`),
+  { key: computed(() => `project-snapshots-${projectId.value}`), getCachedData: () => undefined }
+)
+const snapshots = computed<ProjectSnapshot[]>(() => snapshotsData.value?.items || [])
+
+const handleRefreshSnapshots = async () => {
+  await refreshSnapshots()
+}
+
+const generatingSnapshot = ref(false)
+const snapshotNameInput = ref('')
+const showSnapshotModal = ref(false)
+
+const openSnapshotModal = () => {
+  if (!selectedTaskIds.value.length) return
+  snapshotNameInput.value = ''
+  showSnapshotModal.value = true
+}
+
+const handleGenerateSnapshot = async () => {
+  showSnapshotModal.value = false
+
+  generatingSnapshot.value = true
+  try {
+    const name = snapshotNameInput.value.trim() || undefined
+    await createProjectSnapshot(projectId.value, selectedTaskIds.value, name)
+    selectedTaskIds.value = []
+    snapshotNameInput.value = ''
+    await refreshSnapshots()
+    await navigateTo(`/social-media/projects/${projectId.value}/analysis`)
+  } finally {
+    generatingSnapshot.value = false
+  }
+}
+
+const deletingSnapshotId = ref<number | null>(null)
+const handleDeleteSnapshot = async (snapshotId: number) => {
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '删除快照',
+    message: `确定要删除快照 ${snapshotId} 吗？此操作不可恢复。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'error',
+  })
+  if (!confirmed) return
+
+  deletingSnapshotId.value = snapshotId
+  try {
+    await deleteProjectSnapshot(projectId.value, snapshotId)
+    await refreshSnapshots()
+  } finally {
+    deletingSnapshotId.value = null
+  }
+}
+
 // 刷新所有数据
 const refreshing = ref(false)
 const handleRefresh = async () => {
   refreshing.value = true
-  await Promise.all([refreshProject(), refreshTasks()])
+  await Promise.all([refreshProject(), refreshTasks(), refreshSnapshots()])
   refreshing.value = false
 }
 
@@ -106,6 +196,25 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
   const Button = UButton as Component
 
   return [
+    {
+      id: 'select',
+      header: () => h('input', {
+        type: 'checkbox',
+        checked: allSelected.value,
+        onChange: (e: Event) => toggleSelectAll((e.target as HTMLInputElement).checked),
+        title: '全选',
+      }),
+      cell: ({ row }) => h('input', {
+        type: 'checkbox',
+        checked: selectedTaskIds.value.includes(row.original.id),
+        onChange: (e: Event) => setTaskSelected(row.original.id, (e.target as HTMLInputElement).checked),
+      }),
+    },
+    {
+      accessorKey: 'id',
+      header: 'ID',
+      cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.id),
+    },
     {
       accessorKey: 'name',
       header: '任务名称',
@@ -301,6 +410,22 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           <h2 class="text-lg font-semibold">
             任务列表 ({{ tasks.length }})
           </h2>
+          <ClientOnly>
+            <div class="flex items-center gap-2">
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                已选 {{ selectedTaskIds.length }} 个
+              </div>
+              <UButton
+                size="sm"
+                icon="i-heroicons-sparkles"
+                :disabled="!selectedTaskIds.length"
+                :loading="generatingSnapshot"
+                @click="openSnapshotModal"
+              >
+                生成快照
+              </UButton>
+            </div>
+          </ClientOnly>
         </div>
       </template>
 
@@ -334,5 +459,124 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         />
       </ClientOnly>
     </UCard>
+
+    <!-- 项目快照列表 -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">
+            项目快照 (<ClientOnly fallback="...">{{ snapshots.length }}</ClientOnly>)
+          </h2>
+          <ClientOnly>
+            <UButton
+              size="sm"
+              variant="ghost"
+              icon="i-heroicons-arrow-path"
+              :loading="snapshotsLoading"
+              @click="handleRefreshSnapshots"
+            >
+              刷新
+            </UButton>
+          </ClientOnly>
+        </div>
+      </template>
+
+      <ClientOnly>
+        <template #fallback>
+          <div class="text-center py-8">
+            <p class="text-gray-600 dark:text-gray-400">
+              加载快照中...
+            </p>
+          </div>
+        </template>
+
+        <div v-if="snapshotsLoading" class="text-sm text-gray-400">
+          加载中...
+        </div>
+        <div v-else-if="!snapshots.length" class="text-sm text-gray-400">
+          暂无快照（可在上方勾选任务后生成）
+        </div>
+
+        <div v-else class="space-y-3">
+          <div
+            v-for="s in snapshots"
+            :key="s.id"
+            class="p-4 rounded border border-gray-200 dark:border-gray-800"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-medium text-gray-900 dark:text-white">
+                  {{ s.name || `快照 ${s.id}` }}
+                  <span class="ml-1 text-xs text-gray-400 font-normal">#{{ s.id }}</span>
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {{ new Date(s.created_at).toLocaleString('zh-CN') }}
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  包含任务 ({{ (s.included_task_ids || []).length }})：
+                  <span class="font-mono">{{ (s.included_task_ids || []).join(', ') || '-' }}</span>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  icon="i-heroicons-eye"
+                  :to="`/social-media/projects/${projectId}/analysis?snapshot_id=${s.id}`"
+                >
+                  查看
+                </UButton>
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="error"
+                  icon="i-heroicons-trash"
+                  :loading="deletingSnapshotId === s.id"
+                  @click="handleDeleteSnapshot(s.id)"
+                >
+                  删除
+                </UButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ClientOnly>
+    </UCard>
+
+    <!-- 生成快照弹窗 -->
+    <UModal v-model:open="showSnapshotModal">
+      <template #content>
+        <div class="p-6 space-y-4">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+            生成项目快照
+          </h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            将基于已选 {{ selectedTaskIds.length }} 个任务（ID: {{ selectedTaskIds.join(', ') }}）生成一份项目级合并分析快照。
+          </p>
+          <UFormField label="快照名称（可选）">
+            <UInput
+              v-model="snapshotNameInput"
+              placeholder="输入快照名称"
+              class="w-full"
+            />
+          </UFormField>
+          <div class="flex justify-end gap-3 pt-2">
+            <UButton
+              variant="outline"
+              @click="showSnapshotModal = false"
+            >
+              取消
+            </UButton>
+            <UButton
+              :loading="generatingSnapshot"
+              @click="handleGenerateSnapshot"
+            >
+              开始生成
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>

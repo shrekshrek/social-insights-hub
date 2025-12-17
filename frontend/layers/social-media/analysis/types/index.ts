@@ -129,6 +129,7 @@ export type AnalysisType =
   | 'entity_normalization'
   | 'opinion_normalization'
   | 'aggregation'
+  | 'project_aggregation_snapshot'
   | 'topic_clustering'
   | 'competitive'
 

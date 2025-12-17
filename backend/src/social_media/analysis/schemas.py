@@ -254,6 +254,29 @@ class RunCompetitiveRequest(CustomBaseModel):
     competitors: list[str] | None = Field(None, description="竞品列表")
 
 
+# ==================== Project Snapshot (Manual) ====================
+
+class CreateProjectSnapshotRequest(CustomBaseModel):
+    """手动生成项目级合并分析快照（不依赖 query/filter_spec）"""
+    task_ids: list[int] = Field(..., min_length=1, description="参与合并的任务ID列表")
+    name: str | None = Field(None, max_length=255, description="快照名称（可选）")
+
+
+class ProjectSnapshotResponse(CustomBaseModel):
+    id: int
+    name: str | None = None
+    project_id: int
+    user_id: int
+    included_task_ids: list[int]
+    result_data: dict
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectSnapshotListResponse(CustomBaseModel):
+    items: list[ProjectSnapshotResponse]
+
+
 class RunAnalysisResponse(CustomBaseModel):
     """启动分析任务响应"""
     celery_task_id: str

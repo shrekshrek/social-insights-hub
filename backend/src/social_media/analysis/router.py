@@ -423,12 +423,11 @@ async def create_project_snapshot(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    手动生成项目级合并分析快照（同步完成）
+    """生成项目级合并分析快照，并自动启动项目级归一化与总结（异步）。
 
-    - 前端通过任务列表勾选多个任务，提交 task_ids
-    - 后端基于各任务的 analysis_result.aggregated_* 合并生成项目级 top entities/topics
-    - 结果存入 project_analysis_snapshots 表，支持历史快照查看/删除
+    - 创建快照：同步完成 Stage1 统计聚合（overview/details/charts/topic_aspects）
+    - 自动启动：Stage2（全局归一化/归因增强）与 Stage3（整体总结）
+    - 前端应轮询该快照详情，直至 stage2.status=completed 后再展示核心板块
     """
     snapshot = await service.create_project_snapshot(
         db=db,
@@ -437,6 +436,40 @@ async def create_project_snapshot(
         current_user_id=current_user.id,
         name=request.name,
     )
+
+    # 创建后立刻启动异步增强（不需要额外接口）
+    from datetime import datetime, timezone
+    from src.social_media.analysis.celery_tasks.project_snapshot_tasks import enrich_project_snapshot_task
+
+    now = datetime.now(timezone.utc).isoformat()
+    result_data = snapshot.result_data or {}
+    if not isinstance(result_data, dict):
+        result_data = {}
+
+    # 初始化流水线状态（供前端轮询展示）
+    stage2 = {
+        "status": "processing",
+        "started_at": now,
+        "updated_at": now,
+        "steps": {
+            "entity_normalization": {"status": "pending"},
+            "opinion_normalization": {"status": "pending"},
+            "derived_analysis": {"status": "pending"},
+            "summary": {"status": "pending"},
+        },
+    }
+    stage3 = {
+        "status": "pending",
+        "updated_at": now,
+    }
+
+    async_result = enrich_project_snapshot_task.delay(snapshot_id=snapshot.id)
+    stage2["celery_task_id"] = str(async_result.id)
+    result_data["stage2"] = stage2
+    result_data["stage3"] = stage3
+    snapshot.result_data = result_data
+    await db.commit()
+    await db.refresh(snapshot)
     return ProjectSnapshotResponse.model_validate(snapshot)
 
 
@@ -535,6 +568,7 @@ async def delete_project_snapshot(
     await db.delete(snapshot)
     await db.commit()
     return MessageResponse(message=f"Snapshot {snapshot_id} deleted successfully")
+
 
 @router.post(
     "/projects/{project_id}/clustering",

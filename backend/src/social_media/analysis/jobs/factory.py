@@ -16,7 +16,7 @@ from src.social_media.analysis.models import AnalysisJob
 def create_analysis_job_sync(
     db: Session,
     project_id: int,
-    task_id: int,
+    task_id: int | None,
     user_id: int,
     analysis_type: str,
     source_count: int,
@@ -29,7 +29,7 @@ def create_analysis_job_sync(
     Args:
         db: 同步数据库会话
         project_id: 项目ID
-        task_id: 任务ID
+        task_id: 任务ID（任务级分析时填写；项目级分析时可为空）
         user_id: 用户ID
         analysis_type: 分析类型 (AnalysisType 枚举值)
         source_count: 源数据数量

@@ -4,7 +4,8 @@
   "scripts": {
     "setup": "pnpm install && pnpm run check:env && docker-compose build",
     "//--- Development ---": "",
-    "dev": "pnpm run check:env && pnpm stop && concurrently -k -n DOCKER,WEB -c blue,cyan 'docker-compose up --build' 'pnpm fe:dev'",
+    "dev": "pnpm run check:env && pnpm stop && concurrently -k -n DOCKER,WEB -c blue,cyan 'docker-compose up' 'pnpm fe:dev'",
+    "dev:build": "pnpm run check:env && pnpm stop && concurrently -k -n DOCKER,WEB -c blue,cyan 'docker-compose up --build' 'pnpm fe:dev'",
     "stop": "docker-compose down && npm run kill:port",
     "kill:port": "lsof -ti:3000 | xargs kill -9 2>/dev/null || true",
     "//--- Production ---": "",

@@ -36,6 +36,7 @@ class AnalysisType(str, Enum):
     # 项目级分析（task_id 为空）
     TOPIC_CLUSTERING = "topic_clustering"    # 主题聚类
     COMPETITIVE_ANALYSIS = "competitive"     # 竞品分析
+    PROJECT_SNAPSHOT_SUMMARY = "project_snapshot_summary"  # 项目快照整体总结（Stage3）
 
 
 class AnalysisStatus(str, Enum):

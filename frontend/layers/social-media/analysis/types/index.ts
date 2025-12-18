@@ -130,6 +130,7 @@ export type AnalysisType =
   | 'opinion_normalization'
   | 'aggregation'
   | 'project_aggregation_snapshot'
+  | 'project_snapshot_summary'
   | 'topic_clustering'
   | 'competitive'
 
@@ -179,6 +180,8 @@ export interface AnalysisJob {
   // 关联信息（从列表接口返回）
   project_name?: string
   task_name?: string
+  snapshot_id?: number
+  snapshot_name?: string | null
   user_name?: string
 }
 

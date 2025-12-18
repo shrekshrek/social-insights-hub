@@ -200,6 +200,8 @@ class AnalysisJobResponse(CustomBaseModel):
     # 关联信息（可选，用于列表展示）
     project_name: str | None = None
     task_name: str | None = None
+    snapshot_id: int | None = None
+    snapshot_name: str | None = None
     user_name: str | None = None
 
 

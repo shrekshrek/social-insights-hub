@@ -86,11 +86,12 @@ const handleGenerateSnapshot = async () => {
   generatingSnapshot.value = true
   try {
     const name = snapshotNameInput.value.trim() || undefined
-    await createProjectSnapshot(projectId.value, selectedTaskIds.value, name)
+    const created = await createProjectSnapshot(projectId.value, selectedTaskIds.value, name)
     selectedTaskIds.value = []
     snapshotNameInput.value = ''
     await refreshSnapshots()
-    await navigateTo(`/social-media/projects/${projectId.value}/analysis`)
+    // 生成后直接跳转到该快照详情页，避免 snapshot_id 丢失导致页面显示“快照 null”
+    await navigateTo(`/social-media/projects/${projectId.value}/analysis?snapshot_id=${created.id}`)
   } finally {
     generatingSnapshot.value = false
   }

@@ -220,6 +220,7 @@ async def create_project_snapshot(
 
     stmt = (
         select(DataTask)
+        .options(selectinload(DataTask.platform))
         .where(DataTask.id.in_(task_ids))
         .where(DataTask.project_id == project_id)
         .where(DataTask.is_deleted == False)
@@ -236,19 +237,52 @@ async def create_project_snapshot(
         )
 
     # 必须已有任务级聚合结果
-    task_results: list[dict[str, Any]] = []
+    rich_task_data: list[dict[str, Any]] = []
+    missing_agg_opinions: list[int] = []
+    missing_agg_entities: list[int] = []
     for t in tasks:
         if not t.analysis_result:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Task {t.id} has no analysis_result. Please run task aggregation first.",
             )
-        task_results.append(t.analysis_result)
+
+        # 规范口径：项目快照只认 canonical 字段 aggregated_*（不使用 insights 兜底）
+        ar = t.analysis_result or {}
+        if not isinstance(ar.get("aggregated_opinions"), list):
+            missing_agg_opinions.append(t.id)
+        if not isinstance(ar.get("aggregated_entities"), list):
+            missing_agg_entities.append(t.id)
+
+        # 关键词展示优先使用聚合结果里记录的 keywords（通常是 list[str]）
+        keywords_val = ((t.analysis_result or {}).get("meta") or {}).get("keywords")
+        if isinstance(keywords_val, list) and keywords_val:
+            keyword_label = " / ".join([str(x) for x in keywords_val if x])
+        else:
+            keyword_label = t.keywords or ""
+        rich_task_data.append({
+            "task_id": t.id,
+            "platform": t.platform.code if t.platform else "unknown",
+            "keyword": keyword_label,
+            "posts_count": int(getattr(t, "posts_count", 0) or 0),
+            "analysis_result": t.analysis_result,
+        })
+
+    if missing_agg_opinions or missing_agg_entities:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "Some tasks have incompatible analysis_result schema (missing canonical aggregated_* fields). "
+                           "Please re-run task aggregation for these tasks, then re-generate the project snapshot.",
+                "missing_aggregated_opinions_task_ids": missing_agg_opinions,
+                "missing_aggregated_entities_task_ids": missing_agg_entities,
+            },
+        )
 
     snapshot_result = build_project_snapshot_result(
         project_id=project_id,
         included_task_ids=task_ids,
-        task_results=task_results,
+        task_data_list=rich_task_data,
     )
 
     snapshot = ProjectAnalysisSnapshot(

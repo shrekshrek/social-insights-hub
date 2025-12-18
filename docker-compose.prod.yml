@@ -36,16 +36,11 @@ services:
       dockerfile: Dockerfile
       args:
         # 将根配置中的 APP_NAME 注入到 Nuxt 构建环境
-        # Nuxt 运行时仍可通过 NUXT_PUBLIC_APP_NAME 覆盖
         APP_NAME: ${APP_NAME}
         PROJECT_NAME: ${PROJECT_NAME}
-        NUXT_PUBLIC_APP_NAME: ${APP_NAME}
     container_name: prod-frontend
     env_file:
       - .env.production  # 使用根目录的统一配置
-    environment:
-      # 运行时自动把 APP_NAME 映射为 Nuxt public 变量
-      - NUXT_PUBLIC_APP_NAME=${APP_NAME}
     expose:
       - 3000
     restart: unless-stopped

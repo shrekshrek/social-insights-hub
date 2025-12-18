@@ -63,6 +63,24 @@ def run_aggregation_task(
             entity_job_id=entity_job_id,
             opinion_job_id=opinion_job_id,
         )
+
+        # 兼容回填：历史版本/裁剪结果可能只包含 insights.top_*，缺少 aggregated_* 顶层字段
+        # 项目快照聚合依赖 aggregated_*，因此这里确保两者一致，避免出现 ins>0 但 agg=0 的分裂状态
+        try:
+            insights = (aggregation_result or {}).get("insights") or {}
+            # opinions
+            agg_ops = (aggregation_result or {}).get("aggregated_opinions")
+            ins_topics = insights.get("top_topics")
+            if (not isinstance(agg_ops, list) or len(agg_ops) == 0) and isinstance(ins_topics, list) and len(ins_topics) > 0:
+                aggregation_result["aggregated_opinions"] = ins_topics
+            # entities
+            agg_ents = (aggregation_result or {}).get("aggregated_entities")
+            ins_ents = insights.get("top_entities")
+            if (not isinstance(agg_ents, list) or len(agg_ents) == 0) and isinstance(ins_ents, list) and len(ins_ents) > 0:
+                aggregation_result["aggregated_entities"] = ins_ents
+        except Exception:
+            # 回填失败不应阻塞聚合落库
+            pass
         
         # 将结果保存到 DataTask.analysis_result
         now = datetime.now(timezone.utc)

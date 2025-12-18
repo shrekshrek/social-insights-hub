@@ -1,14 +1,52 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import { defineNuxtConfig } from 'nuxt/config'
 import { fileURLToPath } from 'node:url'
+import fs from 'node:fs'
 
 const resolve = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 
-// 应用显示名称：优先使用 APP_NAME / NUXT_PUBLIC_APP_NAME，其次 PROJECT_NAME
+function stripEnvValueQuotes(value: string): string {
+  const v = value.trim()
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    return v.slice(1, -1)
+  }
+  return v
+}
+
+function readEnvFileSafe(envFilePath: string): Record<string, string> {
+  try {
+    if (!fs.existsSync(envFilePath)) {
+      return {}
+    }
+    const content = fs.readFileSync(envFilePath, 'utf-8')
+    const result: Record<string, string> = {}
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.trim()
+      if (!line || line.startsWith('#')) continue
+      const eq = line.indexOf('=')
+      if (eq <= 0) continue
+      const key = line.slice(0, eq).trim()
+      const value = stripEnvValueQuotes(line.slice(eq + 1))
+      if (key) result[key] = value
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
+// 应用显示名称：优先使用 APP_NAME，其次 PROJECT_NAME
+// 说明：本地前端 dev（nuxt dev）默认只会加载 frontend/.env，因此这里额外读取根目录 ../.env 作为 fallback，
+// 以便 dev/prod 行为更一致（只读取展示名相关字段，不引入敏感配置到前端进程）。
+const rootEnv = readEnvFileSafe(resolve('../.env'))
 const appName =
-  process.env.NUXT_PUBLIC_APP_NAME ||
   process.env.APP_NAME ||
   process.env.PROJECT_NAME ||
+  rootEnv.APP_NAME ||
+  rootEnv.PROJECT_NAME ||
   '全栈脚手架'
 
 export default defineNuxtConfig({
@@ -78,7 +116,6 @@ export default defineNuxtConfig({
     './layers/auth',
     './layers/users',
     './layers/rbac',
-    './layers/social-media',
   ],
   components: [
     // 只注册根目录的全局组件和ui-kit组件为全局

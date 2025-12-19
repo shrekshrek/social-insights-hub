@@ -1,7 +1,7 @@
 """社交媒体数据任务API路由"""
 
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from typing import Optional
+from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -12,12 +12,10 @@ from src.schemas import MessageResponse
 
 from . import schemas, service
 from .dependencies import (
-    validate_task_exists,
     validate_task_access,
-    validate_task_owner,
-    validate_post_access
+    validate_task_owner
 )
-from .models import DataTask, SocialPost
+from .models import DataTask
 
 
 router = APIRouter(

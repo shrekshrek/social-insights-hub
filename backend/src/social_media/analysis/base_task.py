@@ -19,7 +19,7 @@ from src.database import AsyncSessionLocal
 from src.langchain.utils import TaskAnalysisStats
 
 if TYPE_CHECKING:
-    from src.social_media.analysis.models import AnalysisJob
+    pass
 
 logger = logging.getLogger(__name__)
 

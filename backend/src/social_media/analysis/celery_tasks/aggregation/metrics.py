@@ -5,7 +5,6 @@
 
 import math
 from datetime import datetime, timezone
-from collections import Counter
 from typing import Any
 
 from src.social_media.tasks.models import SocialPost

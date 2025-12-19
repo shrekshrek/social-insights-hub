@@ -6,7 +6,7 @@ from src.auth import models, schemas
 from src.exceptions import UserAlreadyExists
 from src.auth.security import verify_password, pwd_context
 from src.rbac import service as rbac_service
-from src.rbac.models import SystemRoles, UserRole, Role
+from src.rbac.models import SystemRoles, UserRole
 
 
 async def get_user_by_username(db: AsyncSession, username: str):

@@ -9,7 +9,7 @@
 
 import logging
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime, timezone
 
 from src.redis_sync_client import get_sync_redis
@@ -264,7 +264,7 @@ class AnalysisProgressManager:
         """
         try:
             # 最终同步
-            logger.info(f"执行最终同步...")
+            logger.info("执行最终同步...")
             self._sync_to_db()
 
             # 更新任务状态为completed，并计算processing_time
@@ -305,7 +305,7 @@ class AnalysisProgressManager:
             self.redis_client.expire(self.key_call_details, expire_seconds)
             self.redis_client.expire(self.key_last_sync, expire_seconds)
 
-            logger.info(f"✅ 任务完成，Redis缓存将在24小时后过期")
+            logger.info("✅ 任务完成，Redis缓存将在24小时后过期")
 
         except Exception as e:
             logger.error(f"最终同步失败: {e}", exc_info=True)

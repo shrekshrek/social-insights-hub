@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, Optional, List, Tuple
 
-from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.messages import BaseMessage
 
 logger = logging.getLogger(__name__)
 

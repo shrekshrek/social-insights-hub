@@ -131,7 +131,7 @@ def aggregate_opinions(
         except Exception as e:
             logger.error(f"[观点聚合] 类别归一化失败: {e}", exc_info=True)
     else:
-        logger.info(f"[观点聚合] 类别数 <= 5，跳过类别归一化")
+        logger.info("[观点聚合] 类别数 <= 5，跳过类别归一化")
 
     def get_normalized_category(raw: str) -> str:
         if not raw: return "其他"

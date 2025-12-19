@@ -7,7 +7,7 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from src.rbac.models import UserRole
-    from src.social_media.projects.models import SocialProject, social_project_participants
+    from src.social_media.projects.models import SocialProject
 
 
 class User(Base):

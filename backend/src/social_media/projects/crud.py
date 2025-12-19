@@ -145,7 +145,6 @@ async def create_project(
     participant_ids: List[int] = None
 ) -> SocialProject:
     """创建项目"""
-    from .models import social_project_participants
 
     # 创建项目
     project = SocialProject(**project_data, owner_id=owner_id)

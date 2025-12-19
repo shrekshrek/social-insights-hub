@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import ProjectQuadrantChart from '../../../../analysis/components/ProjectQuadrantChart.vue'
 import ProjectEntityGraphChart from '../../../../analysis/components/ProjectEntityGraphChart.vue'
 
 definePageMeta({ layout: 'default' })
+
+const toast = useToast()
 
 // ==================== Types (new snapshot contract only) ====================
 interface OriginalTerm { text: string; count: number }
@@ -224,6 +226,55 @@ const aliasNormalization = computed(() => stage2.value?.alias_normalization || n
 // const alignedDetails = computed(() => stage2.value?.details_aligned || null)
 
 const isPipelineReady = computed(() => stage2.value?.status === 'completed')
+const isPipelineRunning = computed(() => stage2.value?.status === 'processing')
+
+// ==================== 自动轮询机制（参考任务级）====================
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const startPolling = () => {
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    refreshSnapshot()
+  }, 3000)
+}
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+// 监听流水线状态，完成时停止轮询并提示
+watch(isPipelineReady, (ready, wasReady) => {
+  if (ready && !wasReady) {
+    stopPolling()
+    toast.add({
+      title: '报告生成完成',
+      description: '项目快照分析已完成',
+      color: 'success',
+    })
+  }
+})
+
+// 监听流水线运行状态，运行中时启动轮询
+watch(isPipelineRunning, (running) => {
+  if (running) {
+    startPolling()
+  } else {
+    stopPolling()
+  }
+})
+
+onMounted(() => {
+  if (isPipelineRunning.value) {
+    startPolling()
+  }
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 
 const sortedPlatformVolume = computed(() => {
   const m = overview.value?.platform_volume || {}
@@ -257,6 +308,29 @@ const toggleExpand = (key: string) => {
   expandedItems.value = s
 }
 const isExpanded = (key: string) => expandedItems.value.has(key)
+
+// 状态颜色映射（参考任务级）
+const getStatusColor = (status?: string) => {
+  const colors: Record<string, string> = {
+    pending: 'warning',
+    processing: 'info',
+    completed: 'success',
+    failed: 'error',
+    skipped: 'neutral',
+  }
+  return colors[status || 'pending'] || 'neutral'
+}
+
+const getStatusLabel = (status?: string) => {
+  const labels: Record<string, string> = {
+    pending: '等待中',
+    processing: '进行中',
+    completed: '已完成',
+    failed: '失败',
+    skipped: '已跳过',
+  }
+  return labels[status || 'pending'] || status || 'pending'
+}
 </script>
 
 <template>
@@ -318,7 +392,9 @@ const isExpanded = (key: string) => expandedItems.value.has(key)
                     job={{ (stage2.steps as any).entity_normalization.job_id }}
                   </span>
                 </div>
-                <UBadge color="neutral" variant="subtle" size="xs">{{ (stage2.steps as any).entity_normalization?.status || 'pending' }}</UBadge>
+                <UBadge :color="getStatusColor((stage2.steps as any).entity_normalization?.status)" variant="solid" size="xs">
+                  {{ getStatusLabel((stage2.steps as any).entity_normalization?.status) }}
+                </UBadge>
               </div>
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
@@ -327,13 +403,17 @@ const isExpanded = (key: string) => expandedItems.value.has(key)
                     job={{ (stage2.steps as any).opinion_normalization.job_id }}
                   </span>
                 </div>
-                <UBadge color="neutral" variant="subtle" size="xs">{{ (stage2.steps as any).opinion_normalization?.status || 'pending' }}</UBadge>
+                <UBadge :color="getStatusColor((stage2.steps as any).opinion_normalization?.status)" variant="solid" size="xs">
+                  {{ getStatusLabel((stage2.steps as any).opinion_normalization?.status) }}
+                </UBadge>
               </div>
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-gray-900 dark:text-white">程序化分析</span>
                 </div>
-                <UBadge color="neutral" variant="subtle" size="xs">{{ (stage2.steps as any).derived_analysis?.status || 'pending' }}</UBadge>
+                <UBadge :color="getStatusColor((stage2.steps as any).derived_analysis?.status)" variant="solid" size="xs">
+                  {{ getStatusLabel((stage2.steps as any).derived_analysis?.status) }}
+                </UBadge>
               </div>
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
@@ -342,7 +422,9 @@ const isExpanded = (key: string) => expandedItems.value.has(key)
                     job={{ (stage2.steps as any).summary.job_id }}
                   </span>
                 </div>
-                <UBadge color="neutral" variant="subtle" size="xs">{{ stage3?.status || (stage2.steps as any).summary?.status || 'pending' }}</UBadge>
+                <UBadge :color="getStatusColor(stage3?.status || (stage2.steps as any).summary?.status)" variant="solid" size="xs">
+                  {{ getStatusLabel(stage3?.status || (stage2.steps as any).summary?.status) }}
+                </UBadge>
               </div>
             </div>
           </div>

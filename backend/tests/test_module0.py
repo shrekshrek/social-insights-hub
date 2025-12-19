@@ -38,7 +38,7 @@ class TestConfiguration:
         """测试数据库配置"""
         assert settings.DATABASE_URL is not None
         assert "postgresql" in settings.DATABASE_URL
-        print(f"✓ 数据库URL配置正确")
+        print("✓ 数据库URL配置正确")
 
     def test_database_pool_settings(self):
         """测试数据库连接池优化设置"""
@@ -52,7 +52,7 @@ class TestConfiguration:
         """测试Celery配置"""
         assert settings.CELERY_BROKER_URL is not None
         assert settings.CELERY_RESULT_BACKEND is not None
-        print(f"✓ Celery配置正确")
+        print("✓ Celery配置正确")
 
     def test_ai_task_config(self):
         """测试AI任务配置"""
@@ -80,7 +80,7 @@ class TestConfiguration:
         assert settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION == 8.0
         assert settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION == 4.0
         assert settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION == 16.0
-        print(f"✓ DeepSeek价格配置正确 (chat: ¥2/¥8, reasoner: ¥4/¥16 per million tokens)")
+        print("✓ DeepSeek价格配置正确 (chat: ¥2/¥8, reasoner: ¥4/¥16 per million tokens)")
 
     def test_batch_analysis_config(self):
         """测试批处理分析框架配置"""
@@ -106,7 +106,7 @@ class TestLangChainModule:
                 truncate_text,
                 format_keywords_for_prompt,
             )
-            print(f"✓ LangChain模块导入成功")
+            print("✓ LangChain模块导入成功")
         except ImportError as e:
             pytest.fail(f"LangChain模块导入失败: {e}")
 
@@ -124,7 +124,7 @@ class TestLangChainModule:
             assert llm is not None
             assert isinstance(llm, BaseChatModel), f"Expected BaseChatModel, got {type(llm)}"
             print(f"✓ Chat LLM实例创建成功 (类型: {type(llm).__name__})")
-            print(f"  - 符合LangChain 1.0规范 (BaseChatModel)")
+            print("  - 符合LangChain 1.0规范 (BaseChatModel)")
         except Exception as e:
             raise AssertionError(f"Chat LLM实例创建失败: {e}")
 
@@ -142,7 +142,7 @@ class TestLangChainModule:
             assert llm is not None
             assert isinstance(llm, BaseChatModel), f"Expected BaseChatModel, got {type(llm)}"
             print(f"✓ Reasoner LLM实例创建成功 (类型: {type(llm).__name__})")
-            print(f"  - 符合LangChain 1.0规范 (BaseChatModel)")
+            print("  - 符合LangChain 1.0规范 (BaseChatModel)")
         except Exception as e:
             raise AssertionError(f"Reasoner LLM实例创建失败: {e}")
 
@@ -177,7 +177,7 @@ class TestLangChainModule:
         text = "a" * 200
         truncated = truncate_text(text, max_length=100)
         assert len(truncated) <= 103  # 100 + "..."
-        print(f"✓ 文本截断函数工作正常")
+        print("✓ 文本截断函数工作正常")
 
         # Test format_keywords_for_prompt
         keywords = "关键词1, 关键词2, 关键词3"
@@ -185,7 +185,7 @@ class TestLangChainModule:
         assert "关键词1" in formatted
         assert "关键词2" in formatted
         assert "关键词3" in formatted
-        print(f"✓ 关键词格式化函数工作正常")
+        print("✓ 关键词格式化函数工作正常")
 
 
 class TestDeepSeekAPI:
@@ -214,7 +214,7 @@ class TestDeepSeekAPI:
             assert "output_tokens" in usage
             assert usage["input_tokens"] > 0 or usage["output_tokens"] > 0
 
-            print(f"✓ Chat模型API连通性测试成功")
+            print("✓ Chat模型API连通性测试成功")
             print(f"  - 响应内容: {response.content[:50]}...")
             print(f"  - Token使用: 输入={usage['input_tokens']}, 输出={usage['output_tokens']}")
         except Exception as e:
@@ -242,7 +242,7 @@ class TestDeepSeekAPI:
             assert "input_tokens" in usage
             assert "output_tokens" in usage
 
-            print(f"✓ Reasoner模型API连通性测试成功")
+            print("✓ Reasoner模型API连通性测试成功")
             print(f"  - 响应内容: {response.content[:50]}...")
             print(f"  - Token使用: 输入={usage['input_tokens']}, 输出={usage['output_tokens']}")
         except Exception as e:
@@ -259,7 +259,7 @@ class TestDatabaseEngine:
         # Note: Internal pool structure differs between sync/async engines
         # We just verify the engine uses correct settings from config
         assert async_engine.pool is not None
-        print(f"✓ 数据库异步引擎配置正确")
+        print("✓ 数据库异步引擎配置正确")
         print(f"  - 连接池大小: {settings.DB_POOL_SIZE}")
         print(f"  - 最大溢出: {settings.DB_MAX_OVERFLOW}")
         print(f"  - 连接超时: {settings.DB_POOL_TIMEOUT}秒")
@@ -274,7 +274,7 @@ class TestCeleryApp:
         try:
             from src.celery_app import celery_app
             assert celery_app is not None
-            print(f"✓ Celery应用导入成功")
+            print("✓ Celery应用导入成功")
         except ImportError as e:
             pytest.fail(f"Celery应用导入失败: {e}")
 
@@ -290,7 +290,7 @@ class TestCeleryApp:
         assert celery_app.conf.worker_pool == "eventlet"
         assert celery_app.conf.worker_concurrency == 100
 
-        print(f"✓ Celery配置验证成功")
+        print("✓ Celery配置验证成功")
         print(f"  - Worker池类型: {celery_app.conf.worker_pool}")
         print(f"  - 并发数: {celery_app.conf.worker_concurrency}")
         print(f"  - 任务时间限制: {celery_app.conf.task_time_limit}秒")

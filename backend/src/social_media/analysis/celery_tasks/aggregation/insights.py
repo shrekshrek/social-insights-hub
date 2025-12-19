@@ -16,8 +16,7 @@
 
 import logging
 import math
-from typing import Any, List, Dict, Set, Optional
-from collections import defaultdict
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select

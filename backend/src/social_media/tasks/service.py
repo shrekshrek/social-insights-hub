@@ -1,6 +1,6 @@
 """社交媒体数据任务业务逻辑层"""
 
-from typing import List, Optional, Any
+from typing import List, Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
@@ -10,9 +10,7 @@ from .models import DataTask, SocialPost, SocialComment
 from .schemas import (
     DataTaskCreate,
     DataTaskUpdate,
-    JSONUploadData,
-    SocialPostCreate,
-    SocialCommentCreate
+    JSONUploadData
 )
 from .adapters import get_adapter
 

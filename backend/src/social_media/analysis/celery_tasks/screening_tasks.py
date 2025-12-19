@@ -308,10 +308,10 @@ def finalize_screening_analysis(result_id: int, total_count: int):
 @celery_app.task(
     bind=True,
     base=AnalysisTaskBase,
-    name="analysis.screening.coordinator",
+    name="analysis.screening.run",
     max_retries=0,
 )
-def screening_coordinator(
+def run_screening_task(
     self,
     result_id: int,
     task_id: int,

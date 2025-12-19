@@ -439,7 +439,7 @@ async def create_project_snapshot(
 
     # 创建后立刻启动异步增强（不需要额外接口）
     from datetime import datetime, timezone
-    from src.social_media.analysis.celery_tasks.project_snapshot_tasks import enrich_project_snapshot_task
+    from src.social_media.analysis.celery_tasks.project_snapshot_tasks import run_project_snapshot_task
 
     now = datetime.now(timezone.utc).isoformat()
     result_data = snapshot.result_data or {}
@@ -463,7 +463,7 @@ async def create_project_snapshot(
         "updated_at": now,
     }
 
-    async_result = enrich_project_snapshot_task.delay(snapshot_id=snapshot.id)
+    async_result = run_project_snapshot_task.delay(snapshot_id=snapshot.id)
     stage2["celery_task_id"] = str(async_result.id)
     result_data["stage2"] = stage2
     result_data["stage3"] = stage3

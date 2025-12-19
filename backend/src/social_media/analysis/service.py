@@ -40,7 +40,7 @@ async def run_post_screening(
     """运行帖子AI初筛分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.projects import crud as project_crud
-    from .celery_tasks.screening_tasks import screening_coordinator
+    from .celery_tasks.screening_tasks import run_screening_task
 
     # 验证任务是否存在
     task = await task_crud.get_task_by_id(db, request.task_id, load_relations=False)
@@ -94,7 +94,7 @@ async def run_post_screening(
     project_keywords = task.keywords or ""
 
     # 启动Celery任务
-    celery_result = screening_coordinator.delay(
+    celery_result = run_screening_task.delay(
         result_id=analysis_job.id,
         task_id=request.task_id,
         post_ids=post_ids,
@@ -124,7 +124,7 @@ async def run_post_deep_analysis(
     """运行帖子深度分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.projects import crud as project_crud
-    from .celery_tasks.deep_analysis_tasks import post_deep_coordinator
+    from .celery_tasks.deep_analysis_tasks import run_post_deep_task
 
     # 验证任务和权限
     task = await task_crud.get_task_by_id(db, request.task_id, load_relations=False)
@@ -174,7 +174,7 @@ async def run_post_deep_analysis(
     )
 
     # 启动Celery任务
-    celery_result = post_deep_coordinator.delay(
+    celery_result = run_post_deep_task.delay(
         result_id=analysis_job.id,
         task_id=request.task_id,
         post_ids=post_ids,
@@ -309,7 +309,7 @@ async def run_comment_deep_analysis(
     """运行评论深度分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.projects import crud as project_crud
-    from .celery_tasks.deep_analysis_tasks import comment_deep_coordinator
+    from .celery_tasks.deep_analysis_tasks import run_comment_deep_task
 
     # 验证任务和权限
     task = await task_crud.get_task_by_id(db, request.task_id, load_relations=False)
@@ -359,7 +359,7 @@ async def run_comment_deep_analysis(
     )
 
     # 启动Celery任务
-    celery_result = comment_deep_coordinator.delay(
+    celery_result = run_comment_deep_task.delay(
         result_id=analysis_job.id,
         task_id=request.task_id,
         post_ids=post_ids,

@@ -261,7 +261,7 @@ def test_aggregated_entities_clustering():
             logger.info(f"   合并自: {merged_from}")
         
         if issues:
-            logger.info(f"   Issues (Top 5):")
+            logger.info("   Issues (Top 5):")
             for issue in issues[:5]:
                 text = issue.get("text", "")
                 post_ids = issue.get("post_ids", [])

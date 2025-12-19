@@ -331,10 +331,10 @@ def aggregate_task_analysis(
             try:
                 if future == future_entity:
                     entity_stats = future.result()
-                    logger.info(f"[并行聚合] 实体聚合完成")
+                    logger.info("[并行聚合] 实体聚合完成")
                 else:
                     topic_stats = future.result()
-                    logger.info(f"[并行聚合] 观点聚合完成")
+                    logger.info("[并行聚合] 观点聚合完成")
             except Exception as e:
                 logger.error(f"[并行聚合] 聚合任务失败: {e}")
                 raise

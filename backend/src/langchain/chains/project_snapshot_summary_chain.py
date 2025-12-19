@@ -30,18 +30,18 @@ PROJECT_SNAPSHOT_SUMMARY_SYSTEM_TEMPLATE = """你是一位资深的社媒洞察�
 
 ## 输出格式（只输出 JSON）
 ```json
-{
+{{
   "executive_summary": "2-5 句话，总结项目全局",
   "differences": [
-    {"dimension": "platform|keyword", "key": "具体平台或关键词", "insight": "差异一句话", "evidence": "mentions/分布等证据线索"}
+    {{"dimension": "platform|keyword", "key": "具体平台或关键词", "insight": "差异一句话", "evidence": "mentions/分布等证据线索"}}
   ],
   "drivers": [
-    {"driver": "维度/驱动因素", "entities": ["实体A","实体B"], "sentiment": "positive|negative|mixed", "evidence": "来自矩阵/属性的证据线索"}
+    {{"driver": "维度/驱动因素", "entities": ["实体A","实体B"], "sentiment": "positive|negative|mixed", "evidence": "来自矩阵/属性的证据线索"}}
   ],
   "risks": ["风险要点1", "风险要点2"],
   "opportunities": ["机会要点1", "机会要点2"],
   "next_questions": ["下一步应验证的问题1", "问题2"]
-}
+}}
 ```
 """
 

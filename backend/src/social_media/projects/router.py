@@ -1,7 +1,7 @@
 """社交媒体模块API路由"""
 
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -13,7 +13,6 @@ from src.schemas import MessageResponse
 from . import schemas, service
 from .dependencies import (
     validate_platform_exists,
-    validate_project_exists,
     validate_project_access,
     validate_project_owner
 )

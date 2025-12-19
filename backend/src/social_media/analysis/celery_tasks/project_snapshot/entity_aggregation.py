@@ -85,6 +85,10 @@ def normalize_entity_aliases(
     entity_mapping: dict[str, str] = {}
     tags_mapping: dict[str, Any] = {}
     entity_mapping_program: dict[str, str] = {}
+    # 统计信息
+    input_count = 0
+    program_clustered_count = 0
+    input_names: list[str] = []
 
     try:
         ents_sorted = sorted(
@@ -104,17 +108,21 @@ def normalize_entity_aliases(
             k_hint = ",".join([kk for kk, _ in sorted(k.items(), key=lambda x: x[1], reverse=True)[:2]])
             hint = f"平台:{p_hint} 关键词:{k_hint}".strip()
             ent_inputs.append({"name": name, "type": etype or "其他", "score": score, "hint": hint})
+            input_names.append(name)
+        input_count = len(ent_inputs)
 
         # 程序预聚类（减少 token + 给 LLM original_names 提示）
         ent_inputs_program, entity_mapping_program = _program_cluster_entities(ent_inputs)
+        program_clustered_count = len(ent_inputs_program)
 
         formatted = format_entities_for_clustering(ent_inputs_program)
         if formatted.strip():
+            # 项目级：输入已是各任务级归一后的精华，只需别名合并，无需复查修正
             llm_result, stats = cluster_entities_with_review_sync(
                 formatted,
                 invoke_chain_with_stats_sync,
                 task_keywords=task_keywords,
-                enable_review=True,
+                enable_review=False,  # 项目级跳过复查阶段
                 llm_type="chat",
             )
             entity_mapping = (llm_result or {}).get("entity_mapping") or {}
@@ -140,12 +148,48 @@ def normalize_entity_aliases(
                 continue
             entity_mapping[raw] = entity_mapping.get(rep, rep)
 
+    # ========== 输出归一化差异总结 ==========
+    merged_groups: dict[str, list[str]] = {}
+    for raw, canon in entity_mapping.items():
+        if raw != canon:
+            merged_groups.setdefault(canon, []).append(raw)
+    
+    final_unique = list(set(entity_mapping.values()))
+    
+    logger.info("=" * 60)
+    logger.info(f"[项目级实体归一化] 统计总结:")
+    logger.info(f"  - 原始输入: {input_count} 个实体")
+    logger.info(f"  - 程序归一后: {program_clustered_count} 个实体")
+    logger.info(f"  - LLM 归一后: {len(final_unique)} 个实体")
+    logger.info(f"  - 被合并的实体组数: {len(merged_groups)}")
+    logger.info(f"  - LLM 是否使用: {entity_llm_used}")
+    
+    # 打印输入实体名称（前30）
+    if input_names:
+        logger.info(f"[项目级实体归一化] 输入实体名称（前30）:")
+        logger.info(f"  {input_names[:30]}")
+    
+    # 打印归一化后的实体名称（前30）
+    if final_unique:
+        sorted_final = sorted(final_unique)[:30]
+        logger.info(f"[项目级实体归一化] 归一化后实体名称（前30）:")
+        logger.info(f"  {sorted_final}")
+    
+    if merged_groups:
+        logger.info(f"[项目级实体归一化] 合并详情（显示前 20 组）:")
+        for i, (canon, members) in enumerate(sorted(merged_groups.items(), key=lambda x: len(x[1]), reverse=True)[:20]):
+            logger.info(f"  {i+1}. [{canon}] ← {members}")
+    logger.info("=" * 60)
+
     return {
         "used": entity_llm_used,
         "token_stats": entity_token_stats,
         "entity_mapping": entity_mapping,
         "tags_mapping": tags_mapping,
         "program_mapping": entity_mapping_program,
+        # 统计信息：原始数量、程序归一后送入 LLM 的数量
+        "input_count": input_count,
+        "program_clustered_count": program_clustered_count,
     }
 
 

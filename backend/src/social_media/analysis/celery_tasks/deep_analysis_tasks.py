@@ -270,10 +270,10 @@ def finalize_post_deep_analysis(
 # ============================================================================
 
 @celery_app.task(
-    name="analysis.deep.posts.coordinator",
+    name="analysis.deep.posts.run",
     bind=True,
 )
-def post_deep_coordinator(
+def run_post_deep_task(
     self,
     result_id: int,
     task_id: int,
@@ -566,10 +566,10 @@ def finalize_comment_deep_analysis(
 # ============================================================================
 
 @celery_app.task(
-    name="analysis.deep.comments.coordinator",
+    name="analysis.deep.comments.run",
     bind=True,
 )
-def comment_deep_coordinator(
+def run_comment_deep_task(
     self,
     result_id: int,
     task_id: int,

@@ -122,19 +122,22 @@ def normalize_opinion_aliases_by_category(
 ) -> dict[str, Any]:
     """观点归一：类目对齐（内置）→ 程序预聚类 → 按类目分组 LLM 归一（失败降级）。"""
     # 1) 内置类目对齐
-    cat = _align_categories_for_topics(top_topics)
-    topics_for_norm = cat.get("topics_for_norm") or []
+    cat_alignment_result = _align_categories_for_topics(top_topics)
+    topics_for_norm = cat_alignment_result.get("topics_for_norm") or []
 
     topic_llm_used = False
     token_stats_list: list[dict[str, Any]] = []
     topic_mapping_by_category: dict[str, dict[str, str]] = {}
     program_mapping_by_category: dict[str, dict[str, str]] = {}
+    # 统计信息
+    input_count = len([t for t in top_topics if isinstance(t, dict)])
+    total_program_clustered = 0
 
     grouped: dict[str, dict[str, int]] = {}
     for t in topics_for_norm or []:
         if not isinstance(t, dict):
             continue
-        cat = (t.get("category_aligned") or "其他").strip() or "其他"
+        cat_name = (t.get("category_aligned") or "其他").strip() or "其他"
         nm = (t.get("name") or "").strip()
         if not nm:
             continue
@@ -144,19 +147,20 @@ def normalize_opinion_aliases_by_category(
             w = 0
         if w <= 0:
             w = 1
-        grouped.setdefault(cat, {})
-        grouped[cat][nm] = grouped[cat].get(nm, 0) + w
+        grouped.setdefault(cat_name, {})
+        grouped[cat_name][nm] = grouped[cat_name].get(nm, 0) + w
 
-    for cat, mp in grouped.items():
+    for cat_name, mp in grouped.items():
         # 候选池来自快照 top_topics（建议 200），这里按类目控制送入归一化的上限
         top_terms = dict(sorted(mp.items(), key=lambda x: x[1], reverse=True)[:100])
         # 程序预聚类（降噪/降 token）
         rep_counts, raw_to_rep, rep_members = _program_cluster_terms(top_terms)
-        program_mapping_by_category[cat] = raw_to_rep
+        program_mapping_by_category[cat_name] = raw_to_rep
+        total_program_clustered += len(rep_counts)
         try:
             chain = create_opinion_normalization_chain()
             formatted = _format_opinions_for_llm(rep_counts, rep_members, top_k=100)
-            resp, stats = invoke_chain_with_stats_sync(chain, {"category": cat, "opinions": formatted}, "chat")
+            resp, stats = invoke_chain_with_stats_sync(chain, {"category": cat_name, "opinions": formatted}, "chat")
             text = resp.content if hasattr(resp, "content") else str(resp)
             clusters = parse_opinion_normalization_response(text)
             if clusters:
@@ -165,7 +169,7 @@ def normalize_opinion_aliases_by_category(
                 full_map: dict[str, str] = {}
                 for raw, rep in raw_to_rep.items():
                     full_map[raw] = m.get(raw) or m.get(rep) or rep
-                topic_mapping_by_category[cat] = full_map
+                topic_mapping_by_category[cat_name] = full_map
                 topic_llm_used = True
                 if stats:
                     token_stats_list.append(stats)
@@ -175,21 +179,69 @@ def normalize_opinion_aliases_by_category(
 
         # fallback：直接使用程序预聚类映射（或最简单映射）
         if raw_to_rep:
-            topic_mapping_by_category[cat] = raw_to_rep
+            topic_mapping_by_category[cat_name] = raw_to_rep
         else:
-            topic_mapping_by_category[cat] = fallback_alias_map(list(top_terms.keys()))
+            topic_mapping_by_category[cat_name] = fallback_alias_map(list(top_terms.keys()))
+
+    # ========== 输出归一化差异总结 ==========
+    total_merged_groups = 0
+    total_llm_output = 0
+    
+    # 输入观点名称列表
+    input_names = [t.get("name") for t in top_topics if isinstance(t, dict) and t.get("name")][:50]
+    
+    logger.info("=" * 60)
+    logger.info(f"[项目级观点归一化] 统计总结:")
+    logger.info(f"  - 原始输入: {input_count} 个观点")
+    logger.info(f"  - 程序归一后: {total_program_clustered} 个观点（跨 {len(grouped)} 个类目）")
+    
+    # 打印输入观点名称（前30）
+    logger.info(f"[项目级观点归一化] 输入观点名称（前30）:")
+    logger.info(f"  {input_names[:30]}")
+    
+    # 类目对齐信息
+    cat_map = cat_alignment_result.get("category_map") or {}
+    if cat_map:
+        logger.info(f"  - 类目对齐: {len(cat_map)} 个类目被映射")
+        for old_cat, new_cat in list(cat_map.items())[:10]:
+            if old_cat != new_cat:
+                logger.info(f"    [{old_cat}] → [{new_cat}]")
+    
+    # 按类目统计合并详情
+    logger.info(f"[项目级观点归一化] 各类目合并详情:")
+    for cat_name, mapping in topic_mapping_by_category.items():
+        merged_in_cat: dict[str, list[str]] = {}
+        for raw, canon in mapping.items():
+            if raw != canon:
+                merged_in_cat.setdefault(canon, []).append(raw)
+        unique_canons = len(set(mapping.values()))
+        total_llm_output += unique_canons
+        total_merged_groups += len(merged_in_cat)
+        
+        if merged_in_cat:
+            logger.info(f"  [{cat_name}] 输入:{len(mapping)} → 输出:{unique_canons}, 合并组:{len(merged_in_cat)}")
+            for canon, members in sorted(merged_in_cat.items(), key=lambda x: len(x[1]), reverse=True)[:5]:
+                logger.info(f"    [{canon}] ← {members[:8]}")
+    
+    logger.info(f"  - LLM 归一后总计: {total_llm_output} 个观点")
+    logger.info(f"  - 被合并的观点组总数: {total_merged_groups}")
+    logger.info(f"  - LLM 是否使用: {topic_llm_used}")
+    logger.info("=" * 60)
 
     return {
         "used": topic_llm_used,
         "category_alignment": {
-            "used": bool(cat.get("used")),
-            "token_stats": cat.get("token_stats"),
-            "category_map": cat.get("category_map") or {},
+            "used": bool(cat_alignment_result.get("used")),
+            "token_stats": cat_alignment_result.get("token_stats"),
+            "category_map": cat_alignment_result.get("category_map") or {},
         },
         "topics_for_norm": topics_for_norm,
         "token_stats_list": token_stats_list,
         "topic_mapping_by_category": topic_mapping_by_category,
         "program_mapping_by_category": program_mapping_by_category,
+        # 统计信息：原始数量、程序归一后送入 LLM 的总数量
+        "input_count": input_count,
+        "program_clustered_count": total_program_clustered,
     }
 
 

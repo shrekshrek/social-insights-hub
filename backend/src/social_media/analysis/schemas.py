@@ -262,6 +262,19 @@ class CreateProjectSnapshotRequest(CustomBaseModel):
     """手动生成项目级合并分析快照（不依赖 query/filter_spec）"""
     task_ids: list[int] = Field(..., min_length=1, description="参与合并的任务ID列表")
     name: str | None = Field(None, max_length=255, description="快照名称（可选）")
+    subject: str | None = Field(
+        None,
+        max_length=200,
+        description="主体品牌/产品（用于 Focus 层触发与角色仲裁；为空则跳过 Focus 层）",
+    )
+    competitors: list[str] | None = Field(
+        None,
+        description="竞品列表（用于角色仲裁与 Focus 层对比）",
+    )
+    platform_weights: dict[str, float] | None = Field(
+        None,
+        description="平台权重覆盖（key=platform code，如 bilibili/xhs/douyin/weibo；value=权重系数）",
+    )
 
 
 class ProjectSnapshotResponse(CustomBaseModel):

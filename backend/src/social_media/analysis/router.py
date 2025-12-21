@@ -435,6 +435,9 @@ async def create_project_snapshot(
         task_ids=request.task_ids,
         current_user_id=current_user.id,
         name=request.name,
+        subject=request.subject,
+        competitors=request.competitors,
+        platform_weights=request.platform_weights,
     )
 
     # 创建后立刻启动异步增强（不需要额外接口）

@@ -201,6 +201,9 @@ async def create_project_snapshot(
     task_ids: list[int],
     current_user_id: int,
     name: str | None = None,
+    subject: str | None = None,
+    competitors: list[str] | None = None,
+    platform_weights: dict[str, float] | None = None,
 ) -> ProjectAnalysisSnapshot:
     """手动生成项目级合并分析快照（同步完成，写入 project_analysis_snapshots 表）。"""
     from src.social_media.projects import crud as project_crud
@@ -283,6 +286,9 @@ async def create_project_snapshot(
         project_id=project_id,
         included_task_ids=task_ids,
         task_data_list=rich_task_data,
+        subject=subject,
+        competitors=competitors,
+        platform_weights=platform_weights,
     )
 
     snapshot = ProjectAnalysisSnapshot(

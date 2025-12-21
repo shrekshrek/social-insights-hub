@@ -576,7 +576,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
   },
 
   // 完整融合数据（数组格式，按 score 排序，用于项目级再分析）
-  // 限制：保留 Top 40 个实体
+  // 限制：保留 Top 60 个实体
   "aggregated_entities": [
     {
       "name": "iPhone 16",

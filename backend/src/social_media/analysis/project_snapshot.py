@@ -132,6 +132,9 @@ def build_project_snapshot_result(
     task_data_list: list[dict[str, Any]],
     max_items: int = 200,
     max_post_ids_sample: int = 50,
+    subject: str | None = None,
+    competitors: list[str] | None = None,
+    platform_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """从多个任务的 analysis_result 生成项目级快照结果。
 
@@ -146,6 +149,9 @@ def build_project_snapshot_result(
         max_items: details.top_entities / details.top_topics 的候选池数量（按 score 排序）
           - 推荐：200（用于后续“先归一再截断 Top60”的流程）
         max_post_ids_sample: 每个条目保留的 (task_id, post_id) 样本数量
+        subject: 主体品牌/产品（用于 Focus 层触发与角色仲裁；为空则跳过 Focus）
+        competitors: 竞品列表（用于角色仲裁与 Focus 层对比）
+        platform_weights: 平台权重覆盖（key=platform code，value=权重系数）
     """
 
     # 构建任务上下文映射
@@ -726,6 +732,9 @@ def build_project_snapshot_result(
         "meta": {
             "project_id": project_id,
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "subject": subject,
+            "competitors": competitors or [],
+            "weights_used": platform_weights or {},
             "scope": {
                 "mode": "selected_tasks",
                 "included_task_ids": included_task_ids,

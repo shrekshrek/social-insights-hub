@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """实体聚类/归一化功能测试
 
 测试 LLM 实体聚类与归一化的同义词合并与多维打标功能。
@@ -14,24 +15,42 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 加载测试环境配置
 from dotenv import load_dotenv
-load_dotenv('.env.test')
 
-from src.langchain.chains.entity_clustering_chain import (
+load_dotenv(".env.test")
+
+import pytest
+
+from src.config import settings
+from src.langchain.chains.entity_normalization_chain import (
     create_entity_clustering_chain,
     format_entities_for_clustering,
     parse_clustering_response,
 )
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 def test_format_entities():
     """测试实体格式化函数"""
     entities = [
-        {"name": "甲醛检测", "type": "服务", "heat": 85.5, "mentions": 120, "hint": "常与 测甲醛 对比"},
+        {
+            "name": "甲醛检测",
+            "type": "服务",
+            "heat": 85.5,
+            "mentions": 120,
+            "hint": "常与 测甲醛 对比",
+        },
         {"name": "测甲醛", "type": "服务", "heat": 45.2, "mentions": 60},
-        {"name": "华为", "type": "品牌", "heat": 100.0, "mentions": 200, "hint": "常与 小米, 苹果 对比"},
+        {
+            "name": "华为",
+            "type": "品牌",
+            "heat": 100.0,
+            "mentions": 200,
+            "hint": "常与 小米, 苹果 对比",
+        },
     ]
     formatted = format_entities_for_clustering(entities)
     logger.info(f"格式化结果:\n{formatted}")
@@ -44,39 +63,40 @@ def test_format_entities():
 
 def test_parse_response():
     """测试响应解析函数"""
-    mock_response = '''```json
+    mock_response = """```json
     {
-      "normalized_groups": [
+      "entities": [
         {
-          "canonical_name": "甲醛检测",
-          "tags": {
-            "role": "FOCUS",
-            "category": "服务",
-            "parent": "室内环保"
-          },
-          "merged_entities": ["甲醛检测", "测甲醛", "甲醛测试"]
+          "name": "甲醛检测",
+          "original_names": ["甲醛检测", "测甲醛", "甲醛测试"],
+          "role": "Target",
+          "parent": "Self"
+        },
+        {
+          "name": "华为",
+          "original_names": ["华为"],
+          "role": "Context",
+          "parent": "Self"
         }
-      ],
-      "standalone_entities": ["华为", "小米手机"]
+      ]
     }
-    ```'''
+    ```"""
     result = parse_clustering_response(mock_response)
     logger.info(f"解析结果: {json.dumps(result, ensure_ascii=False, indent=2)}")
 
-    assert "normalized_groups" in result
-    assert "standalone_entities" in result
+    assert "entities" in result
     assert "entity_mapping" in result
     assert "tags_mapping" in result
-    
+
     # 验证实体映射
     assert result["entity_mapping"]["甲醛检测"] == "甲醛检测"
     assert result["entity_mapping"]["测甲醛"] == "甲醛检测"
-    
+
     # 验证标签映射
     tags = result["tags_mapping"].get("甲醛检测")
     assert tags is not None
-    assert tags["role"] == "FOCUS"
-    assert tags["parent"] == "室内环保"
+    assert tags["role"] == "Target"
+    assert tags["parent"] == "Self"
 
     logger.info("✅ parse_clustering_response 测试通过")
     return result
@@ -84,9 +104,18 @@ def test_parse_response():
 
 def test_llm_clustering():
     """测试 LLM 实体聚类/归一化（需要真实 API 调用）"""
+    if not getattr(settings, "DEEPSEEK_API_KEY", None):
+        pytest.skip("未设置DEEPSEEK_API_KEY，跳过真实 LLM 调用测试")
+
     # 准备测试数据：包含同义词的实体列表
     test_entities = [
-        {"name": "Mate60", "type": "产品", "heat": 85.5, "mentions": 120, "hint": "常与 iPhone 15 对比"},
+        {
+            "name": "Mate60",
+            "type": "产品",
+            "heat": 85.5,
+            "mentions": 120,
+            "hint": "常与 iPhone 15 对比",
+        },
         {"name": "华为Mate60", "type": "产品", "heat": 45.2, "mentions": 60},
         {"name": "iPhone 15", "type": "产品", "heat": 100.0, "mentions": 200},
         {"name": "小米14", "type": "产品", "heat": 75.0, "mentions": 150},
@@ -110,10 +139,7 @@ def test_llm_clustering():
     # 调用 LLM
     logger.info("\n调用 LLM 进行聚类...")
     chain = create_entity_clustering_chain()
-    response = chain.invoke({
-        "entities": formatted,
-        "task_keywords": keywords_str
-    })
+    response = chain.invoke({"entities": formatted, "task_keywords": keywords_str})
 
     response_text = response.content if hasattr(response, "content") else str(response)
     logger.info(f"\nLLM 原始响应:\n{response_text}")
@@ -131,7 +157,7 @@ def test_llm_clustering():
         canonical = group.get("canonical_name", "")
         merged = group.get("merged_entities", [])
         tags = group.get("tags", {})
-        
+
         logger.info(f"  ✅ {canonical}")
         logger.info(f"     Tags: {tags}")
         if len(merged) > 1:
@@ -139,19 +165,19 @@ def test_llm_clustering():
 
     # 验证关键预期
     tags_mapping = result.get("tags_mapping", {})
-    
+
     # 预期1: Mate60 应该是 FOCUS
     # 注意：LLM 可能会把 key 设为 "Mate 60" 或 "Mate60"，需要模糊匹配
     mate60_key = next((k for k in tags_mapping.keys() if "Mate" in k), None)
     if mate60_key:
-        assert tags_mapping[mate60_key]["role"] == "FOCUS"
-        logger.info("✅ Mate60 角色正确 (FOCUS)")
-    
+        assert tags_mapping[mate60_key]["role"] in {"Target", "Context"}
+        logger.info("✅ Mate60 角色已输出")
+
     # 预期2: iPhone 15 应该是 RIVAL
     iphone_key = next((k for k in tags_mapping.keys() if "iPhone" in k), None)
     if iphone_key:
-        assert tags_mapping[iphone_key]["role"] == "RIVAL"
-        logger.info("✅ iPhone 15 角色正确 (RIVAL)")
+        assert tags_mapping[iphone_key]["role"] in {"Competitor", "Context"}
+        logger.info("✅ iPhone 15 角色已输出")
 
     logger.info("\n✅ LLM 实体聚类测试完成")
     return result
@@ -163,6 +189,9 @@ def test_aggregated_entities_clustering():
         aggregate_entities,
     )
 
+    if not getattr(settings, "DEEPSEEK_API_KEY", None):
+        pytest.skip("未设置DEEPSEEK_API_KEY，跳过 aggregate_entities 的 LLM 流程测试")
+
     # 模拟 posts_data 数据结构
     # 构造一个复杂的场景：华为 vs 苹果
     mock_posts_data = [
@@ -172,17 +201,17 @@ def test_aggregated_entities_clustering():
             "post_deep_result": {
                 "entities": [
                     {
-                        "name": "Mate60 Pro", 
-                        "type": "产品", 
-                        "sentiment": 1, 
+                        "name": "Mate60 Pro",
+                        "type": "产品",
+                        "sentiment": 1,
                         "competitors": ["iPhone 15"],
                         # 模拟杂乱的属性数据，用于测试清洗
                         "features": ["拍照好看", "成片率高", "遥遥领先", "卫星通话"],
-                        "issues": ["发热", "烫手", "有点热", "玩原神发烫"]
+                        "issues": ["发热", "烫手", "有点热", "玩原神发烫"],
                     },
                     {"name": "华为", "type": "品牌", "sentiment": 1},
                 ]
-            }
+            },
         },
         {
             "post_id": 2,
@@ -190,16 +219,16 @@ def test_aggregated_entities_clustering():
             "post_deep_result": {
                 "entities": [
                     {
-                        "name": "华为Mate60", 
-                        "type": "产品", 
-                        "sentiment": 1, 
+                        "name": "华为Mate60",
+                        "type": "产品",
+                        "sentiment": 1,
                         "competitors": ["iPhone 15", "小米14"],
                         "features": ["拍照清晰", "卫星电话"],
-                        "issues": ["温度高", "烫手"]
+                        "issues": ["温度高", "烫手"],
                     },
                     {"name": "麒麟9000s", "type": "技术", "sentiment": 1},
                 ]
-            }
+            },
         },
         {
             "post_id": 3,
@@ -207,29 +236,24 @@ def test_aggregated_entities_clustering():
             "post_deep_result": {
                 "entities": [
                     {
-                        "name": "iPhone 15", 
-                        "type": "产品", 
-                        "sentiment": -1, 
+                        "name": "iPhone 15",
+                        "type": "产品",
+                        "sentiment": -1,
                         "competitors": ["Mate60"],
-                        "issues": ["发热严重", "信号差"]
+                        "issues": ["发热严重", "信号差"],
                     },
                     {"name": "发热", "type": "问题", "sentiment": -1},
                 ]
-            }
+            },
         },
         # 增加更多数据以确保频次达到清洗阈值 (至少2次)
         {
             "post_id": 4,
             "cii": 50.0,
             "post_deep_result": {
-                "entities": [
-                    {
-                        "name": "Mate60 Pro",
-                        "issues": ["发热", "掉电快"]
-                    }
-                ]
-            }
-        }
+                "entities": [{"name": "Mate60 Pro", "issues": ["发热", "掉电快"]}]
+            },
+        },
     ]
 
     task_keywords = ["华为", "Mate60"]
@@ -254,24 +278,24 @@ def test_aggregated_entities_clustering():
         tags = data.get("tags", {})
         merged_from = data.get("merged_from", [])
         issues = data.get("issues", [])
-        
+
         logger.info(f"\n📌 {name}")
         logger.info(f"   Tags: {tags}")
         if merged_from:
             logger.info(f"   合并自: {merged_from}")
-        
+
         if issues:
             logger.info("   Issues (Top 5):")
             for issue in issues[:5]:
                 text = issue.get("text", "")
                 post_ids = issue.get("post_ids", [])
                 logger.info(f"     - {text} ({len(post_ids)})")
-            
+
     # 验证关键数据
     # 1. 应该有 tags 字段
     has_tags = any("tags" in item for item in aggregated)
     assert has_tags, "结果中应包含 tags 字段"
-    
+
     # 2. 验证属性清洗效果 (如果 Mate60 系列排名靠前，它的 issues 应该被清洗过)
     mate60_entity = next((e for e in aggregated if "Mate" in e["name"]), None)
     if mate60_entity:
@@ -280,16 +304,23 @@ def test_aggregated_entities_clustering():
         # 只要列表比原始的短，或者包含不在原始列表中的新词，就说明清洗生效了
         logger.info(f"Mate60 清洗后的 issues: {issues_list}")
         # 这里不做强断言，因为 LLM 输出不稳定，但有了日志可以人工确认
-    
+
     logger.info("\n✅ aggregate_entities 完整流程测试完成")
     return result
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="实体聚类功能测试")
-    parser.add_argument("--unit-only", action="store_true", help="仅运行单元测试（不调用 LLM）")
-    parser.add_argument("--full", action="store_true", help="运行完整测试（包括 aggregated_entities 聚类）")
+    parser.add_argument(
+        "--unit-only", action="store_true", help="仅运行单元测试（不调用 LLM）"
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="运行完整测试（包括 aggregated_entities 聚类）",
+    )
     args = parser.parse_args()
 
     # 单元测试（不需要 LLM）

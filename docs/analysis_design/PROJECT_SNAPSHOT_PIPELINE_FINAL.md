@@ -83,11 +83,10 @@ graph TD
 
 #### Job 1: 实体归一化 (Entity Normalization)
 *   **关键变更**：**不可直接复用任务级 Chain**。
-*   **策略**：程序化合并优先，**专用合并 Chain** 兜底。
-*   **前置处理**：按 `Type` 分桶。
-*   **Layer 1 (Programmatic)**：
-    *   名称完全匹配（忽略大小写/空格）。
-    *   子串匹配（仅限 Brand 类型，且长度 > 4）。
+*   **策略**：程序化预聚类（降噪） + **专用合并 Chain**（最终裁判）。
+*   **Layer 1 (Programmatic Pre-clustering)**：
+    *   使用字符相似度阈值 (0.9) 进行预聚类，减少送入 LLM 的实体数量。
+    *   *设计原则：KISS（Keep It Simple）。程序化阶段宁可漏合并（LLM 能补救），也不能误合并（LLM 难拆开）。*
 *   **Layer 2 (New Project Merge Chain)**：
     *   **开发新 Chain**: `project_entity_merge_chain`。
     *   **输入截断**：仅选取 **Top 200 高热实体** 进入 LLM 归一化，长尾实体不参与合并。
@@ -97,9 +96,10 @@ graph TD
     *   **关键输出要求**：
         *   **Entity Name**: 标准化实体名。
         *   **Parent Name**: **同步归一化父级品牌**（如将 "特斯拉"/"Tesla" 统一为 "Tesla"），若原数据缺失需尝试补全。
+            * 口径约定：对"品牌"实体，`parent` 使用哨兵值 `"Self"` 表示"品牌自身"（消费/聚合时等价于实体名本身）；对"产品"实体，`parent` 填其归属品牌名；通用词/场景为空字符串。
     *   **输出**：`entity_mapping` 和 `tags` (Role/Parent)。
 *   **后置处理**：
-    *   **原话合并**：合并 `original_terms` 列表并截断 Top 20。
+    *   **原话合并**：合并 `original_terms` 列表并截断 Top 20（长度优先）。
     *   **属性合并**：`features/issues` 等属性列表，直接物理合并（Set Union）。
 
 #### Job 2: 观点归一化 (Opinion Normalization) - *修正版*
@@ -162,6 +162,31 @@ graph TD
         *   *目的：精准定位问题源头（是品牌通病还是单品硬伤？）。*
     *   **平台剪刀差**：`Subject` 在各平台的份额 vs 行业平均份额。
     *   **Gap 分析**：竞品有的核心优势（High Frequency & High Sentiment），而我方缺失的。
+
+#### 3.4 前端可视化建议 (Visualization Layer)
+*   **设计原则**：从“展示型”转向“分析型”，强调效能分析与机会发现。
+*   **Landscape 层**：
+    *   **SOV 效能矩阵 (Efficiency Matrix)**：
+        *   替代传统散点图。X轴=`Post_Count` (投入/声量), Y轴=`Normalized_Heat` (产出/热度)。
+        *   **分区**：划分为高效区 (High Heat, Low Post) / 低效区 / 虚火区。
+        *   **交互**：Hover 显示 CPI (Cost Per Interaction) 效能倍数。
+    *   **集团份额透视 (Hierarchical Table)**：
+        *   替代旭日图。使用树形表格 (Tree Table)。
+        *   展示 `Parent` -> `Entity` 的层级贡献度，一眼识别集团内的“拖油瓶”与“顶梁柱”。
+*   **Topic 层**：
+    *   **痛点/爽点分布图 (Sentiment-Volume Bubble)**：
+        *   X轴=声量, Y轴=情感净值。
+        *   **机会区 (Unmet Needs)**：**右下角 (高频+负面)**，使用虚线框高亮。
+        *   **护城河 (Moats)**：**右上角 (高频+正面)**。
+    *   **话题详情侧边栏 (Drill-down Slideover)**：
+        *   点击气泡触发。
+        *   内容：趋势微型图 + LLM 观点摘要 + 佐证原帖 (Evidence)。
+*   **Focus 层**：
+    *   **动态 SWOT 映射 (Dynamic SWOT Tornado)**：
+        *   使用龙卷风图 (Tornado Chart) 对比 Target vs Competitor 在同一话题维度的表现。
+        *   **逻辑**：Target 负面极低 & Competitor 负面极高 -> 自动标记为 **O (机会)**。
+    *   **平台剪刀差 (Platform Gap)**：
+        *   双线雷达图或差异柱状图，重点渲染 **Gap 阴影区域**。
 
 ---
 
@@ -270,5 +295,9 @@ graph TD
 
 3.  **前端 (Frontend)**:
     *   [ ] 增加“平台权重配置”入口。
-    *   [ ] 报告页展示“用户原声”气泡。
+    *   [ ] **报告页组件开发**:
+        *   **SOV 效能矩阵**: ECharts Scatter + MarkArea (四象限背景)。
+        *   **痛点/爽点分布图**: ECharts Bubble + MarkArea (Unmet Needs 高亮)。
+        *   **动态 SWOT**: ECharts Custom Series 或 Bar (Tornado 布局)。
+        *   **详情侧边栏**: Slideover 组件，展示 LLM 摘要 + 原话佐证。
     *   [ ] **动态 Tab 展示**：若 `focus` 数据为空，隐藏“战略诊断”Tab。

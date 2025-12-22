@@ -3,27 +3,18 @@
 使用统一的 AnalysisJob 模型，通过 task_id 是否为空区分任务级/项目级分析。
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
+from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
 from .models import PostAnalysis, AnalysisJob, ProjectAnalysisSnapshot
 from .jobs import create_analysis_job_async
-from .jobs import (
-    get_analysis_jobs,
-    get_analysis_job,
-    get_analysis_progress,
-    cancel_analysis_job,
-    delete_analysis_job,
-)
 from .schemas import (
     RunScreeningRequest,
     RunDeepAnalysisRequest,
     RunAnalysisResponse,
-    AnalysisProgressResponse,
     AnalysisStatsResponse,
 )
 
@@ -32,10 +23,9 @@ from .project_snapshot import build_project_snapshot_result
 
 # ==================== Task-Level Analysis ====================
 
+
 async def run_post_screening(
-    db: AsyncSession,
-    request: RunScreeningRequest,
-    current_user_id: int
+    db: AsyncSession, request: RunScreeningRequest, current_user_id: int
 ) -> RunAnalysisResponse:
     """运行帖子AI初筛分析"""
     from src.social_media.tasks import crud as task_crud
@@ -47,15 +37,17 @@ async def run_post_screening(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {request.task_id} not found"
+            detail=f"Task {request.task_id} not found",
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     # 获取要分析的帖子ID列表
@@ -64,11 +56,12 @@ async def run_post_screening(
     if request.analyze_all or not post_ids:
         # 获取任务下所有帖子ID（排除已有初筛结果的）
         from src.social_media.tasks.models import SocialPost
+
         stmt = (
             select(SocialPost.id)
             .outerjoin(PostAnalysis, PostAnalysis.post_id == SocialPost.id)
             .where(SocialPost.task_id == request.task_id)
-            .where(SocialPost.is_deleted == False)
+            .where(SocialPost.is_deleted.is_(False))
             .where(PostAnalysis.spam_score.is_(None))  # 只选择尚未初筛的
         )
         result = await db.execute(stmt)
@@ -77,7 +70,7 @@ async def run_post_screening(
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="没有需要初筛的帖子（所有帖子已完成初筛）"
+            detail="没有需要初筛的帖子（所有帖子已完成初筛）",
         )
 
     # 创建分析任务记录
@@ -109,7 +102,7 @@ async def run_post_screening(
         celery_task_id=celery_result.id,
         job_id=analysis_job.id,
         status="pending",
-        message=f"帖子初筛任务已启动，共{len(post_ids)}条数据"
+        message=f"帖子初筛任务已启动，共{len(post_ids)}条数据",
     )
 
 
@@ -131,14 +124,16 @@ async def run_post_deep_analysis(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {request.task_id} not found"
+            detail=f"Task {request.task_id} not found",
         )
 
-    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     # 获取要分析的帖子ID列表
@@ -147,15 +142,19 @@ async def run_post_deep_analysis(
     if not post_ids:
         # 基于阈值筛选候选帖子
         preview = await preview_deep_analysis_candidates(
-            db, request.task_id, current_user_id,
-            spam_max=spam_max, value_min=value_min, relevance_min=relevance_min
+            db,
+            request.task_id,
+            current_user_id,
+            spam_max=spam_max,
+            value_min=value_min,
+            relevance_min=relevance_min,
         )
         post_ids = preview["deep_candidate_ids"]
 
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="没有符合条件的帖子需要原文深度分析（请先完成初筛或调整阈值）"
+            detail="没有符合条件的帖子需要原文深度分析（请先完成初筛或调整阈值）",
         )
 
     # 创建分析任务记录
@@ -170,7 +169,9 @@ async def run_post_deep_analysis(
             "spam_max": spam_max,
             "value_min": value_min,
             "relevance_min": relevance_min,
-        } if any([spam_max, value_min, relevance_min]) else None,
+        }
+        if any([spam_max, value_min, relevance_min])
+        else None,
     )
 
     # 启动Celery任务
@@ -178,7 +179,7 @@ async def run_post_deep_analysis(
         result_id=analysis_job.id,
         task_id=request.task_id,
         post_ids=post_ids,
-        analysis_focus=request.analysis_focus
+        analysis_focus=request.analysis_focus,
     )
 
     # 更新celery_task_id
@@ -189,11 +190,12 @@ async def run_post_deep_analysis(
         celery_task_id=celery_result.id,
         job_id=analysis_job.id,
         status="pending",
-        message=f"帖子深度分析任务已启动，共{len(post_ids)}条数据"
+        message=f"帖子深度分析任务已启动，共{len(post_ids)}条数据",
     )
 
 
 # ==================== Project Snapshot (Manual) ====================
+
 
 async def create_project_snapshot(
     db: AsyncSession,
@@ -210,7 +212,9 @@ async def create_project_snapshot(
     from src.social_media.tasks.models import DataTask
 
     # 权限校验
-    has_access = await project_crud.check_project_access(db, project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -219,14 +223,16 @@ async def create_project_snapshot(
 
     # 任务校验：必须属于该项目且未删除
     if not task_ids:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="task_ids is required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="task_ids is required"
+        )
 
     stmt = (
         select(DataTask)
         .options(selectinload(DataTask.platform))
         .where(DataTask.id.in_(task_ids))
         .where(DataTask.project_id == project_id)
-        .where(DataTask.is_deleted == False)
+        .where(DataTask.is_deleted.is_(False))
     )
     result = await db.execute(stmt)
     tasks = list(result.scalars().all())
@@ -263,24 +269,103 @@ async def create_project_snapshot(
             keyword_label = " / ".join([str(x) for x in keywords_val if x])
         else:
             keyword_label = t.keywords or ""
-        rich_task_data.append({
-            "task_id": t.id,
-            "platform": t.platform.code if t.platform else "unknown",
-            "keyword": keyword_label,
-            "posts_count": int(getattr(t, "posts_count", 0) or 0),
-            "analysis_result": t.analysis_result,
-        })
+        rich_task_data.append(
+            {
+                "task_id": t.id,
+                "platform": t.platform.code if t.platform else "unknown",
+                "keyword": keyword_label,
+                "posts_count": int(getattr(t, "posts_count", 0) or 0),
+                "analysis_result": t.analysis_result,
+            }
+        )
 
     if missing_agg_opinions or missing_agg_entities:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "message": "Some tasks have incompatible analysis_result schema (missing canonical aggregated_* fields). "
-                           "Please re-run task aggregation for these tasks, then re-generate the project snapshot.",
+                "Please re-run task aggregation for these tasks, then re-generate the project snapshot.",
                 "missing_aggregated_opinions_task_ids": missing_agg_opinions,
                 "missing_aggregated_entities_task_ids": missing_agg_entities,
             },
         )
+
+    # Step0 辅助：为项目级去重/权重/新鲜度准备帖子映射（platform+post_id_on_platform）
+    # 说明：项目级聚合的“去重口径”基于 SocialPost 的平台帖ID，而不是任务内自增ID
+    from src.social_media.tasks.models import SocialPost
+    from src.social_media.projects.models import Platform
+    from src.social_media.analysis.celery_tasks.aggregation.metrics import calculate_cii
+
+    posts_stmt = (
+        select(
+            SocialPost.id,
+            SocialPost.post_id_on_platform,
+            SocialPost.published_at,
+            SocialPost.likes_count,
+            SocialPost.comments_count,
+            SocialPost.shares_count,
+            SocialPost.collected_count,
+            Platform.code,
+        )
+        .join(Platform, Platform.id == SocialPost.platform_id)
+        .where(SocialPost.task_id.in_(task_ids))
+        .where(SocialPost.is_deleted.is_(False))
+    )
+    posts_rows = (await db.execute(posts_stmt)).all()
+
+    post_key_by_id: dict[int, str] = {}
+    post_info_by_key: dict[str, dict[str, Any]] = {}
+    # 为 keyword 分布提供一个稳定“主归属”（首见原则）
+    primary_keyword_by_key: dict[str, str] = {}
+    primary_task_by_key: dict[str, int] = {}
+
+    # 先构造 task_id -> keyword_label 的映射（用于首见原则）
+    task_keyword_label: dict[int, str] = {}
+    for t in rich_task_data:
+        try:
+            tid = int(t.get("task_id"))
+        except Exception:
+            continue
+        task_keyword_label[tid] = str(t.get("keyword") or "")
+
+    for row in posts_rows:
+        try:
+            pid = int(row[0])
+        except Exception:
+            continue
+        post_id_on_platform = str(row[1] or "")
+        platform_code = str(row[7] or "unknown")
+        if not post_id_on_platform:
+            # 极端兜底：没有平台帖ID时，退化为内部ID
+            post_id_on_platform = str(pid)
+
+        post_key = f"{platform_code}:{post_id_on_platform}"
+        post_key_by_id[pid] = post_key
+
+        # 只保留第一条（跨任务重复贴：platform+post_id_on_platform 会相同）
+        if post_key not in post_info_by_key:
+            likes = int(row[3] or 0)
+            comments = int(row[4] or 0)
+            shares = int(row[5] or 0)
+            collected = int(row[6] or 0)
+            raw_cii = float(
+                calculate_cii(
+                    likes=likes, comments=comments, shares=shares, collected=collected
+                )
+            )
+            post_info_by_key[post_key] = {
+                "platform": platform_code,
+                "post_id_on_platform": post_id_on_platform,
+                "published_at": row[2],
+                "raw_cii": raw_cii,
+            }
+
+        # 主归属（首见原则）——用于 keyword 分布在去重后仍能“总和=总量”
+        if post_key not in primary_keyword_by_key:
+            # row 没有 task_id，因此无法直接判定；这里先留空，后续由 build_project_snapshot_result 按任务维度补齐
+            primary_keyword_by_key[post_key] = ""
+        if post_key not in primary_task_by_key:
+            primary_task_by_key[post_key] = 0
 
     snapshot_result = build_project_snapshot_result(
         project_id=project_id,
@@ -289,6 +374,10 @@ async def create_project_snapshot(
         subject=subject,
         competitors=competitors,
         platform_weights=platform_weights,
+        post_key_by_id=post_key_by_id,
+        post_info_by_key=post_info_by_key,
+        primary_keyword_by_key=primary_keyword_by_key,
+        primary_task_by_key=primary_task_by_key,
     )
 
     snapshot = ProjectAnalysisSnapshot(
@@ -322,14 +411,16 @@ async def run_comment_deep_analysis(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {request.task_id} not found"
+            detail=f"Task {request.task_id} not found",
         )
 
-    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     # 获取要分析的帖子ID列表（因为评论分析是基于帖子的）
@@ -338,15 +429,19 @@ async def run_comment_deep_analysis(
     if not post_ids:
         # 基于阈值筛选候选帖子
         preview = await preview_deep_analysis_candidates(
-            db, request.task_id, current_user_id,
-            spam_max=spam_max, value_min=value_min, relevance_min=relevance_min
+            db,
+            request.task_id,
+            current_user_id,
+            spam_max=spam_max,
+            value_min=value_min,
+            relevance_min=relevance_min,
         )
         post_ids = preview["comment_candidate_ids"]
 
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="没有符合条件的帖子需要评论深度分析（需先完成原文深度分析且有评论）"
+            detail="没有符合条件的帖子需要评论深度分析（需先完成原文深度分析且有评论）",
         )
 
     # 创建分析任务记录
@@ -361,7 +456,9 @@ async def run_comment_deep_analysis(
             "spam_max": spam_max,
             "value_min": value_min,
             "relevance_min": relevance_min,
-        } if any([spam_max, value_min, relevance_min]) else None,
+        }
+        if any([spam_max, value_min, relevance_min])
+        else None,
     )
 
     # 启动Celery任务
@@ -369,7 +466,7 @@ async def run_comment_deep_analysis(
         result_id=analysis_job.id,
         task_id=request.task_id,
         post_ids=post_ids,
-        analysis_focus=request.analysis_focus
+        analysis_focus=request.analysis_focus,
     )
 
     # 更新celery_task_id
@@ -380,11 +477,12 @@ async def run_comment_deep_analysis(
         celery_task_id=celery_result.id,
         job_id=analysis_job.id,
         status="pending",
-        message=f"评论深度分析任务已启动，将分析{len(post_ids)}个帖子的评论"
+        message=f"评论深度分析任务已启动，将分析{len(post_ids)}个帖子的评论",
     )
 
 
 # ==================== Post Analysis Query ====================
+
 
 async def get_task_post_analyses(
     db: AsyncSession,
@@ -423,16 +521,17 @@ async def get_task_post_analyses(
     task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
     if not task:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {task_id} not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     # 构建查询
@@ -461,9 +560,13 @@ async def get_task_post_analyses(
             PostAnalysis.analyzed_at,
             PostAnalysis.analysis_model,
         )
-        .join(PostAnalysis, PostAnalysis.post_id == SocialPost.id, isouter=not filter_analyzed)
+        .join(
+            PostAnalysis,
+            PostAnalysis.post_id == SocialPost.id,
+            isouter=not filter_analyzed,
+        )
         .where(SocialPost.task_id == task_id)
-        .where(SocialPost.is_deleted == False)
+        .where(SocialPost.is_deleted.is_(False))
     )
 
     if filter_analyzed:
@@ -480,7 +583,7 @@ async def get_task_post_analyses(
         stmt = stmt.where(
             or_(
                 SocialPost.title.ilike(search_pattern),
-                SocialPost.content.ilike(search_pattern)
+                SocialPost.content.ilike(search_pattern),
             )
         )
 
@@ -499,30 +602,32 @@ async def get_task_post_analyses(
     # 转换为字典列表
     items = []
     for row in rows:
-        items.append({
-            "post_id": row.id,
-            "post_id_on_platform": row.post_id_on_platform,
-            "title": row.title,
-            "content": row.content,
-            "author_name": row.author_name,
-            "likes_count": row.likes_count,
-            "comments_count": row.comments_count,
-            "shares_count": row.shares_count,
-            "collected_count": row.collected_count,
-            "views_count": row.views_count,
-            "danmaku_count": row.danmaku_count,
-            "published_at": row.published_at,
-            "url": row.url,
-            "spam_score": row.spam_score,
-            "value_score": row.value_score,
-            "relevance_score": row.relevance_score,
-            "sentiment": row.sentiment,
-            "cii": row.cii,
-            "post_deep_result": row.post_deep_result,
-            "comment_deep_result": row.comment_deep_result,
-            "analyzed_at": row.analyzed_at,
-            "analysis_model": row.analysis_model,
-        })
+        items.append(
+            {
+                "post_id": row.id,
+                "post_id_on_platform": row.post_id_on_platform,
+                "title": row.title,
+                "content": row.content,
+                "author_name": row.author_name,
+                "likes_count": row.likes_count,
+                "comments_count": row.comments_count,
+                "shares_count": row.shares_count,
+                "collected_count": row.collected_count,
+                "views_count": row.views_count,
+                "danmaku_count": row.danmaku_count,
+                "published_at": row.published_at,
+                "url": row.url,
+                "spam_score": row.spam_score,
+                "value_score": row.value_score,
+                "relevance_score": row.relevance_score,
+                "sentiment": row.sentiment,
+                "cii": row.cii,
+                "post_deep_result": row.post_deep_result,
+                "comment_deep_result": row.comment_deep_result,
+                "analyzed_at": row.analyzed_at,
+                "analysis_model": row.analysis_model,
+            }
+        )
 
     return items, total
 
@@ -549,14 +654,15 @@ async def preview_deep_analysis_candidates(
     task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
     if not task:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {task_id} not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
         )
-    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     # 查询所有帖子与分析结果
@@ -572,7 +678,7 @@ async def preview_deep_analysis_candidates(
         )
         .join(PostAnalysis, PostAnalysis.post_id == SocialPost.id, isouter=True)
         .where(SocialPost.task_id == task_id)
-        .where(SocialPost.is_deleted == False)
+        .where(SocialPost.is_deleted.is_(False))
     )
     result = await db.execute(stmt)
     rows = result.all()
@@ -615,7 +721,11 @@ async def preview_deep_analysis_candidates(
             comment_done += 1
 
         # 评论深度候选：已有原文深度、有评论、尚未评论深度
-        if post_deep is not None and comment_deep is None and (row.comments_count or 0) > 0:
+        if (
+            post_deep is not None
+            and comment_deep is None
+            and (row.comments_count or 0) > 0
+        ):
             comment_candidate_ids.append(post_id)
 
     return {
@@ -630,6 +740,7 @@ async def preview_deep_analysis_candidates(
 
 
 # ==================== Delete Analysis Results ====================
+
 
 async def delete_task_analyses(
     db: AsyncSession,
@@ -653,16 +764,17 @@ async def delete_task_analyses(
     task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
     if not task:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {task_id} not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     # 查询要删除的记录数
@@ -674,7 +786,7 @@ async def delete_task_analyses(
         return {
             "success": True,
             "deleted_count": 0,
-            "message": "没有需要删除的分析结果"
+            "message": "没有需要删除的分析结果",
         }
 
     # 删除所有分析结果
@@ -685,15 +797,15 @@ async def delete_task_analyses(
     return {
         "success": True,
         "deleted_count": deleted_count,
-        "message": f"已删除 {deleted_count} 条分析结果"
+        "message": f"已删除 {deleted_count} 条分析结果",
     }
 
 
 # ==================== Statistics Service ====================
 
+
 async def get_global_stats(
-    db: AsyncSession,
-    current_user_id: int
+    db: AsyncSession, current_user_id: int
 ) -> AnalysisStatsResponse:
     """获取全局分析统计"""
     # 查询所有分析任务
@@ -734,10 +846,9 @@ async def get_global_stats(
 
 # ==================== Task Analysis Result ====================
 
+
 async def run_task_aggregation(
-    db: AsyncSession,
-    task_id: int,
-    current_user_id: int
+    db: AsyncSession, task_id: int, current_user_id: int
 ) -> RunAnalysisResponse:
     """运行聚合分析，生成任务级分析报告（异步 Celery 任务）
 
@@ -745,7 +856,7 @@ async def run_task_aggregation(
     结果存储在 DataTask.analysis_result 中。
 
     与初筛/深度分析一致，采用 Celery 异步执行，避免阻塞 API。
-    
+
     注意：聚合分析本身不涉及 LLM API 调用，因此不创建 AnalysisJob 记录。
     但会预先创建实体归一化和观点归一化的 AnalysisJob（状态为 pending），
     以便前端可以立即检测到任务在运行。
@@ -765,16 +876,17 @@ async def run_task_aggregation(
     task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
     if not task:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {task_id} not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     # 检查是否有已分析的帖子
@@ -789,7 +901,7 @@ async def run_task_aggregation(
     if analyzed_count == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="没有已分析的帖子，请先运行初筛或深度分析"
+            detail="没有已分析的帖子，请先运行初筛或深度分析",
         )
 
     # 预先创建实体归一化和观点归一化的 AnalysisJob（状态为 pending）
@@ -824,14 +936,12 @@ async def run_task_aggregation(
         celery_task_id=celery_result.id,
         job_id=entity_job.id,  # 返回实体归一化的 job_id 用于跟踪
         status="pending",
-        message=f"聚合分析任务已启动，将分析 {analyzed_count} 条数据"
+        message=f"聚合分析任务已启动，将分析 {analyzed_count} 条数据",
     )
 
 
 async def get_task_aggregation(
-    db: AsyncSession,
-    task_id: int,
-    current_user_id: int
+    db: AsyncSession, task_id: int, current_user_id: int
 ) -> dict[str, Any] | None:
     """获取任务级聚合分析结果
 
@@ -852,16 +962,17 @@ async def get_task_aggregation(
     task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
     if not task:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {task_id} not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(db, task.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     # 从 DataTask 获取 analysis_result
@@ -874,6 +985,8 @@ async def get_task_aggregation(
 
     return {
         "task_id": task_id,
-        "analyzed_at": data_task.analysis_result_at.isoformat() if data_task.analysis_result_at else None,
+        "analyzed_at": data_task.analysis_result_at.isoformat()
+        if data_task.analysis_result_at
+        else None,
         "result": data_task.analysis_result,
     }

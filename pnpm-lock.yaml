@@ -11731,7 +11731,7 @@ snapshots:
 
   tsx@4.20.6:
     dependencies:
-      esbuild: 0.25.9
+      esbuild: 0.25.12
       get-tsconfig: 4.10.1
     optionalDependencies:
       fsevents: 2.3.3

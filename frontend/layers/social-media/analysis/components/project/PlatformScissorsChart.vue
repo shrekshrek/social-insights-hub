@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch, onMounted, nextTick } from 'vue'
+import type { EChartsOption } from 'echarts'
 
 interface PlatformScissorsItem {
   platform: string
@@ -21,21 +22,25 @@ const props = defineProps<{
   subject?: string
 }>()
 
+const { chartRef, initChart, setOption, getInstance } = useCharts()
+
 const items = computed(() => props.data?.by_platform || [])
 
 // ECharts 差异柱状图配置
-const chartOptions = computed(() => {
-  if (!items.value.length) return null
+const getOption = (): EChartsOption => {
+  if (!items.value.length) return {}
 
   const platforms = items.value.map(i => i.platform)
-  const subjectData = items.value.map(i => (i.subject_share * 100).toFixed(1))
-  const industryData = items.value.map(i => (i.industry_share * 100).toFixed(1))
+  const subjectData = items.value.map(i => parseFloat((i.subject_share * 100).toFixed(1)))
+  const industryData = items.value.map(i => parseFloat((i.industry_share * 100).toFixed(1)))
 
   return {
+    animation: false,
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      formatter: (params: Array<{ seriesName: string; value: string; dataIndex: number; marker: string }>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formatter: (params: any) => {
         const idx = params[0]?.dataIndex ?? 0
         const item = items.value[idx]
         if (!item) return ''
@@ -100,6 +105,23 @@ const chartOptions = computed(() => {
       },
     ],
   }
+}
+
+const updateChart = async () => {
+  await nextTick()
+  if (chartRef.value && items.value.length) {
+    let instance = getInstance()
+    if (!instance) {
+      instance = initChart()
+    }
+    setOption(getOption())
+  }
+}
+
+watch(() => props.data, updateChart, { deep: true })
+
+onMounted(() => {
+  updateChart()
 })
 
 // 格式化
@@ -120,23 +142,10 @@ const formatDelta = (n: number) => {
       </div>
     </div>
 
-    <ClientOnly>
-      <template #fallback>
-        <div class="h-56 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50 rounded">
-          <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin text-gray-400" />
-        </div>
-      </template>
-
-      <VChart
-        v-if="chartOptions"
-        :option="chartOptions"
-        autoresize
-        class="h-56"
-      />
-      <div v-else class="h-56 flex items-center justify-center text-sm text-gray-400">
-        暂无平台剪刀差数据
-      </div>
-    </ClientOnly>
+    <div v-if="items.length" ref="chartRef" class="h-56" />
+    <div v-else class="h-56 flex items-center justify-center text-sm text-gray-400">
+      暂无平台剪刀差数据
+    </div>
 
     <!-- 差异明细表 -->
     <div v-if="items.length" class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -159,4 +168,3 @@ const formatDelta = (n: number) => {
     </div>
   </div>
 </template>
-

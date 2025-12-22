@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch, onMounted, nextTick } from 'vue'
+import type { EChartsOption } from 'echarts'
 
 interface PlatformDNAItem {
   name: string
@@ -12,6 +13,8 @@ const props = defineProps<{
   data: PlatformDNAItem[]
   maxItems?: number
 }>()
+
+const { chartRef, initChart, setOption, getInstance } = useCharts()
 
 const maxItems = computed(() => props.maxItems ?? 10)
 const items = computed(() => (props.data || []).slice(0, maxItems.value))
@@ -46,31 +49,33 @@ const getPlatformColor = (platform: string) => {
 }
 
 // ECharts 配置
-const chartOptions = computed(() => {
-  if (!items.value.length || !allPlatforms.value.length) return null
+const getOption = (): EChartsOption => {
+  if (!items.value.length || !allPlatforms.value.length) return {}
 
   const series = allPlatforms.value.map(platform => ({
     name: platform,
-    type: 'bar',
+    type: 'bar' as const,
     stack: 'total',
     barWidth: 24,
     itemStyle: {
       color: getPlatformColor(platform),
     },
     emphasis: {
-      focus: 'series',
+      focus: 'series' as const,
     },
     data: items.value.map(item => {
       const share = (item.platform_shares || {})[platform] || 0
-      return (share * 100).toFixed(1)
+      return parseFloat((share * 100).toFixed(1))
     }),
   }))
 
   return {
+    animation: false,
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      formatter: (params: Array<{ seriesName: string; value: string; marker: string; dataIndex?: number }>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formatter: (params: any) => {
         const entityName = items.value[params[0]?.dataIndex ?? 0]?.name || ''
         let content = `<div style="font-weight:600;margin-bottom:6px">${entityName}</div>`
         for (const p of params) {
@@ -119,6 +124,23 @@ const chartOptions = computed(() => {
     },
     series,
   }
+}
+
+const updateChart = async () => {
+  await nextTick()
+  if (chartRef.value && items.value.length && allPlatforms.value.length) {
+    let instance = getInstance()
+    if (!instance) {
+      instance = initChart()
+    }
+    setOption(getOption())
+  }
+}
+
+watch(() => props.data, updateChart, { deep: true })
+
+onMounted(() => {
+  updateChart()
 })
 </script>
 
@@ -129,23 +151,9 @@ const chartOptions = computed(() => {
       <span class="text-xs text-gray-500 dark:text-gray-400">Top {{ items.length }} 品牌</span>
     </div>
 
-    <ClientOnly>
-      <template #fallback>
-        <div class="h-64 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50 rounded">
-          <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin text-gray-400" />
-        </div>
-      </template>
-
-      <VChart
-        v-if="chartOptions"
-        :option="chartOptions"
-        autoresize
-        class="h-64"
-      />
-      <div v-else class="h-64 flex items-center justify-center text-sm text-gray-400">
-        暂无平台分布数据
-      </div>
-    </ClientOnly>
+    <div v-if="items.length && allPlatforms.length" ref="chartRef" class="h-64" />
+    <div v-else class="h-64 flex items-center justify-center text-sm text-gray-400">
+      暂无平台分布数据
+    </div>
   </div>
 </template>
-

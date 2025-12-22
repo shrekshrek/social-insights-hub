@@ -66,19 +66,13 @@ def get_deepseek_chat() -> BaseChatModel:
     if not settings.DEEPSEEK_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "DeepSeek API密钥未配置。"
-                "请设置DEEPSEEK_API_KEY环境变量。"
-            ),
+            detail=("DeepSeek API密钥未配置。请设置DEEPSEEK_API_KEY环境变量。"),
         )
 
     if not settings.DEEPSEEK_BASE_URL:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "DeepSeek API基础URL未配置。"
-                "请设置DEEPSEEK_BASE_URL环境变量。"
-            ),
+            detail=("DeepSeek API基础URL未配置。请设置DEEPSEEK_BASE_URL环境变量。"),
         )
 
     logger.info(
@@ -144,19 +138,13 @@ def get_deepseek_reasoner() -> BaseChatModel:
     if not settings.DEEPSEEK_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "DeepSeek API密钥未配置。"
-                "请设置DEEPSEEK_API_KEY环境变量。"
-            ),
+            detail=("DeepSeek API密钥未配置。请设置DEEPSEEK_API_KEY环境变量。"),
         )
 
     if not settings.DEEPSEEK_BASE_URL:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "DeepSeek API基础URL未配置。"
-                "请设置DEEPSEEK_BASE_URL环境变量。"
-            ),
+            detail=("DeepSeek API基础URL未配置。请设置DEEPSEEK_BASE_URL环境变量。"),
         )
 
     logger.info(
@@ -179,9 +167,7 @@ def get_deepseek_reasoner() -> BaseChatModel:
 
 
 def calculate_cost(
-    input_tokens: int,
-    output_tokens: int,
-    model_type: str = "chat"
+    input_tokens: int, output_tokens: int, model_type: str = "chat"
 ) -> float:
     """
     计算AI调用成本（人民币）
@@ -213,9 +199,8 @@ def calculate_cost(
         input_price = settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION
         output_price = settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION
 
-    cost = (
-        (input_tokens / 1_000_000 * input_price) +
-        (output_tokens / 1_000_000 * output_price)
+    cost = (input_tokens / 1_000_000 * input_price) + (
+        output_tokens / 1_000_000 * output_price
     )
 
     return round(cost, 6)  # 保留6位小数
@@ -263,25 +248,40 @@ def get_model_info(model_type: str = "chat") -> Dict[str, Any]:
     """
     if model_type == "chat":
         return {
-            "model_name": settings.DEEPSEEK_CHAT_MODEL,
-            "max_tokens": settings.DEEPSEEK_CHAT_MAX_TOKENS,
-            "input_price_per_million": settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION,
-            "output_price_per_million": settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION,
-            "temperature": settings.DEEPSEEK_TEMPERATURE,
+            # 防御式读取：避免 settings 缺字段导致 import-time 崩溃（字段存在时行为等价）
+            "model_name": getattr(settings, "DEEPSEEK_CHAT_MODEL", "deepseek-chat"),
+            "max_tokens": getattr(settings, "DEEPSEEK_CHAT_MAX_TOKENS", 8192),
+            "input_price_per_million": getattr(
+                settings, "DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION", 2.0
+            ),
+            "output_price_per_million": getattr(
+                settings, "DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION", 3.0
+            ),
+            "temperature": getattr(settings, "DEEPSEEK_TEMPERATURE", 0.0),
             "use_cases": ["数据筛选", "信息提取", "文本分类", "快速处理"],
         }
     else:  # reasoner
         return {
-            "model_name": settings.DEEPSEEK_REASONER_MODEL,
-            "max_tokens": settings.DEEPSEEK_REASONER_MAX_TOKENS,
-            "input_price_per_million": settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION,
-            "output_price_per_million": settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION,
-            "temperature": settings.DEEPSEEK_TEMPERATURE,
+            "model_name": getattr(
+                settings, "DEEPSEEK_REASONER_MODEL", "deepseek-reasoner"
+            ),
+            "max_tokens": getattr(settings, "DEEPSEEK_REASONER_MAX_TOKENS", 65536),
+            "input_price_per_million": getattr(
+                settings, "DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION", 2.0
+            ),
+            "output_price_per_million": getattr(
+                settings, "DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION", 3.0
+            ),
+            "temperature": getattr(settings, "DEEPSEEK_TEMPERATURE", 0.0),
             "use_cases": ["主题聚类", "竞品分析", "趋势分析", "复杂推理", "深度分析"],
         }
 
 
 # 模块初始化日志
 logger.info("✅ LangChain LLM模块加载完成（LangChain 1.0规范）")
-logger.info(f"   - Chat模型: {settings.DEEPSEEK_CHAT_MODEL}")
-logger.info(f"   - Reasoner模型: {settings.DEEPSEEK_REASONER_MODEL}")
+logger.info(
+    f"   - Chat模型: {getattr(settings, 'DEEPSEEK_CHAT_MODEL', 'deepseek-chat')}"
+)
+logger.info(
+    f"   - Reasoner模型: {getattr(settings, 'DEEPSEEK_REASONER_MODEL', 'deepseek-reasoner')}"
+)

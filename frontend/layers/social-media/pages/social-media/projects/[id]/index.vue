@@ -72,23 +72,116 @@ const handleRefreshSnapshots = async () => {
 
 const generatingSnapshot = ref(false)
 const snapshotNameInput = ref('')
+const snapshotSubjectInput = ref('')
+const snapshotCompetitorsInput = ref('')
+const snapshotWeightsJsonInput = ref('')
+const enableCustomPlatformWeights = ref(false)
 const showSnapshotModal = ref(false)
 
 const openSnapshotModal = () => {
   if (!selectedTaskIds.value.length) return
   snapshotNameInput.value = ''
+  snapshotSubjectInput.value = ''
+  snapshotCompetitorsInput.value = ''
+  snapshotWeightsJsonInput.value = ''
+  enableCustomPlatformWeights.value = false
   showSnapshotModal.value = true
 }
 
+const toast = useToast()
+
+const parseCompetitors = (raw: string): string[] => {
+  const items = (raw || '')
+    .split(/[\n,，]/g)
+    .map(s => s.trim())
+    .filter(Boolean)
+  return Array.from(new Set(items)).slice(0, 30)
+}
+
+const parseKeywords = (raw: string | null | undefined): string[] => {
+  const items = (raw || '')
+    .split(/[\n,，;；]/g)
+    .map(s => s.trim())
+    .filter(Boolean)
+  return Array.from(new Set(items))
+}
+
+// 基于“已选任务”的 keywords 给出候选项（低风险、可解释）
+const keywordCandidates = computed(() => {
+  const selected = new Set(selectedTaskIds.value)
+  const counts = new Map<string, number>()
+  for (const t of tasks.value as DataTaskWithRelations[]) {
+    if (!selected.has(t.id)) continue
+    for (const kw of parseKeywords(t.keywords)) {
+      counts.set(kw, (counts.get(kw) || 0) + 1)
+    }
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+    .slice(0, 24)
+    .map(([kw]) => kw)
+})
+
+const addCompetitor = (kw: string) => {
+  const cur = parseCompetitors(snapshotCompetitorsInput.value)
+  if (!cur.includes(kw)) cur.push(kw)
+  snapshotCompetitorsInput.value = cur.join('，')
+}
+
+const parsePlatformWeights = (raw: string): Record<string, number> | undefined => {
+  const s = (raw || '').trim()
+  if (!s) return undefined
+  const obj = JSON.parse(s) as unknown
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    throw new Error('platform_weights 必须是 JSON 对象，例如 {"bilibili":1.5}')
+  }
+  const weights: Record<string, number> = {}
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    const key = String(k || '').trim()
+    if (!key) continue
+    const n = typeof v === 'number' ? v : Number(v)
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new Error(`平台权重必须是 >0 的数字：${key}`)
+    }
+    weights[key] = n
+  }
+  return Object.keys(weights).length ? weights : undefined
+}
+
 const handleGenerateSnapshot = async () => {
+  // 先校验配置，避免关闭弹窗后报错找不到入口
+  let platformWeights: Record<string, number> | undefined
+  if (enableCustomPlatformWeights.value) {
+    try {
+      platformWeights = parsePlatformWeights(snapshotWeightsJsonInput.value)
+    } catch (e) {
+      toast.add({
+        title: '平台权重配置有误',
+        description: (e as Error).message || '请检查 JSON 格式与数值',
+        color: 'error',
+      })
+      return
+    }
+  }
+
   showSnapshotModal.value = false
 
   generatingSnapshot.value = true
   try {
     const name = snapshotNameInput.value.trim() || undefined
-    const created = await createProjectSnapshot(projectId.value, selectedTaskIds.value, name)
+    const subject = snapshotSubjectInput.value.trim() || undefined
+    const competitors = parseCompetitors(snapshotCompetitorsInput.value)
+    const created = await createProjectSnapshot(projectId.value, selectedTaskIds.value, name, {
+      subject: subject || null,
+      competitors: competitors.length ? competitors : null,
+      platform_weights: platformWeights || null,
+    })
     selectedTaskIds.value = []
     snapshotNameInput.value = ''
+    snapshotSubjectInput.value = ''
+    snapshotCompetitorsInput.value = ''
+    snapshotWeightsJsonInput.value = ''
+    enableCustomPlatformWeights.value = false
     await refreshSnapshots()
     // 生成后直接跳转到该快照详情页，避免 snapshot_id 丢失导致页面显示“快照 null”
     await navigateTo(`/social-media/projects/${projectId.value}/analysis?snapshot_id=${created.id}`)
@@ -546,38 +639,104 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     </UCard>
 
     <!-- 生成快照弹窗 -->
-    <UModal v-model:open="showSnapshotModal">
-      <template #content>
-        <div class="p-6 space-y-4">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            生成项目快照
-          </h3>
-          <p class="text-sm text-gray-600 dark:text-gray-400">
-            将基于已选 {{ selectedTaskIds.length }} 个任务（ID: {{ selectedTaskIds.join(', ') }}）生成一份项目级合并分析快照。
-          </p>
-          <UFormField label="快照名称（可选）">
-            <UInput
-              v-model="snapshotNameInput"
-              placeholder="输入快照名称"
-              class="w-full"
-            />
-          </UFormField>
-          <div class="flex justify-end gap-3 pt-2">
-            <UButton
-              variant="outline"
-              @click="showSnapshotModal = false"
-            >
-              取消
-            </UButton>
-            <UButton
-              :loading="generatingSnapshot"
-              @click="handleGenerateSnapshot"
-            >
-              开始生成
-            </UButton>
+    <ClientOnly>
+      <UModal
+        v-model:open="showSnapshotModal"
+        title="生成项目快照"
+        :description="`将基于已选 ${selectedTaskIds.length} 个任务（ID: ${selectedTaskIds.join(', ')}）生成一份项目级合并分析快照。`"
+        :ui="{ footer: 'justify-end' }"
+      >
+        <template #body>
+          <div class="space-y-4">
+            <UFormField label="快照名称（可选）">
+              <UInput
+                v-model="snapshotNameInput"
+                placeholder="输入快照名称"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="主体（可选，用于 Focus / 战略诊断）" help="例如：产品名/品牌名。为空则不生成 Focus 报告。">
+              <UInput
+                v-model="snapshotSubjectInput"
+                placeholder="输入主体，例如：iPhone 16"
+                class="w-full"
+              />
+            </UFormField>
+            <div v-if="keywordCandidates.length" class="px-1">
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                基于已选任务关键词的候选（点击快速填入，不保证完全准确）
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <UButton
+                  v-for="kw in keywordCandidates"
+                  :key="`kwcand-${kw}`"
+                  size="xs"
+                  variant="soft"
+                  color="primary"
+                  @click="snapshotSubjectInput = kw"
+                >
+                  设为主体：{{ kw }}
+                </UButton>
+                <UButton
+                  v-for="kw in keywordCandidates"
+                  :key="`kwcand-comp-${kw}`"
+                  size="xs"
+                  variant="soft"
+                  color="neutral"
+                  @click="addCompetitor(kw)"
+                >
+                  加为竞品：{{ kw }}
+                </UButton>
+              </div>
+            </div>
+            <UFormField label="竞品列表（可选）" help="用逗号或换行分隔。用于 Role 仲裁与 Focus 对比。">
+              <UTextarea
+                v-model="snapshotCompetitorsInput"
+                :rows="3"
+                placeholder="例如：华为 Mate 60，小米 15\n或每行一个"
+                class="w-full"
+              />
+            </UFormField>
+            <div class="p-3 rounded border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 space-y-3">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-sm font-medium text-gray-900 dark:text-white">
+                  高级：自定义平台权重（可选）
+                </div>
+                <USwitch v-model="enableCustomPlatformWeights" />
+              </div>
+              <div class="text-xs text-gray-600 dark:text-gray-400">
+                一般用户无需调整。系统会使用默认权重做“平台公平”归一化；仅在你非常确定不同平台的热度口径需要校正时才开启。
+              </div>
+              <UFormField
+                v-if="enableCustomPlatformWeights"
+                label="平台权重 JSON"
+                help='JSON 对象，例如：{"bilibili":1.5,"weibo":0.8}。key 使用平台 slug（后端平台标识），value 必须 > 0。'
+              >
+                <UTextarea
+                  v-model="snapshotWeightsJsonInput"
+                  :rows="4"
+                  placeholder='{"bilibili": 1.5}'
+                  class="w-full font-mono"
+                />
+              </UFormField>
+            </div>
           </div>
-        </div>
-      </template>
-    </UModal>
+        </template>
+        <template #footer>
+          <UButton
+            variant="outline"
+            @click="showSnapshotModal = false"
+          >
+            取消
+          </UButton>
+          <UButton
+            :loading="generatingSnapshot"
+            @click="handleGenerateSnapshot"
+          >
+            开始生成
+          </UButton>
+        </template>
+      </UModal>
+    </ClientOnly>
   </div>
 </template>

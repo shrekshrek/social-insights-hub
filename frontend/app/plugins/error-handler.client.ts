@@ -37,14 +37,16 @@ export default defineNuxtPlugin((nuxtApp) => {
     
     // 可以在这里添加额外的错误处理逻辑
     // 例如：显示全局错误提示
-    const toast = useToast()
     if (import.meta.dev) {
       // 开发环境显示错误提示
-      toast.add({
-        title: '运行时错误',
-        description: error instanceof Error ? error.message : '发生了未知错误',
-        color: 'error',
-        duration: 5000
+      nuxtApp.runWithContext(() => {
+        const toast = useToast()
+        toast.add({
+          title: '运行时错误',
+          description: error instanceof Error ? error.message : '发生了未知错误',
+          color: 'error',
+          duration: 5000
+        })
       })
     }
   })
@@ -56,12 +58,14 @@ export default defineNuxtPlugin((nuxtApp) => {
       
       // 开发环境显示警告
       if (import.meta.dev) {
-        const toast = useToast()
-        toast.add({
-          title: 'Promise Rejection',
-          description: event.reason?.message || '未处理的Promise错误',
-          color: 'warning',
-          duration: 5000
+        nuxtApp.runWithContext(() => {
+          const toast = useToast()
+          toast.add({
+            title: 'Promise Rejection',
+            description: event.reason?.message || '未处理的Promise错误',
+            color: 'warning',
+            duration: 5000
+          })
         })
       }
       

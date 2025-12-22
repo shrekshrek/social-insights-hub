@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
-import ProjectQuadrantChart from '../../../../analysis/components/ProjectQuadrantChart.vue'
-import ProjectEntityGraphChart from '../../../../analysis/components/ProjectEntityGraphChart.vue'
+import SOVRankingChart from '../../../../analysis/components/project/SOVRankingChart.vue'
+import GroupShareTable from '../../../../analysis/components/project/GroupShareTable.vue'
+import PlatformDNAChart from '../../../../analysis/components/project/PlatformDNAChart.vue'
+import IndustryQuadrantChart from '../../../../analysis/components/project/IndustryQuadrantChart.vue'
+import TopicRadarChart from '../../../../analysis/components/project/TopicRadarChart.vue'
+import SWOTMatrixChart from '../../../../analysis/components/project/SWOTMatrixChart.vue'
+import ProductLineHealthTable from '../../../../analysis/components/project/ProductLineHealthTable.vue'
+import PlatformScissorsChart from '../../../../analysis/components/project/PlatformScissorsChart.vue'
+import GapAnalysisChart from '../../../../analysis/components/project/GapAnalysisChart.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -58,62 +65,153 @@ interface ProjectTopicAspectItem {
   keyword_distribution?: Record<string, number>
 }
 
-interface ProjectDetailsData {
-  top_entities?: ProjectTopicOrEntity[]
-  top_topics?: ProjectTopicOrEntity[]
+interface SOVRankingItem {
+  name: string
+  parent?: string
+  role?: string
+  heat: number
+  mentions: number
+  share: number
+  sentiment?: number
+  sentiment_distribution?: Record<string, number>
+  platform_distribution?: Record<string, number>
 }
 
-type QuadrantLabel = 'Q1_danger' | 'Q2_brand' | 'Q3_complaint' | 'Q4_niche' | 'neutral'
-interface ProjectQuadrantPoint {
-  task_id: number
-  post_id: number
-  x: number
-  y: number
-  quadrant: QuadrantLabel
-  label?: string
-  platform?: string
-  keyword?: string
+interface GroupShareItem {
+  name: string
+  heat: number
+  mentions: number
 }
-interface ProjectEntityGraphNode {
-  id: string
+
+interface PlatformDNAItem {
   name: string
   role?: string
-  type?: string
-  mentions: number
+  total_mentions: number
+  platform_shares: Record<string, number>
+}
+
+interface IndustryQuadrantPoint {
+  name: string
+  role?: string
   heat: number
-  score: number
+  sentiment: number
+  mentions: number
+}
+
+interface ProjectSnapshotLandscapeLayer {
+  freshness?: Record<string, unknown>
+  overview?: ProjectOverviewData
+  sov_ranking?: SOVRankingItem[]
+  group_share?: GroupShareItem[]
+  platform_dna?: PlatformDNAItem[]
+  industry_quadrant?: IndustryQuadrantPoint[]
+}
+
+interface ProjectSnapshotIntentLayer {
+  topic_aspects?: ProjectTopicAspectItem[]
+  topic_radar?: {
+    pains?: ProjectTopicOrEntity[]
+    gains?: ProjectTopicOrEntity[]
+    controversies?: ProjectTopicOrEntity[]
+  }
+  unmet_needs?: ProjectTopicOrEntity[]
+}
+
+interface SWOTItem {
+  dimension: string
+  target_sentiment: number
+  competitor_sentiment: number
+  target_mentions: number
+  competitor_mentions: number
+  delta: number
+}
+
+interface SWOTData {
+  strengths: SWOTItem[]
+  weaknesses: SWOTItem[]
+  opportunities: SWOTItem[]
+  threats: SWOTItem[]
+}
+
+interface ProductLineHealthItem {
+  name: string
+  heat: number
+  mentions: number
+  contribution: number
+  sentiment: number
+  top_pain?: string
   platform_distribution?: Record<string, number>
-  keyword_distribution?: Record<string, number>
 }
-interface ProjectEntityGraphEdge {
-  source: string
-  target: string
-  co_occurrence: number
-  jaccard: number
-  value: number
-  platform_distribution?: Record<string, number>
-  keyword_distribution?: Record<string, number>
+
+interface ProductLineHealthData {
+  subject: string
+  total_heat: number
+  members: ProductLineHealthItem[]
 }
-interface ProjectEntityGraphData {
-  nodes: ProjectEntityGraphNode[]
-  edges: ProjectEntityGraphEdge[]
-  params?: { top_n?: number; min_co_occurrence?: number }
+
+interface PlatformScissorsItem {
+  platform: string
+  subject_mentions: number
+  industry_mentions: number
+  subject_share: number
+  industry_share: number
+  delta: number
 }
-interface ProjectChartsData {
-  quadrant?: ProjectQuadrantPoint[]
-  quadrant_summary?: Record<string, number>
-  quadrant_summary_by_platform?: Record<string, Record<string, number>>
-  quadrant_summary_by_keyword?: Record<string, Record<string, number>>
-  quadrant_thresholds?: { avg_cii?: number }
-  entity_graph?: ProjectEntityGraphData
+
+interface PlatformScissorsData {
+  subject_total_mentions: number
+  industry_total_mentions: number
+  by_platform: PlatformScissorsItem[]
+}
+
+interface GapData {
+  dimensions: SWOTItem[]
+}
+
+interface ProjectSnapshotFocusLayer {
+  subject?: string
+  targets?: string[]
+  competitors?: string[]
+  swot?: SWOTData | null
+  product_line_health?: ProductLineHealthData | null
+  platform_scissors?: PlatformScissorsData | null
+  gap?: GapData | null
+}
+
+interface ProjectSnapshotLayers {
+  landscape?: ProjectSnapshotLandscapeLayer
+  intent?: ProjectSnapshotIntentLayer
+  focus?: ProjectSnapshotFocusLayer | null
+}
+
+interface ProjectSnapshotReport {
+  content?: string
+}
+
+interface ProjectSnapshotReports {
+  landscape_report?: ProjectSnapshotReport | null
+  topic_report?: ProjectSnapshotReport | null
+  focus_report?: ProjectSnapshotReport | null
+}
+
+interface ProjectSnapshotFoundation {
+  dedup_stats?: Record<string, unknown>
+  aligned_entities?: ProjectTopicOrEntity[]
+  aligned_topics?: ProjectTopicOrEntity[]
 }
 
 interface ProjectSnapshotResultData {
-  meta?: { project_id: number; generated_at: string }
-  overview?: ProjectOverviewData
-  charts?: ProjectChartsData
-  topic_aspects?: ProjectTopicAspectItem[]
-  details?: ProjectDetailsData
+  meta?: {
+    project_id: number
+    generated_at: string
+    subject?: string | null
+    competitors?: string[]
+    weights_used?: Record<string, number>
+    scope?: Record<string, unknown>
+  }
+  foundation?: ProjectSnapshotFoundation
+  layers?: ProjectSnapshotLayers
+  reports?: ProjectSnapshotReports
   stage2?: {
     status: 'completed' | 'processing' | 'failed' | 'skipped'
     started_at?: string
@@ -140,11 +238,6 @@ interface ProjectSnapshotResultData {
         topic_mapping_by_category?: Record<string, Record<string, string>>
       }
     }
-    details_aligned?: {
-      top_entities?: ProjectTopicOrEntity[]
-      top_topics?: ProjectTopicOrEntity[]
-      topic_aspects_aligned_v2?: ProjectTopicAspectItem[]
-    }
     drivers?: {
       min_cell_mentions?: number
       dimensions_top?: string[]
@@ -165,14 +258,6 @@ interface ProjectSnapshotResultData {
     updated_at?: string
     generated_at?: string
     llm?: { used?: boolean }
-    summary?: {
-      executive_summary?: string
-      differences?: Array<{ dimension?: string; key?: string; insight?: string; evidence?: string }>
-      drivers?: Array<{ driver?: string; entities?: string[]; sentiment?: string; evidence?: string }>
-      risks?: string[]
-      opportunities?: string[]
-      next_questions?: string[]
-    }
     error?: string
   }
 }
@@ -211,22 +296,54 @@ const handleRefresh = async () => {
 
 // ==================== View Models ====================
 const snapshotResult = computed<ProjectSnapshotResultData | null>(() => snapshot.value?.result_data || null)
-const overview = computed<ProjectOverviewData | null>(() => snapshotResult.value?.overview || null)
-const charts = computed<ProjectChartsData | null>(() => snapshotResult.value?.charts || null)
-// 统一展示口径：流水线完成后优先使用“归一后的最终结果”，避免展示原始合并噪声
-const alignedDetails = computed(() => stage2.value?.details_aligned || null)
-const topicAspects = computed<ProjectTopicAspectItem[]>(() => alignedDetails.value?.topic_aspects_aligned_v2 || snapshotResult.value?.topic_aspects || [])
-const topEntities = computed<ProjectTopicOrEntity[]>(() => alignedDetails.value?.top_entities || snapshotResult.value?.details?.top_entities || [])
-const topTopics = computed<ProjectTopicOrEntity[]>(() => alignedDetails.value?.top_topics || snapshotResult.value?.details?.top_topics || [])
 const stage2 = computed(() => snapshotResult.value?.stage2 || null)
 const stage3 = computed(() => snapshotResult.value?.stage3 || null)
-const drivers = computed(() => stage2.value?.drivers || null)
-const categoryAlignment = computed(() => stage2.value?.category_alignment || null)
-const aliasNormalization = computed(() => stage2.value?.alias_normalization || null)
-// const alignedDetails = computed(() => stage2.value?.details_aligned || null)
 
+const meta = computed(() => snapshotResult.value?.meta || null)
+const foundation = computed(() => snapshotResult.value?.foundation || null)
+const layers = computed(() => snapshotResult.value?.layers || null)
+const reports = computed(() => snapshotResult.value?.reports || null)
+
+const landscape = computed<ProjectSnapshotLandscapeLayer | null>(() => layers.value?.landscape || null)
+const overview = computed<ProjectOverviewData | null>(() => landscape.value?.overview || null)
+const intent = computed(() => layers.value?.intent || null)
+const focus = computed<ProjectSnapshotFocusLayer | null>(() => layers.value?.focus || null)
+const topEntities = computed<ProjectTopicOrEntity[]>(() => foundation.value?.aligned_entities || [])
+const topTopics = computed<ProjectTopicOrEntity[]>(() => foundation.value?.aligned_topics || [])
+
+// ==================== Landscape Layer Data ====================
+const sovRanking = computed(() => landscape.value?.sov_ranking || [])
+const groupShare = computed(() => landscape.value?.group_share || [])
+const platformDNA = computed(() => landscape.value?.platform_dna || [])
+const industryQuadrant = computed(() => landscape.value?.industry_quadrant || [])
+
+// ==================== Topic Layer Data ====================
+const topicRadar = computed(() => intent.value?.topic_radar || null)
+const unmetNeeds = computed(() => intent.value?.unmet_needs || [])
+
+// ==================== Focus Layer Data ====================
+const swotData = computed(() => focus.value?.swot || null)
+const productLineHealth = computed(() => focus.value?.product_line_health || null)
+const platformScissors = computed(() => focus.value?.platform_scissors || null)
+const gapData = computed(() => focus.value?.gap || null)
+
+const subject = computed(() => (meta.value?.subject || '').toString().trim())
+const showFocusLayer = computed(() => Boolean(subject.value))
+const showFocusReport = computed(() => Boolean(subject.value))
+
+// 注意：Stage2 完成后 Stage3 仍可能继续生成报告（不应提前停止轮询）
 const isPipelineReady = computed(() => stage2.value?.status === 'completed')
-const isPipelineRunning = computed(() => stage2.value?.status === 'processing')
+const isPipelineRunning = computed(() => {
+  const s2 = stage2.value?.status
+  const s3 = stage3.value?.status
+  return s2 === 'processing' || s3 === 'pending' || s3 === 'processing'
+})
+const isReportsReady = computed(() => stage3.value?.status === 'completed')
+const isReportsFailed = computed(() => stage3.value?.status === 'failed')
+
+const reportLandscape = computed(() => reports.value?.landscape_report?.content || '')
+const reportTopic = computed(() => reports.value?.topic_report?.content || '')
+const reportFocus = computed(() => reports.value?.focus_report?.content || '')
 
 // ==================== 自动轮询机制（参考任务级）====================
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -245,14 +362,25 @@ const stopPolling = () => {
   }
 }
 
-// 监听流水线状态，完成时停止轮询并提示
-watch(isPipelineReady, (ready, wasReady) => {
+// 监听 Stage3：报告完成才停止轮询（Stage2 完成并不代表报告已落库）
+watch(isReportsReady, (ready, wasReady) => {
   if (ready && !wasReady) {
     stopPolling()
     toast.add({
       title: '报告生成完成',
       description: '项目快照分析已完成',
       color: 'success',
+    })
+  }
+})
+
+watch(isReportsFailed, (failed, wasFailed) => {
+  if (failed && !wasFailed) {
+    stopPolling()
+    toast.add({
+      title: '报告生成失败',
+      description: stage3.value?.error || '请稍后重试或查看后端日志',
+      color: 'error',
     })
   }
 })
@@ -267,9 +395,7 @@ watch(isPipelineRunning, (running) => {
 })
 
 onMounted(() => {
-  if (isPipelineRunning.value) {
-    startPolling()
-  }
+  if (isPipelineRunning.value) startPolling()
 })
 
 onUnmounted(() => {
@@ -291,13 +417,6 @@ const formatDist = (dist?: Record<string, number>) => {
   return entries.map(([k, v]) => `${k}:${v}`).join('，')
 }
 
-const quadrantSummary = computed(() => charts.value?.quadrant_summary || null)
-const quadrantSummaryByPlatform = computed(() => charts.value?.quadrant_summary_by_platform || {})
-const quadrantSummaryByKeyword = computed(() => charts.value?.quadrant_summary_by_keyword || {})
-const quadrantAvgCii = computed(() => charts.value?.quadrant_thresholds?.avg_cii)
-const entityGraph = computed(() => charts.value?.entity_graph || null)
-const sortedQuadrantPlatforms = computed(() => Object.entries(quadrantSummaryByPlatform.value || {}).sort((a, b) => a[0].localeCompare(b[0])))
-const sortedQuadrantKeywords = computed(() => Object.entries(quadrantSummaryByKeyword.value || {}).sort((a, b) => a[0].localeCompare(b[0])))
 
 // expand original_terms
 const expandedItems = ref<Set<string>>(new Set())
@@ -330,6 +449,17 @@ const getStatusLabel = (status?: string) => {
     skipped: '已跳过',
   }
   return labels[status || 'pending'] || status || 'pending'
+}
+
+const copyText = async (text: string) => {
+  const s = (text || '').toString()
+  if (!s) return
+  try {
+    await navigator.clipboard.writeText(s)
+    toast.add({ title: '已复制到剪贴板', color: 'success' })
+  } catch {
+    toast.add({ title: '复制失败', description: '请检查浏览器权限或手动复制', color: 'error' })
+  }
 }
 </script>
 
@@ -382,7 +512,7 @@ const getStatusLabel = (status?: string) => {
           </div>
           <div class="text-sm text-gray-700 dark:text-gray-300">
             <div class="text-xs text-gray-500 dark:text-gray-400">
-              实体归一与观点归一会并行触发；完成后再进行程序化分析与总分析。进度以快照自身的执行状态为准。
+              实体归一与观点归一会并行触发；完成后再进行程序化分析与三报告生成。进度以快照自身的执行状态为准。
             </div>
             <div v-if="stage2?.steps" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
@@ -417,7 +547,7 @@ const getStatusLabel = (status?: string) => {
               </div>
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <span class="font-medium text-gray-900 dark:text-white">总分析</span>
+                  <span class="font-medium text-gray-900 dark:text-white">报告生成</span>
                   <span v-if="(stage2.steps as any).summary?.job_id" class="text-xs text-gray-400 font-mono">
                     job={{ (stage2.steps as any).summary.job_id }}
                   </span>
@@ -430,59 +560,64 @@ const getStatusLabel = (status?: string) => {
           </div>
 
           <div v-if="!isPipelineReady" class="mt-4 text-xs text-gray-500 dark:text-gray-400">
-            为保证口径一致与结论可靠，报告生成完成前将不展示概览/差异/归因/证据内容。请稍候并点击右上角“刷新”查看进度。
+            为保证口径一致与结论可靠，报告生成完成前将不展示三报告原声与下方指标板块。请稍候并点击右上角“刷新”查看进度。
           </div>
         </section>
 
         <!-- 报告未完成：不展示下方板块 -->
         <template v-if="isPipelineReady">
-        <!-- 总分析（完成后展示） -->
+        <!-- 三报告（原声展示） -->
         <section class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-3">
           <div class="flex items-center justify-between gap-4">
-            <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧠 总分析</h2>
+            <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧾 三报告（原声）</h2>
             <div class="text-xs text-gray-500 dark:text-gray-400">
               <span class="font-mono">{{ stage3?.status || 'pending' }}</span>
             </div>
           </div>
 
-          <div v-if="stage3?.status !== 'completed'" class="text-xs text-gray-500 dark:text-gray-400">
-            总结生成中（或失败）。完成后将展示“执行摘要/差异/驱动因素/风险与机会”等结论。
+          <div v-if="!isReportsReady" class="text-xs text-gray-500 dark:text-gray-400">
+            报告生成中（或失败）。完成后将展示：行业格局 / 话题洞察 /（可选）战略诊断 的原声内容。
+            <span v-if="stage3?.status === 'failed' && stage3?.error" class="ml-2">错误：{{ stage3.error }}</span>
           </div>
 
-          <div v-else class="space-y-3">
+          <div v-else class="space-y-4">
             <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">执行摘要</div>
-              <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
-                {{ stage3?.summary?.executive_summary || '-' }}
+              <div class="flex items-center justify-between gap-3 mb-2">
+                <div class="text-xs text-gray-500 dark:text-gray-400">行业格局（Market Analyst）</div>
+                <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportLandscape" @click="copyText(reportLandscape)">
+                  复制
+                </UButton>
+              </div>
+              <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                {{ reportLandscape || '-' }}
               </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">平台/关键词差异</div>
-                <div v-if="stage3?.summary?.differences?.length" class="space-y-2">
-                  <div v-for="(d, idx) in stage3.summary.differences.slice(0, 8)" :key="`diff-${idx}`" class="p-2 rounded bg-white/60 dark:bg-gray-900/30">
-                    <div class="text-sm text-gray-900 dark:text-white font-medium">
-                      {{ d.dimension }} · {{ d.key }}
-                    </div>
-                    <div class="text-xs text-gray-600 dark:text-gray-300 mt-1">{{ d.insight }}</div>
-                    <div v-if="d.evidence" class="text-xs text-gray-400 mt-1">证据：{{ d.evidence }}</div>
-                  </div>
-                </div>
-                <div v-else class="text-xs text-gray-400">暂无</div>
+            <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
+              <div class="flex items-center justify-between gap-3 mb-2">
+                <div class="text-xs text-gray-500 dark:text-gray-400">话题洞察（Product Manager）</div>
+                <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportTopic" @click="copyText(reportTopic)">
+                  复制
+                </UButton>
               </div>
+              <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                {{ reportTopic || '-' }}
+              </div>
+            </div>
 
-              <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">驱动因素</div>
-                <div v-if="stage3?.summary?.drivers?.length" class="space-y-2">
-                  <div v-for="(d, idx) in stage3.summary.drivers.slice(0, 8)" :key="`drv-${idx}`" class="p-2 rounded bg-white/60 dark:bg-gray-900/30">
-                    <div class="text-sm text-gray-900 dark:text-white font-medium">{{ d.driver }}</div>
-                    <div class="text-xs text-gray-600 dark:text-gray-300 mt-1">实体：{{ (d.entities || []).slice(0, 6).join('、') || '-' }}</div>
-                    <div class="text-xs text-gray-600 dark:text-gray-300 mt-1">倾向：{{ d.sentiment || '-' }}</div>
-                    <div v-if="d.evidence" class="text-xs text-gray-400 mt-1">证据：{{ d.evidence }}</div>
-                  </div>
-                </div>
-                <div v-else class="text-xs text-gray-400">暂无</div>
+            <!-- Focus 为空时隐藏“战略诊断” -->
+            <div v-if="showFocusReport" class="p-3 rounded bg-gray-50 dark:bg-gray-800">
+              <div class="flex items-center justify-between gap-3 mb-2">
+                <div class="text-xs text-gray-500 dark:text-gray-400">战略诊断（CSO / AI 顾问）</div>
+                <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportFocus" @click="copyText(reportFocus)">
+                  复制
+                </UButton>
+              </div>
+              <div v-if="!reportFocus" class="text-xs text-gray-500 dark:text-gray-400">
+                Focus 报告为空：可能未配置主体 subject，或输出未满足“营销/产品/公关”三段式硬约束。
+              </div>
+              <div v-else class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                {{ reportFocus }}
               </div>
             </div>
           </div>
@@ -520,332 +655,62 @@ const getStatusLabel = (status?: string) => {
           </div>
         </section>
 
-        <!-- 2) 差异（平台/关键词） -->
-        <section class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-4">
-          <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧭 差异（平台 / 关键词）</h2>
+        <!-- ===== Landscape Layer (大盘层) ===== -->
+        <section class="space-y-4">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <span class="w-6 h-6 rounded bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-xs text-primary-700 dark:text-primary-400">1</span>
+            大盘层 (Landscape)
+          </h2>
+          <p class="text-xs text-gray-500 dark:text-gray-400">上帝视角：全量实体 (Target + Competitor + Context)</p>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ProjectQuadrantChart
-              v-if="charts?.quadrant?.length"
-              :points="charts?.quadrant"
-              :avg-cii="quadrantAvgCii"
-            />
-            <div v-else class="text-sm text-gray-400 py-4">暂无 quadrant 点位数据（任务级 charts.quadrant 可能缺失）。</div>
-
-            <ProjectEntityGraphChart v-if="entityGraph?.nodes?.length" :data="entityGraph" />
-            <div v-else class="text-sm text-gray-400 py-4">暂无实体共现网络数据（实体不足或共现阈值过滤后为空）。</div>
+            <SOVRankingChart :data="sovRanking" :max-items="15" />
+            <IndustryQuadrantChart :data="industryQuadrant" />
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="text-sm font-medium text-gray-900 dark:text-white mb-2">四象限汇总（全局）</div>
-              <div v-if="quadrantSummary" class="text-xs text-gray-600 dark:text-gray-300 grid grid-cols-2 gap-2">
-                <div>爆雷区(Q1)：{{ quadrantSummary.Q1_danger ?? 0 }}</div>
-                <div>品牌区(Q2)：{{ quadrantSummary.Q2_brand ?? 0 }}</div>
-                <div>吐槽区(Q3)：{{ quadrantSummary.Q3_complaint ?? 0 }}</div>
-                <div>自嗨区(Q4)：{{ quadrantSummary.Q4_niche ?? 0 }}</div>
-                <div>中性：{{ quadrantSummary.neutral ?? 0 }}</div>
-                <div>avg CII：{{ typeof quadrantAvgCii === 'number' ? quadrantAvgCii.toFixed(2) : '-' }}</div>
-              </div>
-              <div v-else class="text-xs text-gray-400">暂无汇总</div>
-            </div>
-
-            <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="text-sm font-medium text-gray-900 dark:text-white mb-2">四象限差异（平台/关键词）</div>
-              <div class="text-xs text-gray-600 dark:text-gray-300 space-y-2">
-                <div>
-                  <div class="text-gray-500 dark:text-gray-400 mb-1">按平台</div>
-                  <div v-if="sortedQuadrantPlatforms.length" class="overflow-x-auto">
-                    <table class="min-w-full text-xs">
-                      <thead>
-                        <tr class="text-left text-gray-500 dark:text-gray-400">
-                          <th class="py-1 pr-3">平台</th><th class="py-1 pr-3">Q1</th><th class="py-1 pr-3">Q2</th><th class="py-1 pr-3">Q3</th><th class="py-1 pr-3">Q4</th><th class="py-1 pr-3">N</th>
-                        </tr>
-                      </thead>
-                      <tbody class="text-gray-700 dark:text-gray-300">
-                        <tr v-for="[p, s] in sortedQuadrantPlatforms" :key="`qp-${p}`" class="border-t border-gray-100 dark:border-gray-700">
-                          <td class="py-1 pr-3">{{ p }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ s.Q1_danger ?? 0 }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ s.Q2_brand ?? 0 }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ s.Q3_complaint ?? 0 }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ s.Q4_niche ?? 0 }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ (s.Q1_danger ?? 0) + (s.Q2_brand ?? 0) + (s.Q3_complaint ?? 0) + (s.Q4_niche ?? 0) + (s.neutral ?? 0) }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div v-else class="text-gray-400">暂无</div>
-                </div>
-                <div>
-                  <div class="text-gray-500 dark:text-gray-400 mb-1">按关键词</div>
-                  <div v-if="sortedQuadrantKeywords.length" class="overflow-x-auto">
-                    <table class="min-w-full text-xs">
-                      <thead>
-                        <tr class="text-left text-gray-500 dark:text-gray-400">
-                          <th class="py-1 pr-3">关键词</th><th class="py-1 pr-3">Q1</th><th class="py-1 pr-3">Q2</th><th class="py-1 pr-3">Q3</th><th class="py-1 pr-3">Q4</th><th class="py-1 pr-3">N</th>
-                        </tr>
-                      </thead>
-                      <tbody class="text-gray-700 dark:text-gray-300">
-                        <tr v-for="[k, s] in sortedQuadrantKeywords" :key="`qk-${k}`" class="border-t border-gray-100 dark:border-gray-700">
-                          <td class="py-1 pr-3">{{ k || '-' }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ s.Q1_danger ?? 0 }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ s.Q2_brand ?? 0 }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ s.Q3_complaint ?? 0 }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ s.Q4_niche ?? 0 }}</td>
-                          <td class="py-1 pr-3 font-mono">{{ (s.Q1_danger ?? 0) + (s.Q2_brand ?? 0) + (s.Q3_complaint ?? 0) + (s.Q4_niche ?? 0) + (s.neutral ?? 0) }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div v-else class="text-gray-400">暂无</div>
-                </div>
-              </div>
-            </div>
+            <GroupShareTable :data="groupShare" :entities="topEntities" :max-items="10" />
+            <PlatformDNAChart :data="platformDNA" :max-items="10" />
           </div>
         </section>
 
-        <!-- 3) 归因 -->
-        <section class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-4">
-          <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧩 归因</h2>
+        <!-- ===== Topic Layer (话题层) ===== -->
+        <section class="space-y-4">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <span class="w-6 h-6 rounded bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-xs text-amber-700 dark:text-amber-400">2</span>
+            话题层 (Topic)
+          </h2>
+          <p class="text-xs text-gray-500 dark:text-gray-400">产品经理/舆情官视角：全量话题（不区分实体归属）</p>
 
-          <!-- 归因矩阵（基于归一结果） -->
-          <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-            <div class="flex items-center justify-between mb-2">
-              <div class="text-sm font-medium text-gray-900 dark:text-white">归因矩阵</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
-                <span v-if="stage2?.status">状态：{{ stage2.status }}</span>
-                <span v-if="stage2?.llm?.used !== undefined"> · LLM={{ stage2.llm.used ? '是' : '否' }}</span>
-              </div>
-            </div>
-            <div v-if="drivers && drivers.dimensions_top?.length && drivers.entity_matrix?.length" class="overflow-x-auto">
-              <table class="min-w-full text-xs">
-                <thead>
-                  <tr class="text-left text-gray-500 dark:text-gray-400">
-                    <th class="py-1 pr-3">实体</th>
-                    <th v-for="d in drivers.dimensions_top" :key="`dim-${d}`" class="py-1 pr-3">
-                      {{ d }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="text-gray-700 dark:text-gray-300">
-                  <tr v-for="row in drivers.entity_matrix.slice(0, 12)" :key="`m2-${row.entity}`" class="border-t border-gray-100 dark:border-gray-700">
-                    <td class="py-1 pr-3 font-medium whitespace-nowrap">{{ row.entity }}</td>
-                    <td
-                      v-for="d in drivers.dimensions_top"
-                      :key="`cell-${row.entity}-${d}`"
-                      class="py-1 pr-3 font-mono whitespace-nowrap"
-                      :class="[
-                        ((row.dimensions?.[d]?.mentions || 0) < (drivers.min_cell_mentions || 5)) ? 'text-gray-300 dark:text-gray-600' : '',
-                        ((row.dimensions?.[d]?.mentions || 0) >= (drivers.min_cell_mentions || 5) && (row.dimensions?.[d]?.sentiment || 0) < 0) ? 'text-red-600 dark:text-red-400' : '',
-                        ((row.dimensions?.[d]?.mentions || 0) >= (drivers.min_cell_mentions || 5) && (row.dimensions?.[d]?.sentiment || 0) > 0) ? 'text-green-600 dark:text-green-400' : '',
-                      ]"
-                      :title="`mentions=${row.dimensions?.[d]?.mentions || 0}, sentiment=${row.dimensions?.[d]?.sentiment ?? 0}`"
-                    >
-                      <span v-if="(row.dimensions?.[d]?.mentions || 0) >= (drivers.min_cell_mentions || 5)">
-                        {{ (row.dimensions?.[d]?.sentiment ?? 0).toFixed(2) }} ({{ row.dimensions?.[d]?.mentions || 0 }})
-                      </span>
-                      <span v-else>N/A</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div class="text-xs text-gray-400 mt-2">
-                说明：单元格显示为 <span class="font-mono">sentiment (mentions)</span>；当 mentions &lt; {{ drivers.min_cell_mentions || 5 }} 时按 N/A 灰显，避免小样本误导。
-              </div>
-            </div>
-            <div v-else class="text-xs text-gray-500 dark:text-gray-400">
-              已生成报告，但缺少归因矩阵数据（可能是实体属性不足）。
-            </div>
-          </div>
-
-          <!-- 实体/观点全局别名归一 -->
-          <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-            <div class="flex items-center justify-between mb-2">
-              <div class="text-sm font-medium text-gray-900 dark:text-white">全局别名归一</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
-                <span v-if="aliasNormalization?.entities?.used !== undefined">实体 LLM={{ aliasNormalization.entities.used ? '是' : '否' }}</span>
-                <span v-if="aliasNormalization?.topics?.used !== undefined"> · 观点 LLM={{ aliasNormalization.topics.used ? '是' : '否' }}</span>
-              </div>
-            </div>
-            <div v-if="aliasNormalization" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">合并效果</div>
-                <div class="text-sm text-gray-700 dark:text-gray-300 space-y-1">
-                  <div>
-                    实体：{{ aliasNormalization?.entities?.before_count ?? '-' }} → {{ aliasNormalization?.entities?.after_count ?? '-' }}
-                  </div>
-                  <div>
-                    观点：{{ aliasNormalization?.topics?.before_count ?? '-' }} → {{ aliasNormalization?.topics?.after_count ?? '-' }}
-                  </div>
-                </div>
-                <div class="text-xs text-gray-400 mt-2">
-                  说明：本阶段用于把跨任务的同义项合并（先程序、后 LLM 复核；LLM 不可用自动降级）。
-                </div>
-              </div>
-
-              <div class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">实体映射抽样（原名 → 标准名）</div>
-                <div v-if="aliasNormalization?.entities?.entity_mapping && Object.keys(aliasNormalization.entities.entity_mapping).length" class="overflow-x-auto">
-                  <table class="min-w-full text-xs">
-                    <thead>
-                      <tr class="text-left text-gray-500 dark:text-gray-400">
-                        <th class="py-1 pr-3">原名</th>
-                        <th class="py-1 pr-3">标准名</th>
-                      </tr>
-                    </thead>
-                    <tbody class="text-gray-700 dark:text-gray-300">
-                      <tr
-                        v-for="([k, v], idx) in Object.entries(aliasNormalization.entities.entity_mapping).slice(0, 15)"
-                        :key="`emap-${idx}`"
-                        class="border-t border-gray-100 dark:border-gray-700"
-                      >
-                        <td class="py-1 pr-3">{{ k }}</td>
-                        <td class="py-1 pr-3 font-medium">{{ v }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div v-else class="text-xs text-gray-400">暂无映射</div>
-              </div>
-            </div>
-            <div v-else class="text-xs text-gray-500 dark:text-gray-400">
-              暂无别名归一信息
-            </div>
-          </div>
-
-          <!-- 观点类目对齐（观点归一的一部分） -->
-          <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-            <div class="flex items-center justify-between mb-2">
-              <div class="text-sm font-medium text-gray-900 dark:text-white">类目对齐</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
-                <span v-if="categoryAlignment?.used !== undefined">LLM={{ categoryAlignment.used ? '是' : '否' }}</span>
-              </div>
-            </div>
-            <div v-if="categoryAlignment?.topic_aspects_aligned?.length" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">对齐后的类目聚合</div>
-                <div class="space-y-2">
-                  <div
-                    v-for="(a, idx) in categoryAlignment.topic_aspects_aligned.slice(0, 12)"
-                    :key="`aligned-aspect-${idx}`"
-                    class="p-3 rounded bg-gray-50 dark:bg-gray-800"
-                  >
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2 flex-wrap">
-                          <span class="text-gray-900 dark:text-white font-medium">{{ a.category }}</span>
-                          <UBadge v-if="a.sentiment < 0" color="error" variant="subtle" size="xs">偏负</UBadge>
-                          <UBadge v-else-if="a.sentiment > 0" color="success" variant="subtle" size="xs">偏正</UBadge>
-                          <UBadge v-else color="neutral" variant="subtle" size="xs">中性</UBadge>
-                        </div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          代表词：{{ (a.top_keywords || []).slice(0, 6).join('、') || '-' }}
-                        </div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(a.platform_distribution) }}</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(a.keyword_distribution) }}</div>
-                      </div>
-                      <div class="text-right shrink-0">
-                        <div class="font-mono font-bold text-gray-900 dark:text-white">{{ Number(a.heat || 0).toFixed(1) }}</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400">heat</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">类目映射（原类目 → 标准类目）</div>
-                <div v-if="categoryAlignment?.category_map && Object.keys(categoryAlignment.category_map).length" class="overflow-x-auto">
-                  <table class="min-w-full text-xs">
-                    <thead>
-                      <tr class="text-left text-gray-500 dark:text-gray-400">
-                        <th class="py-1 pr-3">原类目</th>
-                        <th class="py-1 pr-3">标准类目</th>
-                      </tr>
-                    </thead>
-                    <tbody class="text-gray-700 dark:text-gray-300">
-                      <tr
-                        v-for="(v, k) in categoryAlignment.category_map"
-                        :key="`catmap-${k}`"
-                        class="border-t border-gray-100 dark:border-gray-700"
-                      >
-                        <td class="py-1 pr-3">{{ k }}</td>
-                        <td class="py-1 pr-3 font-medium">{{ v }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div v-else class="text-xs text-gray-400">
-                  LLM 未返回映射或无需对齐（类目较少时可能为空）。
-                </div>
-              </div>
-            </div>
-            <div v-else class="text-xs text-gray-500 dark:text-gray-400">
-              未生成对齐后的类目聚合（可能是 top_topics 为空或类目不足）。
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="text-sm font-medium text-gray-900 dark:text-white mb-2">类目概览（原始合并结果）</div>
-              <div v-if="topicAspects.length" class="space-y-2">
-                <div v-for="(a, idx) in topicAspects.slice(0, 12)" :key="`aspect-${idx}`" class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-2 flex-wrap">
-                        <span class="text-gray-900 dark:text-white font-medium">{{ a.category }}</span>
-                        <UBadge v-if="a.sentiment < 0" color="error" variant="subtle" size="xs">偏负</UBadge>
-                        <UBadge v-else-if="a.sentiment > 0" color="success" variant="subtle" size="xs">偏正</UBadge>
-                        <UBadge v-else color="neutral" variant="subtle" size="xs">中性</UBadge>
-                      </div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">代表词：{{ (a.top_keywords || []).slice(0, 6).join('、') || '-' }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(a.platform_distribution) }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(a.keyword_distribution) }}</div>
-                    </div>
-                    <div class="text-right shrink-0">
-                      <div class="font-mono font-bold text-gray-900 dark:text-white">{{ Number(a.heat || 0).toFixed(1) }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400">heat</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">情感 {{ Number(a.sentiment || 0).toFixed(2) }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="text-sm text-gray-400 py-4">暂无类目聚合数据</div>
-            </div>
-
-            <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="text-sm font-medium text-gray-900 dark:text-white mb-2">Top 实体画像（原始合并结果）</div>
-              <div v-if="topEntities.length" class="space-y-2">
-                <div v-for="(e, idx) in topEntities.slice(0, 12)" :key="`driver-entity-${idx}`" class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-2 flex-wrap">
-                        <span class="text-gray-900 dark:text-white font-medium">{{ e.name }}</span>
-                        <UBadge v-if="e.role" color="neutral" variant="subtle" size="xs">{{ e.role }}</UBadge>
-                        <UBadge v-if="e.type" color="info" variant="subtle" size="xs">{{ e.type }}</UBadge>
-                      </div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(e.platform_distribution) }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(e.keyword_distribution) }}</div>
-                      <div v-if="e.top_features?.length" class="text-xs text-gray-600 dark:text-gray-300 mt-2">
-                        <span class="text-gray-500 dark:text-gray-400">优势：</span>{{ e.top_features.slice(0, 5).map(x => x.text).join('、') }}
-                      </div>
-                      <div v-if="e.top_issues?.length" class="text-xs text-gray-600 dark:text-gray-300 mt-1">
-                        <span class="text-gray-500 dark:text-gray-400">槽点：</span>{{ e.top_issues.slice(0, 5).map(x => x.text).join('、') }}
-                      </div>
-                    </div>
-                    <div class="text-right shrink-0">
-                      <div class="font-mono font-bold text-gray-900 dark:text-white">{{ Number(e.score || 0).toFixed(2) }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400">提及 {{ e.mentions }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="text-sm text-gray-400 py-4">暂无实体数据</div>
-            </div>
-          </div>
+          <TopicRadarChart
+            :pains="topicRadar?.pains"
+            :gains="topicRadar?.gains"
+            :controversies="topicRadar?.controversies"
+            :unmet-needs="unmetNeeds"
+          />
         </section>
 
-        <!-- 4) 证据 -->
+        <!-- ===== Focus Layer (聚焦层) - 条件触发 ===== -->
+        <section v-if="showFocusLayer" class="space-y-4">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <span class="w-6 h-6 rounded bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center text-xs text-rose-700 dark:text-rose-400">3</span>
+            聚焦层 (Focus)
+          </h2>
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            战略官视角：仅限 Target 和 Competitor · 分析主体：<span class="font-medium text-gray-700 dark:text-gray-300">{{ subject }}</span>
+          </p>
+
+          <SWOTMatrixChart :data="swotData" :subject="subject" />
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ProductLineHealthTable :data="productLineHealth" />
+            <PlatformScissorsChart :data="platformScissors" :subject="subject" />
+          </div>
+
+          <GapAnalysisChart :data="gapData" :subject="subject" />
+        </section>
+
+        <!-- 证据 -->
         <section class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-4">
           <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧾 证据</h2>
 

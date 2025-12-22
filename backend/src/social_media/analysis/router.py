@@ -18,6 +18,7 @@ API 结构：
 
 from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from src.database import get_async_db
 from src.schemas import MessageResponse
@@ -39,7 +40,6 @@ from .schemas import (
     PostAnalysisWithPostInfo,
     DeepAnalysisPreviewResponse,
     TaskAnalysisResultResponse,
-    RunAggregationResponse,
     CreateProjectSnapshotRequest,
     ProjectSnapshotResponse,
     ProjectSnapshotListResponse,
@@ -53,6 +53,7 @@ router = APIRouter(
 
 
 # ==================== 分析任务（全局资源）====================
+
 
 @router.get(
     "/jobs",
@@ -181,6 +182,7 @@ async def delete_analysis_job(
 
 # ==================== 任务级分析操作 ====================
 
+
 @router.post(
     "/tasks/{task_id}/screening",
     response_model=RunAnalysisResponse,
@@ -227,7 +229,9 @@ async def run_post_deep_analysis(
     """
     request = RunDeepAnalysisRequest(task_id=task_id)
     return await service.run_post_deep_analysis(
-        db, request, current_user.id,
+        db,
+        request,
+        current_user.id,
         spam_max=spam_max,
         value_min=value_min,
         relevance_min=relevance_min,
@@ -258,7 +262,9 @@ async def run_comment_deep_analysis(
     """
     request = RunDeepAnalysisRequest(task_id=task_id)
     return await service.run_comment_deep_analysis(
-        db, request, current_user.id,
+        db,
+        request,
+        current_user.id,
         spam_max=spam_max,
         value_min=value_min,
         relevance_min=relevance_min,
@@ -293,13 +299,22 @@ async def get_task_post_analyses(
     post_ids_list: list[int] | None = None
     if post_ids:
         try:
-            post_ids_list = [int(pid.strip()) for pid in post_ids.split(",") if pid.strip()]
+            post_ids_list = [
+                int(pid.strip()) for pid in post_ids.split(",") if pid.strip()
+            ]
         except ValueError:
             pass  # 忽略无效的ID
 
     items, total = await service.get_task_post_analyses(
-        db, task_id, current_user.id, page, page_size, filter_analyzed,
-        search_query=search_query, search_id=search_id, post_ids=post_ids_list
+        db,
+        task_id,
+        current_user.id,
+        page,
+        page_size,
+        filter_analyzed,
+        search_query=search_query,
+        search_id=search_id,
+        post_ids=post_ids_list,
     )
 
     return PostAnalysisListResponse(
@@ -411,6 +426,7 @@ async def delete_task_analyses(
 
 # ==================== 项目级分析操作（预留）====================
 
+
 @router.post(
     "/projects/{project_id}/snapshots",
     response_model=ProjectSnapshotResponse,
@@ -442,12 +458,17 @@ async def create_project_snapshot(
 
     # 创建后立刻启动异步增强（不需要额外接口）
     from datetime import datetime, timezone
-    from src.social_media.analysis.celery_tasks.project_snapshot_tasks import run_project_snapshot_task
+    from src.social_media.analysis.celery_tasks.project_snapshot_tasks import (
+        run_project_snapshot_task,
+    )
 
     now = datetime.now(timezone.utc).isoformat()
+    # 重要：result_data 是 JSON 字段，直接原地修改可能不会被 SQLAlchemy 追踪到（导致不落库）
     result_data = snapshot.result_data or {}
     if not isinstance(result_data, dict):
         result_data = {}
+    # 触发变更追踪：用新 dict 承载本次更新
+    result_data = dict(result_data)
 
     # 初始化流水线状态（供前端轮询展示）
     stage2 = {
@@ -471,6 +492,7 @@ async def create_project_snapshot(
     result_data["stage2"] = stage2
     result_data["stage3"] = stage3
     snapshot.result_data = result_data
+    flag_modified(snapshot, "result_data")
     await db.commit()
     await db.refresh(snapshot)
     return ProjectSnapshotResponse.model_validate(snapshot)
@@ -491,9 +513,14 @@ async def list_project_snapshots(
     from .models import ProjectAnalysisSnapshot
     from sqlalchemy import select
 
-    has_access = await project_crud.check_project_access(db, project_id, current_user.id)
+    has_access = await project_crud.check_project_access(
+        db, project_id, current_user.id
+    )
     if not has_access:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this project")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project",
+        )
 
     stmt = (
         select(ProjectAnalysisSnapshot)
@@ -502,7 +529,9 @@ async def list_project_snapshots(
     )
     result = await db.execute(stmt)
     items = list(result.scalars().all())
-    return ProjectSnapshotListResponse(items=[ProjectSnapshotResponse.model_validate(i) for i in items])
+    return ProjectSnapshotListResponse(
+        items=[ProjectSnapshotResponse.model_validate(i) for i in items]
+    )
 
 
 @router.get(
@@ -521,9 +550,14 @@ async def get_project_snapshot(
     from .models import ProjectAnalysisSnapshot
     from sqlalchemy import select
 
-    has_access = await project_crud.check_project_access(db, project_id, current_user.id)
+    has_access = await project_crud.check_project_access(
+        db, project_id, current_user.id
+    )
     if not has_access:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this project")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project",
+        )
 
     stmt = (
         select(ProjectAnalysisSnapshot)
@@ -533,7 +567,9 @@ async def get_project_snapshot(
     result = await db.execute(stmt)
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found"
+        )
     return ProjectSnapshotResponse.model_validate(snapshot)
 
 
@@ -554,9 +590,14 @@ async def delete_project_snapshot(
     from .models import ProjectAnalysisSnapshot
     from sqlalchemy import select
 
-    has_access = await project_crud.check_project_access(db, project_id, current_user.id)
+    has_access = await project_crud.check_project_access(
+        db, project_id, current_user.id
+    )
     if not has_access:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this project")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project",
+        )
 
     stmt = (
         select(ProjectAnalysisSnapshot)
@@ -566,7 +607,9 @@ async def delete_project_snapshot(
     result = await db.execute(stmt)
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found"
+        )
 
     await db.delete(snapshot)
     await db.commit()
@@ -627,6 +670,7 @@ async def run_competitive_analysis(
 
 # ==================== 统计 ====================
 
+
 @router.get(
     "/stats",
     response_model=AnalysisStatsResponse,
@@ -647,6 +691,7 @@ async def get_global_stats(
 
 
 # ==================== 健康检查 ====================
+
 
 @router.get(
     "/health",

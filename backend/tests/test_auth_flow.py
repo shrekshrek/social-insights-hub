@@ -78,7 +78,7 @@ async def test_full_auth_flow(async_client: AsyncClient, user_payload: dict):
     # 4. Logout
     logout_response = await async_client.post("/api/v1/auth/logout", headers=headers)
     assert logout_response.status_code == 200
-    assert "Successfully logged out" in logout_response.json()["msg"]
+    assert "Successfully logged out" in logout_response.json()["message"]
 
     # 5. Fail to Get Me (Token is blacklisted)
     fail_me_response = await async_client.get("/api/v1/users/me", headers=headers)

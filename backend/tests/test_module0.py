@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """Module 0 综合测试：基础设施验证
 
 测试内容：
@@ -17,12 +18,13 @@
 import sys
 from pathlib import Path
 
-# Add backend/src to path for imports
-backend_path = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(backend_path))
+# Add backend root to sys.path for imports (avoid `src` namespace package pollution)
+backend_root = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(backend_root))
 
 # 加载测试环境变量（与conftest.py一致）
 from dotenv import load_dotenv
+
 env_path = Path(__file__).parent.parent / ".env.test"
 load_dotenv(dotenv_path=env_path, override=True)
 
@@ -43,10 +45,18 @@ class TestConfiguration:
     def test_database_pool_settings(self):
         """测试数据库连接池优化设置"""
         assert settings.DB_POOL_SIZE == 50, f"Expected 50, got {settings.DB_POOL_SIZE}"
-        assert settings.DB_MAX_OVERFLOW == 100, f"Expected 100, got {settings.DB_MAX_OVERFLOW}"
-        assert settings.DB_POOL_TIMEOUT == 60, f"Expected 60, got {settings.DB_POOL_TIMEOUT}"
-        assert settings.DB_POOL_RECYCLE == 1800, f"Expected 1800, got {settings.DB_POOL_RECYCLE}"
-        print(f"✓ 数据库连接池设置已优化 (pool_size={settings.DB_POOL_SIZE}, max_overflow={settings.DB_MAX_OVERFLOW})")
+        assert settings.DB_MAX_OVERFLOW == 100, (
+            f"Expected 100, got {settings.DB_MAX_OVERFLOW}"
+        )
+        assert settings.DB_POOL_TIMEOUT == 60, (
+            f"Expected 60, got {settings.DB_POOL_TIMEOUT}"
+        )
+        assert settings.DB_POOL_RECYCLE == 1800, (
+            f"Expected 1800, got {settings.DB_POOL_RECYCLE}"
+        )
+        print(
+            f"✓ 数据库连接池设置已优化 (pool_size={settings.DB_POOL_SIZE}, max_overflow={settings.DB_MAX_OVERFLOW})"
+        )
 
     def test_celery_config(self):
         """测试Celery配置"""
@@ -62,7 +72,9 @@ class TestConfiguration:
         assert settings.CELERY_AI_COMMENTS_BATCH_SIZE == 10
         assert settings.CELERY_TASK_MAX_ITEMS_LIMIT == 20000
         assert settings.DB_COMMIT_AFTER_BATCH_COUNT == 20
-        print(f"✓ AI任务配置正确 (并发流={settings.CELERY_AI_SCREENING_CONCURRENT_STREAMS}, 批次大小={settings.CELERY_AI_POSTS_BATCH_SIZE})")
+        print(
+            f"✓ AI任务配置正确 (并发流={settings.CELERY_AI_SCREENING_CONCURRENT_STREAMS}, 批次大小={settings.CELERY_AI_POSTS_BATCH_SIZE})"
+        )
 
     def test_deepseek_config(self):
         """测试DeepSeek配置"""
@@ -72,15 +84,19 @@ class TestConfiguration:
         assert settings.DEEPSEEK_CHAT_MAX_TOKENS == 8192
         assert settings.DEEPSEEK_REASONER_MAX_TOKENS == 65536
         assert settings.DEEPSEEK_TEMPERATURE == 0.0
-        print(f"✓ DeepSeek模型配置正确 (chat: {settings.DEEPSEEK_CHAT_MODEL}, reasoner: {settings.DEEPSEEK_REASONER_MODEL})")
+        print(
+            f"✓ DeepSeek模型配置正确 (chat: {settings.DEEPSEEK_CHAT_MODEL}, reasoner: {settings.DEEPSEEK_REASONER_MODEL})"
+        )
 
     def test_deepseek_pricing_config(self):
         """测试DeepSeek价格配置"""
         assert settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION == 2.0
-        assert settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION == 8.0
-        assert settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION == 4.0
-        assert settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION == 16.0
-        print("✓ DeepSeek价格配置正确 (chat: ¥2/¥8, reasoner: ¥4/¥16 per million tokens)")
+        assert settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION == 3.0
+        assert settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION == 2.0
+        assert settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION == 3.0
+        print(
+            "✓ DeepSeek价格配置正确 (chat: ¥2/¥3, reasoner: ¥2/¥3 per million tokens)"
+        )
 
     def test_batch_analysis_config(self):
         """测试批处理分析框架配置"""
@@ -89,7 +105,9 @@ class TestConfiguration:
         assert settings.BATCH_ANALYSIS_MAX_BATCH_SIZE == 40
         assert settings.BATCH_ANALYSIS_MAX_CONCURRENT_BATCHES == 100
         assert settings.BATCH_ANALYSIS_ENABLE_CONCURRENT is True
-        print(f"✓ 批处理分析框架配置正确 (默认批次={settings.BATCH_ANALYSIS_DEFAULT_BATCH_SIZE}, 最大并发={settings.BATCH_ANALYSIS_MAX_CONCURRENT_BATCHES})")
+        print(
+            f"✓ 批处理分析框架配置正确 (默认批次={settings.BATCH_ANALYSIS_DEFAULT_BATCH_SIZE}, 最大并发={settings.BATCH_ANALYSIS_MAX_CONCURRENT_BATCHES})"
+        )
 
 
 class TestLangChainModule:
@@ -98,7 +116,7 @@ class TestLangChainModule:
     def test_langchain_module_import(self):
         """测试LangChain模块导入"""
         try:
-            from src.langchain_module import (
+            from src.langchain import (  # noqa: F401
                 get_deepseek_chat,
                 get_deepseek_reasoner,
                 calculate_cost,
@@ -106,23 +124,26 @@ class TestLangChainModule:
                 truncate_text,
                 format_keywords_for_prompt,
             )
+
             print("✓ LangChain模块导入成功")
         except ImportError as e:
             pytest.fail(f"LangChain模块导入失败: {e}")
 
     def test_llm_instance_creation_chat(self):
         """测试Chat LLM实例创建 (LangChain 1.0)"""
-        if not settings.DEEPSEEK_API_KEY:
+        if not getattr(settings, "DEEPSEEK_API_KEY", None):
             print("⊘ 未设置DEEPSEEK_API_KEY，跳过Chat LLM实例创建测试")
             return
 
         try:
-            from src.langchain_module import get_deepseek_chat
+            from src.langchain import get_deepseek_chat
             from langchain_core.language_models.chat_models import BaseChatModel
 
             llm = get_deepseek_chat()
             assert llm is not None
-            assert isinstance(llm, BaseChatModel), f"Expected BaseChatModel, got {type(llm)}"
+            assert isinstance(llm, BaseChatModel), (
+                f"Expected BaseChatModel, got {type(llm)}"
+            )
             print(f"✓ Chat LLM实例创建成功 (类型: {type(llm).__name__})")
             print("  - 符合LangChain 1.0规范 (BaseChatModel)")
         except Exception as e:
@@ -130,17 +151,19 @@ class TestLangChainModule:
 
     def test_llm_instance_creation_reasoner(self):
         """测试Reasoner LLM实例创建 (LangChain 1.0)"""
-        if not settings.DEEPSEEK_API_KEY:
+        if not getattr(settings, "DEEPSEEK_API_KEY", None):
             print("⊘ 未设置DEEPSEEK_API_KEY，跳过Reasoner LLM实例创建测试")
             return
 
         try:
-            from src.langchain_module import get_deepseek_reasoner
+            from src.langchain import get_deepseek_reasoner
             from langchain_core.language_models.chat_models import BaseChatModel
 
             llm = get_deepseek_reasoner()
             assert llm is not None
-            assert isinstance(llm, BaseChatModel), f"Expected BaseChatModel, got {type(llm)}"
+            assert isinstance(llm, BaseChatModel), (
+                f"Expected BaseChatModel, got {type(llm)}"
+            )
             print(f"✓ Reasoner LLM实例创建成功 (类型: {type(llm).__name__})")
             print("  - 符合LangChain 1.0规范 (BaseChatModel)")
         except Exception as e:
@@ -148,27 +171,29 @@ class TestLangChainModule:
 
     def test_calculate_cost_chat(self):
         """测试Chat模型成本计算"""
-        from src.langchain_module import calculate_cost
+        from src.langchain import calculate_cost
 
         # Test chat model: 1000 input + 500 output tokens
         cost = calculate_cost(input_tokens=1000, output_tokens=500, model_type="chat")
-        expected_cost = (1000 / 1_000_000 * 2.0) + (500 / 1_000_000 * 8.0)
+        expected_cost = (1000 / 1_000_000 * 2.0) + (500 / 1_000_000 * 3.0)
         assert abs(cost - expected_cost) < 0.000001
         print(f"✓ Chat模型成本计算正确: 1000输入+500输出 = ¥{cost:.6f}")
 
     def test_calculate_cost_reasoner(self):
         """测试Reasoner模型成本计算"""
-        from src.langchain_module import calculate_cost
+        from src.langchain import calculate_cost
 
         # Test reasoner model: 2000 input + 1000 output tokens
-        cost = calculate_cost(input_tokens=2000, output_tokens=1000, model_type="reasoner")
-        expected_cost = (2000 / 1_000_000 * 4.0) + (1000 / 1_000_000 * 16.0)
+        cost = calculate_cost(
+            input_tokens=2000, output_tokens=1000, model_type="reasoner"
+        )
+        expected_cost = (2000 / 1_000_000 * 2.0) + (1000 / 1_000_000 * 3.0)
         assert abs(cost - expected_cost) < 0.000001
         print(f"✓ Reasoner模型成本计算正确: 2000输入+1000输出 = ¥{cost:.6f}")
 
     def test_utility_functions(self):
         """测试工具函数"""
-        from src.langchain_module import (
+        from src.langchain import (
             truncate_text,
             format_keywords_for_prompt,
         )
@@ -192,8 +217,8 @@ class TestDeepSeekAPI:
     """测试DeepSeek API连通性（需要API密钥）"""
 
     @pytest.mark.skipif(
-        not settings.DEEPSEEK_API_KEY,
-        reason="未设置DEEPSEEK_API_KEY，跳过API连通性测试"
+        not getattr(settings, "DEEPSEEK_API_KEY", None),
+        reason="未设置DEEPSEEK_API_KEY，跳过API连通性测试",
     )
     def test_api_connectivity_chat(self):
         """测试Chat模型API连通性 (LangChain 1.0)"""
@@ -216,13 +241,15 @@ class TestDeepSeekAPI:
 
             print("✓ Chat模型API连通性测试成功")
             print(f"  - 响应内容: {response.content[:50]}...")
-            print(f"  - Token使用: 输入={usage['input_tokens']}, 输出={usage['output_tokens']}")
+            print(
+                f"  - Token使用: 输入={usage['input_tokens']}, 输出={usage['output_tokens']}"
+            )
         except Exception as e:
             pytest.fail(f"Chat模型API连通性测试失败: {e}")
 
     @pytest.mark.skipif(
-        not settings.DEEPSEEK_API_KEY,
-        reason="未设置DEEPSEEK_API_KEY，跳过API连通性测试"
+        not getattr(settings, "DEEPSEEK_API_KEY", None),
+        reason="未设置DEEPSEEK_API_KEY，跳过API连通性测试",
     )
     def test_api_connectivity_reasoner(self):
         """测试Reasoner模型API连通性 (LangChain 1.0)"""
@@ -244,7 +271,9 @@ class TestDeepSeekAPI:
 
             print("✓ Reasoner模型API连通性测试成功")
             print(f"  - 响应内容: {response.content[:50]}...")
-            print(f"  - Token使用: 输入={usage['input_tokens']}, 输出={usage['output_tokens']}")
+            print(
+                f"  - Token使用: 输入={usage['input_tokens']}, 输出={usage['output_tokens']}"
+            )
         except Exception as e:
             pytest.fail(f"Reasoner模型API连通性测试失败: {e}")
 
@@ -273,6 +302,7 @@ class TestCeleryApp:
         """测试Celery应用导入"""
         try:
             from src.celery_app import celery_app
+
             assert celery_app is not None
             print("✓ Celery应用导入成功")
         except ImportError as e:
@@ -287,20 +317,20 @@ class TestCeleryApp:
         assert celery_app.conf.result_serializer == "json"
         assert celery_app.conf.timezone == "Asia/Shanghai"
         assert celery_app.conf.task_track_started is True
-        assert celery_app.conf.worker_pool == "eventlet"
-        assert celery_app.conf.worker_concurrency == 100
+        # worker_pool / worker_concurrency 通过命令行参数指定，不应在应用配置中强绑定
+        assert celery_app.conf.task_time_limit == 7200
 
         print("✓ Celery配置验证成功")
-        print(f"  - Worker池类型: {celery_app.conf.worker_pool}")
-        print(f"  - 并发数: {celery_app.conf.worker_concurrency}")
+        print(f"  - Worker池类型: {getattr(celery_app.conf, 'worker_pool', None)}")
+        print(f"  - 并发数: {getattr(celery_app.conf, 'worker_concurrency', None)}")
         print(f"  - 任务时间限制: {celery_app.conf.task_time_limit}秒")
 
 
 def run_all_tests():
     """运行所有测试（非pytest模式）"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("Module 0 基础设施验证测试")
-    print("="*70 + "\n")
+    print("=" * 70 + "\n")
 
     # Test Configuration
     print("【1/6】配置测试")
@@ -339,7 +369,7 @@ def run_all_tests():
     # Test DeepSeek API
     print("【3/6】DeepSeek API连通性测试")
     print("-" * 70)
-    if not settings.DEEPSEEK_API_KEY:
+    if not getattr(settings, "DEEPSEEK_API_KEY", None):
         print("⊘ 未设置DEEPSEEK_API_KEY，跳过API连通性测试\n")
     else:
         test_api = TestDeepSeekAPI()
@@ -376,7 +406,7 @@ def run_all_tests():
 
     # Summary
     print("【6/6】测试总结")
-    print("="*70)
+    print("=" * 70)
     print("✓ Module 0 基础设施验证完成！")
     print()
     print("已验证组件:")
@@ -384,7 +414,7 @@ def run_all_tests():
     print("  ✓ LangChain 1.0 模块（Chat + Reasoner）")
     print("  ✓ 数据库连接池（50/100优化）")
     print("  ✓ Celery异步任务队列（eventlet/100并发）")
-    if settings.DEEPSEEK_API_KEY:
+    if getattr(settings, "DEEPSEEK_API_KEY", None):
         print("  ✓ DeepSeek API连通性")
     else:
         print("  ⊘ DeepSeek API连通性（未测试，需要API密钥）")
@@ -392,7 +422,7 @@ def run_all_tests():
     print("后续步骤:")
     print("  1. 在.env中配置DEEPSEEK_API_KEY进行完整API测试")
     print("  2. 继续Module 1: 平台管理模块迁移")
-    print("="*70 + "\n")
+    print("=" * 70 + "\n")
 
     return True
 

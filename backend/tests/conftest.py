@@ -1,5 +1,8 @@
+# ruff: noqa: E402
+
 import asyncio
 import os
+import sys
 from typing import AsyncGenerator
 from pathlib import Path
 
@@ -11,6 +14,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import NullPool
+
+# 强制把当前 backend 根目录放到 sys.path 最前，避免 namespace package `src` 被其他工程路径污染
+BACKEND_ROOT = Path(__file__).parent.parent.resolve()
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 from src.database import Base, get_async_db
 from src.main import app

@@ -9,16 +9,50 @@ from collections import defaultdict, Counter
 from datetime import datetime, timezone
 from typing import Any
 
-from src.social_media.analysis.celery_tasks.aggregation.utils import calculate_score, normalize_name
+from src.social_media.analysis.celery_tasks.aggregation.utils import (
+    calculate_score,
+    normalize_name,
+)
 
 
-def _merge_original_terms(term_counts: dict[str, int], original_terms: list[dict[str, Any]] | None) -> None:
+def _normalize_platform_code(code: str) -> str:
+    """将用户输入/文档名映射为系统内部平台 code（Platform.code）。
+
+    系统内部约定（见 projects/init_data.py）：xhs / dy / bili / wb
+    文档/用户可能输入：douyin/weibo/bilibili 等，因此这里做兼容映射。
+    """
+    c = (code or "").strip().lower()
+    if not c:
+        return ""
+    alias = {
+        # internal -> internal
+        "xhs": "xhs",
+        "dy": "dy",
+        "bili": "bili",
+        "wb": "wb",
+        # common names -> internal
+        "douyin": "dy",
+        "weibo": "wb",
+        "bilibili": "bili",
+    }
+    return alias.get(c, c)
+
+
+def _merge_original_terms(
+    term_counts: dict[str, int], original_terms: list[dict[str, Any]] | None
+) -> None:
     if not original_terms:
         return
     for t in original_terms:
         text = (t or {}).get("text")
         if not text:
             continue
+        # 工程防御：限制单条原话长度，避免 token/内存膨胀
+        text = str(text).strip()
+        if not text:
+            continue
+        if len(text) > 100:
+            text = text[:100]
         try:
             count = int((t or {}).get("count", 0))
         except Exception:
@@ -28,38 +62,20 @@ def _merge_original_terms(term_counts: dict[str, int], original_terms: list[dict
         term_counts[text] += count
 
 
-def _empty_quadrant_summary() -> dict[str, int]:
-    return {
-        "Q1_danger": 0,
-        "Q2_brand": 0,
-        "Q3_complaint": 0,
-        "Q4_niche": 0,
-        "neutral": 0,
-    }
-
-
-def _compute_quadrant_label(sentiment: float, cii: float, avg_cii: float) -> str:
-    """项目级四象限标签（按全局 avg_cii 统一口径重算）"""
-    if sentiment < -0.5 and cii > avg_cii:
-        return "Q1_danger"
-    if sentiment > 0.5 and cii > avg_cii:
-        return "Q2_brand"
-    if sentiment < -0.5 and cii <= avg_cii:
-        return "Q3_complaint"
-    if sentiment > 0.5 and cii <= avg_cii:
-        return "Q4_niche"
-    return "neutral"
 
 
 def _ensure_attr_bucket() -> dict[str, Any]:
     return {
-        "items": defaultdict(lambda: {
-            "mentions_set": set(),  # set[(task_id, post_id)]
-            "post_ids_sample": [],
-            "original_terms_counts": defaultdict(int),
-            "platform_dist": defaultdict(int),
-            "keyword_dist": defaultdict(int),
-        })
+        "items": defaultdict(
+            lambda: {
+                # 项目级去重口径：按 platform:post_id_on_platform 去重
+                "mentions_set": set(),  # set[str] (post_key)
+                "post_ids_sample": [],
+                "original_terms_counts": defaultdict(int),
+                "platform_dist": defaultdict(int),
+                "keyword_dist": defaultdict(int),
+            }
+        )
     }
 
 
@@ -72,6 +88,10 @@ def _merge_entity_attr_items(
     attr_name: str,
     attr_items: list[dict[str, Any]] | None,
     max_post_ids_sample: int,
+    post_key_by_id: dict[int, str],
+    post_info_by_key: dict[str, dict[str, Any]],
+    primary_keyword_by_key: dict[str, str],
+    primary_task_by_key: dict[str, int],
 ) -> None:
     """把任务级 entity.{features/issues/...} 合并进项目级 bucket。
 
@@ -101,28 +121,43 @@ def _merge_entity_attr_items(
             continue
 
         sub = items_dict[text]
+        # 项目级去重：把内部 post_id 映射为 post_key（platform:post_id_on_platform）
         post_ids = (it or {}).get("post_ids") or []
-        post_ids_int: list[int] = []
+        pk_to_pid: dict[str, int] = {}
         for pid in post_ids:
             try:
-                post_ids_int.append(int(pid))
+                pid_int = int(pid)
             except Exception:
                 continue
+            pk = post_key_by_id.get(pid_int)
+            if not pk:
+                continue
+            if pk not in pk_to_pid:
+                pk_to_pid[pk] = pid_int
 
-        # mentions_weight：用唯一帖子数口径（属性维度最稳）
-        mentions_weight = len(set(post_ids_int))
+        # mentions_weight：用去重后的唯一帖子数口径（避免跨任务重复贴放大）
+        mentions_weight = len(pk_to_pid)
         if mentions_weight <= 0:
             continue
 
-        sub["platform_dist"][platform] += mentions_weight
-        sub["keyword_dist"][keyword] += mentions_weight
-
-        for pid_int in set(post_ids_int):
-            sub["mentions_set"].add((tid, pid_int))
+        for pk, pid_int in pk_to_pid.items():
+            if pk in sub["mentions_set"]:
+                continue
+            sub["mentions_set"].add(pk)
+            info = post_info_by_key.get(pk) or {}
+            sub["platform_dist"][str(info.get("platform") or platform)] += 1
+            sub["keyword_dist"][str(primary_keyword_by_key.get(pk) or keyword)] += 1
             if len(sub["post_ids_sample"]) < max_post_ids_sample:
-                sub["post_ids_sample"].append({"task_id": tid, "post_id": pid_int})
+                sub["post_ids_sample"].append(
+                    {
+                        "task_id": int(primary_task_by_key.get(pk) or tid),
+                        "post_id": pid_int,
+                    }
+                )
 
-        _merge_original_terms(sub["original_terms_counts"], (it or {}).get("original_terms"))
+        _merge_original_terms(
+            sub["original_terms_counts"], (it or {}).get("original_terms")
+        )
 
 
 def build_project_snapshot_result(
@@ -135,6 +170,10 @@ def build_project_snapshot_result(
     subject: str | None = None,
     competitors: list[str] | None = None,
     platform_weights: dict[str, float] | None = None,
+    post_key_by_id: dict[int, str] | None = None,
+    post_info_by_key: dict[str, dict[str, Any]] | None = None,
+    primary_keyword_by_key: dict[str, str] | None = None,
+    primary_task_by_key: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """从多个任务的 analysis_result 生成项目级快照结果。
 
@@ -152,7 +191,49 @@ def build_project_snapshot_result(
         subject: 主体品牌/产品（用于 Focus 层触发与角色仲裁；为空则跳过 Focus）
         competitors: 竞品列表（用于角色仲裁与 Focus 层对比）
         platform_weights: 平台权重覆盖（key=platform code，value=权重系数）
+        post_key_by_id: {SocialPost.id -> "platform_code:post_id_on_platform"} 映射（用于跨任务去重）
+        post_info_by_key: {"platform_code:post_id_on_platform" -> post meta}（包含 raw_cii/published_at 等）
+        primary_keyword_by_key: {post_key -> keyword_label} 去重后关键词主归属（首见原则）
+        primary_task_by_key: {post_key -> task_id} 去重后任务主归属（首见原则）
     """
+    post_key_by_id = post_key_by_id or {}
+    post_info_by_key = post_info_by_key or {}
+    primary_keyword_by_key = primary_keyword_by_key or {}
+    primary_task_by_key = primary_task_by_key or {}
+
+    # 默认平台权重（可被覆盖）
+    weights_used: dict[str, float] = {
+        # 以系统内部 Platform.code 为准（xhs/dy/bili/wb）
+        "bili": 1.5,
+        "xhs": 1.0,
+        "dy": 0.8,
+        "wb": 0.6,
+    }
+    if isinstance(platform_weights, dict) and platform_weights:
+        for k, v in platform_weights.items():
+            try:
+                kk = _normalize_platform_code(str(k))
+                vv = float(v)
+            except Exception:
+                continue
+            if not kk:
+                continue
+            weights_used[kk] = vv
+
+    # 给 post_info 计算 normalized_heat（Raw_CII * weight）
+    for pk, info in list(post_info_by_key.items()):
+        if not isinstance(info, dict):
+            continue
+        platform = _normalize_platform_code(str(info.get("platform") or "unknown"))
+        try:
+            raw_cii = float(info.get("raw_cii") or 0.0)
+        except Exception:
+            raw_cii = 0.0
+        w = float(weights_used.get(platform, 1.0))
+        info["weight"] = w
+        info["normalized_heat"] = raw_cii * w
+        info["platform"] = platform
+        post_info_by_key[pk] = info
 
     # 构建任务上下文映射
     task_context_map = {
@@ -163,12 +244,44 @@ def build_project_snapshot_result(
         for t in task_data_list
     }
 
+    # 用“首见原则”填充 primary_keyword_by_key / primary_task_by_key（保证去重后关键词分布总和可控）
+    # 说明：同一平台同一帖子可能出现在多个任务（不同关键词），此处选第一条作为主归属。
+    for t in task_data_list:
+        tid = t.get("task_id")
+        ctx = task_context_map.get(tid, {})
+        keyword = ctx.get("keyword", "unknown")
+        ar = t.get("analysis_result") or {}
+        # 从 entity/opinion 的 post_ids 收集 primary keyword/task
+        for key_name in ["aggregated_entities", "aggregated_opinions"]:
+            items = ar.get(key_name)
+            if not isinstance(items, list):
+                continue
+            for it in items:
+                for pid in (it or {}).get("post_ids") or []:
+                    try:
+                        pid_int = int(pid)
+                    except Exception:
+                        continue
+                    pk = post_key_by_id.get(pid_int)
+                    if not pk:
+                        continue
+                    if (
+                        pk not in primary_keyword_by_key
+                        or not primary_keyword_by_key.get(pk)
+                    ):
+                        primary_keyword_by_key[pk] = str(keyword or "unknown")
+                    if pk not in primary_task_by_key or not primary_task_by_key.get(pk):
+                        try:
+                            primary_task_by_key[pk] = int(tid)
+                        except Exception:
+                            primary_task_by_key[pk] = 0
+
     # ==================== 1. Overview & Volume Stats ====================
     total_volume = 0
     platform_volume = defaultdict(int)
     keyword_volume = defaultdict(int)
     task_diagnostics: list[dict[str, Any]] = []
-    
+
     # 情感聚合 (用于计算加权平均)
     global_sentiment_sum = 0.0
     global_sentiment_count = 0
@@ -177,21 +290,57 @@ def build_project_snapshot_result(
     entity_bucket: dict[str, dict[str, Any]] = {}
     topic_bucket: dict[str, dict[str, Any]] = {}
 
-    # ==================== 2.1 Project-level Quadrant Points (recompute with global threshold) ====================
-    quadrant_points_raw: list[dict[str, Any]] = []
-    quadrant_total_cii = 0.0
-    quadrant_count = 0
-    
+    # Step0 去重统计（基于 platform+post_id_on_platform）
+    total_posts_raw = len(post_key_by_id)
+    unique_posts = len(set(post_key_by_id.values())) if post_key_by_id else 0
+    dedup_stats = {
+        "total_posts_raw": total_posts_raw,
+        "unique_posts": unique_posts,
+        "duplicates_removed": max(total_posts_raw - unique_posts, 0),
+        "dedup_key": "platform:post_id_on_platform",
+    }
+
+    # Step1 新鲜度统计（基于去重后的帖子集合）
+    now = datetime.now(timezone.utc)
+    last_7_days_count = 0
+    last_30_days_count = 0
+    ages: list[int] = []
+    for pk, info in post_info_by_key.items():
+        published_at = (info or {}).get("published_at")
+        if not published_at:
+            continue
+        try:
+            dt = published_at
+            if isinstance(dt, str):
+                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+            if getattr(dt, "tzinfo", None) is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            age_days = int((now - dt).days)
+        except Exception:
+            continue
+        ages.append(age_days)
+        if age_days <= 7:
+            last_7_days_count += 1
+        if age_days <= 30:
+            last_30_days_count += 1
+    freshness = {
+        "last_7_days_count": last_7_days_count,
+        "last_30_days_count": last_30_days_count,
+        "avg_age_days": round(sum(ages) / len(ages), 1) if ages else 0.0,
+    }
+
     # 维度聚合 (Aspect Analysis)
-    aspect_bucket: dict[str, dict[str, Any]] = defaultdict(lambda: {
-        "heat": 0.0,
-        "sentiment_sum": 0.0,
-        "sentiment_weight": 0.0,
-        "mention_count": 0,
-        "keywords": defaultdict(int),
-        "platforms": defaultdict(int),
-        "top_terms": defaultdict(int)  # category 下的高频词
-    })
+    aspect_bucket: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "heat": 0.0,
+            "sentiment_sum": 0.0,
+            "sentiment_weight": 0.0,
+            "mention_count": 0,
+            "keywords": defaultdict(int),
+            "platforms": defaultdict(int),
+            "top_terms": defaultdict(int),  # category 下的高频词
+        }
+    )
 
     for task_data in task_data_list:
         tid = task_data["task_id"]
@@ -199,33 +348,6 @@ def build_project_snapshot_result(
         ctx = task_context_map.get(tid, {})
         platform = ctx.get("platform", "unknown")
         keyword = ctx.get("keyword", "unknown")
-
-        # 0. Project-level Quadrant: reuse points but recompute labels later with global avg_cii
-        charts = result.get("charts") or {}
-        raw_quadrant = charts.get("quadrant") or []
-        if isinstance(raw_quadrant, list) and raw_quadrant:
-            for p in raw_quadrant:
-                try:
-                    x = float((p or {}).get("x"))
-                    y = float((p or {}).get("y"))
-                except Exception:
-                    continue
-                post_id = (p or {}).get("post_id")
-                try:
-                    post_id_int = int(post_id)
-                except Exception:
-                    continue
-                quadrant_points_raw.append({
-                    "task_id": tid,
-                    "post_id": post_id_int,
-                    "x": x,
-                    "y": y,
-                    "label": (p or {}).get("label") or "",
-                    "platform": platform,
-                    "keyword": keyword,
-                })
-                quadrant_total_cii += y
-                quadrant_count += 1
 
         # 1. Volume
         vol_data = (result.get("meta") or {}).get("data_volume") or {}
@@ -244,7 +366,7 @@ def build_project_snapshot_result(
         total_volume += count
         platform_volume[platform] += count
         keyword_volume[keyword] += count
-        
+
         # 2. Global Sentiment (from metrics.nsr)
         metrics = result.get("metrics") or {}
         nsr = metrics.get("nsr", 0.0)
@@ -256,8 +378,12 @@ def build_project_snapshot_result(
         # 规范口径：项目级快照只使用 canonical 字段 aggregated_entities，不使用 insights 兜底
         raw_agg_entities = result.get("aggregated_entities")
         raw_insights_entities = (result.get("insights") or {}).get("top_entities")
-        raw_agg_entities_list = raw_agg_entities if isinstance(raw_agg_entities, list) else []
-        raw_insights_entities_list = raw_insights_entities if isinstance(raw_insights_entities, list) else []
+        raw_agg_entities_list = (
+            raw_agg_entities if isinstance(raw_agg_entities, list) else []
+        )
+        raw_insights_entities_list = (
+            raw_insights_entities if isinstance(raw_insights_entities, list) else []
+        )
 
         if raw_agg_entities_list:
             entities: list[dict[str, Any]] = raw_agg_entities_list
@@ -271,7 +397,16 @@ def build_project_snapshot_result(
                 continue
             role = str((e or {}).get("role") or "").lower()
             etype = str((e or {}).get("type") or "")
-            
+            # parent 口径：沿用任务级 tags.parent（品牌用 "Self" 哨兵值；产品用品牌名；通用词为空）
+            tags = (
+                (e or {}).get("tags") if isinstance((e or {}).get("tags"), dict) else {}
+            )
+            parent_val = str((e or {}).get("parent") or "").strip()
+            if not parent_val:
+                parent_val = str((tags or {}).get("parent") or "").strip()
+            if etype.strip().lower() == "brand" and not parent_val:
+                parent_val = "Self"
+
             # Key 变更：不再包含 role 和 type，只按归一化后的名称聚合
             # 解决 "XPEL|brand" 和 "XPEL|product" 分裂的问题
             key = f"{normalize_name(name)}"
@@ -283,13 +418,20 @@ def build_project_snapshot_result(
                     # 不再存储单一 role/type，而是用 Counter 统计众数
                     "role_counts": Counter(),
                     "type_counts": Counter(),
+                    "parent_counts": Counter(),
                     "category": (e or {}).get("category"),
-                    "parent": (e or {}).get("parent"),
-                    "heat": 0.0,
-                    "mentions_set": set(),
+                    "parent": "",
+                    "heat": 0.0,  # normalized heat (Raw_CII * platform_weight) over deduped posts
+                    "mentions_set": set(),  # set[post_key]
                     "post_ids_sample": [],
                     "source_tasks": defaultdict(set),
                     "original_terms_counts": defaultdict(int),
+                    # 情感聚合字段（用于行业象限散点图）
+                    "sentiment_weighted_sum": 0.0,
+                    "sentiment_weight": 0,
+                    "positive_count": 0,
+                    "negative_count": 0,
+                    "neutral_count": 0,
                     # New: Distribution Fingerprints
                     "platform_dist": defaultdict(int),
                     "keyword_dist": defaultdict(int),
@@ -305,37 +447,72 @@ def build_project_snapshot_result(
                     },
                 }
                 entity_bucket[key] = bucket
-            
+
             # 累加 role 和 type 频次
             if role:
                 bucket["role_counts"][role] += 1
             if etype:
                 bucket["type_counts"][etype] += 1
+            if parent_val:
+                bucket["parent_counts"][parent_val] += 1
 
-            heat = float((e or {}).get("heat", 0.0) or 0.0)
-            bucket["heat"] += heat
+            # 累加 sentiment（从任务级实体中读取）
+            entity_sentiment = (e or {}).get("sentiment")
+            entity_mentions = len((e or {}).get("post_ids") or [])
+            if entity_sentiment is not None and entity_mentions > 0:
+                try:
+                    sent_val = float(entity_sentiment)
+                    bucket["sentiment_weighted_sum"] += sent_val * entity_mentions
+                    bucket["sentiment_weight"] += entity_mentions
+                except Exception:
+                    pass
+            # 累加情感分布
+            sent_dist = (e or {}).get("sentiment_distribution")
+            if isinstance(sent_dist, dict):
+                try:
+                    bucket["positive_count"] += int(sent_dist.get("positive") or 0)
+                    bucket["negative_count"] += int(sent_dist.get("negative") or 0)
+                    bucket["neutral_count"] += int(sent_dist.get("neutral") or 0)
+                except Exception:
+                    pass
 
-            # 记录分布（按 mentions 加权，更符合“贡献占比”语义）
-            try:
-                mentions_weight = int((e or {}).get("mentions") or 0)
-            except Exception:
-                mentions_weight = 0
-            if mentions_weight <= 0:
-                mentions_weight = len((e or {}).get("post_ids") or [])
-            bucket["platform_dist"][platform] += mentions_weight
-            bucket["keyword_dist"][keyword] += mentions_weight
-
+            # 去重后的 mentions 与 heat：按 post_key 聚合
             for pid in (e or {}).get("post_ids") or []:
                 try:
                     pid_int = int(pid)
                 except Exception:
                     continue
-                bucket["mentions_set"].add((tid, pid_int))
-                bucket["source_tasks"][tid].add(pid_int)
+                pk = post_key_by_id.get(pid_int)
+                if not pk:
+                    continue
+                if pk in bucket["mentions_set"]:
+                    continue
+                bucket["mentions_set"].add(pk)
+                # heat 累加：normalized_heat（Raw_CII * platform_weight）
+                info = post_info_by_key.get(pk) or {}
+                try:
+                    bucket["heat"] += float(info.get("normalized_heat") or 0.0)
+                except Exception:
+                    pass
+                # 分布：按去重后的主归属 keyword/platform 计数（总和=mentions）
+                bucket["platform_dist"][str(info.get("platform") or platform)] += 1
+                bucket["keyword_dist"][
+                    str(primary_keyword_by_key.get(pk) or keyword)
+                ] += 1
+                # 仍保留样本 internal post_id 供前端追溯
+                try:
+                    primary_tid = int(primary_task_by_key.get(pk) or tid)
+                except Exception:
+                    primary_tid = tid
+                bucket["source_tasks"][primary_tid].add(pid_int)
                 if len(bucket["post_ids_sample"]) < max_post_ids_sample:
-                    bucket["post_ids_sample"].append({"task_id": tid, "post_id": pid_int})
+                    bucket["post_ids_sample"].append(
+                        {"task_id": primary_tid, "post_id": pid_int}
+                    )
 
-            _merge_original_terms(bucket["original_terms_counts"], (e or {}).get("original_terms"))
+            _merge_original_terms(
+                bucket["original_terms_counts"], (e or {}).get("original_terms")
+            )
 
             # 3.x Entity Attribute Aggregation (Stage 1)
             _merge_entity_attr_items(
@@ -346,6 +523,10 @@ def build_project_snapshot_result(
                 attr_name="features",
                 attr_items=(e or {}).get("features"),
                 max_post_ids_sample=max_post_ids_sample,
+                post_key_by_id=post_key_by_id,
+                post_info_by_key=post_info_by_key,
+                primary_keyword_by_key=primary_keyword_by_key,
+                primary_task_by_key=primary_task_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -355,6 +536,10 @@ def build_project_snapshot_result(
                 attr_name="issues",
                 attr_items=(e or {}).get("issues"),
                 max_post_ids_sample=max_post_ids_sample,
+                post_key_by_id=post_key_by_id,
+                post_info_by_key=post_info_by_key,
+                primary_keyword_by_key=primary_keyword_by_key,
+                primary_task_by_key=primary_task_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -364,6 +549,10 @@ def build_project_snapshot_result(
                 attr_name="expectations",
                 attr_items=(e or {}).get("expectations"),
                 max_post_ids_sample=max_post_ids_sample,
+                post_key_by_id=post_key_by_id,
+                post_info_by_key=post_info_by_key,
+                primary_keyword_by_key=primary_keyword_by_key,
+                primary_task_by_key=primary_task_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -373,6 +562,10 @@ def build_project_snapshot_result(
                 attr_name="audience",
                 attr_items=(e or {}).get("audience"),
                 max_post_ids_sample=max_post_ids_sample,
+                post_key_by_id=post_key_by_id,
+                post_info_by_key=post_info_by_key,
+                primary_keyword_by_key=primary_keyword_by_key,
+                primary_task_by_key=primary_task_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -382,6 +575,10 @@ def build_project_snapshot_result(
                 attr_name="scenarios",
                 attr_items=(e or {}).get("scenarios"),
                 max_post_ids_sample=max_post_ids_sample,
+                post_key_by_id=post_key_by_id,
+                post_info_by_key=post_info_by_key,
+                primary_keyword_by_key=primary_keyword_by_key,
+                primary_task_by_key=primary_task_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -391,6 +588,10 @@ def build_project_snapshot_result(
                 attr_name="market_factors",
                 attr_items=(e or {}).get("market_factors"),
                 max_post_ids_sample=max_post_ids_sample,
+                post_key_by_id=post_key_by_id,
+                post_info_by_key=post_info_by_key,
+                primary_keyword_by_key=primary_keyword_by_key,
+                primary_task_by_key=primary_task_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -400,14 +601,22 @@ def build_project_snapshot_result(
                 attr_name="competitors",
                 attr_items=(e or {}).get("competitors"),
                 max_post_ids_sample=max_post_ids_sample,
+                post_key_by_id=post_key_by_id,
+                post_info_by_key=post_info_by_key,
+                primary_keyword_by_key=primary_keyword_by_key,
+                primary_task_by_key=primary_task_by_key,
             )
 
         # 4. Topics Aggregation
         # 规范口径：项目级快照只使用 canonical 字段 aggregated_opinions，不使用 insights 兜底
         raw_agg_opinions = result.get("aggregated_opinions")
         raw_insights_topics = (result.get("insights") or {}).get("top_topics")
-        raw_agg_opinions_list = raw_agg_opinions if isinstance(raw_agg_opinions, list) else []
-        raw_insights_topics_list = raw_insights_topics if isinstance(raw_insights_topics, list) else []
+        raw_agg_opinions_list = (
+            raw_agg_opinions if isinstance(raw_agg_opinions, list) else []
+        )
+        raw_insights_topics_list = (
+            raw_insights_topics if isinstance(raw_insights_topics, list) else []
+        )
 
         if raw_agg_opinions_list:
             opinions: list[dict[str, Any]] = raw_agg_opinions_list
@@ -421,25 +630,18 @@ def build_project_snapshot_result(
                 continue
             category = (o or {}).get("category") or "其他"
             sentiment = (o or {}).get("sentiment") or 0.0
-            try:
-                mentions_weight = int((o or {}).get("mentions") or 0)
-            except Exception:
-                mentions_weight = 0
-            if mentions_weight <= 0:
-                mentions_weight = len((o or {}).get("post_ids") or [])
-            
             # Key for unique topic
-            key = f"{normalize_name(name)}|{category}" # 忽略 sentiment 差异进行合并，计算平均情感
-            
+            key = f"{normalize_name(name)}|{category}"  # 忽略 sentiment 差异进行合并，计算平均情感
+
             bucket = topic_bucket.get(key)
             if not bucket:
                 bucket = {
                     "name": name,
                     "category": category,
-                    "heat": 0.0,
+                    "heat": 0.0,  # normalized heat over deduped posts
                     "sentiment_sum": 0.0,
                     "sentiment_weight": 0.0,
-                    "mentions_set": set(),
+                    "mentions_set": set(),  # set[post_key]
                     "post_ids_sample": [],
                     "source_tasks": defaultdict(set),
                     "original_terms_counts": defaultdict(int),
@@ -448,61 +650,90 @@ def build_project_snapshot_result(
                 }
                 topic_bucket[key] = bucket
 
-            heat = float((o or {}).get("heat", 0.0) or 0.0)
-            bucket["heat"] += heat
-            bucket["sentiment_sum"] += float(sentiment) * float(mentions_weight)
-            bucket["sentiment_weight"] += float(mentions_weight)
-
-            bucket["platform_dist"][platform] += mentions_weight
-            bucket["keyword_dist"][keyword] += mentions_weight
-            
-            # Aspect Aggregation
-            asp = aspect_bucket[category]
-            asp["heat"] += heat
-            asp["sentiment_sum"] += float(sentiment) * float(mentions_weight)
-            asp["sentiment_weight"] += float(mentions_weight)
-            asp["mention_count"] += mentions_weight
-            asp["keywords"][keyword] += mentions_weight
-            asp["platforms"][platform] += mentions_weight
-            asp["top_terms"][name] += mentions_weight
-
             for pid in (o or {}).get("post_ids") or []:
                 try:
                     pid_int = int(pid)
                 except Exception:
                     continue
-                bucket["mentions_set"].add((tid, pid_int))
-                bucket["source_tasks"][tid].add(pid_int)
-                if len(bucket["post_ids_sample"]) < max_post_ids_sample:
-                    bucket["post_ids_sample"].append({"task_id": tid, "post_id": pid_int})
+                pk = post_key_by_id.get(pid_int)
+                if not pk:
+                    continue
+                if pk in bucket["mentions_set"]:
+                    continue
+                bucket["mentions_set"].add(pk)
+                info = post_info_by_key.get(pk) or {}
+                try:
+                    h = float(info.get("normalized_heat") or 0.0)
+                except Exception:
+                    h = 0.0
+                bucket["heat"] += h
+                # sentiment：按 mentions（去重后帖子数）加权
+                bucket["sentiment_sum"] += float(sentiment) * 1.0
+                bucket["sentiment_weight"] += 1.0
 
-            _merge_original_terms(bucket["original_terms_counts"], (o or {}).get("original_terms"))
+                # distributions（总和=mentions）
+                bucket["platform_dist"][str(info.get("platform") or platform)] += 1
+                bucket["keyword_dist"][
+                    str(primary_keyword_by_key.get(pk) or keyword)
+                ] += 1
+
+                # Aspect Aggregation（按去重后的 mentions 计数）
+                asp = aspect_bucket[category]
+                asp["heat"] += h
+                asp["sentiment_sum"] += float(sentiment) * 1.0
+                asp["sentiment_weight"] += 1.0
+                asp["mention_count"] += 1
+                asp["keywords"][str(primary_keyword_by_key.get(pk) or keyword)] += 1
+                asp["platforms"][str(info.get("platform") or platform)] += 1
+                asp["top_terms"][name] += 1
+
+                try:
+                    primary_tid = int(primary_task_by_key.get(pk) or tid)
+                except Exception:
+                    primary_tid = tid
+                bucket["source_tasks"][primary_tid].add(pid_int)
+                if len(bucket["post_ids_sample"]) < max_post_ids_sample:
+                    bucket["post_ids_sample"].append(
+                        {"task_id": primary_tid, "post_id": pid_int}
+                    )
+
+            _merge_original_terms(
+                bucket["original_terms_counts"], (o or {}).get("original_terms")
+            )
 
         # 5. Diagnostics (帮助定位“为什么快照里某块为空”)
-        task_diagnostics.append({
-            "task_id": tid,
-            "platform": platform,
-            "keyword": keyword,
-            "data_volume_total": count,
-            "nsr": metrics.get("nsr"),
-            "entities_count": len(entities),
-            "opinions_count": len(opinions),
-            "has_entities": len(entities) > 0,
-            "has_opinions": len(opinions) > 0,
-            "has_meta_keywords": bool(((result.get("meta") or {}).get("keywords") or [])),
-            "raw_aggregated_entities_count": len(raw_agg_entities_list),
-            "raw_insights_top_entities_count": len(raw_insights_entities_list),
-            "used_entities_source": used_entities_source,
-            "entities_sample": [
-                (x or {}).get("name") for x in (entities[:3] if isinstance(entities, list) else []) if isinstance(x, dict)
-            ],
-            "raw_aggregated_opinions_count": len(raw_agg_opinions_list),
-            "raw_insights_top_topics_count": len(raw_insights_topics_list),
-            "used_opinions_source": used_opinions_source,
-            "opinions_sample": [
-                (x or {}).get("name") for x in (opinions[:3] if isinstance(opinions, list) else []) if isinstance(x, dict)
-            ],
-        })
+        task_diagnostics.append(
+            {
+                "task_id": tid,
+                "platform": platform,
+                "keyword": keyword,
+                "data_volume_total": count,
+                "nsr": metrics.get("nsr"),
+                "entities_count": len(entities),
+                "opinions_count": len(opinions),
+                "has_entities": len(entities) > 0,
+                "has_opinions": len(opinions) > 0,
+                "has_meta_keywords": bool(
+                    ((result.get("meta") or {}).get("keywords") or [])
+                ),
+                "raw_aggregated_entities_count": len(raw_agg_entities_list),
+                "raw_insights_top_entities_count": len(raw_insights_entities_list),
+                "used_entities_source": used_entities_source,
+                "entities_sample": [
+                    (x or {}).get("name")
+                    for x in (entities[:3] if isinstance(entities, list) else [])
+                    if isinstance(x, dict)
+                ],
+                "raw_aggregated_opinions_count": len(raw_agg_opinions_list),
+                "raw_insights_top_topics_count": len(raw_insights_topics_list),
+                "used_opinions_source": used_opinions_source,
+                "opinions_sample": [
+                    (x or {}).get("name")
+                    for x in (opinions[:3] if isinstance(opinions, list) else [])
+                    if isinstance(x, dict)
+                ],
+            }
+        )
 
     # ==================== Finalize Entities ====================
     project_entities: list[dict[str, Any]] = []
@@ -510,147 +741,103 @@ def build_project_snapshot_result(
         mentions = len(b["mentions_set"])
         heat = float(b["heat"])
         score = float(calculate_score(heat, mentions))
-        
+
         source_tasks = [
             {"task_id": tid, "mentions": len(pids)}
-            for tid, pids in sorted(b["source_tasks"].items(), key=lambda x: len(x[1]), reverse=True)
+            for tid, pids in sorted(
+                b["source_tasks"].items(), key=lambda x: len(x[1]), reverse=True
+            )
         ]
-        
+
         # Determine main role and type
         role_counts = b.get("role_counts", Counter())
         type_counts = b.get("type_counts", Counter())
         main_role = role_counts.most_common(1)[0][0] if role_counts else "unknown"
         main_type = type_counts.most_common(1)[0][0] if type_counts else "unknown"
+        parent_counts = b.get("parent_counts", Counter())
+        main_parent = parent_counts.most_common(1)[0][0] if parent_counts else ""
 
         def _finalize_attr(attr_name: str, top_k: int = 10) -> list[dict[str, Any]]:
             attr_bucket = (b.get("attr_buckets") or {}).get(attr_name) or {}
-            items_dict = (attr_bucket.get("items") or {})
+            items_dict = attr_bucket.get("items") or {}
             items_list = []
             for text, sub in items_dict.items():
                 mentions_attr = len(sub.get("mentions_set") or [])
                 if mentions_attr <= 0:
                     continue
-                items_list.append({
-                    "text": text,
-                    "mentions": mentions_attr,
-                    "original_terms": [
-                        {"text": ot, "count": cnt}
-                        for ot, cnt in sorted((sub.get("original_terms_counts") or {}).items(), key=lambda x: x[1], reverse=True)
-                    ],
-                    "post_ids_sample": sub.get("post_ids_sample") or [],
-                    "platform_distribution": dict(sub.get("platform_dist") or {}),
-                    "keyword_distribution": dict(sub.get("keyword_dist") or {}),
-                })
+                items_list.append(
+                    {
+                        "text": text,
+                        "mentions": mentions_attr,
+                        "original_terms": [
+                            {"text": ot, "count": cnt}
+                            for ot, cnt in sorted(
+                                (sub.get("original_terms_counts") or {}).items(),
+                                key=lambda x: (len(x[0] or ""), x[1]),
+                                reverse=True,
+                            )[:20]
+                        ],
+                        "post_ids_sample": sub.get("post_ids_sample") or [],
+                        "platform_distribution": dict(sub.get("platform_dist") or {}),
+                        "keyword_distribution": dict(sub.get("keyword_dist") or {}),
+                    }
+                )
             items_list.sort(key=lambda x: x.get("mentions", 0), reverse=True)
             return items_list[:top_k]
 
-        project_entities.append({
-            "name": b["name"],
-            "role": main_role,
-            "type": main_type,
-            # breakdowns (for mixed cases like XPEL brand/product)
-            "role_breakdown": dict(role_counts),
-            "type_breakdown": dict(type_counts),
-            "category": b["category"],
-            "parent": b["parent"],
-            "heat": round(heat, 3),
-            "mentions": mentions,
-            "score": round(score, 3),
-            "original_terms": [
-                {"text": text, "count": count}
-                for text, count in sorted(b["original_terms_counts"].items(), key=lambda x: x[1], reverse=True)
-            ],
-            "source_tasks": source_tasks,
-            "post_ids_sample": b["post_ids_sample"],
-            # Distributions
-            "platform_distribution": dict(b["platform_dist"]),
-            "keyword_distribution": dict(b["keyword_dist"]),
-            # Aggregated attributes (Stage 1)
-            "top_features": _finalize_attr("features"),
-            "top_issues": _finalize_attr("issues"),
-            "top_expectations": _finalize_attr("expectations"),
-            "top_audience": _finalize_attr("audience"),
-            "top_scenarios": _finalize_attr("scenarios"),
-            "top_market_factors": _finalize_attr("market_factors"),
-            "top_competitors": _finalize_attr("competitors"),
-        })
+        # 计算加权平均情感值
+        sentiment_weight = b.get("sentiment_weight") or 0
+        if sentiment_weight > 0:
+            avg_sentiment = round(b["sentiment_weighted_sum"] / sentiment_weight, 2)
+        else:
+            avg_sentiment = 0.0
+
+        project_entities.append(
+            {
+                "name": b["name"],
+                "role": main_role,
+                "type": main_type,
+                # breakdowns (for mixed cases like XPEL brand/product)
+                "role_breakdown": dict(role_counts),
+                "type_breakdown": dict(type_counts),
+                "category": b["category"],
+                "parent": main_parent,
+                "heat": round(heat, 3),
+                "mentions": mentions,
+                "score": round(score, 3),
+                # 情感字段（用于行业象限散点图）
+                "sentiment": avg_sentiment,
+                "sentiment_distribution": {
+                    "positive": b.get("positive_count") or 0,
+                    "negative": b.get("negative_count") or 0,
+                    "neutral": b.get("neutral_count") or 0,
+                },
+                "original_terms": [
+                    {"text": text, "count": count}
+                    for text, count in sorted(
+                        b["original_terms_counts"].items(),
+                        key=lambda x: (len(x[0] or ""), x[1]),
+                        reverse=True,
+                    )[:20]
+                ],
+                "source_tasks": source_tasks,
+                "post_ids_sample": b["post_ids_sample"],
+                # Distributions
+                "platform_distribution": dict(b["platform_dist"]),
+                "keyword_distribution": dict(b["keyword_dist"]),
+                # Aggregated attributes (Stage 1)
+                "top_features": _finalize_attr("features"),
+                "top_issues": _finalize_attr("issues"),
+                "top_expectations": _finalize_attr("expectations"),
+                "top_audience": _finalize_attr("audience"),
+                "top_scenarios": _finalize_attr("scenarios"),
+                "top_market_factors": _finalize_attr("market_factors"),
+                "top_competitors": _finalize_attr("competitors"),
+            }
+        )
 
     project_entities.sort(key=lambda x: x.get("score", 0.0), reverse=True)
     project_entities = project_entities[:max_items]
-
-    # ==================== Finalize Project Entity Graph (TopN + threshold + platform/keyword breakdown) ====================
-    # 说明：这是“实体-实体”的项目级共现网络，用于竞争格局总览；不同于任务级 context_graph（中心星图）。
-    graph_top_n = 30
-    graph_min_co_occurrence = 2
-
-    # 从 entity_bucket 选取 TopN（按项目级 score）
-    entity_candidates = []
-    for k, b in entity_bucket.items():
-        mentions_k = len(b["mentions_set"])
-        if mentions_k <= 0:
-            continue
-        heat_k = float(b["heat"])
-        score_k = float(calculate_score(heat_k, mentions_k))
-        entity_candidates.append((k, score_k, b))
-    entity_candidates.sort(key=lambda x: x[1], reverse=True)
-    entity_candidates = entity_candidates[:graph_top_n]
-
-    graph_nodes = []
-    mentions_sets: dict[str, set[tuple[int, int]]] = {}
-    for k, score_k, b in entity_candidates:
-        mentions_sets[k] = set(b["mentions_set"])
-        role_counts = b.get("role_counts", Counter())
-        type_counts = b.get("type_counts", Counter())
-        main_role = role_counts.most_common(1)[0][0] if role_counts else "unknown"
-        main_type = type_counts.most_common(1)[0][0] if type_counts else "unknown"
-        graph_nodes.append({
-            "id": k,
-            "name": b["name"],
-            "role": main_role,
-            "type": main_type,
-            "mentions": len(b["mentions_set"]),
-            "heat": round(float(b["heat"]), 3),
-            "score": round(float(score_k), 3),
-            "platform_distribution": dict(b.get("platform_dist") or {}),
-            "keyword_distribution": dict(b.get("keyword_dist") or {}),
-        })
-
-    # edges
-    graph_edges = []
-    node_ids = [n["id"] for n in graph_nodes]
-    for i in range(len(node_ids)):
-        for j in range(i + 1, len(node_ids)):
-            a = node_ids[i]
-            b = node_ids[j]
-            s1 = mentions_sets.get(a) or set()
-            s2 = mentions_sets.get(b) or set()
-            if not s1 or not s2:
-                continue
-            # intersection
-            inter = s1 & s2
-            co = len(inter)
-            if co < graph_min_co_occurrence:
-                continue
-            union = len(s1 | s2)
-            jaccard = (co / union) if union > 0 else 0.0
-
-            platform_dist = defaultdict(int)
-            keyword_dist = defaultdict(int)
-            for tid, _pid in inter:
-                c = task_context_map.get(tid) or {}
-                platform_dist[c.get("platform", "unknown")] += 1
-                keyword_dist[c.get("keyword", "unknown")] += 1
-
-            graph_edges.append({
-                "source": a,
-                "target": b,
-                "co_occurrence": co,
-                "jaccard": round(jaccard, 4),
-                "value": round(jaccard, 4),
-                "platform_distribution": dict(platform_dist),
-                "keyword_distribution": dict(keyword_dist),
-            })
-    graph_edges.sort(key=lambda e: (e.get("co_occurrence", 0), e.get("jaccard", 0.0)), reverse=True)
 
     # ==================== Finalize Topics ====================
     project_topics: list[dict[str, Any]] = []
@@ -658,83 +845,98 @@ def build_project_snapshot_result(
         mentions = len(b["mentions_set"])
         heat = float(b["heat"])
         score = float(calculate_score(heat, mentions))
-        avg_sentiment = b["sentiment_sum"] / b["sentiment_weight"] if b["sentiment_weight"] > 0 else 0.0
+        avg_sentiment = (
+            b["sentiment_sum"] / b["sentiment_weight"]
+            if b["sentiment_weight"] > 0
+            else 0.0
+        )
 
         source_tasks = [
             {"task_id": tid, "mentions": len(pids)}
-            for tid, pids in sorted(b["source_tasks"].items(), key=lambda x: len(x[1]), reverse=True)
+            for tid, pids in sorted(
+                b["source_tasks"].items(), key=lambda x: len(x[1]), reverse=True
+            )
         ]
-        
-        project_topics.append({
-            "name": b["name"],
-            "category": b["category"],
-            "sentiment": round(avg_sentiment, 2),
-            "heat": round(heat, 3),
-            "mentions": mentions,
-            "score": round(score, 3),
-            "original_terms": [
-                {"text": text, "count": count}
-                for text, count in sorted(b["original_terms_counts"].items(), key=lambda x: x[1], reverse=True)
-            ],
-            "source_tasks": source_tasks,
-            "post_ids_sample": b["post_ids_sample"],
-             # Distributions
-            "platform_distribution": dict(b["platform_dist"]),
-            "keyword_distribution": dict(b["keyword_dist"]),
-        })
+
+        project_topics.append(
+            {
+                "name": b["name"],
+                "category": b["category"],
+                "sentiment": round(avg_sentiment, 2),
+                "heat": round(heat, 3),
+                "mentions": mentions,
+                "score": round(score, 3),
+                "original_terms": [
+                    {"text": text, "count": count}
+                    for text, count in sorted(
+                        b["original_terms_counts"].items(),
+                        key=lambda x: (len(x[0] or ""), x[1]),
+                        reverse=True,
+                    )[:20]
+                ],
+                "source_tasks": source_tasks,
+                "post_ids_sample": b["post_ids_sample"],
+                # Distributions
+                "platform_distribution": dict(b["platform_dist"]),
+                "keyword_distribution": dict(b["keyword_dist"]),
+            }
+        )
 
     project_topics.sort(key=lambda x: x.get("score", 0.0), reverse=True)
     project_topics = project_topics[:max_items]
-    
+
     # ==================== Finalize Aspects ====================
     project_aspects = []
     for cat, data in aspect_bucket.items():
-        avg_sent = data["sentiment_sum"] / data["sentiment_weight"] if data["sentiment_weight"] > 0 else 0.0
-        project_aspects.append({
-            "category": cat,
-            "heat": round(data["heat"], 2),
-            "sentiment": round(avg_sent, 2),
-            "mention_count": data["mention_count"],
-            "top_keywords": sorted(data["top_terms"].keys(), key=lambda k: data["top_terms"][k], reverse=True)[:5],
-            "platform_distribution": dict(data["platforms"]),
-            "keyword_distribution": dict(data["keywords"]),
-        })
+        avg_sent = (
+            data["sentiment_sum"] / data["sentiment_weight"]
+            if data["sentiment_weight"] > 0
+            else 0.0
+        )
+        project_aspects.append(
+            {
+                "category": cat,
+                "heat": round(data["heat"], 2),
+                "sentiment": round(avg_sent, 2),
+                "mention_count": data["mention_count"],
+                "top_keywords": sorted(
+                    data["top_terms"].keys(),
+                    key=lambda k: data["top_terms"][k],
+                    reverse=True,
+                )[:5],
+                "platform_distribution": dict(data["platforms"]),
+                "keyword_distribution": dict(data["keywords"]),
+            }
+        )
     project_aspects.sort(key=lambda x: x["heat"], reverse=True)
 
-    # ==================== Finalize Project Quadrant (global recompute) ====================
-    quadrant_avg_cii = (quadrant_total_cii / quadrant_count) if quadrant_count > 0 else 0.0
-    quadrant_points = []
-    quadrant_summary = _empty_quadrant_summary()
-    quadrant_summary_by_platform: dict[str, dict[str, int]] = defaultdict(_empty_quadrant_summary)
-    quadrant_summary_by_keyword: dict[str, dict[str, int]] = defaultdict(_empty_quadrant_summary)
-
-    for p in quadrant_points_raw:
-        label = _compute_quadrant_label(float(p["x"]), float(p["y"]), float(quadrant_avg_cii))
-        quadrant_summary[label] += 1
-        quadrant_summary_by_platform[p.get("platform", "unknown")][label] += 1
-        quadrant_summary_by_keyword[p.get("keyword", "unknown")][label] += 1
-        quadrant_points.append({
-            **p,
-            "quadrant": label,
-        })
-
     # ==================== Finalize Overview ====================
-    global_avg_sentiment = global_sentiment_sum / global_sentiment_count if global_sentiment_count > 0 else 0.0
-    
+    global_avg_sentiment = (
+        global_sentiment_sum / global_sentiment_count
+        if global_sentiment_count > 0
+        else 0.0
+    )
+
     overview = {
+        # 任务级总量（不去重）
         "total_volume": total_volume,
+        # 项目级去重后的帖子量（基于 platform+post_id_on_platform）
+        "unique_posts": unique_posts,
         "global_sentiment": round(global_avg_sentiment, 2),
         "platform_volume": dict(platform_volume),
         "keyword_volume": dict(keyword_volume),
     }
 
+    # ===== 输出（最终方案结构）=====
+    # 说明：不再输出旧版 overview/details/charts/insights 顶层字段；
+    # 旧信息将被折叠进 foundation/layers，供 Step2/Step3/Step4 消费。
     return {
         "meta": {
             "project_id": project_id,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "subject": subject,
             "competitors": competitors or [],
-            "weights_used": platform_weights or {},
+            "weights_used": weights_used,
             "scope": {
                 "mode": "selected_tasks",
                 "included_task_ids": included_task_ids,
@@ -743,34 +945,27 @@ def build_project_snapshot_result(
             },
             "task_diagnostics": task_diagnostics,
         },
-        "overview": overview,
-        "charts": {
-            "quadrant": quadrant_points,
-            "quadrant_summary": quadrant_summary,
-            "quadrant_summary_by_platform": dict(quadrant_summary_by_platform),
-            "quadrant_summary_by_keyword": dict(quadrant_summary_by_keyword),
-            "quadrant_thresholds": {
-                "avg_cii": round(float(quadrant_avg_cii), 4),
-                "sentiment_negative": -0.5,
-                "sentiment_positive": 0.5,
-            },
-            "entity_graph": {
-                "nodes": graph_nodes,
-                "edges": graph_edges,
-                "params": {
-                    "top_n": graph_top_n,
-                    "min_co_occurrence": graph_min_co_occurrence,
-                },
-            },
+        "foundation": {
+            "dedup_stats": dedup_stats,
+            # Stage1 先写入候选池；Stage2 会覆盖为归一化后的 aligned_entities/topics
+            "aligned_entities": project_entities,
+            "aligned_topics": project_topics,
         },
-        "topic_aspects": project_aspects,
-        "details": {
-            "top_entities": project_entities,
-            "top_topics": project_topics,
+        "layers": {
+            "landscape": {
+                "freshness": freshness,
+                "overview": overview,
+            },
+            # 文档口径：Topic 层命名为 intent
+            "intent": {
+                "topic_aspects": project_aspects,
+            },
+            # Focus 由 Stage2/Stage3 基于 subject 条件触发填充
+            "focus": None,
         },
-        # 保持旧结构兼容性（可选）
-        "insights": {
-            "project_top_entities": project_entities,
-            "project_top_topics": project_topics,
+        "reports": {
+            "landscape_report": None,
+            "topic_report": None,
+            "focus_report": None,
         },
     }

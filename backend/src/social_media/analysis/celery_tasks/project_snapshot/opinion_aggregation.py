@@ -3,8 +3,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
-from src.social_media.analysis.celery_tasks.aggregation.utils import calculate_score, are_similar
+from src.social_media.analysis.celery_tasks.llm_utils import (
+    invoke_chain_with_stats_sync,
+)
+from src.social_media.analysis.celery_tasks.aggregation.utils import (
+    calculate_score,
+    are_similar,
+)
 from src.langchain.chains.category_normalization_chain import (
     create_category_normalization_chain,
     format_categories_for_normalization,
@@ -25,7 +30,11 @@ def _program_cluster_terms(
     threshold: float = 0.9,
 ) -> tuple[dict[str, int], dict[str, str], dict[str, list[str]]]:
     """程序归一：按相似度预聚类，返回 rep->count, raw->rep, rep->members。"""
-    items = sorted([(t, int(c or 0)) for t, c in (term_counts or {}).items() if t], key=lambda x: x[1], reverse=True)
+    items = sorted(
+        [(t, int(c or 0)) for t, c in (term_counts or {}).items() if t],
+        key=lambda x: x[1],
+        reverse=True,
+    )
     reps: list[str] = []
     rep_counts: dict[str, int] = {}
     raw_to_rep: dict[str, str] = {}
@@ -47,9 +56,13 @@ def _program_cluster_terms(
     return rep_counts, raw_to_rep, rep_members
 
 
-def _format_opinions_for_llm(rep_counts: dict[str, int], rep_members: dict[str, list[str]], top_k: int = 80) -> str:
+def _format_opinions_for_llm(
+    rep_counts: dict[str, int], rep_members: dict[str, list[str]], top_k: int = 80
+) -> str:
     lines: list[str] = []
-    for rep, cnt in sorted(rep_counts.items(), key=lambda x: x[1], reverse=True)[:top_k]:
+    for rep, cnt in sorted(rep_counts.items(), key=lambda x: x[1], reverse=True)[
+        :top_k
+    ]:
         members = rep_members.get(rep) or []
         extras = [m for m in members if m != rep]
         hint = f" [同义候选: {', '.join(extras[:8])}]" if extras else ""
@@ -86,14 +99,18 @@ def _align_categories_for_topics(
             formatted = format_categories_for_normalization(category_counts)
             if formatted.strip():
                 chain = create_category_normalization_chain()
-                resp, stats = invoke_chain_with_stats_sync(chain, {"categories": formatted}, "chat")
+                resp, stats = invoke_chain_with_stats_sync(
+                    chain, {"categories": formatted}, "chat"
+                )
                 text = resp.content if hasattr(resp, "content") else str(resp)
                 category_map = parse_category_normalization_response(text) or {}
                 if category_map:
                     llm_used = True
                     token_stats = stats
     except Exception as e:
-        logger.error(f"[Snapshot Opinion] Category alignment failed: {e}", exc_info=True)
+        logger.error(
+            f"[Snapshot Opinion] Category alignment failed: {e}", exc_info=True
+        )
 
     def map_category(cat: str) -> str:
         cat = (cat or "").strip() or "其他"
@@ -106,7 +123,14 @@ def _align_categories_for_topics(
         nm = (t.get("name") or "").strip()
         if not nm:
             continue
-        topics_for_norm.append({**t, "category_aligned": map_category((t.get("category") or "").strip() or "其他")})
+        topics_for_norm.append(
+            {
+                **t,
+                "category_aligned": map_category(
+                    (t.get("category") or "").strip() or "其他"
+                ),
+            }
+        )
 
     return {
         "used": llm_used,
@@ -160,7 +184,9 @@ def normalize_opinion_aliases_by_category(
         try:
             chain = create_opinion_normalization_chain()
             formatted = _format_opinions_for_llm(rep_counts, rep_members, top_k=100)
-            resp, stats = invoke_chain_with_stats_sync(chain, {"category": cat_name, "opinions": formatted}, "chat")
+            resp, stats = invoke_chain_with_stats_sync(
+                chain, {"category": cat_name, "opinions": formatted}, "chat"
+            )
             text = resp.content if hasattr(resp, "content") else str(resp)
             clusters = parse_opinion_normalization_response(text)
             if clusters:
@@ -175,30 +201,39 @@ def normalize_opinion_aliases_by_category(
                     token_stats_list.append(stats)
                 continue
         except Exception as e:
-            logger.error(f"[Snapshot Stage2] Topic alias normalization failed: {e}", exc_info=True)
+            logger.error(
+                f"[Snapshot Stage2] Topic alias normalization failed: {e}",
+                exc_info=True,
+            )
 
         # fallback：直接使用程序预聚类映射（或最简单映射）
         if raw_to_rep:
             topic_mapping_by_category[cat_name] = raw_to_rep
         else:
-            topic_mapping_by_category[cat_name] = fallback_alias_map(list(top_terms.keys()))
+            topic_mapping_by_category[cat_name] = fallback_alias_map(
+                list(top_terms.keys())
+            )
 
     # ========== 输出归一化差异总结 ==========
     total_merged_groups = 0
     total_llm_output = 0
-    
+
     # 输入观点名称列表
-    input_names = [t.get("name") for t in top_topics if isinstance(t, dict) and t.get("name")][:50]
-    
+    input_names = [
+        t.get("name") for t in top_topics if isinstance(t, dict) and t.get("name")
+    ][:50]
+
     logger.info("=" * 60)
-    logger.info(f"[项目级观点归一化] 统计总结:")
+    logger.info("[项目级观点归一化] 统计总结:")
     logger.info(f"  - 原始输入: {input_count} 个观点")
-    logger.info(f"  - 程序归一后: {total_program_clustered} 个观点（跨 {len(grouped)} 个类目）")
-    
+    logger.info(
+        f"  - 程序归一后: {total_program_clustered} 个观点（跨 {len(grouped)} 个类目）"
+    )
+
     # 打印输入观点名称（前30）
-    logger.info(f"[项目级观点归一化] 输入观点名称（前30）:")
+    logger.info("[项目级观点归一化] 输入观点名称（前30）:")
     logger.info(f"  {input_names[:30]}")
-    
+
     # 类目对齐信息
     cat_map = cat_alignment_result.get("category_map") or {}
     if cat_map:
@@ -206,9 +241,9 @@ def normalize_opinion_aliases_by_category(
         for old_cat, new_cat in list(cat_map.items())[:10]:
             if old_cat != new_cat:
                 logger.info(f"    [{old_cat}] → [{new_cat}]")
-    
+
     # 按类目统计合并详情
-    logger.info(f"[项目级观点归一化] 各类目合并详情:")
+    logger.info("[项目级观点归一化] 各类目合并详情:")
     for cat_name, mapping in topic_mapping_by_category.items():
         merged_in_cat: dict[str, list[str]] = {}
         for raw, canon in mapping.items():
@@ -217,12 +252,16 @@ def normalize_opinion_aliases_by_category(
         unique_canons = len(set(mapping.values()))
         total_llm_output += unique_canons
         total_merged_groups += len(merged_in_cat)
-        
+
         if merged_in_cat:
-            logger.info(f"  [{cat_name}] 输入:{len(mapping)} → 输出:{unique_canons}, 合并组:{len(merged_in_cat)}")
-            for canon, members in sorted(merged_in_cat.items(), key=lambda x: len(x[1]), reverse=True)[:5]:
+            logger.info(
+                f"  [{cat_name}] 输入:{len(mapping)} → 输出:{unique_canons}, 合并组:{len(merged_in_cat)}"
+            )
+            for canon, members in sorted(
+                merged_in_cat.items(), key=lambda x: len(x[1]), reverse=True
+            )[:5]:
                 logger.info(f"    [{canon}] ← {members[:8]}")
-    
+
     logger.info(f"  - LLM 归一后总计: {total_llm_output} 个观点")
     logger.info(f"  - 被合并的观点组总数: {total_merged_groups}")
     logger.info(f"  - LLM 是否使用: {topic_llm_used}")
@@ -251,6 +290,13 @@ def build_topics_aligned(
     topic_mapping_by_category: dict[str, dict[str, str]],
 ) -> list[dict[str, Any]]:
     """根据 category_aligned + mapping 合并 topics_for_norm，产出对齐后的观点列表。"""
+
+    def _cap_text(s: str) -> str:
+        s = (s or "").strip()
+        if len(s) > 100:
+            s = s[:100]
+        return s
+
     bucket: dict[str, dict[str, Any]] = {}
     for t in topics_for_norm or []:
         if not isinstance(t, dict):
@@ -272,7 +318,7 @@ def build_topics_aligned(
                 "sentiment_weight": 0.0,
                 "platform_distribution": {},
                 "keyword_distribution": {},
-                "original_terms": [],
+                "original_terms_counts": {},
             }
             bucket[key] = b
 
@@ -297,33 +343,71 @@ def build_topics_aligned(
             except Exception:
                 vv = 0
             if vv:
-                b["platform_distribution"][k] = int(b["platform_distribution"].get(k, 0)) + vv
+                b["platform_distribution"][k] = (
+                    int(b["platform_distribution"].get(k, 0)) + vv
+                )
         for k, v in (t.get("keyword_distribution") or {}).items():
             try:
                 vv = int(v or 0)
             except Exception:
                 vv = 0
             if vv:
-                b["keyword_distribution"][k] = int(b["keyword_distribution"].get(k, 0)) + vv
+                b["keyword_distribution"][k] = (
+                    int(b["keyword_distribution"].get(k, 0)) + vv
+                )
 
-        b["original_terms"].append(raw_name)
+        # 合并原话：优先使用任务级聚合下发的 original_terms；没有则回退用观点名占位
+        ots = t.get("original_terms")
+        if isinstance(ots, list) and ots:
+            for it in ots:
+                if not isinstance(it, dict):
+                    continue
+                txt = _cap_text(str(it.get("text") or ""))
+                if not txt:
+                    continue
+                try:
+                    c = int(it.get("count") or 0)
+                except Exception:
+                    c = 0
+                if c <= 0:
+                    c = 1
+                b["original_terms_counts"][txt] = (
+                    int(b["original_terms_counts"].get(txt, 0)) + c
+                )
+        else:
+            txt = _cap_text(raw_name)
+            if txt:
+                b["original_terms_counts"][txt] = (
+                    int(b["original_terms_counts"].get(txt, 0)) + 1
+                )
 
     aligned: list[dict[str, Any]] = []
     for _, b in bucket.items():
-        avg_sent = (b["sentiment_sum"] / b["sentiment_weight"]) if b["sentiment_weight"] > 0 else 0.0
+        avg_sent = (
+            (b["sentiment_sum"] / b["sentiment_weight"])
+            if b["sentiment_weight"] > 0
+            else 0.0
+        )
         score = float(calculate_score(float(b["heat"]), int(b["mentions"])))
-        aligned.append({
-            "name": b["name"],
-            "category": b["category"],
-            "heat": round(float(b["heat"]), 3),
-            "mentions": int(b["mentions"]),
-            "sentiment": round(float(avg_sent), 2),
-            "score": round(float(score), 3),
-            "platform_distribution": b["platform_distribution"],
-            "keyword_distribution": b["keyword_distribution"],
-            "original_terms": [{"text": x, "count": 1} for x in sorted(set(b["original_terms"]))],
-        })
+        aligned.append(
+            {
+                "name": b["name"],
+                "category": b["category"],
+                "heat": round(float(b["heat"]), 3),
+                "mentions": int(b["mentions"]),
+                "sentiment": round(float(avg_sent), 2),
+                "score": round(float(score), 3),
+                "platform_distribution": b["platform_distribution"],
+                "keyword_distribution": b["keyword_distribution"],
+                "original_terms": [
+                    {"text": text, "count": count}
+                    for text, count in sorted(
+                        (b.get("original_terms_counts") or {}).items(),
+                        key=lambda x: (len(x[0] or ""), x[1]),
+                        reverse=True,
+                    )[:20]
+                ],
+            }
+        )
     aligned.sort(key=lambda x: x.get("score", 0.0), reverse=True)
     return aligned
-
-

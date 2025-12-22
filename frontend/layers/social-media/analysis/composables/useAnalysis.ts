@@ -315,12 +315,27 @@ export const useAnalysis = () => {
   /**
    * 手动生成项目级合并分析快照（同步完成）
    */
-  const createProjectSnapshot = async (projectId: number, taskIds: number[], name?: string) => {
+  const createProjectSnapshot = async (
+    projectId: number,
+    taskIds: number[],
+    name?: string,
+    options?: {
+      subject?: string | null
+      competitors?: string[] | null
+      platform_weights?: Record<string, number> | null
+    }
+  ) => {
     const result = await apiRequest<{ id: number; name: string | null }>(
       `/social-media/analysis/projects/${projectId}/snapshots`,
       {
         method: 'POST',
-        body: { task_ids: taskIds, name: name || null },
+        body: {
+          task_ids: taskIds,
+          name: name || null,
+          subject: options?.subject ?? null,
+          competitors: options?.competitors ?? null,
+          platform_weights: options?.platform_weights ?? null,
+        },
       }
     )
     showSuccess('项目快照已生成')

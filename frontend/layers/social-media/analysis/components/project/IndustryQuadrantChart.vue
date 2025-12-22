@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { watch, onMounted, nextTick } from 'vue'
+import type { EChartsOption } from 'echarts'
 import type { IndustryQuadrantPoint } from '../../../types/project-snapshot'
 
 const props = defineProps<{
@@ -10,20 +11,22 @@ const emit = defineEmits<{
   (e: 'select', item: IndustryQuadrantPoint): void
 }>()
 
+const { chartRef, initChart, setOption, getInstance, on } = useCharts()
+
+// 角色颜色
+const roleColors: Record<string, string> = {
+  Target: '#10b981',
+  Competitor: '#f59e0b',
+  Context: '#94a3b8',
+}
+
 // ECharts 配置
-const chartOptions = computed(() => {
+const getOption = (): EChartsOption => {
   const points = props.data || []
-  if (!points.length) return null
+  if (!points.length) return {}
 
   // 找出最大热度用于归一化点大小
   const maxHeat = Math.max(...points.map(p => p.heat || 0), 1)
-
-  // 角色颜色
-  const roleColors: Record<string, string> = {
-    Target: '#10b981',
-    Competitor: '#f59e0b',
-    Context: '#94a3b8',
-  }
 
   // 构建 series 数据（按 role 分组）
   const seriesData: Record<string, Array<[number, number, number, string, IndustryQuadrantPoint]>> = {
@@ -45,7 +48,7 @@ const chartOptions = computed(() => {
     .map(([role, arr]) => ({
       name: role === 'Target' ? '主体' : role === 'Competitor' ? '竞品' : '行业实体',
       type: 'scatter',
-      symbolSize: (val: number[]) => val[2],
+      symbolSize: (val: number[]) => val[2] || 8,
       itemStyle: {
         color: roleColors[role],
         opacity: 0.75,
@@ -61,10 +64,12 @@ const chartOptions = computed(() => {
     }))
 
   return {
+    animation: false,
     tooltip: {
       trigger: 'item',
-      formatter: (params: { data: [number, number, number, string, IndustryQuadrantPoint] }) => {
-        const [heat, sentiment, , name, point] = params.data
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formatter: (params: any) => {
+        const [heat, sentiment, , name, point] = params.data as [number, number, number, string, IndustryQuadrantPoint]
         const roleLabel = point.role === 'Target' ? '主体' : point.role === 'Competitor' ? '竞品' : '行业实体'
         return `
           <div style="font-weight:600;margin-bottom:4px">${name}</div>
@@ -116,16 +121,36 @@ const chartOptions = computed(() => {
       splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
       axisLabel: { fontSize: 10 },
     },
-    series,
-  }
-})
-
-// 点击事件
-const handleChartClick = (params: { data?: [number, number, number, string, IndustryQuadrantPoint] }) => {
-  if (params.data && params.data[4]) {
-    emit('select', params.data[4])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    series: series as any,
   }
 }
+
+const updateChart = async () => {
+  await nextTick()
+  const points = props.data || []
+  if (chartRef.value && points.length) {
+    let instance = getInstance()
+    if (!instance) {
+      instance = initChart()
+      // 绑定点击事件
+      on('click', (params: unknown) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const p = params as any
+        if (p.data && p.data[4]) {
+          emit('select', p.data[4] as IndustryQuadrantPoint)
+        }
+      })
+    }
+    setOption(getOption())
+  }
+}
+
+watch(() => props.data, updateChart, { deep: true })
+
+onMounted(() => {
+  updateChart()
+})
 </script>
 
 <template>
@@ -135,24 +160,9 @@ const handleChartClick = (params: { data?: [number, number, number, string, Indu
       <span class="text-xs text-gray-500 dark:text-gray-400">热度 × 情感</span>
     </div>
 
-    <ClientOnly>
-      <template #fallback>
-        <div class="h-72 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50 rounded">
-          <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin text-gray-400" />
-        </div>
-      </template>
-
-      <VChart
-        v-if="chartOptions"
-        :option="chartOptions"
-        autoresize
-        class="h-72"
-        @click="handleChartClick"
-      />
-      <div v-else class="h-72 flex items-center justify-center text-sm text-gray-400">
-        暂无行业象限数据
-      </div>
-    </ClientOnly>
+    <div v-if="data?.length" ref="chartRef" class="h-72" />
+    <div v-else class="h-72 flex items-center justify-center text-sm text-gray-400">
+      暂无行业象限数据
+    </div>
   </div>
 </template>
-

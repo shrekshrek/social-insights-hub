@@ -53,6 +53,9 @@ const typeConfig = computed(() => {
   }
 })
 
+// 无障碍描述
+const dialogDescription = computed(() => props.item?.category ? `查看${props.item.category}分类下的话题详细信息` : '查看话题详细信息')
+
 // 格式化分布数据
 const formatDistribution = (dist?: Record<string, number>) => {
   if (!dist) return []
@@ -72,7 +75,7 @@ const getSentimentColor = (s?: number) => {
 
 <template>
   <USlideover v-model:open="isOpen">
-    <template #header>
+    <template #title>
       <div v-if="item" class="flex items-center gap-2">
         <span
           class="px-2 py-0.5 rounded text-xs font-medium"
@@ -83,6 +86,10 @@ const getSentimentColor = (s?: number) => {
         <span class="text-gray-900 dark:text-white font-medium truncate">{{ item.name }}</span>
       </div>
       <span v-else class="text-gray-500">话题详情</span>
+    </template>
+
+    <template #description>
+      <span class="sr-only">{{ dialogDescription }}</span>
     </template>
 
     <template #body>

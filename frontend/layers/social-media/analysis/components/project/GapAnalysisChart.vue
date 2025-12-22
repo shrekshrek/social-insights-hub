@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch, onMounted, nextTick } from 'vue'
+import type { EChartsOption } from 'echarts'
 
 interface GapItem {
   dimension: string
@@ -19,6 +20,8 @@ const props = defineProps<{
   subject?: string
 }>()
 
+const { chartRef, initChart, setOption, getInstance } = useCharts()
+
 const items = computed(() => props.data?.dimensions || [])
 
 // 格式化
@@ -28,18 +31,20 @@ const formatSentiment = (v: number) => {
 }
 
 // ECharts 龙卷风图配置
-const chartOptions = computed(() => {
-  if (!items.value.length) return null
+const getOption = (): EChartsOption => {
+  if (!items.value.length) return {}
 
   const dimensions = items.value.map(i => i.dimension)
   const targetData = items.value.map(i => i.target_sentiment)
   const competitorData = items.value.map(i => -i.competitor_sentiment) // 取反以形成双向
 
   return {
+    animation: false,
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      formatter: (params: Array<{ seriesName: string; value: number; dataIndex: number }>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formatter: (params: any) => {
         const idx = params[0]?.dataIndex ?? 0
         const item = items.value[idx]
         if (!item) return ''
@@ -111,6 +116,23 @@ const chartOptions = computed(() => {
       },
     ],
   }
+}
+
+const updateChart = async () => {
+  await nextTick()
+  if (chartRef.value && items.value.length) {
+    let instance = getInstance()
+    if (!instance) {
+      instance = initChart()
+    }
+    setOption(getOption())
+  }
+}
+
+watch(() => props.data, updateChart, { deep: true })
+
+onMounted(() => {
+  updateChart()
 })
 </script>
 
@@ -125,20 +147,7 @@ const chartOptions = computed(() => {
       </div>
     </div>
 
-    <ClientOnly>
-      <template #fallback>
-        <div class="h-48 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50 rounded">
-          <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin text-gray-400" />
-        </div>
-      </template>
-
-      <VChart
-        v-if="chartOptions"
-        :option="chartOptions"
-        autoresize
-        class="h-48"
-      />
-    </ClientOnly>
+    <div v-if="items.length" ref="chartRef" class="h-48" />
 
     <!-- 缺口列表 -->
     <div v-if="items.length" class="mt-3 space-y-2">
@@ -162,4 +171,3 @@ const chartOptions = computed(() => {
     </div>
   </div>
 </template>
-

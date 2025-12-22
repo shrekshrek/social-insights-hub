@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
+import type { EChartsOption } from 'echarts'
 import TopicDrilldownPanel from './TopicDrilldownPanel.vue'
 
 interface TopicRadarItem {
@@ -24,6 +25,8 @@ const emit = defineEmits<{
   (e: 'select', item: TopicRadarItem, type: 'pain' | 'gain' | 'controversy' | 'unmet'): void
 }>()
 
+const { chartRef, initChart, setOption, getInstance, on } = useCharts()
+
 // 侧边栏状态
 const panelOpen = ref(false)
 const selectedItem = ref<TopicRadarItem | null>(null)
@@ -43,13 +46,21 @@ const closePanel = () => {
 // 当前激活的 Tab
 const activeTab = ref<'radar' | 'unmet'>('radar')
 
+// 检查是否有图表数据
+const hasChartData = computed(() => {
+  const pains = props.pains || []
+  const gains = props.gains || []
+  const controversies = props.controversies || []
+  return pains.length > 0 || gains.length > 0 || controversies.length > 0
+})
+
 // ECharts 配置：气泡图 (X=声量, Y=情感)
-const chartOptions = computed(() => {
+const getOption = (): EChartsOption => {
   const pains = props.pains || []
   const gains = props.gains || []
   const controversies = props.controversies || []
 
-  if (!pains.length && !gains.length && !controversies.length) return null
+  if (!pains.length && !gains.length && !controversies.length) return {}
 
   // 计算最大热度用于归一化气泡大小
   const allItems = [...pains, ...gains, ...controversies]
@@ -62,7 +73,7 @@ const chartOptions = computed(() => {
     type: 'pain' | 'gain' | 'controversy'
   ) => ({
     name,
-    type: 'scatter',
+    type: 'scatter' as const,
     symbolSize: (val: number[]) => Math.max(8, Math.min(35, ((val[2] ?? 0) / maxHeat) * 35 + 8)),
     itemStyle: {
       color,
@@ -88,10 +99,12 @@ const chartOptions = computed(() => {
   })
 
   return {
+    animation: false,
     tooltip: {
       trigger: 'item',
-      formatter: (params: { data: [number, number, number, string, string, number, string, TopicRadarItem] }) => {
-        const [heat, sentiment, , name, category, mentions] = params.data
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formatter: (params: any) => {
+        const [heat, sentiment, , name, category, mentions] = params.data as [number, number, number, string, string, number]
         return `
           <div style="font-weight:600;margin-bottom:4px">${name}</div>
           <div style="font-size:11px;color:#888">${category || '未分类'}</div>
@@ -146,19 +159,36 @@ const chartOptions = computed(() => {
       buildSeries(pains, '痛点', '#ef4444', 'pain'),
       buildSeries(gains, '爽点', '#10b981', 'gain'),
       buildSeries(controversies, '争议点', '#f59e0b', 'controversy'),
-    ],
-  }
-})
-
-// 点击事件
-const handleChartClick = (
-  params: { data?: [number, number, number, string, string, number, string, TopicRadarItem] }
-) => {
-  if (params.data && params.data[7]) {
-    const type = params.data[6] as 'pain' | 'gain' | 'controversy'
-    handleSelect(params.data[7], type)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any,
   }
 }
+
+const updateChart = async () => {
+  await nextTick()
+  if (chartRef.value && hasChartData.value) {
+    let instance = getInstance()
+    if (!instance) {
+      instance = initChart()
+      // 绑定点击事件
+      on('click', (params: unknown) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const p = params as any
+        if (p.data && p.data[7]) {
+          const type = p.data[6] as 'pain' | 'gain' | 'controversy'
+          handleSelect(p.data[7] as TopicRadarItem, type)
+        }
+      })
+    }
+    setOption(getOption())
+  }
+}
+
+watch([() => props.pains, () => props.gains, () => props.controversies], updateChart, { deep: true })
+
+onMounted(() => {
+  updateChart()
+})
 
 // Unmet Needs 列表
 const unmetNeedsList = computed(() => props.unmetNeeds || [])
@@ -190,24 +220,10 @@ const unmetNeedsList = computed(() => props.unmetNeeds || [])
 
     <!-- 雷达气泡图 -->
     <div v-show="activeTab === 'radar'">
-      <ClientOnly>
-        <template #fallback>
-          <div class="h-72 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50 rounded">
-            <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin text-gray-400" />
-          </div>
-        </template>
-
-        <VChart
-          v-if="chartOptions"
-          :option="chartOptions"
-          autoresize
-          class="h-72"
-          @click="handleChartClick"
-        />
-        <div v-else class="h-72 flex items-center justify-center text-sm text-gray-400">
-          暂无话题雷达数据
-        </div>
-      </ClientOnly>
+      <div v-if="hasChartData" ref="chartRef" class="h-72" />
+      <div v-else class="h-72 flex items-center justify-center text-sm text-gray-400">
+        暂无话题雷达数据
+      </div>
 
       <div class="mt-3 flex gap-4 justify-center text-xs text-gray-500 dark:text-gray-400">
         <div class="flex items-center gap-1.5">
@@ -278,4 +294,3 @@ const unmetNeedsList = computed(() => props.unmetNeeds || [])
     />
   </div>
 </template>
-

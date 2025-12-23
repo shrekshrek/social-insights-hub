@@ -50,6 +50,8 @@ interface ProjectTopicOrEntity {
 
 interface ProjectOverviewData {
   total_volume?: number
+  unique_posts?: number
+  total_heat?: number
   global_sentiment?: number
   platform_volume?: Record<string, number>
   keyword_volume?: Record<string, number>
@@ -99,7 +101,11 @@ interface IndustryQuadrantPoint {
 }
 
 interface ProjectSnapshotLandscapeLayer {
-  freshness?: Record<string, unknown>
+  freshness?: {
+    last_7_days_count?: number
+    last_30_days_count?: number
+    avg_age_days?: number
+  }
   overview?: ProjectOverviewData
   sov_ranking?: SOVRankingItem[]
   group_share?: GroupShareItem[]
@@ -300,12 +306,14 @@ const stage2 = computed(() => snapshotResult.value?.stage2 || null)
 const stage3 = computed(() => snapshotResult.value?.stage3 || null)
 
 const meta = computed(() => snapshotResult.value?.meta || null)
+const competitors = computed(() => (meta.value?.competitors || []))
 const foundation = computed(() => snapshotResult.value?.foundation || null)
 const layers = computed(() => snapshotResult.value?.layers || null)
 const reports = computed(() => snapshotResult.value?.reports || null)
 
 const landscape = computed<ProjectSnapshotLandscapeLayer | null>(() => layers.value?.landscape || null)
 const overview = computed<ProjectOverviewData | null>(() => landscape.value?.overview || null)
+const freshness = computed(() => landscape.value?.freshness || null)
 const intent = computed(() => layers.value?.intent || null)
 const focus = computed<ProjectSnapshotFocusLayer | null>(() => layers.value?.focus || null)
 const topEntities = computed<ProjectTopicOrEntity[]>(() => foundation.value?.aligned_entities || [])
@@ -316,6 +324,16 @@ const sovRanking = computed(() => landscape.value?.sov_ranking || [])
 const groupShare = computed(() => landscape.value?.group_share || [])
 const platformDNA = computed(() => landscape.value?.platform_dna || [])
 const industryQuadrant = computed(() => landscape.value?.industry_quadrant || [])
+
+const selectedLandscapeEntity = ref<string | null>(null)
+const handleSelectLandscapeEntity = (item: { name: string } | null) => {
+  const name = (item?.name || '').toString().trim()
+  if (!name) return
+  selectedLandscapeEntity.value = selectedLandscapeEntity.value === name ? null : name
+}
+watch(snapshotId, () => {
+  selectedLandscapeEntity.value = null
+})
 
 // ==================== Topic Layer Data ====================
 const topicRadar = computed(() => intent.value?.topic_radar || null)
@@ -411,6 +429,33 @@ const sortedKeywordVolume = computed(() => {
   return Object.entries(m).sort((a, b) => (b[1] || 0) - (a[1] || 0))
 })
 
+const volumeStats = computed(() => {
+  const total = overview.value?.total_volume
+  const unique = overview.value?.unique_posts
+  if (typeof total !== 'number' || typeof unique !== 'number' || total <= 0) return null
+  const duplicates = Math.max(total - unique, 0)
+  const duplicateRate = total > 0 ? duplicates / total : 0
+  return { total, unique, duplicates, duplicateRate }
+})
+
+const displayedPlatformVolume = computed(() => sortedPlatformVolume.value.slice(0, 8))
+const overflowPlatformVolumeCount = computed(() => Math.max(sortedPlatformVolume.value.length - displayedPlatformVolume.value.length, 0))
+
+const displayedKeywordVolume = computed(() => sortedKeywordVolume.value.slice(0, 12))
+const overflowKeywordVolumeCount = computed(() => Math.max(sortedKeywordVolume.value.length - displayedKeywordVolume.value.length, 0))
+
+const formatNumber = (n: number) => {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
+  return n.toString()
+}
+
+const formatCompactNumber = (n: number) => {
+  if (n >= 10000) return `${(n / 10000).toFixed(1)}w`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return n.toString()
+}
+
 const formatDist = (dist?: Record<string, number>) => {
   if (!dist) return '-'
   const entries = Object.entries(dist).sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 4)
@@ -481,8 +526,23 @@ const copyText = async (text: string) => {
             </template>
           </ClientOnly>
           <p class="text-sm text-gray-500 dark:text-gray-400">
-            项目级合并分析快照（新方案）
+            项目级合并分析快照
           </p>
+          <div class="flex items-center gap-3 mt-1 text-sm">
+             <div v-if="subject" class="flex items-center gap-1.5">
+               <span class="text-gray-500">主体:</span>
+               <UBadge color="primary" variant="subtle" size="xs">{{ subject }}</UBadge>
+             </div>
+             <div v-if="competitors?.length" class="flex items-center gap-1.5">
+               <span class="text-gray-500">竞品:</span>
+               <div class="flex gap-1">
+                 <UBadge v-for="c in competitors" :key="c" color="amber" variant="subtle" size="xs">{{ c }}</UBadge>
+               </div>
+             </div>
+             <span v-if="!subject && !competitors?.length" class="text-gray-500">
+               全景模式 (Landscape Only)
+             </span>
+          </div>
         </div>
       </div>
       <ClientOnly>
@@ -634,23 +694,106 @@ const copyText = async (text: string) => {
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div>
-              <div class="text-gray-500 dark:text-gray-400">总声量</div>
-              <div class="text-gray-900 dark:text-white font-mono text-lg">{{ overview?.total_volume ?? '-' }}</div>
-            </div>
-            <div>
-              <div class="text-gray-500 dark:text-gray-400">全局情感</div>
-              <div class="text-gray-900 dark:text-white font-mono text-lg">
-                {{ typeof overview?.global_sentiment === 'number' ? overview.global_sentiment.toFixed(2) : '-' }}
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- 内容量 -->
+            <div class="space-y-1">
+              <div class="text-xs text-gray-500 dark:text-gray-400">去重内容量 (Unique Posts)</div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-2xl font-mono font-semibold text-gray-900 dark:text-white">
+                  {{ typeof overview?.unique_posts === 'number' ? formatNumber(overview.unique_posts) : '-' }}
+                </span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">帖</span>
+              </div>
+              <div class="text-xs text-gray-400 mt-1">
+                任务汇总：{{ typeof overview?.total_volume === 'number' ? formatNumber(overview.total_volume) : '-' }}
+                <template v-if="volumeStats">
+                  · 重复：{{ formatNumber(volumeStats.duplicates) }} ({{ (volumeStats.duplicateRate * 100).toFixed(1) }}%)
+                </template>
               </div>
             </div>
-            <div>
-              <div class="text-gray-500 dark:text-gray-400">平台/关键词构成</div>
-              <div class="text-gray-900 dark:text-white text-xs mt-1">
-                <div>平台：{{ sortedPlatformVolume.length ? sortedPlatformVolume.slice(0, 6).map(([k, v]) => `${k}:${v}`).join('，') : '-' }}</div>
-                <div class="mt-1">关键词：{{ sortedKeywordVolume.length ? sortedKeywordVolume.slice(0, 6).map(([k, v]) => `${k}:${v}`).join('，') : '-' }}</div>
+
+            <!-- 情感 -->
+            <div class="space-y-1">
+              <div class="text-xs text-gray-500 dark:text-gray-400">全局情感 (Sentiment)</div>
+              <div class="flex items-center gap-2">
+                <span 
+                  class="text-2xl font-mono font-semibold"
+                  :class="(overview?.global_sentiment || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                >
+                  {{ typeof overview?.global_sentiment === 'number' ? overview.global_sentiment.toFixed(2) : '-' }}
+                </span>
               </div>
+              <div class="text-xs text-gray-400 mt-1">
+                NSR 指数（按任务量加权，-1 ~ +1）
+              </div>
+            </div>
+
+            <!-- 时效性 -->
+            <div class="space-y-1">
+              <div class="text-xs text-gray-500 dark:text-gray-400">时效性 (Freshness)</div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-lg font-mono font-semibold text-gray-900 dark:text-white">
+                  {{ freshness?.avg_age_days ? freshness.avg_age_days.toFixed(1) : '-' }}
+                </span>
+                <span class="text-xs text-gray-500">天 (平均)</span>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <div class="flex items-center gap-1" title="最近7天内容数">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  7d: <span class="font-mono text-gray-700 dark:text-gray-300">{{ freshness?.last_7_days_count ?? '-' }}</span>
+                </div>
+                <div class="flex items-center gap-1" title="最近30天内容数">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  30d: <span class="font-mono text-gray-700 dark:text-gray-300">{{ freshness?.last_30_days_count ?? '-' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 平台分布 -->
+            <div class="space-y-1">
+              <div class="text-xs text-gray-500 dark:text-gray-400">平台分布 (Task Volume)</div>
+              <div class="flex flex-wrap gap-1.5 mt-1">
+                <div 
+                  v-for="([k, v]) in displayedPlatformVolume" 
+                  :key="k" 
+                  class="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800"
+                >
+                  <span class="text-gray-700 dark:text-gray-300">{{ k }}</span>
+                  <span class="text-[10px] text-gray-400 font-mono">{{ formatCompactNumber(v) }}</span>
+                </div>
+                <div
+                  v-if="overflowPlatformVolumeCount > 0"
+                  class="text-xs px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400"
+                >
+                  +{{ overflowPlatformVolumeCount }}
+                </div>
+                <div v-if="!displayedPlatformVolume.length" class="text-xs text-gray-400 py-1">-</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 配置回顾：关键词来自任务配置（非内容关键词） -->
+          <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-xs text-gray-500 dark:text-gray-400">任务关键词 (Task Keyword)</div>
+              <div class="text-[10px] text-gray-400 dark:text-gray-500">来自所选任务的 keyword 字段</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mt-2">
+              <div
+                v-for="([k, v]) in displayedKeywordVolume"
+                :key="k"
+                class="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800"
+              >
+                <span class="text-gray-700 dark:text-gray-300">{{ k }}</span>
+                <span class="text-[10px] text-gray-400 font-mono">{{ formatCompactNumber(v) }}</span>
+              </div>
+              <div
+                v-if="overflowKeywordVolumeCount > 0"
+                class="text-xs px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400"
+              >
+                +{{ overflowKeywordVolumeCount }}
+              </div>
+              <div v-if="!displayedKeywordVolume.length" class="text-xs text-gray-400 py-1">-</div>
             </div>
           </div>
         </section>
@@ -664,8 +807,17 @@ const copyText = async (text: string) => {
           <p class="text-xs text-gray-500 dark:text-gray-400">上帝视角：全量实体 (Target + Competitor + Context)</p>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <SOVRankingChart :data="sovRanking" :max-items="15" />
-            <IndustryQuadrantChart :data="industryQuadrant" />
+            <SOVRankingChart
+              :data="sovRanking"
+              :max-items="15"
+              :selected="selectedLandscapeEntity"
+              @select="handleSelectLandscapeEntity"
+            />
+            <IndustryQuadrantChart
+              :data="industryQuadrant"
+              :selected="selectedLandscapeEntity"
+              @select="handleSelectLandscapeEntity"
+            />
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">

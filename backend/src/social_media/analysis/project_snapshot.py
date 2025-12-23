@@ -221,6 +221,7 @@ def build_project_snapshot_result(
             weights_used[kk] = vv
 
     # 给 post_info 计算 normalized_heat（Raw_CII * weight）
+    total_heat = 0.0
     for pk, info in list(post_info_by_key.items()):
         if not isinstance(info, dict):
             continue
@@ -234,6 +235,7 @@ def build_project_snapshot_result(
         info["normalized_heat"] = raw_cii * w
         info["platform"] = platform
         post_info_by_key[pk] = info
+        total_heat += info["normalized_heat"]
 
     # 构建任务上下文映射
     task_context_map = {
@@ -922,6 +924,7 @@ def build_project_snapshot_result(
         "total_volume": total_volume,
         # 项目级去重后的帖子量（基于 platform+post_id_on_platform）
         "unique_posts": unique_posts,
+        "total_heat": round(total_heat, 2),
         "global_sentiment": round(global_avg_sentiment, 2),
         "platform_volume": dict(platform_volume),
         "keyword_volume": dict(keyword_volume),

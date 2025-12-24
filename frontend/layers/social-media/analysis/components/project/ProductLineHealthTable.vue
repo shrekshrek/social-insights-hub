@@ -23,7 +23,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'open-posts', item: ProductLineHealthItem): void
+  (e: 'select', item: ProductLineHealthItem): void
 }>()
 
 const members = computed(() => props.data?.members || [])
@@ -89,7 +89,7 @@ const maxContribution = computed(() => {
             v-for="(item, idx) in members"
             :key="item.name"
             class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer"
-            @click="emit('open-posts', item)"
+            @click="emit('select', item)"
           >
             <td class="py-2.5 pr-3">
               <div class="flex items-center gap-2">

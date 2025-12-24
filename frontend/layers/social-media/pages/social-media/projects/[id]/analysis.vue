@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import SOVRankingChart from '../../../../analysis/components/project/SOVRankingChart.vue'
 import GroupShareTable from '../../../../analysis/components/project/GroupShareTable.vue'
 import PlatformDNAChart from '../../../../analysis/components/project/PlatformDNAChart.vue'
@@ -338,10 +338,133 @@ const handleSelectLandscapeEntity = (item: { name: string } | null) => {
   if (!name) return
   selectedLandscapeEntity.value = selectedLandscapeEntity.value === name ? null : name
 }
+
+// ===== Overlay stacking fix =====
+// 从侧边栏再打开 UModal 时，先关闭侧边栏再 nextTick 打开弹窗，避免 overlay z-index/portal 层级问题
+const openEntitySamplePosts = async () => {
+  const e = entityPanelEntity.value as { post_ids_sample?: PostRef[] } | null
+  const refs = (e?.post_ids_sample || []) as PostRef[]
+  entityPanelOpen.value = false
+  await nextTick()
+  openLandscapePostList({ name: entityPanelName.value, post_ids_sample: refs })
+}
+
+const openFocusSamplePosts = async () => {
+  const dim = (focusPanelItem.value?.dimension || '').toString()
+  const refs = (focusPanelItem.value?.post_ids_sample || []) as PostRef[]
+  const t = focusPanelType.value || undefined
+  focusPanelOpen.value = false
+  await nextTick()
+  openFocusPostList({ name: dim, post_ids_sample: refs }, t)
+}
+
+// ==================== Evidence Panels (统一：先证据，后样本) ====================
+const entityPanelOpen = ref(false)
+const entityPanelName = ref<string>('')
+const entityPanelFallback = ref<{ name: string; role?: string; heat?: number; mentions?: number; sentiment?: number } | null>(null)
+
+const focusPanelOpen = ref(false)
+const focusPanelType = ref<'swot' | 'gap' | null>(null)
+const focusPanelItem = ref<{
+  dimension?: string
+  target_sentiment?: number
+  competitor_sentiment?: number
+  target_mentions?: number
+  competitor_mentions?: number
+  delta?: number
+  original_terms?: OriginalTerm[]
+  post_ids_sample?: PostRef[]
+} | null>(null)
+
+// 证据面板（把“证据区”从主页面挪到侧边栏，主页面只保留摘要，减少占用空间）
+const evidencePanelOpen = ref(false)
+
+const entityByName = computed(() => {
+  const m = new Map<string, ProjectTopicOrEntity>()
+  for (const e of topEntities.value || []) {
+    const name = (e?.name || '').toString().trim()
+    if (name) m.set(name, e)
+  }
+  return m
+})
+
+const entityPanelEntity = computed(() => {
+  const name = (entityPanelName.value || '').toString().trim()
+  if (!name) return null
+  return entityByName.value.get(name) || entityPanelFallback.value
+})
+
+const openEntityPanel = (
+  name: string,
+  fallback?: { name: string; role?: string; heat?: number; mentions?: number; sentiment?: number } | null
+) => {
+  const nm = (name || '').toString().trim()
+  if (!nm) return
+  entityPanelName.value = nm
+  entityPanelFallback.value = fallback || null
+  entityPanelOpen.value = true
+}
+
+const openFocusDimensionPanel = (
+  item: {
+    dimension?: string
+    target_sentiment?: number
+    competitor_sentiment?: number
+    target_mentions?: number
+    competitor_mentions?: number
+    delta?: number
+    original_terms?: OriginalTerm[]
+    post_ids_sample?: PostRef[]
+  } | null,
+  t: 'swot' | 'gap'
+) => {
+  focusPanelType.value = t
+  focusPanelItem.value = item
+  focusPanelOpen.value = true
+}
 const postListModalOpen = ref(false)
 const postListModalTitle = ref('')
-const postListModalTaskId = ref<number | null>(null)
-const postListModalPostIds = ref<number[]>([])
+const postListModalGroups = ref<Array<{ taskId: number; postIds: number[]; label?: string }>>([])
+
+const platformName = (code: string) => {
+  const c = (code || '').toString().toLowerCase()
+  const mp: Record<string, string> = { xhs: '小红书', dy: '抖音', bili: 'B站', wb: '微博' }
+  return mp[c] || code
+}
+
+const taskDiagById = computed(() => {
+  const m = new Map<number, { platform?: string; keyword?: string }>()
+  const list =
+    meta.value && typeof meta.value === 'object'
+      ? (meta.value as Record<string, unknown>)?.task_diagnostics
+      : null
+  if (Array.isArray(list)) {
+    for (const r of list) {
+      const tid = Number(r?.task_id)
+      if (!Number.isFinite(tid) || tid <= 0) continue
+      m.set(tid, {
+        platform: (r?.platform || '').toString(),
+        keyword: (r?.keyword || '').toString(),
+      })
+    }
+  }
+  return m
+})
+
+const decorateGroups = (groups: Array<{ taskId: number; postIds: number[] }>) => {
+  return groups.map(g => {
+    const diag = taskDiagById.value.get(g.taskId)
+    const p = diag?.platform ? platformName(diag.platform) : ''
+    const kw = (diag?.keyword || '').toString().trim()
+    const parts = [`任务 #${g.taskId}`]
+    if (p) parts.push(p)
+    if (kw) parts.push(kw)
+    return {
+      ...g,
+      label: `${parts.join(' · ')}（${g.postIds.length}条样本）`,
+    }
+  })
+}
 
 const groupPostIdsByTask = (postRefs?: PostRef[]) => {
   const groups = new Map<number, Set<number>>()
@@ -360,7 +483,7 @@ const groupPostIdsByTask = (postRefs?: PostRef[]) => {
 const openLandscapePostList = (item: { name?: string; post_ids_sample?: PostRef[] } | null) => {
   if (!item) return
   const name = (item.name || '').toString().trim()
-  const groups = groupPostIdsByTask(item.post_ids_sample)
+  const groups = decorateGroups(groupPostIdsByTask(item.post_ids_sample))
   if (!groups.length) {
     toast.add({
       title: '暂无可追溯帖子',
@@ -369,19 +492,15 @@ const openLandscapePostList = (item: { name?: string; post_ids_sample?: PostRef[
     })
     return
   }
-  const primary = groups[0]
-  if (!primary) return
-  const { taskId, postIds } = primary
-  postListModalTaskId.value = taskId
-  postListModalPostIds.value = postIds
-  postListModalTitle.value = `${name || '实体'} 相关内容（样本） · 任务 #${taskId}`
+  postListModalGroups.value = groups
+  postListModalTitle.value = `${name || '实体'} 相关内容（样本）`
   postListModalOpen.value = true
 }
 
 const openTopicPostList = (item: { name?: string; post_ids_sample?: PostRef[] } | null, type?: string) => {
   if (!item) return
   const name = (item.name || '').toString().trim()
-  const groups = groupPostIdsByTask(item.post_ids_sample)
+  const groups = decorateGroups(groupPostIdsByTask(item.post_ids_sample))
   if (!groups.length) {
     toast.add({
       title: '暂无可追溯帖子',
@@ -390,66 +509,78 @@ const openTopicPostList = (item: { name?: string; post_ids_sample?: PostRef[] } 
     })
     return
   }
-  const primary = groups[0]
-  if (!primary) return
-  const { taskId, postIds } = primary
-  postListModalTaskId.value = taskId
-  postListModalPostIds.value = postIds
   const typeLabel = type === 'pain' ? '痛点' : type === 'gain' ? '爽点' : type === 'controversy' ? '争议点' : type === 'unmet' ? '未被满足需求' : '话题'
-  postListModalTitle.value = `${typeLabel} · ${name || '话题'} 相关内容（样本） · 任务 #${taskId}`
+  postListModalGroups.value = groups
+  postListModalTitle.value = `${typeLabel} · ${name || '话题'} 相关内容（样本）`
   postListModalOpen.value = true
 }
 
 const openFocusPostList = (item: { name?: string; post_ids_sample?: PostRef[] } | null, type?: string) => {
   if (!item) return
   const name = (item.name || '').toString().trim()
-  const groups = groupPostIdsByTask(item.post_ids_sample)
+  const groups = decorateGroups(groupPostIdsByTask(item.post_ids_sample))
   if (!groups.length) {
     toast.add({
       title: '暂无可追溯帖子',
-      description: '聚焦层当前仅对“产品线健康度”提供帖子样本；SWOT/Gap 为竞品集合聚合，暂不支持追溯到帖子。',
+      description: name ? `${name} 未提供帖子样本（当前为样本口径）` : '未提供帖子样本（当前为样本口径）',
       color: 'warning',
     })
     return
   }
-  const primary = groups[0]
-  if (!primary) return
-  const { taskId, postIds } = primary
-  postListModalTaskId.value = taskId
-  postListModalPostIds.value = postIds
   const typeLabel = type === 'product-line' ? '产品线' : type === 'swot' ? 'SWOT' : type === 'gap' ? 'Gap' : '聚焦层'
-  postListModalTitle.value = `${typeLabel} · ${name || '条目'} 相关内容（样本） · 任务 #${taskId}`
+  postListModalGroups.value = groups
+  postListModalTitle.value = `${typeLabel} · ${name || '条目'} 相关内容（样本）`
   postListModalOpen.value = true
 }
 
-const handleSwotSelect = () => {
-  toast.add({
-    title: '聚焦层维度暂不支持追溯到帖子',
-    description: '当前 SWOT 为“竞品集合聚合均值”口径，缺少维度→帖子映射；可先用话题层/证据区验证原话与样本。',
-    color: 'warning',
-  })
+const handleSwotSelect = (
+  item: {
+    dimension?: string
+    target_sentiment?: number
+    competitor_sentiment?: number
+    target_mentions?: number
+    competitor_mentions?: number
+    delta?: number
+    original_terms?: OriginalTerm[]
+    post_ids_sample?: PostRef[]
+  } | null,
+  _type: string
+) => {
+  // 统一：先看维度证据，再按需打开样本贴
+  openFocusDimensionPanel(item, 'swot')
 }
 
-const handleGapSelect = () => {
-  toast.add({
-    title: '聚焦层维度暂不支持追溯到帖子',
-    description: '当前 Gap 为“竞品集合聚合均值”口径，缺少维度→帖子映射；可先用话题层/证据区验证原话与样本。',
-    color: 'warning',
-  })
+const handleGapSelect = (item: {
+  dimension?: string
+  target_sentiment?: number
+  competitor_sentiment?: number
+  target_mentions?: number
+  competitor_mentions?: number
+  delta?: number
+  original_terms?: OriginalTerm[]
+  post_ids_sample?: PostRef[]
+} | null) => {
+  openFocusDimensionPanel(item, 'gap')
 }
 
 const handleIndustryQuadrantSelect = (item: IndustryQuadrantPoint | null) => {
   if (!item) return
   handleSelectLandscapeEntity(item)
-  openLandscapePostList(item)
+  // 统一：先看证据（原话/分布），需要时再点开样本贴
+  openEntityPanel(item.name, item)
 }
 
 watch(snapshotId, () => {
   selectedLandscapeEntity.value = null
   postListModalOpen.value = false
-  postListModalTaskId.value = null
-  postListModalPostIds.value = []
+  postListModalGroups.value = []
   postListModalTitle.value = ''
+  entityPanelOpen.value = false
+  entityPanelName.value = ''
+  entityPanelFallback.value = null
+  focusPanelOpen.value = false
+  focusPanelType.value = null
+  focusPanelItem.value = null
 })
 
 // ==================== Topic Layer Data ====================
@@ -479,6 +610,44 @@ const isReportsFailed = computed(() => stage3.value?.status === 'failed')
 const reportLandscape = computed(() => reports.value?.landscape_report?.content || '')
 const reportTopic = computed(() => reports.value?.topic_report?.content || '')
 const reportFocus = computed(() => reports.value?.focus_report?.content || '')
+
+// UI states: collapse execution panel, and switch between 3 reports
+const execPanelOpen = ref(false)
+watch(
+  [isPipelineRunning, isReportsReady],
+  ([running, reportsReady]) => {
+    // 运行中默认展开；完成后默认折叠（但用户可手动再展开）
+    if (running) execPanelOpen.value = true
+    else if (reportsReady) execPanelOpen.value = false
+  },
+  { immediate: true }
+)
+
+type ReportKey = 'landscape' | 'topic' | 'focus'
+const activeReport = ref<ReportKey>('landscape')
+watch(
+  [showFocusReport, isReportsReady],
+  ([canShowFocus]) => {
+    if (!canShowFocus && activeReport.value === 'focus') activeReport.value = 'landscape'
+  },
+  { immediate: true }
+)
+
+const activeReportTitle = computed(() => {
+  if (activeReport.value === 'landscape') return '行业格局报告'
+  if (activeReport.value === 'topic') return '话题洞察报告'
+  return '战略诊断报告'
+})
+const activeReportContent = computed(() => {
+  if (activeReport.value === 'landscape') return reportLandscape.value
+  if (activeReport.value === 'topic') return reportTopic.value
+  return reportFocus.value
+})
+const activeReportEvidence = computed(() => {
+  if (activeReport.value === 'landscape') return reportEvidenceLandscape.value
+  if (activeReport.value === 'topic') return reportEvidenceTopic.value
+  return reportEvidenceFocus.value
+})
 
 // ==================== 自动轮询机制（优化：只检查状态，避免页面跳动）====================
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -617,16 +786,7 @@ const formatDist = (dist?: Record<string, number>) => {
   return entries.map(([k, v]) => `${k}:${v}`).join('，')
 }
 
-const takeReportPreview = (text: string, maxLines: number = 18) => {
-  const lines = (text || '').toString().split('\n')
-  if (lines.length <= maxLines) return text
-  return `${lines.slice(0, maxLines).join('\n')}\n…（已折叠）`
-}
-
-const isReportLong = (text: string, maxLines: number = 18) => {
-  const lines = (text || '').toString().split('\n')
-  return lines.length > maxLines
-}
+// 报告原文不做“展开/收起”，由 UI 内部滚动承载长文本
 
 const extractQuoteLines = (items: Array<{ name?: string; original_terms?: OriginalTerm[] }>, limit: number = 18) => {
   const lines: string[] = []
@@ -777,9 +937,34 @@ const copyText = async (text: string) => {
               <span class="font-mono">snapshot_id={{ snapshot.id }}</span>
             </div>
           </div>
-          <div class="text-sm text-gray-700 dark:text-gray-300">
+          <!-- summary row -->
+          <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <UBadge :color="getStatusColor((stage2?.steps as any)?.entity_normalization?.status)" variant="subtle" size="xs">
+              实体归一：{{ getStatusLabel((stage2?.steps as any)?.entity_normalization?.status) }}
+            </UBadge>
+            <UBadge :color="getStatusColor((stage2?.steps as any)?.opinion_normalization?.status)" variant="subtle" size="xs">
+              观点归一：{{ getStatusLabel((stage2?.steps as any)?.opinion_normalization?.status) }}
+            </UBadge>
+            <UBadge :color="getStatusColor((stage2?.steps as any)?.derived_analysis?.status)" variant="subtle" size="xs">
+              程序化：{{ getStatusLabel((stage2?.steps as any)?.derived_analysis?.status) }}
+            </UBadge>
+            <UBadge :color="getStatusColor(stage3?.status || (stage2?.steps as any)?.summary?.status)" variant="subtle" size="xs">
+              报告：{{ getStatusLabel(stage3?.status || (stage2?.steps as any)?.summary?.status) }}
+            </UBadge>
+            <span class="ml-auto">
+              <UButton
+                size="xs"
+                variant="ghost"
+                @click="execPanelOpen = !execPanelOpen"
+              >
+                {{ execPanelOpen ? '收起执行记录' : '展开执行记录' }}
+              </UButton>
+            </span>
+          </div>
+
+          <div v-if="execPanelOpen" class="mt-3 text-sm text-gray-700 dark:text-gray-300">
             <div class="text-xs text-gray-500 dark:text-gray-400">
-              实体归一与观点归一会并行触发；完成后再进行程序化分析与三报告生成。进度以快照自身的执行状态为准。
+              执行记录用于排查与审计：完成后可折叠，不影响下方阅读。
             </div>
             <div v-if="stage2?.steps" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
@@ -836,7 +1021,7 @@ const copyText = async (text: string) => {
         <!-- 三报告（原声展示） -->
         <section class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-3">
           <div class="flex items-center justify-between gap-4">
-            <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧾 三报告（原声）</h2>
+            <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧾 AI 报告</h2>
             <div class="text-xs text-gray-500 dark:text-gray-400">
               <span class="font-mono">{{ stage3?.status || 'pending' }}</span>
             </div>
@@ -847,119 +1032,57 @@ const copyText = async (text: string) => {
             <span v-if="stage3?.status === 'failed' && stage3?.error" class="ml-2">错误：{{ stage3.error }}</span>
           </div>
 
-          <div v-else class="space-y-4">
-            <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="flex items-center justify-between gap-3 mb-2">
-                <div class="text-xs text-gray-500 dark:text-gray-400">行业格局（Market Analyst）</div>
-                <div class="flex items-center gap-2">
-                  <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportLandscape" @click="copyText(reportLandscape)">
-                    复制
-                  </UButton>
-                  <UButton
-                    v-if="reportLandscape && isReportLong(reportLandscape)"
-                    size="xs"
-                    variant="ghost"
-                    @click="toggleExpand('report-landscape')"
-                  >
-                    {{ isExpanded('report-landscape') ? '收起' : '展开全文' }}
-                  </UButton>
-                  <UButton
-                    v-if="reportLandscape && reportEvidenceLandscape.length"
-                    size="xs"
-                    variant="ghost"
-                    @click="toggleExpand('report-landscape-evidence')"
-                  >
-                    {{ isExpanded('report-landscape-evidence') ? '收起证据' : '查看证据' }}
-                  </UButton>
-                </div>
+          <div v-else class="space-y-3">
+            <!-- unified toolbar: tabs + title + actions -->
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <UButton size="xs" :variant="activeReport === 'landscape' ? 'solid' : 'outline'" @click="activeReport = 'landscape'">
+                  行业格局
+                </UButton>
+                <UButton size="xs" :variant="activeReport === 'topic' ? 'solid' : 'outline'" @click="activeReport = 'topic'">
+                  话题洞察
+                </UButton>
+                <UButton
+                  v-if="showFocusReport"
+                  size="xs"
+                  :variant="activeReport === 'focus' ? 'solid' : 'outline'"
+                  @click="activeReport = 'focus'"
+                >
+                  战略诊断
+                </UButton>
               </div>
-              <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-                {{ reportLandscape ? (isExpanded('report-landscape') ? reportLandscape : takeReportPreview(reportLandscape)) : '-' }}
-              </div>
-              <div v-if="reportEvidenceLandscape.length && isExpanded('report-landscape-evidence')" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">证据原话（节选）</div>
-                <div class="space-y-1 text-xs text-gray-700 dark:text-gray-300">
-                  <div v-for="(line, idx) in reportEvidenceLandscape" :key="`re-land-${idx}`" class="truncate" :title="line">
-                    • {{ line }}
-                  </div>
-                </div>
+
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">
+                  {{ activeReportTitle }}
+                </span>
+                <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!activeReportContent" @click="copyText(activeReportContent)">
+                  复制
+                </UButton>
+                <UButton
+                  v-if="activeReportContent && activeReportEvidence.length"
+                  size="xs"
+                  variant="ghost"
+                  @click="toggleExpand(`report-${activeReport}-evidence`)"
+                >
+                  {{ isExpanded(`report-${activeReport}-evidence`) ? '收起证据' : '查看证据' }}
+                </UButton>
               </div>
             </div>
 
             <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="flex items-center justify-between gap-3 mb-2">
-                <div class="text-xs text-gray-500 dark:text-gray-400">话题洞察（Product Manager）</div>
-                <div class="flex items-center gap-2">
-                  <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportTopic" @click="copyText(reportTopic)">
-                    复制
-                  </UButton>
-                  <UButton
-                    v-if="reportTopic && isReportLong(reportTopic)"
-                    size="xs"
-                    variant="ghost"
-                    @click="toggleExpand('report-topic')"
-                  >
-                    {{ isExpanded('report-topic') ? '收起' : '展开全文' }}
-                  </UButton>
-                  <UButton
-                    v-if="reportTopic && reportEvidenceTopic.length"
-                    size="xs"
-                    variant="ghost"
-                    @click="toggleExpand('report-topic-evidence')"
-                  >
-                    {{ isExpanded('report-topic-evidence') ? '收起证据' : '查看证据' }}
-                  </UButton>
-                </div>
-              </div>
-              <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-                {{ reportTopic ? (isExpanded('report-topic') ? reportTopic : takeReportPreview(reportTopic)) : '-' }}
-              </div>
-              <div v-if="reportEvidenceTopic.length && isExpanded('report-topic-evidence')" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">证据原话（节选）</div>
-                <div class="space-y-1 text-xs text-gray-700 dark:text-gray-300">
-                  <div v-for="(line, idx) in reportEvidenceTopic" :key="`re-topic-${idx}`" class="truncate" :title="line">
-                    • {{ line }}
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <!-- Focus 为空时隐藏“战略诊断” -->
-            <div v-if="showFocusReport" class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="flex items-center justify-between gap-3 mb-2">
-                <div class="text-xs text-gray-500 dark:text-gray-400">战略诊断（CSO / AI 顾问）</div>
-                <div class="flex items-center gap-2">
-                  <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportFocus" @click="copyText(reportFocus)">
-                    复制
-                  </UButton>
-                  <UButton
-                    v-if="reportFocus && isReportLong(reportFocus)"
-                    size="xs"
-                    variant="ghost"
-                    @click="toggleExpand('report-focus')"
-                  >
-                    {{ isExpanded('report-focus') ? '收起' : '展开全文' }}
-                  </UButton>
-                  <UButton
-                    v-if="reportFocus && reportEvidenceFocus.length"
-                    size="xs"
-                    variant="ghost"
-                    @click="toggleExpand('report-focus-evidence')"
-                  >
-                    {{ isExpanded('report-focus-evidence') ? '收起证据' : '查看证据' }}
-                  </UButton>
-                </div>
+              <div v-if="activeReport === 'focus' && !reportFocus" class="text-xs text-gray-500 dark:text-gray-400">
+                战略诊断报告为空：可能未配置主体 subject，或输出未满足“营销/产品/公关”三段式硬约束。
               </div>
-              <div v-if="!reportFocus" class="text-xs text-gray-500 dark:text-gray-400">
-                Focus 报告为空：可能未配置主体 subject，或输出未满足“营销/产品/公关”三段式硬约束。
+              <div v-else class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed max-h-[70vh] overflow-y-auto pr-2">
+                {{ activeReportContent || '-' }}
               </div>
-              <div v-else class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-                {{ isExpanded('report-focus') ? reportFocus : takeReportPreview(reportFocus) }}
-              </div>
-              <div v-if="reportEvidenceFocus.length && isExpanded('report-focus-evidence')" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+
+              <div v-if="activeReportEvidence.length && isExpanded(`report-${activeReport}-evidence`)" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                 <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">证据原话（节选）</div>
                 <div class="space-y-1 text-xs text-gray-700 dark:text-gray-300">
-                  <div v-for="(line, idx) in reportEvidenceFocus" :key="`re-focus-${idx}`" class="truncate" :title="line">
+                  <div v-for="(line, idx) in activeReportEvidence" :key="`re-${activeReport}-${idx}`" class="truncate" :title="line">
                     • {{ line }}
                   </div>
                 </div>
@@ -1141,126 +1264,358 @@ const copyText = async (text: string) => {
           <SWOTMatrixChart :data="swotData" :subject="subject" @select="handleSwotSelect" />
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ProductLineHealthTable :data="productLineHealth" @open-posts="(item) => openFocusPostList(item, 'product-line')" />
+            <ProductLineHealthTable
+              :data="productLineHealth"
+              @select="(item) => openEntityPanel(item.name, { name: item.name, heat: item.heat, mentions: item.mentions, sentiment: item.sentiment })"
+            />
             <PlatformScissorsChart :data="platformScissors" :subject="subject" />
           </div>
 
           <GapAnalysisChart :data="gapData" :subject="subject" @select="handleGapSelect" />
         </section>
 
-        <!-- 证据 -->
-        <section class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-4">
-          <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧾 证据</h2>
+        <!-- 证据（主页面只展示摘要，完整列表放进证据侧边栏，避免占用大量页面空间） -->
+        <section class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧾 证据（摘要）</h2>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                默认只展示精选原话用于快速核验；需要完整 Top 列表与追溯时再打开证据面板。
+              </p>
+            </div>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="outline"
+              :disabled="!topTopics.length && !topEntities.length"
+              :label="`打开证据面板（观点${topTopics.length} / 实体${topEntities.length}）`"
+              @click="evidencePanelOpen = true"
+            />
+          </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="text-sm font-medium text-gray-900 dark:text-white mb-2">Top 观点（可追溯）</div>
-              <div v-if="topTopics.length" class="space-y-2">
-                <div v-for="(t, idx) in topTopics.slice(0, 20)" :key="`topic-${idx}`" class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-2 flex-wrap">
-                        <span class="text-gray-900 dark:text-white font-medium">{{ t.name }}</span>
-                        <UBadge v-if="t.category" color="neutral" variant="subtle" size="xs">{{ t.category }}</UBadge>
-                        <UBadge v-if="(t.sentiment ?? 0) < 0" color="error" variant="subtle" size="xs">负面</UBadge>
-                        <UBadge v-else-if="(t.sentiment ?? 0) > 0" color="success" variant="subtle" size="xs">正面</UBadge>
-                        <UBadge v-else color="neutral" variant="subtle" size="xs">中性</UBadge>
-                      </div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(t.platform_distribution) }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(t.keyword_distribution) }}</div>
-                      <div v-if="t.source_tasks?.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        来源任务：{{ t.source_tasks.slice(0, 4).map(x => `#${x.task_id}:${x.mentions}`).join('，') }}
-                      </div>
-                      <div v-if="t.post_ids_sample?.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        样本帖子：
-                        <NuxtLink
-                          v-for="(p, pIdx) in t.post_ids_sample.slice(0, 4)"
-                          :key="`tp-${idx}-${pIdx}`"
-                          class="text-primary-600 dark:text-primary-400 hover:underline mr-2"
-                          :to="`/social-media/tasks/${p.task_id}`"
-                        >
-                          {{ `#${p.task_id}:${p.post_id}` }}
-                        </NuxtLink>
-                      </div>
-
-                      <div v-if="t.original_terms?.length" class="mt-2">
-                        <button class="text-xs text-primary-600 dark:text-primary-400 hover:underline" @click="toggleExpand(`topic-${idx}`)">
-                          {{ isExpanded(`topic-${idx}`) ? '收起' : '展开' }} {{ t.original_terms.length }} 个原始词条
-                        </button>
-                        <div v-if="isExpanded(`topic-${idx}`)" class="mt-2 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
-                          <div v-for="(term, tIdx) in t.original_terms.slice(0, 15)" :key="tIdx" class="text-xs text-gray-600 dark:text-gray-400 py-0.5">
-                            • {{ term.text }} <span class="text-gray-400">({{ term.count }})</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="text-right shrink-0">
-                      <div class="font-mono font-bold text-gray-900 dark:text-white">{{ Number(t.score || 0).toFixed(2) }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400">提及 {{ t.mentions }}</div>
-                    </div>
-                  </div>
+              <div class="text-sm font-medium text-gray-900 dark:text-white">话题证据原话</div>
+              <div class="mt-2 space-y-1 text-xs text-gray-700 dark:text-gray-300">
+                <div v-for="(line, idx) in reportEvidenceTopic.slice(0, 6)" :key="`ev-topic-${idx}`" class="line-clamp-2">
+                  {{ line }}
                 </div>
+                <div v-if="!reportEvidenceTopic.length" class="text-gray-400">暂无原话</div>
               </div>
-              <div v-else class="text-sm text-gray-400 py-4">暂无观点数据</div>
             </div>
-
             <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
-              <div class="text-sm font-medium text-gray-900 dark:text-white mb-2">Top 实体（可追溯）</div>
-              <div v-if="topEntities.length" class="space-y-2">
-                <div v-for="(e, idx) in topEntities.slice(0, 20)" :key="`entity-${idx}`" class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-2 flex-wrap">
-                        <span class="text-gray-900 dark:text-white font-medium">{{ e.name }}</span>
-                        <UBadge v-if="e.role" color="neutral" variant="subtle" size="xs">{{ e.role }}</UBadge>
-                        <UBadge v-if="e.type" color="info" variant="subtle" size="xs">{{ e.type }}</UBadge>
-                      </div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(e.platform_distribution) }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(e.keyword_distribution) }}</div>
-                      <div v-if="e.source_tasks?.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        来源任务：{{ e.source_tasks.slice(0, 4).map(x => `#${x.task_id}:${x.mentions}`).join('，') }}
-                      </div>
-                      <div v-if="e.post_ids_sample?.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        样本帖子：
-                        <NuxtLink
-                          v-for="(p, pIdx) in e.post_ids_sample.slice(0, 4)"
-                          :key="`ep-${idx}-${pIdx}`"
-                          class="text-primary-600 dark:text-primary-400 hover:underline mr-2"
-                          :to="`/social-media/tasks/${p.task_id}`"
-                        >
-                          {{ `#${p.task_id}:${p.post_id}` }}
-                        </NuxtLink>
-                      </div>
-                      <div v-if="e.original_terms?.length" class="mt-2">
-                        <button class="text-xs text-primary-600 dark:text-primary-400 hover:underline" @click="toggleExpand(`entity-${idx}`)">
-                          {{ isExpanded(`entity-${idx}`) ? '收起' : '展开' }} {{ e.original_terms.length }} 个原始词条
-                        </button>
-                        <div v-if="isExpanded(`entity-${idx}`)" class="mt-2 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
-                          <div v-for="(term, tIdx) in e.original_terms.slice(0, 15)" :key="tIdx" class="text-xs text-gray-600 dark:text-gray-400 py-0.5">
-                            • {{ term.text }} <span class="text-gray-400">({{ term.count }})</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="text-right shrink-0">
-                      <div class="font-mono font-bold text-gray-900 dark:text-white">{{ Number(e.score || 0).toFixed(2) }}</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400">提及 {{ e.mentions }}</div>
-                    </div>
-                  </div>
+              <div class="text-sm font-medium text-gray-900 dark:text-white">实体证据原话</div>
+              <div class="mt-2 space-y-1 text-xs text-gray-700 dark:text-gray-300">
+                <div v-for="(line, idx) in reportEvidenceLandscape.slice(0, 6)" :key="`ev-entity-${idx}`" class="line-clamp-2">
+                  {{ line }}
                 </div>
+                <div v-if="!reportEvidenceLandscape.length" class="text-gray-400">暂无原话</div>
               </div>
-              <div v-else class="text-sm text-gray-400 py-4">暂无实体数据</div>
             </div>
           </div>
         </section>
 
         <PostListModal
-          v-if="postListModalTaskId !== null"
+          v-if="postListModalGroups.length"
           v-model:open="postListModalOpen"
-          :task-id="postListModalTaskId"
-          :post-ids="postListModalPostIds"
+          :groups="postListModalGroups"
           :title="postListModalTitle"
         />
+
+        <!-- 证据面板（完整 Top 列表） -->
+        <USlideover v-model:open="evidencePanelOpen">
+          <template #title>
+            <div class="flex items-center gap-2">
+              <span class="text-gray-900 dark:text-white font-medium">证据面板</span>
+              <UBadge color="neutral" variant="subtle" size="xs">
+                观点 {{ topTopics.length }}
+              </UBadge>
+              <UBadge color="neutral" variant="subtle" size="xs">
+                实体 {{ topEntities.length }}
+              </UBadge>
+            </div>
+          </template>
+          <template #description>
+            <span class="sr-only">查看 Top 观点与 Top 实体的可追溯证据</span>
+          </template>
+          <template #body>
+            <div class="space-y-6">
+              <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="text-sm font-medium text-gray-900 dark:text-white">Top 观点（可追溯）</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">点击“查看样本贴”可按需下钻</div>
+                </div>
+                <div v-if="topTopics.length" class="space-y-2">
+                  <div v-for="(t, idx) in topTopics.slice(0, 30)" :key="`topic-${idx}`" class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <span class="text-gray-900 dark:text-white font-medium">{{ t.name }}</span>
+                          <UBadge v-if="t.category" color="neutral" variant="subtle" size="xs">{{ t.category }}</UBadge>
+                          <UBadge v-if="(t.sentiment ?? 0) < 0" color="error" variant="subtle" size="xs">负面</UBadge>
+                          <UBadge v-else-if="(t.sentiment ?? 0) > 0" color="success" variant="subtle" size="xs">正面</UBadge>
+                          <UBadge v-else color="neutral" variant="subtle" size="xs">中性</UBadge>
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(t.platform_distribution) }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(t.keyword_distribution) }}</div>
+                        <div v-if="t.source_tasks?.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          来源任务：{{ t.source_tasks.slice(0, 4).map(x => `#${x.task_id}:${x.mentions}`).join('，') }}
+                        </div>
+
+                        <div class="mt-2 flex items-center gap-2">
+                          <UButton
+                            size="xs"
+                            color="neutral"
+                            variant="outline"
+                            :disabled="!t.post_ids_sample?.length"
+                            :label="t.post_ids_sample?.length ? `查看样本贴（${t.post_ids_sample.length}）` : '暂无样本贴'"
+                            @click="openTopicPostList({ name: t.name, post_ids_sample: t.post_ids_sample || [] }, 'topic')"
+                          />
+                          <button
+                            v-if="t.original_terms?.length"
+                            class="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                            @click="toggleExpand(`topic-${idx}`)"
+                          >
+                            {{ isExpanded(`topic-${idx}`) ? '收起' : '展开' }} 原话（{{ t.original_terms.length }}）
+                          </button>
+                        </div>
+
+                        <div v-if="t.original_terms?.length && isExpanded(`topic-${idx}`)" class="mt-2 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
+                          <div v-for="(term, tIdx) in t.original_terms.slice(0, 15)" :key="tIdx" class="text-xs text-gray-600 dark:text-gray-400 py-0.5">
+                            • {{ term.text }} <span class="text-gray-400">({{ term.count }})</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <div class="font-mono font-bold text-gray-900 dark:text-white">{{ Number(t.score || 0).toFixed(2) }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">提及 {{ t.mentions }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="text-sm text-gray-400 py-4">暂无观点数据</div>
+              </div>
+
+              <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="text-sm font-medium text-gray-900 dark:text-white">Top 实体（可追溯）</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">点击实体名可打开实体证据侧边栏</div>
+                </div>
+                <div v-if="topEntities.length" class="space-y-2">
+                  <div v-for="(e, idx) in topEntities.slice(0, 30)" :key="`entity-${idx}`" class="p-3 rounded bg-white/60 dark:bg-gray-900/30">
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0 flex-1">
+                        <button class="text-left" @click="openEntityPanel(e.name)">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-gray-900 dark:text-white font-medium">{{ e.name }}</span>
+                            <UBadge v-if="e.role" color="neutral" variant="subtle" size="xs">{{ e.role }}</UBadge>
+                            <UBadge v-if="e.type" color="info" variant="subtle" size="xs">{{ e.type }}</UBadge>
+                          </div>
+                        </button>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(e.platform_distribution) }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(e.keyword_distribution) }}</div>
+                        <div v-if="e.source_tasks?.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          来源任务：{{ e.source_tasks.slice(0, 4).map(x => `#${x.task_id}:${x.mentions}`).join('，') }}
+                        </div>
+
+                        <div class="mt-2 flex items-center gap-2">
+                          <UButton
+                            size="xs"
+                            color="neutral"
+                            variant="outline"
+                            :disabled="!e.post_ids_sample?.length"
+                            :label="e.post_ids_sample?.length ? `查看样本贴（${e.post_ids_sample.length}）` : '暂无样本贴'"
+                            @click="openLandscapePostList({ name: e.name, post_ids_sample: e.post_ids_sample || [] })"
+                          />
+                          <button
+                            v-if="e.original_terms?.length"
+                            class="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                            @click="toggleExpand(`entity-${idx}`)"
+                          >
+                            {{ isExpanded(`entity-${idx}`) ? '收起' : '展开' }} 原话（{{ e.original_terms.length }}）
+                          </button>
+                        </div>
+
+                        <div v-if="e.original_terms?.length && isExpanded(`entity-${idx}`)" class="mt-2 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
+                          <div v-for="(term, tIdx) in e.original_terms.slice(0, 15)" :key="tIdx" class="text-xs text-gray-600 dark:text-gray-400 py-0.5">
+                            • {{ term.text }} <span class="text-gray-400">({{ term.count }})</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <div class="font-mono font-bold text-gray-900 dark:text-white">{{ Number(e.score || 0).toFixed(2) }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">提及 {{ e.mentions }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="text-sm text-gray-400 py-4">暂无实体数据</div>
+              </div>
+            </div>
+          </template>
+        </USlideover>
+
+        <!-- 实体证据侧边栏（行业象限/大盘实体统一入口：先证据，后样本） -->
+        <USlideover v-model:open="entityPanelOpen">
+          <template #title>
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-gray-900 dark:text-white font-medium truncate">{{ entityPanelName }}</span>
+              <UBadge v-if="(entityPanelEntity as any)?.role" color="neutral" variant="subtle" size="xs">
+                {{ (entityPanelEntity as any)?.role }}
+              </UBadge>
+              <UBadge v-if="(entityPanelEntity as any)?.type" color="info" variant="subtle" size="xs">
+                {{ (entityPanelEntity as any)?.type }}
+              </UBadge>
+              <UBadge v-if="(entityPanelEntity as any)?.parent" color="neutral" variant="subtle" size="xs">
+                {{ (entityPanelEntity as any)?.parent }}
+              </UBadge>
+            </div>
+          </template>
+
+          <template #description>
+            <span class="sr-only">
+              查看实体证据与样本贴入口
+            </span>
+          </template>
+
+          <template #body>
+            <div v-if="entityPanelEntity" class="space-y-4">
+              <div class="grid grid-cols-3 gap-3">
+                <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">热度</div>
+                  <div class="text-lg font-mono font-semibold text-gray-900 dark:text-white mt-1">
+                    {{ formatCompactNumber(Number((entityPanelEntity as any).heat || 0)) }}
+                  </div>
+                </div>
+                <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">提及</div>
+                  <div class="text-lg font-mono font-semibold text-gray-900 dark:text-white mt-1">
+                    {{ Number((entityPanelEntity as any).mentions || 0) }}
+                  </div>
+                </div>
+                <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">情感</div>
+                  <div class="text-lg font-mono font-semibold text-gray-900 dark:text-white mt-1">
+                    {{ Number((entityPanelEntity as any).sentiment || 0).toFixed(2) }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">平台分布</div>
+                <div class="text-sm text-gray-900 dark:text-white">
+                  {{ formatDist((entityPanelEntity as any).platform_distribution) }}
+                </div>
+              </div>
+
+              <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">关键词分布</div>
+                <div class="text-sm text-gray-900 dark:text-white">
+                  {{ formatDist((entityPanelEntity as any).keyword_distribution) }}
+                </div>
+              </div>
+
+              <div v-if="(entityPanelEntity as any).original_terms?.length" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  用户原话（{{ (entityPanelEntity as any).original_terms.length }}）
+                </div>
+                <div class="space-y-2 max-h-72 overflow-y-auto">
+                  <div
+                    v-for="(term, idx) in (entityPanelEntity as any).original_terms.slice(0, 20)"
+                    :key="`eot-${idx}`"
+                    class="p-2 rounded bg-white dark:bg-gray-700 text-sm"
+                  >
+                    <div class="text-gray-800 dark:text-gray-200">{{ term.text }}</div>
+                    <div class="text-xs text-gray-400 mt-1">出现 {{ term.count }} 次</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-end">
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="outline"
+                  :disabled="!(entityPanelEntity as any).post_ids_sample?.length"
+                  :label="(entityPanelEntity as any).post_ids_sample?.length ? `查看样本贴（${(entityPanelEntity as any).post_ids_sample.length}）` : '暂无样本贴'"
+                  @click="openEntitySamplePosts"
+                />
+              </div>
+            </div>
+            <div v-else class="py-12 text-center text-sm text-gray-400">
+              暂无实体证据信息
+            </div>
+          </template>
+        </USlideover>
+
+        <!-- 聚焦层维度证据侧边栏（SWOT/Gap：先证据，后样本） -->
+        <USlideover v-model:open="focusPanelOpen">
+          <template #title>
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-gray-900 dark:text-white font-medium truncate">
+                {{ focusPanelItem?.dimension || '维度详情' }}
+              </span>
+              <UBadge v-if="focusPanelType" color="neutral" variant="subtle" size="xs">
+                {{ focusPanelType === 'swot' ? 'SWOT' : 'Gap' }}
+              </UBadge>
+            </div>
+          </template>
+          <template #description>
+            <span class="sr-only">
+              查看聚焦层维度证据与样本贴入口
+            </span>
+          </template>
+          <template #body>
+            <div v-if="focusPanelItem" class="space-y-4">
+              <div class="grid grid-cols-2 gap-3">
+                <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">我方</div>
+                  <div class="text-lg font-mono font-semibold text-gray-900 dark:text-white mt-1">
+                    {{ Number(focusPanelItem.target_sentiment || 0).toFixed(2) }}
+                  </div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">提及 {{ Number(focusPanelItem.target_mentions || 0) }}</div>
+                </div>
+                <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">竞品集合</div>
+                  <div class="text-lg font-mono font-semibold text-gray-900 dark:text-white mt-1">
+                    {{ Number(focusPanelItem.competitor_sentiment || 0).toFixed(2) }}
+                  </div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">提及 {{ Number(focusPanelItem.competitor_mentions || 0) }}</div>
+                </div>
+              </div>
+
+              <div v-if="focusPanelItem.original_terms?.length" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  维度证据原话（{{ focusPanelItem.original_terms.length }}）
+                </div>
+                <div class="space-y-2 max-h-72 overflow-y-auto">
+                  <div
+                    v-for="(term, idx) in focusPanelItem.original_terms.slice(0, 20)"
+                    :key="`fd-${idx}`"
+                    class="p-2 rounded bg-white dark:bg-gray-700 text-sm"
+                  >
+                    <div class="text-gray-800 dark:text-gray-200">{{ term.text }}</div>
+                    <div class="text-xs text-gray-400 mt-1">出现 {{ term.count }} 次</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-end">
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="outline"
+                  :disabled="!focusPanelItem.post_ids_sample?.length"
+                  :label="focusPanelItem.post_ids_sample?.length ? `查看样本贴（${focusPanelItem.post_ids_sample.length}）` : '暂无样本贴'"
+                  @click="openFocusSamplePosts"
+                />
+              </div>
+            </div>
+            <div v-else class="py-12 text-center text-sm text-gray-400">
+              暂无维度证据信息
+            </div>
+          </template>
+        </USlideover>
         </template>
       </div>
     </ClientOnly>

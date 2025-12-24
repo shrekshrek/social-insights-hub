@@ -10,8 +10,10 @@ import DeepResultModal from './DeepResultModal.vue'
 
 const props = defineProps<{
   open: boolean
-  taskId: number
-  postIds: number[]
+  taskId?: number
+  postIds?: number[]
+  /** 多任务样本：用于项目快照等跨任务场景 */
+  groups?: Array<{ taskId: number; postIds: number[]; label?: string; platform?: string }>
   title?: string
 }>()
 
@@ -23,13 +25,46 @@ const { getTaskPostAnalyses } = useAnalysis()
 
 const page = ref(1)
 const pageSize = ref(20)
-const postIdsRef = computed(() => props.postIds)
+
+const groups = computed(() => (Array.isArray(props.groups) ? props.groups : []))
+const hasGroups = computed(() => groups.value.length > 0)
+const selectedTaskId = ref<number | undefined>(undefined)
+
+watch(
+  () => [props.open, groups.value.length],
+  ([isOpen]) => {
+    if (!isOpen) return
+    if (hasGroups.value) {
+      selectedTaskId.value = groups.value[0]?.taskId
+    } else {
+      selectedTaskId.value = props.taskId
+    }
+  }
+)
+
+const selectedGroup = computed(() => {
+  if (!hasGroups.value) return null
+  const tid = selectedTaskId.value
+  if (!tid) return groups.value[0] ?? null
+  return groups.value.find(g => g.taskId === tid) ?? groups.value[0] ?? null
+})
+
+const effectiveTaskId = computed(() => {
+  if (hasGroups.value) return selectedGroup.value?.taskId ?? null
+  return props.taskId ?? null
+})
+const postIdsRef = computed(() => {
+  if (hasGroups.value) return selectedGroup.value?.postIds ?? []
+  return props.postIds ?? []
+})
+
+const safeTaskId = computed(() => (effectiveTaskId.value && effectiveTaskId.value > 0 ? effectiveTaskId.value : 0))
 
 const {
   data: postData,
   pending: loading,
   refresh,
-} = getTaskPostAnalyses(props.taskId, {
+} = getTaskPostAnalyses(safeTaskId, {
   page,
   pageSize,
   filterAnalyzed: false,
@@ -62,8 +97,8 @@ const { columns } = usePostAnalysisColumns({
 })
 
 // 当弹窗打开或 postIds 变化时刷新数据
-watch(() => [props.open, props.postIds], ([isOpen]) => {
-  if (isOpen && props.postIds.length > 0) {
+watch(() => [props.open, postIdsRef.value, safeTaskId.value], ([isOpen]) => {
+  if (isOpen && safeTaskId.value > 0 && postIdsRef.value.length > 0) {
     page.value = 1
     refresh()
   }
@@ -77,12 +112,26 @@ const handleClose = () => {
 <template>
   <UModal
     :open="open"
-    :title="title || `相关帖子 (${postIds.length})`"
+    :title="title || `相关帖子（样本）(${postIdsRef.length})`"
     :description="`共 ${total} 条帖子`"
     :ui="{ content: 'w-[calc(100vw-2rem)] max-w-6xl rounded-lg shadow-lg ring ring-default', footer: 'justify-end' }"
     @update:open="handleClose"
   >
     <template #body>
+      <div v-if="hasGroups" class="mb-3 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span class="shrink-0">任务：</span>
+        <USelect
+          v-model="selectedTaskId"
+          :items="groups.map(g => ({ label: g.label || `任务 #${g.taskId}（${g.postIds.length}条样本）`, value: g.taskId }))"
+          value-key="value"
+          size="xs"
+          class="min-w-64"
+        />
+        <span class="hidden sm:inline">
+          · 仅展示样本帖（每个维度最多 50 条），用于快速核验趋势与原话
+        </span>
+      </div>
+
       <div v-if="loading" class="flex items-center justify-center py-12">
         <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-gray-400" />
       </div>

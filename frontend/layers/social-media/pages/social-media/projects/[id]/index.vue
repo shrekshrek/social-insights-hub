@@ -3,6 +3,7 @@ import { computed, ref, h, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
 import type { DataTaskWithRelations } from '../../../../tasks/types'
+import type { ProjectSnapshot } from '../../../../types/project-snapshot'
 
 definePageMeta({
   layout: 'default',
@@ -46,17 +47,6 @@ const toggleSelectAll = (checked: boolean) => {
   selectedTaskIds.value = checked ? Array.from(new Set(allTaskIds.value)) : []
 }
 
-// 快照列表
-interface ProjectSnapshot {
-  id: number
-  name: string | null
-  project_id: number
-  user_id: number
-  included_task_ids: number[]
-  result_data: Record<string, unknown>
-  created_at: string
-  updated_at: string
-}
 interface ProjectSnapshotListResponse {
   items: ProjectSnapshot[]
 }
@@ -262,6 +252,15 @@ const formatDateTime = (dateStr: string) => {
   })
 }
 
+const formatCompactNumber = (n: unknown): string => {
+  const v = typeof n === 'number' ? n : Number(n)
+  if (!Number.isFinite(v)) return '-'
+  const abs = Math.abs(v)
+  if (abs >= 10000) return `${(v / 10000).toFixed(abs >= 100000 ? 0 : 1)}万`
+  if (abs >= 1000) return `${(v / 1000).toFixed(abs >= 10000 ? 0 : 1)}k`
+  return `${Math.round(v)}`
+}
+
 // 任务状态颜色
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
@@ -283,6 +282,150 @@ const getStatusText = (status: string) => {
   }
   return texts[status] || status
 }
+
+const getSnapshotStageColor = (status?: string) => {
+  const colors: Record<string, string> = {
+    pending: 'neutral',
+    processing: 'info',
+    completed: 'success',
+    failed: 'error',
+    skipped: 'warning',
+  }
+  if (!status) return 'neutral'
+  return colors[status] || 'neutral'
+}
+
+const getSnapshotStageText = (status?: string) => {
+  const texts: Record<string, string> = {
+    pending: '未开始',
+    processing: '进行中',
+    completed: '已完成',
+    failed: '失败',
+    skipped: '跳过',
+  }
+  if (!status) return '未知'
+  return texts[status] || status
+}
+
+const formatCompetitors = (items?: unknown): string => {
+  if (!Array.isArray(items)) return '-'
+  const arr = items.map(x => String(x || '').trim()).filter(Boolean)
+  if (!arr.length) return '-'
+  const head = arr.slice(0, 3).join('、')
+  const rest = arr.length - 3
+  return rest > 0 ? `${head} 等${rest + 3}个` : head
+}
+
+const formatTaskIdsPreview = (ids?: number[]): string => {
+  const arr = Array.isArray(ids) ? ids : []
+  if (!arr.length) return '-'
+  const head = arr.slice(0, 6).join(', ')
+  return arr.length > 6 ? `${head} …` : head
+}
+
+const snapshotColumns = computed<TableColumn<ProjectSnapshot>[]>(() => {
+  const Badge = UBadge as Component
+  const Button = UButton as Component
+
+  return [
+    {
+      accessorKey: 'name',
+      header: '快照',
+      cell: ({ row }) => {
+        const s = row.original
+        const subject = s.result_data?.meta?.subject || null
+        const competitors = formatCompetitors(s.result_data?.meta?.competitors)
+        const hasFocus = Boolean(subject)
+        return h('div', { class: 'min-w-0' }, [
+          h('div', { class: 'flex items-center gap-2 min-w-0' }, [
+            h('div', { class: 'min-w-0 truncate font-medium text-gray-900 dark:text-white' }, s.name || `快照 ${s.id}`),
+            h('span', { class: 'shrink-0 text-xs text-gray-400 font-normal' }, `#${s.id}`),
+            hasFocus
+              ? h(Badge, { size: 'xs', variant: 'subtle', color: 'primary' }, () => 'Focus')
+              : h(Badge, { size: 'xs', variant: 'subtle', color: 'neutral' }, () => '无 Focus'),
+          ]),
+          h('div', { class: 'mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate' },
+            `主体：${subject ? String(subject) : '-'} · 竞品：${competitors}`
+          ),
+        ])
+      },
+    },
+    {
+      accessorKey: 'created_at',
+      header: '创建时间',
+      cell: ({ row }) => h('span', { class: 'text-xs text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
+    },
+    {
+      accessorKey: 'included_task_ids',
+      header: '任务',
+      cell: ({ row }) => {
+        const ids = row.original.included_task_ids || []
+        return h('div', { class: 'text-xs text-gray-600 dark:text-gray-400' }, [
+          h('div', { class: 'font-medium text-gray-900 dark:text-white' }, `${ids.length} 个`),
+          h('div', { class: 'mt-0.5 font-mono truncate' }, formatTaskIdsPreview(ids)),
+        ])
+      },
+    },
+    {
+      accessorKey: 'status',
+      header: '进度',
+      cell: ({ row }) => {
+        const s = row.original
+        const stage2 = s.result_data?.stage2?.status
+        const stage3 = s.result_data?.stage3?.status
+        return h('div', { class: 'flex flex-col gap-1 items-start' }, [
+          h(Badge, { size: 'xs', variant: 'solid', color: getSnapshotStageColor(stage2) }, () => `Stage2：${getSnapshotStageText(stage2)}`),
+          h(Badge, { size: 'xs', variant: 'solid', color: getSnapshotStageColor(stage3) }, () => `Stage3：${getSnapshotStageText(stage3)}`),
+        ])
+      },
+    },
+    {
+      accessorKey: 'metrics',
+      header: '关键指标',
+      cell: ({ row }) => {
+        const s = row.original
+        const totalVolume = s.result_data?.layers?.landscape?.overview?.total_volume
+        const globalSentiment = s.result_data?.layers?.landscape?.overview?.global_sentiment
+        const entityCount = s.result_data?.foundation?.aligned_entities?.length ?? null
+        const topicCount = s.result_data?.foundation?.aligned_topics?.length ?? null
+        const sentimentText = typeof globalSentiment === 'number' && Number.isFinite(globalSentiment)
+          ? globalSentiment.toFixed(2)
+          : '-'
+        return h('div', { class: 'text-xs text-gray-600 dark:text-gray-400' }, [
+          h('div', { class: 'text-gray-900 dark:text-white font-medium' },
+            `总声量 ${formatCompactNumber(totalVolume)} · 情绪 ${sentimentText}`
+          ),
+          h('div', { class: 'mt-0.5' },
+            `实体 ${entityCount ?? '-'} · 话题 ${topicCount ?? '-'}`
+          ),
+        ])
+      },
+    },
+    {
+      accessorKey: 'actions',
+      header: '操作',
+      cell: ({ row }) => {
+        const s = row.original
+        return h('div', { class: 'flex items-center justify-end gap-2' }, [
+          h(Button, {
+            size: 'xs',
+            variant: 'ghost',
+            icon: 'i-heroicons-eye',
+            onClick: () => navigateTo(`/social-media/projects/${projectId.value}/analysis?snapshot_id=${s.id}`),
+          }, () => '查看'),
+          h(Button, {
+            size: 'xs',
+            variant: 'ghost',
+            color: 'error',
+            icon: 'i-heroicons-trash',
+            loading: deletingSnapshotId.value === s.id,
+            onClick: () => handleDeleteSnapshot(s.id),
+          }, () => '删除'),
+        ])
+      },
+    },
+  ]
+})
 
 // 表格列定义 - 使用 computed 以避免 SSR 水合问题
 const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
@@ -591,50 +734,13 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           暂无快照（可在上方勾选任务后生成）
         </div>
 
-        <div v-else class="space-y-3">
-          <div
-            v-for="s in snapshots"
-            :key="s.id"
-            class="p-4 rounded border border-gray-200 dark:border-gray-800"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium text-gray-900 dark:text-white">
-                  {{ s.name || `快照 ${s.id}` }}
-                  <span class="ml-1 text-xs text-gray-400 font-normal">#{{ s.id }}</span>
-                </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {{ new Date(s.created_at).toLocaleString('zh-CN') }}
-                </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  包含任务 ({{ (s.included_task_ids || []).length }})：
-                  <span class="font-mono">{{ (s.included_task_ids || []).join(', ') || '-' }}</span>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2 shrink-0">
-                <UButton
-                  size="xs"
-                  variant="ghost"
-                  icon="i-heroicons-eye"
-                  :to="`/social-media/projects/${projectId}/analysis?snapshot_id=${s.id}`"
-                >
-                  查看
-                </UButton>
-                <UButton
-                  size="xs"
-                  variant="ghost"
-                  color="error"
-                  icon="i-heroicons-trash"
-                  :loading="deletingSnapshotId === s.id"
-                  @click="handleDeleteSnapshot(s.id)"
-                >
-                  删除
-                </UButton>
-              </div>
-            </div>
-          </div>
-        </div>
+        <UTable
+          v-else
+          :data="snapshots"
+          :columns="snapshotColumns"
+          :loading="snapshotsLoading"
+          class="w-full"
+        />
       </ClientOnly>
     </UCard>
 

@@ -11,9 +11,12 @@
  * - 错误响应：通过 HTTP 状态码和标准错误格式处理
 */
 import { isJwtExpiring } from '~/app/utils/token'
+import { getCurrentInstance } from 'vue'
 
 export const useApi = () => {
-  const toast = useToast()
+  // 防御：useApi 可能在非组件 setup 场景被调用（例如某些 composable/工具函数）。
+  // 这时调用 useToast() 会触发 Vue 的 inject() 警告，因此仅在存在当前组件实例时才初始化 toast。
+  const toast = getCurrentInstance() ? useToast() : null
   const config = useRuntimeConfig()
   const { session, fetch: fetchSession, clear: clearSession } = useUserSession()
 
@@ -200,6 +203,10 @@ export const useApi = () => {
    * 显示成功提示
    */
   const showSuccess = (message: string) => {
+    if (!toast) {
+      console.info('[toast:success]', message)
+      return
+    }
     toast.add({
       title: '成功',
       description: message,
@@ -211,6 +218,10 @@ export const useApi = () => {
    * 显示错误提示
    */
   const showError = (message: string) => {
+    if (!toast) {
+      console.warn('[toast:error]', message)
+      return
+    }
     toast.add({
       title: '错误',
       description: message,
@@ -222,6 +233,10 @@ export const useApi = () => {
    * 显示警告提示
    */
   const showWarning = (message: string) => {
+    if (!toast) {
+      console.warn('[toast:warning]', message)
+      return
+    }
     toast.add({
       title: '警告',
       description: message,

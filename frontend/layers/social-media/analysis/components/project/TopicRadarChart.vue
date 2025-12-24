@@ -12,6 +12,7 @@ interface TopicRadarItem {
   original_terms?: Array<{ text: string; count: number }>
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
+  post_ids_sample?: Array<{ task_id: number; post_id: number }>
 }
 
 const props = defineProps<{
@@ -22,7 +23,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'select', item: TopicRadarItem, type: 'pain' | 'gain' | 'controversy' | 'unmet'): void
+  (e: 'select' | 'open-posts', item: TopicRadarItem, type: 'pain' | 'gain' | 'controversy' | 'unmet'): void
 }>()
 
 const { chartRef, initChart, setOption, getInstance, on } = useCharts()
@@ -65,6 +66,17 @@ const getOption = (): EChartsOption => {
   // 计算最大热度用于归一化气泡大小
   const allItems = [...pains, ...gains, ...controversies]
   const maxHeat = Math.max(...allItems.map(i => i.heat || 0), 1)
+  const sortedHeats = allItems.map(i => i.heat || 0).sort((a, b) => a - b)
+  const volumeThreshold = sortedHeats.length ? sortedHeats[Math.floor(sortedHeats.length / 2)] : 0
+  const labelNameSet = new Set(
+    allItems
+      .slice()
+      .sort((a, b) => (b.heat || 0) - (a.heat || 0))
+      .slice(0, 30)
+      .map(i => i.name)
+      .filter(Boolean)
+  )
+  const truncateLabel = (s: string) => (s.length > 6 ? `${s.slice(0, 6)}…` : s)
 
   const buildSeries = (
     items: TopicRadarItem[],
@@ -75,6 +87,20 @@ const getOption = (): EChartsOption => {
     name,
     type: 'scatter' as const,
     symbolSize: (val: number[]) => Math.max(8, Math.min(35, ((val[2] ?? 0) / maxHeat) * 35 + 8)),
+    label: {
+      show: true,
+      position: 'right' as const,
+      distance: 2,
+      color: '#6b7280',
+      fontSize: 10,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formatter: (p: any) => {
+        const nm = (p?.data?.[3] || '').toString()
+        if (!nm) return ''
+        return labelNameSet.has(nm) ? truncateLabel(nm) : ''
+      },
+    },
+    labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
     itemStyle: {
       color,
       opacity: 0.7,
@@ -98,6 +124,35 @@ const getOption = (): EChartsOption => {
     ]),
   })
 
+  const zoneLabelTextStyle = { fontSize: 11, fontWeight: 600, color: '#6b7280' }
+  const buildZones = () => ({
+    silent: true,
+    itemStyle: { opacity: 0.18 },
+    label: { show: true, color: '#6b7280', fontSize: 11, fontWeight: 600 },
+    data: [
+      [
+        {
+          name: '护城河',
+          xAxis: volumeThreshold,
+          yAxis: 0.2,
+          itemStyle: { color: '#10b981' },
+          label: { show: true, position: 'insideTopLeft', ...zoneLabelTextStyle },
+        },
+        { xAxis: 'max', yAxis: 1 },
+      ],
+      [
+        {
+          name: '机会区',
+          xAxis: volumeThreshold,
+          yAxis: -1,
+          itemStyle: { color: '#ef4444' },
+          label: { show: true, position: 'insideBottomLeft', ...zoneLabelTextStyle },
+        },
+        { xAxis: 'max', yAxis: -0.2 },
+      ],
+    ],
+  })
+
   return {
     animation: false,
     tooltip: {
@@ -116,19 +171,15 @@ const getOption = (): EChartsOption => {
         `
       },
     },
-    legend: {
-      bottom: 0,
-      textStyle: { fontSize: 11 },
-    },
     grid: {
       left: 50,
       right: 20,
       top: 20,
-      bottom: 50,
+      bottom: 55,
     },
     xAxis: {
       type: 'value',
-      name: '热度',
+      name: '声量',
       nameLocation: 'middle',
       nameGap: 28,
       nameTextStyle: { fontSize: 11, color: '#6b7280' },
@@ -156,7 +207,10 @@ const getOption = (): EChartsOption => {
       axisLabel: { fontSize: 10 },
     },
     series: [
-      buildSeries(pains, '痛点', '#ef4444', 'pain'),
+      {
+        ...buildSeries(pains, '痛点', '#ef4444', 'pain'),
+        markArea: buildZones(),
+      },
       buildSeries(gains, '爽点', '#10b981', 'gain'),
       buildSeries(controversies, '争议点', '#f59e0b', 'controversy'),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -176,7 +230,12 @@ const updateChart = async () => {
         const p = params as any
         if (p.data && p.data[7]) {
           const type = p.data[6] as 'pain' | 'gain' | 'controversy'
-          handleSelect(p.data[7] as TopicRadarItem, type)
+          const item = p.data[7] as TopicRadarItem
+          if (item?.post_ids_sample?.length) {
+            emit('open-posts', item, type)
+            return
+          }
+          handleSelect(item, type)
         }
       })
     }
@@ -192,6 +251,14 @@ onMounted(() => {
 
 // Unmet Needs 列表
 const unmetNeedsList = computed(() => props.unmetNeeds || [])
+
+const handleUnmetClick = (item: TopicRadarItem) => {
+  if (item?.post_ids_sample?.length) {
+    emit('open-posts', item, 'unmet')
+    return
+  }
+  handleSelect(item, 'unmet')
+}
 </script>
 
 <template>
@@ -220,8 +287,8 @@ const unmetNeedsList = computed(() => props.unmetNeeds || [])
 
     <!-- 雷达气泡图 -->
     <div v-show="activeTab === 'radar'">
-      <div v-if="hasChartData" ref="chartRef" class="h-72" />
-      <div v-else class="h-72 flex items-center justify-center text-sm text-gray-400">
+      <div v-if="hasChartData" ref="chartRef" class="h-100" />
+      <div v-else class="h-80 flex items-center justify-center text-sm text-gray-400">
         暂无话题雷达数据
       </div>
 
@@ -248,7 +315,7 @@ const unmetNeedsList = computed(() => props.unmetNeeds || [])
           v-for="item in unmetNeedsList"
           :key="item.name"
           class="p-3 rounded-lg bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 cursor-pointer transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
-          @click="handleSelect(item, 'unmet')"
+          @click="handleUnmetClick(item)"
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">

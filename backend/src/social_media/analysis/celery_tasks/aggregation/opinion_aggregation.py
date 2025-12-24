@@ -90,8 +90,10 @@ def aggregate_opinions(
     # 第一次遍历：统计 Category 频次
     for post in posts_data:
         sources = []
-        if post.get("post_deep_result"): sources.append(post["post_deep_result"])
-        if post.get("comment_deep_result"): sources.append(post["comment_deep_result"])
+        if post.get("post_deep_result"):
+            sources.append(post["post_deep_result"])
+        if post.get("comment_deep_result"):
+            sources.append(post["comment_deep_result"])
         
         for source in sources:
             opinions = source.get("general_opinions", [])
@@ -134,7 +136,8 @@ def aggregate_opinions(
         logger.info("[观点聚合] 类别数 <= 5，跳过类别归一化")
 
     def get_normalized_category(raw: str) -> str:
-        if not raw: return "其他"
+        if not raw:
+            return "其他"
         raw = raw.strip()
         # 优先使用 LLM 映射，否则使用默认规则
         return category_map.get(raw, _normalize_category(raw))
@@ -307,7 +310,8 @@ def aggregate_opinions(
             label = cluster.get("name")
             originals = cluster.get("original_terms", [])
             
-            if not label: continue
+            if not label:
+                continue
                 
             # 聚合该 label 下的所有数据
             merged_heat = 0.0

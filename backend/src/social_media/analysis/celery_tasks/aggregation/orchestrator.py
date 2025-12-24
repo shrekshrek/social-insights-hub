@@ -190,7 +190,7 @@ def aggregate_task_analysis(
         select(SocialPost, PostAnalysis)
         .outerjoin(PostAnalysis, PostAnalysis.post_id == SocialPost.id)
         .where(SocialPost.task_id == task_id)
-        .where(SocialPost.is_deleted == False)
+        .where(SocialPost.is_deleted.is_(False))
     )
     result = db.execute(stmt)
     rows = result.all()

@@ -20,7 +20,11 @@ const props = defineProps<{
   subject?: string
 }>()
 
-const { chartRef, initChart, setOption, getInstance } = useCharts()
+const emit = defineEmits<{
+  (e: 'select', item: GapItem): void
+}>()
+
+const { chartRef, initChart, setOption, getInstance, on } = useCharts()
 
 const items = computed(() => props.data?.dimensions || [])
 
@@ -124,6 +128,15 @@ const updateChart = async () => {
     let instance = getInstance()
     if (!instance) {
       instance = initChart()
+      on('click', (params: unknown) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const p = params as any
+        const idx = p?.dataIndex
+        if (typeof idx !== 'number') return
+        const item = items.value[idx]
+        if (!item) return
+        emit('select', item)
+      })
     }
     setOption(getOption())
   }
@@ -152,12 +165,13 @@ onMounted(() => {
     <!-- 缺口列表 -->
     <div v-if="items.length" class="mt-3 space-y-2">
       <div
-        v-for="item in items.slice(0, 5)"
-        :key="item.dimension"
-        class="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30"
-      >
-        <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 shrink-0" />
-        <div class="flex-1 min-w-0">
+      v-for="item in items.slice(0, 5)"
+      :key="item.dimension"
+      class="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 cursor-pointer transition-colors hover:bg-amber-50 dark:hover:bg-amber-900/20"
+      @click="emit('select', item)"
+    >
+      <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 shrink-0" />
+      <div class="flex-1 min-w-0">
           <div class="text-sm text-gray-900 dark:text-white truncate">{{ item.dimension }}</div>
           <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
             竞品 <span class="font-mono text-emerald-600 dark:text-emerald-400">{{ formatSentiment(item.competitor_sentiment) }}</span> ({{ item.competitor_mentions }}条)

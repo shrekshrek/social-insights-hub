@@ -290,6 +290,7 @@ def build_topics_aligned(
     topic_mapping_by_category: dict[str, dict[str, str]],
 ) -> list[dict[str, Any]]:
     """根据 category_aligned + mapping 合并 topics_for_norm，产出对齐后的观点列表。"""
+    max_post_ids_sample = 50
 
     def _cap_text(s: str) -> str:
         s = (s or "").strip()
@@ -319,6 +320,9 @@ def build_topics_aligned(
                 "platform_distribution": {},
                 "keyword_distribution": {},
                 "original_terms_counts": {},
+                "post_ids_sample": [],
+                "_post_ids_sample_set": set(),
+                "source_tasks": {},
             }
             bucket[key] = b
 
@@ -355,6 +359,36 @@ def build_topics_aligned(
                 b["keyword_distribution"][k] = (
                     int(b["keyword_distribution"].get(k, 0)) + vv
                 )
+        # 来源任务聚合（用于可追溯）
+        for st in t.get("source_tasks") or []:
+            if not isinstance(st, dict):
+                continue
+            try:
+                tid = int(st.get("task_id") or 0)
+                cnt = int(st.get("mentions") or 0)
+            except Exception:
+                continue
+            if tid <= 0 or cnt <= 0:
+                continue
+            b["source_tasks"][tid] = int(b["source_tasks"].get(tid, 0)) + cnt
+        # 帖子样本合并（去重 + 限制数量）
+        for ref in t.get("post_ids_sample") or []:
+            if len(b["post_ids_sample"]) >= max_post_ids_sample:
+                break
+            if not isinstance(ref, dict):
+                continue
+            try:
+                tid = int(ref.get("task_id") or 0)
+                pid = int(ref.get("post_id") or 0)
+            except Exception:
+                continue
+            if tid <= 0 or pid <= 0:
+                continue
+            key_id = f"{tid}:{pid}"
+            if key_id in b["_post_ids_sample_set"]:
+                continue
+            b["_post_ids_sample_set"].add(key_id)
+            b["post_ids_sample"].append({"task_id": tid, "post_id": pid})
 
         # 合并原话：优先使用任务级聚合下发的 original_terms；没有则回退用观点名占位
         ots = t.get("original_terms")
@@ -399,6 +433,15 @@ def build_topics_aligned(
                 "score": round(float(score), 3),
                 "platform_distribution": b["platform_distribution"],
                 "keyword_distribution": b["keyword_distribution"],
+                "source_tasks": [
+                    {"task_id": tid, "mentions": cnt}
+                    for tid, cnt in sorted(
+                        (b.get("source_tasks") or {}).items(),
+                        key=lambda x: x[1],
+                        reverse=True,
+                    )
+                ],
+                "post_ids_sample": b.get("post_ids_sample") or [],
                 "original_terms": [
                     {"text": text, "count": count}
                     for text, count in sorted(

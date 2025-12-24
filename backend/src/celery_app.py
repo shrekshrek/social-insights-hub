@@ -96,7 +96,7 @@ celery_app.conf.update(
 logger.info("✅ Celery应用配置完成")
 logger.info(f"   Broker: {settings.CELERY_BROKER_URL}")
 logger.info(f"   Backend: {settings.CELERY_RESULT_BACKEND}")
-logger.info(f"   Task Timeout: 7200s (2 hours)")
+logger.info("   Task Timeout: 7200s (2 hours)")
 
 # Task modules will be imported here when they are created
 # Example:

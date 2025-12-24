@@ -56,6 +56,8 @@ def build_snapshot_layers(
         name = e.get("name") or ""
         parent = (e.get("parent") or "") if isinstance(e.get("parent"), str) else ""
         role = _norm_role(e.get("role"))
+        post_ids_sample = e.get("post_ids_sample") or []
+        source_tasks = e.get("source_tasks") or []
         # 情感字段（用于行业象限）
         try:
             sentiment = float(e.get("sentiment") or 0.0)
@@ -72,6 +74,8 @@ def build_snapshot_layers(
                 "sentiment": round(sentiment, 2),
                 "sentiment_distribution": e.get("sentiment_distribution") or {},
                 "platform_distribution": e.get("platform_distribution") or {},
+                "post_ids_sample": post_ids_sample,
+                "source_tasks": source_tasks,
             }
         )
 
@@ -174,6 +178,8 @@ def build_snapshot_layers(
                 "heat": item.get("heat") or 0.0,
                 "sentiment": item.get("sentiment") or 0.0,
                 "mentions": item.get("mentions") or 0,
+                "post_ids_sample": item.get("post_ids_sample") or [],
+                "source_tasks": item.get("source_tasks") or [],
             }
         )
 
@@ -243,6 +249,8 @@ def build_snapshot_layers(
             "platform_distribution": t.get("platform_distribution") or {},
             "keyword_distribution": t.get("keyword_distribution") or {},
             "original_terms": t.get("original_terms") or [],
+            "post_ids_sample": t.get("post_ids_sample") or [],
+            "source_tasks": t.get("source_tasks") or [],
         }
         # 经验阈值：sentiment<-0.2 视为负向主导，>0.2 视为正向主导
         if sent <= -0.2:
@@ -356,6 +364,8 @@ def build_snapshot_layers(
                 "platform_coverage": p_cov,
                 "keyword_coverage": k_cov,
                 "original_terms": (x.get("original_terms") or [])[:10],
+                "post_ids_sample": x.get("post_ids_sample") or [],
+                "source_tasks": x.get("source_tasks") or [],
             }
         )
     unmet_candidates.sort(
@@ -513,6 +523,9 @@ def build_snapshot_layers(
                     "sentiment": round(sentiment, 2),
                     "top_pain": top_pain,
                     "platform_distribution": e.get("platform_distribution") or {},
+                    "keyword_distribution": e.get("keyword_distribution") or {},
+                    "post_ids_sample": e.get("post_ids_sample") or [],
+                    "source_tasks": e.get("source_tasks") or [],
                 }
             )
 

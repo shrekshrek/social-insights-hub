@@ -650,7 +650,8 @@ def _clean_entity_attributes_sync(
             label = cluster.get("name")
             originals = cluster.get("original_terms", [])
             
-            if not label: continue
+            if not label:
+                continue
             
             if label not in new_map:
                 new_map[label] = {
@@ -823,8 +824,13 @@ def aggregate_entities(
 
         # 辅助函数：安全地获取排序后的 keys
         def get_sorted_keys(data_dict):
-            if not data_dict: return []
-            return sorted(data_dict.keys(), key=lambda k: get_item_count(data_dict[k]), reverse=True)
+            if not data_dict:
+                return []
+            return sorted(
+                data_dict.keys(),
+                key=lambda k: get_item_count(data_dict[k]),
+                reverse=True,
+            )
 
         # 辅助函数：构建 Top 属性详细项（用于前端展示 original_terms）
         def build_top_attr_items(data_dict, max_items: int = 5):
@@ -936,7 +942,8 @@ def aggregate_entities(
 
         # 辅助函数：统一格式化属性项
         def format_attr_items(data_dict, max_items: int | None = None):
-            if not data_dict: return []
+            if not data_dict:
+                return []
             
             result = []
             # 按 count 排序

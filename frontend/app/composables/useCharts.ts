@@ -76,6 +76,102 @@ export const useCharts = (options: UseChartsOptions = {}) => {
   
   // 保存用户设置的原始配置（用于主题切换时恢复）
   let savedOption: EChartsOption | null = null
+
+  const DEFAULT_AXIS_LABEL_COLOR = '#6b7280'
+  const DEFAULT_AXIS_LINE_COLOR = '#e5e7eb'
+  const DEFAULT_SPLIT_LINE_COLOR = '#f3f4f6'
+  const DEFAULT_LEGEND_TEXT_COLOR = '#6b7280'
+  const DEFAULT_AXIS_NAME_COLOR = '#6b7280'
+
+  const applyAxisDefaults = (axis: unknown) => {
+    const applyOne = (input: Record<string, unknown>) => {
+      const next = { ...input }
+      if (next.axisLabel && typeof next.axisLabel === 'object') {
+        const axisLabel = { ...(next.axisLabel as Record<string, unknown>) }
+        if (axisLabel.color == null) axisLabel.color = DEFAULT_AXIS_LABEL_COLOR
+        next.axisLabel = axisLabel
+      }
+      if (next.axisLine && typeof next.axisLine === 'object') {
+        const axisLine = { ...(next.axisLine as Record<string, unknown>) }
+        if (axisLine.lineStyle && typeof axisLine.lineStyle === 'object') {
+          const lineStyle = { ...(axisLine.lineStyle as Record<string, unknown>) }
+          if (lineStyle.color == null) lineStyle.color = DEFAULT_AXIS_LINE_COLOR
+          axisLine.lineStyle = lineStyle
+        }
+        next.axisLine = axisLine
+      }
+      if (next.splitLine && typeof next.splitLine === 'object') {
+        const splitLine = { ...(next.splitLine as Record<string, unknown>) }
+        if (splitLine.lineStyle && typeof splitLine.lineStyle === 'object') {
+          const lineStyle = { ...(splitLine.lineStyle as Record<string, unknown>) }
+          if (lineStyle.color == null) lineStyle.color = DEFAULT_SPLIT_LINE_COLOR
+          splitLine.lineStyle = lineStyle
+        }
+        next.splitLine = splitLine
+      }
+      if (next.nameTextStyle && typeof next.nameTextStyle === 'object') {
+        const nameTextStyle = { ...(next.nameTextStyle as Record<string, unknown>) }
+        if (nameTextStyle.color == null) nameTextStyle.color = DEFAULT_AXIS_NAME_COLOR
+        next.nameTextStyle = nameTextStyle
+      }
+      return next
+    }
+
+    if (!axis) return axis
+    if (Array.isArray(axis)) {
+      return axis.map(item => (item && typeof item === 'object' ? applyOne(item as Record<string, unknown>) : item))
+    }
+    if (typeof axis === 'object') {
+      return applyOne(axis as Record<string, unknown>)
+    }
+    return axis
+  }
+
+  const applyLegendDefaults = (legend: unknown) => {
+    const applyOne = (input: Record<string, unknown>) => {
+      const next = { ...input }
+      const textStyle = { ...((next.textStyle as Record<string, unknown>) || {}) }
+      if (textStyle.color == null) textStyle.color = DEFAULT_LEGEND_TEXT_COLOR
+      next.textStyle = textStyle
+      return next
+    }
+    if (!legend) return legend
+    if (Array.isArray(legend)) {
+      return legend.map(item => (item && typeof item === 'object' ? applyOne(item as Record<string, unknown>) : item))
+    }
+    if (typeof legend === 'object') {
+      return applyOne(legend as Record<string, unknown>)
+    }
+    return legend
+  }
+
+  const applyVisualMapDefaults = (visualMap: unknown) => {
+    const applyOne = (input: Record<string, unknown>) => {
+      const next = { ...input }
+      const textStyle = { ...((next.textStyle as Record<string, unknown>) || {}) }
+      if (textStyle.color == null) textStyle.color = DEFAULT_AXIS_LABEL_COLOR
+      next.textStyle = textStyle
+      return next
+    }
+    if (!visualMap) return visualMap
+    if (Array.isArray(visualMap)) {
+      return visualMap.map(item => (item && typeof item === 'object' ? applyOne(item as Record<string, unknown>) : item))
+    }
+    if (typeof visualMap === 'object') {
+      return applyOne(visualMap as Record<string, unknown>)
+    }
+    return visualMap
+  }
+
+  const applyDefaultChartTheme = (option: EChartsOption) => {
+    if (!option || typeof option !== 'object') return option
+    const next = { ...option } as Record<string, unknown>
+    if ('xAxis' in next) next.xAxis = applyAxisDefaults(next.xAxis)
+    if ('yAxis' in next) next.yAxis = applyAxisDefaults(next.yAxis)
+    if ('legend' in next) next.legend = applyLegendDefaults(next.legend)
+    if ('visualMap' in next) next.visualMap = applyVisualMapDefaults(next.visualMap)
+    return next as EChartsOption
+  }
   
   // 计算当前主题
   const currentTheme = computed(() => {
@@ -140,10 +236,11 @@ export const useCharts = (options: UseChartsOptions = {}) => {
       loading.value = true
       error.value = null
       
+      const themedOption = applyDefaultChartTheme(option)
       // 保存配置（用于主题切换时恢复）
-      savedOption = option
+      savedOption = themedOption
       
-      chartInstance.value.setOption(option, opts)
+      chartInstance.value.setOption(themedOption, opts)
       
       return true
     } catch (err) {

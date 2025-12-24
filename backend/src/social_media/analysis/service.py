@@ -11,6 +11,13 @@ from fastapi import HTTPException, status
 
 from .models import PostAnalysis, AnalysisJob, ProjectAnalysisSnapshot
 from .jobs import create_analysis_job_async
+from .jobs.crud import (
+    get_analysis_jobs,
+    get_analysis_job,
+    get_analysis_progress,
+    cancel_analysis_job,
+    delete_analysis_job,
+)
 from .schemas import (
     RunScreeningRequest,
     RunDeepAnalysisRequest,

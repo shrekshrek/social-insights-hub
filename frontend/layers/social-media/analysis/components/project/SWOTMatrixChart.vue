@@ -90,6 +90,11 @@ const formatSentiment = (v: number) => {
   const sign = v >= 0 ? '+' : ''
   return `${sign}${v.toFixed(2)}`
 }
+
+const formatDelta = (v: number) => {
+  const sign = v >= 0 ? '+' : ''
+  return `${sign}${v.toFixed(2)}`
+}
 </script>
 
 <template>
@@ -100,6 +105,9 @@ const formatSentiment = (v: number) => {
         <p v-if="subject" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           分析主体：{{ subject }}
         </p>
+      </div>
+      <div class="text-[11px] text-gray-500 dark:text-gray-400">
+        竞 = 竞品集合（聚合均值）
       </div>
     </div>
 
@@ -145,6 +153,13 @@ const formatSentiment = (v: number) => {
                 竞{{ formatSentiment(item.competitor_sentiment) }}
               </span>
             </div>
+            <div class="hidden sm:flex items-center gap-2 text-[10px] font-mono shrink-0 text-gray-500 dark:text-gray-400">
+              <span>我{{ item.target_mentions }}</span>
+              <span>竞{{ item.competitor_mentions }}</span>
+              <span :class="item.delta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+                Δ{{ formatDelta(item.delta) }}
+              </span>
+            </div>
           </div>
         </div>
         <div v-else class="py-4 text-center text-xs text-gray-400">
@@ -158,4 +173,3 @@ const formatSentiment = (v: number) => {
     </div>
   </div>
 </template>
-

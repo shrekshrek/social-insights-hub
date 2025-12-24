@@ -9,6 +9,7 @@ interface ProductLineHealthItem {
   sentiment: number
   top_pain?: string
   platform_distribution?: Record<string, number>
+  post_ids_sample?: Array<{ task_id: number; post_id: number }>
 }
 
 interface ProductLineHealthData {
@@ -19,6 +20,10 @@ interface ProductLineHealthData {
 
 const props = defineProps<{
   data?: ProductLineHealthData | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'open-posts', item: ProductLineHealthItem): void
 }>()
 
 const members = computed(() => props.data?.members || [])
@@ -83,7 +88,8 @@ const maxContribution = computed(() => {
           <tr
             v-for="(item, idx) in members"
             :key="item.name"
-            class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/30"
+            class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer"
+            @click="emit('open-posts', item)"
           >
             <td class="py-2.5 pr-3">
               <div class="flex items-center gap-2">
@@ -140,4 +146,3 @@ const maxContribution = computed(() => {
     </div>
   </div>
 </template>
-

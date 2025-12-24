@@ -60,14 +60,13 @@ const getOption = (): EChartsOption => {
       axisLabel: {
         rotate: 45,
         fontSize: 10,
-        color: '#9ca3af'
       },
       axisLine: { lineStyle: { color: '#e5e7eb' } }
     },
     yAxis: {
       type: 'value',
       splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
-      axisLabel: { fontSize: 10, color: '#9ca3af' }
+      axisLabel: { fontSize: 10 }
     },
     series: [{
       name: '发布数量',
@@ -151,4 +150,3 @@ const totalCount = computed(() => props.data?.reduce((sum, i) => sum + i.count, 
     </div>
   </div>
 </template>
-

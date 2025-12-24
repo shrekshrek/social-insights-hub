@@ -20,6 +20,11 @@ const props = defineProps<{
 }>()
 
 const maxItems = computed(() => props.maxItems ?? 10)
+type MetricMode = 'heat' | 'mentions' | 'efficiency'
+const metricMode = ref<MetricMode>('heat')
+const metricLabel = computed(() => (metricMode.value === 'mentions' ? '提及' : metricMode.value === 'efficiency' ? '效能' : '热度'))
+const shareLabel = computed(() => (metricMode.value === 'mentions' ? '份额(提及)' : '份额(热度)'))
+const innerShareLabel = computed(() => (metricMode.value === 'mentions' ? '集团内(提及)' : '集团内(热度)'))
 
 // 构建树结构：parent -> children
 interface TreeNode {
@@ -27,8 +32,11 @@ interface TreeNode {
   heat: number
   mentions: number
   share: number
+  innerShare?: number
   isGroup: boolean
   role?: string
+  memberCount?: number
+  top3Share?: number
   children: TreeNode[]
 }
 
@@ -39,6 +47,17 @@ const treeData = computed<TreeNode[]>(() => {
 
   // 计算总热度
   const totalHeat = groups.reduce((sum, g) => sum + (g.heat || 0), 0)
+  const totalMentions = groups.reduce((sum, g) => sum + (g.mentions || 0), 0)
+  const shareMode = metricMode.value === 'mentions' ? 'mentions' : 'heat'
+  const totalShareBase = shareMode === 'mentions' ? totalMentions : totalHeat
+
+  const getMetricValue = (item: { heat?: number; mentions?: number }) => {
+    const heat = item.heat || 0
+    const mentions = item.mentions || 0
+    if (metricMode.value === 'mentions') return mentions
+    if (metricMode.value === 'efficiency') return mentions > 0 ? heat / mentions : 0
+    return heat
+  }
 
   // 构建 parent -> entity 映射
   const entityByParent: Record<string, typeof entities> = {}
@@ -50,26 +69,48 @@ const treeData = computed<TreeNode[]>(() => {
 
   // 构建树
   const tree: TreeNode[] = []
-  for (const g of groups.slice(0, maxItems.value)) {
-    const children = (entityByParent[g.name] || [])
+  const sortedGroups = groups
+    .slice()
+    .sort((a, b) => getMetricValue(b) - getMetricValue(a))
+    .slice(0, maxItems.value)
+
+  for (const g of sortedGroups) {
+    const childrenAll = (entityByParent[g.name] || [])
       .filter(e => e.name !== g.name)
       .map(e => ({
         name: e.name,
         heat: e.heat || 0,
         mentions: e.mentions || 0,
-        share: totalHeat > 0 ? (e.heat || 0) / totalHeat : 0,
+        share: totalShareBase > 0 ? ((shareMode === 'mentions' ? (e.mentions || 0) : (e.heat || 0)) / totalShareBase) : 0,
         isGroup: false,
         role: e.role,
         children: [],
       }))
-      .sort((a, b) => b.heat - a.heat)
+      .sort((a, b) => getMetricValue(b) - getMetricValue(a))
+
+    const groupShareBase = shareMode === 'mentions' ? (g.mentions || 0) : (g.heat || 0)
+    const totalShareValue = shareMode === 'mentions' ? (g.mentions || 0) : (g.heat || 0)
+    const top3Value = childrenAll.slice(0, 3).reduce((sum, c) => {
+      const v = shareMode === 'mentions' ? (c.mentions || 0) : (c.heat || 0)
+      return sum + v
+    }, 0)
+
+    const children = childrenAll
+      .map(child => ({
+        ...child,
+        innerShare: groupShareBase > 0
+          ? ((shareMode === 'mentions' ? (child.mentions || 0) : (child.heat || 0)) / groupShareBase)
+          : 0,
+      }))
 
     tree.push({
       name: g.name,
       heat: g.heat || 0,
       mentions: g.mentions || 0,
-      share: totalHeat > 0 ? (g.heat || 0) / totalHeat : 0,
+      share: totalShareBase > 0 ? totalShareValue / totalShareBase : 0,
       isGroup: true,
+      memberCount: childrenAll.length,
+      top3Share: groupShareBase > 0 ? top3Value / groupShareBase : 0,
       children: children.slice(0, 5),
     })
   }
@@ -96,27 +137,60 @@ const formatNumber = (n: number) => {
 
 const formatPercent = (n: number) => `${(n * 100).toFixed(1)}%`
 
-// 最大热度用于进度条
-const maxHeat = computed(() => {
-  const heats = treeData.value.map(t => t.heat)
-  return Math.max(...heats, 1)
+const formatMetricValue = (item: { heat: number; mentions: number }) => {
+  if (metricMode.value === 'efficiency') {
+    return `${item.mentions > 0 ? (item.heat / item.mentions).toFixed(1) : '-'}x`
+  }
+  return formatNumber(metricMode.value === 'mentions' ? item.mentions : item.heat)
+}
+
+// 最大份额用于进度条
+const maxShare = computed(() => {
+  const shares = treeData.value.map(t => t.share)
+  return Math.max(...shares, 0.000001)
 })
 </script>
 
 <template>
-  <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+  <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 h-[520px] flex flex-col">
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">集团军声量</h3>
-      <span class="text-xs text-gray-500 dark:text-gray-400">按 Parent 聚合</span>
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+          <button
+            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
+            :class="metricMode === 'heat' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
+            @click="metricMode = 'heat'"
+          >
+            热度
+          </button>
+          <button
+            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
+            :class="metricMode === 'mentions' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
+            @click="metricMode = 'mentions'"
+          >
+            提及
+          </button>
+          <button
+            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
+            :class="metricMode === 'efficiency' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
+            @click="metricMode = 'efficiency'"
+          >
+            效能
+          </button>
+        </div>
+        <span class="text-xs text-gray-500 dark:text-gray-400">按 Parent 聚合</span>
+      </div>
     </div>
 
-    <div class="overflow-x-auto">
+    <div class="flex-1 overflow-auto">
       <table class="w-full text-sm">
-        <thead>
+        <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
           <tr class="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
             <th class="py-2 pr-4 font-medium">集团/品牌</th>
-            <th class="py-2 pr-4 font-medium text-right">热度</th>
-            <th class="py-2 pr-4 font-medium text-right">份额</th>
+            <th class="py-2 pr-4 font-medium text-right">{{ metricLabel }}</th>
+            <th class="py-2 pr-4 font-medium text-right">{{ shareLabel }}</th>
+            <th class="py-2 pr-4 font-medium text-right">{{ innerShareLabel }}</th>
             <th class="py-2 font-medium w-32">分布</th>
           </tr>
         </thead>
@@ -139,24 +213,33 @@ const maxHeat = computed(() => {
                   <span v-else class="w-3.5" />
                   <span class="font-medium text-gray-900 dark:text-white">{{ node.name }}</span>
                   <span
-                    v-if="node.children.length"
+                    v-if="node.memberCount"
                     class="text-[10px] text-gray-400 dark:text-gray-500"
                   >
-                    ({{ node.children.length }})
+                    ({{ node.memberCount }})
+                  </span>
+                  <span
+                    v-if="node.memberCount && node.top3Share"
+                    class="text-[10px] text-gray-400 dark:text-gray-500"
+                  >
+                    Top3 {{ formatPercent(node.top3Share) }}
                   </span>
                 </div>
               </td>
               <td class="py-2.5 pr-4 text-right font-mono text-gray-700 dark:text-gray-300">
-                {{ formatNumber(node.heat) }}
+                {{ formatMetricValue(node) }}
               </td>
               <td class="py-2.5 pr-4 text-right font-mono text-gray-700 dark:text-gray-300">
                 {{ formatPercent(node.share) }}
+              </td>
+              <td class="py-2.5 pr-4 text-right font-mono text-gray-400 dark:text-gray-500">
+                —
               </td>
               <td class="py-2.5">
                 <div class="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                   <div
                     class="h-full bg-primary-500 rounded-full transition-all"
-                    :style="{ width: `${(node.heat / maxHeat) * 100}%` }"
+                    :style="{ width: `${(node.share / maxShare) * 100}%` }"
                   />
                 </div>
               </td>
@@ -182,16 +265,19 @@ const maxHeat = computed(() => {
                   </div>
                 </td>
                 <td class="py-2 pr-4 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
-                  {{ formatNumber(child.heat) }}
+                  {{ formatMetricValue(child) }}
                 </td>
                 <td class="py-2 pr-4 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
                   {{ formatPercent(child.share) }}
+                </td>
+                <td class="py-2 pr-4 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
+                  {{ formatPercent(child.innerShare || 0) }}
                 </td>
                 <td class="py-2">
                   <div class="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div
                       class="h-full bg-primary-300 dark:bg-primary-600 rounded-full"
-                      :style="{ width: `${(child.heat / maxHeat) * 100}%` }"
+                      :style="{ width: `${(child.innerShare || 0) * 100}%` }"
                     />
                   </div>
                 </td>
@@ -207,4 +293,3 @@ const maxHeat = computed(() => {
     </div>
   </div>
 </template>
-

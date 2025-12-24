@@ -132,7 +132,7 @@ const formatDelta = (n: number) => {
 </script>
 
 <template>
-  <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+  <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 h-full flex flex-col">
     <div class="flex items-center justify-between mb-3">
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">平台剪刀差</h3>
@@ -142,8 +142,8 @@ const formatDelta = (n: number) => {
       </div>
     </div>
 
-    <div v-if="items.length" ref="chartRef" class="h-56" />
-    <div v-else class="h-56 flex items-center justify-center text-sm text-gray-400">
+    <div v-if="items.length" ref="chartRef" class="flex-1 min-h-[280px]" />
+    <div v-else class="flex-1 min-h-[280px] flex items-center justify-center text-sm text-gray-400">
       暂无平台剪刀差数据
     </div>
 

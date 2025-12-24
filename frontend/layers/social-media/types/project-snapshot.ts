@@ -107,6 +107,8 @@ export interface SOVRankingItem {
   score: number
   /** 热度份额 (%) */
   share: number
+  source_tasks?: SourceTask[]
+  post_ids_sample?: PostRef[]
 }
 
 /** 集团军声量项 */
@@ -136,6 +138,8 @@ export interface IndustryQuadrantPoint {
   heat: number
   sentiment: number
   mentions: number
+  source_tasks?: SourceTask[]
+  post_ids_sample?: PostRef[]
 }
 
 /** Landscape 层完整数据 */
@@ -169,6 +173,13 @@ export interface TopicRadarItem {
   sentiment: number
   mentions: number
   original_terms?: OriginalTerm[]
+  platform_distribution?: PlatformDistribution
+  keyword_distribution?: KeywordDistribution
+  source_tasks?: SourceTask[]
+  post_ids_sample?: PostRef[]
+  coverage?: number
+  platform_coverage?: number
+  keyword_coverage?: number
 }
 
 /** Topic 层完整数据 */
@@ -223,6 +234,10 @@ export interface ProductLineHealthItem {
   sentiment: number
   /** Top 1 痛点 */
   top_pain?: string
+  platform_distribution?: PlatformDistribution
+  keyword_distribution?: KeywordDistribution
+  source_tasks?: SourceTask[]
+  post_ids_sample?: PostRef[]
 }
 
 /** 平台剪刀差项 */
@@ -368,4 +383,3 @@ export interface ProjectSnapshot {
   created_at: string
   updated_at: string
 }
-

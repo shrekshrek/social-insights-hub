@@ -246,12 +246,12 @@ def finalize_post_deep_analysis(
         logger.info(f"[Finalizer] 等待子任务完成: {completed}/{total_count}, 已等待 {int(time.time() - start_time)}s")
         time.sleep(poll_interval)
     else:
-        logger.warning(f"[Finalizer] 等待超时，部分任务可能未完成")
+        logger.warning("[Finalizer] 等待超时，部分任务可能未完成")
 
     # 2. 最终同步 Redis → DB
     try:
         progress_mgr.finalize()
-        logger.info(f"[Finalizer] 进度已同步到数据库")
+        logger.info("[Finalizer] 进度已同步到数据库")
     except Exception as e:
         logger.error(f"[Finalizer] 同步进度到数据库失败: {e}", exc_info=True)
 
@@ -542,12 +542,12 @@ def finalize_comment_deep_analysis(
         logger.info(f"[Finalizer] 等待评论分析完成: {completed}/{total_count}, 已等待 {int(time.time() - start_time)}s")
         time.sleep(poll_interval)
     else:
-        logger.warning(f"[Finalizer] 等待超时，部分评论分析任务可能未完成")
+        logger.warning("[Finalizer] 等待超时，部分评论分析任务可能未完成")
 
     # 2. 最终同步
     try:
         progress_mgr.finalize()
-        logger.info(f"[Finalizer] 评论分析进度已同步到数据库")
+        logger.info("[Finalizer] 评论分析进度已同步到数据库")
     except Exception as e:
         logger.error(f"[Finalizer] 同步评论分析进度失败: {e}", exc_info=True)
 

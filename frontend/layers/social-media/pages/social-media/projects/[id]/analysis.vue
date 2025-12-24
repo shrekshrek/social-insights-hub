@@ -9,6 +9,7 @@ import SWOTMatrixChart from '../../../../analysis/components/project/SWOTMatrixC
 import ProductLineHealthTable from '../../../../analysis/components/project/ProductLineHealthTable.vue'
 import PlatformScissorsChart from '../../../../analysis/components/project/PlatformScissorsChart.vue'
 import GapAnalysisChart from '../../../../analysis/components/project/GapAnalysisChart.vue'
+import PostListModal from '../../../../analysis/components/PostListModal.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -19,11 +20,13 @@ interface OriginalTerm { text: string; count: number }
 
 interface SourceTask { task_id: number; mentions: number }
 
+interface PostRef { task_id: number; post_id: number }
+
 interface ProjectEntityAttrItem {
   text: string
   mentions: number
   original_terms?: OriginalTerm[]
-  post_ids_sample?: { task_id: number; post_id: number }[]
+  post_ids_sample?: PostRef[]
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
 }
@@ -39,7 +42,7 @@ interface ProjectTopicOrEntity {
   score: number
   original_terms?: OriginalTerm[]
   source_tasks?: SourceTask[]
-  post_ids_sample?: { task_id: number; post_id: number }[]
+  post_ids_sample?: PostRef[]
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
   role_breakdown?: Record<string, number>
@@ -77,6 +80,8 @@ interface SOVRankingItem {
   sentiment?: number
   sentiment_distribution?: Record<string, number>
   platform_distribution?: Record<string, number>
+  source_tasks?: SourceTask[]
+  post_ids_sample?: PostRef[]
 }
 
 interface GroupShareItem {
@@ -98,6 +103,8 @@ interface IndustryQuadrantPoint {
   heat: number
   sentiment: number
   mentions: number
+  source_tasks?: SourceTask[]
+  post_ids_sample?: PostRef[]
 }
 
 interface ProjectSnapshotLandscapeLayer {
@@ -331,8 +338,118 @@ const handleSelectLandscapeEntity = (item: { name: string } | null) => {
   if (!name) return
   selectedLandscapeEntity.value = selectedLandscapeEntity.value === name ? null : name
 }
+const postListModalOpen = ref(false)
+const postListModalTitle = ref('')
+const postListModalTaskId = ref<number | null>(null)
+const postListModalPostIds = ref<number[]>([])
+
+const groupPostIdsByTask = (postRefs?: PostRef[]) => {
+  const groups = new Map<number, Set<number>>()
+  for (const postRef of postRefs || []) {
+    const taskId = Number(postRef?.task_id)
+    const postId = Number(postRef?.post_id)
+    if (!Number.isFinite(taskId) || !Number.isFinite(postId) || taskId <= 0 || postId <= 0) continue
+    if (!groups.has(taskId)) groups.set(taskId, new Set())
+    groups.get(taskId)?.add(postId)
+  }
+  return Array.from(groups.entries())
+    .map(([taskId, postIds]) => ({ taskId, postIds: Array.from(postIds) }))
+    .sort((a, b) => b.postIds.length - a.postIds.length)
+}
+
+const openLandscapePostList = (item: { name?: string; post_ids_sample?: PostRef[] } | null) => {
+  if (!item) return
+  const name = (item.name || '').toString().trim()
+  const groups = groupPostIdsByTask(item.post_ids_sample)
+  if (!groups.length) {
+    toast.add({
+      title: '暂无可追溯帖子',
+      description: name ? `${name} 未提供帖子样本` : '未提供帖子样本',
+      color: 'warning',
+    })
+    return
+  }
+  const primary = groups[0]
+  if (!primary) return
+  const { taskId, postIds } = primary
+  postListModalTaskId.value = taskId
+  postListModalPostIds.value = postIds
+  postListModalTitle.value = `${name || '实体'} 相关内容（样本） · 任务 #${taskId}`
+  postListModalOpen.value = true
+}
+
+const openTopicPostList = (item: { name?: string; post_ids_sample?: PostRef[] } | null, type?: string) => {
+  if (!item) return
+  const name = (item.name || '').toString().trim()
+  const groups = groupPostIdsByTask(item.post_ids_sample)
+  if (!groups.length) {
+    toast.add({
+      title: '暂无可追溯帖子',
+      description: name ? `${name} 未提供帖子样本` : '未提供帖子样本',
+      color: 'warning',
+    })
+    return
+  }
+  const primary = groups[0]
+  if (!primary) return
+  const { taskId, postIds } = primary
+  postListModalTaskId.value = taskId
+  postListModalPostIds.value = postIds
+  const typeLabel = type === 'pain' ? '痛点' : type === 'gain' ? '爽点' : type === 'controversy' ? '争议点' : type === 'unmet' ? '未被满足需求' : '话题'
+  postListModalTitle.value = `${typeLabel} · ${name || '话题'} 相关内容（样本） · 任务 #${taskId}`
+  postListModalOpen.value = true
+}
+
+const openFocusPostList = (item: { name?: string; post_ids_sample?: PostRef[] } | null, type?: string) => {
+  if (!item) return
+  const name = (item.name || '').toString().trim()
+  const groups = groupPostIdsByTask(item.post_ids_sample)
+  if (!groups.length) {
+    toast.add({
+      title: '暂无可追溯帖子',
+      description: '聚焦层当前仅对“产品线健康度”提供帖子样本；SWOT/Gap 为竞品集合聚合，暂不支持追溯到帖子。',
+      color: 'warning',
+    })
+    return
+  }
+  const primary = groups[0]
+  if (!primary) return
+  const { taskId, postIds } = primary
+  postListModalTaskId.value = taskId
+  postListModalPostIds.value = postIds
+  const typeLabel = type === 'product-line' ? '产品线' : type === 'swot' ? 'SWOT' : type === 'gap' ? 'Gap' : '聚焦层'
+  postListModalTitle.value = `${typeLabel} · ${name || '条目'} 相关内容（样本） · 任务 #${taskId}`
+  postListModalOpen.value = true
+}
+
+const handleSwotSelect = () => {
+  toast.add({
+    title: '聚焦层维度暂不支持追溯到帖子',
+    description: '当前 SWOT 为“竞品集合聚合均值”口径，缺少维度→帖子映射；可先用话题层/证据区验证原话与样本。',
+    color: 'warning',
+  })
+}
+
+const handleGapSelect = () => {
+  toast.add({
+    title: '聚焦层维度暂不支持追溯到帖子',
+    description: '当前 Gap 为“竞品集合聚合均值”口径，缺少维度→帖子映射；可先用话题层/证据区验证原话与样本。',
+    color: 'warning',
+  })
+}
+
+const handleIndustryQuadrantSelect = (item: IndustryQuadrantPoint | null) => {
+  if (!item) return
+  handleSelectLandscapeEntity(item)
+  openLandscapePostList(item)
+}
+
 watch(snapshotId, () => {
   selectedLandscapeEntity.value = null
+  postListModalOpen.value = false
+  postListModalTaskId.value = null
+  postListModalPostIds.value = []
+  postListModalTitle.value = ''
 })
 
 // ==================== Topic Layer Data ====================
@@ -363,14 +480,52 @@ const reportLandscape = computed(() => reports.value?.landscape_report?.content 
 const reportTopic = computed(() => reports.value?.topic_report?.content || '')
 const reportFocus = computed(() => reports.value?.focus_report?.content || '')
 
-// ==================== 自动轮询机制（参考任务级）====================
+// ==================== 自动轮询机制（优化：只检查状态，避免页面跳动）====================
 let pollTimer: ReturnType<typeof setInterval> | null = null
+const lastPolledStatus = ref<{ stage2?: string; stage3?: string }>({})
+
+const { apiRequest } = useApi()
+
+// 轮询时只检查状态，不触发完整数据刷新
+const pollStatus = async () => {
+  if (!snapshotId.value) return
+
+  try {
+    // 使用 apiRequest 获取最新数据（不会触发 useApiData 的响应式更新）
+    const freshData = await apiRequest<ProjectSnapshot>(
+      `/social-media/analysis/projects/${projectId.value}/snapshots/${snapshotId.value}`
+    )
+    if (!freshData) return
+
+    const newStage2Status = freshData.result_data?.stage2?.status
+    const newStage3Status = freshData.result_data?.stage3?.status
+    const oldStage2Status = lastPolledStatus.value.stage2
+    const oldStage3Status = lastPolledStatus.value.stage3
+
+    // 更新状态缓存
+    lastPolledStatus.value = { stage2: newStage2Status, stage3: newStage3Status }
+
+    // 只有当状态发生变化时，才刷新完整数据（触发图表更新）
+    const statusChanged = newStage2Status !== oldStage2Status || newStage3Status !== oldStage3Status
+    const isCompleted = newStage3Status === 'completed' || newStage3Status === 'failed'
+
+    if (statusChanged || isCompleted) {
+      await refreshSnapshot()
+    }
+  } catch (e) {
+    // 静默失败，避免轮询错误打断用户操作
+    console.warn('[Snapshot Poll] Status check failed:', e)
+  }
+}
 
 const startPolling = () => {
   if (pollTimer) return
-  pollTimer = setInterval(() => {
-    refreshSnapshot()
-  }, 3000)
+  // 初始化状态缓存
+  lastPolledStatus.value = {
+    stage2: stage2.value?.status,
+    stage3: stage3.value?.status,
+  }
+  pollTimer = setInterval(pollStatus, 3000)
 }
 
 const stopPolling = () => {
@@ -462,6 +617,56 @@ const formatDist = (dist?: Record<string, number>) => {
   return entries.map(([k, v]) => `${k}:${v}`).join('，')
 }
 
+const takeReportPreview = (text: string, maxLines: number = 18) => {
+  const lines = (text || '').toString().split('\n')
+  if (lines.length <= maxLines) return text
+  return `${lines.slice(0, maxLines).join('\n')}\n…（已折叠）`
+}
+
+const isReportLong = (text: string, maxLines: number = 18) => {
+  const lines = (text || '').toString().split('\n')
+  return lines.length > maxLines
+}
+
+const extractQuoteLines = (items: Array<{ name?: string; original_terms?: OriginalTerm[] }>, limit: number = 18) => {
+  const lines: string[] = []
+  for (const item of items || []) {
+    const name = (item?.name || '').toString().trim()
+    const ots = item?.original_terms || []
+    for (const ot of ots.slice(0, 2)) {
+      if (!ot?.text) continue
+      lines.push(`${name ? `[${name}] ` : ''}${ot.text}`)
+      if (lines.length >= limit) return lines
+    }
+  }
+  return lines
+}
+
+type QuoteItem = { name?: string; original_terms?: OriginalTerm[]; role?: string; sentiment?: number }
+
+const reportEvidenceLandscape = computed(() => extractQuoteLines(topEntities.value.slice(0, 20), 18))
+const reportEvidenceTopic = computed(() => {
+  const radar = (topicRadar.value || {}) as {
+    pains?: QuoteItem[]
+    gains?: QuoteItem[]
+    controversies?: QuoteItem[]
+  }
+  const unmet = (unmetNeeds.value || []) as QuoteItem[]
+  const items: QuoteItem[] = [
+    ...(radar.pains || []),
+    ...(radar.gains || []),
+    ...(radar.controversies || []),
+    ...unmet,
+  ]
+  return extractQuoteLines(items, 18)
+})
+const reportEvidenceFocus = computed(() => {
+  const all = topEntities.value || []
+  const targetNeg = all.filter(x => ((x.role || '').toString().toLowerCase().includes('target')) && (Number(x.sentiment || 0) <= -0.1))
+  const compPos = all.filter(x => ((x.role || '').toString().toLowerCase().includes('competitor')) && (Number(x.sentiment || 0) >= 0.1))
+  return extractQuoteLines([...targetNeg, ...compPos].slice(0, 20), 18)
+})
+
 
 // expand original_terms
 const expandedItems = ref<Set<string>>(new Set())
@@ -528,21 +733,23 @@ const copyText = async (text: string) => {
           <p class="text-sm text-gray-500 dark:text-gray-400">
             项目级合并分析快照
           </p>
-          <div class="flex items-center gap-3 mt-1 text-sm">
-             <div v-if="subject" class="flex items-center gap-1.5">
-               <span class="text-gray-500">主体:</span>
-               <UBadge color="primary" variant="subtle" size="xs">{{ subject }}</UBadge>
-             </div>
-             <div v-if="competitors?.length" class="flex items-center gap-1.5">
-               <span class="text-gray-500">竞品:</span>
-               <div class="flex gap-1">
-                 <UBadge v-for="c in competitors" :key="c" color="amber" variant="subtle" size="xs">{{ c }}</UBadge>
-               </div>
-             </div>
-             <span v-if="!subject && !competitors?.length" class="text-gray-500">
-               全景模式 (Landscape Only)
-             </span>
-          </div>
+          <ClientOnly>
+            <div class="flex items-center gap-3 mt-1 text-sm">
+              <div v-if="subject" class="flex items-center gap-1.5">
+                <span class="text-gray-500">主体:</span>
+                <UBadge color="primary" variant="subtle" size="xs">{{ subject }}</UBadge>
+              </div>
+              <div v-if="competitors?.length" class="flex items-center gap-1.5">
+                <span class="text-gray-500">竞品:</span>
+                <div class="flex gap-1">
+                  <UBadge v-for="c in competitors" :key="c" color="amber" variant="subtle" size="xs">{{ c }}</UBadge>
+                </div>
+              </div>
+              <span v-if="!subject && !competitors?.length" class="text-gray-500">
+                全景模式 (Landscape Only)
+              </span>
+            </div>
+          </ClientOnly>
         </div>
       </div>
       <ClientOnly>
@@ -644,24 +851,76 @@ const copyText = async (text: string) => {
             <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
               <div class="flex items-center justify-between gap-3 mb-2">
                 <div class="text-xs text-gray-500 dark:text-gray-400">行业格局（Market Analyst）</div>
-                <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportLandscape" @click="copyText(reportLandscape)">
-                  复制
-                </UButton>
+                <div class="flex items-center gap-2">
+                  <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportLandscape" @click="copyText(reportLandscape)">
+                    复制
+                  </UButton>
+                  <UButton
+                    v-if="reportLandscape && isReportLong(reportLandscape)"
+                    size="xs"
+                    variant="ghost"
+                    @click="toggleExpand('report-landscape')"
+                  >
+                    {{ isExpanded('report-landscape') ? '收起' : '展开全文' }}
+                  </UButton>
+                  <UButton
+                    v-if="reportLandscape && reportEvidenceLandscape.length"
+                    size="xs"
+                    variant="ghost"
+                    @click="toggleExpand('report-landscape-evidence')"
+                  >
+                    {{ isExpanded('report-landscape-evidence') ? '收起证据' : '查看证据' }}
+                  </UButton>
+                </div>
               </div>
               <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-                {{ reportLandscape || '-' }}
+                {{ reportLandscape ? (isExpanded('report-landscape') ? reportLandscape : takeReportPreview(reportLandscape)) : '-' }}
+              </div>
+              <div v-if="reportEvidenceLandscape.length && isExpanded('report-landscape-evidence')" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">证据原话（节选）</div>
+                <div class="space-y-1 text-xs text-gray-700 dark:text-gray-300">
+                  <div v-for="(line, idx) in reportEvidenceLandscape" :key="`re-land-${idx}`" class="truncate" :title="line">
+                    • {{ line }}
+                  </div>
+                </div>
               </div>
             </div>
 
             <div class="p-3 rounded bg-gray-50 dark:bg-gray-800">
               <div class="flex items-center justify-between gap-3 mb-2">
                 <div class="text-xs text-gray-500 dark:text-gray-400">话题洞察（Product Manager）</div>
-                <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportTopic" @click="copyText(reportTopic)">
-                  复制
-                </UButton>
+                <div class="flex items-center gap-2">
+                  <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportTopic" @click="copyText(reportTopic)">
+                    复制
+                  </UButton>
+                  <UButton
+                    v-if="reportTopic && isReportLong(reportTopic)"
+                    size="xs"
+                    variant="ghost"
+                    @click="toggleExpand('report-topic')"
+                  >
+                    {{ isExpanded('report-topic') ? '收起' : '展开全文' }}
+                  </UButton>
+                  <UButton
+                    v-if="reportTopic && reportEvidenceTopic.length"
+                    size="xs"
+                    variant="ghost"
+                    @click="toggleExpand('report-topic-evidence')"
+                  >
+                    {{ isExpanded('report-topic-evidence') ? '收起证据' : '查看证据' }}
+                  </UButton>
+                </div>
               </div>
               <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-                {{ reportTopic || '-' }}
+                {{ reportTopic ? (isExpanded('report-topic') ? reportTopic : takeReportPreview(reportTopic)) : '-' }}
+              </div>
+              <div v-if="reportEvidenceTopic.length && isExpanded('report-topic-evidence')" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">证据原话（节选）</div>
+                <div class="space-y-1 text-xs text-gray-700 dark:text-gray-300">
+                  <div v-for="(line, idx) in reportEvidenceTopic" :key="`re-topic-${idx}`" class="truncate" :title="line">
+                    • {{ line }}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -669,15 +928,41 @@ const copyText = async (text: string) => {
             <div v-if="showFocusReport" class="p-3 rounded bg-gray-50 dark:bg-gray-800">
               <div class="flex items-center justify-between gap-3 mb-2">
                 <div class="text-xs text-gray-500 dark:text-gray-400">战略诊断（CSO / AI 顾问）</div>
-                <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportFocus" @click="copyText(reportFocus)">
-                  复制
-                </UButton>
+                <div class="flex items-center gap-2">
+                  <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!reportFocus" @click="copyText(reportFocus)">
+                    复制
+                  </UButton>
+                  <UButton
+                    v-if="reportFocus && isReportLong(reportFocus)"
+                    size="xs"
+                    variant="ghost"
+                    @click="toggleExpand('report-focus')"
+                  >
+                    {{ isExpanded('report-focus') ? '收起' : '展开全文' }}
+                  </UButton>
+                  <UButton
+                    v-if="reportFocus && reportEvidenceFocus.length"
+                    size="xs"
+                    variant="ghost"
+                    @click="toggleExpand('report-focus-evidence')"
+                  >
+                    {{ isExpanded('report-focus-evidence') ? '收起证据' : '查看证据' }}
+                  </UButton>
+                </div>
               </div>
               <div v-if="!reportFocus" class="text-xs text-gray-500 dark:text-gray-400">
                 Focus 报告为空：可能未配置主体 subject，或输出未满足“营销/产品/公关”三段式硬约束。
               </div>
               <div v-else class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-                {{ reportFocus }}
+                {{ isExpanded('report-focus') ? reportFocus : takeReportPreview(reportFocus) }}
+              </div>
+              <div v-if="reportEvidenceFocus.length && isExpanded('report-focus-evidence')" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">证据原话（节选）</div>
+                <div class="space-y-1 text-xs text-gray-700 dark:text-gray-300">
+                  <div v-for="(line, idx) in reportEvidenceFocus" :key="`re-focus-${idx}`" class="truncate" :title="line">
+                    • {{ line }}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -816,7 +1101,7 @@ const copyText = async (text: string) => {
             <IndustryQuadrantChart
               :data="industryQuadrant"
               :selected="selectedLandscapeEntity"
-              @select="handleSelectLandscapeEntity"
+              @select="handleIndustryQuadrantSelect"
             />
           </div>
 
@@ -839,6 +1124,7 @@ const copyText = async (text: string) => {
             :gains="topicRadar?.gains"
             :controversies="topicRadar?.controversies"
             :unmet-needs="unmetNeeds"
+            @open-posts="openTopicPostList"
           />
         </section>
 
@@ -852,14 +1138,14 @@ const copyText = async (text: string) => {
             战略官视角：仅限 Target 和 Competitor · 分析主体：<span class="font-medium text-gray-700 dark:text-gray-300">{{ subject }}</span>
           </p>
 
-          <SWOTMatrixChart :data="swotData" :subject="subject" />
+          <SWOTMatrixChart :data="swotData" :subject="subject" @select="handleSwotSelect" />
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ProductLineHealthTable :data="productLineHealth" />
+            <ProductLineHealthTable :data="productLineHealth" @open-posts="(item) => openFocusPostList(item, 'product-line')" />
             <PlatformScissorsChart :data="platformScissors" :subject="subject" />
           </div>
 
-          <GapAnalysisChart :data="gapData" :subject="subject" />
+          <GapAnalysisChart :data="gapData" :subject="subject" @select="handleGapSelect" />
         </section>
 
         <!-- 证据 -->
@@ -967,6 +1253,14 @@ const copyText = async (text: string) => {
             </div>
           </div>
         </section>
+
+        <PostListModal
+          v-if="postListModalTaskId !== null"
+          v-model:open="postListModalOpen"
+          :task-id="postListModalTaskId"
+          :post-ids="postListModalPostIds"
+          :title="postListModalTitle"
+        />
         </template>
       </div>
     </ClientOnly>

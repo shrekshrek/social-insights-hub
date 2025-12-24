@@ -42,8 +42,11 @@ const median = (arr: number[]) => {
   if (!arr.length) return null
   const a = arr.slice().sort((x, y) => x - y)
   const mid = Math.floor(a.length / 2)
-  if (a.length % 2 === 1) return a[mid]
-  return (a[mid - 1] + a[mid]) / 2
+  if (a.length % 2 === 1) return a[mid] ?? null
+  const left = a[mid - 1]
+  const right = a[mid]
+  if (left == null || right == null) return null
+  return (left + right) / 2
 }
 
 // ECharts 配置
@@ -57,6 +60,17 @@ const getOption = (): EChartsOption => {
   const maxHeat = Math.max(...heatValues, 1)
   const minPositiveHeat = heatValues.length ? Math.min(...heatValues) : 1
   const heatMid = median(heatValues)
+  const labelNameSet = new Set(
+    points
+      .slice()
+      .sort((a, b) => (b.heat || 0) - (a.heat || 0))
+      .slice(0, 30)
+      .map(p => p.name)
+      .filter(Boolean)
+  )
+  const selectedName = (props.selected || '').toString().trim()
+  if (selectedName) labelNameSet.add(selectedName)
+  const truncateLabel = (s: string) => (s.length > 6 ? `${s.slice(0, 6)}…` : s)
 
   // 构建 series 数据（按 role 分组）
   const seriesData: Record<string, Array<[number, number, number, string, IndustryQuadrantPoint]>> = {
@@ -89,7 +103,19 @@ const getOption = (): EChartsOption => {
       name: role === 'Target' ? '主体' : role === 'Competitor' ? '竞品' : '行业实体',
       type: 'scatter',
       symbolSize: (val: number[]) => val[2] || 8,
-      label: { show: false },
+      label: {
+        show: true,
+        distance: 2,
+        color: '#6b7280',
+        fontSize: 10,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (p: any) => {
+          const nm = (p?.data?.[3] || '').toString()
+          if (!nm) return ''
+          return labelNameSet.has(nm) ? truncateLabel(nm) : ''
+        },
+      },
+      labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
       itemStyle: {
         color: roleColors[role],
         opacity: 0.75,
@@ -193,7 +219,6 @@ const getOption = (): EChartsOption => {
       splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
       axisLabel: {
         fontSize: 10,
-        color: '#9ca3af',
         formatter: (v: number) => {
           if (v >= 1000000) return `${(v / 1000000).toFixed(0)}M`
           if (v >= 10000) return `${(v / 10000).toFixed(0)}w`
@@ -212,7 +237,7 @@ const getOption = (): EChartsOption => {
       max: 1,
       axisLine: { lineStyle: { color: '#e5e7eb' } },
       splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
-      axisLabel: { fontSize: 10, color: '#9ca3af' },
+      axisLabel: { fontSize: 10 },
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     series: series as any,

@@ -207,24 +207,20 @@ def normalize_entity_aliases(
         if formatted.strip():
             # 项目级：使用专用 merge chain（支持 subject/competitors 仲裁）
             from src.langchain.chains.project_entity_merge_chain import (
-                create_project_entity_merge_chain,
-                parse_project_entity_merge_response,
+                merge_project_entities_with_review_sync,
             )
 
-            chain = create_project_entity_merge_chain()
-            resp, stats = invoke_chain_with_stats_sync(
-                chain,
-                {
-                    "entities": formatted,
-                    "subject": (subject or "").strip(),
-                    "competitors": [
-                        str(x).strip() for x in (competitors or []) if str(x).strip()
-                    ],
-                },
-                "chat",
+            # 使用两阶段归一化（Merge + Review）
+            llm_result, stats = merge_project_entities_with_review_sync(
+                entities_text=formatted,
+                subject=(subject or "").strip(),
+                competitors=[
+                    str(x).strip() for x in (competitors or []) if str(x).strip()
+                ],
+                invoke_with_stats_fn=invoke_chain_with_stats_sync,
+                enable_review=True,
+                llm_type="chat"
             )
-            text = resp.content if hasattr(resp, "content") else str(resp)
-            llm_result = parse_project_entity_merge_response(text) or {}
 
             entity_mapping = (llm_result or {}).get("entity_mapping") or {}
             tags_mapping = (llm_result or {}).get("tags_mapping") or {}
@@ -383,6 +379,7 @@ def build_entities_aligned(
     - 合并 original_terms 列表并截断 Top 20（长度优先）。
     """
     tags_mapping = tags_mapping or {}
+    max_post_ids_sample = 50
     bucket: dict[str, dict[str, Any]] = {}
     for e in top_entities or []:
         if not isinstance(e, dict):
@@ -416,6 +413,9 @@ def build_entities_aligned(
                 "top_competitors": [],
                 "original_names": [],
                 "original_terms_counts": {},  # 原话合并
+                "post_ids_sample": [],
+                "_post_ids_sample_set": set(),
+                "source_tasks": {},
             }
             bucket[canon] = b
         b["original_names"].append(raw_name)
@@ -458,6 +458,36 @@ def build_entities_aligned(
                 b["keyword_distribution"][k] = (
                     int(b["keyword_distribution"].get(k, 0)) + vv
                 )
+        # 来源任务聚合（用于可追溯）
+        for st in e.get("source_tasks") or []:
+            if not isinstance(st, dict):
+                continue
+            try:
+                tid = int(st.get("task_id") or 0)
+                cnt = int(st.get("mentions") or 0)
+            except Exception:
+                continue
+            if tid <= 0 or cnt <= 0:
+                continue
+            b["source_tasks"][tid] = int(b["source_tasks"].get(tid, 0)) + cnt
+        # 帖子样本合并（去重 + 限制数量）
+        for ref in e.get("post_ids_sample") or []:
+            if len(b["post_ids_sample"]) >= max_post_ids_sample:
+                break
+            if not isinstance(ref, dict):
+                continue
+            try:
+                tid = int(ref.get("task_id") or 0)
+                pid = int(ref.get("post_id") or 0)
+            except Exception:
+                continue
+            if tid <= 0 or pid <= 0:
+                continue
+            key = f"{tid}:{pid}"
+            if key in b["_post_ids_sample_set"]:
+                continue
+            b["_post_ids_sample_set"].add(key)
+            b["post_ids_sample"].append({"task_id": tid, "post_id": pid})
         # 属性合并（Set Union）
         b["top_features"].extend(e.get("top_features") or [])
         b["top_issues"].extend(e.get("top_issues") or [])
@@ -510,6 +540,15 @@ def build_entities_aligned(
                 },
                 "platform_distribution": b["platform_distribution"],
                 "keyword_distribution": b["keyword_distribution"],
+                "source_tasks": [
+                    {"task_id": tid, "mentions": cnt}
+                    for tid, cnt in sorted(
+                        (b.get("source_tasks") or {}).items(),
+                        key=lambda x: x[1],
+                        reverse=True,
+                    )
+                ],
+                "post_ids_sample": b.get("post_ids_sample") or [],
                 "top_features": merge_attr_items(b.get("top_features")),
                 "top_issues": merge_attr_items(b.get("top_issues")),
                 "top_expectations": merge_attr_items(b.get("top_expectations")),

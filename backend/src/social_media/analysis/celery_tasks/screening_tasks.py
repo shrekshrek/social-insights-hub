@@ -287,7 +287,7 @@ def finalize_screening_analysis(result_id: int, total_count: int):
 
         if current_total >= total_count:
             # 所有任务已完成
-            logger.info(f"所有子任务已完成，执行最终同步...")
+            logger.info("所有子任务已完成，执行最终同步...")
             progress_mgr.finalize()
 
             return {
@@ -300,7 +300,7 @@ def finalize_screening_analysis(result_id: int, total_count: int):
         time.sleep(5)
 
     # 超时
-    logger.error(f"等待超时，部分任务可能未完成")
+    logger.error("等待超时，部分任务可能未完成")
     progress_mgr._sync_to_db()  # 至少同步已完成的
     _update_task_status(result_id, status="failed", error_message="任务执行超时")
 

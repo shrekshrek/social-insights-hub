@@ -16,7 +16,7 @@ async def get_task_by_id(
     load_relations: bool = False
 ) -> Optional[DataTask]:
     """根据ID获取任务"""
-    query = select(DataTask).where(DataTask.id == task_id, DataTask.is_deleted == False)
+    query = select(DataTask).where(DataTask.id == task_id, DataTask.is_deleted.is_(False))
 
     if load_relations:
         query = query.options(
@@ -43,7 +43,7 @@ async def get_tasks(
 ) -> tuple[List[DataTask], int]:
     """获取任务列表（带过滤和分页）"""
     # 构建查询条件
-    conditions = [DataTask.is_deleted == False]
+    conditions = [DataTask.is_deleted.is_(False)]
 
     if project_id is not None:
         conditions.append(DataTask.project_id == project_id)
@@ -212,7 +212,7 @@ async def get_post_by_id(
     load_comments: bool = False
 ) -> Optional[SocialPost]:
     """根据ID获取原文"""
-    query = select(SocialPost).where(SocialPost.id == post_id, SocialPost.is_deleted == False)
+    query = select(SocialPost).where(SocialPost.id == post_id, SocialPost.is_deleted.is_(False))
 
     if load_comments:
         query = query.options(selectinload(SocialPost.comments))
@@ -235,7 +235,7 @@ async def get_posts_by_task(
     # 统计总数
     count_query = select(func.count()).select_from(SocialPost).where(
         SocialPost.task_id == task_id,
-        SocialPost.is_deleted == False
+        SocialPost.is_deleted.is_(False)
     )
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
@@ -245,7 +245,7 @@ async def get_posts_by_task(
         select(func.count(SocialComment.id))
         .where(
             SocialComment.post_id == SocialPost.id,
-            SocialComment.is_deleted == False
+            SocialComment.is_deleted.is_(False)
         )
         .correlate(SocialPost)
         .scalar_subquery()
@@ -254,7 +254,7 @@ async def get_posts_by_task(
     # 查询数据（包含已爬取评论数）
     query = (
         select(SocialPost, crawled_count_subquery.label("crawled_comments_count"))
-        .where(SocialPost.task_id == task_id, SocialPost.is_deleted == False)
+        .where(SocialPost.task_id == task_id, SocialPost.is_deleted.is_(False))
         .offset(skip)
         .limit(limit)
         .order_by(SocialPost.published_at.desc())
@@ -307,7 +307,7 @@ async def get_posts_by_platform_post_id(
     conditions = [
         SocialPost.platform_id == platform_id,
         SocialPost.post_id_on_platform == post_id_on_platform,
-        SocialPost.is_deleted == False
+        SocialPost.is_deleted.is_(False)
     ]
 
     # 如果指定项目，只查询该项目下的任务
@@ -370,7 +370,7 @@ async def get_comment_by_id(
     result = await db.execute(
         select(SocialComment).where(
             SocialComment.id == comment_id,
-            SocialComment.is_deleted == False
+            SocialComment.is_deleted.is_(False)
         )
     )
     return result.scalar_one_or_none()
@@ -386,7 +386,7 @@ async def get_comments_by_post(
     # 统计总数
     count_query = select(func.count()).select_from(SocialComment).where(
         SocialComment.post_id == post_id,
-        SocialComment.is_deleted == False
+        SocialComment.is_deleted.is_(False)
     )
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
@@ -396,7 +396,7 @@ async def get_comments_by_post(
         select(SocialComment)
         .where(
             SocialComment.post_id == post_id,
-            SocialComment.is_deleted == False
+            SocialComment.is_deleted.is_(False)
         )
         .offset(skip)
         .limit(limit)
@@ -420,7 +420,7 @@ async def get_comments_by_task(
     # 构建查询条件
     conditions = [
         SocialComment.task_id == task_id,
-        SocialComment.is_deleted == False
+        SocialComment.is_deleted.is_(False)
     ]
 
     # 如果指定了post_id，添加筛选条件
@@ -584,7 +584,7 @@ async def soft_delete_task_posts(db: AsyncSession, task_id: int) -> int:
     result = await db.execute(
         update(SocialPost)
         .where(SocialPost.task_id == task_id)
-        .where(SocialPost.is_deleted == False)
+        .where(SocialPost.is_deleted.is_(False))
         .values(is_deleted=True)
     )
 
@@ -608,7 +608,7 @@ async def soft_delete_task_comments(db: AsyncSession, task_id: int) -> int:
     result = await db.execute(
         update(SocialComment)
         .where(SocialComment.task_id == task_id)
-        .where(SocialComment.is_deleted == False)
+        .where(SocialComment.is_deleted.is_(False))
         .values(is_deleted=True)
     )
 

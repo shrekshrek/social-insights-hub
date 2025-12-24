@@ -21,6 +21,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from src.social_media.analysis.celery_tasks.aggregation.utils import calculate_impact_score
 from src.social_media.tasks.models import SocialPost
 
 logger = logging.getLogger(__name__)
@@ -653,8 +654,6 @@ def analyze_competitor_radar(
 # 4. KOL 声音提取
 # ============================================================================
 
-from src.social_media.analysis.celery_tasks.aggregation.utils import calculate_impact_score
-
 def extract_kol_voices(
     posts_data: list[dict[str, Any]],
     db: Session,
@@ -677,7 +676,8 @@ def extract_kol_voices(
     results = []
     for post_info in top_posts:
         post_id = post_info.get("post_id")
-        if not post_id: continue
+        if not post_id:
+            continue
         
         stmt = select(SocialPost).where(SocialPost.id == post_id)
         post = db.execute(stmt).scalar_one_or_none()

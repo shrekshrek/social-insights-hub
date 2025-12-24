@@ -1003,49 +1003,45 @@ const { columns } = usePostAnalysisColumns({
     </template>
 
     <!-- 报告生成进度 -->
-    <div v-if="actionLoading.aggregate || hasAggregationRunning" class="space-y-4 py-4">
-      <div class="text-center mb-4">
-        <UIcon name="i-heroicons-sparkles" class="w-8 h-8 mx-auto mb-2 text-primary-500 animate-pulse" />
-        <p class="text-gray-600 dark:text-gray-400 font-medium">正在生成分析报告...</p>
-        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">实体归一化和观点归一化正在并行处理</p>
+    <div v-if="actionLoading.aggregate || hasAggregationRunning" class="space-y-3 py-4">
+      <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        实体归一化和观点归一化正在并行处理
       </div>
 
-      <!-- 实体归一化状态 -->
-      <div class="flex items-center gap-2 p-2 border rounded-lg bg-blue-50 dark:bg-blue-900/20">
-        <UIcon name="i-heroicons-cube" class="w-4 h-4 text-blue-500" />
-        <span class="text-sm font-medium">实体归一化</span>
-        <UBadge
-          v-if="entityNormalizationTask"
-          :color="entityNormalizationTask.status === 'completed' ? 'success' : 'primary'"
-          size="xs"
-        >
-          {{ entityNormalizationTask.status === 'completed' ? '已完成' : '分析中' }}
-        </UBadge>
-        <UBadge v-else color="neutral" size="xs">等待中</UBadge>
-        <UIcon
-          v-if="entityNormalizationTask && entityNormalizationTask.status !== 'completed'"
-          name="i-heroicons-arrow-path"
-          class="w-3 h-3 animate-spin text-blue-500"
-        />
-      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <!-- 实体归一化状态 -->
+        <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-900 dark:text-white">实体归一化</span>
+            <span v-if="entityNormalizationTask?.id" class="text-xs text-gray-400 font-mono">
+              job={{ entityNormalizationTask.id }}
+            </span>
+          </div>
+          <UBadge
+            :color="entityNormalizationTask ? (entityNormalizationTask.status === 'completed' ? 'success' : entityNormalizationTask.status === 'failed' ? 'error' : 'primary') : 'neutral'"
+            variant="solid"
+            size="xs"
+          >
+            {{ entityNormalizationTask ? (entityNormalizationTask.status === 'completed' ? '已完成' : entityNormalizationTask.status === 'failed' ? '失败' : '进行中') : '等待中' }}
+          </UBadge>
+        </div>
 
-      <!-- 观点归一化状态 -->
-      <div class="flex items-center gap-2 p-2 border rounded-lg bg-purple-50 dark:bg-purple-900/20">
-        <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-4 h-4 text-purple-500" />
-        <span class="text-sm font-medium">观点归一化</span>
-        <UBadge
-          v-if="opinionNormalizationTask"
-          :color="opinionNormalizationTask.status === 'completed' ? 'success' : 'secondary'"
-          size="xs"
-        >
-          {{ opinionNormalizationTask.status === 'completed' ? '已完成' : '分析中' }}
-        </UBadge>
-        <UBadge v-else color="neutral" size="xs">等待中</UBadge>
-        <UIcon
-          v-if="opinionNormalizationTask && opinionNormalizationTask.status !== 'completed'"
-          name="i-heroicons-arrow-path"
-          class="w-3 h-3 animate-spin text-purple-500"
-        />
+        <!-- 观点归一化状态 -->
+        <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-900 dark:text-white">观点归一化</span>
+            <span v-if="opinionNormalizationTask?.id" class="text-xs text-gray-400 font-mono">
+              job={{ opinionNormalizationTask.id }}
+            </span>
+          </div>
+          <UBadge
+            :color="opinionNormalizationTask ? (opinionNormalizationTask.status === 'completed' ? 'success' : opinionNormalizationTask.status === 'failed' ? 'error' : 'primary') : 'neutral'"
+            variant="solid"
+            size="xs"
+          >
+            {{ opinionNormalizationTask ? (opinionNormalizationTask.status === 'completed' ? '已完成' : opinionNormalizationTask.status === 'failed' ? '失败' : '进行中') : '等待中' }}
+          </UBadge>
+        </div>
       </div>
     </div>
 

@@ -23,8 +23,15 @@ def ensure_stage_state(result: dict[str, Any]) -> tuple[dict[str, Any], dict[str
     stage2["updated_at"] = now_iso()
     stage2.setdefault("steps", {})
     # 产品口径：实体归一 / 观点归一 / 程序化衍生 / 全局LLM总分析
-    for k in ["entity_normalization", "opinion_normalization", "derived_analysis", "summary"]:
-        step = stage2["steps"].get(k) if isinstance(stage2["steps"].get(k), dict) else {}
+    for k in [
+        "entity_normalization",
+        "opinion_normalization",
+        "derived_analysis",
+        "summary",
+    ]:
+        step = (
+            stage2["steps"].get(k) if isinstance(stage2["steps"].get(k), dict) else {}
+        )
         step.setdefault("status", "pending")
         stage2["steps"][k] = step
 
@@ -38,7 +45,9 @@ def ensure_stage_state(result: dict[str, Any]) -> tuple[dict[str, Any], dict[str
 
 def set_step(stage2: dict[str, Any], step: str, status: str, **extra: Any) -> None:
     stage2.setdefault("steps", {})
-    cur = stage2["steps"].get(step) if isinstance(stage2["steps"].get(step), dict) else {}
+    cur = (
+        stage2["steps"].get(step) if isinstance(stage2["steps"].get(step), dict) else {}
+    )
     cur["status"] = status
     if extra:
         cur.update(extra)
@@ -51,9 +60,15 @@ def format_terms_for_llm(term_counts: dict[str, int], top_k: int = 160) -> str:
     return "\n".join([f"- {t} ({c})" for t, c in items if t and c > 0])
 
 
-def fallback_cluster_terms(term_counts: dict[str, int], threshold: float = 0.85) -> list[dict[str, Any]]:
+def fallback_cluster_terms(
+    term_counts: dict[str, int], threshold: float = 0.85
+) -> list[dict[str, Any]]:
     """规则降级：按相似度聚类，输出与 parse_normalization_response 类似的结构"""
-    terms = [t for t, c in sorted(term_counts.items(), key=lambda x: x[1], reverse=True) if t and c > 0]
+    terms = [
+        t
+        for t, c in sorted(term_counts.items(), key=lambda x: x[1], reverse=True)
+        if t and c > 0
+    ]
     clusters: list[dict[str, Any]] = []
     used: set[str] = set()
 
@@ -109,6 +124,7 @@ def merge_attr_items(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]
     if not items:
         return []
     bucket: dict[str, dict[str, Any]] = {}
+    max_post_ids_sample = 50
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -121,13 +137,18 @@ def merge_attr_items(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]
             m = 0
         if m <= 0:
             continue
-        b = bucket.setdefault(text, {
-            "text": text,
-            "mentions": 0,
-            "platform_distribution": {},
-            "keyword_distribution": {},
-            "original_terms": [],
-        })
+        b = bucket.setdefault(
+            text,
+            {
+                "text": text,
+                "mentions": 0,
+                "platform_distribution": {},
+                "keyword_distribution": {},
+                "original_terms": [],
+                "post_ids_sample": [],
+                "_post_ids_set": set(),
+            },
+        )
         b["mentions"] += m
         for k, v in (it.get("platform_distribution") or {}).items():
             try:
@@ -135,18 +156,46 @@ def merge_attr_items(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]
             except Exception:
                 vv = 0
             if vv:
-                b["platform_distribution"][k] = int(b["platform_distribution"].get(k, 0)) + vv
+                b["platform_distribution"][k] = (
+                    int(b["platform_distribution"].get(k, 0)) + vv
+                )
         for k, v in (it.get("keyword_distribution") or {}).items():
             try:
                 vv = int(v or 0)
             except Exception:
                 vv = 0
             if vv:
-                b["keyword_distribution"][k] = int(b["keyword_distribution"].get(k, 0)) + vv
+                b["keyword_distribution"][k] = (
+                    int(b["keyword_distribution"].get(k, 0)) + vv
+                )
         ots = it.get("original_terms") or []
         if isinstance(ots, list) and ots:
-            b["original_terms"].extend([x for x in ots if isinstance(x, dict) and x.get("text")])
+            b["original_terms"].extend(
+                [x for x in ots if isinstance(x, dict) and x.get("text")]
+            )
+        # 关键：保留可追溯样本帖（用于 Focus/SWOT/Gap 下钻）
+        refs = it.get("post_ids_sample") or []
+        if isinstance(refs, list) and refs:
+            for r in refs:
+                if len(b["post_ids_sample"]) >= max_post_ids_sample:
+                    break
+                if not isinstance(r, dict):
+                    continue
+                try:
+                    tid = int(r.get("task_id") or 0)
+                    pid = int(r.get("post_id") or 0)
+                except Exception:
+                    continue
+                if tid <= 0 or pid <= 0:
+                    continue
+                key = f"{tid}:{pid}"
+                if key in b["_post_ids_set"]:
+                    continue
+                b["_post_ids_set"].add(key)
+                b["post_ids_sample"].append({"task_id": tid, "post_id": pid})
     merged = list(bucket.values())
+    for b in merged:
+        b.pop("_post_ids_set", None)
     merged.sort(key=lambda x: x.get("mentions", 0), reverse=True)
     return merged[:10]
 
@@ -157,7 +206,17 @@ def merge_token_usage_stats(stats_list: list[dict[str, Any]]) -> dict[str, Any]:
     目标：与任务级 AnalysisJob.token_usage 格式一致：{summary, call_details}
     """
     if not stats_list:
-        return {"summary": {"total_calls": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_tokens": 0, "total_cost_cny": 0.0, "total_duration_seconds": 0.0}, "call_details": []}
+        return {
+            "summary": {
+                "total_calls": 0,
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "total_tokens": 0,
+                "total_cost_cny": 0.0,
+                "total_duration_seconds": 0.0,
+            },
+            "call_details": [],
+        }
 
     merged_summary = {
         "total_calls": 0,
@@ -175,13 +234,21 @@ def merge_token_usage_stats(stats_list: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         summary = st.get("summary") if isinstance(st.get("summary"), dict) else {}
         merged_summary["total_calls"] += int(summary.get("total_calls") or 0)
-        merged_summary["total_input_tokens"] += int(summary.get("total_input_tokens") or 0)
-        merged_summary["total_output_tokens"] += int(summary.get("total_output_tokens") or 0)
+        merged_summary["total_input_tokens"] += int(
+            summary.get("total_input_tokens") or 0
+        )
+        merged_summary["total_output_tokens"] += int(
+            summary.get("total_output_tokens") or 0
+        )
         merged_summary["total_tokens"] += int(summary.get("total_tokens") or 0)
         merged_summary["total_cost_cny"] += float(summary.get("total_cost_cny") or 0.0)
-        merged_summary["total_duration_seconds"] += float(summary.get("total_duration_seconds") or 0.0)
+        merged_summary["total_duration_seconds"] += float(
+            summary.get("total_duration_seconds") or 0.0
+        )
 
-        calls = st.get("call_details") if isinstance(st.get("call_details"), list) else []
+        calls = (
+            st.get("call_details") if isinstance(st.get("call_details"), list) else []
+        )
         for c in calls:
             if not isinstance(c, dict):
                 continue
@@ -192,12 +259,14 @@ def merge_token_usage_stats(stats_list: list[dict[str, Any]]) -> dict[str, Any]:
 
     # 平均项
     if merged_summary["total_calls"] > 0:
-        merged_summary["avg_tokens_per_call"] = merged_summary["total_tokens"] / merged_summary["total_calls"]
-        merged_summary["avg_cost_per_call"] = merged_summary["total_cost_cny"] / merged_summary["total_calls"]
+        merged_summary["avg_tokens_per_call"] = (
+            merged_summary["total_tokens"] / merged_summary["total_calls"]
+        )
+        merged_summary["avg_cost_per_call"] = (
+            merged_summary["total_cost_cny"] / merged_summary["total_calls"]
+        )
     else:
         merged_summary["avg_tokens_per_call"] = 0
         merged_summary["avg_cost_per_call"] = 0.0
 
     return {"summary": merged_summary, "call_details": merged_calls}
-
-

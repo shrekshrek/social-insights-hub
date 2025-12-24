@@ -440,8 +440,8 @@ def build_entity_name_mapping(
             mentions = len(entity.get("post_ids", set()))
             entity["score"] = calculate_score(impact, mentions)
 
-    # 程序相似度映射 (阈值 0.7)
-    similarity_mapping = build_similarity_mapping(raw_entities, threshold=0.7)
+    # 程序相似度映射 (阈值 0.8)
+    similarity_mapping = build_similarity_mapping(raw_entities, threshold=0.8)
     after_similarity_count = len(set(similarity_mapping.values()))
     similarity_merged = raw_count - after_similarity_count
 

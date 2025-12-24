@@ -207,7 +207,9 @@ def build_snapshot_layers(
         platform_shares: dict[str, float] = {}
         for p in all_platforms_sorted:
             cnt = int(p_dist.get(p) or 0)
-            platform_shares[p] = round(cnt / total_mentions, 4) if total_mentions > 0 else 0.0
+            platform_shares[p] = (
+                round(cnt / total_mentions, 4) if total_mentions > 0 else 0.0
+            )
         platform_dna.append(
             {
                 "name": name,
@@ -487,10 +489,7 @@ def build_snapshot_layers(
             # 排除 subject 自身（parent == "Self" 或 parent == subject 且 name == subject）
             parent_lower = parent.lower()
             name_lower = name.lower()
-            is_child = (
-                parent_lower == subject_lower
-                and name_lower != subject_lower
-            )
+            is_child = parent_lower == subject_lower and name_lower != subject_lower
             if not is_child:
                 continue
 
@@ -530,7 +529,9 @@ def build_snapshot_layers(
             )
 
         # 按声量贡献度排序
-        product_line_members.sort(key=lambda x: x.get("contribution", 0.0), reverse=True)
+        product_line_members.sort(
+            key=lambda x: x.get("contribution", 0.0), reverse=True
+        )
 
         if product_line_members:
             focus["product_line_health"] = {
@@ -559,6 +560,80 @@ def build_snapshot_layers(
             }
 
             dim_agg: dict[str, dict[str, float]] = {}
+            # 证据聚合：维度 -> {target/comp} 的帖子样本与原话（样本口径）
+            max_post_ids_sample = 50
+
+            def _merge_post_samples(dst: dict[str, Any], refs: Any) -> None:
+                if not isinstance(refs, list) or not refs:
+                    return
+                s = dst.setdefault("_post_set", set())
+                arr = dst.setdefault("post_ids_sample", [])
+                if not isinstance(arr, list):
+                    arr = []
+                    dst["post_ids_sample"] = arr
+                for r in refs:
+                    if len(arr) >= max_post_ids_sample:
+                        break
+                    if not isinstance(r, dict):
+                        continue
+                    try:
+                        tid = int(r.get("task_id") or 0)
+                        pid = int(r.get("post_id") or 0)
+                    except Exception:
+                        continue
+                    if tid <= 0 or pid <= 0:
+                        continue
+                    key = f"{tid}:{pid}"
+                    if key in s:
+                        continue
+                    s.add(key)
+                    arr.append({"task_id": tid, "post_id": pid})
+
+            def _merge_original_terms(dst: dict[str, Any], terms: Any) -> None:
+                if not isinstance(terms, list) or not terms:
+                    return
+                mp = dst.setdefault("original_terms_counts", {})
+                if not isinstance(mp, dict):
+                    mp = {}
+                    dst["original_terms_counts"] = mp
+                for ot in terms:
+                    if not isinstance(ot, dict):
+                        continue
+                    text = (ot.get("text") or "").strip()
+                    if not text:
+                        continue
+                    if len(text) > 100:
+                        text = text[:100]
+                    try:
+                        cnt = int(ot.get("count") or 0)
+                    except Exception:
+                        cnt = 0
+                    if cnt <= 0:
+                        cnt = 1
+                    mp[text] = int(mp.get(text, 0)) + cnt
+
+            def _finalize_evidence(evd: dict[str, Any]) -> dict[str, Any]:
+                if not isinstance(evd, dict):
+                    return {"post_ids_sample": [], "original_terms": []}
+                evd.pop("_post_set", None)
+                counts = evd.pop("original_terms_counts", {})
+                if not isinstance(counts, dict):
+                    counts = {}
+                return {
+                    "post_ids_sample": (evd.get("post_ids_sample") or [])[
+                        :max_post_ids_sample
+                    ],
+                    "original_terms": [
+                        {"text": t, "count": c}
+                        for t, c in sorted(
+                            counts.items(),
+                            key=lambda x: (len(str(x[0] or "")), int(x[1] or 0)),
+                            reverse=True,
+                        )[:20]
+                    ],
+                }
+
+            dim_evidence: dict[str, dict[str, Any]] = {}
 
             def _acc(which: str, dim: str, sent: float, m: int) -> None:
                 if not dim or m <= 0:
@@ -604,6 +679,12 @@ def build_snapshot_layers(
                     except Exception:
                         m = 0
                     _acc(which, str(dim), sent, m)
+                    # evidence merge
+                    dim_key = str(dim)
+                    evd = dim_evidence.setdefault(dim_key, {"target": {}, "comp": {}})
+                    bucket = evd["target"] if which == "target" else evd["comp"]
+                    _merge_post_samples(bucket, cell.get("post_ids_sample"))
+                    _merge_original_terms(bucket, cell.get("original_terms"))
 
             strengths: list[dict[str, Any]] = []
             weaknesses: list[dict[str, Any]] = []
@@ -617,7 +698,11 @@ def build_snapshot_layers(
                 ts = (float(rec.get("target_sent_sum") or 0.0) / tm) if tm > 0 else 0.0
                 cs = (float(rec.get("comp_sent_sum") or 0.0) / cm) if cm > 0 else 0.0
                 delta = ts - cs
-                item = {
+                evd = dim_evidence.get(dim) or {}
+                target_evd = _finalize_evidence(evd.get("target") or {})
+                comp_evd = _finalize_evidence(evd.get("comp") or {})
+
+                item_base = {
                     "dimension": dim,
                     "target_sentiment": round(ts, 2),
                     "competitor_sentiment": round(cs, 2),
@@ -627,20 +712,45 @@ def build_snapshot_layers(
                 }
 
                 if tm >= min_mentions and ts >= 0.2 and delta >= 0.15:
-                    strengths.append(item)
+                    strengths.append(
+                        {
+                            **item_base,
+                            **target_evd,
+                        }
+                    )
                 if tm >= min_mentions and ts <= -0.2 and delta <= -0.15:
-                    weaknesses.append(item)
+                    weaknesses.append(
+                        {
+                            **item_base,
+                            **target_evd,
+                        }
+                    )
                 if cm >= min_mentions and cs <= -0.2 and ts > -0.1:
-                    opportunities.append(item)
+                    opportunities.append(
+                        {
+                            **item_base,
+                            **comp_evd,
+                        }
+                    )
                 if cm >= min_mentions and cs >= 0.2 and ts < 0.1:
-                    threats.append(item)
+                    threats.append(
+                        {
+                            **item_base,
+                            **comp_evd,
+                        }
+                    )
 
                 # Gap：竞品强项明显，但目标缺失/偏弱（用于“差异化诊断”）
                 if cm >= min_mentions and cs >= 0.2:
                     low_presence = tm < max(min_mentions, int(cm * 0.3))
                     weak_sent = ts < 0.1
                     if low_presence or weak_sent:
-                        gaps.append(item)
+                        gaps.append(
+                            {
+                                **item_base,
+                                **comp_evd,
+                            }
+                        )
 
             strengths.sort(key=lambda x: x.get("delta", 0.0), reverse=True)
             weaknesses.sort(key=lambda x: x.get("delta", 0.0))

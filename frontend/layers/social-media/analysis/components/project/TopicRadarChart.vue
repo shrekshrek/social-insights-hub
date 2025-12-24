@@ -231,10 +231,6 @@ const updateChart = async () => {
         if (p.data && p.data[7]) {
           const type = p.data[6] as 'pain' | 'gain' | 'controversy'
           const item = p.data[7] as TopicRadarItem
-          if (item?.post_ids_sample?.length) {
-            emit('open-posts', item, type)
-            return
-          }
           handleSelect(item, type)
         }
       })
@@ -253,10 +249,6 @@ onMounted(() => {
 const unmetNeedsList = computed(() => props.unmetNeeds || [])
 
 const handleUnmetClick = (item: TopicRadarItem) => {
-  if (item?.post_ids_sample?.length) {
-    emit('open-posts', item, 'unmet')
-    return
-  }
   handleSelect(item, 'unmet')
 }
 </script>
@@ -358,6 +350,7 @@ const handleUnmetClick = (item: TopicRadarItem) => {
       :type="selectedType"
       :open="panelOpen"
       @close="closePanel"
+      @open-posts="(item, type) => emit('open-posts', item, type)"
     />
   </div>
 </template>

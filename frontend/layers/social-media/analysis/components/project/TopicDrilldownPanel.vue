@@ -15,6 +15,7 @@ interface TopicItem {
   original_terms?: OriginalTerm[]
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
+  post_ids_sample?: Array<{ task_id: number; post_id: number }>
 }
 
 const props = defineProps<{
@@ -26,6 +27,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'update:open', value: boolean): void
+  (e: 'open-posts', item: TopicItem, type: 'pain' | 'gain' | 'controversy' | 'unmet'): void
 }>()
 
 // 使用 computed 避免直接修改 props
@@ -36,6 +38,12 @@ const isOpen = computed({
     emit('update:open', value)
   },
 })
+
+const handleOpenPosts = () => {
+  if (!props.item || !props.type) return
+  if (!props.item.post_ids_sample?.length) return
+  emit('open-posts', props.item, props.type)
+}
 
 // 类型标签配置
 const typeConfig = computed(() => {
@@ -170,6 +178,18 @@ const getSentimentColor = (s?: number) => {
               <div class="text-xs text-gray-400 mt-1">出现 {{ term.count }} 次</div>
             </div>
           </div>
+        </div>
+
+        <!-- 帖子样本入口（统一交互：先看原话，再按需打开样本帖） -->
+        <div class="flex items-center justify-end">
+          <UButton
+            size="xs"
+            color="neutral"
+            variant="outline"
+            :disabled="!item.post_ids_sample?.length"
+            :label="item.post_ids_sample?.length ? `查看帖子样本（${item.post_ids_sample.length}）` : '暂无帖子样本'"
+            @click="handleOpenPosts"
+          />
         </div>
 
         <!-- 洞察提示 -->

@@ -66,19 +66,19 @@ watch([page, pageSize, filterAnalyzed, searchQuery, searchId], () => {
 const rows = computed(() => postAnalysisData.value?.items || [])
 const total = computed(() => postAnalysisData.value?.total || 0)
 
-/** 阈值筛选 */
+/** 阈值筛选 - 默认值：广告≤7 价值≥4 相关≥4（中等宽松） */
 const thresholds = reactive({
-  spamMax: 5,
-  valueMin: 3,
-  relevanceMin: 3,
+  spamMax: 7,
+  valueMin: 4,
+  relevanceMin: 4,
 })
 
 // 深度分析对话框状态
 const deepDialogOpen = ref(false)
 const dialogThresholds = reactive({
-  spamMax: 5,
-  valueMin: 3,
-  relevanceMin: 3,
+  spamMax: 7,
+  valueMin: 4,
+  relevanceMin: 4,
 })
 const dialogPreview = ref<DeepAnalysisPreview | null>(null)
 const dialogPreviewLoading = ref(false)
@@ -87,7 +87,20 @@ const dialogPreviewLoading = ref(false)
 const preview = ref<DeepAnalysisPreview | null>(null)
 const previewLoading = ref(false)
 
+/** 验证阈值是否有效 */
+const isValidThreshold = (val: unknown): val is number =>
+  typeof val === 'number' && Number.isFinite(val) && val >= 0 && val <= 10
+
 const loadPreview = async () => {
+  // 任意阈值为空或无效时不发送请求
+  if (
+    !isValidThreshold(thresholds.spamMax) ||
+    !isValidThreshold(thresholds.valueMin) ||
+    !isValidThreshold(thresholds.relevanceMin)
+  ) {
+    return
+  }
+
   previewLoading.value = true
   try {
     preview.value = await getDeepAnalysisPreview(props.taskId, {
@@ -115,7 +128,9 @@ watch(
 
 const deepCandidateIds = computed(() => preview.value?.deep_candidate_ids || [])
 const commentCandidateIds = computed(() => preview.value?.comment_candidate_ids || [])
-const matchedCount = computed(() => preview.value?.matched_count ?? 0)
+const qualifiedCount = computed(() => preview.value?.qualified_count ?? 0) // 符合条件的总数
+const matchedCount = computed(() => preview.value?.matched_count ?? 0) // 待深度分析数
+const screenedCount = computed(() => preview.value?.screened_count ?? 0) // 已初筛数
 const totalPostsCount = computed(() => preview.value?.total_posts ?? 0)
 
 const processingTasks = computed<AnalysisJob[]>(() =>
@@ -327,6 +342,15 @@ const handleClearSearch = () => {
 let dialogPreviewTimer: ReturnType<typeof setTimeout> | null = null
 
 const loadDialogPreview = async () => {
+  // 任意阈值为空或无效时不发送请求
+  if (
+    !isValidThreshold(dialogThresholds.spamMax) ||
+    !isValidThreshold(dialogThresholds.valueMin) ||
+    !isValidThreshold(dialogThresholds.relevanceMin)
+  ) {
+    return
+  }
+
   dialogPreviewLoading.value = true
   try {
     dialogPreview.value = await getDeepAnalysisPreview(props.taskId, {
@@ -639,19 +663,22 @@ const { columns } = usePostAnalysisColumns({
         </UTooltip>
       </div>
 
-      <!-- 右侧：阈值显示 -->
+      <!-- 右侧：阈值与统计显示 -->
       <div v-if="preview" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-        <UBadge color="neutral" variant="subtle" size="xs">
-          广告{{ thresholds.spamMax }}
+        <UBadge color="neutral" variant="subtle" size="xs" title="广告分上限（≤）">
+          广告≤{{ thresholds.spamMax }}
         </UBadge>
-        <UBadge color="info" variant="subtle" size="xs">
-          价值{{ thresholds.valueMin }}
+        <UBadge color="info" variant="subtle" size="xs" title="价值分下限（≥）">
+          价值≥{{ thresholds.valueMin }}
         </UBadge>
-        <UBadge color="success" variant="subtle" size="xs">
-          相关{{ thresholds.relevanceMin }}
+        <UBadge color="success" variant="subtle" size="xs" title="相关分下限（≥）">
+          相关≥{{ thresholds.relevanceMin }}
         </UBadge>
-        <span class="text-primary-600 dark:text-primary-400 font-medium">
-          符合: {{ matchedCount }}/{{ totalPostsCount }}
+        <span class="text-primary-600 dark:text-primary-400 font-medium" title="符合阈值条件的帖子数 / 已完成初筛的帖子数">
+          符合: {{ qualifiedCount }}/{{ screenedCount }}
+        </span>
+        <span v-if="matchedCount > 0" class="text-warning-600 dark:text-warning-400" title="符合条件且尚未深度分析的帖子数">
+          待分析: {{ matchedCount }}
         </span>
       </div>
     </div>
@@ -790,8 +817,8 @@ const { columns } = usePostAnalysisColumns({
     <template #body>
       <div class="space-y-4">
         <UFormField
-          label="最大广告分"
-          hint="0-10，分数越低表示内容越自然"
+          label="广告分 ≤（上限）"
+          hint="0-10，分数越低越好，表示内容越自然真实"
         >
           <UInput
             v-model.number="dialogThresholds.spamMax"
@@ -799,12 +826,13 @@ const { columns } = usePostAnalysisColumns({
             :min="0"
             :max="10"
             step="0.5"
+            placeholder="默认 ≤ 7"
           />
         </UFormField>
 
         <UFormField
-          label="最小价值分"
-          hint="0-10，分数越高表示内容价值越大"
+          label="价值分 ≥（下限）"
+          hint="0-10，分数越高越好，表示内容价值越大"
         >
           <UInput
             v-model.number="dialogThresholds.valueMin"
@@ -812,12 +840,13 @@ const { columns } = usePostAnalysisColumns({
             :min="0"
             :max="10"
             step="0.5"
+            placeholder="默认 ≥ 4"
           />
         </UFormField>
 
         <UFormField
-          label="最小相关分"
-          hint="0-10，分数越高表示与项目关键词相关度越高"
+          label="相关分 ≥（下限）"
+          hint="0-10，分数越高越好，表示与项目关键词相关度越高"
         >
           <UInput
             v-model.number="dialogThresholds.relevanceMin"
@@ -825,8 +854,15 @@ const { columns } = usePostAnalysisColumns({
             :min="0"
             :max="10"
             step="0.5"
+            placeholder="默认 ≥ 4"
           />
         </UFormField>
+
+        <!-- 筛选规则说明 -->
+        <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-xs text-blue-700 dark:text-blue-300">
+          <p class="font-medium mb-1">筛选规则：</p>
+          <p>广告分 ≤ {{ dialogThresholds.spamMax }} AND 价值分 ≥ {{ dialogThresholds.valueMin }} AND 相关分 ≥ {{ dialogThresholds.relevanceMin }}</p>
+        </div>
 
         <!-- 实时预览 -->
         <div v-if="dialogPreviewLoading" class="text-center text-gray-500 py-4">
@@ -836,11 +872,16 @@ const { columns } = usePostAnalysisColumns({
 
         <div v-else-if="dialogPreview" class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
           <p class="text-sm text-gray-700 dark:text-gray-300">
-            预计有 <strong class="text-lg text-primary">{{ dialogPreview.matched_count }}</strong> /
-            {{ dialogPreview.total_posts }} 条符合条件
+            符合条件 <strong class="text-lg text-primary">{{ dialogPreview.qualified_count }}</strong> / {{ dialogPreview.screened_count }} 已初筛
             <span class="ml-2 text-gray-500">
-              ({{ dialogPreview.total_posts > 0 ? ((dialogPreview.matched_count / dialogPreview.total_posts) * 100).toFixed(1) : '0.0' }}%)
+              ({{ dialogPreview.screened_count > 0 ? ((dialogPreview.qualified_count / dialogPreview.screened_count) * 100).toFixed(1) : '0.0' }}%)
             </span>
+          </p>
+          <p v-if="dialogPreview.matched_count > 0" class="text-sm text-warning-600 dark:text-warning-400 mt-1">
+            其中 <strong>{{ dialogPreview.matched_count }}</strong> 条待深度分析
+          </p>
+          <p v-else-if="dialogPreview.qualified_count > 0" class="text-sm text-success-600 dark:text-success-400 mt-1">
+            符合条件的帖子已全部完成深度分析
           </p>
         </div>
       </div>

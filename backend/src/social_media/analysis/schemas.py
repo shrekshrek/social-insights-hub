@@ -249,7 +249,8 @@ class DeepAnalysisPreviewResponse(CustomBaseModel):
 
     total_posts: int
     screened_count: int
-    matched_count: int
+    qualified_count: int  # 符合阈值条件的已初筛帖子总数（不管是否已深度分析）
+    matched_count: int  # 符合条件且待深度分析的帖子数
     deep_done: int
     comment_done: int
     deep_candidate_ids: list[int]

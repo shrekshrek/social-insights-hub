@@ -692,15 +692,16 @@ async def preview_deep_analysis_candidates(
 
     total_posts = len(rows)
     screened_count = 0
-    matched_ids: list[int] = []
+    qualified_count = 0  # 符合阈值条件的已初筛帖子总数（不管是否已深度分析）
+    matched_ids: list[int] = []  # 符合条件且待深度分析的帖子
     deep_done = 0
     comment_done = 0
     comment_candidate_ids: list[int] = []
 
-    # 阈值默认
-    spam_threshold = spam_max if spam_max is not None else 5
-    value_threshold = value_min if value_min is not None else 6
-    relevance_threshold = relevance_min if relevance_min is not None else 6
+    # 阈值默认值：广告≤7 价值≥4 相关≥4（中等宽松）
+    spam_threshold = spam_max if spam_max is not None else 7
+    value_threshold = value_min if value_min is not None else 4
+    relevance_threshold = relevance_min if relevance_min is not None else 4
 
     for row in rows:
         post_id = row.id
@@ -713,13 +714,16 @@ async def preview_deep_analysis_candidates(
         # 统计初筛
         if spam is not None and val is not None and rel is not None:
             screened_count += 1
+            # 符合阈值条件
             if (
                 spam <= spam_threshold
                 and val >= value_threshold
                 and rel >= relevance_threshold
-                and post_deep is None
             ):
-                matched_ids.append(post_id)
+                qualified_count += 1
+                # 尚未深度分析的才加入候选列表
+                if post_deep is None:
+                    matched_ids.append(post_id)
 
         # 统计已完成
         if post_deep is not None:
@@ -738,7 +742,8 @@ async def preview_deep_analysis_candidates(
     return {
         "total_posts": total_posts,
         "screened_count": screened_count,
-        "matched_count": len(matched_ids),
+        "qualified_count": qualified_count,  # 符合条件的总数
+        "matched_count": len(matched_ids),  # 待深度分析数
         "deep_done": deep_done,
         "comment_done": comment_done,
         "deep_candidate_ids": matched_ids,

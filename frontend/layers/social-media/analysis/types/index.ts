@@ -287,7 +287,8 @@ export type PostAnalysisListResponse = PaginatedResponse<PostAnalysisWithPostInf
 export interface DeepAnalysisPreview {
   total_posts: number
   screened_count: number
-  matched_count: number
+  qualified_count: number // 符合阈值条件的已初筛帖子总数（不管是否已深度分析）
+  matched_count: number // 符合条件且待深度分析的帖子数
   deep_done: number
   comment_done: number
   deep_candidate_ids: number[]

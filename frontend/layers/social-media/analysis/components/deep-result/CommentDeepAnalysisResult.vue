@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CommentDeepResult } from '../types'
+import type { CommentDeepResult } from '../../types'
 
 defineProps<{
   data: CommentDeepResult

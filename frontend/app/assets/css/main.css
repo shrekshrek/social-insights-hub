@@ -1,8 +1,13 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* @nuxt/ui v3 官方推荐方式：使用 @source 指令扫描 layers 目录 */
+/* @nuxt/ui v4 官方推荐方式：使用 @source 指令扫描 layers 目录 */
 @source "../../../layers";
 
 /* 根据官方文档，@nuxtjs/color-mode会自动处理深色模式 */
-/* 这里只定义UI变量 */
+/* UButton 组件样式配置在 app.config.ts 中管理 */
+
+/* 原生 button 元素的鼠标指针样式（用于 Tab 切换、展开控件等自定义按钮） */
+button:not(:disabled) {
+  cursor: pointer;
+}

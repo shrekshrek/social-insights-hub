@@ -237,7 +237,7 @@ const _formatDate = (dateString: string) => {
   });
 };
 
-// 表格列配置 - Nuxt UI v3 格式
+// 表格列配置 - Nuxt UI v4 格式
 const columns: TableColumn<Permission>[] = [
   {
     accessorKey: "display_name",

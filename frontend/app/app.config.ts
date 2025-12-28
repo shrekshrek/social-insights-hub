@@ -18,6 +18,12 @@ export default defineAppConfig({
       chevronDoubleLeft: 'i-heroicons-chevron-double-left',
       chevronDoubleRight: 'i-heroicons-chevron-double-right'
     },
+    // Button组件全局配置 - 确保鼠标悬停时显示手型
+    button: {
+      slots: {
+        base: 'cursor-pointer'
+      }
+    },
     // Input组件全局配置 - 确保占满宽度
     input: {
       slots: {

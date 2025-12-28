@@ -9,7 +9,7 @@ import SWOTMatrixChart from '../../../../analysis/components/project/SWOTMatrixC
 import ProductLineHealthTable from '../../../../analysis/components/project/ProductLineHealthTable.vue'
 import PlatformScissorsChart from '../../../../analysis/components/project/PlatformScissorsChart.vue'
 import GapAnalysisChart from '../../../../analysis/components/project/GapAnalysisChart.vue'
-import PostListModal from '../../../../analysis/components/PostListModal.vue'
+import PostListModal from '../../../../analysis/components/shared/PostListModal.vue'
 
 definePageMeta({ layout: 'default' })
 

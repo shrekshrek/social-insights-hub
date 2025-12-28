@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { EntityAttrItem, TaskAnalysisResultData } from '../types'
-import PostListModal from './PostListModal.vue'
-import ClickableCount from './ClickableCount.vue'
+import type { EntityAttrItem, TaskAnalysisResultData } from '../../types'
+import PostListModal from '../shared/PostListModal.vue'
+import ClickableCount from '../shared/ClickableCount.vue'
 import IpaChart from './IpaChart.vue'
 import ContextGraphChart from './ContextGraphChart.vue'
 import CompetitorRadarChart from './CompetitorRadarChart.vue'
 import TimeDistributionChart from './TimeDistributionChart.vue'
-import OriginalTermsPopover from './OriginalTermsPopover.vue'
+import OriginalTermsPopover from '../shared/OriginalTermsPopover.vue'
 
 const props = defineProps<{
   data: TaskAnalysisResultData

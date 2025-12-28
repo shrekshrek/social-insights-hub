@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch, onMounted, nextTick, ref } from 'vue'
 import type { EChartsOption } from 'echarts'
+import TabSwitch from '../shared/TabSwitch.vue'
 
 interface PlatformDNAItem {
   name: string
@@ -18,6 +19,11 @@ const { chartRef, initChart, setOption, getInstance, clear } = useCharts()
 
 type ViewMode = 'stack' | 'heatmap'
 const viewMode = ref<ViewMode>('stack')
+
+const viewModeOptions = [
+  { value: 'stack', label: '堆叠' },
+  { value: 'heatmap', label: '矩阵' },
+]
 
 const maxItems = computed(() => props.maxItems ?? 10)
 const rawItems = computed(() => props.data || [])
@@ -272,22 +278,7 @@ onMounted(() => {
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">平台阵地 DNA</h3>
       <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="viewMode === 'stack' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="viewMode = 'stack'"
-          >
-            堆叠
-          </button>
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="viewMode === 'heatmap' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="viewMode = 'heatmap'"
-          >
-            矩阵
-          </button>
-        </div>
+        <TabSwitch v-model="viewMode" :options="viewModeOptions" />
         <span class="text-xs text-gray-500 dark:text-gray-400">Top {{ items.length }} 品牌 · 按总量</span>
       </div>
     </div>

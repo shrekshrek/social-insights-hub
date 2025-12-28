@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
-import type { CompetitorRadar } from '../types'
+import type { CompetitorRadar } from '../../types'
 
 const props = defineProps<{
   data?: CompetitorRadar

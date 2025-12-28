@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PostDeepResult } from '../types'
+import type { PostDeepResult } from '../../types'
 
 defineProps<{
   data: PostDeepResult

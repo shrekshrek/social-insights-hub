@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
 import type { IndustryQuadrantPoint } from '../../../types/project-snapshot'
+import TabSwitch from '../shared/TabSwitch.vue'
 
 const props = defineProps<{
   data: IndustryQuadrantPoint[]
@@ -16,6 +17,11 @@ const { chartRef, initChart, setOption, getInstance, on } = useCharts()
 
 type ScaleMode = 'linear' | 'log'
 const scaleMode = ref<ScaleMode>('linear')
+
+const scaleModeOptions = [
+  { value: 'linear', label: '线性' },
+  { value: 'log', label: '对数' },
+]
 
 // 角色颜色
 const roleColors: Record<string, string> = {
@@ -294,22 +300,7 @@ onMounted(() => {
     <div class="flex items-center justify-between mb-3 shrink-0">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">行业象限</h3>
       <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="scaleMode === 'linear' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="scaleMode = 'linear'"
-          >
-            线性
-          </button>
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="scaleMode === 'log' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="scaleMode = 'log'"
-          >
-            对数
-          </button>
-        </div>
+        <TabSwitch v-model="scaleMode" :options="scaleModeOptions" />
         <span class="text-xs text-gray-500 dark:text-gray-400">热度 × 情感</span>
       </div>
     </div>

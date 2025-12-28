@@ -5,8 +5,8 @@
  * 用于显示指定帖子ID列表对应的帖子详情，使用表格格式展示
  * 使用共用的 usePostAnalysisColumns composable 和 DeepResultModal 组件
  */
-import { usePostAnalysisColumns } from '../composables/usePostAnalysisColumns'
-import DeepResultModal from './DeepResultModal.vue'
+import { usePostAnalysisColumns } from '../../composables/usePostAnalysisColumns'
+import DeepResultModal from '../deep-result/DeepResultModal.vue'
 
 const props = defineProps<{
   open: boolean

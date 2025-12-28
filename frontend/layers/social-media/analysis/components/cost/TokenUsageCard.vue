@@ -127,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import type { TokenUsageSummary } from '../types'
+import type { TokenUsageSummary } from '../../types'
 
 interface Props {
   title?: string

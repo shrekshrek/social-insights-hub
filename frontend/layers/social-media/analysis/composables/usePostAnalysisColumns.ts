@@ -7,7 +7,7 @@ import { computed, h, type Component } from 'vue'
 import { UBadge, UIcon } from '#components'
 import type { TableColumn } from '@nuxt/ui'
 import type { PostAnalysisWithPostInfo } from '../types'
-import ExpandableText from '../components/ExpandableText.vue'
+import ExpandableText from '../components/shared/ExpandableText.vue'
 
 export interface PostAnalysisColumnsOptions {
   /** 点击深度分析按钮的回调 */

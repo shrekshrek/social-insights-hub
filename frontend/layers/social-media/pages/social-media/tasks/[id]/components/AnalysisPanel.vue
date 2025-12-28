@@ -6,8 +6,8 @@ import type {
   TaskAnalysisResultData,
 } from '../../../../../analysis/types'
 import { usePostAnalysisColumns } from '../../../../../analysis/composables/usePostAnalysisColumns'
-import DeepResultModal from '../../../../../analysis/components/DeepResultModal.vue'
-import TaskAnalysisReport from '../../../../../analysis/components/TaskAnalysisReport.vue'
+import DeepResultModal from '../../../../../analysis/components/deep-result/DeepResultModal.vue'
+import TaskAnalysisReport from '../../../../../analysis/components/task/TaskAnalysisReport.vue'
 
 const props = defineProps<{
   taskId: number

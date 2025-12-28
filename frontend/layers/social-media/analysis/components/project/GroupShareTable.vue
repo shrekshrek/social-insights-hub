@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import TabSwitch from '../shared/TabSwitch.vue'
 
 interface GroupShareItem {
   name: string
@@ -22,6 +23,13 @@ const props = defineProps<{
 const maxItems = computed(() => props.maxItems ?? 10)
 type MetricMode = 'heat' | 'mentions' | 'efficiency'
 const metricMode = ref<MetricMode>('heat')
+
+const metricModeOptions = [
+  { value: 'heat', label: '热度' },
+  { value: 'mentions', label: '提及' },
+  { value: 'efficiency', label: '效能' },
+]
+
 const metricLabel = computed(() => (metricMode.value === 'mentions' ? '提及' : metricMode.value === 'efficiency' ? '效能' : '热度'))
 const shareLabel = computed(() => (metricMode.value === 'mentions' ? '份额(提及)' : '份额(热度)'))
 const innerShareLabel = computed(() => (metricMode.value === 'mentions' ? '集团内(提及)' : '集团内(热度)'))
@@ -156,29 +164,7 @@ const maxShare = computed(() => {
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">集团军声量</h3>
       <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="metricMode === 'heat' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="metricMode = 'heat'"
-          >
-            热度
-          </button>
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="metricMode === 'mentions' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="metricMode = 'mentions'"
-          >
-            提及
-          </button>
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="metricMode === 'efficiency' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="metricMode = 'efficiency'"
-          >
-            效能
-          </button>
-        </div>
+        <TabSwitch v-model="metricMode" :options="metricModeOptions" />
         <span class="text-xs text-gray-500 dark:text-gray-400">按 Parent 聚合</span>
       </div>
     </div>

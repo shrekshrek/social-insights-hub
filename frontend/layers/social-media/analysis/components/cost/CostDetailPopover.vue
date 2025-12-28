@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import type { TokenUsageStats } from '../types'
+import type { TokenUsageStats } from '../../types'
 
 interface Props {
   stats: TokenUsageStats | null

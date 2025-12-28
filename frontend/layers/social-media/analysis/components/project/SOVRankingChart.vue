@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import TabSwitch from '../shared/TabSwitch.vue'
 
 interface SOVRankingItem {
   name: string
@@ -27,6 +28,12 @@ type SortMode = 'share' | 'mentions' | 'efficiency'
 
 const maxItems = computed(() => props.maxItems ?? 15)
 const sortMode = ref<SortMode>('share')
+
+const sortModeOptions = [
+  { value: 'share', label: '份额' },
+  { value: 'mentions', label: '提及' },
+  { value: 'efficiency', label: '效能' },
+]
 
 const sortedItems = computed(() => {
   const list = (props.data || []).slice()
@@ -84,29 +91,7 @@ const formatNumber = (n: number) => {
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-3">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">SOV 排行榜</h3>
-        <div class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="sortMode === 'share' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="sortMode = 'share'"
-          >
-            份额
-          </button>
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="sortMode === 'mentions' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="sortMode = 'mentions'"
-          >
-            提及
-          </button>
-          <button
-            class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800"
-            :class="sortMode === 'efficiency' ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200' : 'bg-transparent'"
-            @click="sortMode = 'efficiency'"
-          >
-            效能
-          </button>
-        </div>
+        <TabSwitch v-model="sortMode" :options="sortModeOptions" />
       </div>
       <span class="text-xs text-gray-500 dark:text-gray-400">Top {{ items.length }}</span>
     </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { OriginalTerm } from '../types'
+import type { OriginalTerm } from '../../types'
 
 const props = withDefaults(defineProps<{
   text: string

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
-import type { ContextGraph, ContextNode } from '../types'
+import type { ContextGraph, ContextNode } from '../../types'
 
 const props = defineProps<{
   data?: ContextGraph

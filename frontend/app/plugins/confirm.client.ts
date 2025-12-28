@@ -1,7 +1,7 @@
 /**
  * 全局确认对话框插件
  * 
- * 基于Nuxt UI v3的useOverlay实现程序化确认对话框
+ * 基于Nuxt UI v4的useOverlay实现程序化确认对话框
  * 配合ConfirmModal组件使用，提供完整的确认/取消功能
  */
 
@@ -32,7 +32,7 @@ export default defineNuxtPlugin(() => {
     // 动态导入确认对话框组件
     const ConfirmModal = (await import('~/app/components/ConfirmModal.vue')).default
     
-    // 使用Nuxt UI v3的useOverlay来程序化创建模态框
+    // 使用Nuxt UI v4的useOverlay来程序化创建模态框
     const overlay = useOverlay()
     
     // 创建模态框实例

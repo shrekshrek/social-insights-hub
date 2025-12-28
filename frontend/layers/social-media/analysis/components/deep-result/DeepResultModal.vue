@@ -4,7 +4,7 @@
  *
  * 用于展示帖子原文深度分析或评论深度分析结果
  */
-import type { PostAnalysisWithPostInfo } from '../types'
+import type { PostAnalysisWithPostInfo } from '../../types'
 import PostDeepAnalysisResult from './PostDeepAnalysisResult.vue'
 import CommentDeepAnalysisResult from './CommentDeepAnalysisResult.vue'
 

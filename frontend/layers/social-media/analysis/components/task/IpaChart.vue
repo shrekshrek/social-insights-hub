@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption, SeriesOption } from 'echarts'
-import type { IpaAnalysis, IpaPoint } from '../types'
+import type { IpaAnalysis, IpaPoint } from '../../types'
 
 const props = defineProps<{
   data?: IpaAnalysis

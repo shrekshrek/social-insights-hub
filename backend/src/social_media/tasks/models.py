@@ -67,7 +67,21 @@ class DataTask(Base):
         nullable=False,
         default="pending",
         index=True,
-        comment="任务状态: pending/running/completed/failed",
+        comment="任务状态: pending/accepted/running/completed/failed",
+    )
+
+    # 爬虫任务优先级和进度
+    priority: Mapped[int] = mapped_column(
+        Integer, default=0, comment="任务优先级（越大越优先）"
+    )
+    crawled_count: Mapped[int] = mapped_column(
+        Integer, default=0, comment="已爬取数量（进度）"
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="爬虫接收时间"
+    )
+    accepted_by: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, comment="执行客户端标识"
     )
 
     # 统计信息

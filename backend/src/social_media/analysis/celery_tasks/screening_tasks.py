@@ -31,8 +31,12 @@ from src.social_media.analysis.base_task import AnalysisTaskBase
 from src.database import SyncSessionLocal
 from src.social_media.analysis.models import PostAnalysis, AnalysisJob
 from src.social_media.tasks.models import SocialPost
-from src.social_media.analysis.celery_tasks.progress_manager import AnalysisProgressManager
-from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
+from src.social_media.analysis.celery_tasks.progress_manager import (
+    AnalysisProgressManager,
+)
+from src.social_media.analysis.celery_tasks.llm_utils import (
+    invoke_chain_with_stats_sync,
+)
 from src.langchain.chains.screening_chain import (
     create_screening_chain,
     format_posts_for_screening,
@@ -75,7 +79,11 @@ def _analyze_batch_posts(
 
             # 2. 构建帖子内容列表
             posts_list = [
-                {"id": post_id, "title": posts[post_id].title, "content": posts[post_id].content}
+                {
+                    "id": post_id,
+                    "title": posts[post_id].title,
+                    "content": posts[post_id].content,
+                }
                 for post_id in post_ids
                 if post_id in posts
             ]
@@ -89,13 +97,13 @@ def _analyze_batch_posts(
                     "project_keywords": project_keywords,
                     "posts_content": posts_content,
                 },
-                llm_type="chat"
+                llm_type="chat",
             )
 
             # 4. 解析响应
             try:
                 # 尝试提取JSON数组
-                json_match = re.search(r'\[[\s\S]*\]', response.content)
+                json_match = re.search(r"\[[\s\S]*\]", response.content)
                 if json_match:
                     results = json.loads(json_match.group())
                 else:
@@ -184,7 +192,7 @@ def _analyze_batch_posts(
                 "success": True,
                 "analyzed": analyzed_count,
                 "failed": failed_count,
-                "token_usage": token_stats
+                "token_usage": token_stats,
             }
 
         finally:
@@ -195,7 +203,12 @@ def _analyze_batch_posts(
         progress_mgr = AnalysisProgressManager(result_id)
         for _ in range(len(post_ids)):
             progress_mgr.increment_failed()
-        return {"success": False, "analyzed": 0, "failed": len(post_ids), "error": str(e)}
+        return {
+            "success": False,
+            "analyzed": 0,
+            "failed": len(post_ids),
+            "error": str(e),
+        }
 
 
 def _update_task_status(result_id: int, status: str, **kwargs):
@@ -205,7 +218,7 @@ def _update_task_status(result_id: int, status: str, **kwargs):
         update_data = {
             "status": status,
             "updated_at": datetime.now(timezone.utc),
-            **kwargs
+            **kwargs,
         }
 
         # 当状态变为processing时，设置started_at
@@ -213,9 +226,7 @@ def _update_task_status(result_id: int, status: str, **kwargs):
             update_data["started_at"] = datetime.now(timezone.utc)
 
         stmt = (
-            update(AnalysisJob)
-            .where(AnalysisJob.id == result_id)
-            .values(**update_data)
+            update(AnalysisJob).where(AnalysisJob.id == result_id).values(**update_data)
         )
         db.execute(stmt)
         db.commit()
@@ -281,7 +292,7 @@ def finalize_screening_analysis(result_id: int, total_count: int):
 
     while time.time() - start_time < max_wait_time:
         progress = progress_mgr.get_progress()
-        current_total = progress['analyzed_count'] + progress['failed_count']
+        current_total = progress["analyzed_count"] + progress["failed_count"]
 
         logger.info(f"当前进度: {current_total}/{total_count}")
 
@@ -292,8 +303,8 @@ def finalize_screening_analysis(result_id: int, total_count: int):
 
             return {
                 "status": "completed",
-                "analyzed": progress['analyzed_count'],
-                "failed": progress['failed_count']
+                "analyzed": progress["analyzed_count"],
+                "failed": progress["failed_count"],
             }
 
         # 等待5秒后再次检查
@@ -337,8 +348,7 @@ def run_screening_task(
 
         batch_size = settings.CELERY_AI_POSTS_BATCH_SIZE
         batches = [
-            post_ids[i:i + batch_size]
-            for i in range(0, len(post_ids), batch_size)
+            post_ids[i : i + batch_size] for i in range(0, len(post_ids), batch_size)
         ]
 
         # 为每批创建一个子任务
@@ -347,7 +357,7 @@ def run_screening_task(
                 result_id=result_id,
                 task_id=task_id,
                 post_ids=batch,
-                project_keywords=project_keywords
+                project_keywords=project_keywords,
             )
             for batch in batches
         )
@@ -369,7 +379,7 @@ def run_screening_task(
             "subtasks_count": len(batches),
             "total_posts": len(post_ids),
             "batch_size": batch_size,
-            "message": f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个帖子）到队列"
+            "message": f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个帖子）到队列",
         }
 
     except Exception as e:

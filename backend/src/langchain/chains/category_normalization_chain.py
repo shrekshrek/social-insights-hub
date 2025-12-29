@@ -57,26 +57,28 @@ def create_category_normalization_chain() -> Runnable:
     """创建类别归一化的LangChain链"""
     llm = get_llm(llm_type="chat")
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", CATEGORY_NORMALIZATION_SYSTEM_TEMPLATE),
-        ("user", CATEGORY_NORMALIZATION_USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", CATEGORY_NORMALIZATION_SYSTEM_TEMPLATE),
+            ("user", CATEGORY_NORMALIZATION_USER_TEMPLATE),
+        ]
+    )
 
     return prompt | llm
 
 
 def format_categories_for_normalization(category_counts: Dict[str, int]) -> str:
     """格式化类别列表用于归一化
-    
+
     Args:
         category_counts: {类别名称: 频次}
     """
     sorted_items = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
-    
+
     lines = []
     for cat, count in sorted_items:
         lines.append(f"- {cat} ({count})")
-        
+
     return "\n".join(lines)
 
 
@@ -89,7 +91,7 @@ def parse_category_normalization_response(response_text: str) -> Dict[str, str]:
 
     try:
         result = json.loads(response_text.strip())
-        
+
         # 从 clusters 格式转换为 mapping
         mapping = {}
         for cluster in result.get("clusters", []):
@@ -97,8 +99,9 @@ def parse_category_normalization_response(response_text: str) -> Dict[str, str]:
             for term in cluster.get("original_terms", []):
                 mapping[term] = name
         return mapping
-            
-    except json.JSONDecodeError:
-        logger.error(f"Failed to decode JSON from Category Normalization response: {response_text[:100]}...")
-        return {}
 
+    except json.JSONDecodeError:
+        logger.error(
+            f"Failed to decode JSON from Category Normalization response: {response_text[:100]}..."
+        )
+        return {}

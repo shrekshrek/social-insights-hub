@@ -9,7 +9,14 @@ from src.rbac.init_data import create_module_permissions
 # 社交媒体项目管理权限
 SOCIAL_MEDIA_PERMISSIONS = create_module_permissions(
     module_name="social_media",
-    actions=["project.create", "project.view", "project.update", "project.delete", "data.view", "data.export"],
+    actions=[
+        "project.create",
+        "project.view",
+        "project.update",
+        "project.delete",
+        "data.view",
+        "data.export",
+    ],
     display_names={
         "project.create": "创建社交媒体项目",
         "project.view": "查看社交媒体项目",
@@ -25,7 +32,7 @@ SOCIAL_MEDIA_PERMISSIONS = create_module_permissions(
         "project.delete": "允许删除项目及其关联数据",
         "data.view": "允许查看项目中的原文和评论数据",
         "data.export": "允许导出数据为Excel、CSV等格式",
-    }
+    },
 )
 
 # 所有权限汇总

@@ -43,51 +43,41 @@ celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-
     # ========== 时区和编码 ==========
     timezone="Asia/Shanghai",  # 使用中国时区
     enable_utc=True,
-
     # ========== 任务跟踪 ==========
     task_track_started=True,  # 跟踪任务启动状态
     task_send_sent_event=True,  # 发送任务发送事件
-
     # ========== 任务超时配置 ==========
     task_time_limit=7200,  # 硬超时：2小时（用于长时间AI任务）
     task_soft_time_limit=6600,  # 软超时：1小时50分钟
-
     # ========== Worker配置 ==========
     worker_prefetch_multiplier=1,  # 每次只预取1个任务，避免内存堆积
     worker_max_tasks_per_child=100,  # 每个worker进程最多执行100个任务后重启
     worker_disable_rate_limits=False,  # 启用速率限制
-
     # ========== 结果配置 ==========
     result_extended=True,  # 启用扩展任务结果属性
     result_expires=86400,  # 结果过期时间：24小时
     result_backend_transport_options={
         "master_name": "mymaster",
     },
-
     # ========== 连接配置 ==========
     broker_connection_retry_on_startup=True,  # 启动时自动重试连接
     broker_connection_retry=True,  # 连接断开后自动重试
     broker_connection_max_retries=10,  # 最多重试10次
-
     # ========== 任务路由配置（预留，后续模块使用） ==========
     # task_routes={
     #     "ai.screening.*": {"queue": "screening"},
     #     "ai.analysis.*": {"queue": "analysis"},
     #     "ai.clustering.*": {"queue": "clustering"},
     # },
-
     # ========== 任务优先级配置（预留） ==========
     # task_default_priority=5,
     # task_inherit_parent_priority=True,
-
     # ========== 错误处理 ==========
     task_acks_late=True,  # 任务执行完成后才确认（防止任务丢失）
     task_reject_on_worker_lost=True,  # Worker丢失时拒绝任务
-
     # ========== 性能优化 ==========
     # worker_pool 通过命令行参数指定
     # worker_concurrency 通过命令行参数指定

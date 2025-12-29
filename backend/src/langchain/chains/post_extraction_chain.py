@@ -74,22 +74,21 @@ POST_EXTRACTION_USER_TEMPLATE = """请提取以下文本的品牌/产品信息�
 
 def create_post_extraction_chain() -> Runnable:
     """创建帖子信息提取的LangChain链
-    
+
     Returns:
         Runnable: 用于帖子信息提取的LangChain可执行链
     """
     llm = get_llm(llm_type="chat")
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", POST_EXTRACTION_SYSTEM_TEMPLATE),
-        ("user", POST_EXTRACTION_USER_TEMPLATE),
-    ])
-    
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", POST_EXTRACTION_SYSTEM_TEMPLATE),
+            ("user", POST_EXTRACTION_USER_TEMPLATE),
+        ]
+    )
+
     # 在新项目中，我们推荐使用 with_structured_output (LangChain > 0.1)
     # 或者直接在调用处解析JSON（保持与screening_tasks一致的模式）
     # 这里我们返回 runnables 以供 task 中使用
-    
+
     return prompt | llm
-
-
-

@@ -49,12 +49,11 @@ sync_engine = create_engine(
 )
 
 # Create sync sessionmaker for Celery tasks
-SyncSessionLocal = sessionmaker(
-    sync_engine, class_=Session, expire_on_commit=False
-)
+SyncSessionLocal = sessionmaker(sync_engine, class_=Session, expire_on_commit=False)
 
 
 # ==================== Dependencies ====================
+
 
 # Dependency to get a DB session (async) - for FastAPI
 async def get_async_db():

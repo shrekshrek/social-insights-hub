@@ -15,9 +15,7 @@ async def get_user_by_username(db: AsyncSession, username: str):
     """
     result = await db.execute(
         select(models.User)
-        .options(
-            selectinload(models.User.user_roles).selectinload(UserRole.role)
-        )
+        .options(selectinload(models.User.user_roles).selectinload(UserRole.role))
         .where(models.User.username == username)
     )
     return result.scalar_one_or_none()

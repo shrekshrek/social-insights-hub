@@ -8,6 +8,7 @@ from src.schemas import CustomBaseModel, PaginatedResponse
 
 # ==================== Platform Schemas ====================
 
+
 class PlatformBase(CustomBaseModel):
     """平台基础模型"""
 
@@ -33,6 +34,7 @@ PlatformListResponse = PaginatedResponse[PlatformRead]
 
 # ==================== SocialProject Schemas ====================
 
+
 class SocialProjectBase(CustomBaseModel):
     """社交项目基础模型"""
 
@@ -46,11 +48,15 @@ class QuickTaskCreate(CustomBaseModel):
     """快速创建任务配置（仅支持search和homefeed）"""
 
     platform_ids: List[int] = Field(..., min_length=1, description="平台ID列表")
-    task_type: Literal["search", "homefeed"] = Field(..., description="任务类型（仅支持search和homefeed）")
-    data_source: Literal["local_upload", "remote_crawler"] = Field(..., description="数据源")
+    task_type: Literal["search", "homefeed"] = Field(
+        ..., description="任务类型（仅支持search和homefeed）"
+    )
+    data_source: Literal["local_upload", "remote_crawler"] = Field(
+        ..., description="数据源"
+    )
     keywords: Optional[str] = Field(None, description="搜索关键词（search类型必填）")
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_keywords(self):
         """验证search任务必须提供关键词"""
         if self.task_type == "search" and not self.keywords:
@@ -61,14 +67,20 @@ class QuickTaskCreate(CustomBaseModel):
 class SocialProjectCreate(SocialProjectBase):
     """创建社交项目请求模型"""
 
-    participant_ids: List[int] = Field(default_factory=list, description="参与者用户ID列表")
-    quick_tasks: Optional[QuickTaskCreate] = Field(None, description="同时创建任务（可选）")
+    participant_ids: List[int] = Field(
+        default_factory=list, description="参与者用户ID列表"
+    )
+    quick_tasks: Optional[QuickTaskCreate] = Field(
+        None, description="同时创建任务（可选）"
+    )
 
 
 class SocialProjectUpdate(CustomBaseModel):
     """更新社交项目请求模型"""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=255, description="项目名称")
+    name: Optional[str] = Field(
+        None, min_length=1, max_length=255, description="项目名称"
+    )
     description: Optional[str] = Field(None, description="项目描述")
     project_start_date: Optional[datetime] = Field(None, description="项目开始时间")
     project_end_date: Optional[datetime] = Field(None, description="项目结束时间")
@@ -93,7 +105,9 @@ class SocialProjectReadWithOwner(SocialProjectRead):
     """带owner信息的项目读取模型"""
 
     owner_username: str = Field(..., description="项目创建者用户名")
-    participant_usernames: List[str] = Field(default_factory=list, description="参与者用户名列表")
+    participant_usernames: List[str] = Field(
+        default_factory=list, description="参与者用户名列表"
+    )
 
 
 SocialProjectListResponse = PaginatedResponse[SocialProjectReadWithOwner]
@@ -103,25 +117,37 @@ class SocialProjectCreateResponse(CustomBaseModel):
     """创建项目响应（包含项目和可选的批量创建任务）"""
 
     project: SocialProjectRead = Field(..., description="创建的项目")
-    created_tasks: List[dict] = Field(default_factory=list, description="批量创建的任务列表")
+    created_tasks: List[dict] = Field(
+        default_factory=list, description="批量创建的任务列表"
+    )
 
 
 # ==================== Project-Participant Management ====================
 
+
 class ProjectParticipantAssignment(CustomBaseModel):
     """项目-参与者关联模型"""
 
-    user_ids: List[int] = Field(..., min_length=1, description="要添加的参与者用户ID列表")
+    user_ids: List[int] = Field(
+        ..., min_length=1, description="要添加的参与者用户ID列表"
+    )
 
 
 # ==================== Deep Analysis Settings ====================
 
+
 class DeepAnalysisSettings(CustomBaseModel):
     """深度分析阈值配置"""
 
-    spam_score_max: Optional[float] = Field(None, ge=0, le=10, description="广告分数上限")
-    value_score_min: Optional[float] = Field(None, ge=0, le=10, description="价值分数下限")
-    relevance_score_min: Optional[float] = Field(None, ge=0, le=10, description="相关性分数下限")
+    spam_score_max: Optional[float] = Field(
+        None, ge=0, le=10, description="广告分数上限"
+    )
+    value_score_min: Optional[float] = Field(
+        None, ge=0, le=10, description="价值分数下限"
+    )
+    relevance_score_min: Optional[float] = Field(
+        None, ge=0, le=10, description="相关性分数下限"
+    )
 
 
 class UpdateDeepAnalysisSettings(CustomBaseModel):

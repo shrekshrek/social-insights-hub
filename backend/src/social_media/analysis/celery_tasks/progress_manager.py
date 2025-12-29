@@ -53,14 +53,18 @@ class AnalysisProgressManager:
             self.redis_client.delete(self.key_call_details)
 
             # 存储总数以便计算进度
-            self.redis_client.set(f"analysis:result:{self.result_id}:total_count", total_count)
+            self.redis_client.set(
+                f"analysis:result:{self.result_id}:total_count", total_count
+            )
 
             # 更新数据库：设置状态为processing和started_at
             db = SyncSessionLocal()
             try:
-                stmt = select(AnalysisJob).where(
-                    AnalysisJob.id == self.result_id
-                ).with_for_update()
+                stmt = (
+                    select(AnalysisJob)
+                    .where(AnalysisJob.id == self.result_id)
+                    .with_for_update()
+                )
 
                 result = db.execute(stmt)
                 analysis_job = result.scalar_one_or_none()
@@ -69,7 +73,9 @@ class AnalysisProgressManager:
                     analysis_job.status = "processing"
                     analysis_job.started_at = datetime.now(timezone.utc)
                     db.commit()
-                    logger.info(f"初始化分析进度: result_id={self.result_id}, total_count={total_count}, started_at已设置")
+                    logger.info(
+                        f"初始化分析进度: result_id={self.result_id}, total_count={total_count}, started_at已设置"
+                    )
             finally:
                 db.close()
 
@@ -105,12 +111,12 @@ class AnalysisProgressManager:
 
             # 2. 追加调用详情到列表（一次API调用记录一条）
             # token_stats 格式: { 'summary': { 'total_input_tokens': ..., ... }, 'call_details': [...] }
-            summary = token_stats.get('summary', {})
-            input_tokens = summary.get('total_input_tokens', 0)
-            output_tokens = summary.get('total_output_tokens', 0)
-            total_tokens = summary.get('total_tokens', 0)
-            cost_cny = summary.get('total_cost_cny', 0.0)
-            duration_seconds = summary.get('total_duration_seconds', 0.0)
+            summary = token_stats.get("summary", {})
+            input_tokens = summary.get("total_input_tokens", 0)
+            output_tokens = summary.get("total_output_tokens", 0)
+            total_tokens = summary.get("total_tokens", 0)
+            cost_cny = summary.get("total_cost_cny", 0.0)
+            duration_seconds = summary.get("total_duration_seconds", 0.0)
 
             call_detail = {
                 "input_tokens": input_tokens,
@@ -119,7 +125,7 @@ class AnalysisProgressManager:
                 "cost_cny": cost_cny,
                 "duration_seconds": duration_seconds,
                 "batch_size": count,  # 记录本批次处理了多少条
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             self.redis_client.rpush(self.key_call_details, json.dumps(call_detail))
 
@@ -186,9 +192,10 @@ class AnalysisProgressManager:
                 "analyzed_count": analyzed_count,
                 "failed_count": failed_count,
                 "token_usage": {
-                    k: float(v) if '.' in v else int(v)
-                    for k, v in token_usage.items()
-                } if token_usage else {}
+                    k: float(v) if "." in v else int(v) for k, v in token_usage.items()
+                }
+                if token_usage
+                else {},
             }
 
         except Exception as e:
@@ -208,25 +215,32 @@ class AnalysisProgressManager:
             call_details = []
             for idx, detail_json in enumerate(call_details_raw):
                 detail = json.loads(detail_json)
-                detail['call_index'] = idx
+                detail["call_index"] = idx
                 call_details.append(detail)
 
             # 获取汇总统计
             token_stats = self.redis_client.hgetall(self.key_token_usage)
-            summary = {
-                k: float(v) if '.' in v else int(v)
-                for k, v in token_stats.items()
-            } if token_stats else {}
+            summary = (
+                {k: float(v) if "." in v else int(v) for k, v in token_stats.items()}
+                if token_stats
+                else {}
+            )
 
             # 计算平均值
             if summary.get("total_calls", 0) > 0:
-                summary["avg_tokens_per_call"] = summary["total_tokens"] / summary["total_calls"]
-                summary["avg_cost_per_call"] = summary["total_cost_cny"] / summary["total_calls"]
+                summary["avg_tokens_per_call"] = (
+                    summary["total_tokens"] / summary["total_calls"]
+                )
+                summary["avg_cost_per_call"] = (
+                    summary["total_cost_cny"] / summary["total_calls"]
+                )
 
             # 更新数据库
-            stmt = select(AnalysisJob).where(
-                AnalysisJob.id == self.result_id
-            ).with_for_update()
+            stmt = (
+                select(AnalysisJob)
+                .where(AnalysisJob.id == self.result_id)
+                .with_for_update()
+            )
 
             result = db.execute(stmt)
             analysis_job = result.scalar_one_or_none()
@@ -236,14 +250,16 @@ class AnalysisProgressManager:
                 analysis_job.failed_count = failed_count
                 analysis_job.token_usage = {
                     "summary": summary,
-                    "call_details": call_details
+                    "call_details": call_details,
                 }
                 analysis_job.updated_at = datetime.now(timezone.utc)
 
                 db.commit()
 
                 # 更新最后同步时间
-                self.redis_client.set(self.key_last_sync, datetime.now(timezone.utc).isoformat())
+                self.redis_client.set(
+                    self.key_last_sync, datetime.now(timezone.utc).isoformat()
+                )
 
                 logger.info(
                     f"✅ 批量同步完成: analyzed={analyzed_count}, "
@@ -270,9 +286,11 @@ class AnalysisProgressManager:
             # 更新任务状态为completed，并计算processing_time
             db = SyncSessionLocal()
             try:
-                stmt = select(AnalysisJob).where(
-                    AnalysisJob.id == self.result_id
-                ).with_for_update()
+                stmt = (
+                    select(AnalysisJob)
+                    .where(AnalysisJob.id == self.result_id)
+                    .with_for_update()
+                )
 
                 result = db.execute(stmt)
                 analysis_job = result.scalar_one_or_none()
@@ -288,7 +306,9 @@ class AnalysisProgressManager:
                         started_at = analysis_job.started_at
                         if started_at.tzinfo is None:
                             started_at = started_at.replace(tzinfo=timezone.utc)
-                        analysis_job.processing_time = int((completed_at - started_at).total_seconds())
+                        analysis_job.processing_time = int(
+                            (completed_at - started_at).total_seconds()
+                        )
                         logger.info(f"任务完成，耗时: {analysis_job.processing_time}秒")
 
                     db.commit()
@@ -314,27 +334,34 @@ class AnalysisProgressManager:
         """降级方案：直接写入数据库（Redis不可用时）- 单条版本"""
         return self._fallback_increment_analyzed_batch(1, token_stats)
 
-    def _fallback_increment_analyzed_batch(self, count: int, token_stats: Dict[str, Any]) -> int:
+    def _fallback_increment_analyzed_batch(
+        self, count: int, token_stats: Dict[str, Any]
+    ) -> int:
         """降级方案：直接写入数据库（Redis不可用时）- 批量版本"""
         db = SyncSessionLocal()
         try:
-            stmt = select(AnalysisJob).where(
-                AnalysisJob.id == self.result_id
-            ).with_for_update()
+            stmt = (
+                select(AnalysisJob)
+                .where(AnalysisJob.id == self.result_id)
+                .with_for_update()
+            )
 
             result = db.execute(stmt)
             analysis_job = result.scalar_one_or_none()
 
             if analysis_job:
-                current_usage = analysis_job.token_usage or {"summary": {}, "call_details": []}
+                current_usage = analysis_job.token_usage or {
+                    "summary": {},
+                    "call_details": [],
+                }
 
                 # token_stats 格式: { 'summary': { 'total_input_tokens': ..., ... }, 'call_details': [...] }
-                stats_summary = token_stats.get('summary', {})
-                input_tokens = stats_summary.get('total_input_tokens', 0)
-                output_tokens = stats_summary.get('total_output_tokens', 0)
-                total_tokens = stats_summary.get('total_tokens', 0)
-                cost_cny = stats_summary.get('total_cost_cny', 0.0)
-                duration_seconds = stats_summary.get('total_duration_seconds', 0.0)
+                stats_summary = token_stats.get("summary", {})
+                input_tokens = stats_summary.get("total_input_tokens", 0)
+                output_tokens = stats_summary.get("total_output_tokens", 0)
+                total_tokens = stats_summary.get("total_tokens", 0)
+                cost_cny = stats_summary.get("total_cost_cny", 0.0)
+                duration_seconds = stats_summary.get("total_duration_seconds", 0.0)
 
                 new_call_detail = {
                     "call_index": len(current_usage.get("call_details", [])),
@@ -344,21 +371,35 @@ class AnalysisProgressManager:
                     "cost_cny": cost_cny,
                     "duration_seconds": duration_seconds,
                     "batch_size": count,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 current_usage.setdefault("call_details", []).append(new_call_detail)
 
                 summary = current_usage.setdefault("summary", {})
-                summary["total_calls"] = summary.get("total_calls", 0) + 1  # 一次API调用
-                summary["total_input_tokens"] = summary.get("total_input_tokens", 0) + input_tokens
-                summary["total_output_tokens"] = summary.get("total_output_tokens", 0) + output_tokens
+                summary["total_calls"] = (
+                    summary.get("total_calls", 0) + 1
+                )  # 一次API调用
+                summary["total_input_tokens"] = (
+                    summary.get("total_input_tokens", 0) + input_tokens
+                )
+                summary["total_output_tokens"] = (
+                    summary.get("total_output_tokens", 0) + output_tokens
+                )
                 summary["total_tokens"] = summary.get("total_tokens", 0) + total_tokens
-                summary["total_cost_cny"] = summary.get("total_cost_cny", 0.0) + cost_cny
-                summary["total_duration_seconds"] = summary.get("total_duration_seconds", 0.0) + duration_seconds
+                summary["total_cost_cny"] = (
+                    summary.get("total_cost_cny", 0.0) + cost_cny
+                )
+                summary["total_duration_seconds"] = (
+                    summary.get("total_duration_seconds", 0.0) + duration_seconds
+                )
 
                 if summary["total_calls"] > 0:
-                    summary["avg_tokens_per_call"] = summary["total_tokens"] / summary["total_calls"]
-                    summary["avg_cost_per_call"] = summary["total_cost_cny"] / summary["total_calls"]
+                    summary["avg_tokens_per_call"] = (
+                        summary["total_tokens"] / summary["total_calls"]
+                    )
+                    summary["avg_cost_per_call"] = (
+                        summary["total_cost_cny"] / summary["total_calls"]
+                    )
 
                 analysis_job.analyzed_count += count  # 按实际处理数量增加
                 analysis_job.token_usage = current_usage
@@ -376,9 +417,11 @@ class AnalysisProgressManager:
         """降级方案：直接写入数据库（Redis不可用时）"""
         db = SyncSessionLocal()
         try:
-            stmt = select(AnalysisJob).where(
-                AnalysisJob.id == self.result_id
-            ).with_for_update()
+            stmt = (
+                select(AnalysisJob)
+                .where(AnalysisJob.id == self.result_id)
+                .with_for_update()
+            )
 
             result = db.execute(stmt)
             analysis_job = result.scalar_one_or_none()

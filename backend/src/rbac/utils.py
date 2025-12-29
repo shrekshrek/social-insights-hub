@@ -80,11 +80,13 @@ def create_module_permissions(
         else:
             description = f"允许执行{module_name}的{action_name}操作"
 
-        permissions.append({
-            "target": target,
-            "action": action_name,
-            "display_name": display_name,
-            "description": description,
-        })
+        permissions.append(
+            {
+                "target": target,
+                "action": action_name,
+                "display_name": display_name,
+                "description": description,
+            }
+        )
 
     return permissions

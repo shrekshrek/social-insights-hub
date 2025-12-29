@@ -64,10 +64,12 @@ def create_screening_chain() -> Runnable:
     """
     llm = get_llm(llm_type="chat")
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SCREENING_SYSTEM_TEMPLATE),
-        ("user", SCREENING_USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SCREENING_SYSTEM_TEMPLATE),
+            ("user", SCREENING_USER_TEMPLATE),
+        ]
+    )
 
     return prompt | llm
 
@@ -83,9 +85,9 @@ def format_posts_for_screening(posts: List[Dict[str, Any]]) -> str:
     """
     posts_content = []
     for i, post in enumerate(posts, 1):
-        post_id = post.get('id')
-        title = post.get('title') or '无'
-        content = post.get('content') or ''
+        post_id = post.get("id")
+        title = post.get("title") or "无"
+        content = post.get("content") or ""
 
         posts_content.append(f"""
 帖子{i}（ID:{post_id}）：
@@ -93,4 +95,4 @@ def format_posts_for_screening(posts: List[Dict[str, Any]]) -> str:
 正文：{content}
 """)
 
-    return ''.join(posts_content)
+    return "".join(posts_content)

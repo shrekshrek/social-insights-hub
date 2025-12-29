@@ -26,22 +26,45 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("project_id", sa.Integer(), nullable=False, comment="关联的项目ID"),
         sa.Column("user_id", sa.Integer(), nullable=False, comment="创建快照的用户ID"),
-        sa.Column("included_task_ids", sa.JSON(), nullable=False, comment="参与合并的任务ID列表"),
+        sa.Column(
+            "included_task_ids",
+            sa.JSON(),
+            nullable=False,
+            comment="参与合并的任务ID列表",
+        ),
         sa.Column("result_data", sa.JSON(), nullable=False, comment="快照结果数据"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["project_id"], ["social_projects.id"], ondelete="CASCADE"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["project_id"], ["social_projects.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
 
-    op.create_index("idx_project_snapshots_project", "project_analysis_snapshots", ["project_id"])
-    op.create_index("idx_project_snapshots_created_at", "project_analysis_snapshots", ["created_at"])
+    op.create_index(
+        "idx_project_snapshots_project", "project_analysis_snapshots", ["project_id"]
+    )
+    op.create_index(
+        "idx_project_snapshots_created_at", "project_analysis_snapshots", ["created_at"]
+    )
 
 
 def downgrade() -> None:
-    op.drop_index("idx_project_snapshots_created_at", table_name="project_analysis_snapshots")
-    op.drop_index("idx_project_snapshots_project", table_name="project_analysis_snapshots")
+    op.drop_index(
+        "idx_project_snapshots_created_at", table_name="project_analysis_snapshots"
+    )
+    op.drop_index(
+        "idx_project_snapshots_project", table_name="project_analysis_snapshots"
+    )
     op.drop_table("project_analysis_snapshots")
-
-

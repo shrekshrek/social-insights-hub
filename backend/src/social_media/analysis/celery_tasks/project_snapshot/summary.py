@@ -125,9 +125,7 @@ def generate_project_reports(
         # Topic: 注入 痛点/爽点/未满足需求 的 original_terms
         pains_terms = _extract_topic_terms_by_type(intent_layer, "pains", 20)
         gains_terms = _extract_topic_terms_by_type(intent_layer, "gains", 20)
-        unmet_terms = _extract_original_terms(
-            intent_layer.get("unmet_needs") or [], 15
-        )
+        unmet_terms = _extract_original_terms(intent_layer.get("unmet_needs") or [], 15)
         chain = create_project_snapshot_topic_report_chain()
         resp, stats = invoke_chain_with_stats_sync(
             chain,

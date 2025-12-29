@@ -32,138 +32,104 @@ class Settings(BaseSettings):
     # ========== AI Service Configuration ==========
     # DeepSeek API Configuration
     DEEPSEEK_API_KEY: str | None = Field(
-        default=None,
-        description="DeepSeek API Key (required for AI features)"
+        default=None, description="DeepSeek API Key (required for AI features)"
     )
     DEEPSEEK_BASE_URL: str = Field(
-        default="https://api.deepseek.com",
-        description="DeepSeek API Base URL"
+        default="https://api.deepseek.com", description="DeepSeek API Base URL"
     )
 
     # DeepSeek Model Configuration
     DEEPSEEK_CHAT_MODEL: str = Field(
         default="deepseek-chat",
-        description="Model for data processing tasks (screening, extraction)"
+        description="Model for data processing tasks (screening, extraction)",
     )
     DEEPSEEK_CHAT_MAX_TOKENS: int = Field(
-        default=8192,
-        description="Max tokens for Chat model"
+        default=8192, description="Max tokens for Chat model"
     )
     DEEPSEEK_REASONER_MODEL: str = Field(
         default="deepseek-reasoner",
-        description="Model for complex analysis (clustering, competitive analysis)"
+        description="Model for complex analysis (clustering, competitive analysis)",
     )
     DEEPSEEK_REASONER_MAX_TOKENS: int = Field(
-        default=65536,
-        description="Max tokens for Reasoner model"
+        default=65536, description="Max tokens for Reasoner model"
     )
     DEEPSEEK_TEMPERATURE: float = Field(
-        default=0.0,
-        description="Model temperature (0 = deterministic)"
+        default=0.0, description="Model temperature (0 = deterministic)"
     )
 
     # DeepSeek Pricing Configuration (CNY per million tokens)
     DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION: float = Field(
-        default=2.0,
-        description="Chat model input price: CNY/million tokens"
+        default=2.0, description="Chat model input price: CNY/million tokens"
     )
     DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION: float = Field(
-        default=3.0,
-        description="Chat model output price: CNY/million tokens"
+        default=3.0, description="Chat model output price: CNY/million tokens"
     )
     DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION: float = Field(
-        default=2.0,
-        description="Reasoner model input price: CNY/million tokens"
+        default=2.0, description="Reasoner model input price: CNY/million tokens"
     )
     DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION: float = Field(
-        default=3.0,
-        description="Reasoner model output price: CNY/million tokens"
+        default=3.0, description="Reasoner model output price: CNY/million tokens"
     )
 
     # ========== Celery Task Configuration ==========
     # AI Task Concurrency Configuration
     CELERY_AI_SCREENING_CONCURRENT_STREAMS: int = Field(
-        default=100,
-        description="Concurrent streams for AI screening tasks"
+        default=100, description="Concurrent streams for AI screening tasks"
     )
     CELERY_AI_DEEP_ANALYSIS_CONCURRENCY: int = Field(
-        default=100,
-        description="Concurrent LLM calls for deep analysis"
+        default=100, description="Concurrent LLM calls for deep analysis"
     )
     CELERY_AI_POSTS_BATCH_SIZE: int = Field(
-        default=5,
-        description="Batch size for AI post processing"
+        default=5, description="Batch size for AI post processing"
     )
     CELERY_AI_COMMENTS_BATCH_SIZE: int = Field(
-        default=10,
-        description="Batch size for AI comment processing"
+        default=10, description="Batch size for AI comment processing"
     )
     CELERY_TASK_MAX_ITEMS_LIMIT: int = Field(
-        default=20000,
-        description="Max items per Celery task"
+        default=20000, description="Max items per Celery task"
     )
     CELERY_TASK_MAX_COMMENTS_PER_POST_FOR_DEEP_ANALYSIS: int = Field(
-        default=50,
-        description="Max comments per post for deep analysis"
+        default=50, description="Max comments per post for deep analysis"
     )
 
     # Database Batch Commit Configuration
     DB_COMMIT_AFTER_BATCH_COUNT: int = Field(
-        default=20,
-        description="Commit to DB after processing N batches"
+        default=20, description="Commit to DB after processing N batches"
     )
 
     # ========== Batch Analysis Framework Configuration ==========
     BATCH_ANALYSIS_DEFAULT_BATCH_SIZE: int = Field(
-        default=30,
-        ge=1,
-        le=100,
-        description="Default batch size for global analysis"
+        default=30, ge=1, le=100, description="Default batch size for global analysis"
     )
     BATCH_ANALYSIS_MIN_BATCH_SIZE: int = Field(
-        default=20,
-        ge=1,
-        description="Minimum batch size"
+        default=20, ge=1, description="Minimum batch size"
     )
     BATCH_ANALYSIS_MAX_BATCH_SIZE: int = Field(
-        default=40,
-        ge=1,
-        le=100,
-        description="Maximum batch size"
+        default=40, ge=1, le=100, description="Maximum batch size"
     )
     BATCH_ANALYSIS_MAX_CONCURRENT_BATCHES: int = Field(
-        default=100,
-        ge=1,
-        le=200,
-        description="Maximum concurrent batches"
+        default=100, ge=1, le=200, description="Maximum concurrent batches"
     )
     BATCH_ANALYSIS_CONCURRENT_TIMEOUT: int = Field(
         default=600,
         ge=60,
         le=3600,
-        description="Concurrent processing timeout (seconds)"
+        description="Concurrent processing timeout (seconds)",
     )
     BATCH_ANALYSIS_MAX_RETRIES: int = Field(
-        default=2,
-        ge=0,
-        le=5,
-        description="Max retries on failure"
+        default=2, ge=0, le=5, description="Max retries on failure"
     )
     BATCH_ANALYSIS_ENABLE_CONCURRENT: bool = Field(
-        default=True,
-        description="Enable concurrent processing"
+        default=True, description="Enable concurrent processing"
     )
     BATCH_ANALYSIS_ENABLE_BATCHING: bool = Field(
-        default=True,
-        description="Enable batch processing"
+        default=True, description="Enable batch processing"
     )
     BATCH_ANALYSIS_ENABLE_DYNAMIC_SIZING: bool = Field(
-        default=True,
-        description="Enable dynamic batch size adjustment"
+        default=True, description="Enable dynamic batch size adjustment"
     )
     BATCH_ANALYSIS_LOG_TOKEN_USAGE: bool = Field(
-        default=True,
-        description="Log token usage for cost tracking"
+        default=True, description="Log token usage for cost tracking"
     )
 
     # API settings

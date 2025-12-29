@@ -14,40 +14,38 @@ from .models import SocialProject, Platform
 def is_admin_or_super_admin(user: User) -> bool:
     """检查用户是否是管理员或超级管理员"""
     role_names = [ur.role.name for ur in user.user_roles]
-    return 'admin' in role_names or 'super_admin' in role_names
+    return "admin" in role_names or "super_admin" in role_names
 
 
 async def validate_platform_exists(
-    platform_id: Annotated[int, Path()],
-    db: AsyncSession = Depends(get_async_db)
+    platform_id: Annotated[int, Path()], db: AsyncSession = Depends(get_async_db)
 ) -> Platform:
     """验证平台是否存在"""
     platform = await crud.get_platform_by_id(db, platform_id)
     if not platform:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform with id {platform_id} not found"
+            detail=f"Platform with id {platform_id} not found",
         )
     return platform
 
 
 async def validate_project_exists(
-    project_id: Annotated[int, Path()],
-    db: AsyncSession = Depends(get_async_db)
+    project_id: Annotated[int, Path()], db: AsyncSession = Depends(get_async_db)
 ) -> SocialProject:
     """验证项目是否存在"""
     project = await crud.get_project_by_id(db, project_id, load_relations=True)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with id {project_id} not found"
+            detail=f"Project with id {project_id} not found",
         )
     return project
 
 
 async def validate_project_access(
     project: SocialProject = Depends(validate_project_exists),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> SocialProject:
     """
     验证用户是否有项目访问权限
@@ -72,13 +70,13 @@ async def validate_project_access(
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="You don't have access to this project. Only the project owner, participants, or administrators can access this project."
+        detail="You don't have access to this project. Only the project owner, participants, or administrators can access this project.",
     )
 
 
 async def validate_project_owner(
     project: SocialProject = Depends(validate_project_exists),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> SocialProject:
     """
     验证用户是否有项目管理权限（修改/删除）
@@ -95,6 +93,6 @@ async def validate_project_owner(
     if project.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the project owner or administrators can perform this action"
+            detail="Only the project owner or administrators can perform this action",
         )
     return project

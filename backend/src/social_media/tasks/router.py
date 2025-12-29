@@ -11,10 +11,7 @@ from src.pagination import get_pagination_params, PaginationParams
 from src.schemas import MessageResponse
 
 from . import schemas, service
-from .dependencies import (
-    validate_task_access,
-    validate_task_owner
-)
+from .dependencies import validate_task_access, validate_task_owner
 from .models import DataTask
 
 
@@ -26,12 +23,13 @@ router = APIRouter(
 
 # ==================== Task Management APIs ====================
 
+
 @router.post(
     "",
     response_model=schemas.DataTaskRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create new task",
-    description="创建新的社交媒体数据获取任务"
+    description="创建新的社交媒体数据获取任务",
 )
 async def create_task(
     task_in: schemas.DataTaskCreate,
@@ -56,7 +54,7 @@ async def create_task(
     response_model=schemas.DataTaskListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get tasks list",
-    description="获取任务列表，支持过滤和分页"
+    description="获取任务列表，支持过滤和分页",
 )
 async def get_tasks(
     pagination: PaginationParams = Depends(get_pagination_params),
@@ -95,7 +93,7 @@ async def get_tasks(
         data_source=data_source,
         creator_id=creator_id,
         search=search,
-        current_user_id=current_user.id
+        current_user_id=current_user.id,
     )
 
     # 转换为带关联信息的response
@@ -121,7 +119,7 @@ async def get_tasks(
     response_model=schemas.DataTaskReadWithRelations,
     status_code=status.HTTP_200_OK,
     summary="Get task by ID",
-    description="获取任务详情"
+    description="获取任务详情",
 )
 async def get_task(
     task: DataTask = Depends(validate_task_access),
@@ -145,7 +143,7 @@ async def get_task(
     response_model=schemas.DataTaskRead,
     status_code=status.HTTP_200_OK,
     summary="Update task",
-    description="更新任务信息"
+    description="更新任务信息",
 )
 async def update_task(
     task_update: schemas.DataTaskUpdate,
@@ -166,7 +164,7 @@ async def update_task(
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
     summary="Delete task",
-    description="删除任务"
+    description="删除任务",
 )
 async def delete_task(
     db: AsyncSession = Depends(get_async_db),
@@ -187,7 +185,7 @@ async def delete_task(
     response_model=schemas.DataTaskRead,
     status_code=status.HTTP_200_OK,
     summary="Clear task data",
-    description="清空任务的所有数据以便重新上传或采集"
+    description="清空任务的所有数据以便重新上传或采集",
 )
 async def clear_task_data(
     db: AsyncSession = Depends(get_async_db),
@@ -205,12 +203,13 @@ async def clear_task_data(
 
 # ==================== JSON Upload APIs ====================
 
+
 @router.post(
     "/{task_id}/upload",
     response_model=schemas.JSONUploadResponse,
     status_code=status.HTTP_200_OK,
     summary="Upload JSON data",
-    description="上传本地JSON数据到任务"
+    description="上传本地JSON数据到任务",
 )
 async def upload_json_data(
     task_id: int,
@@ -251,22 +250,20 @@ async def upload_json_data(
     ```
     """
     result = await service.process_json_upload(
-        db,
-        task_id=task_id,
-        upload_data=upload_data,
-        current_user_id=current_user.id
+        db, task_id=task_id, upload_data=upload_data, current_user_id=current_user.id
     )
     return schemas.JSONUploadResponse(**result)
 
 
 # ==================== Data Query APIs ====================
 
+
 @router.get(
     "/{task_id}/posts",
     response_model=schemas.SocialPostListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get task posts",
-    description="获取任务的原文列表"
+    description="获取任务的原文列表",
 )
 async def get_task_posts(
     task_id: int,
@@ -284,7 +281,7 @@ async def get_task_posts(
         task_id=task_id,
         page=pagination.page,
         page_size=pagination.page_size,
-        current_user_id=current_user.id
+        current_user_id=current_user.id,
     )
 
     # 转换为分页响应
@@ -293,7 +290,7 @@ async def get_task_posts(
         items=posts_read,
         total=total,
         page=pagination.page,
-        page_size=pagination.page_size
+        page_size=pagination.page_size,
     )
 
 
@@ -302,7 +299,7 @@ async def get_task_posts(
     response_model=schemas.SocialCommentListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get task comments",
-    description="获取任务的评论列表"
+    description="获取任务的评论列表",
 )
 async def get_task_comments(
     task_id: int,
@@ -326,7 +323,7 @@ async def get_task_comments(
         page=pagination.page,
         page_size=pagination.page_size,
         current_user_id=current_user.id,
-        post_id=post_id
+        post_id=post_id,
     )
 
     # 转换为分页响应
@@ -335,7 +332,7 @@ async def get_task_comments(
         items=comments_read,
         total=total,
         page=pagination.page,
-        page_size=pagination.page_size
+        page_size=pagination.page_size,
     )
 
 
@@ -344,7 +341,7 @@ async def get_task_comments(
     response_model=schemas.SocialPostWithComments,
     status_code=status.HTTP_200_OK,
     summary="Get post with comments",
-    description="获取原文及其评论"
+    description="获取原文及其评论",
 )
 async def get_post_with_comments(
     post_id: int,
@@ -363,7 +360,7 @@ async def get_post_with_comments(
         post_id=post_id,
         page=pagination.page,
         page_size=pagination.page_size,
-        current_user_id=current_user.id
+        current_user_id=current_user.id,
     )
 
     # 构建响应
@@ -379,7 +376,7 @@ async def get_post_with_comments(
     response_model=schemas.PostQueryResponse,
     status_code=status.HTTP_200_OK,
     summary="Query post across tasks",
-    description="跨任务查询同一帖子的历史数据"
+    description="跨任务查询同一帖子的历史数据",
 )
 async def query_cross_task_posts(
     platform_id: int,
@@ -405,7 +402,7 @@ async def query_cross_task_posts(
         platform_id=platform_id,
         post_id_on_platform=post_id_on_platform,
         project_id=project_id,
-        current_user_id=current_user.id
+        current_user_id=current_user.id,
     )
 
     posts_read = [schemas.SocialPostRead.model_validate(p) for p in posts]
@@ -416,7 +413,7 @@ async def query_cross_task_posts(
     return schemas.PostQueryResponse(
         posts=posts_read,
         total_tasks=len(task_ids),
-        message=f"Found {len(posts)} records across {len(task_ids)} tasks"
+        message=f"Found {len(posts)} records across {len(task_ids)} tasks",
     )
 
 

@@ -14,10 +14,12 @@ PLATFORM_ADAPTERS: dict[str, type[PlatformAdapter]] = {}
 
 def register_adapter(platform_code: str):
     """装饰器：注册平台适配器"""
+
     def decorator(cls: type[PlatformAdapter]):
         cls.platform_code = platform_code
         PLATFORM_ADAPTERS[platform_code] = cls
         return cls
+
     return decorator
 
 
@@ -40,8 +42,7 @@ def get_adapter(platform_code: str) -> PlatformAdapter:
     if adapter_cls is None:
         supported = ", ".join(sorted(PLATFORM_ADAPTERS.keys()))
         raise ValueError(
-            f"Unsupported platform: '{platform_code}'. "
-            f"Supported platforms: {supported}"
+            f"Unsupported platform: '{platform_code}'. Supported platforms: {supported}"
         )
     return adapter_cls()
 

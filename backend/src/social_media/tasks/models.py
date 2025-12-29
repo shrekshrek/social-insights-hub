@@ -30,19 +30,13 @@ class DataTask(Base):
 
     # 关联关系
     project_id: Mapped[int] = mapped_column(
-        ForeignKey("social_projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        ForeignKey("social_projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
     platform_id: Mapped[int] = mapped_column(
-        ForeignKey("platforms.id"),
-        nullable=False,
-        index=True
+        ForeignKey("platforms.id"), nullable=False, index=True
     )
     creator_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"),
-        nullable=False,
-        index=True
+        ForeignKey("users.id"), nullable=False, index=True
     )
 
     # 任务配置
@@ -50,17 +44,21 @@ class DataTask(Base):
         String(50),
         nullable=False,
         index=True,
-        comment="任务类型: search/detail/creator/homefeed"
+        comment="任务类型: search/detail/creator/homefeed",
     )
-    keywords: Mapped[str | None] = mapped_column(Text, nullable=True, comment="搜索关键词（仅search类型）")
-    task_params: Mapped[dict | None] = mapped_column(JSON, nullable=True, comment="任务参数（JSON格式）")
+    keywords: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="搜索关键词（仅search类型）"
+    )
+    task_params: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="任务参数（JSON格式）"
+    )
 
     # 数据源
     data_source: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
         index=True,
-        comment="数据源: remote_crawler/local_upload"
+        comment="数据源: remote_crawler/local_upload",
     )
 
     # 任务状态
@@ -69,7 +67,7 @@ class DataTask(Base):
         nullable=False,
         default="pending",
         index=True,
-        comment="任务状态: pending/running/completed/failed"
+        comment="任务状态: pending/running/completed/failed",
     )
 
     # 统计信息
@@ -77,62 +75,60 @@ class DataTask(Base):
     comments_count: Mapped[int] = mapped_column(Integer, default=0, comment="评论数量")
 
     # 执行信息
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # AI分析聚合结果
     analysis_result: Mapped[dict | None] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="任务级AI分析聚合结果（NSR、SERP、实体、IPA等）"
+        JSON, nullable=True, comment="任务级AI分析聚合结果（NSR、SERP、实体、IPA等）"
     )
     analysis_result_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        comment="聚合分析生成时间"
+        DateTime(timezone=True), nullable=True, comment="聚合分析生成时间"
     )
 
     # 软删除
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     # 时间戳
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     # 关系
     project: Mapped["SocialProject"] = relationship(
         "src.social_media.projects.models.SocialProject",
         foreign_keys=[project_id],
-        lazy="selectin"
+        lazy="selectin",
     )
     platform: Mapped["Platform"] = relationship(
         "src.social_media.projects.models.Platform",
         foreign_keys=[platform_id],
-        lazy="selectin"
+        lazy="selectin",
     )
     creator: Mapped["User"] = relationship(
-        "src.auth.models.User",
-        foreign_keys=[creator_id],
-        lazy="selectin"
+        "src.auth.models.User", foreign_keys=[creator_id], lazy="selectin"
     )
 
     posts: Mapped[list["SocialPost"]] = relationship(
         "SocialPost",
         back_populates="task",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="selectin",
     )
 
     comments: Mapped[list["SocialComment"]] = relationship(
         "SocialComment",
         back_populates="task",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="selectin",
     )
 
     def __repr__(self):
@@ -154,27 +150,26 @@ class SocialPost(Base):
     task_id: Mapped[int] = mapped_column(
         ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     platform_id: Mapped[int] = mapped_column(
-        ForeignKey("platforms.id"),
-        nullable=False,
-        index=True
+        ForeignKey("platforms.id"), nullable=False, index=True
     )
 
     # 平台数据
     post_id_on_platform: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        index=True,
-        comment="平台上的帖子ID"
+        String(255), nullable=False, index=True, comment="平台上的帖子ID"
     )
-    post_type: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="帖子类型")
+    post_type: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, comment="帖子类型"
+    )
 
     # 内容数据
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    author_id: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="作者ID")
+    author_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="作者ID"
+    )
     author_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # 互动数据
@@ -183,54 +178,64 @@ class SocialPost(Base):
     shares_count: Mapped[int] = mapped_column(Integer, default=0, comment="分享/转发数")
     collected_count: Mapped[int] = mapped_column(Integer, default=0, comment="收藏数")
     views_count: Mapped[int] = mapped_column(Integer, default=0, comment="播放/浏览数")
-    danmaku_count: Mapped[int] = mapped_column(Integer, default=0, comment="弹幕数(B站特有)")
+    danmaku_count: Mapped[int] = mapped_column(
+        Integer, default=0, comment="弹幕数(B站特有)"
+    )
 
     # 媒体资源
-    images: Mapped[list | None] = mapped_column(JSON, nullable=True, comment="图片URL列表")
-    videos: Mapped[list | None] = mapped_column(JSON, nullable=True, comment="视频URL列表")
+    images: Mapped[list | None] = mapped_column(
+        JSON, nullable=True, comment="图片URL列表"
+    )
+    videos: Mapped[list | None] = mapped_column(
+        JSON, nullable=True, comment="视频URL列表"
+    )
 
     # 发布信息
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     url: Mapped[str | None] = mapped_column(Text, nullable=True, comment="帖子URL")
 
     # 原始数据
-    raw_data: Mapped[dict | None] = mapped_column(JSON, nullable=True, comment="平台返回的原始JSON")
+    raw_data: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="平台返回的原始JSON"
+    )
 
     # 采集信息
     collected_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        comment="数据采集时间"
+        DateTime(timezone=True), server_default=func.now(), comment="数据采集时间"
     )
 
     # 软删除
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     # 时间戳
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     # 关系
-    task: Mapped["DataTask"] = relationship("DataTask", back_populates="posts", lazy="selectin")
+    task: Mapped["DataTask"] = relationship(
+        "DataTask", back_populates="posts", lazy="selectin"
+    )
     platform: Mapped["Platform"] = relationship(
         "src.social_media.projects.models.Platform",
         foreign_keys=[platform_id],
-        lazy="selectin"
+        lazy="selectin",
     )
     comments: Mapped[list["SocialComment"]] = relationship(
         "SocialComment",
         back_populates="post",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="selectin",
     )
 
     # 索引：支持跨任务查询同一帖子
     __table_args__ = (
-        Index('ix_post_platform_postid', 'platform_id', 'post_id_on_platform'),
+        Index("ix_post_platform_postid", "platform_id", "post_id_on_platform"),
     )
 
     def __repr__(self):
@@ -252,30 +257,21 @@ class SocialComment(Base):
     task_id: Mapped[int] = mapped_column(
         ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     post_id: Mapped[int] = mapped_column(
-        ForeignKey("social_posts.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        ForeignKey("social_posts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     platform_id: Mapped[int] = mapped_column(
-        ForeignKey("platforms.id"),
-        nullable=False,
-        index=True
+        ForeignKey("platforms.id"), nullable=False, index=True
     )
 
     # 平台数据
     comment_id_on_platform: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        index=True,
-        comment="平台上的评论ID"
+        String(255), nullable=False, index=True, comment="平台上的评论ID"
     )
     parent_comment_id: Mapped[str | None] = mapped_column(
-        String(255),
-        nullable=True,
-        comment="父评论ID（用于楼中楼）"
+        String(255), nullable=True, comment="父评论ID（用于楼中楼）"
     )
 
     # 评论内容
@@ -285,48 +281,54 @@ class SocialComment(Base):
 
     # 互动数据
     likes_count: Mapped[int] = mapped_column(Integer, default=0)
-    sub_comments_count: Mapped[int] = mapped_column(Integer, default=0, comment="子评论数")
+    sub_comments_count: Mapped[int] = mapped_column(
+        Integer, default=0, comment="子评论数"
+    )
 
     # 媒体资源
     images: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     # 发布信息
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # 原始数据
     raw_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # 采集信息
     collected_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        comment="数据采集时间"
+        DateTime(timezone=True), server_default=func.now(), comment="数据采集时间"
     )
 
     # 软删除
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     # 时间戳
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     # 关系
-    task: Mapped["DataTask"] = relationship("DataTask", back_populates="comments", lazy="selectin")
-    post: Mapped["SocialPost"] = relationship("SocialPost", back_populates="comments", lazy="selectin")
+    task: Mapped["DataTask"] = relationship(
+        "DataTask", back_populates="comments", lazy="selectin"
+    )
+    post: Mapped["SocialPost"] = relationship(
+        "SocialPost", back_populates="comments", lazy="selectin"
+    )
     platform: Mapped["Platform"] = relationship(
         "src.social_media.projects.models.Platform",
         foreign_keys=[platform_id],
-        lazy="selectin"
+        lazy="selectin",
     )
 
     # 索引：支持评论去重和查询优化
     __table_args__ = (
-        Index('ix_comment_platform_commentid', 'platform_id', 'comment_id_on_platform'),
-        Index('ix_comment_post', 'post_id', 'collected_at'),
+        Index("ix_comment_platform_commentid", "platform_id", "comment_id_on_platform"),
+        Index("ix_comment_post", "post_id", "collected_at"),
     )
 
     def __repr__(self):

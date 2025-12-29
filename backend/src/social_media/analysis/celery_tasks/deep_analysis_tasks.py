@@ -25,10 +25,16 @@ from src.database import SyncSessionLocal
 from src.social_media.analysis.models import PostAnalysis
 from src.social_media.analysis.schemas import PostDeepResult, CommentDeepResult
 from src.social_media.tasks.models import SocialPost, SocialComment
-from src.social_media.analysis.celery_tasks.progress_manager import AnalysisProgressManager
-from src.social_media.analysis.celery_tasks.llm_utils import invoke_chain_with_stats_sync
+from src.social_media.analysis.celery_tasks.progress_manager import (
+    AnalysisProgressManager,
+)
+from src.social_media.analysis.celery_tasks.llm_utils import (
+    invoke_chain_with_stats_sync,
+)
 from src.langchain.chains.post_extraction_chain import create_post_extraction_chain
-from src.langchain.chains.comment_extraction_chain import create_comment_extraction_chain
+from src.langchain.chains.comment_extraction_chain import (
+    create_comment_extraction_chain,
+)
 
 settings = get_settings()
 
@@ -38,6 +44,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # 辅助函数
 # ============================================================================
+
 
 def _fix_sentiment_in_result(data: dict) -> dict:
     """修复 sentiment 字段，确保所有实体和观点都有 sentiment 值"""
@@ -61,7 +68,8 @@ def _filter_invalid_entities(data: dict) -> dict:
         valid_types = {"品牌", "产品", "服务", "人物", "其他"}
         original_count = len(data["entities"])
         data["entities"] = [
-            ent for ent in data["entities"]
+            ent
+            for ent in data["entities"]
             if ent.get("name") and ent.get("type") in valid_types
         ]
         filtered_count = original_count - len(data["entities"])
@@ -73,6 +81,7 @@ def _filter_invalid_entities(data: dict) -> dict:
 # ============================================================================
 # 原文深度分析 - 单个帖子分析
 # ============================================================================
+
 
 def _analyze_single_post(
     result_id: int,
@@ -95,15 +104,13 @@ def _analyze_single_post(
             # 3. 调用LLM进行深度分析（使用chain）
             chain = create_post_extraction_chain()
             response, token_stats = invoke_chain_with_stats_sync(
-                chain=chain,
-                input_dict={"content": content},
-                llm_type="chat"
+                chain=chain, input_dict={"content": content}, llm_type="chat"
             )
 
             # 4. 解析响应
             response_content = response.content
             try:
-                json_match = re.search(r'\{[\s\S]*\}', response_content)
+                json_match = re.search(r"\{[\s\S]*\}", response_content)
                 if json_match:
                     json_str = json_match.group()
                     extraction_data = json.loads(json_str)
@@ -123,7 +130,9 @@ def _analyze_single_post(
                 return {"success": False, "error": f"parse_error: {str(e)}"}
 
             # 5. 保存分析结果到数据库
-            post_analysis = db.query(PostAnalysis).filter(PostAnalysis.post_id == post_id).first()
+            post_analysis = (
+                db.query(PostAnalysis).filter(PostAnalysis.post_id == post_id).first()
+            )
 
             if post_analysis:
                 # 更新现有记录
@@ -204,6 +213,7 @@ def analyze_single_post_deep(
 # 原文深度分析 - Finalizer
 # ============================================================================
 
+
 @celery_app.task(
     name="analysis.deep.posts.finalizer",
     bind=True,
@@ -226,7 +236,9 @@ def finalize_post_deep_analysis(
 
     注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregation)
     """
-    logger.info(f"[Finalizer] 原文深度分析任务开始最终化: result_id={result_id}, total={total_count}")
+    logger.info(
+        f"[Finalizer] 原文深度分析任务开始最终化: result_id={result_id}, total={total_count}"
+    )
 
     progress_mgr = AnalysisProgressManager(result_id)
 
@@ -237,13 +249,17 @@ def finalize_post_deep_analysis(
 
     while time.time() - start_time < max_wait_time:
         current_progress = progress_mgr.get_progress()
-        completed = current_progress["analyzed_count"] + current_progress["failed_count"]
+        completed = (
+            current_progress["analyzed_count"] + current_progress["failed_count"]
+        )
 
         if completed >= total_count:
             logger.info(f"[Finalizer] 所有子任务已完成: {completed}/{total_count}")
             break
 
-        logger.info(f"[Finalizer] 等待子任务完成: {completed}/{total_count}, 已等待 {int(time.time() - start_time)}s")
+        logger.info(
+            f"[Finalizer] 等待子任务完成: {completed}/{total_count}, 已等待 {int(time.time() - start_time)}s"
+        )
         time.sleep(poll_interval)
     else:
         logger.warning("[Finalizer] 等待超时，部分任务可能未完成")
@@ -268,6 +284,7 @@ def finalize_post_deep_analysis(
 # ============================================================================
 # 原文深度分析 - 协调器
 # ============================================================================
+
 
 @celery_app.task(
     name="analysis.deep.posts.run",
@@ -299,22 +316,26 @@ def run_post_deep_task(
         logger.warning("帖子列表为空，跳过深度分析")
         return {"status": "skipped", "reason": "no_posts"}
 
-    logger.info(f"[Coordinator] 启动原文深度分析: result_id={result_id}, 帖子数={len(post_ids)}")
+    logger.info(
+        f"[Coordinator] 启动原文深度分析: result_id={result_id}, 帖子数={len(post_ids)}"
+    )
 
     # 1. 初始化 Redis 进度管理
     progress_mgr = AnalysisProgressManager(result_id)
     progress_mgr.initialize(total_count=len(post_ids))
 
     # 2. 为每个帖子创建一个子任务
-    subtasks = group([
-        analyze_single_post_deep.s(
-            result_id=result_id,
-            task_id=task_id,
-            post_id=post_id,
-            analysis_focus=analysis_focus,
-        )
-        for post_id in post_ids
-    ])
+    subtasks = group(
+        [
+            analyze_single_post_deep.s(
+                result_id=result_id,
+                task_id=task_id,
+                post_id=post_id,
+                analysis_focus=analysis_focus,
+            )
+            for post_id in post_ids
+        ]
+    )
 
     # 3. 使用 chord 编排：subtasks 完成后调用 finalizer
     workflow = chord(subtasks)(
@@ -324,7 +345,9 @@ def run_post_deep_task(
         )
     )
 
-    logger.info(f"[Coordinator] 已分发 {len(post_ids)} 个子任务，chord_id={workflow.id}")
+    logger.info(
+        f"[Coordinator] 已分发 {len(post_ids)} 个子任务，chord_id={workflow.id}"
+    )
 
     return {
         "status": "dispatched",
@@ -337,6 +360,51 @@ def run_post_deep_task(
 # 评论深度分析 - 单个帖子的评论分析
 # ============================================================================
 
+
+def _calculate_support_score(
+    source_comments: List[int],
+    likes_map: Dict[int, int],
+) -> int:
+    """根据来源评论编号计算支持度分数
+
+    Args:
+        source_comments: 来源评论编号列表（1-indexed）
+        likes_map: 评论编号到点赞数的映射 {1: 235, 2: 89, ...}
+
+    Returns:
+        int: 支持度分数（来源评论点赞数之和）
+    """
+    if not source_comments:
+        return 0
+    return sum(likes_map.get(idx, 0) for idx in source_comments)
+
+
+def _enrich_with_support_score(
+    extraction_data: Dict[str, Any],
+    likes_map: Dict[int, int],
+) -> Dict[str, Any]:
+    """为提取结果中的实体和观点计算 support_score
+
+    Args:
+        extraction_data: LLM 提取的原始数据
+        likes_map: 评论编号到点赞数的映射
+
+    Returns:
+        dict: 补充了 support_score 的数据
+    """
+    # 处理实体
+    for entity in extraction_data.get("entities", []):
+        source_comments = entity.get("source_comments", [])
+        entity["support_score"] = _calculate_support_score(source_comments, likes_map)
+
+    # 处理观点
+    for opinion in extraction_data.get("general_opinions", []):
+        source_comments = opinion.get("source_comments", [])
+        opinion["support_score"] = _calculate_support_score(source_comments, likes_map)
+
+    return extraction_data
+
+
 def _analyze_single_post_comments(
     result_id: int,
     task_id: int,
@@ -348,6 +416,7 @@ def _analyze_single_post_comments(
     策略：
     - 获取该帖子下点赞最高的前N条评论（配置可调）
     - 批量调用LLM进行评论聚合分析
+    - 根据评论点赞数计算 support_score（支持度）
     - 结果存储在 PostAnalysis.comment_deep_result 中
     """
     max_comments = settings.CELERY_TASK_MAX_COMMENTS_PER_POST_FOR_DEEP_ANALYSIS
@@ -361,32 +430,46 @@ def _analyze_single_post_comments(
                 return {"success": False, "error": "post_not_found"}
 
             # 2. 获取PostAnalysis以便添加上下文（仅使用AI总结）
-            post_analysis = db.query(PostAnalysis).filter(PostAnalysis.post_id == post_id).first()
+            post_analysis = (
+                db.query(PostAnalysis).filter(PostAnalysis.post_id == post_id).first()
+            )
 
             context = ""
             if post_analysis and post_analysis.post_deep_result:
-                summary = post_analysis.post_deep_result.get('summary', '')
+                summary = post_analysis.post_deep_result.get("summary", "")
                 if summary:
                     context = f"背景上下文：{summary}"
 
             # 3. 获取评论（点赞最高的前N条）
-            comments = db.query(SocialComment).filter(
-                SocialComment.post_id == post_id
-            ).order_by(
-                SocialComment.likes_count.desc()
-            ).limit(max_comments).all()
+            comments = (
+                db.query(SocialComment)
+                .filter(SocialComment.post_id == post_id)
+                .order_by(SocialComment.likes_count.desc())
+                .limit(max_comments)
+                .all()
+            )
 
             if not comments:
                 logger.info(f"帖子 {post_id} 没有评论，跳过")
                 return {"success": False, "error": "no_comments"}
 
-            comment_texts = [c.content for c in comments if c.content]
-            if not comment_texts:
+            # 4. 构建评论数据：编号、内容、点赞数映射
+            # 编号从 1 开始，与 LLM 输出的 source_comments 对应
+            valid_comments = [
+                (i + 1, c.content, c.likes_count)
+                for i, c in enumerate(comments)
+                if c.content
+            ]
+            if not valid_comments:
                 return {"success": False, "error": "no_valid_comments"}
 
-            # 4. 调用LLM进行评论分析（使用chain）
+            # 构建编号到点赞数的映射
+            likes_map: Dict[int, int] = {idx: likes for idx, _, likes in valid_comments}
+
+            # 5. 调用LLM进行评论分析（使用chain）
+            # 格式：评论[编号]: 内容
             formatted_comments = "\n".join(
-                [f"评论{i+1}: {comment}" for i, comment in enumerate(comment_texts)]
+                [f"评论[{idx}]: {content}" for idx, content, _ in valid_comments]
             )
             context_text = f"背景上下文：\n{context}"
 
@@ -397,13 +480,13 @@ def _analyze_single_post_comments(
                     "context": context_text,
                     "comments": formatted_comments,
                 },
-                llm_type="chat"
+                llm_type="chat",
             )
 
-            # 5. 解析响应
+            # 6. 解析响应
             response_content = response.content
             try:
-                json_match = re.search(r'\{[\s\S]*\}', response_content)
+                json_match = re.search(r"\{[\s\S]*\}", response_content)
                 if json_match:
                     json_str = json_match.group()
                     extraction_data = json.loads(json_str)
@@ -413,6 +496,9 @@ def _analyze_single_post_comments(
                 # 数据清洗：过滤无效实体、修复 sentiment 字段
                 extraction_data = _filter_invalid_entities(extraction_data)
                 extraction_data = _fix_sentiment_in_result(extraction_data)
+
+                # 根据 source_comments 计算 support_score
+                extraction_data = _enrich_with_support_score(extraction_data, likes_map)
 
                 # 验证数据结构
                 validated_result = CommentDeepResult(**extraction_data)
@@ -439,11 +525,13 @@ def _analyze_single_post_comments(
 
             db.commit()
 
-            logger.info(f"帖子 {post_id} 的评论深度分析完成（分析了{len(comment_texts)}条评论）")
+            logger.info(
+                f"帖子 {post_id} 的评论深度分析完成（分析了{len(valid_comments)}条评论）"
+            )
             return {
                 "success": True,
                 "post_id": post_id,
-                "comments_analyzed": len(comment_texts),
+                "comments_analyzed": len(valid_comments),
                 "token_stats": token_stats,
             }
 
@@ -478,7 +566,9 @@ def analyze_single_post_comments_deep(
         分析结果
     """
     try:
-        result = _analyze_single_post_comments(result_id, task_id, post_id, analysis_focus)
+        result = _analyze_single_post_comments(
+            result_id, task_id, post_id, analysis_focus
+        )
 
         # 更新Redis进度
         progress_mgr = AnalysisProgressManager(result_id)
@@ -490,7 +580,9 @@ def analyze_single_post_comments_deep(
         return result
 
     except Exception as e:
-        logger.error(f"Celery任务执行失败 (评论分析, post_id={post_id}): {e}", exc_info=True)
+        logger.error(
+            f"Celery任务执行失败 (评论分析, post_id={post_id}): {e}", exc_info=True
+        )
         progress_mgr = AnalysisProgressManager(result_id)
         progress_mgr.increment_failed()
         raise self.retry(exc=e)
@@ -499,6 +591,7 @@ def analyze_single_post_comments_deep(
 # ============================================================================
 # 评论深度分析 - Finalizer
 # ============================================================================
+
 
 @celery_app.task(
     name="analysis.deep.comments.finalizer",
@@ -522,7 +615,9 @@ def finalize_comment_deep_analysis(
 
     注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregation)
     """
-    logger.info(f"[Finalizer] 评论深度分析任务开始最终化: result_id={result_id}, total={total_count}")
+    logger.info(
+        f"[Finalizer] 评论深度分析任务开始最终化: result_id={result_id}, total={total_count}"
+    )
 
     progress_mgr = AnalysisProgressManager(result_id)
 
@@ -533,13 +628,19 @@ def finalize_comment_deep_analysis(
 
     while time.time() - start_time < max_wait_time:
         current_progress = progress_mgr.get_progress()
-        completed = current_progress["analyzed_count"] + current_progress["failed_count"]
+        completed = (
+            current_progress["analyzed_count"] + current_progress["failed_count"]
+        )
 
         if completed >= total_count:
-            logger.info(f"[Finalizer] 所有评论分析子任务已完成: {completed}/{total_count}")
+            logger.info(
+                f"[Finalizer] 所有评论分析子任务已完成: {completed}/{total_count}"
+            )
             break
 
-        logger.info(f"[Finalizer] 等待评论分析完成: {completed}/{total_count}, 已等待 {int(time.time() - start_time)}s")
+        logger.info(
+            f"[Finalizer] 等待评论分析完成: {completed}/{total_count}, 已等待 {int(time.time() - start_time)}s"
+        )
         time.sleep(poll_interval)
     else:
         logger.warning("[Finalizer] 等待超时，部分评论分析任务可能未完成")
@@ -564,6 +665,7 @@ def finalize_comment_deep_analysis(
 # ============================================================================
 # 评论深度分析 - 协调器
 # ============================================================================
+
 
 @celery_app.task(
     name="analysis.deep.comments.run",
@@ -595,22 +697,26 @@ def run_comment_deep_task(
         logger.warning("帖子列表为空，跳过评论深度分析")
         return {"status": "skipped", "reason": "no_posts"}
 
-    logger.info(f"[Coordinator] 启动评论深度分析: result_id={result_id}, 帖子数={len(post_ids)}")
+    logger.info(
+        f"[Coordinator] 启动评论深度分析: result_id={result_id}, 帖子数={len(post_ids)}"
+    )
 
     # 1. 初始化进度
     progress_mgr = AnalysisProgressManager(result_id)
     progress_mgr.initialize(total_count=len(post_ids))
 
     # 2. 为每个帖子创建评论分析子任务
-    subtasks = group([
-        analyze_single_post_comments_deep.s(
-            result_id=result_id,
-            task_id=task_id,
-            post_id=post_id,
-            analysis_focus=analysis_focus,
-        )
-        for post_id in post_ids
-    ])
+    subtasks = group(
+        [
+            analyze_single_post_comments_deep.s(
+                result_id=result_id,
+                task_id=task_id,
+                post_id=post_id,
+                analysis_focus=analysis_focus,
+            )
+            for post_id in post_ids
+        ]
+    )
 
     # 3. 使用 chord 编排
     workflow = chord(subtasks)(
@@ -620,7 +726,9 @@ def run_comment_deep_task(
         )
     )
 
-    logger.info(f"[Coordinator] 已分发 {len(post_ids)} 个评论分析子任务，chord_id={workflow.id}")
+    logger.info(
+        f"[Coordinator] 已分发 {len(post_ids)} 个评论分析子任务，chord_id={workflow.id}"
+    )
 
     return {
         "status": "dispatched",

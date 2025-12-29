@@ -14,7 +14,7 @@ from . import schemas, service
 from .dependencies import (
     validate_platform_exists,
     validate_project_access,
-    validate_project_owner
+    validate_project_owner,
 )
 from .models import SocialProject, Platform
 
@@ -26,6 +26,7 @@ router = APIRouter(
 
 
 # ==================== Platform APIs ====================
+
 
 @router.get(
     "/platforms",
@@ -64,6 +65,7 @@ async def get_platform(
 
 # ==================== Project APIs ====================
 
+
 @router.post(
     "/projects",
     response_model=schemas.SocialProjectCreateResponse,
@@ -91,11 +93,14 @@ async def create_project(
     result = await service.create_project(db, project_in, current_user.id)
 
     # 构建响应
-    project_dict = schemas.SocialProjectRead.model_validate(result["project"]).model_dump()
+    project_dict = schemas.SocialProjectRead.model_validate(
+        result["project"]
+    ).model_dump()
     project_dict["participant_ids"] = [p.id for p in result["project"].participants]
 
     # 转换任务为字典列表
     from src.social_media.tasks.schemas import DataTaskReadWithRelations
+
     tasks_list = []
     for task in result["created_tasks"]:
         task_dict = DataTaskReadWithRelations.model_validate(task).model_dump()
@@ -106,8 +111,7 @@ async def create_project(
         tasks_list.append(task_dict)
 
     return schemas.SocialProjectCreateResponse(
-        project=schemas.SocialProjectRead(**project_dict),
-        created_tasks=tasks_list
+        project=schemas.SocialProjectRead(**project_dict), created_tasks=tasks_list
     )
 
 
@@ -123,8 +127,12 @@ async def get_projects(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
     owner_id: Optional[int] = Query(None, description="按owner过滤"),
-    my_projects: bool = Query(False, description="只显示我参与的项目（owner或participant）"),
-    search: Optional[str] = Query(None, description="搜索关键词（匹配项目名称或keywords）"),
+    my_projects: bool = Query(
+        False, description="只显示我参与的项目（owner或participant）"
+    ),
+    search: Optional[str] = Query(
+        None, description="搜索关键词（匹配项目名称或keywords）"
+    ),
 ):
     """
     获取项目列表。
@@ -156,7 +164,7 @@ async def get_projects(
         page_size=pagination.page_size,
         owner_id=owner_id,
         participant_id=participant_id,
-        search=search
+        search=search,
     )
 
     # 转换为带owner用户名的response
@@ -217,7 +225,9 @@ async def update_project(
     可以更新项目名称、描述、关键词、时间范围等。
     """
     updated_project = await service.update_project(db, project, project_update)
-    project_dict = schemas.SocialProjectRead.model_validate(updated_project).model_dump()
+    project_dict = schemas.SocialProjectRead.model_validate(
+        updated_project
+    ).model_dump()
     project_dict["participant_ids"] = [p.id for p in updated_project.participants]
     return schemas.SocialProjectRead(**project_dict)
 
@@ -245,6 +255,7 @@ async def delete_project(
 
 # ==================== Project-Participant Management ====================
 
+
 @router.post(
     "/projects/{project_id}/participants",
     response_model=schemas.SocialProjectRead,
@@ -263,8 +274,12 @@ async def add_participants_to_project(
     只有项目owner可以管理参与者。
     参与者可以查看和操作项目数据，但不能修改项目设置。
     """
-    updated_project = await service.add_participants(db, project, participant_assignment.user_ids)
-    project_dict = schemas.SocialProjectRead.model_validate(updated_project).model_dump()
+    updated_project = await service.add_participants(
+        db, project, participant_assignment.user_ids
+    )
+    project_dict = schemas.SocialProjectRead.model_validate(
+        updated_project
+    ).model_dump()
     project_dict["participant_ids"] = [p.id for p in updated_project.participants]
     return schemas.SocialProjectRead(**project_dict)
 
@@ -288,12 +303,15 @@ async def remove_participant_from_project(
     不能移除项目owner。
     """
     updated_project = await service.remove_participant(db, project, user_id)
-    project_dict = schemas.SocialProjectRead.model_validate(updated_project).model_dump()
+    project_dict = schemas.SocialProjectRead.model_validate(
+        updated_project
+    ).model_dump()
     project_dict["participant_ids"] = [p.id for p in updated_project.participants]
     return schemas.SocialProjectRead(**project_dict)
 
 
 # ==================== Deep Analysis Settings ====================
+
 
 @router.put(
     "/projects/{project_id}/deep-analysis-settings",
@@ -316,7 +334,9 @@ async def update_deep_analysis_settings(
     updated_project = await service.update_deep_analysis_settings(
         db, project, settings_update.settings
     )
-    project_dict = schemas.SocialProjectRead.model_validate(updated_project).model_dump()
+    project_dict = schemas.SocialProjectRead.model_validate(
+        updated_project
+    ).model_dump()
     project_dict["participant_ids"] = [p.id for p in updated_project.participants]
     return schemas.SocialProjectRead(**project_dict)
 

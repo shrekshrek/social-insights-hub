@@ -56,10 +56,12 @@ def create_attribute_normalization_chain() -> Runnable:
     """
     llm = get_llm(llm_type="chat")
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", ATTRIBUTE_NORMALIZATION_SYSTEM_TEMPLATE),
-        ("user", ATTRIBUTE_NORMALIZATION_USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", ATTRIBUTE_NORMALIZATION_SYSTEM_TEMPLATE),
+            ("user", ATTRIBUTE_NORMALIZATION_USER_TEMPLATE),
+        ]
+    )
 
     return prompt | llm
 
@@ -74,16 +76,12 @@ def format_attributes_for_normalization(attributes_map: dict[str, set]) -> str:
         str: 格式化后的属性列表字符串
     """
     # 按频次降序排列
-    sorted_items = sorted(
-        attributes_map.items(), 
-        key=lambda x: len(x[1]), 
-        reverse=True
-    )
-    
+    sorted_items = sorted(attributes_map.items(), key=lambda x: len(x[1]), reverse=True)
+
     lines = []
     for term, post_ids in sorted_items:
         lines.append(f"- {term} ({len(post_ids)})")
-        
+
     return "\n".join(lines)
 
 
@@ -105,6 +103,7 @@ def parse_normalization_response(response_text: str) -> List[dict[str, Any]]:
         result = json.loads(response_text.strip())
         return result.get("clusters", [])
     except json.JSONDecodeError:
-        logger.error(f"Failed to decode JSON from Attribute Normalization response: {response_text[:100]}...")
+        logger.error(
+            f"Failed to decode JSON from Attribute Normalization response: {response_text[:100]}..."
+        )
         return []
-

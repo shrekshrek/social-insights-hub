@@ -60,7 +60,11 @@ def upgrade() -> None:
         sa.Column("keywords", sa.Text(), nullable=True),
         sa.Column("project_start_date", sa.DateTime(timezone=True), nullable=True),
         sa.Column("project_end_date", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("deep_analysis_settings", postgresql.JSON(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "deep_analysis_settings",
+            postgresql.JSON(astext_type=sa.Text()),
+            nullable=True,
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -105,7 +109,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["project_id"],
             ["social_projects.id"],
-            name=op.f("fk_social_project_platform_assignments_project_id_social_projects"),
+            name=op.f(
+                "fk_social_project_platform_assignments_project_id_social_projects"
+            ),
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint(

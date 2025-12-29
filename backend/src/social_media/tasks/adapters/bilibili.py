@@ -30,7 +30,9 @@ class BilibiliAdapter(PlatformAdapter):
         """转换B站视频数据"""
         # 优先使用 video_id (aid)，因为评论关联时只有 video_id
         # bvid 仍保留在 raw_data 中用于展示
-        post_id = self.safe_str(raw_data.get("video_id")) or self.safe_str(raw_data.get("bvid"))
+        post_id = self.safe_str(raw_data.get("video_id")) or self.safe_str(
+            raw_data.get("bvid")
+        )
 
         # 处理封面图
         cover_url = self.safe_str(raw_data.get("video_cover_url"))
@@ -68,7 +70,8 @@ class BilibiliAdapter(PlatformAdapter):
 
         return {
             "comment_id_on_platform": self.safe_str(raw_data.get("comment_id")),
-            "parent_comment_id": self.safe_str(raw_data.get("parent_comment_id")) or None,
+            "parent_comment_id": self.safe_str(raw_data.get("parent_comment_id"))
+            or None,
             "content": self.safe_str(raw_data.get("content")) or None,
             "author_id": self.safe_str(raw_data.get("user_id")) or None,
             "author_name": self.safe_str(raw_data.get("nickname")) or None,

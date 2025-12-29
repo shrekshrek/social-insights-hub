@@ -11,6 +11,7 @@ from src.auth.models import User
 
 # ==================== Platform CRUD ====================
 
+
 async def get_platform_by_id(db: AsyncSession, platform_id: int) -> Optional[Platform]:
     """根据ID获取平台"""
     result = await db.execute(select(Platform).where(Platform.id == platform_id))
@@ -24,9 +25,7 @@ async def get_platform_by_code(db: AsyncSession, code: str) -> Optional[Platform
 
 
 async def get_platforms(
-    db: AsyncSession,
-    skip: int = 0,
-    limit: int = 100
+    db: AsyncSession, skip: int = 0, limit: int = 100
 ) -> tuple[List[Platform], int]:
     """获取平台列表（带分页）"""
     # 查询总数
@@ -35,10 +34,7 @@ async def get_platforms(
 
     # 查询数据
     result = await db.execute(
-        select(Platform)
-        .offset(skip)
-        .limit(limit)
-        .order_by(Platform.id)
+        select(Platform).offset(skip).limit(limit).order_by(Platform.id)
     )
     platforms = result.scalars().all()
 
@@ -56,18 +52,16 @@ async def create_platform(db: AsyncSession, platform_data: dict) -> Platform:
 
 # ==================== SocialProject CRUD ====================
 
+
 async def get_project_by_id(
-    db: AsyncSession,
-    project_id: int,
-    load_relations: bool = True
+    db: AsyncSession, project_id: int, load_relations: bool = True
 ) -> Optional[SocialProject]:
     """根据ID获取项目"""
     query = select(SocialProject).where(SocialProject.id == project_id)
 
     if load_relations:
         query = query.options(
-            selectinload(SocialProject.participants),
-            selectinload(SocialProject.owner)
+            selectinload(SocialProject.participants), selectinload(SocialProject.owner)
         )
 
     result = await db.execute(query)
@@ -86,7 +80,7 @@ async def get_projects(
     limit: int = 20,
     owner_id: Optional[int] = None,
     participant_id: Optional[int] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
 ) -> tuple[List[SocialProject], int]:
     """获取项目列表（带过滤和分页）
 
@@ -109,7 +103,7 @@ async def get_projects(
         conditions.append(
             or_(
                 SocialProject.owner_id == participant_id,
-                SocialProject.participants.any(User.id == participant_id)
+                SocialProject.participants.any(User.id == participant_id),
             )
         )
 
@@ -128,9 +122,12 @@ async def get_projects(
     total = count_result.scalar_one()
 
     # 查询数据（加载关联）
-    query = base_query.options(
-        selectinload(SocialProject.owner)
-    ).offset(skip).limit(limit).order_by(SocialProject.created_at.desc())
+    query = (
+        base_query.options(selectinload(SocialProject.owner))
+        .offset(skip)
+        .limit(limit)
+        .order_by(SocialProject.created_at.desc())
+    )
 
     result = await db.execute(query)
     projects = result.scalars().all()
@@ -142,7 +139,7 @@ async def create_project(
     db: AsyncSession,
     project_data: dict,
     owner_id: int,
-    participant_ids: List[int] = None
+    participant_ids: List[int] = None,
 ) -> SocialProject:
     """创建项目"""
 
@@ -156,8 +153,7 @@ async def create_project(
         for user_id in participant_ids:
             await db.execute(
                 social_project_participants.insert().values(
-                    project_id=project.id,
-                    user_id=user_id
+                    project_id=project.id, user_id=user_id
                 )
             )
 
@@ -166,19 +162,15 @@ async def create_project(
     result = await db.execute(
         select(SocialProject)
         .options(
-            selectinload(SocialProject.participants),
-            selectinload(SocialProject.owner)
+            selectinload(SocialProject.participants), selectinload(SocialProject.owner)
         )
         .where(SocialProject.id == project.id)
     )
     return result.scalar_one()
 
 
-
 async def update_project(
-    db: AsyncSession,
-    project: SocialProject,
-    update_data: dict
+    db: AsyncSession, project: SocialProject, update_data: dict
 ) -> SocialProject:
     """更新项目"""
     for key, value in update_data.items():
@@ -198,15 +190,12 @@ async def delete_project(db: AsyncSession, project: SocialProject) -> None:
 
 # ==================== Project-Participant Relations ====================
 
+
 async def add_participants_to_project(
-    db: AsyncSession,
-    project: SocialProject,
-    user_ids: List[int]
+    db: AsyncSession, project: SocialProject, user_ids: List[int]
 ) -> SocialProject:
     """为项目添加参与者"""
-    users = await db.execute(
-        select(User).where(User.id.in_(user_ids))
-    )
+    users = await db.execute(select(User).where(User.id.in_(user_ids)))
     new_participants = users.scalars().all()
 
     # 只添加未关联的参与者
@@ -221,9 +210,7 @@ async def add_participants_to_project(
 
 
 async def remove_participant_from_project(
-    db: AsyncSession,
-    project: SocialProject,
-    user_id: int
+    db: AsyncSession, project: SocialProject, user_id: int
 ) -> SocialProject:
     """从项目移除参与者"""
     project.participants = [u for u in project.participants if u.id != user_id]
@@ -234,11 +221,8 @@ async def remove_participant_from_project(
 
 # ==================== Permission Helpers ====================
 
-async def check_project_access(
-    db: AsyncSession,
-    project_id: int,
-    user_id: int
-) -> bool:
+
+async def check_project_access(db: AsyncSession, project_id: int, user_id: int) -> bool:
     """
     检查用户是否有项目访问权限
 
@@ -253,8 +237,10 @@ async def check_project_access(
     from src.auth.models import User
     from src.rbac.models import UserRole
 
-    stmt = select(User).where(User.id == user_id).options(
-        selectinload(User.user_roles).selectinload(UserRole.role)
+    stmt = (
+        select(User)
+        .where(User.id == user_id)
+        .options(selectinload(User.user_roles).selectinload(UserRole.role))
     )
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
@@ -264,7 +250,7 @@ async def check_project_access(
 
     # 检查是否是管理员或超级管理员
     role_names = [ur.role.name for ur in user.user_roles]
-    if 'admin' in role_names or 'super_admin' in role_names:
+    if "admin" in role_names or "super_admin" in role_names:
         return True
 
     # 获取项目信息

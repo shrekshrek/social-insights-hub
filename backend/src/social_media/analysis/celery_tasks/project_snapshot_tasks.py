@@ -8,7 +8,9 @@ from __future__ import annotations
 from typing import Any
 
 from src.celery_app import celery_app
-from src.social_media.analysis.celery_tasks.project_snapshot import run_project_snapshot_pipeline_sync
+from src.social_media.analysis.celery_tasks.project_snapshot import (
+    run_project_snapshot_pipeline_sync,
+)
 
 
 @celery_app.task(
@@ -29,5 +31,3 @@ def run_project_snapshot_task(
         top_terms_for_llm=top_terms_for_llm,
         min_cell_mentions=min_cell_mentions,
     )
-
-

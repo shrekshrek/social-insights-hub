@@ -7,29 +7,27 @@ from fastapi import HTTPException, status
 
 from . import crud
 from .models import DataTask, SocialPost, SocialComment
-from .schemas import (
-    DataTaskCreate,
-    DataTaskUpdate,
-    JSONUploadData
-)
+from .schemas import DataTaskCreate, DataTaskUpdate, JSONUploadData
 from .adapters import get_adapter
 
 
 # ==================== DataTask Service ====================
 
+
 async def create_task(
-    db: AsyncSession,
-    task_in: DataTaskCreate,
-    current_user_id: int
+    db: AsyncSession, task_in: DataTaskCreate, current_user_id: int
 ) -> DataTask:
     """创建任务"""
     # 验证项目是否存在
     from src.social_media.projects import crud as social_crud
-    project = await social_crud.get_project_by_id(db, task_in.project_id, load_relations=False)
+
+    project = await social_crud.get_project_by_id(
+        db, task_in.project_id, load_relations=False
+    )
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with id {task_in.project_id} not found"
+            detail=f"Project with id {task_in.project_id} not found",
         )
 
     # 验证平台是否存在
@@ -37,15 +35,17 @@ async def create_task(
     if not platform:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform with id {task_in.platform_id} not found"
+            detail=f"Platform with id {task_in.platform_id} not found",
         )
 
     # 验证用户是否有项目访问权限
-    has_access = await social_crud.check_project_access(db, task_in.project_id, current_user_id)
+    has_access = await social_crud.check_project_access(
+        db, task_in.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this project"
+            detail="You don't have access to this project",
         )
 
     # 准备任务数据
@@ -60,9 +60,7 @@ async def create_task(
 
 
 async def get_task(
-    db: AsyncSession,
-    task_id: int,
-    current_user_id: int
+    db: AsyncSession, task_id: int, current_user_id: int
 ) -> Optional[DataTask]:
     """获取任务详情"""
     task = await crud.get_task_by_id(db, task_id, load_relations=True)
@@ -71,11 +69,14 @@ async def get_task(
 
     # 验证用户是否有项目访问权限
     from src.social_media.projects import crud as social_crud
-    has_access = await social_crud.check_project_access(db, task.project_id, current_user_id)
+
+    has_access = await social_crud.check_project_access(
+        db, task.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task"
+            detail="You don't have access to this task",
         )
 
     return task
@@ -92,17 +93,20 @@ async def get_tasks_list(
     data_source: Optional[str] = None,
     creator_id: Optional[int] = None,
     search: Optional[str] = None,
-    current_user_id: Optional[int] = None
+    current_user_id: Optional[int] = None,
 ) -> tuple[List[DataTask], int]:
     """获取任务列表（带过滤和分页）"""
     # 如果指定了project_id，验证访问权限
     if project_id is not None and current_user_id is not None:
         from src.social_media.projects import crud as social_crud
-        has_access = await social_crud.check_project_access(db, project_id, current_user_id)
+
+        has_access = await social_crud.check_project_access(
+            db, project_id, current_user_id
+        )
         if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this project"
+                detail="You don't have access to this project",
             )
 
     skip = (page - 1) * page_size
@@ -116,14 +120,12 @@ async def get_tasks_list(
         status=status,
         data_source=data_source,
         creator_id=creator_id,
-        search=search
+        search=search,
     )
 
 
 async def update_task(
-    db: AsyncSession,
-    task: DataTask,
-    task_update: DataTaskUpdate
+    db: AsyncSession, task: DataTask, task_update: DataTaskUpdate
 ) -> DataTask:
     """更新任务"""
     update_data = task_update.model_dump(exclude_unset=True)
@@ -133,10 +135,7 @@ async def update_task(
     return updated_task
 
 
-async def delete_task(
-    db: AsyncSession,
-    task: DataTask
-) -> None:
+async def delete_task(db: AsyncSession, task: DataTask) -> None:
     """删除任务（软删除）"""
     await crud.delete_task(db, task)
     await db.commit()
@@ -144,11 +143,9 @@ async def delete_task(
 
 # ==================== JSON Upload Service ====================
 
+
 async def process_json_upload(
-    db: AsyncSession,
-    task_id: int,
-    upload_data: JSONUploadData,
-    current_user_id: int
+    db: AsyncSession, task_id: int, upload_data: JSONUploadData, current_user_id: int
 ) -> dict:
     """处理JSON上传数据
 
@@ -167,16 +164,16 @@ async def process_json_upload(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with id {task_id} not found"
+            detail=f"Task with id {task_id} not found",
         )
 
     # 2. 验证任务状态（允许 pending 和 completed 状态上传，completed 会覆盖现有数据）
     if task.status not in ("pending", "completed"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Task status is '{task.status}', cannot upload data. Task must be in 'pending' or 'completed' status."
+            detail=f"Task status is '{task.status}', cannot upload data. Task must be in 'pending' or 'completed' status.",
         )
-    
+
     # 如果是 completed 状态，先清除现有数据
     is_reupload = task.status == "completed"
     if is_reupload:
@@ -190,7 +187,7 @@ async def process_json_upload(
     if task.data_source != "local_upload":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Task data_source is '{task.data_source}', expected 'local_upload'"
+            detail=f"Task data_source is '{task.data_source}', expected 'local_upload'",
         )
 
     # 4. 获取平台适配器
@@ -240,20 +237,16 @@ async def process_json_upload(
         posts_data = list(posts_data_dict.values())
 
         created_posts = await crud.create_posts_bulk(
-            db,
-            task_id=task.id,
-            platform_id=task.platform_id,
-            posts_data=posts_data
+            db, task_id=task.id, platform_id=task.platform_id, posts_data=posts_data
         )
 
         # 7. 创建post_id映射（平台ID -> 数据库ID）
-        post_id_mapping = {
-            post.post_id_on_platform: post.id
-            for post in created_posts
-        }
+        post_id_mapping = {post.post_id_on_platform: post.id for post in created_posts}
 
         # 8. 转换并导入评论数据（按 comment_id_on_platform 去重）
-        comments_dict: dict[str, tuple[int, dict]] = {}  # 用字典去重，key 是 comment_id_on_platform
+        comments_dict: dict[
+            str, tuple[int, dict]
+        ] = {}  # 用字典去重，key 是 comment_id_on_platform
         for comment in upload_data.comments:
             raw_data = comment.model_dump()
             if adapter:
@@ -272,7 +265,9 @@ async def process_json_upload(
                         f"Platform '{platform_code}' has no adapter. "
                         f"Data keys: {list(raw_data.keys())[:10]}"
                     )
-                post_id_on_platform = transformed.get('raw_data', {}).get('post_id_on_platform')
+                post_id_on_platform = transformed.get("raw_data", {}).get(
+                    "post_id_on_platform"
+                )
 
             # 查找对应的 post
             if not post_id_on_platform:
@@ -298,7 +293,7 @@ async def process_json_upload(
             db,
             task_id=task.id,
             platform_id=task.platform_id,
-            comments_data=comments_to_create
+            comments_data=comments_to_create,
         )
 
         # 9. 更新任务统计和状态
@@ -306,7 +301,7 @@ async def process_json_upload(
             db,
             task,
             posts_count=len(created_posts),
-            comments_count=len(created_comments)
+            comments_count=len(created_comments),
         )
         await crud.update_task_status(db, task, "completed")
 
@@ -317,7 +312,7 @@ async def process_json_upload(
             "task_id": task.id,
             "posts_imported": len(created_posts),
             "comments_imported": len(created_comments),
-            "message": "Data imported successfully"
+            "message": "Data imported successfully",
         }
 
     except Exception as e:
@@ -330,18 +325,19 @@ async def process_json_upload(
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to import data: {str(e)}"
+            detail=f"Failed to import data: {str(e)}",
         )
 
 
 # ==================== Data Query Service ====================
+
 
 async def get_task_posts(
     db: AsyncSession,
     task_id: int,
     page: int = 1,
     page_size: int = 20,
-    current_user_id: int = None
+    current_user_id: int = None,
 ) -> tuple[List[dict], int]:
     """获取任务的原文列表（包含已爬取评论数）"""
     # 验证任务访问权限
@@ -349,7 +345,7 @@ async def get_task_posts(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with id {task_id} not found"
+            detail=f"Task with id {task_id} not found",
         )
 
     skip = (page - 1) * page_size
@@ -362,7 +358,7 @@ async def get_task_comments(
     page: int = 1,
     page_size: int = 50,
     current_user_id: int = None,
-    post_id: int = None
+    post_id: int = None,
 ) -> tuple[List[SocialComment], int]:
     """获取任务的评论列表，可选按原文ID筛选"""
     # 验证任务访问权限
@@ -370,11 +366,13 @@ async def get_task_comments(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with id {task_id} not found"
+            detail=f"Task with id {task_id} not found",
         )
 
     skip = (page - 1) * page_size
-    return await crud.get_comments_by_task(db, task_id, skip=skip, limit=page_size, post_id=post_id)
+    return await crud.get_comments_by_task(
+        db, task_id, skip=skip, limit=page_size, post_id=post_id
+    )
 
 
 async def get_post_with_comments(
@@ -382,7 +380,7 @@ async def get_post_with_comments(
     post_id: int,
     page: int = 1,
     page_size: int = 50,
-    current_user_id: int = None
+    current_user_id: int = None,
 ) -> tuple[SocialPost, List[SocialComment], int]:
     """获取原文及其评论"""
     # 获取原文
@@ -390,7 +388,7 @@ async def get_post_with_comments(
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Post with id {post_id} not found"
+            detail=f"Post with id {post_id} not found",
         )
 
     # 验证任务访问权限
@@ -398,16 +396,13 @@ async def get_post_with_comments(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this post"
+            detail="You don't have access to this post",
         )
 
     # 获取评论列表
     skip = (page - 1) * page_size
     comments, total = await crud.get_comments_by_post(
-        db,
-        post_id,
-        skip=skip,
-        limit=page_size
+        db, post_id, skip=skip, limit=page_size
     )
 
     return post, comments, total
@@ -418,33 +413,33 @@ async def query_cross_task_posts(
     platform_id: int,
     post_id_on_platform: str,
     project_id: Optional[int] = None,
-    current_user_id: int = None
+    current_user_id: int = None,
 ) -> List[SocialPost]:
     """跨任务查询同一帖子的历史数据"""
     # 如果指定了project_id，验证访问权限
     if project_id is not None and current_user_id is not None:
         from src.social_media.projects import crud as social_crud
-        has_access = await social_crud.check_project_access(db, project_id, current_user_id)
+
+        has_access = await social_crud.check_project_access(
+            db, project_id, current_user_id
+        )
         if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this project"
+                detail="You don't have access to this project",
             )
 
     posts = await crud.get_posts_by_platform_post_id(
         db,
         platform_id=platform_id,
         post_id_on_platform=post_id_on_platform,
-        project_id=project_id
+        project_id=project_id,
     )
 
     return posts
 
 
-async def clear_task_data(
-    db: AsyncSession,
-    task: DataTask
-) -> DataTask:
+async def clear_task_data(db: AsyncSession, task: DataTask) -> DataTask:
     """
     清空任务的所有数据（软删除原文和评论），重置任务状态
 
@@ -454,9 +449,7 @@ async def clear_task_data(
     from src.social_media.analysis.models import PostAnalysis
 
     # 先删除分析结果（因为帖子是软删除，CASCADE 不会触发）
-    await db.execute(
-        delete(PostAnalysis).where(PostAnalysis.task_id == task.id)
-    )
+    await db.execute(delete(PostAnalysis).where(PostAnalysis.task_id == task.id))
 
     # 软删除该任务的所有原文
     await crud.soft_delete_task_posts(db, task.id)

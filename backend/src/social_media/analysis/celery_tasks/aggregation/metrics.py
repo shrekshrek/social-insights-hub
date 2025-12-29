@@ -14,6 +14,7 @@ from src.social_media.tasks.models import SocialPost
 # CII 互动指数计算
 # ============================================================================
 
+
 def calculate_cii(
     likes: int = 0,
     comments: int = 0,
@@ -27,10 +28,10 @@ def calculate_cii(
     CII = log10(RawScore + 1) × 10
     """
     raw_score = (
-        (likes or 0) * 1 +
-        (comments or 0) * 2 +
-        (shares or 0) * 5 +
-        (collected or 0) * 3
+        (likes or 0) * 1
+        + (comments or 0) * 2
+        + (shares or 0) * 5
+        + (collected or 0) * 3
     )
     if raw_score <= 0:
         return 0.0
@@ -50,6 +51,7 @@ def calculate_cii_for_post(post: SocialPost) -> float:
 # ============================================================================
 # NSR 净情感率计算
 # ============================================================================
+
 
 def calculate_nsr(posts_data: list[dict[str, Any]]) -> float:
     """计算 NSR 净情感率 (Net Sentiment Rate)
@@ -76,6 +78,7 @@ def calculate_nsr(posts_data: list[dict[str, Any]]) -> float:
 # SERP 健康度计算
 # ============================================================================
 
+
 def calculate_serp_health(posts_data: list[dict[str, Any]], top_n: int = 20) -> float:
     """计算 SERP 搜索健康度，范围 0-100"""
     top_posts = posts_data[:top_n]
@@ -91,10 +94,16 @@ def calculate_serp_health(posts_data: list[dict[str, Any]], top_n: int = 20) -> 
 # 营销浓度计算
 # ============================================================================
 
+
 def calculate_marketing_density(posts_data: list[dict[str, Any]]) -> dict[str, Any]:
     """计算营销浓度 (spam_score >= 4 视为营销内容)"""
     if not posts_data:
-        return {"promotion_ratio": 0.0, "organic_ratio": 1.0, "promotion_count": 0, "organic_count": 0}
+        return {
+            "promotion_ratio": 0.0,
+            "organic_ratio": 1.0,
+            "promotion_count": 0,
+            "organic_count": 0,
+        }
 
     promotion_count = 0
     organic_count = 0
@@ -110,7 +119,12 @@ def calculate_marketing_density(posts_data: list[dict[str, Any]]) -> dict[str, A
 
     total = promotion_count + organic_count
     if total == 0:
-        return {"promotion_ratio": 0.0, "organic_ratio": 1.0, "promotion_count": 0, "organic_count": 0}
+        return {
+            "promotion_ratio": 0.0,
+            "organic_ratio": 1.0,
+            "promotion_count": 0,
+            "organic_count": 0,
+        }
 
     return {
         "promotion_ratio": round(promotion_count / total, 3),
@@ -123,6 +137,7 @@ def calculate_marketing_density(posts_data: list[dict[str, Any]]) -> dict[str, A
 # ============================================================================
 # 舆论反差度计算
 # ============================================================================
+
 
 def calculate_sentiment_conflict(posts_data: list[dict[str, Any]]) -> dict[str, Any]:
     """计算舆论反差度 (帖子情感 vs 评论情感)"""
@@ -138,7 +153,12 @@ def calculate_sentiment_conflict(posts_data: list[dict[str, Any]]) -> dict[str, 
             conflicts.append({"conflict": conflict})
 
     if not conflicts:
-        return {"avg_conflict": 0.0, "conflict_direction": "aligned", "high_conflict_count": 0, "risk_level": "low"}
+        return {
+            "avg_conflict": 0.0,
+            "conflict_direction": "aligned",
+            "high_conflict_count": 0,
+            "risk_level": "low",
+        }
 
     avg_abs_conflict = sum(abs(c["conflict"]) for c in conflicts) / len(conflicts)
     avg_conflict = sum(c["conflict"] for c in conflicts) / len(conflicts)
@@ -173,10 +193,15 @@ def calculate_sentiment_conflict(posts_data: list[dict[str, Any]]) -> dict[str, 
 # 时效性分布统计
 # ============================================================================
 
+
 def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, Any]:
     """计算时效性分布"""
     if not posts_data:
-        return {"distribution": [], "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0}, "skipped_count": 0}
+        return {
+            "distribution": [],
+            "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0},
+            "skipped_count": 0,
+        }
 
     now = datetime.now(timezone.utc)
     date_posts: dict[str, list[int]] = {}  # 日期 -> 帖子ID列表
@@ -192,7 +217,9 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
 
         if isinstance(published_at, str):
             try:
-                published_at = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+                published_at = datetime.fromisoformat(
+                    published_at.replace("Z", "+00:00")
+                )
             except ValueError:
                 continue
         elif not isinstance(published_at, datetime):
@@ -210,7 +237,11 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
         ages_days.append(age_days)
 
     if not ages_days:
-        return {"distribution": [], "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0}, "skipped_count": skipped_count}
+        return {
+            "distribution": [],
+            "freshness": {"last_7_days": 0.0, "last_30_days": 0.0, "avg_age_days": 0},
+            "skipped_count": skipped_count,
+        }
 
     distribution = [
         {"date": date, "count": len(post_ids), "post_ids": post_ids}
@@ -225,5 +256,5 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
             "last_30_days": round(sum(1 for age in ages_days if age <= 30) / total, 3),
             "avg_age_days": round(sum(ages_days) / total, 1),
         },
-        "skipped_count": skipped_count  # 跳过的帖子数（无发布时间）
+        "skipped_count": skipped_count,  # 跳过的帖子数（无发布时间）
     }

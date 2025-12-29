@@ -10,19 +10,20 @@ from .models import DataTask, SocialPost, SocialComment
 
 # ==================== DataTask CRUD ====================
 
+
 async def get_task_by_id(
-    db: AsyncSession,
-    task_id: int,
-    load_relations: bool = False
+    db: AsyncSession, task_id: int, load_relations: bool = False
 ) -> Optional[DataTask]:
     """根据ID获取任务"""
-    query = select(DataTask).where(DataTask.id == task_id, DataTask.is_deleted.is_(False))
+    query = select(DataTask).where(
+        DataTask.id == task_id, DataTask.is_deleted.is_(False)
+    )
 
     if load_relations:
         query = query.options(
             selectinload(DataTask.project),
             selectinload(DataTask.platform),
-            selectinload(DataTask.creator)
+            selectinload(DataTask.creator),
         )
 
     result = await db.execute(query)
@@ -39,7 +40,7 @@ async def get_tasks(
     status: Optional[str] = None,
     data_source: Optional[str] = None,
     creator_id: Optional[int] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
 ) -> tuple[List[DataTask], int]:
     """获取任务列表（带过滤和分页）"""
     # 构建查询条件
@@ -69,7 +70,7 @@ async def get_tasks(
             or_(
                 DataTask.name.ilike(search_pattern),
                 DataTask.description.ilike(search_pattern),
-                DataTask.keywords.ilike(search_pattern)
+                DataTask.keywords.ilike(search_pattern),
             )
         )
 
@@ -85,7 +86,7 @@ async def get_tasks(
         .options(
             selectinload(DataTask.project),
             selectinload(DataTask.platform),
-            selectinload(DataTask.creator)
+            selectinload(DataTask.creator),
         )
         .offset(skip)
         .limit(limit)
@@ -98,11 +99,7 @@ async def get_tasks(
     return list(tasks), total
 
 
-async def create_task(
-    db: AsyncSession,
-    task_data: dict,
-    creator_id: int
-) -> DataTask:
+async def create_task(db: AsyncSession, task_data: dict, creator_id: int) -> DataTask:
     """创建任务"""
     task = DataTask(**task_data, creator_id=creator_id)
     db.add(task)
@@ -111,11 +108,7 @@ async def create_task(
     return task
 
 
-async def update_task(
-    db: AsyncSession,
-    task: DataTask,
-    update_data: dict
-) -> DataTask:
+async def update_task(db: AsyncSession, task: DataTask, update_data: dict) -> DataTask:
     """更新任务"""
     for key, value in update_data.items():
         if value is not None:
@@ -127,10 +120,7 @@ async def update_task(
 
 
 async def update_task_status(
-    db: AsyncSession,
-    task: DataTask,
-    status: str,
-    error_message: Optional[str] = None
+    db: AsyncSession, task: DataTask, status: str, error_message: Optional[str] = None
 ) -> DataTask:
     """更新任务状态"""
     task.status = status
@@ -139,6 +129,7 @@ async def update_task_status(
 
     if status == "completed":
         from datetime import datetime, timezone
+
         task.completed_at = datetime.now(timezone.utc)
 
     await db.flush()
@@ -150,7 +141,7 @@ async def update_task_counts(
     db: AsyncSession,
     task: DataTask,
     posts_count: Optional[int] = None,
-    comments_count: Optional[int] = None
+    comments_count: Optional[int] = None,
 ) -> DataTask:
     """更新任务统计数据"""
     if posts_count is not None:
@@ -171,48 +162,48 @@ async def delete_task(db: AsyncSession, task: DataTask) -> None:
 
 async def delete_task_posts_and_comments(db: AsyncSession, task_id: int) -> dict:
     """删除任务的所有帖子和评论（硬删除，用于重新上传数据）
-    
+
     Args:
         db: 数据库会话
         task_id: 任务ID
-        
+
     Returns:
         删除统计：{"posts_deleted": int, "comments_deleted": int}
     """
     from sqlalchemy import delete
-    
+
     # 先删除评论
     comments_result = await db.execute(
         delete(SocialComment).where(SocialComment.task_id == task_id)
     )
     comments_deleted = comments_result.rowcount
-    
+
     # 再删除帖子
     posts_result = await db.execute(
         delete(SocialPost).where(SocialPost.task_id == task_id)
     )
     posts_deleted = posts_result.rowcount
-    
+
     # 同时删除帖子分析结果
     from src.social_media.analysis.models import PostAnalysis
-    await db.execute(
-        delete(PostAnalysis).where(PostAnalysis.task_id == task_id)
-    )
-    
+
+    await db.execute(delete(PostAnalysis).where(PostAnalysis.task_id == task_id))
+
     await db.flush()
-    
+
     return {"posts_deleted": posts_deleted, "comments_deleted": comments_deleted}
 
 
 # ==================== SocialPost CRUD ====================
 
+
 async def get_post_by_id(
-    db: AsyncSession,
-    post_id: int,
-    load_comments: bool = False
+    db: AsyncSession, post_id: int, load_comments: bool = False
 ) -> Optional[SocialPost]:
     """根据ID获取原文"""
-    query = select(SocialPost).where(SocialPost.id == post_id, SocialPost.is_deleted.is_(False))
+    query = select(SocialPost).where(
+        SocialPost.id == post_id, SocialPost.is_deleted.is_(False)
+    )
 
     if load_comments:
         query = query.options(selectinload(SocialPost.comments))
@@ -222,10 +213,7 @@ async def get_post_by_id(
 
 
 async def get_posts_by_task(
-    db: AsyncSession,
-    task_id: int,
-    skip: int = 0,
-    limit: int = 20
+    db: AsyncSession, task_id: int, skip: int = 0, limit: int = 20
 ) -> tuple[List[dict], int]:
     """获取任务的原文列表（包含已爬取评论数）
 
@@ -233,9 +221,10 @@ async def get_posts_by_task(
         tuple: (帖子数据列表（包含 crawled_comments_count）, 总数)
     """
     # 统计总数
-    count_query = select(func.count()).select_from(SocialPost).where(
-        SocialPost.task_id == task_id,
-        SocialPost.is_deleted.is_(False)
+    count_query = (
+        select(func.count())
+        .select_from(SocialPost)
+        .where(SocialPost.task_id == task_id, SocialPost.is_deleted.is_(False))
     )
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
@@ -244,8 +233,7 @@ async def get_posts_by_task(
     crawled_count_subquery = (
         select(func.count(SocialComment.id))
         .where(
-            SocialComment.post_id == SocialPost.id,
-            SocialComment.is_deleted.is_(False)
+            SocialComment.post_id == SocialPost.id, SocialComment.is_deleted.is_(False)
         )
         .correlate(SocialPost)
         .scalar_subquery()
@@ -301,13 +289,13 @@ async def get_posts_by_platform_post_id(
     db: AsyncSession,
     platform_id: int,
     post_id_on_platform: str,
-    project_id: Optional[int] = None
+    project_id: Optional[int] = None,
 ) -> List[SocialPost]:
     """跨任务查询同一帖子（按发布时间倒序）"""
     conditions = [
         SocialPost.platform_id == platform_id,
         SocialPost.post_id_on_platform == post_id_on_platform,
-        SocialPost.is_deleted.is_(False)
+        SocialPost.is_deleted.is_(False),
     ]
 
     # 如果指定项目，只查询该项目下的任务
@@ -332,10 +320,7 @@ async def get_posts_by_platform_post_id(
 
 
 async def create_post(
-    db: AsyncSession,
-    task_id: int,
-    platform_id: int,
-    post_data: dict
+    db: AsyncSession, task_id: int, platform_id: int, post_data: dict
 ) -> SocialPost:
     """创建原文"""
     post = SocialPost(**post_data, task_id=task_id, platform_id=platform_id)
@@ -345,10 +330,7 @@ async def create_post(
 
 
 async def create_posts_bulk(
-    db: AsyncSession,
-    task_id: int,
-    platform_id: int,
-    posts_data: List[dict]
+    db: AsyncSession, task_id: int, platform_id: int, posts_data: List[dict]
 ) -> List[SocialPost]:
     """批量创建原文"""
     posts = [
@@ -362,31 +344,28 @@ async def create_posts_bulk(
 
 # ==================== SocialComment CRUD ====================
 
+
 async def get_comment_by_id(
-    db: AsyncSession,
-    comment_id: int
+    db: AsyncSession, comment_id: int
 ) -> Optional[SocialComment]:
     """根据ID获取评论"""
     result = await db.execute(
         select(SocialComment).where(
-            SocialComment.id == comment_id,
-            SocialComment.is_deleted.is_(False)
+            SocialComment.id == comment_id, SocialComment.is_deleted.is_(False)
         )
     )
     return result.scalar_one_or_none()
 
 
 async def get_comments_by_post(
-    db: AsyncSession,
-    post_id: int,
-    skip: int = 0,
-    limit: int = 50
+    db: AsyncSession, post_id: int, skip: int = 0, limit: int = 50
 ) -> tuple[List[SocialComment], int]:
     """获取帖子的评论列表"""
     # 统计总数
-    count_query = select(func.count()).select_from(SocialComment).where(
-        SocialComment.post_id == post_id,
-        SocialComment.is_deleted.is_(False)
+    count_query = (
+        select(func.count())
+        .select_from(SocialComment)
+        .where(SocialComment.post_id == post_id, SocialComment.is_deleted.is_(False))
     )
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
@@ -394,10 +373,7 @@ async def get_comments_by_post(
     # 查询评论，按发布时间倒序
     query = (
         select(SocialComment)
-        .where(
-            SocialComment.post_id == post_id,
-            SocialComment.is_deleted.is_(False)
-        )
+        .where(SocialComment.post_id == post_id, SocialComment.is_deleted.is_(False))
         .offset(skip)
         .limit(limit)
         .order_by(SocialComment.published_at.desc())
@@ -410,18 +386,11 @@ async def get_comments_by_post(
 
 
 async def get_comments_by_task(
-    db: AsyncSession,
-    task_id: int,
-    skip: int = 0,
-    limit: int = 50,
-    post_id: int = None
+    db: AsyncSession, task_id: int, skip: int = 0, limit: int = 50, post_id: int = None
 ) -> tuple[List[SocialComment], int]:
     """获取任务的评论列表，可选按原文ID筛选"""
     # 构建查询条件
-    conditions = [
-        SocialComment.task_id == task_id,
-        SocialComment.is_deleted.is_(False)
-    ]
+    conditions = [SocialComment.task_id == task_id, SocialComment.is_deleted.is_(False)]
 
     # 如果指定了post_id，添加筛选条件
     if post_id is not None:
@@ -448,18 +417,11 @@ async def get_comments_by_task(
 
 
 async def create_comment(
-    db: AsyncSession,
-    task_id: int,
-    post_id: int,
-    platform_id: int,
-    comment_data: dict
+    db: AsyncSession, task_id: int, post_id: int, platform_id: int, comment_data: dict
 ) -> SocialComment:
     """创建评论"""
     comment = SocialComment(
-        **comment_data,
-        task_id=task_id,
-        post_id=post_id,
-        platform_id=platform_id
+        **comment_data, task_id=task_id, post_id=post_id, platform_id=platform_id
     )
     db.add(comment)
     await db.flush()
@@ -470,7 +432,7 @@ async def create_comments_bulk(
     db: AsyncSession,
     task_id: int,
     platform_id: int,
-    comments_data: List[tuple[int, dict]]  # [(post_id, comment_data), ...]
+    comments_data: List[tuple[int, dict]],  # [(post_id, comment_data), ...]
 ) -> List[SocialComment]:
     """批量创建评论
 
@@ -479,10 +441,7 @@ async def create_comments_bulk(
     """
     comments = [
         SocialComment(
-            **comment_data,
-            task_id=task_id,
-            post_id=post_id,
-            platform_id=platform_id
+            **comment_data, task_id=task_id, post_id=post_id, platform_id=platform_id
         )
         for post_id, comment_data in comments_data
     ]
@@ -491,6 +450,7 @@ async def create_comments_bulk(
 
     # 更新每个原文的评论计数
     from collections import Counter
+
     post_comment_counts = Counter(post_id for post_id, _ in comments_data)
 
     for post_id, count in post_comment_counts.items():
@@ -504,6 +464,7 @@ async def create_comments_bulk(
 
 
 # ==================== Bulk Task Creation ====================
+
 
 async def bulk_create_tasks(
     db: AsyncSession,
@@ -559,7 +520,7 @@ async def bulk_create_tasks(
         .options(
             selectinload(DataTask.project),
             selectinload(DataTask.platform),
-            selectinload(DataTask.creator)
+            selectinload(DataTask.creator),
         )
         .where(DataTask.id.in_(task_ids))
     )

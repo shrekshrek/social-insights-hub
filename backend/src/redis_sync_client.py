@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # ==================== 连接池优化配置 ====================
 # 基于 gevent pool concurrency=100 的优化参数
 
+
 # TCP Keepalive 配置（跨平台兼容）
 def get_keepalive_options():
     """
@@ -33,13 +34,13 @@ def get_keepalive_options():
     - macOS/BSD: 部分支持或使用不同常量
     - Windows: 不支持这些选项
     """
-    if sys.platform.startswith('linux'):
+    if sys.platform.startswith("linux"):
         # Linux 系统，启用完整的 keepalive 配置
         try:
             return {
-                socket.TCP_KEEPIDLE: 60,   # 60秒无数据后开始探测
+                socket.TCP_KEEPIDLE: 60,  # 60秒无数据后开始探测
                 socket.TCP_KEEPINTVL: 10,  # 每10秒探测一次
-                socket.TCP_KEEPCNT: 3,     # 3次失败后断开
+                socket.TCP_KEEPCNT: 3,  # 3次失败后断开
             }
         except AttributeError:
             # 某些 Linux 版本可能没有这些常量
@@ -53,16 +54,13 @@ REDIS_POOL_CONFIG = {
     # 核心连接池参数
     "max_connections": 150,  # 最大连接数 = 并发数 × 1.5（100 × 1.5）
     "decode_responses": True,  # 自动解码为字符串
-
     # 超时配置（防止连接卡死）
     "socket_timeout": 5,  # 单次操作超时：5秒
     "socket_connect_timeout": 3,  # 连接建立超时：3秒
     "socket_keepalive": True,  # 启用TCP keepalive
-
     # 重试配置
     "retry_on_timeout": True,  # 超时后自动重试一次
     "retry_on_error": [redis.exceptions.ConnectionError],  # 连接错误时重试
-
     # 健康检查
     "health_check_interval": 30,  # 每30秒检查连接健康状态
 }
@@ -74,10 +72,7 @@ if keepalive_opts:
     logger.debug("TCP keepalive 详细配置已启用（Linux平台）")
 
 # 创建同步Redis连接池（用于Celery + gevent）
-sync_redis_pool = redis.ConnectionPool.from_url(
-    settings.REDIS_URL,
-    **REDIS_POOL_CONFIG
-)
+sync_redis_pool = redis.ConnectionPool.from_url(settings.REDIS_URL, **REDIS_POOL_CONFIG)
 
 logger.info(
     f"✅ Redis连接池初始化完成: "

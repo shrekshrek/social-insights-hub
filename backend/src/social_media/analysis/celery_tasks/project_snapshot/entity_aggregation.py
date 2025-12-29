@@ -219,7 +219,7 @@ def normalize_entity_aliases(
                 ],
                 invoke_with_stats_fn=invoke_chain_with_stats_sync,
                 enable_review=True,
-                llm_type="chat"
+                llm_type="chat",
             )
 
             entity_mapping = (llm_result or {}).get("entity_mapping") or {}

@@ -176,6 +176,7 @@ class PlatformAdapter(ABC):
             if value.startswith("["):
                 try:
                     import json
+
                     parsed = json.loads(value)
                     if isinstance(parsed, list):
                         return [str(v).strip() for v in parsed if v]

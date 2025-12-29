@@ -51,17 +51,19 @@ def create_opinion_normalization_chain() -> Runnable:
     """创建观点归一化的LangChain链"""
     llm = get_llm(llm_type="chat")
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", OPINION_NORMALIZATION_SYSTEM_TEMPLATE),
-        ("user", OPINION_NORMALIZATION_USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", OPINION_NORMALIZATION_SYSTEM_TEMPLATE),
+            ("user", OPINION_NORMALIZATION_USER_TEMPLATE),
+        ]
+    )
 
     return prompt | llm
 
 
 def format_opinions_for_normalization(opinions_map: dict[str, Any]) -> str:
     """格式化观点列表用于归一化
-    
+
     Args:
         opinions_map: {原始观点: post_ids_set 或 频次}
                       可以是 dict[str, set] 或 dict[str, int]
@@ -69,16 +71,18 @@ def format_opinions_for_normalization(opinions_map: dict[str, Any]) -> str:
     # 统一获取频次
     items = []
     for term, value in opinions_map.items():
-        count = len(value) if isinstance(value, set) or isinstance(value, list) else value
+        count = (
+            len(value) if isinstance(value, set) or isinstance(value, list) else value
+        )
         items.append((term, count))
-        
+
     # 按频次降序排列
     sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-    
+
     lines = []
     for term, count in sorted_items:
         lines.append(f"- {term} ({count})")
-        
+
     return "\n".join(lines)
 
 
@@ -93,6 +97,7 @@ def parse_normalization_response(response_text: str) -> List[dict[str, Any]]:
         result = json.loads(response_text.strip())
         return result.get("clusters", [])
     except json.JSONDecodeError:
-        logger.error(f"Failed to decode JSON from Opinion Normalization response: {response_text[:100]}...")
+        logger.error(
+            f"Failed to decode JSON from Opinion Normalization response: {response_text[:100]}..."
+        )
         return []
-

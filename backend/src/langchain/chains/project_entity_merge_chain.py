@@ -161,10 +161,7 @@ def parse_project_entity_merge_response(response_text: str) -> Dict[str, Any]:
 
 
 async def merge_project_entities_with_review(
-    entities_text: str,
-    subject: str,
-    competitors: str,
-    enable_review: bool = True
+    entities_text: str, subject: str, competitors: str, enable_review: bool = True
 ) -> Dict[str, Any]:
     """
     执行两阶段项目实体合并：
@@ -173,14 +170,14 @@ async def merge_project_entities_with_review(
     """
     # 1. First Pass
     merge_chain = create_project_entity_merge_chain()
-    first_res = await merge_chain.ainvoke({
-        "entities": entities_text,
-        "subject": subject,
-        "competitors": competitors
-    })
-    
-    first_json_str = first_res.content if hasattr(first_res, "content") else str(first_res)
-    
+    first_res = await merge_chain.ainvoke(
+        {"entities": entities_text, "subject": subject, "competitors": competitors}
+    )
+
+    first_json_str = (
+        first_res.content if hasattr(first_res, "content") else str(first_res)
+    )
+
     if not enable_review:
         return parse_project_entity_merge_response(first_json_str)
 
@@ -189,17 +186,23 @@ async def merge_project_entities_with_review(
     temp_parsed = parse_project_entity_merge_response(first_json_str)
     if not temp_parsed.get("entities"):
         return temp_parsed
-        
-    clean_json_input = json.dumps({"entities": temp_parsed["entities"]}, ensure_ascii=False, indent=2)
-    
+
+    clean_json_input = json.dumps(
+        {"entities": temp_parsed["entities"]}, ensure_ascii=False, indent=2
+    )
+
     review_chain = create_project_entity_review_chain()
-    review_res = await review_chain.ainvoke({
-        "first_pass_result": clean_json_input,
-        "subject": subject,
-        "competitors": competitors
-    })
-    
-    final_json_str = review_res.content if hasattr(review_res, "content") else str(review_res)
+    review_res = await review_chain.ainvoke(
+        {
+            "first_pass_result": clean_json_input,
+            "subject": subject,
+            "competitors": competitors,
+        }
+    )
+
+    final_json_str = (
+        review_res.content if hasattr(review_res, "content") else str(review_res)
+    )
     return parse_project_entity_merge_response(final_json_str)
 
 
@@ -209,34 +212,42 @@ def merge_project_entities_with_review_sync(
     competitors: list[str],
     invoke_with_stats_fn,
     enable_review: bool = True,
-    llm_type: str = "chat"
+    llm_type: str = "chat",
 ) -> tuple[Dict[str, Any], Dict[str, Any]]:
     """
     同步版本：执行两阶段项目实体合并，支持 stats 统计。
     """
     combined_stats = {
-        'summary': {
-            'total_calls': 0,
-            'total_input_tokens': 0,
-            'total_output_tokens': 0,
-            'total_tokens': 0,
-            'total_cost_cny': 0.0,
-            'total_duration_seconds': 0.0,
+        "summary": {
+            "total_calls": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cost_cny": 0.0,
+            "total_duration_seconds": 0.0,
         },
-        'call_details': [],
+        "call_details": [],
     }
 
     def merge_stats(stats: dict[str, Any]):
         if not stats:
             return
-        summary = stats.get('summary', {})
-        combined_stats['summary']['total_calls'] += summary.get('total_calls', 0)
-        combined_stats['summary']['total_input_tokens'] += summary.get('total_input_tokens', 0)
-        combined_stats['summary']['total_output_tokens'] += summary.get('total_output_tokens', 0)
-        combined_stats['summary']['total_tokens'] += summary.get('total_tokens', 0)
-        combined_stats['summary']['total_cost_cny'] += summary.get('total_cost_cny', 0.0)
-        combined_stats['summary']['total_duration_seconds'] += summary.get('total_duration_seconds', 0.0)
-        combined_stats['call_details'].extend(stats.get('call_details', []))
+        summary = stats.get("summary", {})
+        combined_stats["summary"]["total_calls"] += summary.get("total_calls", 0)
+        combined_stats["summary"]["total_input_tokens"] += summary.get(
+            "total_input_tokens", 0
+        )
+        combined_stats["summary"]["total_output_tokens"] += summary.get(
+            "total_output_tokens", 0
+        )
+        combined_stats["summary"]["total_tokens"] += summary.get("total_tokens", 0)
+        combined_stats["summary"]["total_cost_cny"] += summary.get(
+            "total_cost_cny", 0.0
+        )
+        combined_stats["summary"]["total_duration_seconds"] += summary.get(
+            "total_duration_seconds", 0.0
+        )
+        combined_stats["call_details"].extend(stats.get("call_details", []))
 
     competitors_str = str(competitors)
 
@@ -245,16 +256,14 @@ def merge_project_entities_with_review_sync(
     merge_chain = create_project_entity_merge_chain()
     first_res, first_stats = invoke_with_stats_fn(
         merge_chain,
-        {
-            "entities": entities_text,
-            "subject": subject,
-            "competitors": competitors_str
-        },
-        llm_type
+        {"entities": entities_text, "subject": subject, "competitors": competitors_str},
+        llm_type,
     )
     merge_stats(first_stats)
-    
-    first_json_str = first_res.content if hasattr(first_res, "content") else str(first_res)
+
+    first_json_str = (
+        first_res.content if hasattr(first_res, "content") else str(first_res)
+    )
     first_result = parse_project_entity_merge_response(first_json_str)
 
     if not enable_review:
@@ -262,25 +271,31 @@ def merge_project_entities_with_review_sync(
 
     # 2. Second Pass (Review)
     if not first_result.get("entities"):
-        logger.warning("[Project Merge] Phase 1 returned empty entities, skipping review.")
+        logger.warning(
+            "[Project Merge] Phase 1 returned empty entities, skipping review."
+        )
         return first_result, combined_stats
 
     logger.info("[Project Merge] Phase 2: Audit & Review")
-    clean_json_input = json.dumps({"entities": first_result["entities"]}, ensure_ascii=False, indent=2)
-    
+    clean_json_input = json.dumps(
+        {"entities": first_result["entities"]}, ensure_ascii=False, indent=2
+    )
+
     review_chain = create_project_entity_review_chain()
     review_res, review_stats = invoke_with_stats_fn(
         review_chain,
         {
             "first_pass_result": clean_json_input,
             "subject": subject,
-            "competitors": competitors_str
+            "competitors": competitors_str,
         },
-        llm_type
+        llm_type,
     )
     merge_stats(review_stats)
-    
-    final_json_str = review_res.content if hasattr(review_res, "content") else str(review_res)
+
+    final_json_str = (
+        review_res.content if hasattr(review_res, "content") else str(review_res)
+    )
     final_result = parse_project_entity_merge_response(final_json_str)
 
     return final_result, combined_stats

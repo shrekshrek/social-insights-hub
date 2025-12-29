@@ -35,9 +35,9 @@ async def get_analysis_jobs(
     stmt = (
         select(
             AnalysisJob,
-            SocialProject.name.label('project_name'),
-            DataTask.name.label('task_name'),
-            User.username.label('user_name'),
+            SocialProject.name.label("project_name"),
+            DataTask.name.label("task_name"),
+            User.username.label("user_name"),
         )
         .join(SocialProject, AnalysisJob.project_id == SocialProject.id)
         .join(DataTask, AnalysisJob.task_id == DataTask.id, isouter=True)
@@ -100,9 +100,9 @@ async def get_analysis_jobs(
 
     snapshot_name_by_id: dict[int, str | None] = {}
     if snapshot_ids:
-        snap_stmt = select(ProjectAnalysisSnapshot.id, ProjectAnalysisSnapshot.name).where(
-            ProjectAnalysisSnapshot.id.in_(list(snapshot_ids))
-        )
+        snap_stmt = select(
+            ProjectAnalysisSnapshot.id, ProjectAnalysisSnapshot.name
+        ).where(ProjectAnalysisSnapshot.id.in_(list(snapshot_ids)))
         snap_rows = (await db.execute(snap_stmt)).all()
         snapshot_name_by_id = {int(r[0]): r[1] for r in snap_rows}
 
@@ -140,7 +140,9 @@ async def get_analysis_jobs(
             "project_name": row.project_name,
             "task_name": row.task_name,
             "snapshot_id": snapshot_id,
-            "snapshot_name": snapshot_name_by_id.get(snapshot_id) if snapshot_id is not None else None,
+            "snapshot_name": snapshot_name_by_id.get(snapshot_id)
+            if snapshot_id is not None
+            else None,
             "user_name": row.user_name,
         }
         items.append(item)
@@ -149,9 +151,7 @@ async def get_analysis_jobs(
 
 
 async def get_analysis_job(
-    db: AsyncSession,
-    job_id: int,
-    current_user_id: int
+    db: AsyncSession, job_id: int, current_user_id: int
 ) -> Optional[Dict[str, Any]]:
     """获取单个分析任务详情（带关联信息）"""
     from src.social_media.projects.models import SocialProject
@@ -163,9 +163,9 @@ async def get_analysis_job(
     stmt = (
         select(
             AnalysisJob,
-            SocialProject.name.label('project_name'),
-            DataTask.name.label('task_name'),
-            User.username.label('user_name'),
+            SocialProject.name.label("project_name"),
+            DataTask.name.label("task_name"),
+            User.username.label("user_name"),
         )
         .join(SocialProject, AnalysisJob.project_id == SocialProject.id)
         .join(DataTask, AnalysisJob.task_id == DataTask.id, isouter=True)
@@ -182,11 +182,12 @@ async def get_analysis_job(
     job = row.AnalysisJob
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(db, job.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, job.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
-            status_code=403,
-            detail="You don't have access to this analysis job"
+            status_code=403, detail="You don't have access to this analysis job"
         )
 
     return {
@@ -218,9 +219,7 @@ async def get_analysis_job(
 
 
 async def get_analysis_progress(
-    db: AsyncSession,
-    job_id: int,
-    current_user_id: int
+    db: AsyncSession, job_id: int, current_user_id: int
 ) -> AnalysisProgressResponse:
     """获取分析任务进度"""
     from src.social_media.projects import crud as project_crud
@@ -233,15 +232,17 @@ async def get_analysis_progress(
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analysis job {job_id} not found"
+            detail=f"Analysis job {job_id} not found",
         )
 
     # 验证权限
-    has_access = await project_crud.check_project_access(db, job.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, job.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this analysis job"
+            detail="You don't have access to this analysis job",
         )
 
     # 计算进度（限制最大100%）
@@ -276,9 +277,7 @@ async def get_analysis_progress(
 
 
 async def cancel_analysis_job(
-    db: AsyncSession,
-    job_id: int,
-    current_user_id: int
+    db: AsyncSession, job_id: int, current_user_id: int
 ) -> bool:
     """取消分析任务"""
     from celery import current_app as celery_app
@@ -292,21 +291,23 @@ async def cancel_analysis_job(
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analysis job {job_id} not found"
+            detail=f"Analysis job {job_id} not found",
         )
 
     # 验证权限
-    has_access = await project_crud.check_project_access(db, job.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, job.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this analysis job"
+            detail="You don't have access to this analysis job",
         )
 
     if job.status not in ("pending", "processing"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot cancel analysis in status: {job.status}"
+            detail=f"Cannot cancel analysis in status: {job.status}",
         )
 
     # 取消Celery任务
@@ -322,9 +323,7 @@ async def cancel_analysis_job(
 
 
 async def delete_analysis_job(
-    db: AsyncSession,
-    job_id: int,
-    current_user_id: int
+    db: AsyncSession, job_id: int, current_user_id: int
 ) -> bool:
     """删除分析任务"""
     from src.social_media.projects import crud as project_crud
@@ -337,15 +336,17 @@ async def delete_analysis_job(
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analysis job {job_id} not found"
+            detail=f"Analysis job {job_id} not found",
         )
 
     # 验证权限
-    has_access = await project_crud.check_project_access(db, job.project_id, current_user_id)
+    has_access = await project_crud.check_project_access(
+        db, job.project_id, current_user_id
+    )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this analysis job"
+            detail="You don't have access to this analysis job",
         )
 
     await db.delete(job)

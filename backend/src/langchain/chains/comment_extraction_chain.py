@@ -18,6 +18,10 @@ COMMENT_ANALYSIS_SYSTEM_TEMPLATE = """你是舆情分析专家，从社交媒体
 2. **评论独立性**：逐条分析评论，避免跨评论信息混合
 3. **实体级汇总**：多条评论涉及同一实体时才汇总信息
 4. **无则留空**：评论未提及的内容，对应字段返回空数组
+5. **来源追踪**：每个实体和观点必须标注来源评论编号（source_comments字段）
+
+## 输入格式说明
+评论以 `评论[编号]: 内容` 格式提供，编号用于追踪来源。
 
 ## 实体识别策略
 - **明确提及**：评论中直接提到的实体名称
@@ -39,6 +43,7 @@ COMMENT_ANALYSIS_SYSTEM_TEMPLATE = """你是舆情分析专家，从社交媒体
 | scenarios | 使用场景/用途 |
 | market_factors | 价格/促销/渠道 |
 | competitors | 竞品对比 |
+| source_comments | **必填**：该实体信息来源的评论编号列表 |
 
 **type分类（只能选以下5类之一）**：
 - 品牌：公司、品牌（华为、可口可乐）
@@ -55,11 +60,12 @@ COMMENT_ANALYSIS_SYSTEM_TEMPLATE = """你是舆情分析专家，从社交媒体
 | category | 观点类别（产品/价格/服务/行业等） |
 | opinions | 具体观点内容列表 |
 | sentiment | 情感：1正面, 0中性, -1负面 |
+| source_comments | **必填**：该观点来源的评论编号列表 |
 
 ## 输出格式
 {{
-  "entities": [{{"name": "", "type": "", "sentiment": 0, "features": [], "issues": [], "expectations": [], "audience": [], "scenarios": [], "market_factors": [], "competitors": []}}],
-  "general_opinions": [{{"category": "", "opinions": [], "sentiment": 0}}]
+  "entities": [{{"name": "", "type": "", "sentiment": 0, "features": [], "issues": [], "expectations": [], "audience": [], "scenarios": [], "market_factors": [], "competitors": [], "source_comments": [1, 2]}}],
+  "general_opinions": [{{"category": "", "opinions": [], "sentiment": 0, "source_comments": [1]}}]
 }}
 
 只输出JSON，不要有其他文字。
@@ -71,24 +77,24 @@ COMMENT_ANALYSIS_USER_TEMPLATE = """
 {context}
 注意：以上背景上下文仅作为理解评论内容的辅助信息，请仅从下面的评论中提取信息，不要从背景上下文中提取任何内容。
 
-评论列表：
+评论列表（编号用于追踪来源）：
 {comments}
 """
 
 
 def create_comment_extraction_chain() -> Runnable:
     """创建评论信息提取的LangChain链
-    
+
     Returns:
         Runnable: 用于评论信息提取的LangChain可执行链
     """
     llm = get_llm(llm_type="chat")
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", COMMENT_ANALYSIS_SYSTEM_TEMPLATE),
-        ("user", COMMENT_ANALYSIS_USER_TEMPLATE),
-    ])
-    
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", COMMENT_ANALYSIS_SYSTEM_TEMPLATE),
+            ("user", COMMENT_ANALYSIS_USER_TEMPLATE),
+        ]
+    )
+
     return prompt | llm
-
-

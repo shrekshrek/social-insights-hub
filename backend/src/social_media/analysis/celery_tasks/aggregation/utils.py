@@ -27,9 +27,9 @@ def run_parallel_normalization(
     task_name_key: str = "task_id",
 ) -> tuple[List[dict], dict]:
     """通用并行归一化执行器
-    
+
     统一处理并行调用 LLM、异常捕获和 Token 统计汇总。
-    
+
     Args:
         tasks: 任务列表，每个 task 必须包含 chain 需要的 input_variables
         chain_factory: 创建 chain 的工厂函数
@@ -38,7 +38,7 @@ def run_parallel_normalization(
         llm_type: LLM 类型
         max_workers: 最大并发数
         task_name_key: 用于日志记录的任务标识键名 (如 'group_key' 或 'entity_name')
-        
+
     Returns:
         tuple: (results, combined_token_stats)
             - results: List[{ "task": original_task, "parsed_result": result, "stats": stats }]
@@ -46,21 +46,23 @@ def run_parallel_normalization(
     """
     results = []
     combined_stats = {
-        'summary': {
-            'total_calls': 0,
-            'total_input_tokens': 0,
-            'total_output_tokens': 0,
-            'total_tokens': 0,
-            'total_cost_cny': 0.0,
-            'total_duration_seconds': 0.0,
+        "summary": {
+            "total_calls": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cost_cny": 0.0,
+            "total_duration_seconds": 0.0,
         },
-        'call_details': [],
+        "call_details": [],
     }
-    
+
     if not tasks:
         return results, combined_stats
 
-    logger.info(f"[并行归一化] 准备执行 {len(tasks)} 个任务 (max_workers={max_workers})")
+    logger.info(
+        f"[并行归一化] 准备执行 {len(tasks)} 个任务 (max_workers={max_workers})"
+    )
 
     # 定义单个执行任务
     def _run_single_task(task_input):
@@ -68,66 +70,76 @@ def run_parallel_normalization(
         try:
             # 在线程中创建 chain (确保线程安全)
             chain = chain_factory()
-            
+
             # 调用 LLM
             # 注意：invoke_func (invoke_chain_with_stats_sync) 的签名通常是 (chain, inputs, llm_type)
             # task_input 中包含了 chain 需要的所有参数
             response, stats = invoke_func(chain, task_input, llm_type)
-            
-            response_text = response.content if hasattr(response, "content") else str(response)
+
+            response_text = (
+                response.content if hasattr(response, "content") else str(response)
+            )
             parsed_result = parse_response_func(response_text)
-            
+
             return {
                 "task": task_input,
                 "parsed_result": parsed_result,
                 "stats": stats,
-                "success": True
+                "success": True,
             }
         except Exception as e:
             logger.error(f"[并行归一化] 任务 '{task_id}' 失败: {e}", exc_info=True)
-            return {
-                "task": task_input,
-                "error": str(e),
-                "success": False
-            }
+            return {"task": task_input, "error": str(e), "success": False}
 
     # 并行执行
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # 提交所有任务
-        future_to_task = {executor.submit(_run_single_task, task): task for task in tasks}
-        
+        future_to_task = {
+            executor.submit(_run_single_task, task): task for task in tasks
+        }
+
         for future in as_completed(future_to_task):
             try:
                 result = future.result()
                 if not result["success"]:
                     continue
-                    
+
                 results.append(result)
-                
+
                 # 汇总统计
                 stats = result.get("stats")
                 if stats:
-                    s = stats.get('summary', {})
-                    combined_stats['summary']['total_calls'] += s.get('total_calls', 0)
-                    combined_stats['summary']['total_input_tokens'] = combined_stats['summary'].get('total_input_tokens', 0) + s.get('total_input_tokens', 0)
-                    combined_stats['summary']['total_output_tokens'] = combined_stats['summary'].get('total_output_tokens', 0) + s.get('total_output_tokens', 0)
-                    combined_stats['summary']['total_tokens'] += s.get('total_tokens', 0)
-                    combined_stats['summary']['total_cost_cny'] += s.get('total_cost_cny', 0.0)
+                    s = stats.get("summary", {})
+                    combined_stats["summary"]["total_calls"] += s.get("total_calls", 0)
+                    combined_stats["summary"]["total_input_tokens"] = combined_stats[
+                        "summary"
+                    ].get("total_input_tokens", 0) + s.get("total_input_tokens", 0)
+                    combined_stats["summary"]["total_output_tokens"] = combined_stats[
+                        "summary"
+                    ].get("total_output_tokens", 0) + s.get("total_output_tokens", 0)
+                    combined_stats["summary"]["total_tokens"] += s.get(
+                        "total_tokens", 0
+                    )
+                    combined_stats["summary"]["total_cost_cny"] += s.get(
+                        "total_cost_cny", 0.0
+                    )
                     # duration 不需要累加用于计费，但用于统计总的计算资源占用
-                    combined_stats['summary']['total_duration_seconds'] += s.get('total_duration_seconds', 0.0)
-                    combined_stats['call_details'].extend(stats.get('call_details', []))
-                    
+                    combined_stats["summary"]["total_duration_seconds"] += s.get(
+                        "total_duration_seconds", 0.0
+                    )
+                    combined_stats["call_details"].extend(stats.get("call_details", []))
+
             except Exception as e:
                 logger.error(f"[并行归一化] 线程执行异常: {e}", exc_info=True)
 
     # 重新计算平均值
-    total_calls = combined_stats['summary']['total_calls']
+    total_calls = combined_stats["summary"]["total_calls"]
     if total_calls > 0:
-        combined_stats['summary']['avg_tokens_per_call'] = (
-            combined_stats['summary']['total_tokens'] / total_calls
+        combined_stats["summary"]["avg_tokens_per_call"] = (
+            combined_stats["summary"]["total_tokens"] / total_calls
         )
-        combined_stats['summary']['avg_cost_per_call'] = (
-            combined_stats['summary']['total_cost_cny'] / total_calls
+        combined_stats["summary"]["avg_cost_per_call"] = (
+            combined_stats["summary"]["total_cost_cny"] / total_calls
         )
 
     return results, combined_stats
@@ -135,39 +147,45 @@ def run_parallel_normalization(
 
 def merge_token_stats(target: dict, source: dict) -> None:
     """合并 Token 统计数据（原地更新 target）
-    
+
     Args:
         target: 目标统计字典（将被更新）
         source: 源统计字典
     """
     if not source:
         return
-        
-    s_target = target.setdefault('summary', {})
-    s_source = source.get('summary', {})
-    
+
+    s_target = target.setdefault("summary", {})
+    s_source = source.get("summary", {})
+
     # 初始化默认值
-    for key in ['total_calls', 'total_tokens', 'total_input_tokens', 'total_output_tokens', 
-                'total_cost_cny', 'total_duration_seconds']:
+    for key in [
+        "total_calls",
+        "total_tokens",
+        "total_input_tokens",
+        "total_output_tokens",
+        "total_cost_cny",
+        "total_duration_seconds",
+    ]:
         s_target.setdefault(key, 0)
-    
+
     # 累加数值字段
-    s_target['total_calls'] += s_source.get('total_calls', 0)
-    s_target['total_input_tokens'] += s_source.get('total_input_tokens', 0)
-    s_target['total_output_tokens'] += s_source.get('total_output_tokens', 0)
-    s_target['total_tokens'] += s_source.get('total_tokens', 0)
-    s_target['total_cost_cny'] += s_source.get('total_cost_cny', 0.0)
-    s_target['total_duration_seconds'] += s_source.get('total_duration_seconds', 0.0)
-    
+    s_target["total_calls"] += s_source.get("total_calls", 0)
+    s_target["total_input_tokens"] += s_source.get("total_input_tokens", 0)
+    s_target["total_output_tokens"] += s_source.get("total_output_tokens", 0)
+    s_target["total_tokens"] += s_source.get("total_tokens", 0)
+    s_target["total_cost_cny"] += s_source.get("total_cost_cny", 0.0)
+    s_target["total_duration_seconds"] += s_source.get("total_duration_seconds", 0.0)
+
     # 合并调用详情
-    if 'call_details' in source:
-        target.setdefault('call_details', []).extend(source['call_details'])
-        
+    if "call_details" in source:
+        target.setdefault("call_details", []).extend(source["call_details"])
+
     # 重新计算平均值
-    total_calls = s_target['total_calls']
+    total_calls = s_target["total_calls"]
     if total_calls > 0:
-        s_target['avg_tokens_per_call'] = s_target['total_tokens'] / total_calls
-        s_target['avg_cost_per_call'] = s_target['total_cost_cny'] / total_calls
+        s_target["avg_tokens_per_call"] = s_target["total_tokens"] / total_calls
+        s_target["avg_cost_per_call"] = s_target["total_cost_cny"] / total_calls
 
 
 def calculate_impact_score(cii: float, value_score: float | None) -> float:
@@ -185,12 +203,47 @@ def calculate_impact_score(cii: float, value_score: float | None) -> float:
     """
     if value_score is None:
         value_score = 5.0
-    
+
     # 确保 value_score 在合理范围内
     value_score = max(0.0, min(10.0, float(value_score)))
-    
+
     quality_factor = 0.5 + (value_score / 10.0)
     return cii * quality_factor
+
+
+# 评论权重衰减系数
+COMMENT_WEIGHT_BASE_FACTOR = 0.1
+
+
+def calculate_comment_weight(
+    support_score: int,
+    post_impact: float,
+) -> float:
+    """计算评论观点/实体的权重
+
+    评论权重 = post_impact * COMMENT_WEIGHT_BASE_FACTOR * log10(support_score + 1)
+
+    权重示例（假设 post_impact = 1000）：
+    - support_score=1000 → 1000 * 0.1 * 3 = 300 (原文的 30%)
+    - support_score=100  → 1000 * 0.1 * 2 = 200 (原文的 20%)
+    - support_score=10   → 1000 * 0.1 * 1 = 100 (原文的 10%)
+    - support_score=0    → 1000 * 0.1 * 0 = 0   (无权重)
+
+    Args:
+        support_score: 支持度分数（来源评论点赞数之和）
+        post_impact: 帖子的 Impact Score
+
+    Returns:
+        float: 评论观点/实体的权重
+    """
+    if support_score <= 0:
+        return 0.0
+
+    # 对数平滑：log10(support_score + 1)
+    # support_score=10 → 1.04, support_score=100 → 2.00, support_score=1000 → 3.00
+    log_factor = math.log10(support_score + 1)
+
+    return post_impact * COMMENT_WEIGHT_BASE_FACTOR * log_factor
 
 
 def calculate_score(heat: float, mentions: int) -> float:

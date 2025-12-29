@@ -15,7 +15,9 @@ from src.rbac.models import SystemRoles
 from src.rbac.utils import create_module_permissions
 
 # 导入模块权限定义
-from src.social_media.analysis.permissions_def import ALL_PERMISSIONS as ANALYSIS_PERMISSIONS
+from src.social_media.analysis.permissions_def import (
+    ALL_PERMISSIONS as ANALYSIS_PERMISSIONS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +155,7 @@ BUSINESS_PERMISSIONS = [
             "read": "允许查看项目详情和列表",
             "write": "允许创建和编辑项目",
             "delete": "允许删除项目及其关联数据",
-        }
+        },
     ),
     # ========================================================================
     # 任务管理
@@ -172,7 +174,7 @@ BUSINESS_PERMISSIONS = [
             "read": "允许查看任务详情和数据",
             "write": "允许创建任务和上传数据",
             "delete": "允许删除任务及其数据",
-        }
+        },
     ),
     # ========================================================================
     # 数据分析模块 (新增)

@@ -29,4 +29,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("project_analysis_snapshots", "name")
-

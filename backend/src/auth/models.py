@@ -35,12 +35,12 @@ class User(Base):
     owned_projects: Mapped[list["SocialProject"]] = relationship(
         "src.social_media.projects.models.SocialProject",
         foreign_keys="SocialProject.owner_id",
-        back_populates="owner"
+        back_populates="owner",
     )
 
     # 社交媒体项目关系（作为participant）
     participating_projects: Mapped[list["SocialProject"]] = relationship(
         "src.social_media.projects.models.SocialProject",
         secondary="social_project_participants",
-        back_populates="participants"
+        back_populates="participants",
     )

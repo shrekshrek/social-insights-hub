@@ -83,12 +83,56 @@ class PostDeepResult(CustomBaseModel):
     summary: str = Field(..., description="内容摘要（100-200字）")
 
 
-class CommentDeepResult(CustomBaseModel):
-    """评论深度分析结果（按帖子聚合）"""
+# ==================== 评论专用 Schema（带来源追踪）====================
 
-    entities: list[EntityInfo] = Field(default_factory=list, description="识别的实体")
-    general_opinions: list[GeneralOpinion] = Field(
-        default_factory=list, description="通用观点"
+
+class CommentEntityInfo(CustomBaseModel):
+    """评论中提取的实体信息（带来源追踪）"""
+
+    name: str = Field(..., description="实体名称")
+    type: Literal["品牌", "产品", "服务", "人物", "其他"] = Field(
+        ..., description="实体类型"
+    )
+    sentiment: Literal[1, 0, -1] = Field(..., description="情感倾向")
+    features: list[str] = Field(default_factory=list, description="特性/功能/亮点")
+    issues: list[str] = Field(default_factory=list, description="问题/缺点")
+    expectations: list[str] = Field(default_factory=list, description="改进期望/建议")
+    audience: list[str] = Field(default_factory=list, description="目标人群")
+    scenarios: list[str] = Field(default_factory=list, description="使用场景")
+    market_factors: list[str] = Field(default_factory=list, description="价格/促销信息")
+    competitors: list[str] = Field(default_factory=list, description="竞品对比")
+    # 评论来源追踪
+    source_comments: list[int] = Field(
+        default_factory=list, description="来源评论编号列表"
+    )
+    support_score: int = Field(
+        default=0, description="支持度分数（来源评论点赞数之和）"
+    )
+
+
+class CommentGeneralOpinion(CustomBaseModel):
+    """评论中提取的通用观点（带来源追踪）"""
+
+    category: str = Field(..., description="观点类别")
+    opinions: list[str] = Field(default_factory=list, description="具体观点")
+    sentiment: Literal[1, 0, -1] = Field(..., description="情感倾向")
+    # 评论来源追踪
+    source_comments: list[int] = Field(
+        default_factory=list, description="来源评论编号列表"
+    )
+    support_score: int = Field(
+        default=0, description="支持度分数（来源评论点赞数之和）"
+    )
+
+
+class CommentDeepResult(CustomBaseModel):
+    """评论深度分析结果（按帖子聚合，带来源追踪）"""
+
+    entities: list[CommentEntityInfo] = Field(
+        default_factory=list, description="识别的实体（带来源追踪）"
+    )
+    general_opinions: list[CommentGeneralOpinion] = Field(
+        default_factory=list, description="通用观点（带来源追踪）"
     )
 
 

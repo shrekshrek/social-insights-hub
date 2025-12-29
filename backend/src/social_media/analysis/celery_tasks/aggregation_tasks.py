@@ -35,23 +35,23 @@ def run_aggregation_task(
     opinion_job_id: int | None = None,
 ) -> Dict[str, Any]:
     """执行聚合分析（Celery 异步任务）
-    
+
     聚合分析本身不涉及 LLM API 调用。
     实体归一化和观点归一化的 AnalysisJob 由调用方预先创建（状态为 pending），
     本任务接收 job_id 并传递给 orchestrator 更新状态。
-    
+
     Args:
         task_id: DataTask ID
         project_id: 项目 ID
         user_id: 用户 ID
         entity_job_id: 预创建的实体归一化 AnalysisJob ID
         opinion_job_id: 预创建的观点归一化 AnalysisJob ID
-    
+
     Returns:
         聚合分析结果
     """
     logger.info(f"开始聚合分析: task_id={task_id}")
-    
+
     db = SyncSessionLocal()
     try:
         # 执行聚合分析，传递预创建的 job_id
@@ -71,43 +71,51 @@ def run_aggregation_task(
             # opinions
             agg_ops = (aggregation_result or {}).get("aggregated_opinions")
             ins_topics = insights.get("top_topics")
-            if (not isinstance(agg_ops, list) or len(agg_ops) == 0) and isinstance(ins_topics, list) and len(ins_topics) > 0:
+            if (
+                (not isinstance(agg_ops, list) or len(agg_ops) == 0)
+                and isinstance(ins_topics, list)
+                and len(ins_topics) > 0
+            ):
                 aggregation_result["aggregated_opinions"] = ins_topics
             # entities
             agg_ents = (aggregation_result or {}).get("aggregated_entities")
             ins_ents = insights.get("top_entities")
-            if (not isinstance(agg_ents, list) or len(agg_ents) == 0) and isinstance(ins_ents, list) and len(ins_ents) > 0:
+            if (
+                (not isinstance(agg_ents, list) or len(agg_ents) == 0)
+                and isinstance(ins_ents, list)
+                and len(ins_ents) > 0
+            ):
                 aggregation_result["aggregated_entities"] = ins_ents
         except Exception:
             # 回填失败不应阻塞聚合落库
             pass
-        
+
         # 将结果保存到 DataTask.analysis_result
         now = datetime.now(timezone.utc)
         stmt = select(DataTask).where(DataTask.id == task_id)
         result = db.execute(stmt)
         data_task = result.scalar_one_or_none()
-        
+
         if data_task:
             data_task.analysis_result = aggregation_result
             data_task.analysis_result_at = now
-        
+
         db.commit()
-        
+
         logger.info(f"聚合分析完成: task_id={task_id}")
-        
+
         return {
             "status": "completed",
             "task_id": task_id,
             "analyzed_at": now.isoformat(),
         }
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"聚合分析失败: task_id={task_id}, error={str(e)}", exc_info=True)
-        
+
         # 重试或抛出异常
         raise self.retry(exc=e)
-        
+
     finally:
         db.close()

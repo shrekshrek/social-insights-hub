@@ -52,12 +52,16 @@ class AnalysisTaskBase(Task):
         processing_time = int(time.time() - self._start_time) if self._start_time else 0
         logger.info(f"任务 {task_id} 成功完成，耗时 {processing_time}秒")
 
-    def on_failure(self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo) -> None:
+    def on_failure(
+        self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo
+    ) -> None:
         """任务失败的钩子"""
         super().on_failure(exc, task_id, args, kwargs, einfo)
         logger.error(f"任务 {task_id} 失败: {str(exc)}", exc_info=True)
 
-    def on_retry(self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo) -> None:
+    def on_retry(
+        self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo
+    ) -> None:
         """任务重试的钩子"""
         super().on_retry(exc, task_id, args, kwargs, einfo)
         logger.warning(f"任务 {task_id} 重试: {str(exc)}")

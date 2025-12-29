@@ -127,10 +127,12 @@ def create_entity_clustering_chain() -> Runnable:
     """
     llm = get_llm(llm_type="chat")
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", ENTITY_CLUSTERING_SYSTEM_TEMPLATE),
-        ("user", ENTITY_CLUSTERING_USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", ENTITY_CLUSTERING_SYSTEM_TEMPLATE),
+            ("user", ENTITY_CLUSTERING_USER_TEMPLATE),
+        ]
+    )
 
     return prompt | llm
 
@@ -143,10 +145,12 @@ def create_entity_review_chain() -> Runnable:
     """
     llm = get_llm(llm_type="chat")
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", ENTITY_REVIEW_SYSTEM_TEMPLATE),
-        ("user", ENTITY_REVIEW_USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", ENTITY_REVIEW_SYSTEM_TEMPLATE),
+            ("user", ENTITY_REVIEW_USER_TEMPLATE),
+        ]
+    )
 
     return prompt | llm
 
@@ -187,7 +191,9 @@ def parse_clustering_response(response_text: str) -> dict[str, Any]:
     try:
         result = json.loads(response_text.strip())
     except json.JSONDecodeError:
-        logger.error(f"Failed to decode JSON from LLM response: {response_text[:100]}...")
+        logger.error(
+            f"Failed to decode JSON from LLM response: {response_text[:100]}..."
+        )
         return {"entities": [], "entity_mapping": {}, "tags_mapping": {}}
 
     # 构建实体映射表（原名称 -> 归一化名称）
@@ -199,7 +205,7 @@ def parse_clustering_response(response_text: str) -> dict[str, Any]:
         name = entity.get("name", "")
         if not name:
             continue
-            
+
         # 构建 tags (role 和 parent 由 LLM 生成)
         tags = {
             "role": entity.get("role", "Context"),
@@ -219,7 +225,7 @@ def parse_clustering_response(response_text: str) -> dict[str, Any]:
 async def cluster_entities_with_review(
     entities: list[dict[str, Any]],
     task_keywords: list[str] | None = None,
-    enable_review: bool = True
+    enable_review: bool = True,
 ) -> dict[str, Any]:
     """执行两阶段实体归一化/聚类（异步版本）
 
@@ -232,12 +238,8 @@ async def cluster_entities_with_review(
         dict: 归一化结果，包含 entities, entity_mapping, tags_mapping
     """
     if not entities:
-        return {
-            "entities": [],
-            "entity_mapping": {},
-            "tags_mapping": {}
-        }
-    
+        return {"entities": [], "entity_mapping": {}, "tags_mapping": {}}
+
     # 转换关键词为字符串
     keywords_str = ", ".join(task_keywords) if task_keywords else "未指定"
 
@@ -246,10 +248,9 @@ async def cluster_entities_with_review(
     # 第一阶段：初步归一化
     logger.info(f"实体归一化第一阶段：处理 {len(entities)} 个实体")
     normalization_chain = create_entity_clustering_chain()
-    first_response = await normalization_chain.ainvoke({
-        "entities": formatted_entities,
-        "task_keywords": keywords_str
-    })
+    first_response = await normalization_chain.ainvoke(
+        {"entities": formatted_entities, "task_keywords": keywords_str}
+    )
     first_result = parse_clustering_response(first_response.content)
 
     if not enable_review:
@@ -261,15 +262,17 @@ async def cluster_entities_with_review(
     review_chain = create_entity_review_chain()
 
     # 格式化第一阶段结果用于复查
-    first_pass_json = json.dumps({
-        "entities": first_result.get("entities", [])
-    }, ensure_ascii=False, indent=2)
+    first_pass_json = json.dumps(
+        {"entities": first_result.get("entities", [])}, ensure_ascii=False, indent=2
+    )
 
-    review_response = await review_chain.ainvoke({
-        "original_entities": formatted_entities,
-        "first_pass_result": first_pass_json,
-        "task_keywords": keywords_str
-    })
+    review_response = await review_chain.ainvoke(
+        {
+            "original_entities": formatted_entities,
+            "first_pass_result": first_pass_json,
+            "task_keywords": keywords_str,
+        }
+    )
 
     final_result = parse_clustering_response(review_response.content)
     logger.info(f"实体归一化完成：{len(final_result.get('entities', []))} 个实体")
@@ -282,7 +285,7 @@ def cluster_entities_with_review_sync(
     invoke_with_stats_fn,
     task_keywords: list[str] | None = None,
     enable_review: bool = True,
-    llm_type: str = "chat"
+    llm_type: str = "chat",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """执行两阶段实体归一化/聚类（同步版本，支持 token 统计）
 
@@ -299,17 +302,17 @@ def cluster_entities_with_review_sync(
         tuple: (归一化结果, 合并的 token 统计)
     """
     combined_stats = {
-        'summary': {
-            'total_calls': 0,
-            'total_input_tokens': 0,
-            'total_output_tokens': 0,
-            'total_tokens': 0,
-            'total_cost_cny': 0.0,
-            'total_duration_seconds': 0.0,
+        "summary": {
+            "total_calls": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cost_cny": 0.0,
+            "total_duration_seconds": 0.0,
         },
-        'call_details': [],
+        "call_details": [],
     }
-    
+
     # 转换关键词为字符串
     keywords_str = ", ".join(task_keywords) if task_keywords else "未指定"
 
@@ -317,29 +320,38 @@ def cluster_entities_with_review_sync(
         """合并 token 统计"""
         if not stats:
             return
-        summary = stats.get('summary', {})
-        combined_stats['summary']['total_calls'] += summary.get('total_calls', 0)
-        combined_stats['summary']['total_input_tokens'] += summary.get('total_input_tokens', 0)
-        combined_stats['summary']['total_output_tokens'] += summary.get('total_output_tokens', 0)
-        combined_stats['summary']['total_tokens'] += summary.get('total_tokens', 0)
-        combined_stats['summary']['total_cost_cny'] += summary.get('total_cost_cny', 0.0)
-        combined_stats['summary']['total_duration_seconds'] += summary.get('total_duration_seconds', 0.0)
-        combined_stats['call_details'].extend(stats.get('call_details', []))
+        summary = stats.get("summary", {})
+        combined_stats["summary"]["total_calls"] += summary.get("total_calls", 0)
+        combined_stats["summary"]["total_input_tokens"] += summary.get(
+            "total_input_tokens", 0
+        )
+        combined_stats["summary"]["total_output_tokens"] += summary.get(
+            "total_output_tokens", 0
+        )
+        combined_stats["summary"]["total_tokens"] += summary.get("total_tokens", 0)
+        combined_stats["summary"]["total_cost_cny"] += summary.get(
+            "total_cost_cny", 0.0
+        )
+        combined_stats["summary"]["total_duration_seconds"] += summary.get(
+            "total_duration_seconds", 0.0
+        )
+        combined_stats["call_details"].extend(stats.get("call_details", []))
 
     # 第一阶段：初步归一化
     logger.info("实体归一化第一阶段：初步归一化")
     normalization_chain = create_entity_clustering_chain()
     first_response, first_stats = invoke_with_stats_fn(
         normalization_chain,
-        {
-            "entities": formatted_entities,
-            "task_keywords": keywords_str
-        },
-        llm_type
+        {"entities": formatted_entities, "task_keywords": keywords_str},
+        llm_type,
     )
     merge_stats(first_stats)
 
-    first_response_text = first_response.content if hasattr(first_response, "content") else str(first_response)
+    first_response_text = (
+        first_response.content
+        if hasattr(first_response, "content")
+        else str(first_response)
+    )
     first_result = parse_clustering_response(first_response_text)
 
     if not enable_review:
@@ -351,33 +363,41 @@ def cluster_entities_with_review_sync(
     review_chain = create_entity_review_chain()
 
     # 格式化第一阶段结果用于复查
-    first_pass_json = json.dumps({
-        "entities": first_result.get("entities", [])
-    }, ensure_ascii=False, indent=2)
+    first_pass_json = json.dumps(
+        {"entities": first_result.get("entities", [])}, ensure_ascii=False, indent=2
+    )
 
     review_response, review_stats = invoke_with_stats_fn(
         review_chain,
         {
             "original_entities": formatted_entities,
             "first_pass_result": first_pass_json,
-            "task_keywords": keywords_str
+            "task_keywords": keywords_str,
         },
-        llm_type
+        llm_type,
     )
     merge_stats(review_stats)
 
-    review_response_text = review_response.content if hasattr(review_response, "content") else str(review_response)
+    review_response_text = (
+        review_response.content
+        if hasattr(review_response, "content")
+        else str(review_response)
+    )
     final_result = parse_clustering_response(review_response_text)
 
-    logger.info(f"[实体归一化] 两步归一化完成，输出 {len(final_result.get('entities', []))} 个实体")
+    logger.info(
+        f"[实体归一化] 两步归一化完成，输出 {len(final_result.get('entities', []))} 个实体"
+    )
 
     # 更新合并统计的平均值
-    if combined_stats['summary']['total_calls'] > 0:
-        combined_stats['summary']['avg_tokens_per_call'] = (
-            combined_stats['summary']['total_tokens'] / combined_stats['summary']['total_calls']
+    if combined_stats["summary"]["total_calls"] > 0:
+        combined_stats["summary"]["avg_tokens_per_call"] = (
+            combined_stats["summary"]["total_tokens"]
+            / combined_stats["summary"]["total_calls"]
         )
-        combined_stats['summary']['avg_cost_per_call'] = (
-            combined_stats['summary']['total_cost_cny'] / combined_stats['summary']['total_calls']
+        combined_stats["summary"]["avg_cost_per_call"] = (
+            combined_stats["summary"]["total_cost_cny"]
+            / combined_stats["summary"]["total_calls"]
         )
 
     return final_result, combined_stats

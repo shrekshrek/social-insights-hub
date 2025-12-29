@@ -59,6 +59,7 @@ logger = logging.getLogger(__name__)
 # 四象限数据生成
 # ============================================================================
 
+
 def generate_quadrant_data(
     posts_data: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -117,13 +118,15 @@ def generate_quadrant_data(
             # 取摘要前20个字作为标签
             label = summary[:20] + "..." if len(summary) > 20 else summary
 
-        quadrant_data.append({
-            "post_id": post_id,
-            "x": sentiment,  # 情感分
-            "y": round(cii, 2),  # CII
-            "quadrant": quadrant,
-            "label": label,
-        })
+        quadrant_data.append(
+            {
+                "post_id": post_id,
+                "x": sentiment,  # 情感分
+                "y": round(cii, 2),  # CII
+                "quadrant": quadrant,
+                "label": label,
+            }
+        )
 
     return quadrant_data
 
@@ -149,6 +152,7 @@ def get_quadrant_summary(quadrant_data: list[dict[str, Any]]) -> dict[str, int]:
 # ============================================================================
 # 主聚合函数
 # ============================================================================
+
 
 def aggregate_task_analysis(
     db: Session,
@@ -220,7 +224,7 @@ def aggregate_task_analysis(
             "cii": cii,
             "sentiment": None,
             "spam_score": None,  # 用于营销浓度计算
-            "value_score": None, # 用于影响力计算
+            "value_score": None,  # 用于影响力计算
             "published_at": post.published_at,  # 用于时效性分布
             "post_deep_result": None,
             "comment_deep_result": None,
@@ -237,7 +241,7 @@ def aggregate_task_analysis(
             if analysis.post_deep_result:
                 deep_analyzed_posts += 1
                 post_info["post_deep_result"] = analysis.post_deep_result
-                
+
                 # 【Unified Sentiment】优先使用深度分析的情感值覆盖初筛值
                 # 检查深度分析中是否包含情感倾向
                 # 如果是 Entity Sentiment Aggregation 后的结果会更好，但这里直接用 post_deep_result.sentiment
@@ -288,7 +292,7 @@ def aggregate_task_analysis(
                 source_count=len(posts_data),
                 status="processing",
             )
-        
+
         if opinion_job_id:
             # 使用预创建的 job，更新状态为 processing
             opinion_job = start_analysis_job_sync(db, opinion_job_id)
@@ -363,11 +367,11 @@ def aggregate_task_analysis(
     # 8. 高级派生分析 (基于 DERIVED_ANALYSIS_DESIGN.md)
     aggregated_entities = entity_stats.get("aggregated_entities", [])
     aggregated_opinions = topic_stats.get("opinions", [])
-    
+
     # 获取分类后的实体（展示用简化格式）
     target_entities = entity_stats.get("target_entities", [])
     competitor_entities = entity_stats.get("competitor_entities", [])
-    
+
     # 从 aggregated_entities 中找到完整的 Top 1 Target 实体（包含完整的 features/issues）
     # 展示用的 target_entities 只有字符串数组，缺少 post_ids
     top_target_full = None
@@ -377,7 +381,7 @@ def aggregate_task_analysis(
             if entity.get("name") == top_target_name:
                 top_target_full = entity
                 break
-    
+
     # 从 aggregated_entities 中找到完整的 competitor 实体
     competitor_entities_full = []
     for comp in competitor_entities:
@@ -386,18 +390,20 @@ def aggregate_task_analysis(
             if entity.get("name") == comp_name:
                 competitor_entities_full.append(entity)
                 break
-    
+
     # (1) 关联网络 (Context Graph) - 以 Top 1 Target 实体为中心
     # 节点包括：人群、场景、产品属性(features/issues)、话题、竞品
     context_graph = build_context_graph(
         top_target_full, aggregated_opinions, competitor_entities_full
     )
-    
+
     # (2) 产品力诊断 (IPA) - 使用 opinions + target 实体的 features/issues
     ipa_result = perform_ipa_analysis(aggregated_opinions, top_target_full)
-    
+
     # (3) 竞品雷达 (Competitor Radar)
-    competitor_radar = analyze_competitor_radar(top_target_full, competitor_entities_full, aggregated_entities)
+    competitor_radar = analyze_competitor_radar(
+        top_target_full, competitor_entities_full, aggregated_entities
+    )
 
     # (4) KOL 声音提取
     kol_voices = extract_kol_voices(posts_data, db)
@@ -427,11 +433,13 @@ def aggregate_task_analysis(
             "quadrant": quadrant_data,
             "quadrant_summary": quadrant_summary,
             "time_distribution": time_distribution.get("distribution", []),
-            "time_distribution_skipped": time_distribution.get("skipped_count", 0),  # 无发布时间的帖子数
+            "time_distribution_skipped": time_distribution.get(
+                "skipped_count", 0
+            ),  # 无发布时间的帖子数
             # 新增图表
             "ipa_analysis": ipa_result,
             "competitor_radar": competitor_radar,
-            "context_graph": context_graph
+            "context_graph": context_graph,
         },
         "freshness": time_distribution.get("freshness", {}),
         "insights": {
@@ -440,7 +448,9 @@ def aggregate_task_analysis(
             "target_entities": target_entities,
             "competitor_entities": competitor_entities,
             # 话题统计（原观点统计）
-            "top_topics": topic_stats.get("opinions", []),  # 返回所有聚合后的观点，由前端进行正负面筛选
+            "top_topics": topic_stats.get(
+                "opinions", []
+            ),  # 返回所有聚合后的观点，由前端进行正负面筛选
             # KOL 声音
             "kol_voices": kol_voices,
         },

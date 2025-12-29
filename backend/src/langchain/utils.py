@@ -116,11 +116,7 @@ def get_response_content(response: Any) -> str:
         return ""
 
 
-def truncate_text(
-    text: str,
-    max_length: int = 1000,
-    suffix: str = "..."
-) -> str:
+def truncate_text(text: str, max_length: int = 1000, suffix: str = "...") -> str:
     """
     截断文本到指定长度
 
@@ -275,8 +271,7 @@ def validate_api_key(api_key: Optional[str]) -> bool:
 
 
 def format_analysis_result(
-    analysis: Dict[str, Any],
-    include_metadata: bool = False
+    analysis: Dict[str, Any], include_metadata: bool = False
 ) -> str:
     """
     格式化分析结果为易读的字符串
@@ -333,9 +328,11 @@ def format_analysis_result(
 # Token使用统计和成本计算
 # ============================================================================
 
+
 @dataclass
 class CallDetail:
     """单次LLM调用详情"""
+
     call_type: str  # "chat" 或 "reasoner"
     input_tokens: int
     output_tokens: int
@@ -348,17 +345,19 @@ class CallDetail:
 @dataclass
 class TokenUsageStats:
     """Token使用统计（基于真实API返回数据）"""
-    input_tokens: int = 0           # 真实输入token数量
-    output_tokens: int = 0          # 真实输出token数量
-    total_tokens: int = 0           # 真实总token数量
-    model_calls: int = 0            # 模型调用次数
-    total_cost_cny: float = 0.0     # 基于真实token使用量计算的总成本（人民币）
-    duration_seconds: float = 0.0   # 调用耗时（秒）
+
+    input_tokens: int = 0  # 真实输入token数量
+    output_tokens: int = 0  # 真实输出token数量
+    total_tokens: int = 0  # 真实总token数量
+    model_calls: int = 0  # 模型调用次数
+    total_cost_cny: float = 0.0  # 基于真实token使用量计算的总成本（人民币）
+    duration_seconds: float = 0.0  # 调用耗时（秒）
 
 
 @dataclass
 class TaskAnalysisStats:
     """任务级AI分析统计汇总"""
+
     total_calls: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
@@ -378,7 +377,7 @@ class TaskAnalysisStats:
             total_tokens=stats.total_tokens,
             cost_cny=stats.total_cost_cny,
             duration_seconds=stats.duration_seconds,
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
         )
         self.call_details.append(call_detail)
 
@@ -417,7 +416,7 @@ class TaskAnalysisStats:
                 "total_tokens": self.total_tokens,
                 "cost_cny": round(self.total_cost_cny, 4),
                 "duration_seconds": round(self.total_duration_seconds, 2),
-                "avg_duration_per_call": round(avg_duration_per_call, 2)
+                "avg_duration_per_call": round(avg_duration_per_call, 2),
             },
             "call_details": [
                 {
@@ -428,17 +427,15 @@ class TaskAnalysisStats:
                     "total_tokens": detail.total_tokens,
                     "cost_cny": round(detail.cost_cny, 4),
                     "duration_seconds": round(detail.duration_seconds, 2),
-                    "timestamp": detail.timestamp
+                    "timestamp": detail.timestamp,
                 }
                 for idx, detail in enumerate(self.call_details)
-            ]
+            ],
         }
 
 
 async def invoke_llm_with_stats(
-    llm: Any,
-    messages: List[Dict[str, str]],
-    llm_type: str = "chat"
+    llm: Any, messages: List[Dict[str, str]], llm_type: str = "chat"
 ) -> Tuple[Any, TokenUsageStats]:
     """
     直接调用LLM并获取token统计的通用函数
@@ -461,6 +458,7 @@ async def invoke_llm_with_stats(
     try:
         # 导入配置（延迟导入避免循环依赖）
         from src.config import get_settings
+
         settings = get_settings()
 
         # 记录开始时间
@@ -478,26 +476,46 @@ async def invoke_llm_with_stats(
         real_output_tokens = 0
         real_total_tokens = 0
 
-        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
             usage = response.usage_metadata
-            real_input_tokens = usage.get('input_tokens', 0)
-            real_output_tokens = usage.get('output_tokens', 0)
-            real_total_tokens = usage.get('total_tokens', 0)
-        elif hasattr(response, 'response_metadata') and response.response_metadata:
+            real_input_tokens = usage.get("input_tokens", 0)
+            real_output_tokens = usage.get("output_tokens", 0)
+            real_total_tokens = usage.get("total_tokens", 0)
+        elif hasattr(response, "response_metadata") and response.response_metadata:
             metadata = response.response_metadata
-            if 'usage' in metadata:
-                usage = metadata['usage']
-                real_input_tokens = usage.get('prompt_tokens', usage.get('input_tokens', 0))
-                real_output_tokens = usage.get('completion_tokens', usage.get('output_tokens', 0))
-                real_total_tokens = usage.get('total_tokens', 0)
+            if "usage" in metadata:
+                usage = metadata["usage"]
+                real_input_tokens = usage.get(
+                    "prompt_tokens", usage.get("input_tokens", 0)
+                )
+                real_output_tokens = usage.get(
+                    "completion_tokens", usage.get("output_tokens", 0)
+                )
+                real_total_tokens = usage.get("total_tokens", 0)
 
         # 计算成本
         if llm_type == "reasoner":
-            input_cost = real_input_tokens * settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION / 1_000_000
-            output_cost = real_output_tokens * settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION / 1_000_000
+            input_cost = (
+                real_input_tokens
+                * settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION
+                / 1_000_000
+            )
+            output_cost = (
+                real_output_tokens
+                * settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION
+                / 1_000_000
+            )
         else:
-            input_cost = real_input_tokens * settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION / 1_000_000
-            output_cost = real_output_tokens * settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION / 1_000_000
+            input_cost = (
+                real_input_tokens
+                * settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION
+                / 1_000_000
+            )
+            output_cost = (
+                real_output_tokens
+                * settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION
+                / 1_000_000
+            )
 
         real_cost = input_cost + output_cost
 
@@ -507,7 +525,7 @@ async def invoke_llm_with_stats(
             total_tokens=real_total_tokens,
             model_calls=1,
             total_cost_cny=real_cost,
-            duration_seconds=duration_seconds
+            duration_seconds=duration_seconds,
         )
 
         return response, stats

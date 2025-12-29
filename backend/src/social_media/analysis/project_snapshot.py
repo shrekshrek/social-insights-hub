@@ -62,8 +62,6 @@ def _merge_original_terms(
         term_counts[text] += count
 
 
-
-
 def _ensure_attr_bucket() -> dict[str, Any]:
     return {
         "items": defaultdict(

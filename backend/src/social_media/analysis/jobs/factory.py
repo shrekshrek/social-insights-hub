@@ -92,7 +92,7 @@ async def create_analysis_job_async(
     # 格式与同步版本一致：pending-{type}-{uuid}
     if not celery_task_id:
         celery_task_id = f"pending-{analysis_type}-{uuid.uuid4().hex[:8]}"
-    
+
     job = AnalysisJob(
         project_id=project_id,
         task_id=task_id,
@@ -153,7 +153,9 @@ def complete_analysis_job_sync(
     return job
 
 
-def start_analysis_job_sync(db: Session, job_or_id: AnalysisJob | int) -> AnalysisJob | None:
+def start_analysis_job_sync(
+    db: Session, job_or_id: AnalysisJob | int
+) -> AnalysisJob | None:
     """同步标记任务开始处理
 
     Args:
@@ -165,6 +167,7 @@ def start_analysis_job_sync(db: Session, job_or_id: AnalysisJob | int) -> Analys
     """
     if isinstance(job_or_id, int):
         from sqlalchemy import select
+
         stmt = select(AnalysisJob).where(AnalysisJob.id == job_or_id)
         result = db.execute(stmt)
         job = result.scalar_one_or_none()
@@ -172,7 +175,7 @@ def start_analysis_job_sync(db: Session, job_or_id: AnalysisJob | int) -> Analys
             return None
     else:
         job = job_or_id
-    
+
     job.status = "processing"
     job.started_at = datetime.now(timezone.utc)
     db.commit()

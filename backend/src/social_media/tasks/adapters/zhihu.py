@@ -63,7 +63,8 @@ class ZhihuAdapter(PlatformAdapter):
 
         return {
             "comment_id_on_platform": self.safe_str(raw_data.get("comment_id")),
-            "parent_comment_id": self.safe_str(raw_data.get("parent_comment_id")) or None,
+            "parent_comment_id": self.safe_str(raw_data.get("parent_comment_id"))
+            or None,
             "content": self.safe_str(raw_data.get("content")) or None,
             "author_id": self.safe_str(raw_data.get("user_id")) or None,
             "author_name": self.safe_str(raw_data.get("user_nickname")) or None,

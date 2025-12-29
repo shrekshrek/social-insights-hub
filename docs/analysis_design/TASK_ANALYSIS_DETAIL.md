@@ -93,8 +93,27 @@ graph TD
         *   `scenarios`: 使用场景/用途列表
         *   `market_factors`: 价格/促销/渠道列表
         *   `competitors`: 竞品对比列表
+        *   `source_comments`: 来源评论编号列表（仅评论提取）
+        *   `support_score`: 支持度分数（仅评论提取，来源评论点赞数之和）
     *   `general_opinions`: 通用观点列表（category, opinions, sentiment）。
+        *   评论提取时额外包含 `source_comments` 和 `support_score`。
     *   `summary`: 内容摘要。
+
+### 3.1 评论来源追踪与支持度计算
+
+评论深度分析采用**来源追踪机制**，解决"高互动原文的低赞评论观点权重过高"问题：
+
+*   **输入格式**：评论以 `评论[编号]: 内容` 格式发送给 LLM。
+*   **LLM 输出**：每个实体/观点包含 `source_comments` 字段，标注来源评论编号。
+*   **支持度计算**（程序端完成）：
+    ```python
+    # 构建编号到点赞数的映射
+    likes_map = {1: 235, 2: 89, 3: 12, ...}
+    
+    # 计算支持度 = 来源评论点赞数之和
+    support_score = sum(likes_map[idx] for idx in source_comments)
+    ```
+*   **设计理念**：LLM 只负责语义理解和来源标注，程序负责精确的数值计算。
 
 ---
 
@@ -121,7 +140,29 @@ graph TD
 ```python
 # 综合评分计算：结合影响力(heat)和讨论广泛性(mentions)
 def calculate_score(heat: float, mentions: int) -> float:
-    return heat * math.log(mentions + 1)
+    return math.log(heat + 1) * math.log(mentions + 1)
+
+# 帖子影响力计算
+def calculate_impact_score(cii: float, value_score: float | None) -> float:
+    quality_factor = 0.5 + (value_score or 5.0) / 10.0
+    return cii * quality_factor
+
+# 评论权重计算（区分原文和评论的权重）
+COMMENT_WEIGHT_BASE_FACTOR = 0.1
+
+def calculate_comment_weight(support_score: int, post_impact: float) -> float:
+    """
+    评论权重 = post_impact × 0.1 × log10(support_score + 1)
+    
+    权重示例（假设 post_impact = 1000）：
+    - support_score=1000 → 300 (原文的 30%)
+    - support_score=100  → 200 (原文的 20%)
+    - support_score=10   → 100 (原文的 10%)
+    - support_score=0    → 0   (无权重)
+    """
+    if support_score <= 0:
+        return 0.0
+    return post_impact * COMMENT_WEIGHT_BASE_FACTOR * math.log10(support_score + 1)
 
 # 名称归一化：去除空格、转小写
 def normalize_name(name: str) -> str:
@@ -143,6 +184,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 **设计优势**：
 - 代码复用：避免实体/观点模块重复实现
 - 逻辑一致：确保归一化规则统一
+- **权重分离**：原文和评论使用不同的权重计算，避免低赞评论观点权重过高
 - 易于维护：单点修改影响全局
 
 *   **设计理念：只按 canonical_name 分组，情感派生计算**
@@ -159,13 +201,14 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "name": str,           # 显示名称
         "canonical_name": str, # 标准化名称
         "type": str,           # 实体类型
-        # 情感派生计算
-        "sentiment_weighted_sum": float,  # Σ(sentiment * cii)
+        # 权重与情感派生计算
+        "total_impact": float,    # 权重累加（原文用 impact，评论用 comment_weight）
+        "total_weight": float,    # 对数平滑权重（用于情感计算）
+        "sentiment_weighted_sum": float,  # Σ(sentiment * smoothed_weight)
         "positive_count": int,   # 正面提及次数
         "negative_count": int,   # 负面提及次数
         "neutral_count": int,    # 中性提及次数
-        "total_cii": float,    # CII累加（去重后）
-        "cii_added_posts": set,  # 已贡献CII的帖子ID（避免重复累加）
+        "impact_added_posts": set,  # 已贡献权重的帖子ID（避免重复累加）
         "post_sources": set,     # 从帖子原文提取的帖子ID
         "comment_sources": set,  # 从评论提取的帖子ID
         "post_ids": set,         # 所有涉及的帖子ID
@@ -179,6 +222,11 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "competitors": dict,   # 竞品对比 {label: set(post_ids)}
     }
     ```
+    
+    **权重计算逻辑**：
+    - **原文实体**：`entity_weight = calculate_impact_score(cii, value_score)`
+    - **评论实体**：`entity_weight = calculate_comment_weight(support_score, post_impact)`
+    - **情感计算**：使用对数平滑权重 `log10(max(impact, 1)) + 1` 避免超高热度帖子主导情感
 
 *   **聚合逻辑（纯代码实现）**：
     1.  **实体归一化 (Normalization)**：
@@ -234,8 +282,8 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     opinion_data[f"{category}|{sentiment}"] = {
         "category": str,           # 话题类别
         "sentiment": int,          # 情感值 (-1, 0, 1)
-        "total_cii": float,        # CII累加（去重后）
-        "cii_added_posts": set,    # 已贡献CII的帖子ID
+        "total_impact": float,     # 权重累加（区分原文/评论权重）
+        "impact_added_posts": set, # 已贡献权重的帖子ID
         "post_sources": set,       # 从帖子原文提取的帖子ID
         "comment_sources": set,    # 从评论提取的帖子ID
         "post_ids": set,           # 所有涉及的帖子ID
@@ -245,9 +293,12 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 
 *   **聚合逻辑**：
     1.  **分组键生成**：`key = f"{category}|{sentiment}"`
-    2.  **热度累加**：每帖只贡献一次 CII（通过 `cii_added_posts` 去重）
-    3.  **来源标记**：区分帖子原文 vs 评论来源
-    4.  **观点收集**：记录具体观点文本及其来源帖子
+    2.  **权重计算**（关键更新）：
+        - **原文观点**：使用 `post_impact = calculate_impact_score(cii, value_score)`
+        - **评论观点**：使用 `comment_weight = calculate_comment_weight(support_score, post_impact)`
+    3.  **热度累加**：每帖只贡献一次权重（通过 `impact_added_posts` 去重）
+    4.  **来源标记**：区分帖子原文 vs 评论来源
+    5.  **观点收集**：记录具体观点文本及其来源帖子
 
 *   **输出结构**：
     ```python

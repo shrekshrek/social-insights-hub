@@ -376,7 +376,19 @@ def _calculate_support_score(
     """
     if not source_comments:
         return 0
-    return sum(likes_map.get(idx, 0) for idx in source_comments)
+    # 去重与容错：
+    # - LLM 可能输出重复编号（如 [1, 1, 2]），避免重复累加同一条评论的点赞
+    # - 防御性过滤非 int / 非正数编号
+    unique_indices = set()
+    for idx in source_comments:
+        try:
+            idx_int = int(idx)
+        except Exception:
+            continue
+        if idx_int > 0:
+            unique_indices.add(idx_int)
+
+    return sum(int(likes_map.get(idx, 0) or 0) for idx in unique_indices)
 
 
 def _enrich_with_support_score(
@@ -456,7 +468,7 @@ def _analyze_single_post_comments(
             # 4. 构建评论数据：编号、内容、点赞数映射
             # 编号从 1 开始，与 LLM 输出的 source_comments 对应
             valid_comments = [
-                (i + 1, c.content, c.likes_count)
+                (i + 1, c.content, int(c.likes_count or 0))
                 for i, c in enumerate(comments)
                 if c.content
             ]

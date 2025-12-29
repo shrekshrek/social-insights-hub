@@ -243,7 +243,11 @@ def calculate_comment_weight(
     # support_score=10 → 1.04, support_score=100 → 2.00, support_score=1000 → 3.00
     log_factor = math.log10(support_score + 1)
 
-    return post_impact * COMMENT_WEIGHT_BASE_FACTOR * log_factor
+    weight = post_impact * COMMENT_WEIGHT_BASE_FACTOR * log_factor
+    # 安全上限：评论信号不应超过原文帖子本身的影响力
+    if post_impact > 0:
+        weight = min(weight, post_impact)
+    return weight
 
 
 def calculate_score(heat: float, mentions: int) -> float:

@@ -159,6 +159,14 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 60
 
+    # ========== Agent API Configuration ==========
+    AGENT_API_KEY: str | None = Field(
+        default=None, description="API Key for crawler agent authentication"
+    )
+    AGENT_TASK_TIMEOUT_HOURS: int = Field(
+        default=2, description="Hours before accepted task is reset to pending"
+    )
+
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:

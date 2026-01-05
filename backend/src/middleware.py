@@ -1,3 +1,4 @@
+import gzip
 import logging
 import time
 import uuid
@@ -34,6 +35,72 @@ request_id_context: ContextVar[str] = ContextVar("request_id", default="")
 
 # 配置日志
 logger = logging.getLogger(__name__)
+
+
+class GZipRequestMiddleware(BaseHTTPMiddleware):
+    """GZip 请求体解压中间件
+
+    自动解压 Content-Encoding: gzip 的请求体。
+    用于支持爬虫客户端发送压缩数据以节省带宽。
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        content_encoding = request.headers.get("content-encoding", "").lower()
+
+        if content_encoding == "gzip":
+            try:
+                # 读取压缩的请求体
+                compressed_body = await request.body()
+
+                # 解压
+                decompressed_body = gzip.decompress(compressed_body)
+
+                # 创建新的 scope，移除 content-encoding 头
+                new_headers = [
+                    (k, v)
+                    for k, v in request.scope["headers"]
+                    if k.lower() != b"content-encoding"
+                ]
+                # 更新 content-length
+                new_headers = [
+                    (k, v)
+                    for k, v in new_headers
+                    if k.lower() != b"content-length"
+                ]
+                new_headers.append(
+                    (b"content-length", str(len(decompressed_body)).encode())
+                )
+
+                # 创建新的 receive 函数返回解压后的数据
+                async def receive():
+                    return {
+                        "type": "http.request",
+                        "body": decompressed_body,
+                        "more_body": False,
+                    }
+
+                # 更新 scope
+                request.scope["headers"] = new_headers
+                request._receive = receive
+
+                logger.debug(
+                    f"GZip decompressed request: {len(compressed_body)} -> {len(decompressed_body)} bytes"
+                )
+
+            except gzip.BadGzipFile as e:
+                logger.warning(f"Invalid gzip data: {e}")
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "Invalid gzip compressed data"},
+                )
+            except Exception as e:
+                logger.error(f"GZip decompression error: {e}")
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": f"Failed to decompress request body: {str(e)}"},
+                )
+
+        return await call_next(request)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):

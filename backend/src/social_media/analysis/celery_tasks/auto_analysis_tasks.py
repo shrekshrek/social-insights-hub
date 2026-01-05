@@ -71,7 +71,6 @@ def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | N
     Returns:
         分析任务ID，失败返回 None
     """
-    from src.social_media.analysis.models import AnalysisJob
     from src.social_media.tasks.models import SocialPost, DataTask
     from .screening_tasks import run_screening_task
     
@@ -94,18 +93,16 @@ def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | N
             logger.info(f"Task {task_id}: No posts to screen")
             return None
         
-        # 创建分析任务记录
-        analysis_job = AnalysisJob(
+        # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
+        from src.social_media.analysis.jobs import create_analysis_job_sync
+        analysis_job = create_analysis_job_sync(
+            db=db,
             project_id=task.project_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="screening_posts",
             source_count=len(post_ids),
-            status="pending",
         )
-        db.add(analysis_job)
-        db.commit()
-        db.refresh(analysis_job)
         job_id = analysis_job.id
         
         # 启动 Celery 任务
@@ -116,7 +113,7 @@ def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | N
             project_keywords=project_keywords,
         )
         
-        # 更新 celery_task_id
+        # 更新为真实的 celery_task_id
         analysis_job.celery_task_id = celery_result.id
         db.commit()
         
@@ -132,7 +129,7 @@ def _run_deep_posts(
     relevance_min: float,
 ) -> int | None:
     """执行原文深度分析"""
-    from src.social_media.analysis.models import AnalysisJob, PostAnalysis
+    from src.social_media.analysis.models import PostAnalysis
     from src.social_media.tasks.models import DataTask
     from .deep_analysis_tasks import run_post_deep_task
     
@@ -160,18 +157,16 @@ def _run_deep_posts(
             logger.info(f"Task {task_id}: No posts for deep analysis")
             return None
         
-        # 创建分析任务记录
-        analysis_job = AnalysisJob(
+        # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
+        from src.social_media.analysis.jobs import create_analysis_job_sync
+        analysis_job = create_analysis_job_sync(
+            db=db,
             project_id=task.project_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="deep_posts",
             source_count=len(post_ids),
-            status="pending",
         )
-        db.add(analysis_job)
-        db.commit()
-        db.refresh(analysis_job)
         job_id = analysis_job.id
         
         # 启动 Celery 任务
@@ -182,6 +177,7 @@ def _run_deep_posts(
             analysis_focus=task.keywords,
         )
         
+        # 更新为真实的 celery_task_id
         analysis_job.celery_task_id = celery_result.id
         db.commit()
         
@@ -197,7 +193,7 @@ def _run_deep_comments(
     relevance_min: float,
 ) -> int | None:
     """执行评论深度分析"""
-    from src.social_media.analysis.models import AnalysisJob, PostAnalysis
+    from src.social_media.analysis.models import PostAnalysis
     from src.social_media.tasks.models import DataTask, SocialComment
     from .deep_analysis_tasks import run_comment_deep_task
     
@@ -235,18 +231,16 @@ def _run_deep_comments(
             logger.info(f"Task {task_id}: No posts with comments for deep analysis")
             return None
         
-        # 创建分析任务记录
-        analysis_job = AnalysisJob(
+        # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
+        from src.social_media.analysis.jobs import create_analysis_job_sync
+        analysis_job = create_analysis_job_sync(
+            db=db,
             project_id=task.project_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="deep_comments",
             source_count=len(posts_with_comments),
-            status="pending",
         )
-        db.add(analysis_job)
-        db.commit()
-        db.refresh(analysis_job)
         job_id = analysis_job.id
         
         # 启动 Celery 任务
@@ -257,6 +251,7 @@ def _run_deep_comments(
             analysis_focus=task.keywords,
         )
         
+        # 更新为真实的 celery_task_id
         analysis_job.celery_task_id = celery_result.id
         db.commit()
         
@@ -266,7 +261,6 @@ def _run_deep_comments(
 
 def _run_aggregation(task_id: int, user_id: int) -> int | None:
     """执行聚合报告生成"""
-    from src.social_media.analysis.models import AnalysisJob
     from src.social_media.tasks.models import DataTask
     from .aggregation_tasks import run_aggregation_task
     
@@ -275,18 +269,16 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         if not task:
             return None
         
-        # 创建分析任务记录
-        analysis_job = AnalysisJob(
+        # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
+        from src.social_media.analysis.jobs import create_analysis_job_sync
+        analysis_job = create_analysis_job_sync(
+            db=db,
             project_id=task.project_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="aggregation",
             source_count=0,
-            status="pending",
         )
-        db.add(analysis_job)
-        db.commit()
-        db.refresh(analysis_job)
         job_id = analysis_job.id
         
         # 启动 Celery 任务
@@ -295,6 +287,7 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
             task_id=task_id,
         )
         
+        # 更新为真实的 celery_task_id
         analysis_job.celery_task_id = celery_result.id
         db.commit()
         

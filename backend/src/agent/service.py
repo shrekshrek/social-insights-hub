@@ -255,8 +255,8 @@ async def upload_result(
             adapter.validate_post(transformed)
             transformed = adapter.normalize_content(transformed)
 
-            # 如果 content 为空则跳过
-            if not transformed.get("content"):
+            # 只有当 title 和 content 都为空时才跳过
+            if not transformed.get("content") and not transformed.get("title"):
                 continue
 
             platform_id = transformed.get("post_id_on_platform")
@@ -320,6 +320,24 @@ async def upload_result(
         logger.info(
             f"Task {task_id} result uploaded: posts={posts_count}, comments={comments_count}"
         )
+
+        # 如果启用了自动分析，触发分析任务链
+        if task.auto_analyze and posts_count > 0:
+            from src.social_media.analysis.celery_tasks.auto_analysis_tasks import (
+                run_auto_analysis,
+            )
+            
+            # 获取任务创建者ID作为分析任务的用户ID
+            user_id = task.creator_id
+            project_keywords = task.keywords or ""
+            
+            # 异步启动分析任务链
+            run_auto_analysis.delay(
+                task_id=task.id,
+                user_id=user_id,
+                project_keywords=project_keywords,
+            )
+            logger.info(f"Task {task_id}: Auto analysis triggered")
 
         return StoredCounts(posts=posts_count, comments=comments_count)
 

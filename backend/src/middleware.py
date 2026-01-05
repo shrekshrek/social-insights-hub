@@ -37,70 +37,90 @@ request_id_context: ContextVar[str] = ContextVar("request_id", default="")
 logger = logging.getLogger(__name__)
 
 
-class GZipRequestMiddleware(BaseHTTPMiddleware):
-    """GZip 请求体解压中间件
+class GZipRequestMiddleware:
+    """GZip 请求体解压中间件（ASGI 实现）
 
     自动解压 Content-Encoding: gzip 的请求体。
     用于支持爬虫客户端发送压缩数据以节省带宽。
     """
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        content_encoding = request.headers.get("content-encoding", "").lower()
+    def __init__(self, app: ASGIApp):
+        self.app = app
 
-        if content_encoding == "gzip":
-            try:
-                # 读取压缩的请求体
-                compressed_body = await request.body()
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-                # 解压
-                decompressed_body = gzip.decompress(compressed_body)
+        # 检查 Content-Encoding 头
+        headers = dict(scope.get("headers", []))
+        content_encoding = headers.get(b"content-encoding", b"").decode().lower()
 
-                # 创建新的 scope，移除 content-encoding 头
-                new_headers = [
-                    (k, v)
-                    for k, v in request.scope["headers"]
-                    if k.lower() != b"content-encoding"
-                ]
-                # 更新 content-length
-                new_headers = [
-                    (k, v)
-                    for k, v in new_headers
-                    if k.lower() != b"content-length"
-                ]
-                new_headers.append(
-                    (b"content-length", str(len(decompressed_body)).encode())
-                )
+        if content_encoding != "gzip":
+            await self.app(scope, receive, send)
+            return
 
-                # 创建新的 receive 函数返回解压后的数据
-                async def receive():
-                    return {
-                        "type": "http.request",
-                        "body": decompressed_body,
-                        "more_body": False,
-                    }
+        # 收集完整的请求体
+        body_parts = []
+        while True:
+            message = await receive()
+            body_parts.append(message.get("body", b""))
+            if not message.get("more_body", False):
+                break
 
-                # 更新 scope
-                request.scope["headers"] = new_headers
-                request._receive = receive
+        compressed_body = b"".join(body_parts)
 
-                logger.debug(
-                    f"GZip decompressed request: {len(compressed_body)} -> {len(decompressed_body)} bytes"
-                )
+        # 解压 gzip 数据
+        try:
+            decompressed_body = gzip.decompress(compressed_body)
+            logger.debug(
+                f"GZip decompressed: {len(compressed_body)} -> {len(decompressed_body)} bytes"
+            )
+        except gzip.BadGzipFile as e:
+            logger.warning(f"[GZip Middleware] Invalid gzip data: {e}")
+            response = JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid gzip compressed data"},
+            )
+            await response(scope, receive, send)
+            return
+        except Exception as e:
+            logger.error(f"[GZip Middleware] Decompression error: {e}")
+            response = JSONResponse(
+                status_code=400,
+                content={"detail": f"Failed to decompress request body: {str(e)}"},
+            )
+            await response(scope, receive, send)
+            return
 
-            except gzip.BadGzipFile as e:
-                logger.warning(f"Invalid gzip data: {e}")
-                return JSONResponse(
-                    status_code=400,
-                    content={"detail": "Invalid gzip compressed data"},
-                )
-            except Exception as e:
-                logger.error(f"GZip decompression error: {e}")
-                return JSONResponse(
-                    status_code=400,
-                    content={"detail": f"Failed to decompress request body: {str(e)}"},
-                )
+        # 更新 headers：移除 content-encoding，更新 content-length
+        new_headers = [
+            (k, v)
+            for k, v in scope["headers"]
+            if k.lower() not in (b"content-encoding", b"content-length")
+        ]
+        new_headers.append((b"content-length", str(len(decompressed_body)).encode()))
 
-        return await call_next(request)
+        # 创建新的 scope
+        new_scope = dict(scope)
+        new_scope["headers"] = new_headers
+
+        # 创建新的 receive 函数，返回解压后的数据
+        body_sent = False
+
+        async def new_receive():
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {
+                    "type": "http.request",
+                    "body": decompressed_body,
+                    "more_body": False,
+                }
+            # 后续调用返回空
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        await self.app(new_scope, new_receive, send)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):

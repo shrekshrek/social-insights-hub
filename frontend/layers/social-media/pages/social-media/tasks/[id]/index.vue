@@ -91,9 +91,16 @@ const postIdMap = computed(() => {
 });
 
 const refreshing = ref(false);
+const analysisPanelRef = ref<{ refresh: () => Promise<void> } | null>(null);
+
 const handleRefresh = async () => {
   refreshing.value = true;
-  await Promise.all([refreshTask(), refreshPosts(), refreshComments()]);
+  await Promise.all([
+    refreshTask(),
+    refreshPosts(),
+    refreshComments(),
+    analysisPanelRef.value?.refresh?.(),
+  ]);
   refreshing.value = false;
 };
 
@@ -125,7 +132,7 @@ const handleClearData = async () => {
   const { $confirm } = useNuxtApp();
   const confirmed = await $confirm({
     title: "清空任务数据",
-    message: `确定要清空任务 "${task.value.name}" 的所有数据吗？\n\n此操作将删除所有原文和评论数据，任务状态将重置为"待处理"，您可以重新上传或采集数据。`,
+    message: `确定要清空任务 "${task.value.name}" 的所有数据吗？\n\n此操作将删除所有原文、评论、分析结果和分析报告，任务状态将重置为"待处理"，您可以重新上传或采集数据。`,
     confirmText: "清空数据",
     cancelText: "取消",
     type: "warning",
@@ -889,7 +896,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
           <!-- AI 分析卡片 -->
           <div class="mt-6">
             <ClientOnly>
-              <AnalysisPanel :task-id="taskId" />
+              <AnalysisPanel ref="analysisPanelRef" :task-id="taskId" />
             </ClientOnly>
           </div>
   </div>

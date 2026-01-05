@@ -34,6 +34,9 @@ class DataTaskCreate(DataTaskBase):
         pattern="^(remote_crawler|local_upload)$",
         description="数据源: remote_crawler/local_upload",
     )
+    auto_analyze: bool = Field(
+        False, description="数据上传完成后自动执行全流程分析"
+    )
 
 
 class DataTaskUpdate(CustomBaseModel):
@@ -59,6 +62,7 @@ class DataTaskRead(DataTaskBase):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     error_message: Optional[str]
+    auto_analyze: bool = False
     is_deleted: bool
     created_at: datetime
     updated_at: datetime

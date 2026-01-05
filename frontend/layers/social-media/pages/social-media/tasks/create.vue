@@ -79,6 +79,8 @@ const state = reactive<{
   // 平台特定选项
   publish_time_type: number // 抖音专属
   sort_type: string // 小红书专属
+  // 自动分析
+  auto_analyze: boolean
 }>({
   name: '',
   description: '',
@@ -94,6 +96,8 @@ const state = reactive<{
   per_note_max_comments_count: 20,
   publish_time_type: 0,
   sort_type: 'popularity_descending',
+  // 自动分析（仅远程爬虫）
+  auto_analyze: true,
 })
 
 // 项目搜索相关
@@ -410,6 +414,8 @@ const handleSubmit = async () => {
       data_source: state.data_source,
       keywords: state.keywords || undefined,
       task_params: Object.keys(taskParams).length > 0 ? taskParams : undefined,
+      // 远程爬虫支持自动分析
+      auto_analyze: state.data_source === 'remote_crawler' ? state.auto_analyze : false,
     }
 
     const result = await createTask(taskData)
@@ -761,6 +767,18 @@ const handleSubmit = async () => {
                     value-key="value"
                     class="w-full"
                   />
+                </UFormField>
+              </div>
+
+              <!-- 自动分析选项 -->
+              <USeparator label="分析配置" />
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <UFormField
+                  label="自动分析"
+                  help="数据采集完成后自动执行全流程分析（初筛→深度→报告）"
+                >
+                  <USwitch v-model="state.auto_analyze" />
                 </UFormField>
               </div>
             </template>

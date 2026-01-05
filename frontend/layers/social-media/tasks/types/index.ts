@@ -104,6 +104,7 @@ export interface DataTaskCreate {
   keywords?: string
   task_params?: Record<string, unknown>
   data_source: DataSource
+  auto_analyze?: boolean
 }
 
 export interface DataTaskUpdate {

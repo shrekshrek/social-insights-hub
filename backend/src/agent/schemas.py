@@ -14,6 +14,7 @@ class AgentTaskInfo(CustomBaseModel):
     """Agent 任务信息（返回给爬虫客户端）"""
 
     task_id: int = Field(..., description="任务ID")
+    task_name: str = Field(..., description="任务名称")
     platform: str = Field(..., description="平台代码: xhs/dy/bili/ks/wb/tieba/zhihu")
     task_type: str = Field(..., description="任务类型: search/detail/creator/homefeed")
     priority: int = Field(0, description="优先级（越大越优先）")

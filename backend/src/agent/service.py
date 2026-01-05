@@ -53,6 +53,7 @@ async def get_pending_tasks(
     return [
         AgentTaskInfo(
             task_id=task.id,
+            task_name=task.name,
             platform=task.platform.code if task.platform else "unknown",
             task_type=task.task_type,
             priority=task.priority,

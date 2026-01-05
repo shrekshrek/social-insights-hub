@@ -200,7 +200,7 @@ class PlatformAdapter(ABC):
 
         规则：
         1. 当 raw_data.transcript.text 有值时，content = transcript.text
-        2. 当 title == content 时，清空 content
+        2. 当 title == content 时，清空 content（避免重复存储）
         """
         raw_data = transformed.get("raw_data")
         if raw_data and isinstance(raw_data, dict):

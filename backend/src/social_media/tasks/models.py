@@ -97,6 +97,11 @@ class DataTask(Base):
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # 自动分析配置
+    auto_analyze: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="数据上传完成后自动执行全流程分析"
+    )
+
     # AI分析聚合结果
     analysis_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="任务级AI分析聚合结果（NSR、SERP、实体、IPA等）"

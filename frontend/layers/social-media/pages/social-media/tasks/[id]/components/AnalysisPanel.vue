@@ -547,6 +547,11 @@ const { columns } = usePostAnalysisColumns({
   onOpenDeepResult: openDeepResultModal,
   contentColumnSize: 180,
 })
+
+// 暴露刷新方法供父组件调用
+defineExpose({
+  refresh: refreshAll,
+})
 </script>
 
 <template>

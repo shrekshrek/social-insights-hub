@@ -226,8 +226,8 @@ async def process_json_upload(
                         f"Platform '{platform_code}' has no adapter. "
                         f"Data keys: {list(raw_data.keys())[:10]}"
                     )
-            # 如果 content 为空则跳过不存入
-            if not transformed.get("content"):
+            # 只有当 title 和 content 都为空时才跳过
+            if not transformed.get("content") and not transformed.get("title"):
                 continue
             # 按 post_id_on_platform 去重（保留第一条）
             platform_id = transformed.get("post_id_on_platform")
@@ -464,6 +464,9 @@ async def clear_task_data(db: AsyncSession, task: DataTask) -> DataTask:
     task.started_at = None
     task.completed_at = None
     task.error_message = None
+    # 清空聚合分析报告
+    task.analysis_result = None
+    task.analysis_result_at = None
 
     await db.commit()
     await db.refresh(task)

@@ -3,7 +3,6 @@
     :open="open"
     :close="{ onClick: () => emit('close', false) }"
     :title="title"
-    :description="message"
     :ui="{ footer: 'justify-end' }"
   >
     <template #body>

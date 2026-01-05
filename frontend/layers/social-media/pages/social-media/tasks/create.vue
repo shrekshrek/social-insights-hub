@@ -57,7 +57,10 @@ const schema = z.object({
   data_source: z.enum(['local_upload', 'remote_crawler'], { message: '请选择数据源' }),
   keywords: z.string().optional(),
   id_list: z.string().optional(),
-})
+}).refine(
+  (data) => data.task_type !== 'search' || (data.keywords && data.keywords.trim().length > 0),
+  { message: '请输入搜索关键词', path: ['keywords'] }
+)
 
 // 表单初始值
 const state = reactive<{
@@ -69,6 +72,13 @@ const state = reactive<{
   data_source: 'local_upload' | 'remote_crawler'
   keywords: string
   id_list: string
+  // 远程爬虫高级选项
+  max_notes_count: number
+  enable_comments: boolean
+  per_note_max_comments_count: number
+  // 平台特定选项
+  publish_time_type: number // 抖音专属
+  sort_type: string // 小红书专属
 }>({
   name: '',
   description: '',
@@ -78,6 +88,12 @@ const state = reactive<{
   data_source: 'local_upload',
   keywords: '',
   id_list: '',
+  // 远程爬虫高级选项默认值
+  max_notes_count: 100,
+  enable_comments: true,
+  per_note_max_comments_count: 20,
+  publish_time_type: 0,
+  sort_type: 'popularity_descending',
 })
 
 // 项目搜索相关
@@ -186,7 +202,40 @@ const taskTypeOptions = [
 // 数据源选项
 const dataSourceOptions = [
   { label: '本地上传', value: 'local_upload', description: '上传本地JSON数据文件' },
-  { label: '远程爬虫', value: 'remote_crawler', description: '通过WebSocket与爬虫平台通信（即将支持）' },
+  { label: '远程爬虫', value: 'remote_crawler', description: '通过远程爬虫客户端采集数据' },
+]
+
+// 是否显示远程爬虫高级选项
+const showCrawlerOptions = computed(() => state.data_source === 'remote_crawler')
+
+// 获取当前选中的平台代码
+const selectedPlatformCode = computed(() => {
+  return platforms.value?.find(p => p.id === state.platform_id)?.code
+})
+
+// 是否显示抖音专属选项
+const showDouyinOptions = computed(() => {
+  return showCrawlerOptions.value && selectedPlatformCode.value === 'dy'
+})
+
+// 是否显示小红书专属选项
+const showXhsOptions = computed(() => {
+  return showCrawlerOptions.value && selectedPlatformCode.value === 'xhs'
+})
+
+// 抖音发布时间选项
+const publishTimeOptions = [
+  { label: '不限', value: 0 },
+  { label: '一天内', value: 1 },
+  { label: '一周内', value: 7 },
+  { label: '半年内', value: 182 },
+]
+
+// 小红书排序选项
+const sortTypeOptions = [
+  { label: '综合排序', value: 'general' },
+  { label: '最热', value: 'popularity_descending' },
+  { label: '最新', value: 'time_descending' },
 ]
 
 // 是否需要显示ID列表字段
@@ -334,6 +383,21 @@ const handleSubmit = async () => {
         if (paramKey) {
           taskParams[paramKey] = idArray
         }
+      }
+    }
+
+    // 远程爬虫高级选项
+    if (state.data_source === 'remote_crawler') {
+      taskParams.max_notes_count = state.max_notes_count
+      taskParams.enable_comments = state.enable_comments ? 1 : 0
+      taskParams.per_note_max_comments_count = state.per_note_max_comments_count
+
+      // 平台特定选项
+      if (platformCode === 'dy') {
+        taskParams.publish_time_type = state.publish_time_type
+      }
+      if (platformCode === 'xhs') {
+        taskParams.sort_type = state.sort_type
       }
     }
 
@@ -548,7 +612,6 @@ const handleSubmit = async () => {
                 value-key="value"
                 placeholder="选择数据源"
                 class="w-full"
-                :disabled-items="['remote_crawler']"
               />
             </UFormField>
           </div>
@@ -559,6 +622,7 @@ const handleSubmit = async () => {
             label="搜索关键词"
             name="keywords"
             help="多个关键词请用逗号分隔"
+            required
           >
             <UInput
               v-model="state.keywords"
@@ -619,6 +683,90 @@ const handleSubmit = async () => {
               </label>
             </div>
           </UFormField>
+
+          <!-- 远程爬虫高级选项 -->
+          <template v-if="showCrawlerOptions">
+            <UDivider label="爬虫配置" />
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <!-- 最大爬取数 -->
+              <UFormField
+                label="最大爬取数"
+                help="爬取的最大条目数量"
+              >
+                <UInput
+                  v-model.number="state.max_notes_count"
+                  type="number"
+                  :min="1"
+                  :max="10000"
+                  class="w-full"
+                />
+              </UFormField>
+
+              <!-- 爬取评论 -->
+              <UFormField
+                label="爬取评论"
+                help="是否爬取帖子的评论"
+              >
+                <USwitch
+                  v-model="state.enable_comments"
+                  on-icon="i-heroicons-check"
+                  off-icon="i-heroicons-x-mark"
+                />
+              </UFormField>
+
+              <!-- 单帖最大评论数 -->
+              <UFormField
+                v-if="state.enable_comments"
+                label="单帖最大评论数"
+                help="每个帖子爬取的最大评论数，0表示不限"
+              >
+                <UInput
+                  v-model.number="state.per_note_max_comments_count"
+                  type="number"
+                  :min="0"
+                  :max="10000"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+
+            <!-- 抖音专属选项 -->
+            <div
+              v-if="showDouyinOptions"
+              class="grid grid-cols-1 md:grid-cols-2 gap-5"
+            >
+              <UFormField
+                label="发布时间筛选"
+                help="按发布时间筛选视频（抖音专属）"
+              >
+                <USelect
+                  v-model="state.publish_time_type"
+                  :items="publishTimeOptions"
+                  value-key="value"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+
+            <!-- 小红书专属选项 -->
+            <div
+              v-if="showXhsOptions"
+              class="grid grid-cols-1 md:grid-cols-2 gap-5"
+            >
+              <UFormField
+                label="排序方式"
+                help="搜索结果排序方式（小红书专属）"
+              >
+                <USelect
+                  v-model="state.sort_type"
+                  :items="sortTypeOptions"
+                  value-key="value"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+          </template>
         </div>
       </UForm>
     </UCard>

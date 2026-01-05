@@ -148,7 +148,7 @@ def _run_deep_posts(
                 PostAnalysis.spam_score <= spam_max,
                 PostAnalysis.value_score >= value_min,
                 PostAnalysis.relevance_score >= relevance_min,
-                PostAnalysis.deep_result.is_(None),  # 未做深度分析
+                PostAnalysis.post_deep_result.is_(None),  # 未做深度分析
             )
             .all()
         ]
@@ -211,7 +211,7 @@ def _run_deep_comments(
                 PostAnalysis.spam_score <= spam_max,
                 PostAnalysis.value_score >= value_min,
                 PostAnalysis.relevance_score >= relevance_min,
-                PostAnalysis.deep_result.isnot(None),  # 已完成深度分析
+                PostAnalysis.post_deep_result.isnot(None),  # 已完成深度分析
                 PostAnalysis.comment_deep_result.is_(None),  # 未做评论深度
             )
             .all()

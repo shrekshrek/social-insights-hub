@@ -685,88 +685,90 @@ const handleSubmit = async () => {
           </UFormField>
 
           <!-- 远程爬虫高级选项 -->
-          <template v-if="showCrawlerOptions">
-            <UDivider label="爬虫配置" />
+          <ClientOnly>
+            <template v-if="showCrawlerOptions">
+              <USeparator label="爬虫配置" />
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <!-- 最大爬取数 -->
-              <UFormField
-                label="最大爬取数"
-                help="爬取的最大条目数量"
-              >
-                <UInput
-                  v-model.number="state.max_notes_count"
-                  type="number"
-                  :min="1"
-                  :max="10000"
-                  class="w-full"
-                />
-              </UFormField>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <!-- 最大爬取数 -->
+                <UFormField
+                  label="最大爬取数"
+                  help="爬取的最大条目数量"
+                >
+                  <UInput
+                    v-model.number="state.max_notes_count"
+                    type="number"
+                    :min="1"
+                    :max="10000"
+                    class="w-full"
+                  />
+                </UFormField>
 
-              <!-- 爬取评论 -->
-              <UFormField
-                label="爬取评论"
-                help="是否爬取帖子的评论"
-              >
-                <USwitch
-                  v-model="state.enable_comments"
-                  on-icon="i-heroicons-check"
-                  off-icon="i-heroicons-x-mark"
-                />
-              </UFormField>
+                <!-- 爬取评论 -->
+                <UFormField
+                  label="爬取评论"
+                  help="是否爬取帖子的评论"
+                >
+                  <USwitch
+                    v-model="state.enable_comments"
+                    on-icon="i-heroicons-check"
+                    off-icon="i-heroicons-x-mark"
+                  />
+                </UFormField>
 
-              <!-- 单帖最大评论数 -->
-              <UFormField
-                v-if="state.enable_comments"
-                label="单帖最大评论数"
-                help="每个帖子爬取的最大评论数，0表示不限"
-              >
-                <UInput
-                  v-model.number="state.per_note_max_comments_count"
-                  type="number"
-                  :min="0"
-                  :max="10000"
-                  class="w-full"
-                />
-              </UFormField>
-            </div>
+                <!-- 单帖最大评论数 -->
+                <UFormField
+                  v-if="state.enable_comments"
+                  label="单帖最大评论数"
+                  help="每个帖子爬取的最大评论数，0表示不限"
+                >
+                  <UInput
+                    v-model.number="state.per_note_max_comments_count"
+                    type="number"
+                    :min="0"
+                    :max="10000"
+                    class="w-full"
+                  />
+                </UFormField>
+              </div>
 
-            <!-- 抖音专属选项 -->
-            <div
-              v-if="showDouyinOptions"
-              class="grid grid-cols-1 md:grid-cols-2 gap-5"
-            >
-              <UFormField
-                label="发布时间筛选"
-                help="按发布时间筛选视频（抖音专属）"
+              <!-- 抖音专属选项 -->
+              <div
+                v-if="showDouyinOptions"
+                class="grid grid-cols-1 md:grid-cols-2 gap-5"
               >
-                <USelect
-                  v-model="state.publish_time_type"
-                  :items="publishTimeOptions"
-                  value-key="value"
-                  class="w-full"
-                />
-              </UFormField>
-            </div>
+                <UFormField
+                  label="发布时间筛选"
+                  help="按发布时间筛选视频（抖音专属）"
+                >
+                  <USelect
+                    v-model="state.publish_time_type"
+                    :items="publishTimeOptions"
+                    value-key="value"
+                    class="w-full"
+                  />
+                </UFormField>
+              </div>
 
-            <!-- 小红书专属选项 -->
-            <div
-              v-if="showXhsOptions"
-              class="grid grid-cols-1 md:grid-cols-2 gap-5"
-            >
-              <UFormField
-                label="排序方式"
-                help="搜索结果排序方式（小红书专属）"
+              <!-- 小红书专属选项 -->
+              <div
+                v-if="showXhsOptions"
+                class="grid grid-cols-1 md:grid-cols-2 gap-5"
               >
-                <USelect
-                  v-model="state.sort_type"
-                  :items="sortTypeOptions"
-                  value-key="value"
-                  class="w-full"
-                />
-              </UFormField>
-            </div>
-          </template>
+                <UFormField
+                  label="排序方式"
+                  help="搜索结果排序方式（小红书专属）"
+                >
+                  <USelect
+                    v-model="state.sort_type"
+                    :items="sortTypeOptions"
+                    value-key="value"
+                    class="w-full"
+                  />
+                </UFormField>
+              </div>
+            </template>
+          </ClientOnly>
         </div>
       </UForm>
     </UCard>

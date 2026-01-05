@@ -908,7 +908,6 @@ const { columns } = usePostAnalysisColumns({
   <UModal
     v-model:open="commentDialogOpen"
     title="评论深度分析预览"
-    description="对已完成原文深度分析且有评论的帖子进行评论内容分析"
     :ui="{ width: 'sm:max-w-xl', footer: 'justify-end' }"
   >
     <template #body>

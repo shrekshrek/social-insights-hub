@@ -20,6 +20,7 @@ from src.database import get_async_db, AsyncSessionLocal
 from src.rbac.init_data import init_rbac_data
 from src.social_media.projects.init_data import init_platforms
 from src.middleware import (
+    GZipRequestMiddleware,
     RequestLoggingMiddleware,
     GlobalExceptionHandlerMiddleware,
     SecurityHeadersMiddleware,
@@ -95,7 +96,7 @@ class RootResponse(CustomBaseModel):
     version: str
 
 
-# 添加中间件（注意顺序很重要）
+# 添加中间件（注意顺序很重要，后添加的先执行）
 # 1. 安全头中间件
 app.add_middleware(SecurityHeadersMiddleware)
 
@@ -105,7 +106,10 @@ app.add_middleware(GlobalExceptionHandlerMiddleware)
 # 3. 请求日志中间件
 app.add_middleware(RequestLoggingMiddleware)
 
-# 4. CORS中间件
+# 4. GZip 请求体解压中间件（用于爬虫客户端压缩上传）
+app.add_middleware(GZipRequestMiddleware)
+
+# 5. CORS中间件
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,

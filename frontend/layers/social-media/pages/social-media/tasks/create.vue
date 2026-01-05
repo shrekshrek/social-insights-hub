@@ -709,11 +709,7 @@ const handleSubmit = async () => {
                   label="爬取评论"
                   help="是否爬取帖子的评论"
                 >
-                  <USwitch
-                    v-model="state.enable_comments"
-                    on-icon="i-heroicons-check"
-                    off-icon="i-heroicons-x-mark"
-                  />
+                  <USwitch v-model="state.enable_comments" />
                 </UFormField>
 
                 <!-- 单帖最大评论数 -->

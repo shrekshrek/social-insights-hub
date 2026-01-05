@@ -163,8 +163,8 @@ class Settings(BaseSettings):
     AGENT_API_KEY: str | None = Field(
         default=None, description="API Key for crawler agent authentication"
     )
-    AGENT_TASK_TIMEOUT_HOURS: int = Field(
-        default=2, description="Hours before accepted task is reset to pending"
+    AGENT_TASK_TIMEOUT_HOURS: float = Field(
+        default=2.0, description="Hours before accepted task is reset to pending"
     )
 
     @field_validator("SECRET_KEY")

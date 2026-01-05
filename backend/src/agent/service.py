@@ -204,19 +204,63 @@ async def upload_result(
         )
 
     # 验证状态
-    if task.status not in ("accepted", "running"):
-        # 幂等：已完成的任务返回成功
-        if task.status == "completed":
-            return StoredCounts(posts=task.posts_count, comments=task.comments_count)
-
+    if task.status not in ("accepted", "running", "completed"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "ok": False,
                 "error_code": "INVALID_TASK_STATUS",
-                "message": f"Task status is {task.status}, expected accepted or running",
+                "message": f"Task status is {task.status}, expected accepted, running or completed",
             },
         )
+
+    # 如果是已完成的任务，先清空现有数据（覆盖模式）
+    is_reupload = task.status == "completed"
+    if is_reupload:
+        logger.info(f"Task {task_id}: Re-uploading data, clearing existing data...")
+        # 先撤销/终止旧的分析 Celery 任务，避免重传过程中旧任务继续写入
+        try:
+            from celery import current_app as celery_app
+            from src.social_media.analysis.models import AnalysisJob
+
+            jobs_stmt = select(AnalysisJob.celery_task_id).where(
+                and_(
+                    AnalysisJob.task_id == task_id,
+                    AnalysisJob.status.in_(("pending", "processing")),
+                )
+            )
+            jobs_result = await db.execute(jobs_stmt)
+            celery_task_ids = [row[0] for row in jobs_result.all() if row and row[0]]
+            for celery_task_id in celery_task_ids:
+                celery_app.control.revoke(celery_task_id, terminate=True)
+            if celery_task_ids:
+                logger.info(
+                    f"Task {task_id}: Revoked {len(celery_task_ids)} analysis celery tasks"
+                )
+        except Exception as e:
+            # 撤销失败不应阻断重传；记录日志用于排查
+            logger.warning(
+                f"Task {task_id}: Failed to revoke previous analysis celery tasks: {e}",
+                exc_info=True,
+            )
+
+        await task_crud.delete_task_posts_and_comments(db, task_id)
+        # 重置任务统计与时间字段，避免沿用旧的 started_at / completed_at / counts
+        task.posts_count = 0
+        task.comments_count = 0
+        task.crawled_count = 0
+        task.started_at = None
+        task.completed_at = None
+        task.error_message = None
+        # 清空聚合分析报告
+        task.analysis_result = None
+        task.analysis_result_at = None
+        # 清空分析任务记录
+        from sqlalchemy import delete
+        from src.social_media.analysis.models import AnalysisJob
+        await db.execute(delete(AnalysisJob).where(AnalysisJob.task_id == task_id))
+        await db.flush()
+        logger.info(f"Task {task_id}: Existing data cleared")
 
     # 验证平台
     platform_code = task.platform.code if task.platform else None

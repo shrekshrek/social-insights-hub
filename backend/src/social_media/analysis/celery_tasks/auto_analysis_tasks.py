@@ -72,7 +72,6 @@ def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | N
         分析任务ID，失败返回 None
     """
     from src.social_media.analysis.models import AnalysisJob
-    from src.social_media.analysis.jobs.crud import create_analysis_job
     from src.social_media.tasks.models import SocialPost, DataTask
     from .screening_tasks import run_screening_task
     

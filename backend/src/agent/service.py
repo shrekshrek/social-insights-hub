@@ -258,6 +258,7 @@ async def upload_result(
         # 清空分析任务记录
         from sqlalchemy import delete
         from src.social_media.analysis.models import AnalysisJob
+
         await db.execute(delete(AnalysisJob).where(AnalysisJob.task_id == task_id))
         await db.flush()
         logger.info(f"Task {task_id}: Existing data cleared")
@@ -370,11 +371,11 @@ async def upload_result(
             from src.social_media.analysis.celery_tasks.auto_analysis_tasks import (
                 run_auto_analysis,
             )
-            
+
             # 获取任务创建者ID作为分析任务的用户ID
             user_id = task.creator_id
             project_keywords = task.keywords or ""
-            
+
             # 异步启动分析任务链
             run_auto_analysis.delay(
                 task_id=task.id,

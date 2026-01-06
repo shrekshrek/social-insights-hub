@@ -56,6 +56,20 @@ class QuickTaskCreate(CustomBaseModel):
     )
     keywords: Optional[str] = Field(None, description="搜索关键词（search类型必填）")
 
+    # 远程爬虫高级选项
+    max_notes_count: int = Field(100, ge=1, le=10000, description="最大爬取数量")
+    enable_comments: bool = Field(True, description="是否爬取评论")
+    per_note_max_comments_count: int = Field(
+        20, ge=0, le=10000, description="单帖最大评论数，0表示不限"
+    )
+    # 平台特定选项
+    publish_time_type: int = Field(0, ge=0, description="发布时间筛选（抖音专属）")
+    sort_type: str = Field(
+        "popularity_descending", description="排序方式（小红书专属）"
+    )
+    # 自动分析
+    auto_analyze: bool = Field(True, description="数据采集完成后自动执行全流程分析")
+
     @model_validator(mode="after")
     def validate_keywords(self):
         """验证search任务必须提供关键词"""

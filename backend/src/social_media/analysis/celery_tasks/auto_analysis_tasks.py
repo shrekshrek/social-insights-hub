@@ -72,6 +72,7 @@ def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | N
         分析任务ID，失败返回 None
     """
     from src.social_media.tasks.models import SocialPost, DataTask
+    from src.social_media.analysis.models import PostAnalysis
     from .screening_tasks import run_screening_task
     
     with _get_db_session() as db:
@@ -81,16 +82,21 @@ def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | N
             logger.error(f"Task {task_id} not found")
             return None
         
-        # 获取所有帖子ID
+        # 获取任务下所有帖子ID（排除已有初筛结果的），与手动初筛逻辑保持一致
         post_ids = [
-            row[0] for row in 
-            db.query(SocialPost.id)
-            .filter(SocialPost.task_id == task_id, SocialPost.is_deleted.is_(False))
-            .all()
+            row[0]
+            for row in (
+                db.query(SocialPost.id)
+                .outerjoin(PostAnalysis, PostAnalysis.post_id == SocialPost.id)
+                .filter(SocialPost.task_id == task_id)
+                .filter(SocialPost.is_deleted.is_(False))
+                .filter(PostAnalysis.spam_score.is_(None))  # 只选择尚未初筛的
+                .all()
+            )
         ]
         
         if not post_ids:
-            logger.info(f"Task {task_id}: No posts to screen")
+            logger.info(f"Task {task_id}: No posts to screen (already screened)")
             return None
         
         # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
@@ -130,7 +136,7 @@ def _run_deep_posts(
 ) -> int | None:
     """执行原文深度分析"""
     from src.social_media.analysis.models import PostAnalysis
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import DataTask, SocialPost
     from .deep_analysis_tasks import run_post_deep_task
     
     with _get_db_session() as db:
@@ -140,17 +146,19 @@ def _run_deep_posts(
         
         # 筛选符合阈值的帖子（已初筛但未深度分析）
         post_ids = [
-            row[0] for row in
-            db.query(PostAnalysis.post_id)
-            .filter(
-                PostAnalysis.task_id == task_id,
-                PostAnalysis.spam_score.isnot(None),
-                PostAnalysis.spam_score <= spam_max,
-                PostAnalysis.value_score >= value_min,
-                PostAnalysis.relevance_score >= relevance_min,
-                PostAnalysis.post_deep_result.is_(None),  # 未做深度分析
+            row[0]
+            for row in (
+                db.query(PostAnalysis.post_id)
+                .join(SocialPost, SocialPost.id == PostAnalysis.post_id)
+                .filter(PostAnalysis.task_id == task_id)
+                .filter(SocialPost.is_deleted.is_(False))
+                .filter(PostAnalysis.spam_score.isnot(None))
+                .filter(PostAnalysis.spam_score <= spam_max)
+                .filter(PostAnalysis.value_score >= value_min)
+                .filter(PostAnalysis.relevance_score >= relevance_min)
+                .filter(PostAnalysis.post_deep_result.is_(None))  # 未做深度分析
+                .all()
             )
-            .all()
         ]
         
         if not post_ids:
@@ -192,9 +200,13 @@ def _run_deep_comments(
     value_min: float,
     relevance_min: float,
 ) -> int | None:
-    """执行评论深度分析"""
+    """执行评论深度分析
+
+    与手动候选筛选保持一致：post_deep_result 已有 + comment_deep_result 为空 + 帖子有评论
+    （不额外按阈值过滤，避免与现有 preview 逻辑产生分歧）
+    """
     from src.social_media.analysis.models import PostAnalysis
-    from src.social_media.tasks.models import DataTask, SocialComment
+    from src.social_media.tasks.models import DataTask, SocialPost
     from .deep_analysis_tasks import run_comment_deep_task
     
     with _get_db_session() as db:
@@ -202,30 +214,19 @@ def _run_deep_comments(
         if not task:
             return None
         
-        # 筛选：已完成深度分析且有评论的帖子
-        post_ids = [
-            row[0] for row in
-            db.query(PostAnalysis.post_id)
-            .filter(
-                PostAnalysis.task_id == task_id,
-                PostAnalysis.spam_score <= spam_max,
-                PostAnalysis.value_score >= value_min,
-                PostAnalysis.relevance_score >= relevance_min,
-                PostAnalysis.post_deep_result.isnot(None),  # 已完成深度分析
-                PostAnalysis.comment_deep_result.is_(None),  # 未做评论深度
+        posts_with_comments = [
+            row[0]
+            for row in (
+                db.query(PostAnalysis.post_id)
+                .join(SocialPost, SocialPost.id == PostAnalysis.post_id)
+                .filter(PostAnalysis.task_id == task_id)
+                .filter(SocialPost.is_deleted.is_(False))
+                .filter(PostAnalysis.post_deep_result.isnot(None))  # 已完成原文深度
+                .filter(PostAnalysis.comment_deep_result.is_(None))  # 未做评论深度
+                .filter((SocialPost.comments_count or 0) > 0)
+                .all()
             )
-            .all()
         ]
-        
-        # 过滤出实际有评论的帖子
-        posts_with_comments = []
-        for post_id in post_ids:
-            comment_count = db.query(SocialComment).filter(
-                SocialComment.post_id == post_id,
-                SocialComment.is_deleted.is_(False),
-            ).count()
-            if comment_count > 0:
-                posts_with_comments.append(post_id)
         
         if not posts_with_comments:
             logger.info(f"Task {task_id}: No posts with comments for deep analysis")
@@ -260,8 +261,14 @@ def _run_deep_comments(
 
 
 def _run_aggregation(task_id: int, user_id: int) -> int | None:
-    """执行聚合报告生成"""
+    """执行聚合报告生成
+    
+    和手动聚合保持一致：创建实体归一化和观点归一化两个任务
+    """
+    from sqlalchemy import func
     from src.social_media.tasks.models import DataTask
+    from src.social_media.analysis.models import PostAnalysis
+    from src.social_media.analysis.jobs import create_analysis_job_sync
     from .aggregation_tasks import run_aggregation_task
     
     with _get_db_session() as db:
@@ -269,30 +276,53 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         if not task:
             return None
         
-        # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
-        from src.social_media.analysis.jobs import create_analysis_job_sync
-        analysis_job = create_analysis_job_sync(
+        # 检查是否有已分析的帖子
+        analyzed_count = db.query(func.count()).filter(
+            PostAnalysis.task_id == task_id,
+            PostAnalysis.spam_score.isnot(None),
+        ).scalar() or 0
+        
+        if analyzed_count == 0:
+            logger.info(f"Task {task_id}: No analyzed posts for aggregation")
+            return None
+        
+        # 创建实体归一化任务（和手动聚合一致）
+        entity_job = create_analysis_job_sync(
             db=db,
             project_id=task.project_id,
             task_id=task_id,
             user_id=user_id,
-            analysis_type="aggregation",
-            source_count=0,
+            analysis_type="entity_normalization",
+            source_count=analyzed_count,
         )
-        job_id = analysis_job.id
         
-        # 启动 Celery 任务
-        celery_result = run_aggregation_task.delay(
-            result_id=job_id,
+        # 创建观点归一化任务（和手动聚合一致）
+        opinion_job = create_analysis_job_sync(
+            db=db,
+            project_id=task.project_id,
             task_id=task_id,
+            user_id=user_id,
+            analysis_type="opinion_normalization",
+            source_count=analyzed_count,
         )
         
-        # 更新为真实的 celery_task_id
-        analysis_job.celery_task_id = celery_result.id
+        # 启动 Celery 任务，传递预创建的 job_id
+        celery_result = run_aggregation_task.delay(
+            task_id=task_id,
+            project_id=task.project_id,
+            user_id=user_id,
+            entity_job_id=entity_job.id,
+            opinion_job_id=opinion_job.id,
+        )
+        
+        # 仅更新 entity_job 的 celery_task_id 为真实任务ID：
+        # - `analysis_jobs.celery_task_id` 有唯一约束，不能对两个 job 写同一个值
+        # - 前端跟踪通常以 entity_job 为主，重传覆盖撤销也依赖真实 task_id
+        entity_job.celery_task_id = celery_result.id
         db.commit()
         
-        logger.info(f"Task {task_id}: Started aggregation job {job_id}")
-        return job_id
+        logger.info(f"Task {task_id}: Started aggregation (entity_job={entity_job.id}, opinion_job={opinion_job.id})")
+        return entity_job.id
 
 
 @celery_app.task(

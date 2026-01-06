@@ -944,6 +944,10 @@ async def run_task_aggregation(
         opinion_job_id=opinion_job.id,
     )
 
+    # 仅将 entity_job 绑定到真实 Celery 任务ID，便于取消/排查（celery_task_id 有唯一约束）
+    entity_job.celery_task_id = celery_result.id
+    await db.commit()
+
     return RunAnalysisResponse(
         celery_task_id=celery_result.id,
         job_id=entity_job.id,  # 返回实体归一化的 job_id 用于跟踪

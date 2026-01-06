@@ -48,6 +48,15 @@ const quickTaskSchema = z.object({
     message: '请选择数据源'
   }),
   keywords: z.string().optional(),
+  // 远程爬虫高级选项
+  max_notes_count: z.number().min(1).max(10000).default(100),
+  enable_comments: z.boolean().default(true),
+  per_note_max_comments_count: z.number().min(0).max(10000).default(20),
+  // 平台特定选项
+  publish_time_type: z.number().default(0),
+  sort_type: z.string().default('popularity_descending'),
+  // 自动分析
+  auto_analyze: z.boolean().default(true),
 }).refine((data) => {
   // search类型必须提供keywords
   if (data.task_type === 'search' && !data.keywords?.trim()) {
@@ -74,6 +83,14 @@ const quickTaskState = reactive<QuickTaskSchema>({
   task_type: 'search',
   data_source: 'remote_crawler',
   keywords: '',
+  // 远程爬虫高级选项
+  max_notes_count: 100,
+  enable_comments: true,
+  per_note_max_comments_count: 20,
+  publish_time_type: 0,
+  sort_type: 'popularity_descending',
+  // 自动分析
+  auto_analyze: true,
 })
 
 // 格式化日期为 YYYY-MM-DD
@@ -130,6 +147,42 @@ const showKeywordsInput = computed(() => {
   return quickTaskState.task_type === 'search'
 })
 
+// 是否显示远程爬虫高级选项
+const showCrawlerOptions = computed(() => quickTaskState.data_source === 'remote_crawler')
+
+// 选中的平台代码列表
+const selectedPlatformCodes = computed(() => {
+  if (!platforms.value) return []
+  return platforms.value
+    .filter(p => quickTaskState.platform_ids.includes(p.id))
+    .map(p => p.code)
+})
+
+// 是否显示抖音专属选项（选中的平台包含抖音）
+const showDouyinOptions = computed(() => {
+  return showCrawlerOptions.value && selectedPlatformCodes.value.includes('dy')
+})
+
+// 是否显示小红书专属选项（选中的平台包含小红书）
+const showXhsOptions = computed(() => {
+  return showCrawlerOptions.value && selectedPlatformCodes.value.includes('xhs')
+})
+
+// 抖音发布时间选项
+const publishTimeOptions = [
+  { label: '不限', value: 0 },
+  { label: '一天内', value: 1 },
+  { label: '一周内', value: 7 },
+  { label: '半年内', value: 182 },
+]
+
+// 小红书排序选项
+const sortTypeOptions = [
+  { label: '综合排序', value: 'general' },
+  { label: '最热', value: 'popularity_descending' },
+  { label: '最新', value: 'time_descending' },
+]
+
 // 任务创建摘要
 const taskSummary = computed(() => {
   if (!enableQuickTasks.value || quickTaskState.platform_ids.length === 0) {
@@ -170,6 +223,14 @@ const handleSubmit = async () => {
         task_type: quickTaskState.task_type,
         data_source: quickTaskState.data_source,
         keywords: quickTaskState.keywords || undefined,
+        // 远程爬虫高级选项
+        max_notes_count: quickTaskState.max_notes_count,
+        enable_comments: quickTaskState.enable_comments,
+        per_note_max_comments_count: quickTaskState.per_note_max_comments_count,
+        publish_time_type: quickTaskState.publish_time_type,
+        sort_type: quickTaskState.sort_type,
+        // 自动分析
+        auto_analyze: quickTaskState.auto_analyze,
       }
       projectData.quick_tasks = quickTasks
     }
@@ -410,6 +471,100 @@ const handleSubmit = async () => {
                 </label>
               </div>
             </UFormField>
+
+            <!-- 远程爬虫高级选项 -->
+            <ClientOnly>
+              <template v-if="showCrawlerOptions">
+                <USeparator label="爬虫配置" />
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <!-- 最大爬取数 -->
+                  <UFormField
+                    label="最大爬取数"
+                    help="爬取的最大条目数量"
+                  >
+                    <UInput
+                      v-model.number="quickTaskState.max_notes_count"
+                      type="number"
+                      :min="1"
+                      :max="10000"
+                      class="w-full"
+                    />
+                  </UFormField>
+
+                  <!-- 爬取评论 -->
+                  <UFormField
+                    label="爬取评论"
+                    help="是否爬取帖子的评论"
+                  >
+                    <USwitch v-model="quickTaskState.enable_comments" />
+                  </UFormField>
+
+                  <!-- 单帖最大评论数 -->
+                  <UFormField
+                    v-if="quickTaskState.enable_comments"
+                    label="单帖最大评论数"
+                    help="每个帖子爬取的最大评论数，0表示不限"
+                  >
+                    <UInput
+                      v-model.number="quickTaskState.per_note_max_comments_count"
+                      type="number"
+                      :min="0"
+                      :max="10000"
+                      class="w-full"
+                    />
+                  </UFormField>
+                </div>
+
+                <!-- 抖音专属选项 -->
+                <div
+                  v-if="showDouyinOptions"
+                  class="grid grid-cols-1 md:grid-cols-2 gap-5"
+                >
+                  <UFormField
+                    label="发布时间筛选"
+                    help="按发布时间筛选视频（抖音专属）"
+                  >
+                    <USelect
+                      v-model="quickTaskState.publish_time_type"
+                      :items="publishTimeOptions"
+                      value-key="value"
+                      class="w-full"
+                    />
+                  </UFormField>
+                </div>
+
+                <!-- 小红书专属选项 -->
+                <div
+                  v-if="showXhsOptions"
+                  class="grid grid-cols-1 md:grid-cols-2 gap-5"
+                >
+                  <UFormField
+                    label="排序方式"
+                    help="搜索结果排序方式（小红书专属）"
+                  >
+                    <USelect
+                      v-model="quickTaskState.sort_type"
+                      :items="sortTypeOptions"
+                      value-key="value"
+                      class="w-full"
+                    />
+                  </UFormField>
+                </div>
+
+                <!-- 自动分析选项 -->
+                <USeparator label="分析配置" />
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <UFormField
+                    label="自动分析"
+                    help="数据采集完成后自动执行全流程分析（初筛→深度→报告）"
+                  >
+                    <USwitch v-model="quickTaskState.auto_analyze" />
+                  </UFormField>
+                </div>
+              </template>
+            </ClientOnly>
           </div>
 
           <!-- 任务摘要 -->

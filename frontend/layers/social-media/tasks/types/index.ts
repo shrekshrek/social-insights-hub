@@ -37,6 +37,15 @@ export interface QuickTaskCreate {
   task_type: 'search' | 'homefeed'
   data_source: DataSource
   keywords?: string
+  // 远程爬虫高级选项
+  max_notes_count?: number
+  enable_comments?: boolean
+  per_note_max_comments_count?: number
+  // 平台特定选项
+  publish_time_type?: number // 抖音专属
+  sort_type?: string // 小红书专属
+  // 自动分析
+  auto_analyze?: boolean
 }
 
 export interface SocialProjectCreate {

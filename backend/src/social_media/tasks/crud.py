@@ -239,11 +239,7 @@ async def get_posts_by_task(
         base_conditions.append(SocialPost.id == post_id)
 
     # 统计总数
-    count_query = (
-        select(func.count())
-        .select_from(SocialPost)
-        .where(*base_conditions)
-    )
+    count_query = select(func.count()).select_from(SocialPost).where(*base_conditions)
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
@@ -492,6 +488,8 @@ async def bulk_create_tasks(
     data_source: str,
     creator_id: int,
     keywords: Optional[str] = None,
+    task_params: Optional[dict] = None,
+    auto_analyze: bool = False,
 ) -> List[DataTask]:
     """为多个平台批量创建相同配置的任务
 
@@ -503,17 +501,46 @@ async def bulk_create_tasks(
         data_source: 数据源
         creator_id: 创建者ID
         keywords: 关键词（search类型必填）
+        task_params: 任务参数（爬虫高级选项等）
+        auto_analyze: 是否自动分析
 
     Returns:
         创建的任务列表
     """
     tasks = []
 
+    # 非远程爬虫不需要携带爬虫参数/自动分析
+    if data_source != "remote_crawler":
+        task_params = None
+        auto_analyze = False
+
+    # 预取平台 code，便于裁剪平台专属参数，避免误传导致爬虫端报错
+    platform_code_map: dict[int, str] = {}
+    if task_params:
+        from src.social_media.projects.models import Platform
+
+        result = await db.execute(
+            select(Platform.id, Platform.code).where(Platform.id.in_(platform_ids))
+        )
+        platform_code_map = {row[0]: row[1] for row in result.all()}
+
     for platform_id in platform_ids:
         # 生成任务名称
         task_name = f"{task_type.title()} Task"
         if keywords:
             task_name += f" - {keywords[:20]}"  # 限制长度
+
+        per_task_params = task_params
+        if task_params:
+            # copy，避免跨平台互相影响
+            per_task_params = dict(task_params)
+            platform_code = platform_code_map.get(platform_id)
+            if platform_code != "dy":
+                per_task_params.pop("publish_time_type", None)
+            if platform_code != "xhs":
+                per_task_params.pop("sort_type", None)
+            if not per_task_params:
+                per_task_params = None
 
         task_data = {
             "project_id": project_id,
@@ -523,6 +550,8 @@ async def bulk_create_tasks(
             "name": task_name,
             "keywords": keywords,
             "status": "pending",
+            "task_params": per_task_params,
+            "auto_analyze": auto_analyze,
         }
 
         task = DataTask(**task_data, creator_id=creator_id)

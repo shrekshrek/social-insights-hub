@@ -34,9 +34,7 @@ class DataTaskCreate(DataTaskBase):
         pattern="^(remote_crawler|local_upload)$",
         description="数据源: remote_crawler/local_upload",
     )
-    auto_analyze: bool = Field(
-        False, description="数据上传完成后自动执行全流程分析"
-    )
+    auto_analyze: bool = Field(False, description="数据上传完成后自动执行全流程分析")
 
 
 class DataTaskUpdate(CustomBaseModel):

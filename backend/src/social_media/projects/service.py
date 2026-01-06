@@ -66,6 +66,17 @@ async def create_project(
                     detail=f"Platform with id {platform_id} not found",
                 )
 
+        # 构建 task_params（爬虫高级选项）
+        task_params = None
+        if project_in.quick_tasks.data_source == "remote_crawler":
+            task_params = {
+                "max_notes_count": project_in.quick_tasks.max_notes_count,
+                "enable_comments": 1 if project_in.quick_tasks.enable_comments else 0,
+                "per_note_max_comments_count": project_in.quick_tasks.per_note_max_comments_count,
+                "publish_time_type": project_in.quick_tasks.publish_time_type,
+                "sort_type": project_in.quick_tasks.sort_type,
+            }
+
         # 批量创建任务
         created_tasks = await bulk_create_tasks(
             db=db,
@@ -75,6 +86,12 @@ async def create_project(
             data_source=project_in.quick_tasks.data_source,
             creator_id=current_user_id,
             keywords=project_in.quick_tasks.keywords,
+            task_params=task_params,
+            auto_analyze=(
+                project_in.quick_tasks.auto_analyze
+                if project_in.quick_tasks.data_source == "remote_crawler"
+                else False
+            ),
         )
 
         await db.commit()

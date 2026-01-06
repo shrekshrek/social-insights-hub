@@ -188,6 +188,8 @@ def analyze_single_post_deep(
 
     Returns:
         分析结果
+
+    注意：为保证 chord callback 能被调用，重试耗尽后返回失败结果而非抛出异常
     """
     try:
         result = _analyze_single_post(result_id, task_id, post_id, analysis_focus)
@@ -203,10 +205,16 @@ def analyze_single_post_deep(
 
     except Exception as e:
         logger.error(f"Celery任务执行失败 (post_id={post_id}): {e}", exc_info=True)
-        # 更新失败计数
         progress_mgr = AnalysisProgressManager(result_id)
         progress_mgr.increment_failed()
-        raise self.retry(exc=e)
+
+        # 检查是否还有重试机会
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e)
+
+        # 重试耗尽：返回失败结果而非抛出异常，保证 chord callback 能被调用
+        logger.warning(f"帖子 {post_id} 深度分析重试耗尽，返回失败结果")
+        return {"success": False, "error": str(e), "post_id": post_id}
 
 
 # ============================================================================
@@ -576,6 +584,8 @@ def analyze_single_post_comments_deep(
 
     Returns:
         分析结果
+
+    注意：为保证 chord callback 能被调用，重试耗尽后返回失败结果而非抛出异常
     """
     try:
         result = _analyze_single_post_comments(
@@ -597,7 +607,14 @@ def analyze_single_post_comments_deep(
         )
         progress_mgr = AnalysisProgressManager(result_id)
         progress_mgr.increment_failed()
-        raise self.retry(exc=e)
+
+        # 检查是否还有重试机会
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e)
+
+        # 重试耗尽：返回失败结果而非抛出异常，保证 chord callback 能被调用
+        logger.warning(f"帖子 {post_id} 评论深度分析重试耗尽，返回失败结果")
+        return {"success": False, "error": str(e), "post_id": post_id}
 
 
 # ============================================================================

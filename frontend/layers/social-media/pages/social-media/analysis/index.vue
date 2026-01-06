@@ -21,6 +21,8 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const selectedType = ref<AnalysisType | undefined>()
 const selectedStatus = ref<AnalysisStatus | undefined>()
+const searchProjectId = ref<number | undefined>()
+const searchTaskId = ref<number | undefined>()
 const refreshing = ref(false)
 
 // 构建查询参数
@@ -29,6 +31,13 @@ const params = computed(() => ({
   page_size: pageSize.value,
   analysis_type: selectedType.value,
   status: selectedStatus.value,
+  // 处理空值和 NaN
+  project_id: typeof searchProjectId.value === 'number' && !Number.isNaN(searchProjectId.value)
+    ? searchProjectId.value
+    : undefined,
+  task_id: typeof searchTaskId.value === 'number' && !Number.isNaN(searchTaskId.value)
+    ? searchTaskId.value
+    : undefined,
 }))
 
 // 获取分析任务列表
@@ -40,6 +49,34 @@ const {
 
 const jobs = computed(() => jobsData.value?.items || [])
 const total = computed(() => jobsData.value?.total || 0)
+
+// 当前页统计
+const pageStats = computed(() => {
+  const items = jobs.value
+  let totalTokens = 0
+  let totalCost = 0
+  let totalCalls = 0
+  let totalTime = 0
+
+  for (const job of items) {
+    const summary = job.token_usage?.summary
+    if (summary) {
+      totalTokens += summary.total_tokens || 0
+      totalCost += summary.total_cost_cny || 0
+      totalCalls += summary.total_calls || 0
+    }
+    if (job.processing_time) {
+      totalTime += job.processing_time
+    }
+  }
+
+  return {
+    totalTokens,
+    totalCost,
+    totalCalls,
+    totalTime,
+  }
+})
 
 // 刷新列表
 const handleRefresh = async () => {
@@ -178,6 +215,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       accessorKey: 'id',
       header: 'ID',
       cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.id),
+      footer: () => h('span', { class: 'text-xs font-semibold text-gray-600 dark:text-gray-400 whitespace-nowrap' }, '合计'),
     },
     {
       accessorKey: 'analysis_type',
@@ -221,6 +259,17 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       },
     },
     {
+      accessorKey: 'project_id',
+      header: () => h('span', { class: 'whitespace-nowrap' }, '项目ID'),
+      cell: ({ row }) => {
+        const projectId = row.original.project_id
+        if (!projectId) {
+          return h('span', { class: 'text-gray-400' }, '-')
+        }
+        return h('span', { class: 'text-xs text-gray-500 font-mono' }, projectId)
+      },
+    },
+    {
       accessorKey: 'project_name',
       header: '项目',
       cell: ({ row }) => {
@@ -233,6 +282,17 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           class: 'p-0 font-normal',
           to: `/social-media/projects/${row.original.project_id}`,
         }, () => row.original.project_name)
+      },
+    },
+    {
+      accessorKey: 'task_id',
+      header: () => h('span', { class: 'whitespace-nowrap' }, '任务ID'),
+      cell: ({ row }) => {
+        const taskId = row.original.task_id
+        if (!taskId) {
+          return h('span', { class: 'text-gray-400' }, '-')
+        }
+        return h('span', { class: 'text-xs text-gray-500 font-mono' }, taskId)
       },
     },
     {
@@ -275,6 +335,10 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           h('div', { class: 'text-gray-400' }, 'deepseek-chat'),
         ])
       },
+      footer: () => h('div', { class: 'text-xs font-semibold text-gray-700 dark:text-gray-300' }, [
+        h('div', {}, `${pageStats.value.totalCalls.toLocaleString()} 次`),
+        h('div', { class: 'text-gray-400 font-normal' }, '合计'),
+      ]),
     },
     {
       accessorKey: 'token_usage',
@@ -286,12 +350,19 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           h('div', { class: 'text-primary-500' }, formatCost(usage?.total_cost_cny)),
         ])
       },
+      footer: () => h('div', { class: 'text-xs font-semibold' }, [
+        h('div', { class: 'text-gray-700 dark:text-gray-300' }, formatTokens(pageStats.value.totalTokens)),
+        h('div', { class: 'text-primary-500' }, formatCost(pageStats.value.totalCost)),
+      ]),
     },
     {
       accessorKey: 'processing_time',
       header: '耗时',
       cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
         formatDuration(row.original.processing_time)
+      ),
+      footer: () => h('span', { class: 'text-xs font-semibold text-gray-700 dark:text-gray-300' },
+        formatDuration(pageStats.value.totalTime)
       ),
     },
     {
@@ -363,6 +434,22 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           </h2>
 
           <div class="flex items-center gap-3">
+            <UInput
+              v-model.number="searchProjectId"
+              type="number"
+              placeholder="项目ID"
+              class="w-24"
+              :ui="{ base: 'text-sm' }"
+            />
+
+            <UInput
+              v-model.number="searchTaskId"
+              type="number"
+              placeholder="任务ID"
+              class="w-24"
+              :ui="{ base: 'text-sm' }"
+            />
+
             <USelect
               v-model="selectedType"
               :items="typeOptions"

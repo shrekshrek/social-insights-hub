@@ -923,6 +923,7 @@ defineExpose({
   <UModal
     v-model:open="commentDialogOpen"
     title="评论深度分析预览"
+    description="预览评论深度分析的候选帖子数量"
     :ui="{ width: 'sm:max-w-xl', footer: 'justify-end' }"
   >
     <template #body>
@@ -991,6 +992,7 @@ defineExpose({
   <UModal
     v-model:open="deleteDialogOpen"
     title="确认删除分析结果"
+    description="删除所有分析结果后需要重新运行分析任务"
     :ui="{ width: 'sm:max-w-md', footer: 'justify-end' }"
   >
     <template #body>

@@ -33,7 +33,8 @@ def _get_db_session():
 
 
 def _auto_lock_key(task_id: int) -> str:
-    return f"analysis:auto:{task_id}:lock"
+    # 执行侧“正在运行”锁（与触发侧 triggered key 分离）
+    return f"analysis:auto:{task_id}:running"
 
 
 def _acquire_auto_lock(task_id: int, owner: str, ttl_seconds: int) -> bool:

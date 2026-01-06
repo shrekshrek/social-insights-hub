@@ -236,7 +236,8 @@ async def upload_result(
             from src.redis_client import redis_pool
 
             async with redis.Redis(connection_pool=redis_pool) as redis_client:
-                await redis_client.delete(f"analysis:auto:{task_id}:lock")
+                await redis_client.delete(f"analysis:auto:{task_id}:triggered")
+                await redis_client.delete(f"analysis:auto:{task_id}:running")
         except Exception as e:
             logger.warning(
                 f"Task {task_id}: Failed to clear auto analysis lock: {e}",
@@ -402,7 +403,8 @@ async def upload_result(
             project_keywords = task.keywords or ""
 
             # 幂等锁（触发侧）：避免同一 task 并发 upload_result 时重复触发
-            lock_key = f"analysis:auto:{task.id}:lock"
+            # 注意：触发侧与执行侧使用不同 key，避免“已触发”阻断真正执行
+            lock_key = f"analysis:auto:{task.id}:triggered"
             try:
                 import redis.asyncio as redis
                 from src.redis_client import redis_pool

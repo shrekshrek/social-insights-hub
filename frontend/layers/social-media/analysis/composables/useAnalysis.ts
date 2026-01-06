@@ -195,7 +195,7 @@ export const useAnalysis = () => {
         if (query) {
           params.set('search_query', query)
         }
-        if (id != null) {
+        if (typeof id === 'number' && !Number.isNaN(id)) {
           params.set('search_id', String(id))
         }
         if (ids && ids.length > 0) {

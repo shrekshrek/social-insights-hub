@@ -282,7 +282,7 @@ async def get_task_post_analyses(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     filter_analyzed: bool = Query(True, description="是否只返回已分析的帖子"),
     search_query: str | None = Query(None, description="关键词搜索（搜索标题和内容）"),
-    search_id: int | None = Query(None, description="按帖子ID精确搜索"),
+    search_id: int | None = Query(None, description="按帖子ID精确搜索（对应表格ID列）"),
     post_ids: str | None = Query(None, description="按帖子ID列表筛选（逗号分隔）"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),

@@ -525,10 +525,13 @@ async def bulk_create_tasks(
         platform_code_map = {row[0]: row[1] for row in result.all()}
 
     for platform_id in platform_ids:
-        # 生成任务名称
-        task_name = f"{task_type.title()} Task"
-        if keywords:
-            task_name += f" - {keywords[:20]}"  # 限制长度
+        # 生成任务名称：不使用 "Search Task -" 这类前缀
+        if task_type == "search":
+            task_name = (keywords or "").strip() or "搜索任务"
+        else:
+            task_name = "主页任务"
+        # DB 字段上限 255，做一下安全截断
+        task_name = task_name[:255]
 
         per_task_params = task_params
         if task_params:

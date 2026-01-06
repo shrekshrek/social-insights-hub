@@ -270,6 +270,7 @@ async def get_task_posts(
     pagination: PaginationParams = Depends(get_pagination_params),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
+    post_id: Optional[int] = Query(None, description="按原文ID精确筛选"),
 ):
     """
     获取任务的原文列表（分页）。
@@ -282,6 +283,7 @@ async def get_task_posts(
         page=pagination.page,
         page_size=pagination.page_size,
         current_user_id=current_user.id,
+        post_id=post_id,
     )
 
     # 转换为分页响应

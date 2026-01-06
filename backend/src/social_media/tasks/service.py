@@ -338,8 +338,18 @@ async def get_task_posts(
     page: int = 1,
     page_size: int = 20,
     current_user_id: int = None,
+    post_id: int = None,
 ) -> tuple[List[dict], int]:
-    """获取任务的原文列表（包含已爬取评论数）"""
+    """获取任务的原文列表（包含已爬取评论数）
+
+    Args:
+        db: 数据库会话
+        task_id: 任务ID
+        page: 页码
+        page_size: 每页数量
+        current_user_id: 当前用户ID（用于权限验证）
+        post_id: 可选，按原文ID精确筛选
+    """
     # 验证任务访问权限
     task = await get_task(db, task_id, current_user_id)
     if not task:
@@ -349,7 +359,9 @@ async def get_task_posts(
         )
 
     skip = (page - 1) * page_size
-    return await crud.get_posts_by_task(db, task_id, skip=skip, limit=page_size)
+    return await crud.get_posts_by_task(
+        db, task_id, skip=skip, limit=page_size, post_id=post_id
+    )
 
 
 async def get_task_comments(

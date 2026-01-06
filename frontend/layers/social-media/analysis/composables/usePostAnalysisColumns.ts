@@ -12,6 +12,8 @@ import ExpandableText from '../components/shared/ExpandableText.vue'
 export interface PostAnalysisColumnsOptions {
   /** 点击深度分析按钮的回调 */
   onOpenDeepResult?: (postId: number, type: 'post' | 'comment') => void
+  /** 点击查看按钮的回调（跳转到原文/评论数据） */
+  onViewPost?: (postId: number) => void
   /** 标题/内容列的宽度 */
   contentColumnSize?: number
 }
@@ -49,6 +51,7 @@ const formatDateTime = (value?: string | null): { date: string; time: string } |
 export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {}) {
   const {
     onOpenDeepResult,
+    onViewPost,
     contentColumnSize = 160,
   } = options
 
@@ -61,8 +64,26 @@ export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {})
       {
         accessorKey: 'post_id',
         header: 'ID',
-        size: 40,
-        cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.post_id),
+        size: 60,
+        cell: ({ row }) => {
+          const postId = row.original.post_id
+          return h('div', { class: 'space-y-1' }, [
+            h('span', { class: 'text-xs text-gray-500 font-mono block' }, postId),
+            onViewPost
+              ? h(
+                  'button',
+                  {
+                    class: 'flex items-center gap-0.5 text-xs text-primary-500 hover:text-primary-600 cursor-pointer',
+                    onClick: () => onViewPost(postId),
+                  },
+                  [
+                    h(Icon, { name: 'i-heroicons-eye', class: 'w-3 h-3' }),
+                    h('span', '查看'),
+                  ]
+                )
+              : null,
+          ])
+        },
       },
       // 平台ID 列
       {

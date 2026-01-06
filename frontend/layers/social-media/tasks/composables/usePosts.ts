@@ -14,7 +14,7 @@ export const usePosts = () => {
       query: params,
       key: computed(() => {
         const p = unref(params)
-        return `task-${taskId}-posts-${p?.page || 1}-${p?.page_size || 20}`
+        return `task-${taskId}-posts-${p?.page || 1}-${p?.page_size || 20}-${p?.post_id || 'all'}`
       }),
     })
   }

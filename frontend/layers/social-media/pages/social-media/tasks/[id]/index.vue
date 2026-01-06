@@ -35,11 +35,21 @@ const {
 const postPage = ref(1);
 const postPageSize = ref(20);
 
+// 原文筛选（用于从分析面板跳转查看）
+const selectedPostDbIdForPosts = ref<number | null>(null);
+
 // 获取任务的原文列表
-const postParams = computed(() => ({
-  page: postPage.value,
-  page_size: postPageSize.value,
-}));
+const postParams = computed(() => {
+  const params: Record<string, unknown> = {
+    page: postPage.value,
+    page_size: postPageSize.value,
+  };
+  // 如果选中了特定帖子，添加 post_id 参数
+  if (selectedPostDbIdForPosts.value) {
+    params.post_id = selectedPostDbIdForPosts.value;
+  }
+  return params;
+});
 
 const {
   data: postsResponse,
@@ -156,10 +166,30 @@ const handleViewComments = (post: SocialPost) => {
   commentPage.value = 1;
 };
 
-// 清除筛选
+// 清除评论筛选
 const handleClearFilter = () => {
   selectedPostIdOnPlatform.value = null;
   selectedPostDbId.value = null;
+  commentPage.value = 1;
+};
+
+// 清除原文筛选
+const handleClearPostFilter = () => {
+  selectedPostDbIdForPosts.value = null;
+  postPage.value = 1;
+};
+
+// 处理从分析面板跳转查看原文/评论（同时筛选原文和评论列表）
+const handleFocusPost = (postId: number) => {
+  // 设置原文筛选
+  selectedPostDbIdForPosts.value = postId;
+  postPage.value = 1;
+
+  // 同时设置评论筛选（复用现有的评论筛选逻辑）
+  selectedPostDbId.value = postId;
+  // 评论的平台ID显示需要从 postIdMap 获取，但此时可能还没加载
+  // 先设置为 null，UI 会显示 postId
+  selectedPostIdOnPlatform.value = null;
   commentPage.value = 1;
 };
 
@@ -770,7 +800,28 @@ const AnalysisPanel = defineAsyncComponent(() =>
             <!-- 左侧：原文列表 -->
             <UCard>
               <template #header>
-                <h2 class="text-lg font-semibold">原文数据</h2>
+                <div class="flex items-center justify-between gap-3">
+                  <h2 class="text-lg font-semibold">原文数据</h2>
+                  <div
+                    v-if="selectedPostDbIdForPosts"
+                    class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-1.5"
+                  >
+                    <span
+                      class="text-sm text-blue-700 dark:text-blue-300 whitespace-nowrap"
+                    >
+                      正在查看:
+                      <span class="font-mono font-medium">ID {{ selectedPostDbIdForPosts }}</span>
+                    </span>
+                    <UButton
+                      size="xs"
+                      variant="ghost"
+                      icon="i-heroicons-x-mark"
+                      @click="handleClearPostFilter"
+                    >
+                      查看全部
+                    </UButton>
+                  </div>
+                </div>
               </template>
 
               <ClientOnly>
@@ -822,16 +873,16 @@ const AnalysisPanel = defineAsyncComponent(() =>
                 <div class="flex items-center justify-between gap-3">
                   <h2 class="text-lg font-semibold">评论数据</h2>
                   <div
-                    v-if="selectedPostIdOnPlatform"
+                    v-if="selectedPostDbId"
                     class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-1.5"
                   >
                     <span
                       class="text-sm text-blue-700 dark:text-blue-300 whitespace-nowrap"
                     >
                       正在查看:
-                      <span class="font-mono font-medium">{{
-                        selectedPostIdOnPlatform
-                      }}</span>
+                      <span class="font-mono font-medium">
+                        {{ selectedPostIdOnPlatform || `ID ${selectedPostDbId}` }}
+                      </span>
                     </span>
                     <UButton
                       size="xs"
@@ -866,7 +917,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
 
                 <div v-else class="text-center py-8">
                   <p class="text-gray-600 dark:text-gray-400">
-                    {{ selectedPostIdOnPlatform ? "该帖子暂无评论" : "暂无评论数据" }}
+                    {{ selectedPostDbId ? "该帖子暂无评论" : "暂无评论数据" }}
                   </p>
                 </div>
               </ClientOnly>
@@ -878,7 +929,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
                       显示 {{ (commentPage - 1) * commentPageSize + 1 }} 到
                       {{ Math.min(commentPage * commentPageSize, commentsTotal) }}
                       共 {{ commentsTotal }} 条{{
-                        selectedPostIdOnPlatform ? "评论" : "记录"
+                        selectedPostDbId ? "评论" : "记录"
                       }}
                     </div>
                     <UPagination
@@ -896,7 +947,11 @@ const AnalysisPanel = defineAsyncComponent(() =>
           <!-- AI 分析卡片 -->
           <div class="mt-6">
             <ClientOnly>
-              <AnalysisPanel ref="analysisPanelRef" :task-id="taskId" />
+              <AnalysisPanel
+                ref="analysisPanelRef"
+                :task-id="taskId"
+                @focus-post="handleFocusPost"
+              />
             </ClientOnly>
           </div>
   </div>

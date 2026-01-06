@@ -13,6 +13,10 @@ const props = defineProps<{
   taskId: number
 }>()
 
+const emit = defineEmits<{
+  (e: 'focusPost', postId: number): void
+}>()
+
 const toast = useToast()
 
 const {
@@ -542,9 +546,15 @@ const openDeepResultModal = (postId: number, type: 'post' | 'comment') => {
   deepResultModalOpen.value = true
 }
 
+// 处理查看原文/评论数据
+const handleViewPost = (postId: number) => {
+  emit('focusPost', postId)
+}
+
 // 使用共用的表格列定义
 const { columns } = usePostAnalysisColumns({
   onOpenDeepResult: openDeepResultModal,
+  onViewPost: handleViewPost,
   contentColumnSize: 180,
 })
 

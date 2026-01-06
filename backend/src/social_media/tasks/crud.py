@@ -213,18 +213,36 @@ async def get_post_by_id(
 
 
 async def get_posts_by_task(
-    db: AsyncSession, task_id: int, skip: int = 0, limit: int = 20
+    db: AsyncSession,
+    task_id: int,
+    skip: int = 0,
+    limit: int = 20,
+    post_id: int | None = None,
 ) -> tuple[List[dict], int]:
     """获取任务的原文列表（包含已爬取评论数）
+
+    Args:
+        db: 数据库会话
+        task_id: 任务ID
+        skip: 跳过数量
+        limit: 返回数量限制
+        post_id: 可选，按原文ID精确筛选
 
     Returns:
         tuple: (帖子数据列表（包含 crawled_comments_count）, 总数)
     """
+    # 基础筛选条件
+    base_conditions = [SocialPost.task_id == task_id, SocialPost.is_deleted.is_(False)]
+
+    # 如果指定了 post_id，添加精确筛选
+    if post_id is not None:
+        base_conditions.append(SocialPost.id == post_id)
+
     # 统计总数
     count_query = (
         select(func.count())
         .select_from(SocialPost)
-        .where(SocialPost.task_id == task_id, SocialPost.is_deleted.is_(False))
+        .where(*base_conditions)
     )
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
@@ -242,7 +260,7 @@ async def get_posts_by_task(
     # 查询数据（包含已爬取评论数）
     query = (
         select(SocialPost, crawled_count_subquery.label("crawled_comments_count"))
-        .where(SocialPost.task_id == task_id, SocialPost.is_deleted.is_(False))
+        .where(*base_conditions)
         .offset(skip)
         .limit(limit)
         .order_by(SocialPost.published_at.desc())

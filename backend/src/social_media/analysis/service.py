@@ -511,7 +511,7 @@ async def get_task_post_analyses(
         page_size: 每页数量
         filter_analyzed: 是否只返回已分析的帖子（默认True）
         search_query: 关键词搜索（搜索标题和内容）
-        search_id: 按帖子分析ID精确搜索
+        search_id: 按帖子ID精确搜索
         post_ids: 按帖子ID列表筛选
 
     Returns:
@@ -584,7 +584,8 @@ async def get_task_post_analyses(
         # 按帖子ID列表筛选（优先级最高）
         stmt = stmt.where(SocialPost.id.in_(post_ids))
     elif search_id is not None:
-        stmt = stmt.where(PostAnalysis.id == search_id)
+        # 按帖子ID精确搜索（对应表格中显示的 ID 列）
+        stmt = stmt.where(SocialPost.id == search_id)
     elif search_query:
         search_pattern = f"%{search_query}%"
         stmt = stmt.where(

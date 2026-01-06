@@ -31,6 +31,7 @@ const handleClose = () => {
   <UModal
     :open="open"
     :title="title"
+    description="查看AI深度分析的详细结果"
     :ui="{ content: 'w-[calc(100vw-2rem)] max-w-2xl rounded-lg shadow-lg ring ring-default', footer: 'justify-end' }"
     @update:open="handleClose"
   >

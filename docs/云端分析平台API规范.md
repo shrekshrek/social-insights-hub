@@ -142,7 +142,7 @@ Authorization: Bearer {api_key}
       "platform": "xhs",
       "task_type": "search",
       "priority": 1,
-      "keywords": "人工智能",
+        "keywords": "人工智能",
       "task_params": {
         "max_notes_count": 50,
         "enable_comments": true,

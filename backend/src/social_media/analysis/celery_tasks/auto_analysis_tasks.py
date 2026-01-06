@@ -13,6 +13,7 @@ from typing import Any, Dict
 
 from src.celery_app import celery_app
 from src.database import SyncSessionLocal
+from src.redis_sync_client import get_sync_redis
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,31 @@ POLL_INTERVAL = 5  # 5秒轮询一次
 def _get_db_session():
     """获取同步数据库会话"""
     return SyncSessionLocal()
+
+
+def _auto_lock_key(task_id: int) -> str:
+    return f"analysis:auto:{task_id}:lock"
+
+
+def _acquire_auto_lock(task_id: int, owner: str, ttl_seconds: int) -> bool:
+    """task_id 级自动分析幂等锁（防止同一任务重复启动自动分析链）"""
+    redis_client = get_sync_redis()
+    return bool(
+        redis_client.set(_auto_lock_key(task_id), owner, nx=True, ex=ttl_seconds)
+    )
+
+
+def _release_auto_lock(task_id: int, owner: str) -> None:
+    """仅当 owner 匹配时释放锁，避免误删他人锁。"""
+    redis_client = get_sync_redis()
+    key = _auto_lock_key(task_id)
+    try:
+        current = redis_client.get(key)
+        if current == owner:
+            redis_client.delete(key)
+    except Exception:
+        # 锁释放失败不应影响主流程；依赖 TTL 自动过期兜底
+        logger.exception("Failed to release auto analysis lock")
 
 
 def _wait_for_analysis_job(job_id: int, timeout: int = TASK_WAIT_TIMEOUT) -> bool:
@@ -360,6 +386,16 @@ def run_auto_analysis(
     """
     logger.info(f"Task {task_id}: Starting auto analysis pipeline")
 
+    # 幂等锁（执行侧兜底）：即使触发侧并发，也保证同一 task 只跑一个自动分析链
+    owner = getattr(self.request, "id", None) or f"auto-{int(time.time())}"
+    # TTL 需覆盖整个 pipeline（4 步 × 单步超时 + 余量）
+    lock_ttl = TASK_WAIT_TIMEOUT * 5
+    if not _acquire_auto_lock(task_id, owner=owner, ttl_seconds=lock_ttl):
+        logger.info(
+            f"Task {task_id}: Auto analysis already running (lock exists), skip"
+        )
+        return {"task_id": task_id, "status": "skipped", "reason": "already_running"}
+
     results = {
         "task_id": task_id,
         "screening": None,
@@ -449,5 +485,7 @@ def run_auto_analysis(
         )
         results["status"] = "error"
         results["error"] = str(e)
+    finally:
+        _release_auto_lock(task_id, owner=owner)
 
     return results

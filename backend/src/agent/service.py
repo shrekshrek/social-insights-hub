@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
@@ -80,43 +80,55 @@ async def accept_task(
     Raises:
         HTTPException: 任务不存在或状态不正确
     """
-    stmt = select(DataTask).where(
-        and_(
-            DataTask.id == task_id,
-            DataTask.is_deleted.is_(False),
+    # 原子抢占：仅当任务仍为 pending 时才能成功更新为 accepted
+    accepted_at = datetime.now(timezone.utc)
+    upd = (
+        update(DataTask)
+        .where(
+            and_(
+                DataTask.id == task_id,
+                DataTask.is_deleted.is_(False),
+                DataTask.status == "pending",
+            )
+        )
+        .values(
+            status="accepted",
+            accepted_at=accepted_at,
+            accepted_by=request.client_id,
         )
     )
-    result = await db.execute(stmt)
-    task = result.scalar_one_or_none()
-
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found",
+    result = await db.execute(upd)
+    if result.rowcount and result.rowcount > 0:
+        await db.commit()
+        logger.info(
+            f"Task {task_id} accepted by client: {request.client_id or 'unknown'}"
         )
-
-    # 幂等：已被接收的任务再次调用返回成功
-    if task.status == "accepted":
         return
 
-    if task.status != "pending":
+    # 未抢占成功：查询当前状态给出幂等/冲突响应
+    stmt = select(DataTask.status).where(
+        and_(DataTask.id == task_id, DataTask.is_deleted.is_(False))
+    )
+    status_result = await db.execute(stmt)
+    current_status = status_result.scalar_one_or_none()
+
+    if current_status is None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "ok": False,
-                "error_code": "TASK_ALREADY_ACCEPTED",
-                "message": f"Task status is {task.status}, expected pending",
-            },
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
         )
 
-    # 更新任务状态
-    task.status = "accepted"
-    task.accepted_at = datetime.now(timezone.utc)
-    if request.client_id:
-        task.accepted_by = request.client_id
+    # 幂等：已被接收则直接返回成功
+    if current_status == "accepted":
+        return
 
-    await db.commit()
-    logger.info(f"Task {task_id} accepted by client: {request.client_id or 'unknown'}")
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "ok": False,
+            "error_code": "TASK_ALREADY_ACCEPTED",
+            "message": f"Task status is {current_status}, expected pending",
+        },
+    )
 
 
 async def update_progress(
@@ -218,9 +230,22 @@ async def upload_result(
     is_reupload = task.status == "completed"
     if is_reupload:
         logger.info(f"Task {task_id}: Re-uploading data, clearing existing data...")
+        # 清理自动分析幂等锁（避免锁残留阻断后续自动分析）
+        try:
+            import redis.asyncio as redis
+            from src.redis_client import redis_pool
+
+            async with redis.Redis(connection_pool=redis_pool) as redis_client:
+                await redis_client.delete(f"analysis:auto:{task_id}:lock")
+        except Exception as e:
+            logger.warning(
+                f"Task {task_id}: Failed to clear auto analysis lock: {e}",
+                exc_info=True,
+            )
+
         # 先撤销/终止旧的分析 Celery 任务，避免重传过程中旧任务继续写入
         try:
-            from celery import current_app as celery_app
+            from celery import current_app as celery_app  # type: ignore[import-not-found]
             from src.social_media.analysis.models import AnalysisJob
 
             jobs_stmt = select(AnalysisJob.celery_task_id).where(
@@ -376,13 +401,38 @@ async def upload_result(
             user_id = task.creator_id
             project_keywords = task.keywords or ""
 
-            # 异步启动分析任务链
-            run_auto_analysis.delay(
-                task_id=task.id,
-                user_id=user_id,
-                project_keywords=project_keywords,
-            )
-            logger.info(f"Task {task_id}: Auto analysis triggered")
+            # 幂等锁（触发侧）：避免同一 task 并发 upload_result 时重复触发
+            lock_key = f"analysis:auto:{task.id}:lock"
+            try:
+                import redis.asyncio as redis
+                from src.redis_client import redis_pool
+
+                async with redis.Redis(connection_pool=redis_pool) as redis_client:
+                    acquired = await redis_client.set(
+                        lock_key, "triggered", nx=True, ex=7200
+                    )
+                if acquired:
+                    run_auto_analysis.delay(
+                        task_id=task.id,
+                        user_id=user_id,
+                        project_keywords=project_keywords,
+                    )
+                    logger.info(f"Task {task_id}: Auto analysis triggered")
+                else:
+                    logger.info(
+                        f"Task {task_id}: Auto analysis already triggered (lock exists), skip"
+                    )
+            except Exception as e:
+                # 锁失败不应阻断主流程：降级为直接触发（由 Celery 执行侧幂等锁兜底）
+                logger.warning(
+                    f"Task {task_id}: Failed to acquire auto analysis lock, fallback trigger: {e}",
+                    exc_info=True,
+                )
+                run_auto_analysis.delay(
+                    task_id=task.id,
+                    user_id=user_id,
+                    project_keywords=project_keywords,
+                )
 
         return StoredCounts(posts=posts_count, comments=comments_count)
 

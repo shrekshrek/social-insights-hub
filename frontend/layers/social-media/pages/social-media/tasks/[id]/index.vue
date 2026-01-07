@@ -605,11 +605,21 @@ const AnalysisPanel = defineAsyncComponent(() =>
                   <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
                     所属项目
                   </h3>
-                  <p
-                    class="mt-1 text-sm text-gray-900 dark:text-white truncate"
+                  <UButton
+                    v-if="task.project_id"
+                    variant="link"
+                    size="sm"
+                    class="mt-1 p-0 font-normal"
+                    :to="`/social-media/projects/${task.project_id}`"
                     :title="task.project_name || '-'"
                   >
                     {{ task.project_name || "-" }}
+                  </UButton>
+                  <p
+                    v-else
+                    class="mt-1 text-sm text-gray-900 dark:text-white truncate"
+                  >
+                    -
                   </p>
                 </div>
 

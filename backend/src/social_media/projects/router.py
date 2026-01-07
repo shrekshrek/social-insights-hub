@@ -361,3 +361,36 @@ async def get_deep_analysis_settings(
     if settings:
         return schemas.DeepAnalysisSettings(**settings)
     return None
+
+
+# ==================== Task Comparison ====================
+
+
+@router.post(
+    "/projects/{project_id}/compare",
+    response_model=schemas.TaskComparisonResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Compare tasks in project",
+    description="对比项目内多个任务的数据重合度（原文和评论）",
+)
+async def compare_tasks(
+    project_id: int,
+    request: schemas.TaskComparisonRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    对比项目内选定的任务，分析数据重合情况。
+
+    - 必须选择同一平台、同一项目的任务
+    - 至少选择2个任务
+    - 返回两两重合矩阵和整体重合概览
+    - 包含评论互补率分析（针对重合的帖子，分析评论是否互补）
+    """
+    return await service.compare_tasks(
+        db=db,
+        project_id=project_id,
+        task_ids=request.task_ids,
+        current_user_id=current_user.id,
+        compare_type=request.compare_type,
+    )

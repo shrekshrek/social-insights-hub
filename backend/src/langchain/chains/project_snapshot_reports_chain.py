@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """项目级快照三报告 Chain（Landscape/Topic/Focus）
 
-输出统一为 JSON：{"content": "..."}，便于后端直接写入 `reports.*_report`。
+LLM 直接输出 Markdown 文本，后端解析后写入 `reports.*_report`。
 """
 
 from __future__ import annotations
@@ -18,11 +18,11 @@ from src.langchain.llm import get_llm
 logger = logging.getLogger(__name__)
 
 
-# 注意：LangChain ChatPromptTemplate 使用 {var} 做占位符，JSON 花括号必须转义为 {{ / }}。
-REPORT_OUTPUT_JSON_SPEC = """只输出 JSON，禁止任何额外文本。
-```json
-{{"content": "..."}}
-```"""
+# 输出格式说明：直接输出 Markdown 文本，不使用 JSON 包裹，提高稳定性
+REPORT_OUTPUT_FORMAT_SPEC = """请直接输出 Markdown 格式的报告内容。
+- 不要使用 JSON 格式包裹。
+- 不要输出 ```markdown 代码块标记，直接输出正文。
+"""
 
 
 LANDSCAPE_SYSTEM = (
@@ -35,13 +35,19 @@ LANDSCAPE_SYSTEM = (
 3. **自然引用**：将用户原话自然融入叙述中，不要生硬地用“正如用户所说”打断阅读流。
    - ❌ 差：大家都在吐槽价格。正如用户所说“太贵了”。
    - ✅ 优：用户普遍对高昂的溢价表示不满，直言产品“完全是智商税”。
+4. **上下文意识 (Context Awareness) [重要]**：
+   - 本报告基于**用户选定的特定任务/关键词**生成的“关注市场快照”，而非全网绝对全景。
+   - 分析“市场份额”时，请明确指出是在“**本次监测范围内**”或“**关注列表中**”。
+   - 避免使用“全网最火”、“绝对垄断”等可能产生误导的绝对化表述，除非数据量级具有压倒性优势。
 
 ## 报告结构（Markdown）
+**注意：不要生成报告大标题，直接从第一节开始。**
+
 ### 1. 核心摘要 (Executive Summary)
-- 用 3-5 个 bullet points 概括市场最关键的特征（如垄断程度、增长驱动力、主要风险）。
+- 用 3-5 个 bullet points 概括**本次监测范围内**最关键的特征（如品牌集中度、核心增长点、主要风险）。
 
 ### 2. 市场竞争格局 (Competitive Landscape)
-- **定义市场阶段**：明确是“混战期”、“寡头垄断”、“双雄对峙”还是“碎片化市场”。
+- **定义市场阶段**：基于当前数据分布，判断是“混战期”、“寡头垄断”、“双雄对峙”还是“碎片化市场”。
 - **头部玩家画像**：用一句话精准概括 Top3 品牌的核心心智（例如：3M——靠品牌光环躺赢；龙膜——性价比之王但服务拉胯）。
 
 ### 3. 关键趋势与心智 (Key Trends)
@@ -51,7 +57,7 @@ LANDSCAPE_SYSTEM = (
 - 全文 500-700 字。
 - 保持精炼，多用短句。
 """
-    + REPORT_OUTPUT_JSON_SPEC
+    + REPORT_OUTPUT_FORMAT_SPEC
 )
 
 LANDSCAPE_USER = """【meta】
@@ -78,14 +84,19 @@ TOPIC_SYSTEM = (
    - 表层：用户说“太贵”。
    - 深层：用户觉得“价值感不清晰”或“找不到低价替代方案”。
 3. **情感共鸣**：通过精选的用户原话，还原真实的使用场景和情绪。
+4. **比例意识 (Proportionality)**：
+   - 关注痛点（负面）在整体讨论中的占比。如果是极少数人的抱怨，请标注为“长尾问题”；如果是普遍现象，则标注为“核心阻碍”。
+   - 区分“吐槽”与“放弃”：用户是边骂边买，还是因为痛点直接流失？
 
 ## 报告结构（Markdown）
+**注意：不要生成报告大标题，直接从第一节开始。**
+
 ### 1. 核心洞察 (Key Insights)
 - 3-5 点总结，直接指出用户最强烈的诉求和不满。
 
 ### 2. 痛点深潜 (Pain Points Deep Dive)
 - **Top 1 核心痛点**：详细拆解最严重的痛点。
-  - *现象*：用户在抱怨什么？
+  - *现象*：用户在抱怨什么？（结合场景描述）
   - *归因*：是产品缺陷、服务流程还是市场教育问题？
   - *佐证*：自然融入 1-2 句用户吐槽原话。
 - **次级痛点**：简要概括其他普遍问题。
@@ -99,8 +110,9 @@ TOPIC_SYSTEM = (
 ## 长度控制
 - 全文 600-900 字。
 """
-    + REPORT_OUTPUT_JSON_SPEC
+    + REPORT_OUTPUT_FORMAT_SPEC
 )
+
 
 TOPIC_USER = """【meta】
 {meta}
@@ -129,10 +141,14 @@ FOCUS_SYSTEM = (
 ## 写作原则
 1. **Issue-Based 分析**：一切分析围绕“如何解决客户的问题”展开。
 2. **对比视角**：不要只看自己，始终将 Target 放在与 Competitor 的对比中（Benchmarking）。
-3. **So What?**：每一个数据结论后面都要紧跟“这对品牌意味着什么？”。
+3. **数据不对称风控 [重要]**：
+   - 如果竞品（Competitor）的数据量显著少于目标品牌（Target），必须在分析中**明确示警**（“因竞品样本量较小，相关对比仅供参考”）。
+   - 不要将“竞品数据少”误读为“竞品声量低”或“竞品无缺点”。
 4. **行动导向**：建议必须具体、可执行（Actionable），不要说空话（如“加强品牌建设”是空话，“在抖音投放侧重耐用性实测视频”是建议）。
 
 ## 报告结构（Markdown）
+**注意：不要生成报告大标题，直接从第一节开始。**
+
 ### 1. 战略仪表盘 (Diagnostic Dashboard)
 - **数据置信度**：一句话评估数据质量（如果竞品数据缺失，必须预警）。
 - **关键诊断**：用 3 句话概括品牌当前的处境（优势/劣势/机会）。
@@ -156,7 +172,7 @@ FOCUS_SYSTEM = (
 - 全文 800-1200 字。
 - 重点放在“行动建议”上。
 """
-    + REPORT_OUTPUT_JSON_SPEC
+    + REPORT_OUTPUT_FORMAT_SPEC
 )
 
 FOCUS_USER = """【meta】
@@ -195,19 +211,31 @@ def create_project_snapshot_focus_report_chain() -> Runnable:
 
 
 def parse_project_snapshot_report_response(response_text: str) -> Dict[str, Any]:
-    """解析 report JSON（允许被 ```json 包裹）"""
-    if "```json" in response_text:
-        response_text = response_text.split("```json")[1].split("```")[0]
-    elif "```" in response_text:
-        response_text = response_text.split("```")[1].split("```")[0]
+    """解析 report 响应。
+    
+    新策略：LLM 直接输出 Markdown 文本。
+    为了兼容性，如果 LLM 还是输出了 JSON 或 Markdown 代码块，尝试清理。
+    """
+    text = response_text.strip()
+    
+    # 1. 尝试清理 Markdown 代码块标记
+    if text.startswith("```"):
+        # 移除开头的 ```json 或 ```markdown
+        lines = text.split("\n")
+        if len(lines) >= 2:
+            # 移除第一行 (```xxx) 和最后一行 (```)
+            text = "\n".join(lines[1:-1]).strip()
+    
+    # 2. 尝试解析 JSON（以防 LLM 仍然顽固地输出 JSON）
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            result = json.loads(text)
+            if isinstance(result, dict) and "content" in result:
+                return {"content": str(result["content"])}
+        except Exception:
+            # 解析失败，说明可能只是长得像 JSON 的文本，或者 JSON 格式错误
+            # 这种情况下，直接把原始内容作为 content 返回（Better robust than fail）
+            pass
 
-    try:
-        result = json.loads(response_text.strip())
-        if isinstance(result, dict) and isinstance(result.get("content"), str):
-            return {"content": result.get("content") or ""}
-        return {}
-    except Exception:
-        logger.error(
-            f"Failed to decode JSON from project snapshot report: {response_text[:200]}..."
-        )
-        return {}
+    # 3. 默认：直接把文本作为 content
+    return {"content": text}

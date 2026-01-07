@@ -4,6 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
 import type { DataTaskWithRelations } from '../../../../tasks/types'
 import type { ProjectSnapshot } from '../../../../types/project-snapshot'
+import TaskComparisonSlideover from '../../../../projects/components/TaskComparisonSlideover.vue'
 
 definePageMeta({
   layout: 'default',
@@ -67,6 +68,50 @@ const snapshotCompetitorsInput = ref('')
 const snapshotWeightsJsonInput = ref('')
 const enableCustomPlatformWeights = ref(false)
 const showSnapshotModal = ref(false)
+
+// 任务对比
+const showComparisonSlideover = ref(false)
+
+// 检查选中的任务是否来自同一平台
+const selectedTasksPlatformCheck = computed(() => {
+  if (selectedTaskIds.value.length < 2) {
+    return { valid: false, reason: 'not_enough', platformIds: new Set<number>() }
+  }
+  const selectedSet = new Set(selectedTaskIds.value)
+  const platformIds = new Set<number>()
+  for (const t of tasks.value as DataTaskWithRelations[]) {
+    if (selectedSet.has(t.id) && t.platform_id) {
+      platformIds.add(t.platform_id)
+    }
+  }
+  if (platformIds.size > 1) {
+    return { valid: false, reason: 'different_platforms', platformIds }
+  }
+  return { valid: true, reason: null, platformIds }
+})
+
+const canCompare = computed(() => selectedTasksPlatformCheck.value.valid)
+
+const openComparisonSlideover = () => {
+  const check = selectedTasksPlatformCheck.value
+  if (selectedTaskIds.value.length < 2) {
+    toast.add({
+      title: '至少选择 2 个任务',
+      description: '请勾选至少两个任务进行对比',
+      color: 'warning',
+    })
+    return
+  }
+  if (check.reason === 'different_platforms') {
+    toast.add({
+      title: '无法对比不同平台的任务',
+      description: '请选择同一平台的任务进行对比，当前选择了多个平台',
+      color: 'error',
+    })
+    return
+  }
+  showComparisonSlideover.value = true
+}
 
 const openSnapshotModal = () => {
   if (!selectedTaskIds.value.length) return
@@ -654,6 +699,16 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               </div>
               <UButton
                 size="sm"
+                variant="outline"
+                icon="i-heroicons-scale"
+                :disabled="!canCompare"
+                :title="selectedTasksPlatformCheck.reason === 'different_platforms' ? '请选择同一平台的任务' : selectedTaskIds.length < 2 ? '至少选择2个任务' : ''"
+                @click="openComparisonSlideover"
+              >
+                对比任务
+              </UButton>
+              <UButton
+                size="sm"
                 icon="i-heroicons-sparkles"
                 :disabled="!selectedTaskIds.length"
                 :loading="generatingSnapshot"
@@ -843,6 +898,15 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           </UButton>
         </template>
       </UModal>
+    </ClientOnly>
+
+    <!-- 任务对比侧边栏 -->
+    <ClientOnly>
+      <TaskComparisonSlideover
+        v-model:open="showComparisonSlideover"
+        :project-id="projectId"
+        :task-ids="selectedTaskIds"
+      />
     </ClientOnly>
   </div>
 </template>

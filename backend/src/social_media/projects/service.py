@@ -196,3 +196,198 @@ async def update_deep_analysis_settings(
 async def get_deep_analysis_settings(project: SocialProject) -> Optional[dict]:
     """获取项目的深度分析阈值配置"""
     return project.deep_analysis_settings
+
+
+# ==================== Task Comparison ====================
+
+
+async def compare_tasks(
+    db: AsyncSession,
+    project_id: int,
+    task_ids: List[int],
+    current_user_id: int,
+    compare_type: str = "posts",
+) -> dict:
+    """对比项目内多个任务的数据重合度"""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from src.social_media.tasks.models import DataTask, SocialPost, SocialComment
+    from src.social_media.projects import crud as project_crud
+
+    # 1. 权限校验
+    has_access = await project_crud.check_project_access(
+        db, project_id, current_user_id
+    )
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project",
+        )
+
+    # 2. 任务校验
+    stmt = (
+        select(DataTask)
+        .options(selectinload(DataTask.platform))
+        .where(DataTask.id.in_(task_ids))
+        .where(DataTask.project_id == project_id)
+        .where(DataTask.is_deleted.is_(False))
+    )
+    result = await db.execute(stmt)
+    tasks = list(result.scalars().all())
+
+    if len(tasks) != len(task_ids):
+        found_ids = {t.id for t in tasks}
+        missing = set(task_ids) - found_ids
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tasks not found or not in project: {missing}",
+        )
+
+    # 校验是否同一平台（不同平台对比 post_id 无意义）
+    platform_ids = {t.platform_id for t in tasks}
+    if len(platform_ids) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot compare tasks from different platforms. Please select tasks from the same platform.",
+        )
+
+    # 3. 获取所有任务的帖子ID (task_id, post_id_on_platform)
+    posts_stmt = (
+        select(SocialPost.task_id, SocialPost.post_id_on_platform)
+        .where(SocialPost.task_id.in_(task_ids))
+        .where(SocialPost.is_deleted.is_(False))
+    )
+    posts_result = await db.execute(posts_stmt)
+    # 内存结构：task_id -> set(post_ids)
+    task_posts: dict[int, set[str]] = {tid: set() for tid in task_ids}
+    all_posts: set[str] = set()
+    # 记录每个帖子出现在哪些任务中，用于评论分析
+    post_in_tasks: dict[str, set[int]] = {}
+
+    for tid, pid in posts_result.all():
+        task_posts[tid].add(pid)
+        all_posts.add(pid)
+        if pid not in post_in_tasks:
+            post_in_tasks[pid] = set()
+        post_in_tasks[pid].add(tid)
+
+    # 4. 计算矩阵
+    matrix = []
+    task_map = {t.id: t for t in tasks}
+
+    for tid_main in task_ids:
+        main_set = task_posts[tid_main]
+        overlaps = []
+        # 计算该任务的独有帖子（不与其他任何选定任务重合）
+        # unique = main - union(others)
+        others_union = set()
+        for tid_other in task_ids:
+            if tid_other != tid_main:
+                others_union.update(task_posts[tid_other])
+        unique_count = len(main_set - others_union)
+
+        # 计算两两重合
+        for tid_target in task_ids:
+            if tid_main == tid_target:
+                continue
+            target_set = task_posts[tid_target]
+            overlap_count = len(main_set & target_set)
+            overlaps.append(
+                {"target_task_id": tid_target, "overlap_count": overlap_count}
+            )
+
+        matrix.append(
+            {
+                "task_id": tid_main,
+                "task_name": task_map[tid_main].name,
+                "total_posts": len(main_set),
+                "unique_posts": unique_count,
+                "overlaps": overlaps,
+            }
+        )
+
+    # 5. 概览统计
+    total_posts_raw = sum(len(s) for s in task_posts.values())
+    unique_posts_count = len(all_posts)
+    # 重合帖子：出现在 >= 2 个任务中的帖子
+    overlap_posts_set = {pid for pid, tids in post_in_tasks.items() if len(tids) >= 2}
+    overlap_count = len(overlap_posts_set)
+    overlap_rate = overlap_count / unique_posts_count if unique_posts_count > 0 else 0.0
+
+    # 6. 评论互补分析（仅针对重合帖子）
+    comment_analysis = {
+        "posts_involved": overlap_count,
+        "total_comments_raw": 0,
+        "unique_comments": 0,
+        "overlap_rate": 0.0,
+        "complementary_rate": 0.0,
+    }
+
+    if overlap_count > 0:
+        # 查出这些重合帖子在各任务中的评论 ID
+        # 仅查询涉及重合帖子的评论
+        comments_stmt = (
+            select(
+                SocialComment.task_id,
+                SocialComment.post_id,
+                SocialComment.comment_id_on_platform,
+                SocialPost.post_id_on_platform,
+            )
+            .join(SocialPost, SocialPost.id == SocialComment.post_id)
+            .where(SocialComment.task_id.in_(task_ids))
+            .where(SocialPost.post_id_on_platform.in_(overlap_posts_set))
+            .where(SocialComment.is_deleted.is_(False))
+        )
+        comments_result = await db.execute(comments_stmt)
+
+        # 统计
+        # task_id -> set(comment_id) (仅限重合帖子)
+        task_comments: dict[int, set[str]] = {tid: set() for tid in task_ids}
+        all_comments: set[str] = set()
+
+        for tid, _, cid, pid in comments_result.all():
+            # 组合键：为了更严谨，评论去重最好带上 post_id (虽然平台 cid 全局唯一，但带上更安全)
+            # 这里简化为 cid，假设平台 cid 足够唯一
+            task_comments[tid].add(cid)
+            all_comments.add(cid)
+
+        total_comments_raw = sum(len(s) for s in task_comments.values())
+        unique_comments_count = len(all_comments)
+
+        # 评论重合率：(Raw - Unique) / Raw (衡量冗余度)
+        # 或者：(Raw - Unique) / Unique ?
+        # 这里定义 Overlap Rate = 1 - (Unique / Raw)，即冗余比例
+        comments_overlap_rate = (
+            1.0 - (unique_comments_count / total_comments_raw)
+            if total_comments_raw > 0
+            else 0.0
+        )
+
+        # 互补率：(Unique - Max_Single_Task) / Unique
+        # 衡量多任务合并后比单任务增加了多少信息量
+        max_single = max(len(s) for s in task_comments.values()) if task_comments else 0
+        complementary_rate = (
+            (unique_comments_count - max_single) / unique_comments_count
+            if unique_comments_count > 0
+            else 0.0
+        )
+
+        comment_analysis.update(
+            {
+                "total_comments_raw": total_comments_raw,
+                "unique_comments": unique_comments_count,
+                "overlap_rate": round(comments_overlap_rate, 4),
+                "complementary_rate": round(complementary_rate, 4),
+            }
+        )
+
+    return {
+        "overview": {
+            "total_posts_raw": total_posts_raw,
+            "unique_posts": unique_posts_count,
+            "overlap_count": overlap_count,
+            "overlap_rate": round(overlap_rate, 4),
+        },
+        "matrix": matrix,
+        "comment_analysis": comment_analysis,
+    }

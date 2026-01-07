@@ -168,3 +168,59 @@ class UpdateDeepAnalysisSettings(CustomBaseModel):
     """更新深度分析配置请求"""
 
     settings: DeepAnalysisSettings = Field(..., description="深度分析阈值配置")
+
+
+# ==================== Task Comparison ====================
+
+
+class TaskComparisonRequest(CustomBaseModel):
+    """任务对比请求"""
+
+    task_ids: List[int] = Field(..., min_length=2, description="要对比的任务ID列表")
+    compare_type: Literal["posts"] = Field(
+        "posts", description="对比类型（暂时只支持 posts）"
+    )
+
+
+class TaskOverlap(CustomBaseModel):
+    """任务重合详情（矩阵单元格）"""
+
+    target_task_id: int
+    overlap_count: int
+
+
+class TaskComparisonItem(CustomBaseModel):
+    """单个任务的对比详情（矩阵行）"""
+
+    task_id: int
+    task_name: str
+    total_posts: int
+    unique_posts: int
+    overlaps: List[TaskOverlap]
+
+
+class CommentAnalysis(CustomBaseModel):
+    """评论对比分析"""
+
+    posts_involved: int = Field(..., description="涉及到的重合帖子数")
+    total_comments_raw: int = Field(..., description="这些帖子在各任务中的评论总和")
+    unique_comments: int = Field(..., description="按 comment_id 去重后的评论数")
+    overlap_rate: float = Field(..., description="评论重复率")
+    complementary_rate: float = Field(..., description="评论互补率")
+
+
+class TaskComparisonOverview(CustomBaseModel):
+    """对比概览"""
+
+    total_posts_raw: int
+    unique_posts: int
+    overlap_count: int
+    overlap_rate: float
+
+
+class TaskComparisonResponse(CustomBaseModel):
+    """任务对比响应"""
+
+    overview: TaskComparisonOverview
+    matrix: List[TaskComparisonItem]
+    comment_analysis: CommentAnalysis

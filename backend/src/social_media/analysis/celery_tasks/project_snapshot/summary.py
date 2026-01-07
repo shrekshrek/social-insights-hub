@@ -211,7 +211,7 @@ def generate_project_reports(
 
     ok = bool(reports.get("landscape_report")) and bool(reports.get("topic_report"))
     if subject:
-        # Focus 硬约束：必须包含“营销/产品/公关”三段式建议（否则判失败）
+        # Focus 软约束：检查是否包含三段式建议（使用同义词匹配）
         fr = (
             reports.get("focus_report")
             if isinstance(reports.get("focus_report"), dict)
@@ -219,12 +219,25 @@ def generate_project_reports(
         )
         content = (fr or {}).get("content") if isinstance(fr, dict) else ""
         content = str(content or "")
-        has_required = (
-            ("营销" in content) and ("产品" in content) and ("公关" in content)
-        )
-        if not has_required:
-            reports["focus_report"] = None
-        ok = ok and has_required
+
+        # 使用同义词列表，更灵活地匹配
+        marketing_kw = ["营销", "市场", "Marketing", "推广", "传播"]
+        product_kw = ["产品", "Product", "功能", "体验"]
+        pr_kw = ["公关", "服务", "PR", "Service", "危机", "舆情"]
+
+        has_marketing = any(kw in content for kw in marketing_kw)
+        has_product = any(kw in content for kw in product_kw)
+        has_pr = any(kw in content for kw in pr_kw)
+        has_required = has_marketing and has_product and has_pr
+
+        # 即使不满足硬约束，也保留报告内容（但标记警告）
+        if not has_required and reports.get("focus_report"):
+            logger.warning(
+                f"[Snapshot Reports] Focus report missing sections: "
+                f"marketing={has_marketing}, product={has_product}, pr={has_pr}"
+            )
+        # 只要有 focus_report 内容就算成功（移除丢弃逻辑）
+        ok = ok and bool(reports.get("focus_report"))
 
     return {
         "status": "completed" if ok else "failed",
@@ -232,5 +245,5 @@ def generate_project_reports(
         "reports": reports,
         "error": None
         if ok
-        else ("focus_report_missing_required_sections" if subject else "empty_reports"),
+        else ("focus_report_empty" if subject else "empty_reports"),
     }

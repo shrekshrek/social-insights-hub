@@ -45,22 +45,63 @@ const allPlatforms = computed(() => {
   return Array.from(platformSet).sort()
 })
 
-// 平台颜色（使用固定调色板）
+// 官方 7 个平台颜色（对齐 backend/src/social_media/projects/init_data.py）
 const platformColors: Record<string, string> = {
+  // 微博 - 橙红色
   weibo: '#ff6b6b',
+  wb: '#ff6b6b',
+  // B站 - 粉色
   bilibili: '#fb7299',
+  bili: '#fb7299',
+  // 抖音 - 黑色
   douyin: '#161823',
-  kuaishou: '#ff5500',
+  dy: '#161823',
+  // 快手 - 橙色
+  kuaishou: '#ff9500',
+  ks: '#ff9500',
+  // 小红书 - 红色
   xiaohongshu: '#fe2c55',
   xhs: '#fe2c55',
+  // 知乎 - 蓝色
   zhihu: '#0084ff',
-  tieba: '#4e6ef2',
+  // 贴吧 - 紫色
+  tieba: '#7c3aed',
+  // 默认 - 灰色
   default: '#94a3b8',
 }
 
+// 备用颜色（当平台超出预定义列表时使用）
+const fallbackColors = [
+  '#6366f1', // 靛蓝
+  '#14b8a6', // 青色
+  '#f59e0b', // 琥珀
+  '#84cc16', // 黄绿
+  '#ec4899', // 粉红
+  '#8b5cf6', // 紫色
+]
+
+// 动态分配颜色的缓存
+const dynamicColorMap = new Map<string, string>()
+let fallbackColorIndex = 0
+
 const getPlatformColor = (platform: string) => {
   const key = platform.toLowerCase().replace(/[^a-z]/g, '')
-  return platformColors[key] || platformColors.default
+
+  // 1. 优先使用预定义颜色
+  if (platformColors[key]) {
+    return platformColors[key]
+  }
+
+  // 2. 检查动态缓存
+  if (dynamicColorMap.has(key)) {
+    return dynamicColorMap.get(key)!
+  }
+
+  // 3. 分配备用颜色
+  const color = fallbackColors[fallbackColorIndex % fallbackColors.length]
+  fallbackColorIndex++
+  dynamicColorMap.set(key, color)
+  return color
 }
 
 const formatNumber = (n: number) => {

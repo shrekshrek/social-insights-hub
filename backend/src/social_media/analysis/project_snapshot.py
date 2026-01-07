@@ -18,22 +18,28 @@ from src.social_media.analysis.celery_tasks.aggregation.utils import (
 def _normalize_platform_code(code: str) -> str:
     """将用户输入/文档名映射为系统内部平台 code（Platform.code）。
 
-    系统内部约定（见 projects/init_data.py）：xhs / dy / bili / wb
-    文档/用户可能输入：douyin/weibo/bilibili 等，因此这里做兼容映射。
+    系统内部约定（见 projects/init_data.py）：7 个平台
+    - bili, dy, ks, tieba, wb, xhs, zhihu
+    文档/用户可能输入全称：douyin/weibo/bilibili/kuaishou/xiaohongshu 等。
     """
     c = (code or "").strip().lower()
     if not c:
         return ""
     alias = {
-        # internal -> internal
+        # internal codes (保持不变)
         "xhs": "xhs",
         "dy": "dy",
         "bili": "bili",
         "wb": "wb",
-        # common names -> internal
+        "ks": "ks",
+        "tieba": "tieba",
+        "zhihu": "zhihu",
+        # common full names -> internal codes
+        "xiaohongshu": "xhs",
         "douyin": "dy",
-        "weibo": "wb",
         "bilibili": "bili",
+        "weibo": "wb",
+        "kuaishou": "ks",
     }
     return alias.get(c, c)
 

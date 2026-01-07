@@ -428,8 +428,29 @@ const postListModalTitle = ref('')
 const postListModalGroups = ref<Array<{ taskId: number; postIds: number[]; label?: string }>>([])
 
 const platformName = (code: string) => {
+  // 官方 7 个平台（对齐 backend/src/social_media/projects/init_data.py）
   const c = (code || '').toString().toLowerCase()
-  const mp: Record<string, string> = { xhs: '小红书', dy: '抖音', bili: 'B站', wb: '微博' }
+  const mp: Record<string, string> = {
+    // 小红书
+    xhs: '小红书',
+    xiaohongshu: '小红书',
+    // 抖音
+    dy: '抖音',
+    douyin: '抖音',
+    // B站
+    bili: 'B站',
+    bilibili: 'B站',
+    // 微博
+    wb: '微博',
+    weibo: '微博',
+    // 快手
+    ks: '快手',
+    kuaishou: '快手',
+    // 知乎
+    zhihu: '知乎',
+    // 贴吧
+    tieba: '贴吧',
+  }
   return mp[c] || code
 }
 

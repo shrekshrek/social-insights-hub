@@ -218,8 +218,11 @@ const handleGenerateSnapshot = async () => {
     snapshotWeightsJsonInput.value = ''
     enableCustomPlatformWeights.value = false
     await refreshSnapshots()
-    // 生成后直接跳转到该快照详情页，避免 snapshot_id 丢失导致页面显示“快照 null”
+    // 生成后直接跳转到该快照详情页，避免 snapshot_id 丢失导致页面显示"快照 null"
     await navigateTo(`/social-media/projects/${projectId.value}/analysis?snapshot_id=${created.id}`)
+  } catch {
+    // apiRequest 已在 onResponseError 中显示了错误 toast，这里不需要重复显示
+    // 只需要捕获错误防止 unhandled rejection
   } finally {
     generatingSnapshot.value = false
   }

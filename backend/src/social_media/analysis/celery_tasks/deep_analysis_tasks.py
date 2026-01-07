@@ -210,7 +210,7 @@ def analyze_single_post_deep(
 
         # 检查是否还有重试机会
         if self.request.retries < self.max_retries:
-        raise self.retry(exc=e)
+            raise self.retry(exc=e)
 
         # 重试耗尽：返回失败结果而非抛出异常，保证 chord callback 能被调用
         logger.warning(f"帖子 {post_id} 深度分析重试耗尽，返回失败结果")
@@ -610,7 +610,7 @@ def analyze_single_post_comments_deep(
 
         # 检查是否还有重试机会
         if self.request.retries < self.max_retries:
-        raise self.retry(exc=e)
+            raise self.retry(exc=e)
 
         # 重试耗尽：返回失败结果而非抛出异常，保证 chord callback 能被调用
         logger.warning(f"帖子 {post_id} 评论深度分析重试耗尽，返回失败结果")

@@ -10,6 +10,7 @@ import ProductLineHealthTable from '../../../../analysis/components/project/Prod
 import PlatformScissorsChart from '../../../../analysis/components/project/PlatformScissorsChart.vue'
 import GapAnalysisChart from '../../../../analysis/components/project/GapAnalysisChart.vue'
 import PostListModal from '../../../../analysis/components/shared/PostListModal.vue'
+import MarkdownRenderer from '../../../../analysis/components/shared/MarkdownRenderer.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -1075,8 +1076,9 @@ const copyText = async (text: string) => {
               <div v-if="activeReport === 'focus' && !reportFocus" class="text-xs text-gray-500 dark:text-gray-400">
                 战略诊断报告为空：可能未配置主体 subject，或输出未满足“营销/产品/公关”三段式硬约束。
               </div>
-              <div v-else class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed max-h-[70vh] overflow-y-auto pr-2">
-                {{ activeReportContent || '-' }}
+              <div v-else class="text-sm max-h-[70vh] overflow-y-auto pr-2">
+                <MarkdownRenderer v-if="activeReportContent" :content="activeReportContent" />
+                <span v-else class="text-gray-500 dark:text-gray-400">-</span>
               </div>
 
               <div v-if="activeReportEvidence.length && isExpanded(`report-${activeReport}-evidence`)" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">

@@ -37,7 +37,7 @@ async def register(
     # 用户注册成功，补充角色确保响应包含 roles 数组
     user_roles = await rbac_service.get_user_roles(db, db_user.id)
     role_names = [role.name for role in user_roles]
-    return user_service._convert_user_to_schema(db_user, role_names)
+    return user_service.convert_user_to_schema(db_user, role_names)
 
 
 @router.post(

@@ -6,7 +6,7 @@ from fastapi import status
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.schemas import CustomBaseModel
+from src.schemas import HealthResponse, RootResponse
 
 from src.auth.router import router as auth_router
 from src.users.router import router as users_router
@@ -43,8 +43,11 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 权限同步成功")
     except Exception as e:
         logger.error(f"❌ 权限同步失败: {e}", exc_info=True)
-        # 权限同步失败不阻止应用启动（开发环境容错）
-        logger.warning("⚠️ 应用将以现有权限配置启动")
+        # 生产环境失败即阻止启动；开发环境容错继续
+        if (settings.ENVIRONMENT or "").lower() == "production":
+            logger.critical("RBAC 权限同步在生产环境失败，阻止应用启动")
+            raise
+        logger.warning("⚠️ 应用将以现有权限配置启动（开发环境容错）")
 
     # 初始化平台数据
     try:
@@ -76,25 +79,6 @@ app = FastAPI(
 # Configure rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-
-# 响应模型定义
-class HealthCheckDetail(CustomBaseModel):
-    status: str
-    message: str = None
-
-
-class HealthResponse(CustomBaseModel):
-    status: str
-    service: str
-    version: str = None
-    checks: dict[str, str] = None
-
-
-class RootResponse(CustomBaseModel):
-    message: str
-    version: str
-
 
 # 添加中间件（注意顺序很重要，后添加的先执行）
 # 1. 安全头中间件

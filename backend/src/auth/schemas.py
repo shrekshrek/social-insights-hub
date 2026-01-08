@@ -48,7 +48,7 @@ class UserRead(CustomBaseModel):
     email: EmailStr | None
     created_at: datetime
     updated_at: datetime
-    roles: List[str] = []  # 用户的角色名称列表
+    roles: List[str] = Field(default_factory=list)  # 用户的角色名称列表
 
 
 # --- Token Schemas ---

@@ -64,3 +64,20 @@ class MessageResponse(CustomBaseModel):
     """通用消息响应"""
 
     message: str = Field(..., description="响应消息")
+
+
+class HealthCheckDetail(CustomBaseModel):
+    status: str
+    message: str | None = None
+
+
+class HealthResponse(CustomBaseModel):
+    status: str
+    service: str
+    version: str | None = None
+    checks: dict[str, str] | None = None
+
+
+class RootResponse(CustomBaseModel):
+    message: str
+    version: str

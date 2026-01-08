@@ -45,7 +45,7 @@ async def read_users_me(
     role_names = [role.name for role in user_roles]
 
     # 使用统一的转换函数
-    return service._convert_user_to_schema(current_user, role_names)
+    return service.convert_user_to_schema(current_user, role_names)
 
 
 @router.get(

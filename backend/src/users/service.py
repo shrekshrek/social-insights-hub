@@ -88,7 +88,7 @@ async def get_user_with_roles(
 
     # 构造包含角色信息的用户数据
     # 使用统一的转换函数
-    return _convert_user_to_schema(user, role_names)
+    return convert_user_to_schema(user, role_names)
 
 
 async def get_users_with_roles_batch(
@@ -120,13 +120,13 @@ async def get_users_with_roles_batch(
     result = []
     for user in users:
         role_names = user_roles_map.get(user.id, [])
-        result.append(_convert_user_to_schema(user, role_names))
+        result.append(convert_user_to_schema(user, role_names))
 
     return result
 
 
-def _convert_user_to_schema(user: User, role_names: List[str]) -> auth_schemas.UserRead:
-    """统一的用户数据转换工具函数"""
+def convert_user_to_schema(user: User, role_names: List[str]) -> auth_schemas.UserRead:
+    """统一的用户数据转换工具函数（公开）"""
     return auth_schemas.UserRead(
         id=user.id,
         username=user.username,
@@ -169,4 +169,4 @@ async def create_user_admin(
 
     user_roles = await rbac_service.get_user_roles(db, new_user.id)
     role_names = [role.name for role in user_roles]
-    return _convert_user_to_schema(new_user, role_names)
+    return convert_user_to_schema(new_user, role_names)

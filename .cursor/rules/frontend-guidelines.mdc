@@ -1,9 +1,11 @@
 ---
-alwaysApply: true
+description: Nuxt.js 前端开发规范，适用于 frontend 目录下的代码
+globs: ["frontend/**"]
+alwaysApply: false
 ---
 # Nuxt.js 前端开发核心规则
 
-详细规范见：`frontend/CONTRIBUTING.md`
+详细规范见：`frontend/CODING_GUIDE.md`
 
 ## 核心技术栈
 - **框架**: Nuxt 4

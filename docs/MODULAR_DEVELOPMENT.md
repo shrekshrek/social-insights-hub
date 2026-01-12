@@ -351,8 +351,8 @@ const user = await getUser(userId)
 ## 📚 相关文档
 
 - [权限系统深度指南](./PERMISSION_MANAGEMENT.md) - 了解权限同步原理
-- [后端开发规范](../backend/CONTRIBUTING.md) - 后端详细规范
-- [前端开发规范](../frontend/CONTRIBUTING.md) - 前端详细规范
+- [后端开发规范](../backend/CODING_GUIDE.md) - 后端详细规范
+- [前端开发规范](../frontend/CODING_GUIDE.md) - 前端详细规范
 - [工作流程指南](./WORKFLOW.md) - 完整的开发流程
 
 ## 🎯 下一步

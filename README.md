@@ -111,8 +111,8 @@ pnpm dev
 
 **👨‍💻 开发指南**：
 - 模块化开发：[`docs/MODULAR_DEVELOPMENT.md`](docs/MODULAR_DEVELOPMENT.md) ⭐ 新手必读
-- 后端规范：[`backend/CONTRIBUTING.md`](backend/CONTRIBUTING.md)
-- 前端规范：[`frontend/CONTRIBUTING.md`](frontend/CONTRIBUTING.md)
+- 后端规范：[`backend/CODING_GUIDE.md`](backend/CODING_GUIDE.md)
+- 前端规范：[`frontend/CODING_GUIDE.md`](frontend/CODING_GUIDE.md)
 - 工作流程：[`docs/WORKFLOW.md`](docs/WORKFLOW.md)
 
 **⚙️ 专项功能**：

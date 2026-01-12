@@ -1,6 +1,6 @@
 # Nuxt.js 前端开发指南
 
-本指南旨在为全栈项目的前端部分提供一套清晰、统一的开发规范。前端架构选用 [Nuxt Layers](https://nuxt.com/docs/getting-started/layers)，以实现与模块化后端（见 [backend/CONTRIBUTING.md](../backend/CONTRIBUTING.md)）在设计理念上的对称与统一。
+本指南旨在为全栈项目的前端部分提供一套清晰、统一的开发规范。前端架构选用 [Nuxt Layers](https://nuxt.com/docs/getting-started/layers)，以实现与模块化后端（见 [backend/CODING_GUIDE.md](../backend/CODING_GUIDE.md)）在设计理念上的对称与统一。
 
 ---
 

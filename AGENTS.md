@@ -1,4 +1,6 @@
-# Codex 项目配置
+# AI 开发规范
+
+> 本文件供 Codex 使用，与 `CLAUDE.md` 保持同步。
 
 本项目是一个全栈Web应用，基于 FastAPI (后端) 和 Nuxt 4 (前端) 构建。
 
@@ -6,16 +8,15 @@
 - `/backend` - FastAPI后端应用
 - `/frontend` - Nuxt前端应用  
 - `/docs` - 项目文档
-- `/.claude` - Claude AI专用规则
 
 ## 核心开发规则
-- **后端规则**: 见 `.claude/backend-rules.md`
-- **前端规则**: 见 `.claude/frontend-rules.md`
-- **工作流规则**: 见 `.claude/workflow-rules.md`
+- **后端规则**: `.cursor/rules/backend-guidelines.mdc`
+- **前端规则**: `.cursor/rules/frontend-guidelines.mdc`
+- **工作流规则**: `.cursor/rules/workflow-guardrails.mdc`
 
 ## 详细开发文档
-- **后端详细规范**: `backend/CONTRIBUTING.md`
-- **前端详细规范**: `frontend/CONTRIBUTING.md`
+- **后端详细规范**: `backend/CODING_GUIDE.md`
+- **前端详细规范**: `frontend/CODING_GUIDE.md`
 
 ## 核心配置文件
 

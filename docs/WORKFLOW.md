@@ -50,5 +50,5 @@
 ## 相关文档
 
 - 模块开发详见：[模块化开发指南](./MODULAR_DEVELOPMENT.md)
-- 后端规范详见：[后端开发规范](../backend/CONTRIBUTING.md)
-- 前端规范详见：[前端开发规范](../frontend/CONTRIBUTING.md) 
+- 后端规范详见：[后端开发规范](../backend/CODING_GUIDE.md)
+- 前端规范详见：[前端开发规范](../frontend/CODING_GUIDE.md) 

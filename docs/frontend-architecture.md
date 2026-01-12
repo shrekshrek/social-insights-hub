@@ -134,7 +134,7 @@ frontend/
 ## 6. 开发指南
 
 详细的开发规范和操作指南见：
-- [前端开发规范](../frontend/CONTRIBUTING.md)
+- [前端开发规范](../frontend/CODING_GUIDE.md)
 - [模块化开发指南](./MODULAR_DEVELOPMENT.md)
 
 ### 关键要点

@@ -47,9 +47,8 @@ curl http://localhost/health
 
 ## 🔗 相关文档
 
-- [部署指南](../DEPLOYMENT.md) - 完整的部署流程
 - [后端架构](./backend-architecture.md) - 后端配置详解
 - [GitLab CI/CD变量](./GITLAB_CI_VARIABLES.md) - CI/CD配置
-- [开发规范](../AGENTS.md) - 项目开发规范
+- [开发规范](../CLAUDE.md) - 项目开发规范
 
 ---

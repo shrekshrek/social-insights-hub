@@ -70,9 +70,9 @@ watch([page, pageSize, filterAnalyzed, searchQuery, searchId], () => {
 const rows = computed(() => postAnalysisData.value?.items || [])
 const total = computed(() => postAnalysisData.value?.total || 0)
 
-/** 阈值筛选 - 默认值：广告≤7 价值≥4 相关≥4（中等宽松） */
+/** 阈值筛选 - 默认值：广告≤10(不过滤) 价值≥4 相关≥4 */
 const thresholds = reactive({
-  spamMax: 7,
+  spamMax: 10,
   valueMin: 4,
   relevanceMin: 4,
 })
@@ -80,7 +80,7 @@ const thresholds = reactive({
 // 深度分析对话框状态
 const deepDialogOpen = ref(false)
 const dialogThresholds = reactive({
-  spamMax: 7,
+  spamMax: 10,
   valueMin: 4,
   relevanceMin: 4,
 })

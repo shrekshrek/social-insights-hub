@@ -699,8 +699,8 @@ async def preview_deep_analysis_candidates(
     comment_done = 0
     comment_candidate_ids: list[int] = []
 
-    # 阈值默认值：广告≤7 价值≥4 相关≥4（中等宽松）
-    spam_threshold = spam_max if spam_max is not None else 7
+    # 阈值默认值：广告≤10(不过滤) 价值≥4 相关≥4
+    spam_threshold = spam_max if spam_max is not None else 10
     value_threshold = value_min if value_min is not None else 4
     relevance_threshold = relevance_min if relevance_min is not None else 4
 

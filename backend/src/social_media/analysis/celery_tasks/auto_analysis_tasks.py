@@ -18,7 +18,7 @@ from src.redis_sync_client import get_sync_redis
 logger = logging.getLogger(__name__)
 
 # 默认阈值配置
-DEFAULT_SPAM_MAX = 7.0
+DEFAULT_SPAM_MAX = 10.0
 DEFAULT_VALUE_MIN = 4.0
 DEFAULT_RELEVANCE_MIN = 4.0
 

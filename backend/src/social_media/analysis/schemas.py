@@ -819,6 +819,68 @@ class TaskAnalysisMeta(CustomBaseModel):
     data_volume: TaskAnalysisDataVolume = Field(default_factory=TaskAnalysisDataVolume)
 
 
+# ==================== Spam 对比分析 Schema ====================
+
+
+class SpamComparisonEntity(CustomBaseModel):
+    """Spam 对比 - 轻量实体统计"""
+
+    name: str
+    type: str = "其他"
+    mentions: int = 0
+    sentiment: float = 0
+    top_features: list[str] = Field(default_factory=list)
+    top_issues: list[str] = Field(default_factory=list)
+
+
+class SpamComparisonOpinion(CustomBaseModel):
+    """Spam 对比 - 轻量观点统计"""
+
+    category: str
+    mentions: int = 0
+    sentiment: float = 0
+    sample_opinions: list[str] = Field(default_factory=list)
+
+
+class SpamComparisonBlock(CustomBaseModel):
+    """Spam 对比 - 单块分析（原文或评论）"""
+
+    top_entities: list[SpamComparisonEntity] = Field(default_factory=list)
+    top_opinions: list[SpamComparisonOpinion] = Field(default_factory=list)
+
+
+class SpamComparisonMetrics(CustomBaseModel):
+    """Spam 对比 - 组指标"""
+
+    avg_cii: float = 0
+    avg_sentiment: float = 0
+
+
+class SpamComparisonGroup(CustomBaseModel):
+    """Spam 对比 - 单组分析（高广告或低广告）"""
+
+    post_count: int = 0
+    deep_analyzed_count: int = 0
+    comment_analyzed_count: int = 0
+    metrics: SpamComparisonMetrics = Field(default_factory=SpamComparisonMetrics)
+    post_analysis: SpamComparisonBlock = Field(default_factory=SpamComparisonBlock)
+    comment_analysis: SpamComparisonBlock = Field(default_factory=SpamComparisonBlock)
+
+
+class SpamComparisonConfig(CustomBaseModel):
+    """Spam 对比 - 配置"""
+
+    threshold: float = 6.0
+
+
+class SpamComparison(CustomBaseModel):
+    """Spam 对比分析结果"""
+
+    config: SpamComparisonConfig = Field(default_factory=SpamComparisonConfig)
+    high_spam: SpamComparisonGroup = Field(default_factory=SpamComparisonGroup)
+    low_spam: SpamComparisonGroup = Field(default_factory=SpamComparisonGroup)
+
+
 class TaskAnalysisResultData(CustomBaseModel):
     """任务级分析聚合结果（存储在 AnalysisJob.result_data 中）"""
 
@@ -827,6 +889,7 @@ class TaskAnalysisResultData(CustomBaseModel):
     charts: TaskAnalysisCharts = Field(default_factory=TaskAnalysisCharts)
     freshness: Freshness = Field(default_factory=Freshness, description="数据新鲜度")
     insights: TaskAnalysisInsights = Field(default_factory=TaskAnalysisInsights)
+    spam_comparison: SpamComparison | None = Field(None, description="广告/有机内容对比分析")
 
 
 class TaskAnalysisResultResponse(CustomBaseModel):

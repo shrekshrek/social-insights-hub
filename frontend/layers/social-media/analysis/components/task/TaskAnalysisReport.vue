@@ -8,6 +8,7 @@ import ContextGraphChart from './ContextGraphChart.vue'
 import CompetitorRadarChart from './CompetitorRadarChart.vue'
 import TimeDistributionChart from './TimeDistributionChart.vue'
 import OriginalTermsPopover from '../shared/OriginalTermsPopover.vue'
+import SpamComparisonSection from './SpamComparisonSection.vue'
 
 const props = defineProps<{
   data: TaskAnalysisResultData
@@ -433,6 +434,9 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
         </div>
       </div>
     </section>
+
+    <!-- 广告/有机内容对比分析 -->
+    <SpamComparisonSection v-if="data.spam_comparison" :data="data.spam_comparison" />
 
     <!-- 关联网络与竞品分析 (并排展示) -->
     <div v-if="hasContextGraph || hasCompetitorRadar" class="grid grid-cols-1 lg:grid-cols-2 gap-4">

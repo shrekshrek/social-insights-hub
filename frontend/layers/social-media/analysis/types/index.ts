@@ -572,6 +572,52 @@ export interface TaskAnalysisMeta {
   data_volume: TaskAnalysisDataVolume
 }
 
+// ==================== Spam Comparison ====================
+
+/** Spam 对比 - 轻量实体统计 */
+export interface SpamComparisonEntity {
+  name: string
+  type: string
+  mentions: number
+  sentiment: number
+  top_features: string[]
+  top_issues: string[]
+}
+
+/** Spam 对比 - 轻量观点统计 */
+export interface SpamComparisonOpinion {
+  category: string
+  mentions: number
+  sentiment: number
+  sample_opinions: string[]
+}
+
+/** Spam 对比 - 单块分析（原文或评论） */
+export interface SpamComparisonBlock {
+  top_entities: SpamComparisonEntity[]
+  top_opinions: SpamComparisonOpinion[]
+}
+
+/** Spam 对比 - 单组分析（高广告或低广告） */
+export interface SpamComparisonGroup {
+  post_count: number
+  deep_analyzed_count: number
+  comment_analyzed_count: number
+  metrics: {
+    avg_cii: number
+    avg_sentiment: number
+  }
+  post_analysis: SpamComparisonBlock
+  comment_analysis: SpamComparisonBlock
+}
+
+/** Spam 对比分析结果 */
+export interface SpamComparison {
+  config: { threshold: number }
+  high_spam: SpamComparisonGroup
+  low_spam: SpamComparisonGroup
+}
+
 /** 任务级分析聚合结果 */
 export interface TaskAnalysisResultData {
   meta: TaskAnalysisMeta
@@ -579,6 +625,7 @@ export interface TaskAnalysisResultData {
   charts: TaskAnalysisCharts
   freshness: Freshness
   insights: TaskAnalysisInsights
+  spam_comparison?: SpamComparison
 }
 
 /** 任务级聚合分析结果 API 响应 */

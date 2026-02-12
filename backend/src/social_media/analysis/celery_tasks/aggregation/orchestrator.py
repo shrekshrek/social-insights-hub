@@ -45,6 +45,7 @@ from .metrics import (
 )
 from .entity_aggregation import aggregate_entities
 from .opinion_aggregation import aggregate_opinions
+from .spam_comparison import build_spam_comparison, DEFAULT_SPAM_COMPARISON_THRESHOLD
 from .insights import (
     perform_ipa_analysis,
     build_context_graph,
@@ -162,6 +163,7 @@ def aggregate_task_analysis(
     enable_entity_normalization: bool = True,
     entity_job_id: int | None = None,
     opinion_job_id: int | None = None,
+    spam_comparison_threshold: float | None = None,
 ) -> dict[str, Any]:
     """执行任务级分析聚合
 
@@ -173,6 +175,7 @@ def aggregate_task_analysis(
         enable_entity_normalization: 是否启用 LLM 实体归一化（会增加成本）
         entity_job_id: 预创建的实体归一化 AnalysisJob ID
         opinion_job_id: 预创建的观点归一化 AnalysisJob ID
+        spam_comparison_threshold: 广告对比分析阈值（默认 7.0，>= 此值为高广告组）
 
     Returns:
         dict: 聚合结果，存入 AnalysisJob.result_data
@@ -408,6 +411,14 @@ def aggregate_task_analysis(
     # (4) KOL 声音提取
     kol_voices = extract_kol_voices(posts_data, db)
 
+    # 9. 广告/有机内容对比分析
+    spam_comparison = build_spam_comparison(
+        posts_data,
+        threshold=spam_comparison_threshold
+        if spam_comparison_threshold is not None
+        else DEFAULT_SPAM_COMPARISON_THRESHOLD,
+    )
+
     # 12. 组装结果
     result_data = {
         "meta": {
@@ -457,6 +468,8 @@ def aggregate_task_analysis(
         # 原始融合数据（用于后续项目级分析/深挖；不要求下发给前端）
         "aggregated_entities": aggregated_entities,
         "aggregated_opinions": aggregated_opinions,
+        # 广告/有机内容对比分析
+        "spam_comparison": spam_comparison,
     }
 
     # 统计实体分类数量
@@ -535,4 +548,22 @@ def _empty_result() -> dict[str, Any]:
         # 原始融合数据（与正常结果字段名一致）
         "aggregated_entities": [],
         "aggregated_opinions": [],
+        # 广告/有机内容对比分析
+        "spam_comparison": {
+            "config": {"threshold": DEFAULT_SPAM_COMPARISON_THRESHOLD},
+            "high_spam": {
+                "post_count": 0, "deep_analyzed_count": 0,
+                "comment_analyzed_count": 0,
+                "metrics": {"avg_cii": 0, "avg_sentiment": 0},
+                "post_analysis": {"top_entities": [], "top_opinions": []},
+                "comment_analysis": {"top_entities": [], "top_opinions": []},
+            },
+            "low_spam": {
+                "post_count": 0, "deep_analyzed_count": 0,
+                "comment_analyzed_count": 0,
+                "metrics": {"avg_cii": 0, "avg_sentiment": 0},
+                "post_analysis": {"top_entities": [], "top_opinions": []},
+                "comment_analysis": {"top_entities": [], "top_opinions": []},
+            },
+        },
     }

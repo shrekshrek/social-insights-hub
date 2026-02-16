@@ -1,7 +1,5 @@
 """Tests for spam_distribution module."""
 
-import pytest
-
 from src.social_media.analysis.celery_tasks.aggregation.spam_distribution import (
     build_spam_distributions,
     _build_spam_map,

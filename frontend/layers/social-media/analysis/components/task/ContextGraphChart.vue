@@ -191,7 +191,10 @@ onMounted(() => {
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
     <div class="flex items-center justify-between mb-4">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">关联网络</h3>
+      <div class="flex items-center gap-3">
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">关联网络</h3>
+        <slot />
+      </div>
       <div class="flex flex-wrap gap-2 text-xs">
         <button
           v-for="item in legendItems"

@@ -120,10 +120,10 @@ const getOption = (): EChartsOption => {
           </div>
         `
 
-        // spam 分布信息
+        // spam 分布信息 (4D: 高/低广告 × 原文/评论)
         const sd = item.spam_distribution
-        if (sd && (sd.high > 0 || sd.low > 0)) {
-          html += `<div class="text-xs mt-1"><span style="color:#f59e0b;">推广 ${sd.high}</span> / <span style="color:#22c55e;">有机 ${sd.low}</span></div>`
+        if (sd?.high_spam && sd?.low_spam && (sd.high_spam.total > 0 || sd.low_spam.total > 0)) {
+          html += `<div class="text-xs mt-1"><span style="color:#f59e0b;">推广 ${sd.high_spam.total} (原文${sd.high_spam.post}/评论${sd.high_spam.comment})</span> / <span style="color:#22c55e;">有机 ${sd.low_spam.total} (原文${sd.low_spam.post}/评论${sd.low_spam.comment})</span></div>`
         }
         
         // 如果是观点集合，显示原始观点列表
@@ -303,7 +303,10 @@ onMounted(() => {
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
     <div class="flex items-center justify-between mb-4">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">产品力诊断 (IPA)</h3>
+      <div class="flex items-center gap-3">
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">产品力诊断 (IPA)</h3>
+        <slot />
+      </div>
       <div class="flex gap-2 text-xs">
         <div class="flex items-center gap-1">
           <span class="w-2 h-2 rounded-full bg-emerald-500" />

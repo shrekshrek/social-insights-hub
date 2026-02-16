@@ -45,7 +45,7 @@ from .metrics import (
 )
 from .entity_aggregation import aggregate_entities
 from .opinion_aggregation import aggregate_opinions
-from .spam_distribution_builder import build_spam_distributions
+from .spam_distribution import build_spam_distributions, _build_spam_map
 from .insights import (
     perform_ipa_analysis,
     build_context_graph,
@@ -394,10 +394,14 @@ def aggregate_task_analysis(
                 competitor_entities_full.append(entity)
                 break
 
+    # §5 派生洞察计算 - 提前构建 spam_map 以支持维度筛选
+    spam_map = _build_spam_map(posts_data, threshold=spam_threshold)
+
     # (1) 关联网络 (Context Graph) - 以 Top 1 Target 实体为中心
     # 节点包括：人群、场景、产品属性(features/issues)、话题、竞品
     context_graph = build_context_graph(
-        top_target_full, aggregated_opinions, competitor_entities_full
+        top_target_full, aggregated_opinions, competitor_entities_full,
+        spam_map=spam_map
     )
 
     # (2) 产品力诊断 (IPA) - 使用 opinions + target 实体的 features/issues
@@ -405,7 +409,8 @@ def aggregate_task_analysis(
 
     # (3) 竞品雷达 (Competitor Radar)
     competitor_radar = analyze_competitor_radar(
-        top_target_full, competitor_entities_full, aggregated_entities
+        top_target_full, competitor_entities_full, aggregated_entities,
+        spam_map=spam_map, posts_data=posts_data
     )
 
     # (4) KOL 声音提取

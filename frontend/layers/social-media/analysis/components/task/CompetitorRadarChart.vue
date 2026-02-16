@@ -27,7 +27,7 @@ const getOption = (): EChartsOption => {
     
     // 构建产品列表映射和 spam 分布映射用于 tooltip
     const productsMap: Record<string, string[]> = {}
-    const spamMap: Record<string, { high: number; low: number } | undefined> = {}
+    const spamMap: Record<string, CompetitorRadar['series'][0]['spam_distribution']> = {}
     series.forEach(s => {
       productsMap[s.name] = s.products || []
       spamMap[s.name] = s.spam_distribution ?? undefined
@@ -56,10 +56,10 @@ const getOption = (): EChartsOption => {
             html += `<div class="text-xs">${dim}: ${val}%</div>`
           })
 
-          // spam 分布信息
+          // spam 分布信息 (4D: 高/低广告 × 原文/评论)
           const sd = spamMap[name]
-          if (sd && (sd.high > 0 || sd.low > 0)) {
-            html += `<div class="text-xs mt-1"><span style="color:#f59e0b;">推广 ${sd.high}</span> / <span style="color:#22c55e;">有机 ${sd.low}</span></div>`
+          if (sd?.high_spam && sd?.low_spam && (sd.high_spam.total > 0 || sd.low_spam.total > 0)) {
+            html += `<div class="text-xs mt-1"><span style="color:#f59e0b;">推广 ${sd.high_spam.total} (原文${sd.high_spam.post}/评论${sd.high_spam.comment})</span> / <span style="color:#22c55e;">有机 ${sd.low_spam.total} (原文${sd.low_spam.post}/评论${sd.low_spam.comment})</span></div>`
           }
 
           return html
@@ -104,7 +104,7 @@ const getOption = (): EChartsOption => {
     
     // 构建产品列表映射和 spam 分布映射用于 tooltip
     const productsMap: Record<string, string[]> = {}
-    const spamMap: Record<string, { high: number; low: number } | undefined> = {}
+    const spamMap: Record<string, CompetitorRadar['series'][0]['spam_distribution']> = {}
     series.forEach(s => {
       productsMap[s.name] = s.products || []
       spamMap[s.name] = s.spam_distribution ?? undefined
@@ -143,8 +143,8 @@ const getOption = (): EChartsOption => {
             const products = productsMap[p.seriesName] || []
             const productInfo = products.length > 1 ? ` (${products.length}个产品)` : ''
             const sd = spamMap[p.seriesName]
-            const spamInfo = sd && (sd.high > 0 || sd.low > 0)
-              ? ` <span style="color:#f59e0b;">推广${sd.high}</span>/<span style="color:#22c55e;">有机${sd.low}</span>`
+            const spamInfo = sd?.high_spam && sd?.low_spam && (sd.high_spam.total > 0 || sd.low_spam.total > 0)
+              ? ` <span style="color:#f59e0b;">推广${sd.high_spam.total}(原文${sd.high_spam.post}/评论${sd.high_spam.comment})</span>/<span style="color:#22c55e;">有机${sd.low_spam.total}(原文${sd.low_spam.post}/评论${sd.low_spam.comment})</span>`
               : ''
             html += `
               <div class="flex items-center gap-2 text-xs">
@@ -204,9 +204,12 @@ onMounted(() => {
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
     <div class="flex items-center justify-between mb-4">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-        {{ data?.mode === 'radar' ? '竞品雷达 (多维对比)' : '竞品情感对比' }}
-      </h3>
+      <div class="flex items-center gap-3">
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ data?.mode === 'radar' ? '竞品雷达 (多维对比)' : '竞品情感对比' }}
+        </h3>
+        <slot />
+      </div>
     </div>
     <div ref="chartRef" class="w-full h-80" />
   </div>

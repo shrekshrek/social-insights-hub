@@ -294,6 +294,8 @@ def aggregate_opinions(
                         "source_distribution": source_dist,
                         "post_source_count": post_count,
                         "comment_source_count": comment_count,
+                        "post_source_ids": list(term_sources["post"]),
+                        "comment_source_ids": list(term_sources["comment"]),
                     }
                 )
             continue
@@ -402,6 +404,8 @@ def aggregate_opinions(
                 "source_distribution": source_dist,
                 "post_source_count": post_count,
                 "comment_source_count": comment_count,
+                "post_source_ids": list(merged_post_sources),
+                "comment_source_ids": list(merged_comment_sources),
             }
             # 只有真正发生合并时才保留 original_terms
             if _should_keep_original_terms(label, merged_originals):
@@ -441,6 +445,8 @@ def aggregate_opinions(
                         "source_distribution": source_dist,
                         "post_source_count": post_count,
                         "comment_source_count": comment_count,
+                        "post_source_ids": list(term_sources["post"]),
+                        "comment_source_ids": list(term_sources["comment"]),
                     }
                 )
 

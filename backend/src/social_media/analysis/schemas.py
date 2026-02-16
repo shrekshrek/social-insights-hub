@@ -452,6 +452,47 @@ class SentimentConflict(CustomBaseModel):
     risk_level: str = Field("low", description="风险等级: low/medium/high")
 
 
+# ==================== Spam 分布 Schema ====================
+
+
+class SpamSourceBreakdown(CustomBaseModel):
+    """单个 spam 组内的原文/评论拆分"""
+
+    total: int = 0
+    post: int = 0
+    comment: int = 0
+
+
+class SpamDistribution(CustomBaseModel):
+    """实体/观点的 spam 4 维分布"""
+
+    high_spam: SpamSourceBreakdown = Field(default_factory=SpamSourceBreakdown)
+    low_spam: SpamSourceBreakdown = Field(default_factory=SpamSourceBreakdown)
+
+
+class SpamCountBreakdown(CustomBaseModel):
+    """简化的 spam 分组计数 (无原文/评论拆分)"""
+
+    high: int = 0
+    low: int = 0
+
+
+class SpamConfig(CustomBaseModel):
+    """Spam 分组配置"""
+
+    threshold: float = 6.0
+
+
+class NsrBySpam(CustomBaseModel):
+    """按 spam 分组的 NSR"""
+
+    high: float = 0
+    low: float = 0
+
+
+# ==================== 核心指标 ====================
+
+
 class TaskAnalysisMetrics(CustomBaseModel):
     """核心指标"""
 
@@ -464,6 +505,7 @@ class TaskAnalysisMetrics(CustomBaseModel):
     sentiment_conflict: SentimentConflict = Field(
         default_factory=SentimentConflict, description="舆论反差度分析"
     )
+    nsr_by_spam: NsrBySpam | None = None
 
 
 class QuadrantItem(CustomBaseModel):
@@ -476,6 +518,7 @@ class QuadrantItem(CustomBaseModel):
         ..., description="象限: Q1_danger/Q2_brand/Q3_complaint/Q4_niche/neutral"
     )
     label: str = Field("", description="标签（摘要前20字）")
+    spam_group: str | None = None
 
 
 class QuadrantSummary(CustomBaseModel):
@@ -496,6 +539,7 @@ class TimeDistributionItem(CustomBaseModel):
     post_ids: list[int] = Field(
         default_factory=list, description="该日期对应的帖子ID列表，用于反向追溯"
     )
+    spam_breakdown: SpamCountBreakdown | None = None
 
 
 class Freshness(CustomBaseModel):
@@ -525,6 +569,7 @@ class IpaPoint(CustomBaseModel):
     z: float = Field(0, description="气泡大小 (Log Smoothed Heat)")
     heat: float = Field(0, description="影响力 (Heat)")
     post_ids: list[int] = Field(default_factory=list)
+    spam_distribution: SpamCountBreakdown | None = None
     original_terms: list[OriginalTerm] | None = Field(
         None, description="原始观点列表（仅当该点为观点集合时存在）"
     )
@@ -596,6 +641,8 @@ class CompetitorSeries(CustomBaseModel):
     sentiment: float | None = None  # 柱状图数据
     sentiment_distribution: SentimentDistribution | None = None  # 柱状图数据
     products: list[str] | None = None  # 品牌聚合时包含的产品列表
+    post_ids: list[int] = Field(default_factory=list)
+    spam_distribution: SpamCountBreakdown | None = None
 
 
 class CompetitorRadar(CustomBaseModel):
@@ -627,14 +674,6 @@ class SourceDistribution(CustomBaseModel):
 
     post: float = Field(0.0, description="来自帖子的占比 (0-1)")
     comment: float = Field(0.0, description="来自评论的占比 (0-1)")
-
-
-class SentimentDistribution(CustomBaseModel):
-    """情感分布"""
-
-    positive: int = Field(0, description="正面提及次数")
-    negative: int = Field(0, description="负面提及次数")
-    neutral: int = Field(0, description="中性提及次数")
 
 
 class EntityNormalizedInfo(CustomBaseModel):
@@ -686,6 +725,13 @@ class EntityStat(CustomBaseModel):
     post_ids: list[int] = Field(
         default_factory=list, description="关联帖子ID，用于反向追溯"
     )
+    post_source_ids: list[int] = Field(
+        default_factory=list, description="来自原文的帖子ID列表"
+    )
+    comment_source_ids: list[int] = Field(
+        default_factory=list, description="来自评论的帖子ID列表"
+    )
+    spam_distribution: SpamDistribution | None = None
     tags: EntityTags | None = None  # 多维标签
     original_terms: list[dict] | None = None  # 原始词条（仅在合并时存在）
     normalized_info: EntityNormalizedInfo | None = None
@@ -706,6 +752,13 @@ class OpinionStat(CustomBaseModel):
     post_ids: list[int] = Field(
         default_factory=list, description="关联帖子ID，用于反向追溯"
     )
+    post_source_ids: list[int] = Field(
+        default_factory=list, description="来自原文的帖子ID列表"
+    )
+    comment_source_ids: list[int] = Field(
+        default_factory=list, description="来自评论的帖子ID列表"
+    )
+    spam_distribution: SpamDistribution | None = None
     original_terms: list[dict] | None = None  # 原始词条（仅在合并时存在）
     post_source_count: int = 0
     comment_source_count: int = 0
@@ -789,6 +842,7 @@ class KolVoice(CustomBaseModel):
     post_id: int = Field(..., description="帖子ID")
     cii: float = Field(0, description="互动指数")
     platform: str = Field("", description="平台来源")
+    spam_group: str | None = None
 
 
 # ==================== 洞察数据 Schema ====================
@@ -819,68 +873,6 @@ class TaskAnalysisMeta(CustomBaseModel):
     data_volume: TaskAnalysisDataVolume = Field(default_factory=TaskAnalysisDataVolume)
 
 
-# ==================== Spam 对比分析 Schema ====================
-
-
-class SpamComparisonEntity(CustomBaseModel):
-    """Spam 对比 - 轻量实体统计"""
-
-    name: str
-    type: str = "其他"
-    mentions: int = 0
-    sentiment: float = 0
-    top_features: list[str] = Field(default_factory=list)
-    top_issues: list[str] = Field(default_factory=list)
-
-
-class SpamComparisonOpinion(CustomBaseModel):
-    """Spam 对比 - 轻量观点统计"""
-
-    category: str
-    mentions: int = 0
-    sentiment: float = 0
-    sample_opinions: list[str] = Field(default_factory=list)
-
-
-class SpamComparisonBlock(CustomBaseModel):
-    """Spam 对比 - 单块分析（原文或评论）"""
-
-    top_entities: list[SpamComparisonEntity] = Field(default_factory=list)
-    top_opinions: list[SpamComparisonOpinion] = Field(default_factory=list)
-
-
-class SpamComparisonMetrics(CustomBaseModel):
-    """Spam 对比 - 组指标"""
-
-    avg_cii: float = 0
-    avg_sentiment: float = 0
-
-
-class SpamComparisonGroup(CustomBaseModel):
-    """Spam 对比 - 单组分析（高广告或低广告）"""
-
-    post_count: int = 0
-    deep_analyzed_count: int = 0
-    comment_analyzed_count: int = 0
-    metrics: SpamComparisonMetrics = Field(default_factory=SpamComparisonMetrics)
-    post_analysis: SpamComparisonBlock = Field(default_factory=SpamComparisonBlock)
-    comment_analysis: SpamComparisonBlock = Field(default_factory=SpamComparisonBlock)
-
-
-class SpamComparisonConfig(CustomBaseModel):
-    """Spam 对比 - 配置"""
-
-    threshold: float = 6.0
-
-
-class SpamComparison(CustomBaseModel):
-    """Spam 对比分析结果"""
-
-    config: SpamComparisonConfig = Field(default_factory=SpamComparisonConfig)
-    high_spam: SpamComparisonGroup = Field(default_factory=SpamComparisonGroup)
-    low_spam: SpamComparisonGroup = Field(default_factory=SpamComparisonGroup)
-
-
 class TaskAnalysisResultData(CustomBaseModel):
     """任务级分析聚合结果（存储在 AnalysisJob.result_data 中）"""
 
@@ -889,7 +881,7 @@ class TaskAnalysisResultData(CustomBaseModel):
     charts: TaskAnalysisCharts = Field(default_factory=TaskAnalysisCharts)
     freshness: Freshness = Field(default_factory=Freshness, description="数据新鲜度")
     insights: TaskAnalysisInsights = Field(default_factory=TaskAnalysisInsights)
-    spam_comparison: SpamComparison | None = Field(None, description="广告/有机内容对比分析")
+    spam_config: SpamConfig | None = Field(None, description="Spam 分组配置")
 
 
 class TaskAnalysisResultResponse(CustomBaseModel):

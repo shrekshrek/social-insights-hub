@@ -930,6 +930,8 @@ def aggregate_entities(
             "top_issues": top_issues,
             "top_expectations": top_expectations,
             "post_ids": list(data["post_ids"]),
+            "post_source_ids": list(data["post_sources"]),
+            "comment_source_ids": list(data["comment_sources"]),
         }
 
         # 添加多维标签
@@ -1047,6 +1049,8 @@ def aggregate_entities(
             "post_source_count": len(data["post_sources"]),
             "comment_source_count": len(data["comment_sources"]),
             "post_ids": list(data["post_ids"]),
+            "post_source_ids": list(data["post_sources"]),
+            "comment_source_ids": list(data["comment_sources"]),
             "features": format_attr_items(data.get("features", {}), attr_limit),
             "issues": format_attr_items(data.get("issues", {}), attr_limit),
             "expectations": format_attr_items(data.get("expectations", {}), attr_limit),

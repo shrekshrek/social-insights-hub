@@ -636,6 +636,7 @@ def analyze_competitor_radar(
                 "sentiment": target_data.get("sentiment", 0),
                 "sentiment_distribution": target_data.get("sentiment_distribution", {}),
                 "products": target_data.get("products", [target_entity["name"]]),
+                "post_ids": target_data.get("post_ids", []),
             }
         ]
         for comp in competitor_data_list:
@@ -647,6 +648,7 @@ def analyze_competitor_radar(
                         "sentiment_distribution", {}
                     ),
                     "products": comp["products"],
+                    "post_ids": comp["data"].get("post_ids", []),
                 }
             )
         return {"mode": "bar", "series": series}
@@ -693,6 +695,7 @@ def analyze_competitor_radar(
             "name": target_name,
             "data": _get_radar_score(target_data, max_mentions, max_heat),
             "products": target_data.get("products", [target_entity["name"]]),
+            "post_ids": target_data.get("post_ids", []),
         }
     ]
 
@@ -702,6 +705,7 @@ def analyze_competitor_radar(
                 "name": comp["name"],
                 "data": _get_radar_score(comp["data"], max_mentions, max_heat),
                 "products": comp["products"],
+                "post_ids": comp["data"].get("post_ids", []),
             }
         )
 

@@ -341,6 +341,7 @@ export interface TaskAnalysisMetrics {
   serp_health: number
   marketing_analysis: MarketingAnalysis
   sentiment_conflict: SentimentConflict
+  nsr_by_spam?: NsrBySpam
 }
 
 /** 四象限数据项 */
@@ -350,6 +351,7 @@ export interface QuadrantItem {
   y: number
   quadrant: 'Q1_danger' | 'Q2_brand' | 'Q3_complaint' | 'Q4_niche' | 'neutral'
   label: string
+  spam_group?: string
 }
 
 /** 四象限统计 */
@@ -366,6 +368,7 @@ export interface TimeDistributionItem {
   date: string
   count: number
   post_ids: number[]
+  spam_breakdown?: SpamCountBreakdown
 }
 
 /** 数据新鲜度 */
@@ -396,6 +399,7 @@ export interface IpaPoint {
   z: number        // 气泡大小 (Log Smoothed Heat)
   heat: number     // 影响力 (Heat)
   post_ids: number[]
+  spam_distribution?: SpamCountBreakdown
   original_terms?: OriginalTerm[]  // 原始观点列表（仅当该点为观点集合时存在）
 }
 
@@ -444,6 +448,8 @@ export interface CompetitorSeries {
   sentiment?: number // 柱状图数据
   sentiment_distribution?: SentimentDistribution // 柱状图数据
   products?: string[] // 品牌聚合时包含的产品列表
+  post_ids?: number[]
+  spam_distribution?: SpamCountBreakdown
 }
 
 /** 竞品雷达分析 */
@@ -492,12 +498,6 @@ export interface EntityTags {
   parent: string  // 品牌归属
 }
 
-/** 原始词条（合并前的原始名称） */
-export interface OriginalTerm {
-  text: string
-  count: number
-}
-
 /** 实体统计 */
 export interface EntityStat {
   name: string
@@ -514,6 +514,9 @@ export interface EntityStat {
   top_issues: EntityAttrItem[]
   top_expectations: EntityAttrItem[]
   post_ids: number[]  // 关联帖子ID，用于反向追溯
+  post_source_ids?: number[]
+  comment_source_ids?: number[]
+  spam_distribution?: SpamDistribution
   tags?: EntityTags  // 多维标签（可选）
   original_terms?: OriginalTerm[]  // 原始词条（可选，仅在合并时存在）
   normalized_info?: EntityNormalizedInfo  // LLM 归一化信息（可选）
@@ -536,6 +539,9 @@ export interface OpinionStat {
   sentiment: number
   source_distribution?: SourceDistribution  // 来源分布
   post_ids: number[]  // 关联帖子ID，用于反向追溯
+  post_source_ids?: number[]
+  comment_source_ids?: number[]
+  spam_distribution?: SpamDistribution
   original_terms?: OriginalTerm[]  // 原始词条（可选，仅在合并时存在）
   // legacy compatibility
   post_source_count?: number
@@ -553,6 +559,7 @@ export interface KolVoice {
   post_id: number
   cii: number
   platform: string
+  spam_group?: string
 }
 
 /** 洞察数据 */
@@ -572,50 +579,31 @@ export interface TaskAnalysisMeta {
   data_volume: TaskAnalysisDataVolume
 }
 
-// ==================== Spam Comparison ====================
+// ==================== Spam Distribution ====================
 
-/** Spam 对比 - 轻量实体统计 */
-export interface SpamComparisonEntity {
-  name: string
-  type: string
-  mentions: number
-  sentiment: number
-  top_features: string[]
-  top_issues: string[]
+/** 4 维分布 - 单个 spam 组内的原文/评论拆分 */
+export interface SpamSourceBreakdown {
+  total: number
+  post: number
+  comment: number
 }
 
-/** Spam 对比 - 轻量观点统计 */
-export interface SpamComparisonOpinion {
-  category: string
-  mentions: number
-  sentiment: number
-  sample_opinions: string[]
+/** 4 维分布 (高/低广告 × 原文/评论) */
+export interface SpamDistribution {
+  high_spam: SpamSourceBreakdown
+  low_spam: SpamSourceBreakdown
 }
 
-/** Spam 对比 - 单块分析（原文或评论） */
-export interface SpamComparisonBlock {
-  top_entities: SpamComparisonEntity[]
-  top_opinions: SpamComparisonOpinion[]
+/** 2 维分布 (高/低广告) */
+export interface SpamCountBreakdown {
+  high: number
+  low: number
 }
 
-/** Spam 对比 - 单组分析（高广告或低广告） */
-export interface SpamComparisonGroup {
-  post_count: number
-  deep_analyzed_count: number
-  comment_analyzed_count: number
-  metrics: {
-    avg_cii: number
-    avg_sentiment: number
-  }
-  post_analysis: SpamComparisonBlock
-  comment_analysis: SpamComparisonBlock
-}
-
-/** Spam 对比分析结果 */
-export interface SpamComparison {
-  config: { threshold: number }
-  high_spam: SpamComparisonGroup
-  low_spam: SpamComparisonGroup
+/** 按 spam 分组的 NSR */
+export interface NsrBySpam {
+  high: number
+  low: number
 }
 
 /** 任务级分析聚合结果 */
@@ -625,7 +613,7 @@ export interface TaskAnalysisResultData {
   charts: TaskAnalysisCharts
   freshness: Freshness
   insights: TaskAnalysisInsights
-  spam_comparison?: SpamComparison
+  spam_config?: { threshold: number }
 }
 
 /** 任务级聚合分析结果 API 响应 */

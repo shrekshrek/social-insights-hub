@@ -19,7 +19,12 @@
 | langchain/后端 | 已完成 | DeepSeek 集成、9 条分析链 |
 | agent/后端 | 已完成 | 爬虫代理 API、API Key 认证、数据上传 |
 | analysis/spam_distribution/后端 | 已完成 | 全模块 spam 分布: 实体/观点(4维) + 四象限/KOL(标记) + IPA/竞品/时间(2维) + NSR拆分 |
-| analysis/spam_display/前端 | 方案已确认 | 4维可视化(比例条+popover) + 排序控件 + 时间分布堆叠图 + IPA/竞品tooltip增强 |
+| analysis/spam_display/前端 | 已完成 | 4维可视化(比例条+popover) + 排序控件 + 时间分布堆叠图 + IPA/竞品tooltip增强 |
+| analysis/spam_4d/后端 | 已完成 | IPA/竞品携带 post_source_ids+comment_source_ids，spam 计算 2D→4D，重命名 spam_distribution |
+| analysis/spam_4d/前端 | 已完成 | IPA/竞品类型升级 SpamCountBreakdown→SpamDistribution，tooltip 展示 4D |
+| analysis/spam_dimension_view/前端 | 实施中 | 实体和话题列表 4 维排序控件，按推广/有机×原文/评论排序对比（已完成：实体/话题/IPA/KOL 筛选） |
+| analysis/spam_dimension_chart/后端 | 方案已确认 | 关联网络和竞品雷达按维度预计算 3 版本（全部/有机/推广） |
+| analysis/spam_dimension_chart/前端 | 方案已确认 | 关联网络和竞品雷达维度筛选 UI，TabSwitch 切换展示 |
 | 部署配置 | 已完成 | Docker Compose 开发/生产双配置 |
 
 ## 已完成的里程碑
@@ -35,4 +40,4 @@
 
 ## 下次继续的入口
 
-`analysis/spam_display/前端` 模块 6 步实现已全部完成，运行 `/module-done analysis/spam_display/前端` 标记完成。
+`analysis/spam_dimension_chart` 模块方案已确认，参考 `docs/plan.md`。后端 7 步，前端 3 步，需改动 `orchestrator.py` + `insights.py` + 前端 3 个文件。从后端 Step 1（提前构建 spam_map）开始实施。运行 `/module-dev` 启动实现。

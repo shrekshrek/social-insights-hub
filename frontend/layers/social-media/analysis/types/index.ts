@@ -399,7 +399,7 @@ export interface IpaPoint {
   z: number        // 气泡大小 (Log Smoothed Heat)
   heat: number     // 影响力 (Heat)
   post_ids: number[]
-  spam_distribution?: SpamCountBreakdown
+  spam_distribution?: SpamDistribution
   original_terms?: OriginalTerm[]  // 原始观点列表（仅当该点为观点集合时存在）
 }
 
@@ -441,6 +441,13 @@ export interface ContextGraph {
   edges: ContextEdge[]
 }
 
+/** 关联网络（支持维度筛选） */
+export interface ContextGraphWithDimensions {
+  all: ContextGraph
+  organic: ContextGraph
+  promo: ContextGraph
+}
+
 /** 竞品雷达系列数据 */
 export interface CompetitorSeries {
   name: string
@@ -449,7 +456,7 @@ export interface CompetitorSeries {
   sentiment_distribution?: SentimentDistribution // 柱状图数据
   products?: string[] // 品牌聚合时包含的产品列表
   post_ids?: number[]
-  spam_distribution?: SpamCountBreakdown
+  spam_distribution?: SpamDistribution
 }
 
 /** 竞品雷达分析 */
@@ -459,6 +466,13 @@ export interface CompetitorRadar {
   series: CompetitorSeries[]
 }
 
+/** 竞品雷达（支持维度筛选） */
+export interface CompetitorRadarWithDimensions {
+  all: CompetitorRadar
+  organic: CompetitorRadar
+  promo: CompetitorRadar
+}
+
 /** 图表数据 */
 export interface TaskAnalysisCharts {
   quadrant: QuadrantItem[]
@@ -466,8 +480,8 @@ export interface TaskAnalysisCharts {
   time_distribution: TimeDistributionItem[]
   time_distribution_skipped?: number  // 无发布时间的帖子数
   ipa_analysis?: IpaAnalysis
-  context_graph?: ContextGraph
-  competitor_radar?: CompetitorRadar
+  context_graph?: ContextGraphWithDimensions
+  competitor_radar?: CompetitorRadarWithDimensions
 }
 
 /** 来源分布 */

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { EntityAttrItem, TaskAnalysisResultData } from '../../types'
+import type { EntityAttrItem, SpamDistribution, TaskAnalysisResultData, ContextGraph, CompetitorRadar } from '../../types'
 import PostListModal from '../shared/PostListModal.vue'
 import ClickableCount from '../shared/ClickableCount.vue'
 import IpaChart from './IpaChart.vue'
@@ -47,13 +47,99 @@ const getEntityAttrItems = (entity: { top_features?: EntityAttrItem[]; top_issue
 const topEntitiesExpanded = ref(false)
 const kolVoicesExpanded = ref(false)
 
+// KOL 声音筛选
+const kolFilterMode = ref('all')
+const kolFilterOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'organic', label: '仅有机' },
+  { value: 'promo', label: '仅推广' },
+]
+
+/** 是否有任何 KOL 声音携带 spam 数据 */
+const hasKolSpamData = computed(() =>
+  props.data.insights.kol_voices.some(v => v.spam_group != null),
+)
+
+/** 按筛选模式过滤的 KOL 声音 */
+const filteredKolVoices = computed(() => {
+  const voices = props.data.insights.kol_voices
+  if (kolFilterMode.value === 'organic') return voices.filter(v => v.spam_group === 'low')
+  if (kolFilterMode.value === 'promo') return voices.filter(v => v.spam_group === 'high')
+  return voices
+})
+
+// IPA 筛选
+const ipaFilterMode = ref('all')
+
+/** IPA 点中是否有 spam 数据 */
+const hasIpaSpamData = computed(() => {
+  const ipa = props.data.charts.ipa_analysis
+  if (!ipa) return false
+  const allPoints = [
+    ...ipa.quadrants.strength,
+    ...ipa.quadrants.improvement,
+    ...ipa.quadrants.maintain,
+    ...ipa.quadrants.opportunity,
+  ]
+  return allPoints.some(p => p.spam_distribution != null)
+})
+
+/** 按筛选模式过滤的 IPA 数据 */
+const filteredIpaAnalysis = computed(() => {
+  const ipa = props.data.charts.ipa_analysis
+  if (!ipa || ipaFilterMode.value === 'all') return ipa
+
+  const filterFn = (point: { spam_distribution?: SpamDistribution | null }) => {
+    const sd = point.spam_distribution
+    if (!sd || !sd.high_spam || !sd.low_spam) return false
+    if (ipaFilterMode.value === 'promo') return sd.high_spam.total > 0
+    if (ipaFilterMode.value === 'organic') return sd.low_spam.total > 0
+    return true
+  }
+
+  return {
+    ...ipa,
+    quadrants: {
+      strength: ipa.quadrants.strength.filter(filterFn),
+      improvement: ipa.quadrants.improvement.filter(filterFn),
+      maintain: ipa.quadrants.maintain.filter(filterFn),
+      opportunity: ipa.quadrants.opportunity.filter(filterFn),
+    },
+  }
+})
+
+// ==================== 4D spam 维度排序 ====================
+
+/** 通用 4D spam 维度排序 */
+const sortBySpamDimension = <T extends { spam_distribution?: SpamDistribution | null }>(
+  items: T[],
+  mode: string,
+): T[] => {
+  if (mode === 'default') return items
+  const getValue = (item: T): number => {
+    const sd = item.spam_distribution
+    if (!sd) return -1
+    switch (mode) {
+      case 'promo_post': return sd.high_spam.post
+      case 'promo_comment': return sd.high_spam.comment
+      case 'organic_post': return sd.low_spam.post
+      case 'organic_comment': return sd.low_spam.comment
+      default: return -1
+    }
+  }
+  return [...items].sort((a, b) => getValue(b) - getValue(a))
+}
+
+const spamSortOptions = [
+  { value: 'default', label: '综合评分' },
+  { value: 'promo_post', label: '推广·原文' },
+  { value: 'promo_comment', label: '推广·评论' },
+  { value: 'organic_post', label: '有机·原文' },
+  { value: 'organic_comment', label: '有机·评论' },
+]
+
 // 实体排序
 const entitySortMode = ref('default')
-const entitySortOptions = [
-  { value: 'default', label: '综合评分' },
-  { value: 'promo_ratio', label: '推广占比' },
-  { value: 'organic_count', label: '有机提及' },
-]
 
 /** 是否有任何实体携带 spam 数据 */
 const hasEntitySpamData = computed(() =>
@@ -61,25 +147,75 @@ const hasEntitySpamData = computed(() =>
 )
 
 /** 按排序模式重排的实体列表 */
-const sortedTopEntities = computed(() => {
-  const entities = [...props.data.insights.top_entities]
-  if (entitySortMode.value === 'promo_ratio') {
-    return entities.sort((a, b) => {
-      const aTotal = (a.spam_distribution?.high_spam.total ?? 0) + (a.spam_distribution?.low_spam.total ?? 0)
-      const bTotal = (b.spam_distribution?.high_spam.total ?? 0) + (b.spam_distribution?.low_spam.total ?? 0)
-      const aRatio = aTotal > 0 ? (a.spam_distribution?.high_spam.total ?? 0) / aTotal : -1
-      const bRatio = bTotal > 0 ? (b.spam_distribution?.high_spam.total ?? 0) / bTotal : -1
-      return bRatio - aRatio
-    })
-  }
-  if (entitySortMode.value === 'organic_count') {
-    return entities.sort((a, b) => {
-      const aCount = a.spam_distribution?.low_spam.total ?? -1
-      const bCount = b.spam_distribution?.low_spam.total ?? -1
-      return bCount - aCount
-    })
-  }
-  return entities
+const sortedTopEntities = computed(() =>
+  sortBySpamDimension(props.data.insights.top_entities, entitySortMode.value),
+)
+
+// 话题排序
+const topicSortMode = ref('default')
+
+/** 是否有任何话题携带 spam 数据 */
+const hasTopicSpamData = computed(() =>
+  props.data.insights.top_topics.some(t => t.spam_distribution != null),
+)
+
+/** 排序后的负面话题（热门问题） */
+const sortedNegativeTopics = computed(() =>
+  sortBySpamDimension(
+    props.data.insights.top_topics.filter(t => t.sentiment < 0),
+    topicSortMode.value,
+  ).slice(0, 10),
+)
+
+/** 排序后的正面话题（热门特性） */
+const sortedPositiveTopics = computed(() =>
+  sortBySpamDimension(
+    props.data.insights.top_topics.filter(t => t.sentiment > 0),
+    topicSortMode.value,
+  ).slice(0, 10),
+)
+
+// 话题展开状态
+const topicsExpanded = ref(false)
+
+// 关联网络和竞品雷达筛选
+const contextGraphFilterMode = ref('all')
+const competitorRadarFilterMode = ref('all')
+const dimensionFilterOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'organic', label: '仅有机' },
+  { value: 'promo', label: '仅推广' },
+]
+
+/** 是否有关联网络 spam 数据（检查 organic 和 promo 是否与 all 不同） */
+const hasContextGraphSpamData = computed(() => {
+  const cg = props.data.charts.context_graph
+  if (!cg) return false
+  // 如果 organic 和 promo 都与 all 相同（引用相等），说明没有 spam 数据
+  return cg.organic !== cg.all || cg.promo !== cg.all
+})
+
+/** 是否有竞品雷达 spam 数据（检查 organic 和 promo 是否与 all 不同） */
+const hasCompetitorRadarSpamData = computed(() => {
+  const cr = props.data.charts.competitor_radar
+  if (!cr) return false
+  return cr.organic !== cr.all || cr.promo !== cr.all
+})
+
+/** 过滤后的关联网络数据 */
+const filteredContextGraph = computed((): ContextGraph | undefined => {
+  const cg = props.data.charts.context_graph
+  if (!cg) return undefined
+  const mode = contextGraphFilterMode.value as 'all' | 'organic' | 'promo'
+  return cg[mode]
+})
+
+/** 过滤后的竞品雷达数据 */
+const filteredCompetitorRadar = computed((): CompetitorRadar | undefined => {
+  const cr = props.data.charts.competitor_radar
+  if (!cr) return undefined
+  const mode = competitorRadarFilterMode.value as 'all' | 'organic' | 'promo'
+  return cr[mode]
 })
 
 /** 获取四象限中某个象限的帖子IDs */
@@ -176,8 +312,8 @@ const getSpamGroupColor = (group: string | undefined | null) => {
   return 'neutral'
 }
 
-const hasContextGraph = computed(() => !!props.data.charts.context_graph?.nodes?.length)
-const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar && props.data.charts.competitor_radar.mode !== 'none'))
+const hasContextGraph = computed(() => !!props.data.charts.context_graph?.all?.nodes?.length)
+const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?.all && props.data.charts.competitor_radar.all.mode !== 'none'))
 
 </script>
 
@@ -429,13 +565,27 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
     <!-- 产品力诊断 (IPA) -->
     <section v-if="data.charts.ipa_analysis?.quadrants">
       <ClientOnly>
-        <IpaChart :data="data.charts.ipa_analysis" @click-point="openPostListModal" />
+        <IpaChart :data="filteredIpaAnalysis" @click-point="openPostListModal">
+          <TabSwitch v-if="hasIpaSpamData" v-model="ipaFilterMode" :options="kolFilterOptions" />
+        </IpaChart>
       </ClientOnly>
     </section>
 
     <!-- 热门观点：问题 vs 特性 -->
     <section v-if="data.insights.top_topics?.length">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">热门话题</h3>
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">热门话题</h3>
+          <TabSwitch v-if="hasTopicSpamData" v-model="topicSortMode" :options="spamSortOptions" />
+        </div>
+        <button
+          v-if="sortedNegativeTopics.length > 5 || sortedPositiveTopics.length > 5"
+          class="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+          @click="topicsExpanded = !topicsExpanded"
+        >
+          {{ topicsExpanded ? '收起' : '查看更多' }}
+        </button>
+      </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- 热门问题（负面观点） -->
         <div class="p-4 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
@@ -444,9 +594,9 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
             <span class="font-medium text-gray-900 dark:text-white">热门问题</span>
             <span class="text-xs text-gray-400">(负面观点)</span>
           </div>
-          <div v-if="data.insights.top_topics.filter(t => t.sentiment < 0).length" class="space-y-3">
+          <div v-if="sortedNegativeTopics.length" class="space-y-3">
             <div
-              v-for="issue in data.insights.top_topics.filter(t => t.sentiment < 0).slice(0, 5)"
+              v-for="issue in sortedNegativeTopics.slice(0, topicsExpanded ? 10 : 5)"
               :key="issue.name"
               class="text-sm"
             >
@@ -490,9 +640,9 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
             <span class="font-medium text-gray-900 dark:text-white">热门特性</span>
             <span class="text-xs text-gray-400">(正面观点)</span>
           </div>
-          <div v-if="data.insights.top_topics.filter(t => t.sentiment > 0).length" class="space-y-3">
+          <div v-if="sortedPositiveTopics.length" class="space-y-3">
             <div
-              v-for="feature in data.insights.top_topics.filter(t => t.sentiment > 0).slice(0, 5)"
+              v-for="feature in sortedPositiveTopics.slice(0, topicsExpanded ? 10 : 5)"
               :key="feature.name"
               class="text-sm"
             >
@@ -536,14 +686,18 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
       <!-- 关联网络 (Context Graph) -->
       <section v-if="hasContextGraph" :class="{'lg:col-span-2': !hasCompetitorRadar}">
         <ClientOnly>
-          <ContextGraphChart :data="data.charts.context_graph" @click-node="openPostListModal" />
+          <ContextGraphChart :data="filteredContextGraph" @click-node="openPostListModal">
+            <TabSwitch v-if="hasContextGraphSpamData" v-model="contextGraphFilterMode" :options="dimensionFilterOptions" />
+          </ContextGraphChart>
         </ClientOnly>
       </section>
 
       <!-- 竞品分析 -->
       <section v-if="hasCompetitorRadar" :class="{'lg:col-span-2': !hasContextGraph}">
         <ClientOnly>
-          <CompetitorRadarChart :data="data.charts.competitor_radar" />
+          <CompetitorRadarChart :data="filteredCompetitorRadar">
+            <TabSwitch v-if="hasCompetitorRadarSpamData" v-model="competitorRadarFilterMode" :options="dimensionFilterOptions" />
+          </CompetitorRadarChart>
         </ClientOnly>
       </section>
     </div>
@@ -553,7 +707,7 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-3">
           <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">热门实体</h3>
-          <TabSwitch v-if="hasEntitySpamData" v-model="entitySortMode" :options="entitySortOptions" />
+          <TabSwitch v-if="hasEntitySpamData" v-model="entitySortMode" :options="spamSortOptions" />
         </div>
         <button
           v-if="data.insights.top_entities.length > 5"
@@ -680,20 +834,21 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar 
     <!-- 高影响力内容 -->
     <section v-if="data.insights.kol_voices.length > 0">
       <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">高影响力内容 TOP {{ Math.min(data.insights.kol_voices.length, 10) }}</h3>
+        <div class="flex items-center gap-3">
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">高影响力内容 TOP {{ Math.min(filteredKolVoices.length, 10) }}</h3>
+          <TabSwitch v-if="hasKolSpamData" v-model="kolFilterMode" :options="kolFilterOptions" />
         </div>
         <button
-          v-if="data.insights.kol_voices.length > 5"
+          v-if="filteredKolVoices.length > 5"
           class="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
           @click="kolVoicesExpanded = !kolVoicesExpanded"
         >
-          {{ kolVoicesExpanded ? '收起' : `查看全部 ${Math.min(data.insights.kol_voices.length, 10)} 项` }}
+          {{ kolVoicesExpanded ? '收起' : `查看全部 ${Math.min(filteredKolVoices.length, 10)} 项` }}
         </button>
       </div>
       <div class="space-y-2">
         <div
-          v-for="item in data.insights.kol_voices.slice(0, kolVoicesExpanded ? 10 : 5)"
+          v-for="item in filteredKolVoices.slice(0, kolVoicesExpanded ? 10 : 5)"
           :key="item.post_id"
           class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
         >

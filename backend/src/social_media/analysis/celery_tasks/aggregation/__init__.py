@@ -8,11 +8,11 @@
 - opinion_aggregation.py: 观点聚合与 LLM 归一化
 - metrics.py: 基础指标计算（CII、NSR、SERP等）
 - insights.py: 派生洞察（IPA、关联网络、竞品雷达、KOL）
-- spam_distribution_builder.py: 全模块 spam 分布附加
+- spam_distribution.py: 全模块 spam 分布附加
 """
 
 from .orchestrator import aggregate_task_analysis
-from .spam_distribution_builder import build_spam_distributions
+from .spam_distribution import build_spam_distributions
 from .entity_aggregation import aggregate_entities
 from .opinion_aggregation import aggregate_opinions
 from .metrics import (

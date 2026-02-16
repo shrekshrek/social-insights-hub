@@ -210,6 +210,8 @@ def perform_ipa_analysis(
             "z": round(z_val, 2),  # Bubble Size (Normalized)
             "heat": round(heat, 2),
             "post_ids": list(item.get("post_ids", [])),  # 支持溯源
+            "post_source_ids": list(item.get("post_source_ids", [])),
+            "comment_source_ids": list(item.get("comment_source_ids", [])),
         }
 
         # 如果是观点集合，添加原始观点列表
@@ -289,6 +291,7 @@ def build_context_graph(
     aggregated_opinions: list[dict[str, Any]],
     competitor_entities: Optional[list[dict[str, Any]]] = None,
     top_n_per_type: int = 3,
+    spam_map: Optional[dict[int, str]] = None,
 ) -> dict[str, Any]:
     """构建以 Target 实体为中心的星形关联网络
 
@@ -307,6 +310,11 @@ def build_context_graph(
         aggregated_opinions: 聚合后的观点
         competitor_entities: 竞品实体列表
         top_n_per_type: 每种类型最多保留的节点数
+        spam_map: post_id -> spam 分组映射 (可选)。若提供，返回按维度拆分的 3 版本
+
+    Returns:
+        若 spam_map 为 None: { "center_node": str, "nodes": list, "edges": list }
+        若 spam_map 非 None: { "all": {...}, "organic": {...}, "promo": {...} }
     """
     if not target_entity:
         return {}
@@ -315,138 +323,205 @@ def build_context_graph(
     center_pids = set(target_entity.get("post_ids", []))
 
     if not center_pids:
-        return {"center_node": center_name, "nodes": [], "edges": []}
+        # 提前返回空图（总是三层结构）
+        empty_graph = {"center_node": center_name, "nodes": [], "edges": []}
+        return {"all": empty_graph, "organic": empty_graph, "promo": empty_graph}
 
-    # 按类型分组的候选节点池
-    candidates_by_type: dict[str, list[dict]] = {
-        "audience": [],
-        "scenario": [],
-        "feature": [],
-        "issue": [],
-        "topic": [],
-        "competitor": [],
-    }
+    # 辅助函数：按 spam 维度过滤 post_ids
+    def _filter_pids_by_dimension(pids: set[int], dimension: str) -> set[int]:
+        """按维度过滤 post_ids"""
+        if dimension == "all" or spam_map is None:
+            return pids
+        if dimension == "organic":
+            return {pid for pid in pids if spam_map.get(pid) == "low"}
+        if dimension == "promo":
+            return {pid for pid in pids if spam_map.get(pid) == "high"}
+        return pids
 
-    # 1. 提取人群 (来自 Target 实体的属性)
-    for aud_item in target_entity.get("audience", []):
-        if isinstance(aud_item, dict) and aud_item.get("text"):
-            candidates_by_type["audience"].append(
-                {
-                    "name": aud_item["text"],
-                    "type": "audience",
-                    "post_ids": set(aud_item.get("post_ids", [])),
-                }
+    # 辅助函数：构建单个维度的图
+    def _build_single_graph(
+        dimension_center_pids: set[int], dimension: str
+    ) -> dict[str, Any]:
+        """为指定维度构建关联网络"""
+        if not dimension_center_pids:
+            return {"center_node": center_name, "nodes": [], "edges": []}
+
+        # 按类型分组的候选节点池（维度过滤后）
+        candidates_by_type: dict[str, list[dict]] = {
+            "audience": [],
+            "scenario": [],
+            "feature": [],
+            "issue": [],
+            "topic": [],
+            "competitor": [],
+        }
+
+        # 1. 提取人群 (来自 Target 实体的属性)
+        for aud_item in target_entity.get("audience", []):
+            if isinstance(aud_item, dict) and aud_item.get("text"):
+                filtered_pids = _filter_pids_by_dimension(
+                    set(aud_item.get("post_ids", [])), dimension
+                )
+                if filtered_pids:
+                    candidates_by_type["audience"].append(
+                        {
+                            "name": aud_item["text"],
+                            "type": "audience",
+                            "post_ids": filtered_pids,
+                        }
+                    )
+
+        # 2. 提取场景
+        for scn_item in target_entity.get("scenarios", []):
+            if isinstance(scn_item, dict) and scn_item.get("text"):
+                filtered_pids = _filter_pids_by_dimension(
+                    set(scn_item.get("post_ids", [])), dimension
+                )
+                if filtered_pids:
+                    candidates_by_type["scenario"].append(
+                        {
+                            "name": scn_item["text"],
+                            "type": "scenario",
+                            "post_ids": filtered_pids,
+                        }
+                    )
+
+        # 3. 提取产品优点 (features)
+        for feat_item in target_entity.get("features", []):
+            if isinstance(feat_item, dict) and feat_item.get("text"):
+                filtered_pids = _filter_pids_by_dimension(
+                    set(feat_item.get("post_ids", [])), dimension
+                )
+                if filtered_pids:
+                    candidates_by_type["feature"].append(
+                        {
+                            "name": feat_item["text"],
+                            "type": "feature",
+                            "sentiment": 0.5,
+                            "post_ids": filtered_pids,
+                        }
+                    )
+
+        # 4. 提取产品问题 (issues)
+        for issue_item in target_entity.get("issues", []):
+            if isinstance(issue_item, dict) and issue_item.get("text"):
+                filtered_pids = _filter_pids_by_dimension(
+                    set(issue_item.get("post_ids", [])), dimension
+                )
+                if filtered_pids:
+                    candidates_by_type["issue"].append(
+                        {
+                            "name": issue_item["text"],
+                            "type": "issue",
+                            "sentiment": -0.5,
+                            "post_ids": filtered_pids,
+                        }
+                    )
+
+        # 5. 提取主要话题 (来自 Top Opinions)
+        for topic in aggregated_opinions[:10]:
+            filtered_pids = _filter_pids_by_dimension(
+                set(topic.get("post_ids", [])), dimension
             )
-
-    # 2. 提取场景
-    for scn_item in target_entity.get("scenarios", []):
-        if isinstance(scn_item, dict) and scn_item.get("text"):
-            candidates_by_type["scenario"].append(
-                {
-                    "name": scn_item["text"],
-                    "type": "scenario",
-                    "post_ids": set(scn_item.get("post_ids", [])),
-                }
-            )
-
-    # 3. 提取产品优点 (features)
-    for feat_item in target_entity.get("features", []):
-        if isinstance(feat_item, dict) and feat_item.get("text"):
-            candidates_by_type["feature"].append(
-                {
-                    "name": feat_item["text"],
-                    "type": "feature",
-                    "sentiment": 0.5,  # features 默认正面
-                    "post_ids": set(feat_item.get("post_ids", [])),
-                }
-            )
-
-    # 4. 提取产品问题 (issues)
-    for issue_item in target_entity.get("issues", []):
-        if isinstance(issue_item, dict) and issue_item.get("text"):
-            candidates_by_type["issue"].append(
-                {
-                    "name": issue_item["text"],
-                    "type": "issue",
-                    "sentiment": -0.5,  # issues 默认负面
-                    "post_ids": set(issue_item.get("post_ids", [])),
-                }
-            )
-
-    # 5. 提取主要话题 (来自 Top Opinions)
-    for topic in aggregated_opinions[:10]:
-        candidates_by_type["topic"].append(
-            {
-                "name": topic["name"],
-                "type": "topic",
-                "sentiment": topic.get("sentiment", 0),
-                "post_ids": set(topic.get("post_ids", [])),
-            }
-        )
-
-    # 6. 提取竞品 (来自 competitor_entities)
-    if competitor_entities:
-        for comp in competitor_entities:
-            if comp.get("name") and comp.get("name") != center_name:
-                candidates_by_type["competitor"].append(
+            if filtered_pids:
+                candidates_by_type["topic"].append(
                     {
-                        "name": comp["name"],
-                        "type": "competitor",
-                        "sentiment": comp.get("sentiment", 0),
-                        "post_ids": set(comp.get("post_ids", [])),
+                        "name": topic["name"],
+                        "type": "topic",
+                        "sentiment": topic.get("sentiment", 0),
+                        "post_ids": filtered_pids,
                     }
                 )
 
-    # 计算 Jaccard 相似度并按类型分组排序
-    def _calc_jaccard_nodes(candidates: list[dict]) -> list[dict]:
-        """计算候选节点的 Jaccard 相似度"""
-        result = []
-        for cand in candidates:
-            cand_pids = cand["post_ids"]
-            if not cand_pids:
-                continue
+        # 6. 提取竞品 (来自 competitor_entities)
+        if competitor_entities:
+            for comp in competitor_entities:
+                if comp.get("name") and comp.get("name") != center_name:
+                    filtered_pids = _filter_pids_by_dimension(
+                        set(comp.get("post_ids", [])), dimension
+                    )
+                    if filtered_pids:
+                        candidates_by_type["competitor"].append(
+                            {
+                                "name": comp["name"],
+                                "type": "competitor",
+                                "sentiment": comp.get("sentiment", 0),
+                                "post_ids": filtered_pids,
+                            }
+                        )
 
-            intersection = center_pids.intersection(cand_pids)
-            union = center_pids.union(cand_pids)
+        # 计算 Jaccard 相似度并按类型分组排序
+        def _calc_jaccard_nodes(candidates: list[dict]) -> list[dict]:
+            """计算候选节点的 Jaccard 相似度"""
+            result = []
+            for cand in candidates:
+                cand_pids = cand["post_ids"]
+                if not cand_pids:
+                    continue
 
-            co_occurrence = len(intersection)
-            if co_occurrence < 1:
-                continue
+                intersection = dimension_center_pids.intersection(cand_pids)
+                union = dimension_center_pids.union(cand_pids)
 
-            jaccard = co_occurrence / len(union)
+                co_occurrence = len(intersection)
+                if co_occurrence < 1:
+                    continue
 
-            result.append(
-                {
-                    "name": cand["name"],
-                    "type": cand["type"],
-                    "weight": jaccard,
-                    "co_occurrence": co_occurrence,
-                    "sentiment": cand.get("sentiment"),
-                    "post_ids": list(intersection),
-                }
-            )
+                jaccard = co_occurrence / len(union)
 
-        # 按权重降序排序
-        result.sort(key=lambda x: x["weight"], reverse=True)
-        return result
+                result.append(
+                    {
+                        "name": cand["name"],
+                        "type": cand["type"],
+                        "weight": jaccard,
+                        "co_occurrence": co_occurrence,
+                        "sentiment": cand.get("sentiment"),
+                        "post_ids": list(intersection),
+                    }
+                )
 
-    # 每种类型取 Top N
-    nodes = []
-    edges = []
+            # 按权重降序排序
+            result.sort(key=lambda x: x["weight"], reverse=True)
+            return result
 
-    for node_type, candidates in candidates_by_type.items():
-        ranked = _calc_jaccard_nodes(candidates)
-        for node in ranked[:top_n_per_type]:
-            nodes.append(node)
-            edges.append(
-                {
-                    "source": center_name,
-                    "target": node["name"],
-                    "value": round(node["weight"], 3),
-                }
-            )
+        # 每种类型取 Top N
+        nodes = []
+        edges = []
 
-    return {"center_node": center_name, "nodes": nodes, "edges": edges}
+        for node_type, candidates in candidates_by_type.items():
+            ranked = _calc_jaccard_nodes(candidates)
+            for node in ranked[:top_n_per_type]:
+                nodes.append(node)
+                edges.append(
+                    {
+                        "source": center_name,
+                        "target": node["name"],
+                        "value": round(node["weight"], 3),
+                    }
+                )
+
+        return {"center_node": center_name, "nodes": nodes, "edges": edges}
+
+    # 总是返回三层结构
+    # 如果没有 spam_map 或为空，所有维度返回相同数据（全量）
+    if spam_map is None or not spam_map:
+        all_graph = _build_single_graph(center_pids, "all")
+        return {
+            "all": all_graph,
+            "organic": all_graph,
+            "promo": all_graph,
+        }
+
+    # 有 spam_map，计算 3 个不同版本
+    return {
+        "all": _build_single_graph(center_pids, "all"),
+        "organic": _build_single_graph(
+            _filter_pids_by_dimension(center_pids, "organic"), "organic"
+        ),
+        "promo": _build_single_graph(
+            _filter_pids_by_dimension(center_pids, "promo"), "promo"
+        ),
+    }
+
 
 
 # ============================================================================
@@ -504,6 +579,8 @@ def _aggregate_entities_by_parent(
                 "product_count": 0,
                 "products": [],  # 记录包含的产品
                 "post_ids": set(),
+                "post_source_ids": set(),
+                "comment_source_ids": set(),
             }
 
         stats = brand_stats[parent]
@@ -512,6 +589,8 @@ def _aggregate_entities_by_parent(
         stats["product_count"] += 1
         stats["products"].append(entity.get("name", ""))
         stats["post_ids"].update(entity.get("post_ids", []))
+        stats["post_source_ids"].update(entity.get("post_source_ids", []))
+        stats["comment_source_ids"].update(entity.get("comment_source_ids", []))
 
         # 加权情感（按 mentions 加权）
         entity_mentions = entity.get("mentions", 1)
@@ -547,6 +626,8 @@ def _aggregate_entities_by_parent(
         del stats["neutral_count"]
 
         stats["post_ids"] = list(stats["post_ids"])
+        stats["post_source_ids"] = list(stats["post_source_ids"])
+        stats["comment_source_ids"] = list(stats["comment_source_ids"])
 
     return brand_stats
 
@@ -556,164 +637,291 @@ def analyze_competitor_radar(
     competitor_entities: list[dict[str, Any]],
     aggregated_entities: list[dict[str, Any]],
     max_competitors: int = 4,  # 最多显示的竞品数量（加上本品最多5条线）
+    spam_map: Optional[dict[int, str]] = None,
+    posts_data: Optional[list[dict]] = None,
 ) -> dict[str, Any]:
     """竞品雷达分析 (带品牌聚合，支持多品牌对比)
 
     改进：
     1. 使用 tags.parent 将同品牌产品聚合后对比品牌整体表现
     2. 支持多个竞品品牌（数据充足时）
+    3. 若提供 spam_map 和 posts_data，返回按维度拆分的 3 版本
+
+    Args:
+        target_entity: 目标实体
+        competitor_entities: 竞品实体列表
+        aggregated_entities: 聚合后的所有实体
+        max_competitors: 最多显示的竞品数量
+        spam_map: post_id -> spam 分组映射 (可选)
+        posts_data: 原始帖子数据列表 (可选)
+
+    Returns:
+        若 spam_map 为 None: { "mode": str, "series": list, ... }
+        若 spam_map 非 None: { "all": {...}, "organic": {...}, "promo": {...} }
     """
     if not target_entity or not competitor_entities:
-        return {"mode": "none"}
+        # 总是返回三层结构
+        empty_result = {"mode": "none"}
+        return {"all": empty_result, "organic": empty_result, "promo": empty_result}
 
-    # 1. 按 parent 聚合实体
-    target_brands = _aggregate_entities_by_parent(
-        aggregated_entities, role_filter="target"
-    )
-    competitor_brands = _aggregate_entities_by_parent(
-        aggregated_entities, role_filter="competitor"
-    )
+    # 辅助函数：按 spam 维度过滤 post_ids
+    def _match_dimension(pid: int, dimension: str) -> bool:
+        """判断 post_id 是否匹配指定维度"""
+        if dimension == "all" or spam_map is None:
+            return True
+        if dimension == "organic":
+            return spam_map.get(pid) == "low"
+        if dimension == "promo":
+            return spam_map.get(pid) == "high"
+        return False
 
-    # 2. 准备 Target 数据
-    target_parent = _get_entity_parent(target_entity)
-    if (
-        target_parent in target_brands
-        and target_brands[target_parent]["product_count"] > 1
-    ):
-        target_data = target_brands[target_parent]
-        target_name = f"{target_parent} ({target_data['product_count']}个产品)"
-    else:
-        target_data = target_entity
-        target_name = target_entity["name"]
+    # 辅助函数：按维度重新聚合实体统计
+    def _aggregate_entity_stats_by_dimension(
+        entity: dict, dimension: str
+    ) -> dict:
+        """按 spam 维度重新聚合实体的统计字段"""
+        if spam_map is None or posts_data is None or dimension == "all":
+            # 无 spam_map 或 all 维度，返回原始统计
+            return entity
 
-    # 3. 准备所有竞品数据（按 mentions 排序，取前 N 个）
-    # 先按品牌聚合，再按 mentions 排序
-    competitor_data_list = []
-    seen_parents = set()
+        # 1. 过滤 post_source_ids 和 comment_source_ids
+        post_src = [
+            pid
+            for pid in entity.get("post_source_ids", [])
+            if _match_dimension(pid, dimension)
+        ]
+        comment_src = [
+            pid
+            for pid in entity.get("comment_source_ids", [])
+            if _match_dimension(pid, dimension)
+        ]
 
-    for comp in competitor_entities:
-        comp_parent = _get_entity_parent(comp)
-        if comp_parent in seen_parents:
-            continue
-        seen_parents.add(comp_parent)
+        # 2. 从 posts_data 中提取对应帖子的统计数据
+        mentions = len(post_src) + len(comment_src)
 
+        # 3. 计算 heat (从 posts_data 中取 cii 求和)
+        heat = 0.0
+        for post in posts_data:
+            pid = post.get("post_id")
+            if pid in post_src or pid in comment_src:
+                heat += post.get("cii", 0)
+
+        # 4. 计算加权 sentiment 和 sentiment_distribution
+        sentiment_weighted_sum = 0.0
+        sentiment_weight = 0
+        pos_count = neg_count = neu_count = 0
+        for post in posts_data:
+            pid = post.get("post_id")
+            if pid in post_src or pid in comment_src:
+                post_sentiment = post.get("sentiment", 0)
+                post_cii = post.get("cii", 1)
+                sentiment_weighted_sum += post_sentiment * post_cii
+                sentiment_weight += post_cii
+                if post_sentiment > 0:
+                    pos_count += 1
+                elif post_sentiment < 0:
+                    neg_count += 1
+                else:
+                    neu_count += 1
+
+        sentiment = (
+            sentiment_weighted_sum / sentiment_weight if sentiment_weight > 0 else 0
+        )
+
+        return {
+            **entity,  # 保留其他字段
+            "mentions": mentions,
+            "heat": heat,
+            "sentiment": sentiment,
+            "sentiment_distribution": {
+                "positive": pos_count,
+                "negative": neg_count,
+                "neutral": neu_count,
+            },
+            "post_source_ids": post_src,
+            "comment_source_ids": comment_src,
+        }
+
+    # 内部函数：构建单个维度的雷达图
+    def _build_single_radar(dimension: str) -> dict[str, Any]:
+        """为指定维度构建竞品雷达图"""
+        # 按维度重新聚合实体统计
+        dim_target_data = _aggregate_entity_stats_by_dimension(target_entity, dimension)
+        dim_aggregated_entities = [
+            _aggregate_entity_stats_by_dimension(e, dimension)
+            for e in aggregated_entities
+        ]
+
+        # 1. 按 parent 聚合实体（使用维度过滤后的数据）
+        target_brands = _aggregate_entities_by_parent(
+            dim_aggregated_entities, role_filter="target"
+        )
+        competitor_brands = _aggregate_entities_by_parent(
+            dim_aggregated_entities, role_filter="competitor"
+        )
+
+        # 2. 准备 Target 数据
+        target_parent = _get_entity_parent(dim_target_data)
         if (
-            comp_parent in competitor_brands
-            and competitor_brands[comp_parent]["product_count"] > 1
+            target_parent in target_brands
+            and target_brands[target_parent]["product_count"] > 1
         ):
-            brand_data = competitor_brands[comp_parent]
-            competitor_data_list.append(
-                {
-                    "data": brand_data,
-                    "name": f"{comp_parent} ({brand_data['product_count']}个产品)",
-                    "products": brand_data.get("products", []),
-                    "mentions": brand_data.get("mentions", 0),
-                }
-            )
+            target_data_single = target_brands[target_parent]
+            target_name = f"{target_parent} ({target_data_single['product_count']}个产品)"
         else:
-            competitor_data_list.append(
-                {
-                    "data": comp,
-                    "name": comp["name"],
-                    "products": [comp["name"]],
-                    "mentions": comp.get("mentions", 0),
-                }
+            target_data_single = dim_target_data
+            target_name = dim_target_data["name"]
+
+        # 3. 准备所有竞品数据（使用维度过滤后的 competitor_entities）
+        competitor_data_list = []
+        seen_parents = set()
+
+        for comp in competitor_entities:
+            # 从 dim_aggregated_entities 中找到对应的实体
+            comp_name = comp.get("name")
+            dim_comp = next(
+                (e for e in dim_aggregated_entities if e.get("name") == comp_name), comp
             )
 
-    # 按 mentions 排序并限制数量
-    competitor_data_list.sort(key=lambda x: x["mentions"], reverse=True)
-    competitor_data_list = competitor_data_list[:max_competitors]
+            comp_parent = _get_entity_parent(dim_comp)
+            if comp_parent in seen_parents:
+                continue
+            seen_parents.add(comp_parent)
 
-    # 4. 检查是否有足够数据做雷达图
-    # 至少需要1个竞品有>=5 mentions
-    has_enough_data = any(c["mentions"] >= 5 for c in competitor_data_list)
+            if (
+                comp_parent in competitor_brands
+                and competitor_brands[comp_parent]["product_count"] > 1
+            ):
+                brand_data = competitor_brands[comp_parent]
+                competitor_data_list.append(
+                    {
+                        "data": brand_data,
+                        "name": f"{comp_parent} ({brand_data['product_count']}个产品)",
+                        "products": brand_data.get("products", []),
+                        "mentions": brand_data.get("mentions", 0),
+                    }
+                )
+            else:
+                competitor_data_list.append(
+                    {
+                        "data": dim_comp,
+                        "name": dim_comp["name"],
+                        "products": [dim_comp["name"]],
+                        "mentions": dim_comp.get("mentions", 0),
+                    }
+                )
 
-    if not has_enough_data:
-        # Mode B: Bar Chart (降级为简单的正负面占比对比)
+        # 按 mentions 排序并限制数量
+        competitor_data_list.sort(key=lambda x: x["mentions"], reverse=True)
+        competitor_data_list = competitor_data_list[:max_competitors]
+
+        # 4. 检查是否有足够数据做雷达图
+        has_enough_data = any(c["mentions"] >= 5 for c in competitor_data_list)
+
+        if not has_enough_data:
+            # Mode B: Bar Chart
+            series = [
+                {
+                    "name": target_name,
+                    "sentiment": target_data_single.get("sentiment", 0),
+                    "sentiment_distribution": target_data_single.get("sentiment_distribution", {}),
+                    "products": target_data_single.get("products", [dim_target_data["name"]]),
+                    "post_ids": target_data_single.get("post_ids", []),
+                    "post_source_ids": target_data_single.get("post_source_ids", []),
+                    "comment_source_ids": target_data_single.get("comment_source_ids", []),
+                }
+            ]
+            for comp in competitor_data_list:
+                series.append(
+                    {
+                        "name": comp["name"],
+                        "sentiment": comp["data"].get("sentiment", 0),
+                        "sentiment_distribution": comp["data"].get("sentiment_distribution", {}),
+                        "products": comp["products"],
+                        "post_ids": comp["data"].get("post_ids", []),
+                        "post_source_ids": comp["data"].get("post_source_ids", []),
+                        "comment_source_ids": comp["data"].get("comment_source_ids", []),
+                    }
+                )
+            return {"mode": "bar", "series": series}
+
+        # Mode A: Radar
+        def _get_radar_score(
+            entity: dict, max_mentions: int, max_heat: float
+        ) -> list[float]:
+            m_score = min(entity.get("mentions", 0) / (max_mentions + 1), 1.0)
+            s_score = (entity.get("sentiment", 0) + 1) / 2
+            h_score = min(
+                math.log(entity.get("heat", 0) + 1) / (math.log(max_heat + 1) + 0.1), 1.0
+            )
+            dist = entity.get("sentiment_distribution", {})
+            total = sum(dist.values()) if dist else 1
+            pos_score = dist.get("positive", 0) / total if total > 0 else 0
+            neg_ratio = dist.get("negative", 0) / total if total > 0 else 0
+            neg_control_score = 1.0 - neg_ratio
+            return [
+                round(m_score, 2),
+                round(s_score, 2),
+                round(h_score, 2),
+                round(pos_score, 2),
+                round(neg_control_score, 2),
+            ]
+
+        # 计算所有品牌的最大值用于归一化
+        all_data = [target_data_single] + [c["data"] for c in competitor_data_list]
+        max_mentions = max(d.get("mentions", 0) for d in all_data)
+        max_heat = max(d.get("heat", 0) for d in all_data)
+
+        # 构建 series
         series = [
             {
                 "name": target_name,
-                "sentiment": target_data.get("sentiment", 0),
-                "sentiment_distribution": target_data.get("sentiment_distribution", {}),
-                "products": target_data.get("products", [target_entity["name"]]),
-                "post_ids": target_data.get("post_ids", []),
+                "data": _get_radar_score(target_data_single, max_mentions, max_heat),
+                "products": target_data_single.get("products", [dim_target_data["name"]]),
+                "post_ids": target_data_single.get("post_ids", []),
+                "post_source_ids": target_data_single.get("post_source_ids", []),
+                "comment_source_ids": target_data_single.get("comment_source_ids", []),
             }
         ]
+
         for comp in competitor_data_list:
             series.append(
                 {
                     "name": comp["name"],
-                    "sentiment": comp["data"].get("sentiment", 0),
-                    "sentiment_distribution": comp["data"].get(
-                        "sentiment_distribution", {}
-                    ),
+                    "data": _get_radar_score(comp["data"], max_mentions, max_heat),
                     "products": comp["products"],
                     "post_ids": comp["data"].get("post_ids", []),
+                    "post_source_ids": comp["data"].get("post_source_ids", []),
+                    "comment_source_ids": comp["data"].get("comment_source_ids", []),
                 }
             )
-        return {"mode": "bar", "series": series}
 
-    # Mode A: Radar（多品牌）
-    # 5 维雷达：声量、情感、互动、好评率、差评控制
-
-    def _get_radar_score(
-        entity: dict, max_mentions: int, max_heat: float
-    ) -> list[float]:
-        # 1. 声量 (0-1)
-        m_score = min(entity.get("mentions", 0) / (max_mentions + 1), 1.0)
-        # 2. 情感 (映射 -1~1 到 0~1)
-        s_score = (entity.get("sentiment", 0) + 1) / 2
-        # 3. 互动
-        h_score = min(
-            math.log(entity.get("heat", 0) + 1) / (math.log(max_heat + 1) + 0.1), 1.0
-        )
-
-        dist = entity.get("sentiment_distribution", {})
-        total = sum(dist.values()) if dist else 1
-        # 4. 好评率
-        pos_score = dist.get("positive", 0) / total if total > 0 else 0
-        # 5. 差评控制 (1 - 差评率)
-        neg_ratio = dist.get("negative", 0) / total if total > 0 else 0
-        neg_control_score = 1.0 - neg_ratio
-
-        return [
-            round(m_score, 2),
-            round(s_score, 2),
-            round(h_score, 2),
-            round(pos_score, 2),
-            round(neg_control_score, 2),
-        ]
-
-    # 计算所有品牌的最大值用于归一化
-    all_data = [target_data] + [c["data"] for c in competitor_data_list]
-    max_mentions = max(d.get("mentions", 0) for d in all_data)
-    max_heat = max(d.get("heat", 0) for d in all_data)
-
-    # 构建 series（本品 + 所有竞品）
-    series = [
-        {
-            "name": target_name,
-            "data": _get_radar_score(target_data, max_mentions, max_heat),
-            "products": target_data.get("products", [target_entity["name"]]),
-            "post_ids": target_data.get("post_ids", []),
+        return {
+            "mode": "radar",
+            "dimensions": ["声量影响", "综合情感", "互动热度", "好评率", "差评控制"],
+            "series": series,
         }
-    ]
 
-    for comp in competitor_data_list:
-        series.append(
-            {
-                "name": comp["name"],
-                "data": _get_radar_score(comp["data"], max_mentions, max_heat),
-                "products": comp["products"],
-                "post_ids": comp["data"].get("post_ids", []),
-            }
-        )
+    # 总是返回三层结构
+    # 如果没有 spam_map 或为空，所有维度返回相同数据（全量）
+    if spam_map is None or not spam_map:
+        all_radar = _build_single_radar("all")
+        return {
+            "all": all_radar,
+            "organic": all_radar,
+            "promo": all_radar,
+        }
 
+    # 有 spam_map，计算 3 个不同版本
     return {
-        "mode": "radar",
-        "dimensions": ["声量影响", "综合情感", "互动热度", "好评率", "差评控制"],
-        "series": series,
+        "all": _build_single_radar("all"),
+        "organic": _build_single_radar("organic"),
+        "promo": _build_single_radar("promo"),
     }
+
+
+# 以下是原有代码，现已被提取到 _build_single_radar 中，需要删除
+# 保留标记以便后续清理
 
 
 # ============================================================================

@@ -45,7 +45,7 @@ from .metrics import (
 )
 from .entity_aggregation import aggregate_entities
 from .opinion_aggregation import aggregate_opinions
-from .spam_comparison import build_spam_comparison, DEFAULT_SPAM_COMPARISON_THRESHOLD
+from .spam_distribution_builder import build_spam_distributions
 from .insights import (
     perform_ipa_analysis,
     build_context_graph,
@@ -163,7 +163,7 @@ def aggregate_task_analysis(
     enable_entity_normalization: bool = True,
     entity_job_id: int | None = None,
     opinion_job_id: int | None = None,
-    spam_comparison_threshold: float | None = None,
+    spam_threshold: float = 6.0,
 ) -> dict[str, Any]:
     """执行任务级分析聚合
 
@@ -175,7 +175,7 @@ def aggregate_task_analysis(
         enable_entity_normalization: 是否启用 LLM 实体归一化（会增加成本）
         entity_job_id: 预创建的实体归一化 AnalysisJob ID
         opinion_job_id: 预创建的观点归一化 AnalysisJob ID
-        spam_comparison_threshold: 广告对比分析阈值（默认 7.0，>= 此值为高广告组）
+        spam_threshold: spam 分组阈值（默认 6.0，>= 此值为高广告组）
 
     Returns:
         dict: 聚合结果，存入 AnalysisJob.result_data
@@ -411,13 +411,63 @@ def aggregate_task_analysis(
     # (4) KOL 声音提取
     kol_voices = extract_kol_voices(posts_data, db)
 
-    # 9. 广告/有机内容对比分析
-    spam_comparison = build_spam_comparison(
-        posts_data,
-        threshold=spam_comparison_threshold
-        if spam_comparison_threshold is not None
-        else DEFAULT_SPAM_COMPARISON_THRESHOLD,
+    # 9. NSR 按 spam 分组拆分
+    screened_posts_list = [
+        p for p in posts_data if p.get("spam_score") is not None
+    ]
+    nsr_by_spam = None
+    if screened_posts_list:
+        high_spam_posts = [
+            p for p in screened_posts_list if p["spam_score"] >= spam_threshold
+        ]
+        low_spam_posts = [
+            p for p in screened_posts_list if p["spam_score"] < spam_threshold
+        ]
+        nsr_by_spam = {
+            "high": calculate_nsr(high_spam_posts),
+            "low": calculate_nsr(low_spam_posts),
+        }
+
+    # 10. Spam 分布附加（全模块）
+    time_dist_list = time_distribution.get("distribution", [])
+
+    # 提取 IPA 所有象限的点
+    ipa_all_points = []
+    if ipa_result and ipa_result.get("quadrants"):
+        for quadrant_list in ipa_result["quadrants"].values():
+            if isinstance(quadrant_list, list):
+                ipa_all_points.extend(quadrant_list)
+
+    competitor_series = competitor_radar.get("series", [])
+
+    spam_config = build_spam_distributions(
+        aggregated_entities=aggregated_entities,
+        aggregated_opinions=aggregated_opinions,
+        quadrant_data=quadrant_data,
+        kol_voices=kol_voices,
+        ipa_points=ipa_all_points,
+        competitor_series=competitor_series,
+        time_distribution=time_dist_list,
+        posts_data=posts_data,
+        threshold=spam_threshold,
     )
+
+    # 传播 spam_distribution 到 insights 展示列表
+    entity_spam_lookup = {
+        e["name"]: e.get("spam_distribution") for e in aggregated_entities
+    }
+    for e in entity_stats.get("top_entities", []):
+        e["spam_distribution"] = entity_spam_lookup.get(e["name"])
+    for e in target_entities:
+        e["spam_distribution"] = entity_spam_lookup.get(e["name"])
+    for e in competitor_entities:
+        e["spam_distribution"] = entity_spam_lookup.get(e["name"])
+
+    opinion_spam_lookup = {
+        o["name"]: o.get("spam_distribution") for o in aggregated_opinions
+    }
+    for o in topic_stats.get("opinions", []):
+        o["spam_distribution"] = opinion_spam_lookup.get(o["name"])
 
     # 12. 组装结果
     result_data = {
@@ -438,12 +488,13 @@ def aggregate_task_analysis(
             "serp_health": serp_health,
             "marketing_analysis": marketing_stats,
             "sentiment_conflict": sentiment_conflict,
+            "nsr_by_spam": nsr_by_spam,
         },
         "charts": {
             # 保留完整象限列表以便前端反向追溯帖子 (宏观概览)
             "quadrant": quadrant_data,
             "quadrant_summary": quadrant_summary,
-            "time_distribution": time_distribution.get("distribution", []),
+            "time_distribution": time_dist_list,
             "time_distribution_skipped": time_distribution.get(
                 "skipped_count", 0
             ),  # 无发布时间的帖子数
@@ -468,8 +519,8 @@ def aggregate_task_analysis(
         # 原始融合数据（用于后续项目级分析/深挖；不要求下发给前端）
         "aggregated_entities": aggregated_entities,
         "aggregated_opinions": aggregated_opinions,
-        # 广告/有机内容对比分析
-        "spam_comparison": spam_comparison,
+        # Spam 分组配置
+        "spam_config": spam_config,
     }
 
     # 统计实体分类数量
@@ -517,6 +568,7 @@ def _empty_result() -> dict[str, Any]:
                 "high_conflict_count": 0,
                 "risk_level": "low",
             },
+            "nsr_by_spam": None,
         },
         "charts": {
             "quadrant": [],
@@ -548,22 +600,6 @@ def _empty_result() -> dict[str, Any]:
         # 原始融合数据（与正常结果字段名一致）
         "aggregated_entities": [],
         "aggregated_opinions": [],
-        # 广告/有机内容对比分析
-        "spam_comparison": {
-            "config": {"threshold": DEFAULT_SPAM_COMPARISON_THRESHOLD},
-            "high_spam": {
-                "post_count": 0, "deep_analyzed_count": 0,
-                "comment_analyzed_count": 0,
-                "metrics": {"avg_cii": 0, "avg_sentiment": 0},
-                "post_analysis": {"top_entities": [], "top_opinions": []},
-                "comment_analysis": {"top_entities": [], "top_opinions": []},
-            },
-            "low_spam": {
-                "post_count": 0, "deep_analyzed_count": 0,
-                "comment_analyzed_count": 0,
-                "metrics": {"avg_cii": 0, "avg_sentiment": 0},
-                "post_analysis": {"top_entities": [], "top_opinions": []},
-                "comment_analysis": {"top_entities": [], "top_opinions": []},
-            },
-        },
+        # Spam 分组配置
+        "spam_config": None,
     }

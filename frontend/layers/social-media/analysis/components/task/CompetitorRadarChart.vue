@@ -25,12 +25,14 @@ const getOption = (): EChartsOption => {
   if (props.data.mode === 'radar') {
     const { dimensions = [], series = [] } = props.data
     
-    // 构建产品列表映射用于 tooltip
+    // 构建产品列表映射和 spam 分布映射用于 tooltip
     const productsMap: Record<string, string[]> = {}
+    const spamMap: Record<string, { high: number; low: number } | undefined> = {}
     series.forEach(s => {
       productsMap[s.name] = s.products || []
+      spamMap[s.name] = s.spam_distribution ?? undefined
     })
-    
+
     return {
       animation: false,  // 关闭动画，避免 resize 时的问题
       tooltip: {
@@ -40,20 +42,26 @@ const getOption = (): EChartsOption => {
           const name = params.name || ''
           const products = productsMap[name] || []
           const values = params.value || []
-          
+
           let html = `<div class="font-medium mb-2">${name}</div>`
-          
+
           // 如果有多个产品，显示产品列表
           if (products.length > 1) {
             html += `<div class="text-xs text-gray-400 mb-2">包含: ${products.join(', ')}</div>`
           }
-          
+
           // 显示各维度数值
           dimensions.forEach((dim, i) => {
             const val = values[i] !== undefined ? (values[i] * 100).toFixed(0) : '-'
             html += `<div class="text-xs">${dim}: ${val}%</div>`
           })
-          
+
+          // spam 分布信息
+          const sd = spamMap[name]
+          if (sd && (sd.high > 0 || sd.low > 0)) {
+            html += `<div class="text-xs mt-1"><span style="color:#f59e0b;">推广 ${sd.high}</span> / <span style="color:#22c55e;">有机 ${sd.low}</span></div>`
+          }
+
           return html
         }
       },
@@ -94,12 +102,14 @@ const getOption = (): EChartsOption => {
     // 展示 正面/中性/负面 占比
     const categories = ['正面', '中性', '负面']
     
-    // 构建产品列表映射用于 tooltip
+    // 构建产品列表映射和 spam 分布映射用于 tooltip
     const productsMap: Record<string, string[]> = {}
+    const spamMap: Record<string, { high: number; low: number } | undefined> = {}
     series.forEach(s => {
       productsMap[s.name] = s.products || []
+      spamMap[s.name] = s.spam_distribution ?? undefined
     })
-    
+
     const barSeries = series.map((s, index) => {
       const dist = s.sentiment_distribution || { positive: 0, neutral: 0, negative: 0 }
       const total = (dist.positive + dist.neutral + dist.negative) || 1
@@ -132,14 +142,18 @@ const getOption = (): EChartsOption => {
           params.forEach((p: { seriesName: string; value: number; color: string }) => {
             const products = productsMap[p.seriesName] || []
             const productInfo = products.length > 1 ? ` (${products.length}个产品)` : ''
+            const sd = spamMap[p.seriesName]
+            const spamInfo = sd && (sd.high > 0 || sd.low > 0)
+              ? ` <span style="color:#f59e0b;">推广${sd.high}</span>/<span style="color:#22c55e;">有机${sd.low}</span>`
+              : ''
             html += `
               <div class="flex items-center gap-2 text-xs">
                 <span style="background:${p.color};width:8px;height:8px;border-radius:50%;display:inline-block;"></span>
-                <span>${p.seriesName}${productInfo}: ${p.value}%</span>
+                <span>${p.seriesName}${productInfo}: ${p.value}%${spamInfo}</span>
               </div>
             `
           })
-          
+
           return html
         }
       },

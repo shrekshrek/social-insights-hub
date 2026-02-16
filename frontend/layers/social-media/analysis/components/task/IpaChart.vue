@@ -119,6 +119,12 @@ const getOption = (): EChartsOption => {
             影响力: ${heat}
           </div>
         `
+
+        // spam 分布信息
+        const sd = item.spam_distribution
+        if (sd && (sd.high > 0 || sd.low > 0)) {
+          html += `<div class="text-xs mt-1"><span style="color:#f59e0b;">推广 ${sd.high}</span> / <span style="color:#22c55e;">有机 ${sd.low}</span></div>`
+        }
         
         // 如果是观点集合，显示原始观点列表
         const originalTerms = item.original_terms

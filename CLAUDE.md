@@ -18,10 +18,21 @@
 | 部署 | Docker Compose + Nginx | 开发/生产双配置 |
 | 包管理 | uv (后端) / pnpm (前端) | monorepo |
 
+## 项目类型
+
+类型：多 tier
+
+| Tier | 目录 | 角色 |
+|:-----|:-----|:-----|
+| 后端 | backend/ | FastAPI + Python 3.11+, Celery Workers, LangChain |
+| 前端 | frontend/ | Nuxt 4 + Vue 3 + TypeScript |
+
+每个 tier 有独立的 `CLAUDE.md` 文件，定义 tier 专属的技术栈、构建命令和编码约定。Tier 约定优先于本文件中的同名约定。
+
 ## 项目结构
 
-- `/backend` - FastAPI 后端应用
-- `/frontend` - Nuxt 前端应用
+- `/backend` - FastAPI 后端应用 → 详见 `backend/CLAUDE.md`
+- `/frontend` - Nuxt 前端应用 → 详见 `frontend/CLAUDE.md`
 - `/docs` - 项目文档
 
 ## 模块结构
@@ -133,10 +144,11 @@
 
 ## 参考文档
 
-- 后端编码规范: `backend/CODING_GUIDE.md`
-- 前端编码规范: `frontend/CODING_GUIDE.md`
-- 后端架构: `docs/backend-architecture.md`
-- 前端架构: `docs/frontend-architecture.md`
+- 系统架构: `docs/architecture.md`
+- 后端 tier 约定: `backend/CLAUDE.md`
+- 前端 tier 约定: `frontend/CLAUDE.md`
+- 后端编码规范 (详细版): `backend/CODING_GUIDE.md`
+- 前端编码规范 (详细版): `frontend/CODING_GUIDE.md`
 - 模块开发流程: `docs/MODULAR_DEVELOPMENT.md`
 - 权限系统原理: `docs/PERMISSION_MANAGEMENT.md`
 - 配置管理: `docs/CONFIGURATION.md`

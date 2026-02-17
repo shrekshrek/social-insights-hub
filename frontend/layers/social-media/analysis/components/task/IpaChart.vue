@@ -13,15 +13,6 @@ const emit = defineEmits<{
 
 const { chartRef, initChart, setOption, getInstance } = useCharts()
 
-// 象限定义（用于图例展示，实际数据在 props.data 中）
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const quadrants = [
-  { name: '优势区 (保持)', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' }, // Q1: High Imp, High Perf
-  { name: '改进区 (重点)', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' }, // Q2: High Imp, Low Perf
-  { name: '维持区 (次要)', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' }, // Q3: Low Imp, Low Perf
-  { name: '机会区 (挖掘)', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' }  // Q4: Low Imp, High Perf
-]
-
 const getOption = (): EChartsOption => {
   if (!props.data?.quadrants) return {}
 

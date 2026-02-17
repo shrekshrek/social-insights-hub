@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
 import type { CompetitorRadar } from '../../types'
 
@@ -19,19 +19,57 @@ const BRAND_COLORS = [
   '#06b6d4', // 青色 - 竞品5
 ]
 
+// 品牌图例可见性状态（默认全部显示）
+const visibleBrands = ref<Set<string>>(new Set())
+
+// 从 data 计算图例项
+const brandLegendItems = computed(() => {
+  if (!props.data || props.data.mode === 'none') return []
+  return (props.data.series || []).map((s, index) => ({
+    name: s.name,
+    color: BRAND_COLORS[index % BRAND_COLORS.length],
+  }))
+})
+
+// 切换品牌显示
+const toggleBrand = (name: string) => {
+  const newSet = new Set(visibleBrands.value)
+  if (newSet.has(name)) {
+    newSet.delete(name)
+  } else {
+    newSet.add(name)
+  }
+  visibleBrands.value = newSet
+  updateChart()
+}
+
+// 当数据变化时重置可见性（新品牌默认全部显示）
+watch(() => props.data?.series, (newSeries) => {
+  if (newSeries) {
+    visibleBrands.value = new Set(newSeries.map(s => s.name))
+  }
+}, { immediate: true })
+
 const getOption = (): EChartsOption => {
   if (!props.data || props.data.mode === 'none') return {}
 
+  const { series = [] } = props.data
+
+  // 构建产品列表映射和 spam 分布映射用于 tooltip
+  const productsMap: Record<string, string[]> = {}
+  const spamMap: Record<string, CompetitorRadar['series'][0]['spam_distribution']> = {}
+  series.forEach(s => {
+    productsMap[s.name] = s.products || []
+    spamMap[s.name] = s.spam_distribution ?? undefined
+  })
+
   if (props.data.mode === 'radar') {
-    const { dimensions = [], series = [] } = props.data
-    
-    // 构建产品列表映射和 spam 分布映射用于 tooltip
-    const productsMap: Record<string, string[]> = {}
-    const spamMap: Record<string, CompetitorRadar['series'][0]['spam_distribution']> = {}
-    series.forEach(s => {
-      productsMap[s.name] = s.products || []
-      spamMap[s.name] = s.spam_distribution ?? undefined
-    })
+    const { dimensions = [] } = props.data
+
+    // 按可见性过滤 series
+    const visibleSeries = series
+      .map((s, index) => ({ ...s, originalIndex: index }))
+      .filter(s => visibleBrands.value.has(s.name))
 
     return {
       animation: false,  // 关闭动画，避免 resize 时的问题
@@ -65,28 +103,24 @@ const getOption = (): EChartsOption => {
           return html
         }
       },
-      legend: {
-        bottom: 0,
-        data: series.map(s => s.name),
-        selectedMode: 'multiple' // 支持多选切换
-      },
       radar: {
+        center: ['50%', '50%'],
         indicator: dimensions.map(d => ({ name: d, max: 1 })),
         radius: '75%'
       },
-      // 每个品牌作为独立的 series，使用固定颜色
-      series: series.map((s, index) => ({
+      // 每个品牌作为独立的 series，使用固定颜色（按可见性过滤）
+      series: visibleSeries.map(s => ({
         type: 'radar',
         name: s.name,
         lineStyle: {
-          color: BRAND_COLORS[index % BRAND_COLORS.length],
+          color: BRAND_COLORS[s.originalIndex % BRAND_COLORS.length],
           width: 2
         },
         itemStyle: {
-          color: BRAND_COLORS[index % BRAND_COLORS.length]
+          color: BRAND_COLORS[s.originalIndex % BRAND_COLORS.length]
         },
         areaStyle: {
-          color: BRAND_COLORS[index % BRAND_COLORS.length],
+          color: BRAND_COLORS[s.originalIndex % BRAND_COLORS.length],
           opacity: 0.1
         },
         data: [{
@@ -97,20 +131,14 @@ const getOption = (): EChartsOption => {
     }
   } else {
     // Bar Mode (Sentiment comparison)
-    const { series = [] } = props.data
-    // 假设 series 只有两个（本品 vs 竞品）
-    // 展示 正面/中性/负面 占比
     const categories = ['正面', '中性', '负面']
-    
-    // 构建产品列表映射和 spam 分布映射用于 tooltip
-    const productsMap: Record<string, string[]> = {}
-    const spamMap: Record<string, CompetitorRadar['series'][0]['spam_distribution']> = {}
-    series.forEach(s => {
-      productsMap[s.name] = s.products || []
-      spamMap[s.name] = s.spam_distribution ?? undefined
-    })
 
-    const barSeries = series.map((s, index) => {
+    // 按可见性过滤 series
+    const visibleSeries = series
+      .map((s, index) => ({ ...s, originalIndex: index }))
+      .filter(s => visibleBrands.value.has(s.name))
+
+    const barSeries = visibleSeries.map(s => {
       const dist = s.sentiment_distribution || { positive: 0, neutral: 0, negative: 0 }
       const total = (dist.positive + dist.neutral + dist.negative) || 1
       return {
@@ -118,7 +146,7 @@ const getOption = (): EChartsOption => {
         type: 'bar',
         stack: s.name, // 不堆叠，分组展示
         itemStyle: {
-          color: BRAND_COLORS[index % BRAND_COLORS.length]
+          color: BRAND_COLORS[s.originalIndex % BRAND_COLORS.length]
         },
         data: [
           (dist.positive / total),
@@ -135,10 +163,10 @@ const getOption = (): EChartsOption => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         formatter: (params: any) => {
           if (!Array.isArray(params) || params.length === 0) return ''
-          
+
           const category = params[0].axisValue
           let html = `<div class="font-medium mb-2">${category}</div>`
-          
+
           params.forEach((p: { seriesName: string; value: number; color: string }) => {
             const products = productsMap[p.seriesName] || []
             const productInfo = products.length > 1 ? ` (${products.length}个产品)` : ''
@@ -157,14 +185,10 @@ const getOption = (): EChartsOption => {
           return html
         }
       },
-      legend: {
-        bottom: 0,
-        selectedMode: 'multiple' // 支持多选切换
-      },
       grid: {
         top: 30,
         right: 10,
-        bottom: 30,
+        bottom: 10,
         left: 10,
         containLabel: true
       },
@@ -189,8 +213,8 @@ const updateChart = async () => {
     if (!instance) {
       instance = initChart()
     }
-    // 不使用 notMerge，保持 legend 选中状态
-    setOption(getOption())
+    // 使用 notMerge 确保 series 数量变化时正确更新（图例切换场景）
+    setOption(getOption(), { notMerge: true })
   }
 }
 
@@ -211,7 +235,22 @@ onMounted(() => {
         <slot />
       </div>
     </div>
+    <!-- 图表 -->
     <div ref="chartRef" class="w-full h-80" />
+
+    <!-- 图例 - 底部居中（与 ContextGraphChart 一致，放在 chart 外部） -->
+    <div v-if="brandLegendItems.length > 1" class="flex flex-wrap justify-center gap-x-2 gap-y-1 text-xs mt-3">
+      <button
+        v-for="item in brandLegendItems"
+        :key="item.name"
+        class="flex items-center gap-1 px-1.5 py-0.5 rounded whitespace-nowrap transition-all cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+        :class="visibleBrands.has(item.name) ? 'opacity-100' : 'opacity-40 line-through'"
+        @click="toggleBrand(item.name)"
+      >
+        <span class="w-2 h-2 shrink-0 rounded-full" :style="{ backgroundColor: item.color }" />
+        <span class="text-gray-500">{{ item.name }}</span>
+      </button>
+    </div>
   </div>
 </template>
 

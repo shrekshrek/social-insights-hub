@@ -51,18 +51,29 @@ def _extract_entity_attributes_for_ipa(
 
     candidates = []
 
+    # 获取实体级别的 post_source_ids 和 comment_source_ids，用于拆分特征的 post_ids
+    entity_post_sources = set(target_entity.get("post_source_ids", []))
+    entity_comment_sources = set(target_entity.get("comment_source_ids", []))
+
     # 提取 features（正面属性，sentiment 设为正值）
     for feature in target_entity.get("features", []):
         if isinstance(feature, dict) and feature.get("text"):
             post_ids = feature.get("post_ids", [])
             mentions = len(post_ids)
             if mentions >= 1:
+                # 使用实体级别的来源信息拆分 post_ids
+                post_ids_set = set(post_ids)
+                post_source_ids = list(post_ids_set & entity_post_sources)
+                comment_source_ids = list(post_ids_set & entity_comment_sources)
+
                 item = {
                     "name": feature["text"],
                     "mentions": mentions,
                     "sentiment": 0.5,  # features 默认正面
                     "heat": round(mentions * avg_heat_per_mention, 1),
                     "post_ids": post_ids,
+                    "post_source_ids": post_source_ids,
+                    "comment_source_ids": comment_source_ids,
                     "source_type": "feature",
                 }
                 # 透传原始词条（仅当该属性发生过合并时才会存在）
@@ -81,12 +92,19 @@ def _extract_entity_attributes_for_ipa(
             post_ids = issue.get("post_ids", [])
             mentions = len(post_ids)
             if mentions >= 1:
+                # 使用实体级别的来源信息拆分 post_ids
+                post_ids_set = set(post_ids)
+                post_source_ids = list(post_ids_set & entity_post_sources)
+                comment_source_ids = list(post_ids_set & entity_comment_sources)
+
                 item = {
                     "name": issue["text"],
                     "mentions": mentions,
                     "sentiment": -0.5,  # issues 默认负面
                     "heat": round(mentions * avg_heat_per_mention, 1),
                     "post_ids": post_ids,
+                    "post_source_ids": post_source_ids,
+                    "comment_source_ids": comment_source_ids,
                     "source_type": "issue",
                 }
                 # 透传原始词条（仅当该属性发生过合并时才会存在）
@@ -223,6 +241,11 @@ def perform_ipa_analysis(
         ):
             point["original_terms"] = original_terms
 
+        # 透传 spam_distribution（用于前端维度筛选）
+        spam_dist = item.get("spam_distribution")
+        if spam_dist:
+            point["spam_distribution"] = spam_dist
+
         # 判定逻辑
         is_high_importance = mentions >= avg_mentions
         is_high_performance = sentiment >= sentiment_threshold
@@ -317,7 +340,9 @@ def build_context_graph(
         若 spam_map 非 None: { "all": {...}, "organic": {...}, "promo": {...} }
     """
     if not target_entity:
-        return {}
+        # 无 target 实体时返回 3 层空图
+        empty_graph = {"center_node": None, "nodes": [], "edges": []}
+        return {"all": empty_graph, "organic": empty_graph, "promo": empty_graph}
 
     center_name = target_entity["name"]
     center_pids = set(target_entity.get("post_ids", []))

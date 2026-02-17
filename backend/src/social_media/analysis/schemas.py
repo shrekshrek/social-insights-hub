@@ -539,7 +539,7 @@ class TimeDistributionItem(CustomBaseModel):
     post_ids: list[int] = Field(
         default_factory=list, description="该日期对应的帖子ID列表，用于反向追溯"
     )
-    spam_breakdown: SpamCountBreakdown | None = None
+    spam_breakdown: SpamDistribution | None = None
 
 
 class Freshness(CustomBaseModel):
@@ -569,7 +569,7 @@ class IpaPoint(CustomBaseModel):
     z: float = Field(0, description="气泡大小 (Log Smoothed Heat)")
     heat: float = Field(0, description="影响力 (Heat)")
     post_ids: list[int] = Field(default_factory=list)
-    spam_distribution: SpamCountBreakdown | None = None
+    spam_distribution: SpamDistribution | None = None
     original_terms: list[OriginalTerm] | None = Field(
         None, description="原始观点列表（仅当该点为观点集合时存在）"
     )
@@ -625,6 +625,14 @@ class ContextGraph(CustomBaseModel):
     edges: list[ContextEdge] = Field(default_factory=list)
 
 
+class ContextGraphWithDimensions(CustomBaseModel):
+    """关联网络图（按 spam 维度拆分的三层结构）"""
+
+    all: ContextGraph = Field(..., description="全部数据")
+    organic: ContextGraph = Field(..., description="仅有机内容")
+    promo: ContextGraph = Field(..., description="仅推广内容")
+
+
 class SentimentDistribution(CustomBaseModel):
     """情感分布"""
 
@@ -642,7 +650,7 @@ class CompetitorSeries(CustomBaseModel):
     sentiment_distribution: SentimentDistribution | None = None  # 柱状图数据
     products: list[str] | None = None  # 品牌聚合时包含的产品列表
     post_ids: list[int] = Field(default_factory=list)
-    spam_distribution: SpamCountBreakdown | None = None
+    spam_distribution: SpamDistribution | None = None
 
 
 class CompetitorRadar(CustomBaseModel):
@@ -651,6 +659,14 @@ class CompetitorRadar(CustomBaseModel):
     mode: Literal["radar", "bar", "none"] = "none"
     dimensions: list[str] | None = None
     series: list[CompetitorSeries] = Field(default_factory=list)
+
+
+class CompetitorRadarWithDimensions(CustomBaseModel):
+    """竞品雷达分析（按 spam 维度拆分的三层结构）"""
+
+    all: CompetitorRadar = Field(..., description="全部数据")
+    organic: CompetitorRadar = Field(..., description="仅有机内容")
+    promo: CompetitorRadar = Field(..., description="仅推广内容")
 
 
 class TaskAnalysisCharts(CustomBaseModel):
@@ -665,8 +681,8 @@ class TaskAnalysisCharts(CustomBaseModel):
     )
     # 新增图表字段
     ipa_analysis: IpaAnalysis | None = None
-    context_graph: ContextGraph | None = None
-    competitor_radar: CompetitorRadar | None = None
+    context_graph: ContextGraphWithDimensions | None = None
+    competitor_radar: CompetitorRadarWithDimensions | None = None
 
 
 class SourceDistribution(CustomBaseModel):

@@ -98,7 +98,7 @@ const getPlatformColor = (platform: string) => {
   }
 
   // 3. 分配备用颜色
-  const color = fallbackColors[fallbackColorIndex % fallbackColors.length]
+  const color = fallbackColors[fallbackColorIndex % fallbackColors.length] ?? '#94a3b8'
   fallbackColorIndex++
   dynamicColorMap.set(key, color)
   return color

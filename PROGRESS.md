@@ -22,15 +22,16 @@
 | analysis/spam_display/前端 | 已完成 | 4维可视化(比例条+popover) + 排序控件 + 时间分布堆叠图 + IPA/竞品tooltip增强 |
 | analysis/spam_4d/后端 | 已完成 | IPA/竞品携带 post_source_ids+comment_source_ids，spam 计算 2D→4D，重命名 spam_distribution |
 | analysis/spam_4d/前端 | 已完成 | IPA/竞品类型升级 SpamCountBreakdown→SpamDistribution，tooltip 展示 4D |
-| analysis/spam_dimension_view/前端 | 实施中 | 实体和话题列表 4 维排序控件，按推广/有机×原文/评论排序对比（已完成：实体/话题/IPA/KOL 筛选） |
-| analysis/spam_dimension_chart/后端 | 方案已确认 | 关联网络和竞品雷达按维度预计算 3 版本（全部/有机/推广） |
-| analysis/spam_dimension_chart/前端 | 方案已确认 | 关联网络和竞品雷达维度筛选 UI，TabSwitch 切换展示 |
+| analysis/spam_dimension_view/前端 | 已完成 | 实体/话题 4 维排序控件 + IPA/KOL/竞品维度筛选 |
+| analysis/spam_dimension_chart/后端 | 已完成 | 关联网络和竞品雷达 3 层预计算（全部/有机/推广），KOL 池扩展至 top_n=10 |
+| analysis/spam_dimension_chart/前端 | 已完成 | 竞品雷达 HTML 图例 + 品牌可见性控制 + 维度 TabSwitch；类型一致性修复 |
 | 部署配置 | 已完成 | Docker Compose 开发/生产双配置 |
 
 ## 已完成的里程碑
 
 - v1.0: 全栈基础框架 (auth + rbac + users)
 - v1.x: 社交媒体数据采集与分析功能 (projects + tasks + analysis + langchain + agent)
+- v1.x: 数据任务分析 spam 维度功能完成 (4D 分布 + 维度排序 + 图表预计算 + 全栈类型一致性)
 
 ## 待改进项
 
@@ -40,4 +41,7 @@
 
 ## 下次继续的入口
 
-`analysis/spam_dimension_chart` 模块方案已确认，参考 `docs/plan.md`。后端 7 步，前端 3 步，需改动 `orchestrator.py` + `insights.py` + 前端 3 个文件。从后端 Step 1（提前构建 spam_map）开始实施。运行 `/module-dev` 启动实现。
+数据任务分析模块已全部完成（含 spam 4D 分布、维度排序、图表预计算、全栈类型一致性修复）。可选方向：
+1. **项目级快照分析增强** — 对多任务合并快照的分析结果做类似的 spam 维度拆分
+2. **测试覆盖率提升** — 后端 aggregation 模块缺少单元测试，前端图表组件可加 snapshot 测试
+3. **文档补全** — `docs/backend-architecture.md` 和 `docs/frontend-architecture.md` 缺少 social_media 模块描述

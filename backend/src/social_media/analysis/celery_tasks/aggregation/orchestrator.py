@@ -443,7 +443,7 @@ def aggregate_task_analysis(
             if isinstance(quadrant_list, list):
                 ipa_all_points.extend(quadrant_list)
 
-    competitor_series = competitor_radar.get("series", [])
+    competitor_series = competitor_radar.get("all", {}).get("series", [])
 
     spam_config = build_spam_distributions(
         aggregated_entities=aggregated_entities,
@@ -585,6 +585,7 @@ def _empty_result() -> dict[str, Any]:
                 "neutral": 0,
             },
             "time_distribution": [],
+            "time_distribution_skipped": 0,
             # 新增图表（与正常结果一致，3 层结构）
             "ipa_analysis": {"quadrants": {}, "thresholds": {"x": 0, "y": 0}},
             "competitor_radar": {

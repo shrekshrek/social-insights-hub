@@ -566,7 +566,7 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
     <section v-if="data.charts.ipa_analysis?.quadrants">
       <ClientOnly>
         <IpaChart :data="filteredIpaAnalysis" @click-point="openPostListModal">
-          <TabSwitch v-if="hasIpaSpamData" v-model="ipaFilterMode" :options="kolFilterOptions" />
+          <TabSwitch v-if="hasIpaSpamData" v-model="ipaFilterMode" :options="dimensionFilterOptions" />
         </IpaChart>
       </ClientOnly>
     </section>
@@ -625,7 +625,7 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
                 <span>帖子 {{ issue.post_source_count || 0 }} / 评论 {{ issue.comment_source_count || 0 }}</span>
                 <template v-if="issue.spam_distribution">
                   <span class="text-gray-300 dark:text-gray-600">|</span>
-                  <SpamRatioBar :spam-distribution="issue.spam_distribution" size="xs" />
+                  <SpamRatioBar :spam-distribution="issue.spam_distribution" />
                 </template>
               </div>
             </div>
@@ -671,7 +671,7 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
                 <span>帖子 {{ feature.post_source_count || 0 }} / 评论 {{ feature.comment_source_count || 0 }}</span>
                 <template v-if="feature.spam_distribution">
                   <span class="text-gray-300 dark:text-gray-600">|</span>
-                  <SpamRatioBar :spam-distribution="feature.spam_distribution" size="xs" />
+                  <SpamRatioBar :spam-distribution="feature.spam_distribution" />
                 </template>
               </div>
             </div>
@@ -761,7 +761,7 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
             </template>
             <template v-if="entity.spam_distribution">
               <span class="text-gray-400 dark:text-gray-500">|</span>
-              <SpamRatioBar :spam-distribution="entity.spam_distribution" size="xs" />
+              <SpamRatioBar :spam-distribution="entity.spam_distribution" />
             </template>
           </div>
           <!-- 归一化信息（别名、关联实体） -->

@@ -95,7 +95,7 @@ export interface PostAnalysis {
   spam_score: number | null
   value_score: number | null
   relevance_score: number | null
-  sentiment: -1 | 0 | 1 | null
+  sentiment: -2 | -1 | 0 | 1 | 2 | null
   post_deep_result: PostDeepResult | null
   comment_deep_result: CommentDeepResult | null
   analyzed_at: string | null
@@ -110,7 +110,7 @@ export interface PostAnalysisCreate {
   spam_score?: number
   value_score?: number
   relevance_score?: number
-  sentiment?: -1 | 0 | 1
+  sentiment?: -2 | -1 | 0 | 1 | 2
   post_deep_result?: PostDeepResult
   comment_deep_result?: CommentDeepResult
 }
@@ -269,7 +269,7 @@ export interface PostAnalysisWithPostInfo {
   spam_score: number | null
   value_score: number | null
   relevance_score: number | null
-  sentiment: -1 | 0 | 1 | null
+  sentiment: -2 | -1 | 0 | 1 | 2 | null
   cii: number | null  // 内容影响力指数
 
   // 深度分析
@@ -436,7 +436,7 @@ export interface ContextEdge {
 
 /** 关联网络图 */
 export interface ContextGraph {
-  center_node: string
+  center_node: string | null
   nodes: ContextNode[]
   edges: ContextEdge[]
 }

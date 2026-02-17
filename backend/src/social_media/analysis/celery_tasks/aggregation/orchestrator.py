@@ -414,7 +414,7 @@ def aggregate_task_analysis(
     )
 
     # (4) KOL 声音提取
-    kol_voices = extract_kol_voices(posts_data, db)
+    kol_voices = extract_kol_voices(posts_data, db, top_n=10)
 
     # 9. NSR 按 spam 分组拆分
     screened_posts_list = [

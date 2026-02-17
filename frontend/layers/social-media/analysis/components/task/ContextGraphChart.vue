@@ -52,7 +52,7 @@ const typeColorMap: Record<string, string> = {
 }
 
 const getOption = (): EChartsOption => {
-  if (!props.data) return {}
+  if (!props.data || !props.data.center_node) return {}
 
   const { center_node, nodes, edges } = props.data
   

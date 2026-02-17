@@ -539,7 +539,7 @@ class TimeDistributionItem(CustomBaseModel):
     post_ids: list[int] = Field(
         default_factory=list, description="该日期对应的帖子ID列表，用于反向追溯"
     )
-    spam_breakdown: SpamDistribution | None = None
+    spam_breakdown: SpamCountBreakdown | None = None
 
 
 class Freshness(CustomBaseModel):
@@ -678,6 +678,9 @@ class TaskAnalysisCharts(CustomBaseModel):
     )
     time_distribution: list[TimeDistributionItem] = Field(
         default_factory=list, description="时间分布"
+    )
+    time_distribution_skipped: int = Field(
+        0, description="无发布时间的帖子数量"
     )
     # 新增图表字段
     ipa_analysis: IpaAnalysis | None = None

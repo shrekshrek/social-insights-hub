@@ -59,7 +59,7 @@ const getOption = (): EChartsOption => {
           // spam 分布信息 (4D: 高/低广告 × 原文/评论)
           const sd = spamMap[name]
           if (sd?.high_spam && sd?.low_spam && (sd.high_spam.total > 0 || sd.low_spam.total > 0)) {
-            html += `<div class="text-xs mt-1"><span style="color:#f59e0b;">推广 ${sd.high_spam.total} (原文${sd.high_spam.post}/评论${sd.high_spam.comment})</span> / <span style="color:#22c55e;">有机 ${sd.low_spam.total} (原文${sd.low_spam.post}/评论${sd.low_spam.comment})</span></div>`
+            html += `<div class="text-xs mt-1"><span style="color:#f59e0b;">推广 ${sd.high_spam.total} (原${sd.high_spam.post}/评${sd.high_spam.comment})</span> / <span style="color:#22c55e;">有机 ${sd.low_spam.total} (原${sd.low_spam.post}/评${sd.low_spam.comment})</span></div>`
           }
 
           return html
@@ -144,7 +144,7 @@ const getOption = (): EChartsOption => {
             const productInfo = products.length > 1 ? ` (${products.length}个产品)` : ''
             const sd = spamMap[p.seriesName]
             const spamInfo = sd?.high_spam && sd?.low_spam && (sd.high_spam.total > 0 || sd.low_spam.total > 0)
-              ? ` <span style="color:#f59e0b;">推广${sd.high_spam.total}(原文${sd.high_spam.post}/评论${sd.high_spam.comment})</span>/<span style="color:#22c55e;">有机${sd.low_spam.total}(原文${sd.low_spam.post}/评论${sd.low_spam.comment})</span>`
+              ? ` <span style="color:#f59e0b;">推广${sd.high_spam.total}(原${sd.high_spam.post}/评${sd.high_spam.comment})</span>/<span style="color:#22c55e;">有机${sd.low_spam.total}(原${sd.low_spam.post}/评${sd.low_spam.comment})</span>`
               : ''
             html += `
               <div class="flex items-center gap-2 text-xs">

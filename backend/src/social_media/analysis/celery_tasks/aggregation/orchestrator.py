@@ -585,10 +585,18 @@ def _empty_result() -> dict[str, Any]:
                 "neutral": 0,
             },
             "time_distribution": [],
-            # 新增图表（与正常结果一致）
+            # 新增图表（与正常结果一致，3 层结构）
             "ipa_analysis": {"quadrants": {}, "thresholds": {"x": 0, "y": 0}},
-            "competitor_radar": {"mode": "none"},
-            "context_graph": {"center_node": None, "nodes": [], "edges": []},
+            "competitor_radar": {
+                "all": {"mode": "none"},
+                "organic": {"mode": "none"},
+                "promo": {"mode": "none"},
+            },
+            "context_graph": {
+                "all": {"center_node": None, "nodes": [], "edges": []},
+                "organic": {"center_node": None, "nodes": [], "edges": []},
+                "promo": {"center_node": None, "nodes": [], "edges": []},
+            },
         },
         "freshness": {
             "last_7_days": 0.0,

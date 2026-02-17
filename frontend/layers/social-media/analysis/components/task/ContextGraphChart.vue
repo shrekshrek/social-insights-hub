@@ -190,30 +190,33 @@ onMounted(() => {
 
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-3">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">关联网络</h3>
-        <slot />
-      </div>
-      <div class="flex flex-wrap gap-2 text-xs">
-        <button
-          v-for="item in legendItems"
-          :key="item.key"
-          class="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all"
-          :class="[
-            visibleCategories.has(item.key) 
-              ? 'opacity-100' 
-              : 'opacity-40 line-through',
-            item.key === 'center' ? 'cursor-default' : 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700'
-          ]"
-          @click="toggleCategory(item.key)"
-        >
-          <span class="w-2 h-2 rounded-full" :class="item.color" />
-          <span class="text-gray-500">{{ item.label }}</span>
-        </button>
-      </div>
+    <!-- 标题 + slot (全部/推广/有机按钮) -->
+    <div class="flex items-center gap-3 mb-4">
+      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">关联网络</h3>
+      <slot />
     </div>
+
+    <!-- 图表 -->
     <div ref="chartRef" class="w-full h-80" />
+
+    <!-- 图例 - 底部居中 -->
+    <div class="flex justify-center gap-2 text-xs mt-3">
+      <button
+        v-for="item in legendItems"
+        :key="item.key"
+        class="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all"
+        :class="[
+          visibleCategories.has(item.key)
+            ? 'opacity-100'
+            : 'opacity-40 line-through',
+          item.key === 'center' ? 'cursor-default' : 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700'
+        ]"
+        @click="toggleCategory(item.key)"
+      >
+        <span class="w-2 h-2 rounded-full" :class="item.color" />
+        <span class="text-gray-500">{{ item.label }}</span>
+      </button>
+    </div>
   </div>
 </template>
 

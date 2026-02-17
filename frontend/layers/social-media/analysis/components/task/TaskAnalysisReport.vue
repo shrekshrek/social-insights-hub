@@ -51,8 +51,8 @@ const kolVoicesExpanded = ref(false)
 const kolFilterMode = ref('all')
 const kolFilterOptions = [
   { value: 'all', label: '全部' },
-  { value: 'organic', label: '仅有机' },
   { value: 'promo', label: '仅推广' },
+  { value: 'organic', label: '仅有机' },
 ]
 
 /** 是否有任何 KOL 声音携带 spam 数据 */
@@ -183,8 +183,8 @@ const contextGraphFilterMode = ref('all')
 const competitorRadarFilterMode = ref('all')
 const dimensionFilterOptions = [
   { value: 'all', label: '全部' },
-  { value: 'organic', label: '仅有机' },
   { value: 'promo', label: '仅推广' },
+  { value: 'organic', label: '仅有机' },
 ]
 
 /** 是否有关联网络 spam 数据（检查 organic 和 promo 是否与 all 不同） */

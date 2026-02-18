@@ -33,7 +33,44 @@ graph TD
     end
 ```
 
-## 1.1 情感评分体系说明 (Sentiment Scoring System) [重要设计决策]
+## 1.1 4D Spam 维度体系 (4D Spam Dimension System) [重要设计决策]
+
+所有聚合分析都贯穿一套 **4D Spam 维度**，用于区分内容来源的真实性：
+
+```
+spam_score >= 6.0  →  high_spam（推广内容）
+spam_score <  6.0  →  low_spam （有机内容）
+
+× 来源维度：post（帖子原文） / comment（评论区）
+
+= 4 个维度：高广告·原文 / 高广告·评论 / 有机·原文 / 有机·评论
+```
+
+**核心数据结构**：
+
+```python
+SpamDistribution = {
+    "high_spam": {"total": int, "post": int, "comment": int},
+    "low_spam":  {"total": int, "post": int, "comment": int},
+}
+```
+
+**各分析模块的 4D 应用**：
+
+| 模块 | 4D 应用方式 |
+|------|------------|
+| 实体/话题 | `spam_distribution` 内联展示组成；`promo_sentiment`/`organic_sentiment` 分组情感 |
+| 核心指标 | `nsr_by_spam` 分组净情感率 |
+| 四象限 | 每个帖子携带 `spam_group`，聚合时统计推/机分布 |
+| 时间分布 | 每日数据携带 `spam_breakdown: {high, low}` |
+| IPA | 每个气泡点携带 `spam_distribution`，前端编码为实心/空心/半实心 |
+| 关联网络/竞品雷达 | 预计算三层：`all` / `organic` / `promo`，前端 TabSwitch 切换 |
+| KOL 声音 | 每条携带 `spam_group`，前端可按推广/有机筛选 |
+| 帖子溯源弹窗 | API 支持 `spam_group=high/low` 过滤参数，前端 3 个 tab：全部/推广/有机 |
+
+---
+
+## 1.2 情感评分体系说明 (Sentiment Scoring System) [重要设计决策]
 
 本项目采用**双重情感评分体系**，以平衡宏观趋势的敏锐度与微观提取的稳定性：
 
@@ -478,14 +515,21 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
       "screened": 85,            // 已初筛数量
       "deep_analyzed": 50,       // 已深度分析帖子数
       "comment_analyzed": 30     // 已分析评论的帖子数
+    },
+    "spam_config": {
+      "threshold": 6.0           // 推广/有机判断阈值（spam_score >= 阈值为推广）
     }
   },
   "metrics": {
-    "nsr": 0.45,            // 加权净情感率 [-1, 1]
+    "nsr": 0.45,            // 加权净情感率 [-2, +2]（全量数据）
+    "nsr_by_spam": {        // 分组净情感率（可选，有 spam 数据时存在）
+      "high": 0.72,         // 推广内容的 NSR
+      "low": 0.31           // 有机内容的 NSR
+    },
     "avg_cii": 24.5,        // 平均互动指数
     "serp_health": 65,      // 搜索健康度 (0-100)
     "marketing_analysis": {
-      "promotion_ratio": 0.15,  // 营销内容占比
+      "promotion_ratio": 0.15,  // 营销内容占比（spam_score >= threshold）
       "organic_ratio": 0.85,    // 自然内容占比
       "promotion_count": 12,
       "organic_count": 73
@@ -499,8 +543,9 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
   },
   "charts": {
     "quadrant": [
-      {"post_id": 101, "x": -0.8, "y": 45, "quadrant": "Q1_danger", "label": "发热严重"},
-      {"post_id": 102, "x": 0.9, "y": 30, "quadrant": "Q2_brand", "label": "拍照好看"}
+      // spam_group: "high"=推广, "low"=有机, null=未知
+      {"post_id": 101, "x": -0.8, "y": 45, "quadrant": "Q1_danger", "label": "发热严重", "spam_group": "low"},
+      {"post_id": 102, "x": 0.9, "y": 30, "quadrant": "Q2_brand", "label": "拍照好看", "spam_group": "high"}
     ],
     "quadrant_summary": {
       "Q1_danger": 5,    // 爆雷区：高互动+负面
@@ -510,9 +555,32 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
       "neutral": 10      // 中性区
     },
     "time_distribution": [
-      {"date": "2023-10-01", "count": 5}, // 仅用于展示内容的时效性分布，不做趋势解读
-      {"date": "2023-10-02", "count": 12}
-    ]
+      // spam_breakdown 可选，有 spam 数据时存在
+      {"date": "2023-10-01", "count": 5, "spam_breakdown": {"high": 2, "low": 3}, "post_ids": [101, 102]},
+      {"date": "2023-10-02", "count": 12, "spam_breakdown": {"high": 3, "low": 9}, "post_ids": [103, 104]}
+    ],
+    "time_distribution_skipped": 3, // 无发布时间的帖子数
+    // IPA 产品诊断：气泡图数据，按象限分组
+    "ipa_analysis": {
+      "quadrants": {
+        "strength":    [/* IpaPoint，见下方结构 */],
+        "improvement": [],
+        "maintain":    [],
+        "opportunity": []
+      }
+    },
+    // 关联网络：预计算三层，前端 TabSwitch 切换
+    "context_graph": {
+      "all":     {"nodes": [...], "links": [...]},
+      "organic": {"nodes": [...], "links": [...]}, // 仅 low_spam 帖子
+      "promo":   {"nodes": [...], "links": [...]}  // 仅 high_spam 帖子
+    },
+    // 竞品雷达：预计算三层
+    "competitor_radar": {
+      "all":     {"mode": "radar", "brands": [...], "dimensions": [...], "series": [...]},
+      "organic": {...},
+      "promo":   {...}
+    }
   },
   "freshness": {
     "last_7_days": 25,   // 最近7天的帖子数
@@ -529,13 +597,20 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "heat": 4500,               // Σ CII (去重后)
         "mentions": 15,             // 唯一帖子数
         "score": 12532.5,           // 综合评分 = heat × log(mentions + 1)
-        "sentiment": 0.35,          // 派生情感值 [-1, 1]，CII 加权
+        "sentiment": 0.35,          // 派生情感值 [-1, 1]，CII 加权（混合全部数据）
+        "promo_sentiment": 0.65,    // 促销情感（仅 spam_score >= 6.0 的帖子）
+        "organic_sentiment": 0.18,  // 有机情感（仅 spam_score < 6.0 的帖子）
         "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
         "source_distribution": {"post": 0.3, "comment": 0.7},
         "top_features": ["外观好看", "拍照清晰", "续航持久"],
         "top_issues": ["发热严重", "价格高"],
         "top_expectations": ["降价", "改善散热"],
-        "post_ids": [101, 102, 103, 105, 108]  // 帖子ID列表（用于追溯）
+        "post_ids": [101, 102, 103, 105, 108],  // 帖子ID列表（用于追溯）
+        // 4D spam 分布（可选，有 spam 数据时存在）
+        "spam_distribution": {
+          "high_spam": {"total": 8, "post": 5, "comment": 3},
+          "low_spam":  {"total": 7, "post": 3, "comment": 4}
+        }
       }
     ],
     "target_entities": [...],     // 本品实体列表（按 score 排序）
@@ -553,7 +628,12 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "source_distribution": {"post": 0.2, "comment": 0.8}, // 80% 来自评论，说明是用户痛点而非博主痛点
         "post_ids": [101, 102, 105, 108],  // 帖子ID列表（用于追溯）
         "post_source_count": 3,
-        "comment_source_count": 12
+        "comment_source_count": 12,
+        // 4D spam 分布（可选）
+        "spam_distribution": {
+          "high_spam": {"total": 10, "post": 8, "comment": 2},
+          "low_spam":  {"total": 5,  "post": 2, "comment": 3}
+        }
       },
       {
         "name": "发热",
@@ -622,7 +702,14 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
       ]
     },
     "kol_voices": [
-      {"author": "数码大V", "sentiment": 0.5, "summary": "综合体验不错，但有溢价", "post_id": "p101", "cii": 45.2}
+      {
+        "author": "数码大V",
+        "sentiment": 0.5,
+        "summary": "综合体验不错，但有溢价",
+        "post_id": 101,
+        "cii": 45.2,
+        "spam_group": "low"  // "high"=推广, "low"=有机, null=未知
+      }
     ]
   },
 
@@ -635,7 +722,9 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
       "category": "产品名",         // 实体类别 (如：品类词、属性词)
       "parent": "智能手机",         // 归属父类
       "type": "产品",
-      "sentiment": 0.35,           // 派生情感值 [-1, 1]，CII 加权
+      "sentiment": 0.35,           // 派生情感值 [-1, 1]，CII 加权（混合全部数据）
+      "promo_sentiment": 0.65,     // 促销情感（仅 spam_score >= 6.0 的帖子）
+      "organic_sentiment": 0.18,   // 有机情感（仅 spam_score < 6.0 的帖子）
       "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
       "heat": 4500,
       "mentions": 15,
@@ -704,24 +793,39 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 
 ## 6. 前端报告布局
 
-分析报告的展示顺序经过优化，按用户关注度和数据依赖关系排列：
+分析报告的展示顺序按"宏观概览 → 数据组成 → 内容洞察 → 溯源"排列：
 
 ```
-1. 热门观点（问题 vs 特性）  -- 用户最关注的核心洞察
-2. IPA 产品诊断              -- 基于观点数据的产品力分析
-3. 热门实体                  -- 实体画像和维度信息
-4. 竞品分析                  -- 基于实体数据的对比分析
-5. 场景与人群画像            -- 基于实体数据的派生分析
-6. 高影响力内容 (KOL)        -- 关键意见领袖
-7. 情感-互动四象限           -- 可视化分析
-8. 时间分布                  -- 数据时效性
+1. 分析概览                  -- 时间、关键词、数据量（总/初筛/深度/评论）、新鲜度（7/30天/均龄）
+2. 核心指标                  -- NSR（含推广/有机分组）、CII、SERP、营销浓度、舆论反差度
+3. 舆情四象限分布             -- 5个象限卡片，每个显示推广/有机比例条 + 数量，可点击查帖
+4. 时间分布                  -- 有 spam 数据时自动显示推广/有机堆叠面积图
+5. 产品力诊断 IPA            -- 气泡图，实心/空心/半实心编码有机比例，TabSwitch 过滤维度
+6. 热门话题（问题 vs 特性）   -- SpamRatioBar 内联 + TabSwitch 按4维排序
+7. 关联网络 / 竞品雷达       -- 并排，各自有 TabSwitch 切换全量/推广/有机视图
+8. 热门实体                  -- SpamRatioBar + 推广/有机情感对比 + TabSwitch 排序
+9. 高影响力内容 (KOL)        -- 每条带推广/有机 badge，TabSwitch 过滤
 ```
 
-**设计原则**：
-- 观点优先：用户最想了解的是"大家怎么说"
-- IPA 紧随观点：IPA 诊断直接基于观点和实体数据
-- 实体次之：实体画像提供更深入的结构化分析
-- 竞品/场景人群最后：这些是派生分析，依赖实体数据
+**各区段 4D 数据展示方式**：
+
+| 区段 | 展示形式 | 交互 |
+|------|---------|------|
+| 核心指标 | `nsr_by_spam` 文本 | 无 |
+| 四象限 | 比例条 + 推/机计数 | 点击→弹窗（含推广/有机 tab） |
+| 时间分布 | 堆叠面积图（推广+有机） | 点击日期→弹窗 |
+| IPA | 实心/空心/半实心编码 | TabSwitch 过滤；点击→弹窗 |
+| 热门话题 | SpamRatioBar（4D 明细） | TabSwitch 排序；点击数量→弹窗 |
+| 关联网络/竞品 | 三层预计算 | TabSwitch 全量/推广/有机 |
+| 热门实体 | SpamRatioBar + 情感对比 | TabSwitch 排序；点击数量→弹窗 |
+| KOL 声音 | 每条 badge 标注 | TabSwitch 过滤 |
+
+**帖子溯源弹窗（PostListModal）**：
+- 所有"查看帖子"入口共用同一弹窗
+- 有 spam 数据时显示三个 tab：**全部 / 推广 / 有机**
+- 对应后端 API `GET /tasks/{task_id}/posts?spam_group=high|low`，服务端按 `spam_score` 阈值过滤，分页正确
+
+**设计定位**：任务级分析为"数据整理"，核心目标是让用户清楚看到数据的 4D 组成（推广 vs 有机 × 原文 vs 评论），而非做最终决策判断。
 
 ## 7. 开发实现建议
 

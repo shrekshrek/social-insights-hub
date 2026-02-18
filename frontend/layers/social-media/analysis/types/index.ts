@@ -520,7 +520,9 @@ export interface EntityStat {
   heat: number
   mentions: number
   score: number  // 综合评分
-  sentiment: number  // 派生情感值 [-1, 1]，CII 加权
+  sentiment: number  // 派生情感值 [-1, 1]，CII 加权（混合全部数据）
+  promo_sentiment: number  // 促销情感（仅 spam_score >= 6.0 的帖子）
+  organic_sentiment: number  // 有机情感（仅 spam_score < 6.0 的帖子）
   sentiment_distribution: SentimentDistribution  // 情感分布
   source_distribution: SourceDistribution
   // 详细项（包含 original_terms，用于 UI 溯源展示）

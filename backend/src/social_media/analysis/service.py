@@ -506,6 +506,7 @@ async def get_task_post_analyses(
     search_query: str | None = None,
     search_id: int | None = None,
     post_ids: list[int] | None = None,
+    spam_group: str | None = None,
 ) -> tuple[List[Dict[str, Any]], int]:
     """获取任务下所有帖子的分析结果（带分页和搜索）
 
@@ -518,6 +519,7 @@ async def get_task_post_analyses(
         search_query: 关键词搜索（搜索标题和内容）
         search_id: 按帖子ID精确搜索
         post_ids: 按帖子ID列表筛选
+        spam_group: 按垃圾分组筛选（high=推广/low=有机，阈值6.0）
 
     Returns:
         (帖子分析列表, 总数)，每个帖子包含：
@@ -583,6 +585,12 @@ async def get_task_post_analyses(
 
     if filter_analyzed:
         stmt = stmt.where(PostAnalysis.spam_score.isnot(None))
+
+    # spam 分组过滤（独立于搜索条件）
+    if spam_group == "high":
+        stmt = stmt.where(PostAnalysis.spam_score >= 6.0)
+    elif spam_group == "low":
+        stmt = stmt.where(PostAnalysis.spam_score < 6.0)
 
     # 搜索条件
     if post_ids:

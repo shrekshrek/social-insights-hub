@@ -320,6 +320,7 @@ def aggregate_task_analysis(
             posts_data,
             task_keywords=task_keywords,
             enable_llm_normalization=enable_entity_normalization,
+            spam_threshold=spam_threshold,
         )
 
     def run_topic_aggregation():

@@ -41,6 +41,9 @@ from src.social_media.analysis.celery_tasks.aggregation.utils import (
     run_parallel_normalization,
     merge_token_stats,
 )
+from src.social_media.analysis.celery_tasks.aggregation.spam_distribution import (
+    _build_spam_map,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +168,11 @@ def _collect_raw_entities_full(
                 "competitors": defaultdict(set),
                 # 新增：竞品共现统计，用于生成线索
                 "competitor_stats": Counter(),
+                # 新增：按 spam 分组分别累加情感（用于区分促销 vs 有机情感）
+                "high_spam_sent_sum": 0.0,
+                "high_spam_sent_weight": 0.0,
+                "low_spam_sent_sum": 0.0,
+                "low_spam_sent_weight": 0.0,
             }
         return raw_entity_data[name]
 
@@ -324,6 +332,7 @@ def _merge_entity_data(
     name_mapping: dict[str, str],
     tags_mapping: dict[str, dict] | None = None,
     post_impact_map: dict[int, float] | None = None,
+    spam_map: dict[int, str] | None = None,
 ) -> dict[str, dict]:
     """通用实体数据合并函数
 
@@ -332,6 +341,7 @@ def _merge_entity_data(
         name_mapping: 名称映射 {original_name: canonical_name}
         tags_mapping: 标签映射 {canonical_name: tags_dict} (可选)
         post_impact_map: 帖子 Impact Score 映射 {post_id: impact} (可选)
+        spam_map: Spam 分组映射 {post_id: "high" | "low"} (可选)
 
     Returns:
         合并后的实体数据 {canonical_name: merged_entity_dict}
@@ -339,6 +349,7 @@ def _merge_entity_data(
     merged_data: dict[str, dict] = {}
     tags_mapping = tags_mapping or {}
     post_impact_map = post_impact_map or {}
+    spam_map = spam_map or {}
 
     def get_or_create_merged(canonical: str, entity_type: str) -> dict:
         """获取或创建合并后的实体数据结构"""
@@ -369,6 +380,11 @@ def _merge_entity_data(
                 "market_factors": defaultdict(set),
                 "competitors": defaultdict(set),
                 "original_terms": [],  # 统一使用 original_terms 替代 merged_from
+                # 新增：按 spam 分组分别累加情感（用于区分促销 vs 有机情感）
+                "high_spam_sent_sum": 0.0,
+                "high_spam_sent_weight": 0.0,
+                "low_spam_sent_sum": 0.0,
+                "low_spam_sent_weight": 0.0,
             }
         return merged_data[canonical]
 
@@ -417,6 +433,15 @@ def _merge_entity_data(
                     # 使用该帖子的 sentiment 正确计算加权和
                     sentiment = post_sentiments.get(post_id, 0)
                     merged["sentiment_weighted_sum"] += sentiment * smoothed_weight
+
+                    # 3. 按 spam 分组分别累加情感（用于区分促销 vs 有机情感）
+                    spam_group = spam_map.get(post_id)
+                    if spam_group == "high":
+                        merged["high_spam_sent_sum"] += sentiment * smoothed_weight
+                        merged["high_spam_sent_weight"] += smoothed_weight
+                    elif spam_group == "low":
+                        merged["low_spam_sent_sum"] += sentiment * smoothed_weight
+                        merged["low_spam_sent_weight"] += smoothed_weight
         else:
             # 预处理阶段：直接累加 total_impact（近似值，用于排序）
             merged["total_impact"] += raw_data.get("total_impact", 0.0)
@@ -743,10 +768,14 @@ def aggregate_entities(
     enable_llm_normalization: bool = True,
     top_n: int = 10,
     top_k_attrs: int = 50,  # 新增参数
+    spam_threshold: float = 6.0,  # 新增：spam 分组阈值
 ) -> dict[str, Any]:
     """聚合任务内的实体，生成焦点地图"""
     start_time = time.time()
     task_keywords = task_keywords or []
+
+    # 构建 spam_map（用于按 spam 分组分别累加情感）
+    spam_map = _build_spam_map(posts_data, threshold=spam_threshold)
 
     # ========================================
     # 1. 收集原始实体完整数据（只遍历一次！）
@@ -770,7 +799,7 @@ def aggregate_entities(
     # 3. 根据映射合并原始数据（无需再遍历 posts_data）
     # ========================================
     entity_data = _merge_entity_data(
-        raw_entity_data, name_mapping, tags_mapping, post_impact_map
+        raw_entity_data, name_mapping, tags_mapping, post_impact_map, spam_map
     )
 
     # 只保留 LLM 处理过的实体（有 tags 的）
@@ -858,6 +887,18 @@ def aggregate_entities(
                 data["sentiment_weighted_sum"] / data["total_weight"], 2
             )
 
+        # 计算促销情感和有机情感
+        promo_sentiment = 0.0
+        organic_sentiment = 0.0
+        if data["high_spam_sent_weight"] > 0:
+            promo_sentiment = round(
+                data["high_spam_sent_sum"] / data["high_spam_sent_weight"], 2
+            )
+        if data["low_spam_sent_weight"] > 0:
+            organic_sentiment = round(
+                data["low_spam_sent_sum"] / data["low_spam_sent_weight"], 2
+            )
+
         role = classify_entity_role(data["name"], data, task_keywords, competitor_names)
 
         # 辅助函数：安全地获取排序后的 keys
@@ -920,6 +961,8 @@ def aggregate_entities(
             "mentions": mentions,
             "score": score,
             "sentiment": derived_sentiment,
+            "promo_sentiment": promo_sentiment,
+            "organic_sentiment": organic_sentiment,
             "sentiment_distribution": {
                 "positive": data["positive_count"],
                 "negative": data["negative_count"],
@@ -975,6 +1018,18 @@ def aggregate_entities(
         if data["total_weight"] > 0:
             derived_sentiment = round(
                 data["sentiment_weighted_sum"] / data["total_weight"], 2
+            )
+
+        # 计算促销情感和有机情感
+        promo_sentiment = 0.0
+        organic_sentiment = 0.0
+        if data["high_spam_sent_weight"] > 0:
+            promo_sentiment = round(
+                data["high_spam_sent_sum"] / data["high_spam_sent_weight"], 2
+            )
+        if data["low_spam_sent_weight"] > 0:
+            organic_sentiment = round(
+                data["low_spam_sent_sum"] / data["low_spam_sent_weight"], 2
             )
 
         heat = round(data["total_impact"], 1)
@@ -1038,6 +1093,8 @@ def aggregate_entities(
             "canonical_name": data["canonical_name"],
             "type": data["type"],
             "sentiment": derived_sentiment,
+            "promo_sentiment": promo_sentiment,
+            "organic_sentiment": organic_sentiment,
             "sentiment_distribution": {
                 "positive": data["positive_count"],
                 "negative": data["negative_count"],

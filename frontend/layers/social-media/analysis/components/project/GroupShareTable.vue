@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import TabSwitch from '../shared/TabSwitch.vue'
+import SpamRatioBar from '../shared/SpamRatioBar.vue'
+
+interface SpamDistribution {
+  high_spam: { total: number; post: number; comment: number }
+  low_spam: { total: number; post: number; comment: number }
+}
 
 interface GroupShareItem {
   name: string
   heat: number
   mentions: number
+  spam_distribution?: SpamDistribution
 }
 
 const props = defineProps<{
@@ -16,6 +23,7 @@ const props = defineProps<{
     heat?: number
     mentions?: number
     role?: string
+    spam_distribution?: SpamDistribution
   }>
   maxItems?: number
 }>()
@@ -45,6 +53,7 @@ interface TreeNode {
   role?: string
   memberCount?: number
   top3Share?: number
+  spam_distribution?: SpamDistribution
   children: TreeNode[]
 }
 
@@ -92,6 +101,7 @@ const treeData = computed<TreeNode[]>(() => {
         share: totalShareBase > 0 ? ((shareMode === 'mentions' ? (e.mentions || 0) : (e.heat || 0)) / totalShareBase) : 0,
         isGroup: false,
         role: e.role,
+        spam_distribution: e.spam_distribution,
         children: [],
       }))
       .sort((a, b) => getMetricValue(b) - getMetricValue(a))
@@ -119,6 +129,7 @@ const treeData = computed<TreeNode[]>(() => {
       isGroup: true,
       memberCount: childrenAll.length,
       top3Share: groupShareBase > 0 ? top3Value / groupShareBase : 0,
+      spam_distribution: g.spam_distribution,
       children: children.slice(0, 5),
     })
   }
@@ -189,7 +200,7 @@ const maxShare = computed(() => {
               @click="node.children.length && toggleGroup(node.name)"
             >
               <td class="py-2.5 pr-4">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 mb-1">
                   <UIcon
                     v-if="node.children.length"
                     name="i-heroicons-chevron-right"
@@ -210,6 +221,9 @@ const maxShare = computed(() => {
                   >
                     Top3 {{ formatPercent(node.top3Share) }}
                   </span>
+                </div>
+                <div v-if="node.spam_distribution" class="ml-5">
+                  <SpamRatioBar :spam-distribution="node.spam_distribution" />
                 </div>
               </td>
               <td class="py-2.5 pr-4 text-right font-mono text-gray-700 dark:text-gray-300">
@@ -239,7 +253,7 @@ const maxShare = computed(() => {
                 class="bg-gray-50/50 dark:bg-gray-800/20"
               >
                 <td class="py-2 pr-4 pl-8">
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1.5 mb-1">
                     <span class="text-gray-600 dark:text-gray-400">{{ child.name }}</span>
                     <span
                       v-if="child.role && child.role !== 'Context'"
@@ -248,6 +262,9 @@ const maxShare = computed(() => {
                     >
                       {{ child.role === 'Target' ? '主体' : '竞品' }}
                     </span>
+                  </div>
+                  <div v-if="child.spam_distribution">
+                    <SpamRatioBar :spam-distribution="child.spam_distribution" />
                   </div>
                 </td>
                 <td class="py-2 pr-4 text-right font-mono text-xs text-gray-500 dark:text-gray-400">

@@ -90,7 +90,19 @@ def build_snapshot_layers(
         parent = str(e.get("parent") or "").strip()
         # 约定：parent="" 或 "Self" 时用自身作为 parent
         group = nm if not parent or parent.lower() == "self" else parent
-        b = group_bucket.setdefault(group, {"name": group, "heat": 0.0, "mentions": 0})
+        b = group_bucket.setdefault(
+            group,
+            {
+                "name": group,
+                "heat": 0.0,
+                "mentions": 0,
+                "_spam_high_post": 0,
+                "_spam_high_comment": 0,
+                "_spam_low_post": 0,
+                "_spam_low_comment": 0,
+                "_has_spam": False,
+            },
+        )
         try:
             b["heat"] += float(e.get("heat") or 0.0)
         except Exception:
@@ -99,15 +111,40 @@ def build_snapshot_layers(
             b["mentions"] += int(e.get("mentions") or 0)
         except Exception:
             pass
-    group_share = sorted(
-        [
-            {
-                "name": k,
-                "heat": round(float(v.get("heat") or 0.0), 3),
-                "mentions": int(v.get("mentions") or 0),
+        # Spam 分布累加
+        sd = e.get("spam_distribution")
+        if isinstance(sd, dict):
+            hs = sd.get("high_spam")
+            ls = sd.get("low_spam")
+            if isinstance(hs, dict) and isinstance(ls, dict):
+                b["_spam_high_post"] += int(hs.get("post") or 0)
+                b["_spam_high_comment"] += int(hs.get("comment") or 0)
+                b["_spam_low_post"] += int(ls.get("post") or 0)
+                b["_spam_low_comment"] += int(ls.get("comment") or 0)
+                b["_has_spam"] = True
+    group_share_items = []
+    for k, v in group_bucket.items():
+        item = {
+            "name": k,
+            "heat": round(float(v.get("heat") or 0.0), 3),
+            "mentions": int(v.get("mentions") or 0),
+        }
+        # 构建 spam_distribution
+        if v.get("_has_spam"):
+            hp = int(v.get("_spam_high_post") or 0)
+            hc = int(v.get("_spam_high_comment") or 0)
+            lp = int(v.get("_spam_low_post") or 0)
+            lc = int(v.get("_spam_low_comment") or 0)
+            item["spam_distribution"] = {
+                "high_spam": {"total": hp + hc, "post": hp, "comment": hc},
+                "low_spam": {"total": lp + lc, "post": lp, "comment": lc},
             }
-            for k, v in group_bucket.items()
-        ],
+        else:
+            item["spam_distribution"] = None
+        group_share_items.append(item)
+
+    group_share = sorted(
+        group_share_items,
         key=lambda x: x.get("heat", 0.0),
         reverse=True,
     )[:30]
@@ -248,6 +285,7 @@ def build_snapshot_layers(
             "heat": float(t.get("heat") or 0.0),
             "mentions": int(t.get("mentions") or 0),
             "sentiment": round(sent, 2),
+            "spam_distribution": t.get("spam_distribution"),
             "platform_distribution": t.get("platform_distribution") or {},
             "keyword_distribution": t.get("keyword_distribution") or {},
             "original_terms": t.get("original_terms") or [],
@@ -362,6 +400,7 @@ def build_snapshot_layers(
                 "heat": heat,
                 "mentions": mentions,
                 "sentiment": x.get("sentiment"),
+                "spam_distribution": x.get("spam_distribution"),
                 "coverage": coverage,
                 "platform_coverage": p_cov,
                 "keyword_coverage": k_cov,
@@ -523,6 +562,7 @@ def build_snapshot_layers(
                     "top_pain": top_pain,
                     "platform_distribution": e.get("platform_distribution") or {},
                     "keyword_distribution": e.get("keyword_distribution") or {},
+                    "spam_distribution": e.get("spam_distribution"),
                     "post_ids_sample": e.get("post_ids_sample") or [],
                     "source_tasks": e.get("source_tasks") or [],
                 }
@@ -635,7 +675,7 @@ def build_snapshot_layers(
 
             dim_evidence: dict[str, dict[str, Any]] = {}
 
-            def _acc(which: str, dim: str, sent: float, m: int) -> None:
+            def _acc(which: str, dim: str, sent: float, m: int, spam_dist: Any = None) -> None:
                 if not dim or m <= 0:
                     return
                 rec = dim_agg.setdefault(
@@ -645,14 +685,42 @@ def build_snapshot_layers(
                         "target_m": 0.0,
                         "comp_sent_sum": 0.0,
                         "comp_m": 0.0,
+                        "target_spam_high_post": 0,
+                        "target_spam_high_comment": 0,
+                        "target_spam_low_post": 0,
+                        "target_spam_low_comment": 0,
+                        "target_has_spam": False,
+                        "comp_spam_high_post": 0,
+                        "comp_spam_high_comment": 0,
+                        "comp_spam_low_post": 0,
+                        "comp_spam_low_comment": 0,
+                        "comp_has_spam": False,
                     },
                 )
                 if which == "target":
                     rec["target_sent_sum"] += sent * float(m)
                     rec["target_m"] += float(m)
+                    if isinstance(spam_dist, dict):
+                        hs = spam_dist.get("high_spam")
+                        ls = spam_dist.get("low_spam")
+                        if isinstance(hs, dict) and isinstance(ls, dict):
+                            rec["target_spam_high_post"] += int(hs.get("post") or 0)
+                            rec["target_spam_high_comment"] += int(hs.get("comment") or 0)
+                            rec["target_spam_low_post"] += int(ls.get("post") or 0)
+                            rec["target_spam_low_comment"] += int(ls.get("comment") or 0)
+                            rec["target_has_spam"] = True
                 else:
                     rec["comp_sent_sum"] += sent * float(m)
                     rec["comp_m"] += float(m)
+                    if isinstance(spam_dist, dict):
+                        hs = spam_dist.get("high_spam")
+                        ls = spam_dist.get("low_spam")
+                        if isinstance(hs, dict) and isinstance(ls, dict):
+                            rec["comp_spam_high_post"] += int(hs.get("post") or 0)
+                            rec["comp_spam_high_comment"] += int(hs.get("comment") or 0)
+                            rec["comp_spam_low_post"] += int(ls.get("post") or 0)
+                            rec["comp_spam_low_comment"] += int(ls.get("comment") or 0)
+                            rec["comp_has_spam"] = True
 
             for row in drivers_matrix:
                 if not isinstance(row, dict):
@@ -678,7 +746,8 @@ def build_snapshot_layers(
                         m = int(cell.get("mentions") or 0)
                     except Exception:
                         m = 0
-                    _acc(which, str(dim), sent, m)
+                    spam_dist = cell.get("spam_distribution")
+                    _acc(which, str(dim), sent, m, spam_dist)
                     # evidence merge
                     dim_key = str(dim)
                     evd = dim_evidence.setdefault(dim_key, {"target": {}, "comp": {}})
@@ -702,6 +771,29 @@ def build_snapshot_layers(
                 target_evd = _finalize_evidence(evd.get("target") or {})
                 comp_evd = _finalize_evidence(evd.get("comp") or {})
 
+                # 构建 target 和 competitor 的 spam_distribution
+                target_spam_dist = None
+                if rec.get("target_has_spam"):
+                    thp = int(rec.get("target_spam_high_post") or 0)
+                    thc = int(rec.get("target_spam_high_comment") or 0)
+                    tlp = int(rec.get("target_spam_low_post") or 0)
+                    tlc = int(rec.get("target_spam_low_comment") or 0)
+                    target_spam_dist = {
+                        "high_spam": {"total": thp + thc, "post": thp, "comment": thc},
+                        "low_spam": {"total": tlp + tlc, "post": tlp, "comment": tlc},
+                    }
+
+                comp_spam_dist = None
+                if rec.get("comp_has_spam"):
+                    chp = int(rec.get("comp_spam_high_post") or 0)
+                    chc = int(rec.get("comp_spam_high_comment") or 0)
+                    clp = int(rec.get("comp_spam_low_post") or 0)
+                    clc = int(rec.get("comp_spam_low_comment") or 0)
+                    comp_spam_dist = {
+                        "high_spam": {"total": chp + chc, "post": chp, "comment": chc},
+                        "low_spam": {"total": clp + clc, "post": clp, "comment": clc},
+                    }
+
                 item_base = {
                     "dimension": dim,
                     "target_sentiment": round(ts, 2),
@@ -709,6 +801,8 @@ def build_snapshot_layers(
                     "target_mentions": int(tm),
                     "competitor_mentions": int(cm),
                     "delta": round(delta, 2),
+                    "target_spam_distribution": target_spam_dist,
+                    "competitor_spam_distribution": comp_spam_dist,
                 }
 
                 if tm >= min_mentions and ts >= 0.2 and delta >= 0.15:

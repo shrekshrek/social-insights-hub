@@ -30,6 +30,24 @@ const roleColors: Record<string, string> = {
   Context: '#94a3b8',
 }
 
+// Spam 维度颜色
+const spamColors = {
+  organic: '#10b981',    // 有机主导（>70% organic）→ 绿色
+  promo: '#f59e0b',      // 推广主导（>70% promo）→ 橙色
+}
+
+// 计算有机占比和颜色
+const getSpamColor = (point: IndustryQuadrantPoint): string | null => {
+  const sd = point.spam_distribution
+  if (!sd) return null
+  const total = sd.high_spam.total + sd.low_spam.total
+  if (total === 0) return null
+  const organicRatio = sd.low_spam.total / total
+  if (organicRatio > 0.7) return spamColors.organic
+  if (organicRatio < 0.3) return spamColors.promo
+  return null  // 混合，使用角色颜色
+}
+
 const regionColors = {
   positive: 'rgba(16, 185, 129, 0.12)',
   negative: 'rgba(239, 68, 68, 0.12)',
@@ -123,7 +141,13 @@ const getOption = (): EChartsOption => {
       },
       labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
       itemStyle: {
-        color: roleColors[role],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        color: (params: any) => {
+          const point = params.data?.[4] as IndustryQuadrantPoint | undefined
+          if (!point) return roleColors[role]
+          const spamColor = getSpamColor(point)
+          return spamColor || roleColors[role]
+        },
         opacity: 0.75,
       },
       emphasis: {
@@ -140,7 +164,13 @@ const getOption = (): EChartsOption => {
           borderColor: '#111827',
           borderWidth: 1,
           shadowBlur: 10,
-          shadowColor: roleColors[role],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          shadowColor: (params: any) => {
+            const point = params.data?.[4] as IndustryQuadrantPoint | undefined
+            if (!point) return roleColors[role]
+            const spamColor = getSpamColor(point)
+            return spamColor || roleColors[role]
+          },
         },
       },
       data: arr,
@@ -194,6 +224,22 @@ const getOption = (): EChartsOption => {
         const roleLabel = point.role === 'Target' ? '主体' : point.role === 'Competitor' ? '竞品' : '行业实体'
         const mentions = point.mentions || 0
         const eff = mentions > 0 ? (Number(point.heat || heat) / mentions) : 0
+        let spamInfo = ''
+        if (point.spam_distribution) {
+          const sd = point.spam_distribution
+          const total = sd.high_spam.total + sd.low_spam.total
+          const organicRatio = total > 0 ? ((sd.low_spam.total / total) * 100).toFixed(0) : '-'
+          spamInfo = `
+            <div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb">
+              <div style="font-size:11px;color:#888;margin-bottom:2px">有机占比</div>
+              <div><b>${organicRatio}%</b> (${sd.low_spam.total}/${total})</div>
+              <div style="font-size:10px;color:#888;margin-top:2px">
+                推广 ${sd.high_spam.total} (原${sd.high_spam.post}/评${sd.high_spam.comment})<br>
+                有机 ${sd.low_spam.total} (原${sd.low_spam.post}/评${sd.low_spam.comment})
+              </div>
+            </div>
+          `
+        }
         return `
           <div style="font-weight:600;margin-bottom:4px">${name}</div>
           <div style="font-size:12px;color:#888">${roleLabel}</div>
@@ -203,6 +249,7 @@ const getOption = (): EChartsOption => {
             <div>提及：<b>${mentions}</b></div>
             <div>效能：<b>${mentions > 0 ? eff.toFixed(1) : '-'}</b>x</div>
           </div>
+          ${spamInfo}
         `
       },
     },
@@ -317,6 +364,14 @@ onMounted(() => {
       <span class="inline-flex items-center gap-1">
         <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: roleColors.Context }" />
         行业实体
+      </span>
+      <span class="inline-flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: spamColors.organic }" />
+        有机主导 (>70%)
+      </span>
+      <span class="inline-flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: spamColors.promo }" />
+        推广主导 (>70%)
       </span>
     </div>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400 mb-1">

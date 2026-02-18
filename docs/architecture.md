@@ -214,11 +214,13 @@ Stage 3: 聚合 (aggregation_tasks)       ← LLM: 归一化
 
 ```
 选择多个 DataTask
-  → Stage 1 (同步): 统计聚合 → 创建 ProjectAnalysisSnapshot
-  → Stage 2 (Celery): 跨任务实体/观点合并 (LLM)
+  → Stage 1 (同步): 统计聚合 + spam 分布计算 → 创建 ProjectAnalysisSnapshot
+  → Stage 2 (Celery): 跨任务实体/观点合并 (LLM)，传递 spam_distribution
   → Stage 3 (Celery): 项目级报告摘要 (LLM)
   → 更新 ProjectAnalysisSnapshot.result_data
 ```
+
+Stage 1 通过 outerjoin PostAnalysis 获取 spam_score，构建 `spam_map_by_key`（post_key → high/low），为每个实体/话题计算 4D spam 分布（`high_spam/low_spam × post/comment`）。Stage 2 归一化时累加传递该分布。
 
 ### 6.3 自动分析
 

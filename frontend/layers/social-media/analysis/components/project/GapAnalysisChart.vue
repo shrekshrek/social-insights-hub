@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
+import SpamRatioBar from '../shared/SpamRatioBar.vue'
 
 interface GapItem {
   dimension: string
@@ -9,6 +10,14 @@ interface GapItem {
   target_mentions: number
   competitor_mentions: number
   delta: number
+  target_spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
+  competitor_spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
 }
 
 interface GapData {
@@ -52,12 +61,40 @@ const getOption = (): EChartsOption => {
         const idx = params[0]?.dataIndex ?? 0
         const item = items.value[idx]
         if (!item) return ''
+        let targetSpamInfo = ''
+        if (item.target_spam_distribution) {
+          const sd = item.target_spam_distribution
+          const total = sd.high_spam.total + sd.low_spam.total
+          const organicRatio = total > 0 ? ((sd.low_spam.total / total) * 100).toFixed(0) : '-'
+          targetSpamInfo = `
+            <div style="margin-top:4px;font-size:11px">
+              我方有机占比: <b>${organicRatio}%</b><br>
+              <span style="color:#f59e0b;">推广${sd.high_spam.total}(原${sd.high_spam.post}/评${sd.high_spam.comment})</span> /
+              <span style="color:#22c55e;">有机${sd.low_spam.total}(原${sd.low_spam.post}/评${sd.low_spam.comment})</span>
+            </div>
+          `
+        }
+        let compSpamInfo = ''
+        if (item.competitor_spam_distribution) {
+          const sd = item.competitor_spam_distribution
+          const total = sd.high_spam.total + sd.low_spam.total
+          const organicRatio = total > 0 ? ((sd.low_spam.total / total) * 100).toFixed(0) : '-'
+          compSpamInfo = `
+            <div style="margin-top:4px;font-size:11px">
+              竞品有机占比: <b>${organicRatio}%</b><br>
+              <span style="color:#f59e0b;">推广${sd.high_spam.total}(原${sd.high_spam.post}/评${sd.high_spam.comment})</span> /
+              <span style="color:#22c55e;">有机${sd.low_spam.total}(原${sd.low_spam.post}/评${sd.low_spam.comment})</span>
+            </div>
+          `
+        }
         return `
           <div style="font-weight:600;margin-bottom:6px">${item.dimension}</div>
           <div style="font-size:12px">
             <div>${props.subject || '目标'}：<b style="color:${item.target_sentiment >= 0 ? '#10b981' : '#ef4444'}">${formatSentiment(item.target_sentiment)}</b> (${item.target_mentions}条)</div>
-            <div>竞品：<b style="color:${item.competitor_sentiment >= 0 ? '#10b981' : '#ef4444'}">${formatSentiment(item.competitor_sentiment)}</b> (${item.competitor_mentions}条)</div>
-            <div style="margin-top:4px;color:#f59e0b">⚠️ 竞品强项，我方缺失</div>
+            ${targetSpamInfo}
+            <div style="margin-top:6px">竞品：<b style="color:${item.competitor_sentiment >= 0 ? '#10b981' : '#ef4444'}">${formatSentiment(item.competitor_sentiment)}</b> (${item.competitor_mentions}条)</div>
+            ${compSpamInfo}
+            <div style="margin-top:6px;color:#f59e0b">⚠️ 竞品强项，我方缺失</div>
           </div>
         `
       },
@@ -176,6 +213,17 @@ onMounted(() => {
           <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
             竞品 <span class="font-mono text-emerald-600 dark:text-emerald-400">{{ formatSentiment(item.competitor_sentiment) }}</span> ({{ item.competitor_mentions }}条)
             · {{ subject || '目标' }} <span class="font-mono" :class="item.target_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">{{ formatSentiment(item.target_sentiment) }}</span> ({{ item.target_mentions }}条)
+          </div>
+          <!-- Spam 分布展示 -->
+          <div v-if="item.target_spam_distribution || item.competitor_spam_distribution" class="mt-1.5 space-y-0.5 text-[10px]">
+            <div v-if="item.target_spam_distribution" class="flex items-center gap-1.5">
+              <span class="text-gray-500 dark:text-gray-400 w-4 shrink-0">我</span>
+              <SpamRatioBar :spam-distribution="item.target_spam_distribution" />
+            </div>
+            <div v-if="item.competitor_spam_distribution" class="flex items-center gap-1.5">
+              <span class="text-gray-500 dark:text-gray-400 w-4 shrink-0">竞</span>
+              <SpamRatioBar :spam-distribution="item.competitor_spam_distribution" />
+            </div>
           </div>
         </div>
       </div>

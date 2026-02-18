@@ -107,6 +107,10 @@ export interface SOVRankingItem {
   score: number
   /** 热度份额 (%) */
   share: number
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
   source_tasks?: SourceTask[]
   post_ids_sample?: PostRef[]
 }
@@ -117,11 +121,19 @@ export interface GroupShareItem {
   total_heat: number
   total_mentions: number
   share: number
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
   members: Array<{
     name: string
     heat: number
     mentions: number
     contribution: number
+    spam_distribution?: {
+      high_spam: { total: number; post: number; comment: number }
+      low_spam: { total: number; post: number; comment: number }
+    }
   }>
 }
 
@@ -138,6 +150,10 @@ export interface IndustryQuadrantPoint {
   heat: number
   sentiment: number
   mentions: number
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
   source_tasks?: SourceTask[]
   post_ids_sample?: PostRef[]
 }
@@ -172,6 +188,10 @@ export interface TopicRadarItem {
   heat: number
   sentiment: number
   mentions: number
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
   original_terms?: OriginalTerm[]
   platform_distribution?: PlatformDistribution
   keyword_distribution?: KeywordDistribution
@@ -211,8 +231,20 @@ export interface TopicLayer {
 /** SWOT 矩阵项 */
 export interface SWOTItem {
   dimension: string
-  mentions: number
-  sentiment: number
+  target_sentiment: number
+  competitor_sentiment: number
+  target_mentions: number
+  competitor_mentions: number
+  delta: number
+  target_spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
+  competitor_spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
+  post_ids_sample?: PostRef[]
   original_terms?: OriginalTerm[]
 }
 
@@ -236,6 +268,10 @@ export interface ProductLineHealthItem {
   top_pain?: string
   platform_distribution?: PlatformDistribution
   keyword_distribution?: KeywordDistribution
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
   source_tasks?: SourceTask[]
   post_ids_sample?: PostRef[]
 }
@@ -251,10 +287,21 @@ export interface PlatformScissorsItem {
 /** Gap 分析项 */
 export interface GapAnalysisItem {
   dimension: string
+  target_sentiment: number
   competitor_sentiment: number
+  target_mentions: number
   competitor_mentions: number
-  subject_sentiment?: number
-  subject_mentions?: number
+  delta: number
+  target_spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
+  competitor_spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
+  post_ids_sample?: PostRef[]
+  original_terms?: OriginalTerm[]
 }
 
 /** Focus 层完整数据 */

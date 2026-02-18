@@ -416,6 +416,12 @@ def build_entities_aligned(
                 "post_ids_sample": [],
                 "_post_ids_sample_set": set(),
                 "source_tasks": {},
+                # Spam 4D 分布累加器
+                "_spam_high_post": 0,
+                "_spam_high_comment": 0,
+                "_spam_low_post": 0,
+                "_spam_low_comment": 0,
+                "_spam_found": False,
             }
             bucket[canon] = b
         b["original_names"].append(raw_name)
@@ -470,6 +476,19 @@ def build_entities_aligned(
             if tid <= 0 or cnt <= 0:
                 continue
             b["source_tasks"][tid] = int(b["source_tasks"].get(tid, 0)) + cnt
+        # Spam 分布累加
+        sd = e.get("spam_distribution")
+        if isinstance(sd, dict):
+            hs = sd.get("high_spam")
+            ls = sd.get("low_spam")
+            if isinstance(hs, dict) or isinstance(ls, dict):
+                b["_spam_found"] = True
+            if isinstance(hs, dict):
+                b["_spam_high_post"] += int(hs.get("post") or 0)
+                b["_spam_high_comment"] += int(hs.get("comment") or 0)
+            if isinstance(ls, dict):
+                b["_spam_low_post"] += int(ls.get("post") or 0)
+                b["_spam_low_comment"] += int(ls.get("comment") or 0)
         # 帖子样本合并（去重 + 限制数量）
         for ref in e.get("post_ids_sample") or []:
             if len(b["post_ids_sample"]) >= max_post_ids_sample:
@@ -521,6 +540,18 @@ def build_entities_aligned(
                 reverse=True,
             )[:20]
         ]
+        # Spam 4D 分布
+        spam_distribution = None
+        if b.get("_spam_found"):
+            hp = b["_spam_high_post"]
+            hc = b["_spam_high_comment"]
+            lp = b["_spam_low_post"]
+            lc = b["_spam_low_comment"]
+            spam_distribution = {
+                "high_spam": {"total": hp + hc, "post": hp, "comment": hc},
+                "low_spam": {"total": lp + lc, "post": lp, "comment": lc},
+            }
+
         aligned.append(
             {
                 "name": b["name"],
@@ -538,6 +569,7 @@ def build_entities_aligned(
                     "negative": b.get("negative_count") or 0,
                     "neutral": b.get("neutral_count") or 0,
                 },
+                "spam_distribution": spam_distribution,
                 "platform_distribution": b["platform_distribution"],
                 "keyword_distribution": b["keyword_distribution"],
                 "source_tasks": [

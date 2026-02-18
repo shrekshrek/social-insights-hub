@@ -1,6 +1,5 @@
 """测试 build_context_graph 的 spam 维度筛选功能"""
 
-import pytest
 from src.social_media.analysis.celery_tasks.aggregation.insights import build_context_graph
 
 

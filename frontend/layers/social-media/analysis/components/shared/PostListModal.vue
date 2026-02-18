@@ -15,6 +15,8 @@ const props = defineProps<{
   /** 多任务样本：用于项目快照等跨任务场景 */
   groups?: Array<{ taskId: number; postIds: number[]; label?: string; platform?: string }>
   title?: string
+  /** 是否显示推广/有机分组 tab */
+  hasSpamData?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -25,6 +27,16 @@ const { getTaskPostAnalyses } = useAnalysis()
 
 const page = ref(1)
 const pageSize = ref(20)
+const spamGroup = ref<'high' | 'low' | undefined>(undefined)
+
+const spamTabs = [
+  { value: undefined, label: '全部' },
+  { value: 'high' as const, label: '推广' },
+  { value: 'low' as const, label: '有机' },
+]
+
+// 懒记录各 tab 的 total，访问一次后就显示数量，无需额外请求
+const tabTotals = reactive<Partial<Record<string, number>>>({})
 
 const groups = computed(() => (Array.isArray(props.groups) ? props.groups : []))
 const hasGroups = computed(() => groups.value.length > 0)
@@ -34,6 +46,9 @@ watch(
   () => [props.open, groups.value.length],
   ([isOpen]) => {
     if (!isOpen) return
+    spamGroup.value = undefined
+    // 重置 tabTotals
+    Object.keys(tabTotals).forEach(k => delete tabTotals[k])
     if (hasGroups.value) {
       selectedTaskId.value = groups.value[0]?.taskId
     } else {
@@ -69,10 +84,18 @@ const {
   pageSize,
   filterAnalyzed: false,
   postIds: postIdsRef,
+  spamGroup,
 })
 
 const posts = computed(() => postData.value?.items || [])
 const total = computed(() => postData.value?.total || 0)
+
+// 每次请求完成后记录当前 tab 的 total
+watch([total, loading], ([newTotal, isLoading]) => {
+  if (!isLoading && newTotal !== undefined) {
+    tabTotals[String(spamGroup.value)] = newTotal
+  }
+})
 
 // 深度分析结果弹窗状态
 const deepResultModalOpen = ref(false)
@@ -96,8 +119,8 @@ const { columns } = usePostAnalysisColumns({
   contentColumnSize: 160,
 })
 
-// 当弹窗打开或 postIds 变化时刷新数据
-watch(() => [props.open, postIdsRef.value, safeTaskId.value], ([isOpen]) => {
+// 当弹窗打开或 postIds / spamGroup 变化时重置分页并刷新
+watch(() => [props.open, postIdsRef.value, safeTaskId.value, spamGroup.value], ([isOpen]) => {
   if (isOpen && safeTaskId.value > 0 && postIdsRef.value.length > 0) {
     page.value = 1
     refresh()
@@ -113,11 +136,28 @@ const handleClose = () => {
   <UModal
     :open="open"
     :title="title || `相关帖子（样本）(${postIdsRef.length})`"
-    :description="`共 ${total} 条帖子`"
     :ui="{ content: 'w-[calc(100vw-2rem)] max-w-6xl rounded-lg shadow-lg ring ring-default', footer: 'justify-end' }"
     @update:open="handleClose"
   >
     <template #body>
+      <!-- 副标题：帖子数 + 推广/有机分组切换 -->
+      <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
+        <span>共 {{ total }} 条帖子</span>
+        <div v-if="hasSpamData" class="flex items-center gap-1 text-[11px]">
+          <button
+            v-for="tab in spamTabs"
+            :key="String(tab.value)"
+            class="px-2 py-0.5 rounded border transition-colors"
+            :class="spamGroup === tab.value
+              ? 'bg-primary-500 text-white border-primary-500'
+              : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
+            @click="spamGroup = tab.value"
+          >
+            {{ tab.label }}{{ tabTotals[String(tab.value)] !== undefined ? ` ${tabTotals[String(tab.value)]}` : '' }}
+          </button>
+        </div>
+      </div>
+
       <div v-if="hasGroups" class="mb-3 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
         <span class="shrink-0">任务：</span>
         <USelect

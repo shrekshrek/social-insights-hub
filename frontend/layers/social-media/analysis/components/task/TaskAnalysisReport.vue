@@ -235,6 +235,22 @@ const getQuadrantSpamBreakdown = (quadrant: string): { promo: number; organic: n
   return { promo, organic }
 }
 
+/** 四象限 spam 分布（预计算，含有机/推广比例） */
+const quadrantSpamBreakdowns = computed(() => {
+  const keys = ['Q1_danger', 'Q2_brand', 'Q3_complaint', 'Q4_niche', 'neutral'] as const
+  const result = {} as Record<string, { promo: number; organic: number; promoRatio: number } | null>
+  for (const key of keys) {
+    const bd = getQuadrantSpamBreakdown(key)
+    if (bd) {
+      const total = bd.promo + bd.organic
+      result[key] = { ...bd, promoRatio: total > 0 ? bd.promo / total : 0 }
+    } else {
+      result[key] = null
+    }
+  }
+  return result
+})
+
 /** 处理时间分布图表点击事件 */
 const handleTimeChartClick = (date: string, postIds: number[]) => {
   openPostListModal(`${date} 发布的内容`, postIds)
@@ -314,6 +330,11 @@ const getSpamGroupColor = (group: string | undefined | null) => {
 
 const hasContextGraph = computed(() => !!props.data.charts.context_graph?.all?.nodes?.length)
 const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?.all && props.data.charts.competitor_radar.all.mode !== 'none'))
+
+/** 是否有任何 spam 数据（用于帖子列表弹窗显示分组 tab） */
+const hasAnySpamData = computed(() =>
+  hasEntitySpamData.value || hasTopicSpamData.value || hasIpaSpamData.value || hasKolSpamData.value,
+)
 
 </script>
 
@@ -486,11 +507,16 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
           <p class="text-xl font-bold text-red-600 dark:text-red-400">{{ data.charts.quadrant_summary.Q1_danger }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">爆雷区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">高互动/负面</p>
-          <p v-if="getQuadrantSpamBreakdown('Q1_danger')" class="text-[10px] mt-0.5">
-            <span class="text-orange-500">推广 {{ getQuadrantSpamBreakdown('Q1_danger')!.promo }}</span>
-            <span class="text-gray-300 dark:text-gray-600"> / </span>
-            <span class="text-green-500">有机 {{ getQuadrantSpamBreakdown('Q1_danger')!.organic }}</span>
-          </p>
+          <div v-if="quadrantSpamBreakdowns['Q1_danger']" class="mt-1.5 w-full px-0.5">
+            <div class="flex h-1 rounded-full overflow-hidden">
+              <div class="bg-orange-400" :style="{ width: (quadrantSpamBreakdowns['Q1_danger'].promoRatio * 100).toFixed(0) + '%' }" />
+              <div class="bg-green-400 flex-1" />
+            </div>
+            <div class="flex justify-between text-[10px] mt-0.5">
+              <span class="text-orange-500">推 {{ quadrantSpamBreakdowns['Q1_danger'].promo }}</span>
+              <span class="text-green-500">机 {{ quadrantSpamBreakdowns['Q1_danger'].organic }}</span>
+            </div>
+          </div>
         </button>
         <button
           class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors cursor-pointer"
@@ -500,11 +526,16 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
           <p class="text-xl font-bold text-green-600 dark:text-green-400">{{ data.charts.quadrant_summary.Q2_brand }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">品牌区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">高互动/正面</p>
-          <p v-if="getQuadrantSpamBreakdown('Q2_brand')" class="text-[10px] mt-0.5">
-            <span class="text-orange-500">推广 {{ getQuadrantSpamBreakdown('Q2_brand')!.promo }}</span>
-            <span class="text-gray-300 dark:text-gray-600"> / </span>
-            <span class="text-green-500">有机 {{ getQuadrantSpamBreakdown('Q2_brand')!.organic }}</span>
-          </p>
+          <div v-if="quadrantSpamBreakdowns['Q2_brand']" class="mt-1.5 w-full px-0.5">
+            <div class="flex h-1 rounded-full overflow-hidden">
+              <div class="bg-orange-400" :style="{ width: (quadrantSpamBreakdowns['Q2_brand'].promoRatio * 100).toFixed(0) + '%' }" />
+              <div class="bg-green-400 flex-1" />
+            </div>
+            <div class="flex justify-between text-[10px] mt-0.5">
+              <span class="text-orange-500">推 {{ quadrantSpamBreakdowns['Q2_brand'].promo }}</span>
+              <span class="text-green-500">机 {{ quadrantSpamBreakdowns['Q2_brand'].organic }}</span>
+            </div>
+          </div>
         </button>
         <button
           class="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors cursor-pointer"
@@ -514,11 +545,16 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
           <p class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ data.charts.quadrant_summary.Q3_complaint }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">吐槽区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">低互动/负面</p>
-          <p v-if="getQuadrantSpamBreakdown('Q3_complaint')" class="text-[10px] mt-0.5">
-            <span class="text-orange-500">推广 {{ getQuadrantSpamBreakdown('Q3_complaint')!.promo }}</span>
-            <span class="text-gray-300 dark:text-gray-600"> / </span>
-            <span class="text-green-500">有机 {{ getQuadrantSpamBreakdown('Q3_complaint')!.organic }}</span>
-          </p>
+          <div v-if="quadrantSpamBreakdowns['Q3_complaint']" class="mt-1.5 w-full px-0.5">
+            <div class="flex h-1 rounded-full overflow-hidden">
+              <div class="bg-orange-400" :style="{ width: (quadrantSpamBreakdowns['Q3_complaint'].promoRatio * 100).toFixed(0) + '%' }" />
+              <div class="bg-green-400 flex-1" />
+            </div>
+            <div class="flex justify-between text-[10px] mt-0.5">
+              <span class="text-orange-500">推 {{ quadrantSpamBreakdowns['Q3_complaint'].promo }}</span>
+              <span class="text-green-500">机 {{ quadrantSpamBreakdowns['Q3_complaint'].organic }}</span>
+            </div>
+          </div>
         </button>
         <button
           class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors cursor-pointer"
@@ -528,11 +564,16 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
           <p class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ data.charts.quadrant_summary.Q4_niche }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">自嗨区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">低互动/正面</p>
-          <p v-if="getQuadrantSpamBreakdown('Q4_niche')" class="text-[10px] mt-0.5">
-            <span class="text-orange-500">推广 {{ getQuadrantSpamBreakdown('Q4_niche')!.promo }}</span>
-            <span class="text-gray-300 dark:text-gray-600"> / </span>
-            <span class="text-green-500">有机 {{ getQuadrantSpamBreakdown('Q4_niche')!.organic }}</span>
-          </p>
+          <div v-if="quadrantSpamBreakdowns['Q4_niche']" class="mt-1.5 w-full px-0.5">
+            <div class="flex h-1 rounded-full overflow-hidden">
+              <div class="bg-orange-400" :style="{ width: (quadrantSpamBreakdowns['Q4_niche'].promoRatio * 100).toFixed(0) + '%' }" />
+              <div class="bg-green-400 flex-1" />
+            </div>
+            <div class="flex justify-between text-[10px] mt-0.5">
+              <span class="text-orange-500">推 {{ quadrantSpamBreakdowns['Q4_niche'].promo }}</span>
+              <span class="text-green-500">机 {{ quadrantSpamBreakdowns['Q4_niche'].organic }}</span>
+            </div>
+          </div>
         </button>
         <button
           class="text-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors cursor-pointer"
@@ -542,11 +583,16 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
           <p class="text-xl font-bold text-gray-600 dark:text-gray-300">{{ data.charts.quadrant_summary.neutral }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">中性区</p>
           <p class="text-xs text-gray-400 dark:text-gray-500">情感中立</p>
-          <p v-if="getQuadrantSpamBreakdown('neutral')" class="text-[10px] mt-0.5">
-            <span class="text-orange-500">推广 {{ getQuadrantSpamBreakdown('neutral')!.promo }}</span>
-            <span class="text-gray-300 dark:text-gray-600"> / </span>
-            <span class="text-green-500">有机 {{ getQuadrantSpamBreakdown('neutral')!.organic }}</span>
-          </p>
+          <div v-if="quadrantSpamBreakdowns['neutral']" class="mt-1.5 w-full px-0.5">
+            <div class="flex h-1 rounded-full overflow-hidden">
+              <div class="bg-orange-400" :style="{ width: (quadrantSpamBreakdowns['neutral'].promoRatio * 100).toFixed(0) + '%' }" />
+              <div class="bg-green-400 flex-1" />
+            </div>
+            <div class="flex justify-between text-[10px] mt-0.5">
+              <span class="text-orange-500">推 {{ quadrantSpamBreakdowns['neutral'].promo }}</span>
+              <span class="text-green-500">机 {{ quadrantSpamBreakdowns['neutral'].organic }}</span>
+            </div>
+          </div>
         </button>
       </div>
     </section>
@@ -749,6 +795,12 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
               <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
                 {{ getSentimentLabel(entity.sentiment) }}
               </UBadge>
+              <!-- 推广 vs 有机情感对比：两组均有数据且差值 > 0.3 时展示 -->
+              <template v-if="entity.spam_distribution && entity.spam_distribution.high_spam.total > 0 && entity.spam_distribution.low_spam.total > 0 && Math.abs((entity.promo_sentiment ?? 0) - (entity.organic_sentiment ?? 0)) > 0.3">
+                <span class="text-gray-300 dark:text-gray-600">·</span>
+                <span class="text-orange-500 dark:text-orange-400">推 {{ entity.promo_sentiment?.toFixed(2) }}</span>
+                <span class="text-green-600 dark:text-green-400">机 {{ entity.organic_sentiment?.toFixed(2) }}</span>
+              </template>
             </div>
           </div>
           <!-- 情感分布 + Spam 分布 -->
@@ -885,6 +937,7 @@ const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?
       :task-id="taskId"
       :post-ids="postListModalPostIds"
       :title="postListModalTitle"
+      :has-spam-data="hasAnySpamData"
     />
   </div>
 </template>

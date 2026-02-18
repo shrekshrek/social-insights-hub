@@ -13,6 +13,24 @@ const emit = defineEmits<{
 
 const { chartRef, initChart, setOption, getInstance } = useCharts()
 
+/**
+ * 根据有机比例计算点样式：
+ * - 有机为主(≥65%) → 实心（默认），标签完整可读
+ * - 推广为主(≤35%) → 空心（仅外框），语义上"内容不实"
+ * - 中间         → 半实心（填充色半透明，外框保留）
+ */
+const getPointItemStyle = (item: IpaPoint, seriesColor: string): Record<string, unknown> => {
+  const sd = item.spam_distribution
+  if (!sd) return {}
+  const total = (sd.high_spam?.total ?? 0) + (sd.low_spam?.total ?? 0)
+  if (total === 0) return {}
+  const organicRatio = (sd.low_spam?.total ?? 0) / total
+  if (organicRatio >= 0.65) return {}  // 实心，使用 series 默认样式
+  if (organicRatio <= 0.35) return { color: 'transparent', borderColor: seriesColor, borderWidth: 2 }
+  // 中间：半实心
+  return { color: seriesColor + '66', borderColor: seriesColor, borderWidth: 1.5 }
+}
+
 const getOption = (): EChartsOption => {
   if (!props.data?.quadrants) return {}
 
@@ -216,16 +234,18 @@ const getOption = (): EChartsOption => {
           return {
             // 使用布局后的坐标进行绘图
             value: [
-              pos.x, 
-              pos.y, 
+              pos.x,
+              pos.y,
               item.z || 1, // 索引 2: 使用后端计算的 z 值 (Bubble Size)
-              item.name, 
+              item.name,
               item.post_ids,
               item.x, // 索引 5: 原始 X
               item.y  // 索引 6: 原始 Y
             ],
             // 保留原始属性以便 tooltip 使用
-            ...item
+            ...item,
+            // 按有机比例编码点样式：有机为主→实心，推广为主→空心，中间→半实心
+            itemStyle: getPointItemStyle(item, s.color),
           }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         }) as any[], // 类型断言绕过 ECharts 严格类型检查

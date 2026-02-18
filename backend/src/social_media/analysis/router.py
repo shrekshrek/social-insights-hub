@@ -284,6 +284,7 @@ async def get_task_post_analyses(
     search_query: str | None = Query(None, description="关键词搜索（搜索标题和内容）"),
     search_id: int | None = Query(None, description="按帖子ID精确搜索（对应表格ID列）"),
     post_ids: str | None = Query(None, description="按帖子ID列表筛选（逗号分隔）"),
+    spam_group: str | None = Query(None, description="按垃圾分组筛选（high=推广/low=有机）"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -294,6 +295,7 @@ async def get_task_post_analyses(
     - 包含帖子基本信息和分析结果
     - 支持分页查询和搜索
     - 支持按帖子ID列表筛选（post_ids参数，逗号分隔）
+    - 支持按垃圾分组筛选（spam_group=high/low）
     """
     # 解析 post_ids 参数
     post_ids_list: list[int] | None = None
@@ -305,6 +307,9 @@ async def get_task_post_analyses(
         except ValueError:
             pass  # 忽略无效的ID
 
+    # 校验 spam_group 参数
+    valid_spam_group = spam_group if spam_group in ("high", "low") else None
+
     items, total = await service.get_task_post_analyses(
         db,
         task_id,
@@ -315,6 +320,7 @@ async def get_task_post_analyses(
         search_query=search_query,
         search_id=search_id,
         post_ids=post_ids_list,
+        spam_group=valid_spam_group,
     )
 
     return PostAnalysisListResponse(

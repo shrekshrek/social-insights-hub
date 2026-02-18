@@ -26,14 +26,14 @@ const handleClick = (value: string) => {
 </script>
 
 <template>
-  <div class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+  <div class="flex items-center gap-1 text-[11px]">
     <button
       v-for="option in options"
       :key="option.value"
-      class="px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800 transition-colors"
+      class="px-2 py-0.5 rounded border transition-colors"
       :class="isActive(option.value)
-        ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200'
-        : 'bg-transparent hover:bg-gray-50/50 dark:hover:bg-gray-800/30'"
+        ? 'bg-primary-500 text-white border-primary-500'
+        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
       @click="handleClick(option.value)"
     >
       {{ option.label }}

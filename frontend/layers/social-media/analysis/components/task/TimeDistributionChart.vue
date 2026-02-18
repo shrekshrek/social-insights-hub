@@ -4,10 +4,9 @@
  *
  * 展示内容发布时间分布的折线图，支持总量/推广-有机分组两种视图
  */
-import { ref, watch, onMounted, nextTick } from 'vue'
+import { watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
 import type { SpamCountBreakdown } from '../../types'
-import TabSwitch from '../shared/TabSwitch.vue'
 
 interface TimeDistributionItem {
   date: string
@@ -26,13 +25,6 @@ const emit = defineEmits<{
 }>()
 
 const { chartRef, initChart, setOption, getInstance } = useCharts()
-
-// 视图切换
-const viewMode = ref('total')
-const viewModeOptions = [
-  { value: 'total', label: '总量' },
-  { value: 'spam_split', label: '分组' },
-]
 
 /** 是否存在 spam 分组数据 */
 const hasSpamData = computed(() =>
@@ -178,9 +170,8 @@ const getSpamSplitOption = (dist: TimeDistributionItem[]): EChartsOption => ({
 const getOption = (): EChartsOption => {
   const dist = props.data || []
   if (dist.length === 0) return {}
-  if (viewMode.value === 'spam_split' && hasSpamData.value) {
-    return getSpamSplitOption(dist)
-  }
+  // 有 spam 数据时直接用分组视图，无需切换
+  if (hasSpamData.value) return getSpamSplitOption(dist)
   return getTotalOption(dist)
 }
 
@@ -213,7 +204,6 @@ const updateChart = async () => {
 }
 
 watch(() => props.data, updateChart, { deep: true })
-watch(viewMode, updateChart)
 
 onMounted(() => {
   updateChart()
@@ -227,7 +217,6 @@ const totalCount = computed(() => props.data?.reduce((sum, i) => sum + i.count, 
   <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">内容发布时间分布</h3>
-      <TabSwitch v-if="hasSpamData" v-model="viewMode" :options="viewModeOptions" />
     </div>
     <div ref="chartRef" class="w-full h-48" />
     <div class="mt-3 flex items-center justify-between text-xs text-gray-500">

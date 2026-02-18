@@ -172,6 +172,7 @@ export const useAnalysis = () => {
       searchQuery?: MaybeRef<string>
       searchId?: MaybeRef<number | null>
       postIds?: MaybeRef<number[] | null>
+      spamGroup?: MaybeRef<string | undefined>
     }
   ) => {
     const page = options?.page ?? 1
@@ -180,6 +181,7 @@ export const useAnalysis = () => {
     const searchQuery = options?.searchQuery ?? ''
     const searchId = options?.searchId ?? null
     const postIds = options?.postIds ?? null
+    const spamGroup = options?.spamGroup ?? undefined
 
     return useApiData<PostAnalysisListResponse>(
       computed(() => {
@@ -192,6 +194,7 @@ export const useAnalysis = () => {
         const query = unref(searchQuery)
         const id = unref(searchId)
         const ids = unref(postIds)
+        const sg = unref(spamGroup)
         if (query) {
           params.set('search_query', query)
         }
@@ -201,6 +204,9 @@ export const useAnalysis = () => {
         if (ids && ids.length > 0) {
           params.set('post_ids', ids.join(','))
         }
+        if (sg === 'high' || sg === 'low') {
+          params.set('spam_group', sg)
+        }
 
         return `/social-media/analysis/tasks/${unref(taskId)}/posts?${params}`
       }),
@@ -209,8 +215,9 @@ export const useAnalysis = () => {
           const query = unref(searchQuery)
           const id = unref(searchId)
           const ids = unref(postIds)
+          const sg = unref(spamGroup)
           const idsKey = ids ? ids.slice(0, 10).join('-') : ''  // 只用前10个ID作为key的一部分
-          return `task-post-analyses-${unref(taskId)}-${unref(page)}-${unref(pageSize)}-${query}-${id}-${idsKey}`
+          return `task-post-analyses-${unref(taskId)}-${unref(page)}-${unref(pageSize)}-${query}-${id}-${idsKey}-${sg ?? ''}`
         }),
       }
     )

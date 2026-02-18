@@ -10,7 +10,9 @@ import ProductLineHealthTable from '../../../../analysis/components/project/Prod
 import PlatformScissorsChart from '../../../../analysis/components/project/PlatformScissorsChart.vue'
 import GapAnalysisChart from '../../../../analysis/components/project/GapAnalysisChart.vue'
 import PostListModal from '../../../../analysis/components/shared/PostListModal.vue'
+import SpamRatioBar from '../../../../analysis/components/shared/SpamRatioBar.vue'
 import MarkdownRenderer from '../../../../analysis/components/shared/MarkdownRenderer.vue'
+import type { SpamDistribution } from '../../../../analysis/types'
 
 definePageMeta({ layout: 'default' })
 
@@ -44,6 +46,7 @@ interface ProjectTopicOrEntity {
   original_terms?: OriginalTerm[]
   source_tasks?: SourceTask[]
   post_ids_sample?: PostRef[]
+  spam_distribution?: SpamDistribution
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
   role_breakdown?: Record<string, number>
@@ -1381,6 +1384,7 @@ const copyText = async (text: string) => {
                         </div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(t.platform_distribution) }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(t.keyword_distribution) }}</div>
+                        <SpamRatioBar v-if="t.spam_distribution" :spam-distribution="t.spam_distribution" class="mt-1" />
                         <div v-if="t.source_tasks?.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           来源任务：{{ t.source_tasks.slice(0, 4).map(x => `#${x.task_id}:${x.mentions}`).join('，') }}
                         </div>
@@ -1437,6 +1441,7 @@ const copyText = async (text: string) => {
                         </button>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(e.platform_distribution) }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(e.keyword_distribution) }}</div>
+                        <SpamRatioBar v-if="e.spam_distribution" :spam-distribution="e.spam_distribution" class="mt-1" />
                         <div v-if="e.source_tasks?.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           来源任务：{{ e.source_tasks.slice(0, 4).map(x => `#${x.task_id}:${x.mentions}`).join('，') }}
                         </div>
@@ -1536,6 +1541,11 @@ const copyText = async (text: string) => {
                 <div class="text-sm text-gray-900 dark:text-white">
                   {{ formatDist((entityPanelEntity as any).keyword_distribution) }}
                 </div>
+              </div>
+
+              <div v-if="(entityPanelEntity as any).spam_distribution" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">推广/有机分布</div>
+                <SpamRatioBar :spam-distribution="(entityPanelEntity as any).spam_distribution" />
               </div>
 
               <div v-if="(entityPanelEntity as any).original_terms?.length" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">

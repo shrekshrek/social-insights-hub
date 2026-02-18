@@ -2,6 +2,7 @@
 import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
 import TopicDrilldownPanel from './TopicDrilldownPanel.vue'
+import TabSwitch from '../shared/TabSwitch.vue'
 
 interface TopicRadarItem {
   name: string
@@ -9,6 +10,10 @@ interface TopicRadarItem {
   heat: number
   sentiment?: number
   mentions: number
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
   original_terms?: Array<{ text: string; count: number }>
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
@@ -47,19 +52,45 @@ const closePanel = () => {
 // 当前激活的 Tab
 const activeTab = ref<'radar' | 'unmet'>('radar')
 
+// Spam 维度筛选
+type SpamDimension = 'all' | 'organic' | 'promo'
+const spamDimension = ref<SpamDimension>('all')
+
+const spamDimensionOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'organic', label: '有机' },
+  { value: 'promo', label: '推广' },
+]
+
+// 根据 spam 维度过滤话题
+const filterBySpamDimension = (items: TopicRadarItem[]): TopicRadarItem[] => {
+  if (spamDimension.value === 'all') return items
+  return items.filter(item => {
+    const sd = item.spam_distribution
+    // 无数据时在所有维度都显示（无法判断推广/有机）
+    if (!sd) return true
+    const total = sd.high_spam.total + sd.low_spam.total
+    if (total === 0) return true
+    const organicRatio = sd.low_spam.total / total
+    if (spamDimension.value === 'organic') return organicRatio > 0.5
+    if (spamDimension.value === 'promo') return organicRatio <= 0.5
+    return true
+  })
+}
+
 // 检查是否有图表数据
 const hasChartData = computed(() => {
-  const pains = props.pains || []
-  const gains = props.gains || []
-  const controversies = props.controversies || []
+  const pains = filterBySpamDimension(props.pains || [])
+  const gains = filterBySpamDimension(props.gains || [])
+  const controversies = filterBySpamDimension(props.controversies || [])
   return pains.length > 0 || gains.length > 0 || controversies.length > 0
 })
 
 // ECharts 配置：气泡图 (X=声量, Y=情感)
 const getOption = (): EChartsOption => {
-  const pains = props.pains || []
-  const gains = props.gains || []
-  const controversies = props.controversies || []
+  const pains = filterBySpamDimension(props.pains || [])
+  const gains = filterBySpamDimension(props.gains || [])
+  const controversies = filterBySpamDimension(props.controversies || [])
 
   if (!pains.length && !gains.length && !controversies.length) return {}
 
@@ -159,7 +190,23 @@ const getOption = (): EChartsOption => {
       trigger: 'item',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formatter: (params: any) => {
-        const [heat, sentiment, , name, category, mentions] = params.data as [number, number, number, string, string, number]
+        const [heat, sentiment, , name, category, mentions, , item] = params.data as [number, number, number, string, string, number, string, TopicRadarItem]
+        let spamInfo = ''
+        if (item?.spam_distribution) {
+          const sd = item.spam_distribution
+          const total = sd.high_spam.total + sd.low_spam.total
+          const organicRatio = total > 0 ? ((sd.low_spam.total / total) * 100).toFixed(0) : '-'
+          spamInfo = `
+            <div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb">
+              <div style="font-size:11px;color:#888;margin-bottom:2px">有机占比</div>
+              <div><b>${organicRatio}%</b> (${sd.low_spam.total}/${total})</div>
+              <div style="font-size:10px;color:#888;margin-top:2px">
+                推广 ${sd.high_spam.total} (原${sd.high_spam.post}/评${sd.high_spam.comment})<br>
+                有机 ${sd.low_spam.total} (原${sd.low_spam.post}/评${sd.low_spam.comment})
+              </div>
+            </div>
+          `
+        }
         return `
           <div style="font-weight:600;margin-bottom:4px">${name}</div>
           <div style="font-size:11px;color:#888">${category || '未分类'}</div>
@@ -168,6 +215,7 @@ const getOption = (): EChartsOption => {
             <div>情感：<b style="color:${sentiment >= 0 ? '#10b981' : '#ef4444'}">${sentiment.toFixed(2)}</b></div>
             <div>提及：<b>${mentions}</b></div>
           </div>
+          ${spamInfo}
         `
       },
     },
@@ -239,7 +287,7 @@ const updateChart = async () => {
   }
 }
 
-watch([() => props.pains, () => props.gains, () => props.controversies], updateChart, { deep: true })
+watch([() => props.pains, () => props.gains, () => props.controversies, spamDimension], updateChart, { deep: true })
 
 onMounted(() => {
   updateChart()
@@ -279,6 +327,12 @@ const handleUnmetClick = (item: TopicRadarItem) => {
 
     <!-- 雷达气泡图 -->
     <div v-show="activeTab === 'radar'">
+      <!-- Spam 维度筛选 -->
+      <div class="mb-3 flex items-center justify-between">
+        <span class="text-xs text-gray-500 dark:text-gray-400">维度筛选</span>
+        <TabSwitch v-model="spamDimension" :options="spamDimensionOptions" />
+      </div>
+
       <div v-if="hasChartData" ref="chartRef" class="h-100" />
       <div v-else class="h-80 flex items-center justify-center text-sm text-gray-400">
         暂无话题雷达数据

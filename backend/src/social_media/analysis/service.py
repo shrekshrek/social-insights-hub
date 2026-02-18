@@ -313,8 +313,10 @@ async def create_project_snapshot(
             SocialPost.shares_count,
             SocialPost.collected_count,
             Platform.code,
+            PostAnalysis.spam_score,
         )
         .join(Platform, Platform.id == SocialPost.platform_id)
+        .outerjoin(PostAnalysis, PostAnalysis.post_id == SocialPost.id)
         .where(SocialPost.task_id.in_(task_ids))
         .where(SocialPost.is_deleted.is_(False))
     )
@@ -342,6 +344,7 @@ async def create_project_snapshot(
             continue
         post_id_on_platform = str(row[1] or "")
         platform_code = str(row[7] or "unknown")
+        spam_score_val = row[8]
         if not post_id_on_platform:
             # 极端兜底：没有平台帖ID时，退化为内部ID
             post_id_on_platform = str(pid)
@@ -365,6 +368,7 @@ async def create_project_snapshot(
                 "post_id_on_platform": post_id_on_platform,
                 "published_at": row[2],
                 "raw_cii": raw_cii,
+                "spam_score": float(spam_score_val) if spam_score_val is not None else None,
             }
 
         # 主归属（首见原则）——用于 keyword 分布在去重后仍能“总和=总量”
@@ -385,6 +389,7 @@ async def create_project_snapshot(
         post_info_by_key=post_info_by_key,
         primary_keyword_by_key=primary_keyword_by_key,
         primary_task_by_key=primary_task_by_key,
+        spam_threshold=6.0,
     )
 
     snapshot = ProjectAnalysisSnapshot(

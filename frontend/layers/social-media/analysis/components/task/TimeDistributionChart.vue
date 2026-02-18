@@ -112,7 +112,7 @@ const getSpamSplitOption = (dist: TimeDistributionItem[]): EChartsOption => ({
     textStyle: { color: '#374151', fontSize: 12 },
   },
   legend: {
-    data: ['有机', '推广'],
+    data: ['推广', '有机'],
     bottom: 0,
     textStyle: { fontSize: 10 },
     itemWidth: 12,
@@ -133,26 +133,6 @@ const getSpamSplitOption = (dist: TimeDistributionItem[]): EChartsOption => ({
   },
   series: [
     {
-      name: '有机',
-      type: 'line',
-      stack: 'spam',
-      smooth: true,
-      showSymbol: false,
-      data: dist.map(i => i.spam_breakdown?.low ?? 0),
-      lineStyle: { color: '#22c55e', width: 1.5 },
-      itemStyle: { color: '#22c55e' },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: 'rgba(34, 197, 94, 0.4)' },
-            { offset: 1, color: 'rgba(34, 197, 94, 0.05)' },
-          ],
-        },
-      },
-    },
-    {
       name: '推广',
       type: 'line',
       stack: 'spam',
@@ -168,6 +148,26 @@ const getSpamSplitOption = (dist: TimeDistributionItem[]): EChartsOption => ({
           colorStops: [
             { offset: 0, color: 'rgba(245, 158, 11, 0.4)' },
             { offset: 1, color: 'rgba(245, 158, 11, 0.05)' },
+          ],
+        },
+      },
+    },
+    {
+      name: '有机',
+      type: 'line',
+      stack: 'spam',
+      smooth: true,
+      showSymbol: false,
+      data: dist.map(i => i.spam_breakdown?.low ?? 0),
+      lineStyle: { color: '#22c55e', width: 1.5 },
+      itemStyle: { color: '#22c55e' },
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(34, 197, 94, 0.4)' },
+            { offset: 1, color: 'rgba(34, 197, 94, 0.05)' },
           ],
         },
       },

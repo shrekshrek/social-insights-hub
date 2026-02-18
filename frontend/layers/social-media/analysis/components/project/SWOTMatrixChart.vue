@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import SpamRatioBar from '../shared/SpamRatioBar.vue'
 
 interface SWOTItem {
   dimension: string
@@ -8,6 +9,14 @@ interface SWOTItem {
   target_mentions: number
   competitor_mentions: number
   delta: number
+  target_spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
+  competitor_spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
 }
 
 interface SWOTData {
@@ -134,31 +143,46 @@ const formatDelta = (v: number) => {
           <div
             v-for="item in q.items.slice(0, 5)"
             :key="item.dimension"
-            class="flex items-center gap-2 py-1.5 px-2 rounded bg-white/60 dark:bg-gray-900/40 cursor-pointer transition-colors hover:bg-white dark:hover:bg-gray-900/60"
+            class="py-1.5 px-2 rounded bg-white/60 dark:bg-gray-900/40 cursor-pointer transition-colors hover:bg-white dark:hover:bg-gray-900/60"
             @click="emit('select', item, q.key)"
           >
-            <span class="text-xs text-gray-800 dark:text-gray-200 truncate flex-1">
-              {{ item.dimension }}
-            </span>
-            <div class="flex items-center gap-2 text-[10px] font-mono shrink-0">
-              <span
-                :class="item.target_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
-              >
-                我{{ formatSentiment(item.target_sentiment) }}
+            <!-- 维度名 + 情感对比 -->
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-gray-800 dark:text-gray-200 truncate flex-1">
+                {{ item.dimension }}
               </span>
-              <span class="text-gray-400">vs</span>
-              <span
-                :class="item.competitor_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
-              >
-                竞{{ formatSentiment(item.competitor_sentiment) }}
-              </span>
+              <div class="flex items-center gap-2 text-[10px] font-mono shrink-0">
+                <span
+                  :class="item.target_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                >
+                  我{{ formatSentiment(item.target_sentiment) }}
+                </span>
+                <span class="text-gray-400">vs</span>
+                <span
+                  :class="item.competitor_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                >
+                  竞{{ formatSentiment(item.competitor_sentiment) }}
+                </span>
+              </div>
+              <div class="hidden sm:flex items-center gap-2 text-[10px] font-mono shrink-0 text-gray-500 dark:text-gray-400">
+                <span>我{{ item.target_mentions }}</span>
+                <span>竞{{ item.competitor_mentions }}</span>
+                <span :class="item.delta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+                  Δ{{ formatDelta(item.delta) }}
+                </span>
+              </div>
             </div>
-            <div class="hidden sm:flex items-center gap-2 text-[10px] font-mono shrink-0 text-gray-500 dark:text-gray-400">
-              <span>我{{ item.target_mentions }}</span>
-              <span>竞{{ item.competitor_mentions }}</span>
-              <span :class="item.delta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
-                Δ{{ formatDelta(item.delta) }}
-              </span>
+
+            <!-- Spam 分布展示 -->
+            <div v-if="item.target_spam_distribution || item.competitor_spam_distribution" class="mt-1.5 space-y-0.5 text-[10px]">
+              <div v-if="item.target_spam_distribution" class="flex items-center gap-1.5">
+                <span class="text-gray-500 dark:text-gray-400 w-4 shrink-0">我</span>
+                <SpamRatioBar :spam-distribution="item.target_spam_distribution" />
+              </div>
+              <div v-if="item.competitor_spam_distribution" class="flex items-center gap-1.5">
+                <span class="text-gray-500 dark:text-gray-400 w-4 shrink-0">竞</span>
+                <SpamRatioBar :spam-distribution="item.competitor_spam_distribution" />
+              </div>
             </div>
           </div>
         </div>

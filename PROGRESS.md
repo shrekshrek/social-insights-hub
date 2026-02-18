@@ -25,6 +25,8 @@
 | analysis/spam_dimension_view/前端 | 已完成 | 实体/话题 4 维排序控件 + IPA/KOL/竞品维度筛选 |
 | analysis/spam_dimension_chart/后端 | 已完成 | 关联网络和竞品雷达 3 层预计算（全部/有机/推广），KOL 池扩展至 top_n=10 |
 | analysis/spam_dimension_chart/前端 | 已完成 | 竞品雷达 HTML 图例 + 品牌可见性控制 + 维度 TabSwitch；类型一致性修复 |
+| analysis/project_snapshot_spam/后端 | 已完成 | 项目级快照实体/话题 4D spam 分布：PostAnalysis join 查询 spam_score，构建 spam_map_by_key，post/comment 来源追踪，Stage2 归一化传递 |
+| analysis/project_snapshot_spam/前端 | 已完成 | ProjectTopicOrEntity 接口加 spam_distribution，证据面板话题行/实体行/实体侧边栏展示 SpamRatioBar |
 | 部署配置 | 已完成 | Docker Compose 开发/生产双配置 |
 
 ## 已完成的里程碑
@@ -32,6 +34,7 @@
 - v1.0: 全栈基础框架 (auth + rbac + users)
 - v1.x: 社交媒体数据采集与分析功能 (projects + tasks + analysis + langchain + agent)
 - v1.x: 数据任务分析 spam 维度功能完成 (4D 分布 + 维度排序 + 图表预计算 + 全栈类型一致性)
+- v1.x: 项目级快照 spam 维度增强 (实体/话题 4D 分布 + SpamRatioBar 展示)
 
 ## 待改进项
 
@@ -41,7 +44,6 @@
 
 ## 下次继续的入口
 
-数据任务分析模块已全部完成（含 spam 4D 分布、维度排序、图表预计算、全栈类型一致性修复）。可选方向：
-1. **项目级快照分析增强** — 对多任务合并快照的分析结果做类似的 spam 维度拆分
-2. **测试覆盖率提升** — 后端 aggregation 模块缺少单元测试，前端图表组件可加 snapshot 测试
-3. **文档补全** — `docs/backend-architecture.md` 和 `docs/frontend-architecture.md` 缺少 social_media 模块描述
+项目级快照 spam 维度增强已完成（实体/话题 4D 分布 + Stage2 传递 + SpamRatioBar 前端展示）。可选方向：
+1. **测试覆盖率提升** — 后端 aggregation 模块缺少单元测试，前端图表组件可加 snapshot 测试
+2. **文档补全** — `docs/backend-architecture.md` 和 `docs/frontend-architecture.md` 缺少 social_media 模块描述

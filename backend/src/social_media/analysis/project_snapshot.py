@@ -68,6 +68,56 @@ def _merge_original_terms(
         term_counts[text] += count
 
 
+def _compute_spam_dist_4d_by_key(
+    post_source_keys: set[str],
+    comment_source_keys: set[str],
+    spam_map_by_key: dict[str, str],
+) -> dict[str, dict[str, int]] | None:
+    """计算 4 维 spam 分布 (高/低广告 × 原文/评论)，基于 post_key 而非 post_id。
+
+    与 spam_distribution.py:_compute_spam_dist_4d 逻辑相同，但操作 post_key (str)。
+    """
+    high_post = 0
+    high_comment = 0
+    low_post = 0
+    low_comment = 0
+    found = False
+
+    for pk in post_source_keys:
+        group = spam_map_by_key.get(pk)
+        if group is not None:
+            found = True
+            if group == "high":
+                high_post += 1
+            else:
+                low_post += 1
+
+    for pk in comment_source_keys:
+        group = spam_map_by_key.get(pk)
+        if group is not None:
+            found = True
+            if group == "high":
+                high_comment += 1
+            else:
+                low_comment += 1
+
+    if not found:
+        return None
+
+    return {
+        "high_spam": {
+            "total": high_post + high_comment,
+            "post": high_post,
+            "comment": high_comment,
+        },
+        "low_spam": {
+            "total": low_post + low_comment,
+            "post": low_post,
+            "comment": low_comment,
+        },
+    }
+
+
 def _ensure_attr_bucket() -> dict[str, Any]:
     return {
         "items": defaultdict(
@@ -178,6 +228,7 @@ def build_project_snapshot_result(
     post_info_by_key: dict[str, dict[str, Any]] | None = None,
     primary_keyword_by_key: dict[str, str] | None = None,
     primary_task_by_key: dict[str, int] | None = None,
+    spam_threshold: float = 6.0,
 ) -> dict[str, Any]:
     """从多个任务的 analysis_result 生成项目级快照结果。
 
@@ -240,6 +291,13 @@ def build_project_snapshot_result(
         info["platform"] = platform
         post_info_by_key[pk] = info
         total_heat += info["normalized_heat"]
+
+    # 构建 spam_map_by_key：post_key → "high"/"low"
+    spam_map_by_key: dict[str, str] = {}
+    for pk, info in post_info_by_key.items():
+        ss = info.get("spam_score")
+        if ss is not None:
+            spam_map_by_key[pk] = "high" if ss >= spam_threshold else "low"
 
     # 构建任务上下文映射
     task_context_map = {
@@ -438,6 +496,9 @@ def build_project_snapshot_result(
                     "positive_count": 0,
                     "negative_count": 0,
                     "neutral_count": 0,
+                    # Spam 来源追踪（post_key 维度）
+                    "post_source_keys": set(),
+                    "comment_source_keys": set(),
                     # New: Distribution Fingerprints
                     "platform_dist": defaultdict(int),
                     "keyword_dist": defaultdict(int),
@@ -482,6 +543,20 @@ def build_project_snapshot_result(
                 except Exception:
                     pass
 
+            # 构建任务级来源集合（用于 spam 4D 分布的 post/comment 归类）
+            task_post_src: set[int] = set()
+            task_comment_src: set[int] = set()
+            for _src_pid in (e or {}).get("post_source_ids") or []:
+                try:
+                    task_post_src.add(int(_src_pid))
+                except Exception:
+                    pass
+            for _src_pid in (e or {}).get("comment_source_ids") or []:
+                try:
+                    task_comment_src.add(int(_src_pid))
+                except Exception:
+                    pass
+
             # 去重后的 mentions 与 heat：按 post_key 聚合
             for pid in (e or {}).get("post_ids") or []:
                 try:
@@ -494,6 +569,14 @@ def build_project_snapshot_result(
                 if pk in bucket["mentions_set"]:
                     continue
                 bucket["mentions_set"].add(pk)
+                # Spam 来源归类（post vs comment）
+                if pid_int in task_post_src:
+                    bucket["post_source_keys"].add(pk)
+                elif pid_int in task_comment_src:
+                    bucket["comment_source_keys"].add(pk)
+                else:
+                    # 兜底：无来源信息时归入 post
+                    bucket["post_source_keys"].add(pk)
                 # heat 累加：normalized_heat（Raw_CII * platform_weight）
                 info = post_info_by_key.get(pk) or {}
                 try:
@@ -653,8 +736,25 @@ def build_project_snapshot_result(
                     "original_terms_counts": defaultdict(int),
                     "platform_dist": defaultdict(int),
                     "keyword_dist": defaultdict(int),
+                    # Spam 来源追踪
+                    "post_source_keys": set(),
+                    "comment_source_keys": set(),
                 }
                 topic_bucket[key] = bucket
+
+            # 构建任务级观点来源集合（用于 spam 4D 分布的 post/comment 归类）
+            task_post_src_o: set[int] = set()
+            task_comment_src_o: set[int] = set()
+            for _src_pid in (o or {}).get("post_source_ids") or []:
+                try:
+                    task_post_src_o.add(int(_src_pid))
+                except Exception:
+                    pass
+            for _src_pid in (o or {}).get("comment_source_ids") or []:
+                try:
+                    task_comment_src_o.add(int(_src_pid))
+                except Exception:
+                    pass
 
             for pid in (o or {}).get("post_ids") or []:
                 try:
@@ -667,6 +767,13 @@ def build_project_snapshot_result(
                 if pk in bucket["mentions_set"]:
                     continue
                 bucket["mentions_set"].add(pk)
+                # Spam 来源归类（post vs comment）
+                if pid_int in task_post_src_o:
+                    bucket["post_source_keys"].add(pk)
+                elif pid_int in task_comment_src_o:
+                    bucket["comment_source_keys"].add(pk)
+                else:
+                    bucket["post_source_keys"].add(pk)
                 info = post_info_by_key.get(pk) or {}
                 try:
                     h = float(info.get("normalized_heat") or 0.0)
@@ -798,6 +905,11 @@ def build_project_snapshot_result(
         else:
             avg_sentiment = 0.0
 
+        # Spam 4D 分布
+        spam_dist = _compute_spam_dist_4d_by_key(
+            b["post_source_keys"], b["comment_source_keys"], spam_map_by_key
+        )
+
         project_entities.append(
             {
                 "name": b["name"],
@@ -818,6 +930,7 @@ def build_project_snapshot_result(
                     "negative": b.get("negative_count") or 0,
                     "neutral": b.get("neutral_count") or 0,
                 },
+                "spam_distribution": spam_dist,
                 "original_terms": [
                     {"text": text, "count": count}
                     for text, count in sorted(
@@ -864,6 +977,11 @@ def build_project_snapshot_result(
             )
         ]
 
+        # Spam 4D 分布
+        spam_dist_t = _compute_spam_dist_4d_by_key(
+            b["post_source_keys"], b["comment_source_keys"], spam_map_by_key
+        )
+
         project_topics.append(
             {
                 "name": b["name"],
@@ -872,6 +990,7 @@ def build_project_snapshot_result(
                 "heat": round(heat, 3),
                 "mentions": mentions,
                 "score": round(score, 3),
+                "spam_distribution": spam_dist_t,
                 "original_terms": [
                     {"text": text, "count": count}
                     for text, count in sorted(
@@ -951,6 +1070,7 @@ def build_project_snapshot_result(
                 "keywords": list(keyword_volume.keys()),
             },
             "task_diagnostics": task_diagnostics,
+            "spam_config": {"threshold": spam_threshold},
         },
         "foundation": {
             "dedup_stats": dedup_stats,

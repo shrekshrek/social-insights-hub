@@ -65,6 +65,12 @@ def build_drivers_from_entities(
                         "_post_ids_set": set(),
                         "post_ids_sample": [],
                         "original_terms_counts": {},
+                        # Spam 分布累加器（4 维）
+                        "_spam_high_post": 0,
+                        "_spam_high_comment": 0,
+                        "_spam_low_post": 0,
+                        "_spam_low_comment": 0,
+                        "_has_spam_data": False,
                     },
                 )
                 if polarity == "pos":
@@ -137,6 +143,18 @@ def build_drivers_from_entities(
                             int(rec["original_terms_counts"].get(text, 0)) + cnt
                         )
 
+                # Spam 分布累加
+                sd = it.get("spam_distribution")
+                if isinstance(sd, dict):
+                    hs = sd.get("high_spam")
+                    ls = sd.get("low_spam")
+                    if isinstance(hs, dict) and isinstance(ls, dict):
+                        rec["_spam_high_post"] += int(hs.get("post") or 0)
+                        rec["_spam_high_comment"] += int(hs.get("comment") or 0)
+                        rec["_spam_low_post"] += int(ls.get("post") or 0)
+                        rec["_spam_low_comment"] += int(ls.get("comment") or 0)
+                        rec["_has_spam_data"] = True
+
         _merge_items(e.get("top_features"), "pos")
         _merge_items(e.get("top_issues"), "neg")
 
@@ -194,6 +212,12 @@ def build_drivers_from_entities(
                     "_post_ids_set": set(),
                     "post_ids_sample": [],
                     "original_terms_counts": {},
+                    # Spam 分布累加器
+                    "_spam_high_post": 0,
+                    "_spam_high_comment": 0,
+                    "_spam_low_post": 0,
+                    "_spam_low_comment": 0,
+                    "_has_spam_data": False,
                 },
             )
             pos = int(rec.get("pos") or 0)
@@ -206,6 +230,14 @@ def build_drivers_from_entities(
                 cell["platform_distribution"][k] += int(v or 0)
             for k, v in (rec.get("keyword_dist") or {}).items():
                 cell["keyword_distribution"][k] += int(v or 0)
+
+            # Spam 分布累加
+            if rec.get("_has_spam_data"):
+                cell["_spam_high_post"] += int(rec.get("_spam_high_post") or 0)
+                cell["_spam_high_comment"] += int(rec.get("_spam_high_comment") or 0)
+                cell["_spam_low_post"] += int(rec.get("_spam_low_post") or 0)
+                cell["_spam_low_comment"] += int(rec.get("_spam_low_comment") or 0)
+                cell["_has_spam_data"] = True
 
             # 证据：合并 raw_term 级别的样本到 cluster cell
             for ref in (
@@ -251,8 +283,27 @@ def build_drivers_from_entities(
                 )
             cell["platform_distribution"] = dict(cell["platform_distribution"])
             cell["keyword_distribution"] = dict(cell["keyword_distribution"])
+
+            # Spam 分布构建
+            if cell.get("_has_spam_data"):
+                hp = int(cell.get("_spam_high_post") or 0)
+                hc = int(cell.get("_spam_high_comment") or 0)
+                lp = int(cell.get("_spam_low_post") or 0)
+                lc = int(cell.get("_spam_low_comment") or 0)
+                cell["spam_distribution"] = {
+                    "high_spam": {"total": hp + hc, "post": hp, "comment": hc},
+                    "low_spam": {"total": lp + lc, "post": lp, "comment": lc},
+                }
+            else:
+                cell["spam_distribution"] = None
+
             # 清理内部字段并生成 original_terms（Top 20，长度优先）
             cell.pop("_post_ids_set", None)
+            cell.pop("_spam_high_post", None)
+            cell.pop("_spam_high_comment", None)
+            cell.pop("_spam_low_post", None)
+            cell.pop("_spam_low_comment", None)
+            cell.pop("_has_spam_data", None)
             ot_counts = (
                 cell.pop("original_terms_counts", {})
                 if isinstance(cell.get("original_terms_counts"), dict)

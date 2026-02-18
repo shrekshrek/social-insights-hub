@@ -9,6 +9,10 @@ interface SOVRankingItem {
   heat: number
   mentions: number
   share: number
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
   sentiment?: number
   sentiment_distribution?: Record<string, number>
   platform_distribution?: Record<string, number>
@@ -24,7 +28,7 @@ const emit = defineEmits<{
   (e: 'select', item: SOVRankingItem): void
 }>()
 
-type SortMode = 'share' | 'mentions' | 'efficiency'
+type SortMode = 'share' | 'mentions' | 'efficiency' | 'organic'
 
 const maxItems = computed(() => props.maxItems ?? 15)
 const sortMode = ref<SortMode>('share')
@@ -33,7 +37,17 @@ const sortModeOptions = [
   { value: 'share', label: '份额' },
   { value: 'mentions', label: '提及' },
   { value: 'efficiency', label: '效能' },
+  { value: 'organic', label: '有机占比' },
 ]
+
+// 计算有机占比
+const getOrganicRatio = (item: SOVRankingItem): number => {
+  const sd = item.spam_distribution
+  if (!sd) return -1  // 无数据排最后
+  const total = sd.high_spam.total + sd.low_spam.total
+  if (total === 0) return -1
+  return sd.low_spam.total / total
+}
 
 const sortedItems = computed(() => {
   const list = (props.data || []).slice()
@@ -43,6 +57,8 @@ const sortedItems = computed(() => {
     list.sort((a, b) => (b.mentions || 0) - (a.mentions || 0))
   } else if (sortMode.value === 'efficiency') {
     list.sort((a, b) => byEfficiency(b) - byEfficiency(a))
+  } else if (sortMode.value === 'organic') {
+    list.sort((a, b) => getOrganicRatio(b) - getOrganicRatio(a))
   } else {
     // default: SOV should align with share/heat
     list.sort((a, b) => (b.share || 0) - (a.share || 0))
@@ -140,6 +156,9 @@ const formatNumber = (n: number) => {
                 </span>
                 <span title="效能倍数 (heat / mentions)">
                   效 <span class="font-mono text-gray-700 dark:text-gray-300">{{ item.mentions > 0 ? (item.heat / item.mentions).toFixed(1) : '-' }}</span>x
+                </span>
+                <span v-if="item.spam_distribution" title="有机占比" class="hidden md:inline">
+                  机 <span class="font-mono text-gray-700 dark:text-gray-300">{{ (getOrganicRatio(item) * 100).toFixed(0) }}</span>%
                 </span>
               </div>
             </div>

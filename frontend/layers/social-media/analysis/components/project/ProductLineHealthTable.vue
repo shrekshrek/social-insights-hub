@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import SpamRatioBar from '../shared/SpamRatioBar.vue'
+
+interface SpamDistribution {
+  high_spam: { total: number; post: number; comment: number }
+  low_spam: { total: number; post: number; comment: number }
+}
 
 interface ProductLineHealthItem {
   name: string
@@ -9,6 +15,7 @@ interface ProductLineHealthItem {
   sentiment: number
   top_pain?: string
   platform_distribution?: Record<string, number>
+  spam_distribution?: SpamDistribution
   post_ids_sample?: Array<{ task_id: number; post_id: number }>
 }
 
@@ -92,7 +99,7 @@ const maxContribution = computed(() => {
             @click="emit('select', item)"
           >
             <td class="py-2.5 pr-3">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 mb-1">
                 <span
                   class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-medium shrink-0"
                   :class="idx < 3 ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'"
@@ -100,6 +107,9 @@ const maxContribution = computed(() => {
                   {{ idx + 1 }}
                 </span>
                 <span class="text-gray-900 dark:text-white">{{ item.name }}</span>
+              </div>
+              <div v-if="item.spam_distribution" class="ml-7">
+                <SpamRatioBar :spam-distribution="item.spam_distribution" />
               </div>
             </td>
             <td class="py-2.5 pr-3 text-right font-mono text-gray-700 dark:text-gray-300">

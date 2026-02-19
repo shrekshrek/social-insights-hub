@@ -314,6 +314,8 @@ def build_topics_aligned(
                 "name": canon,
                 "category": cat,
                 "heat": 0.0,
+                "organic_heat": 0.0,
+                "promo_heat": 0.0,
                 "mentions": 0,
                 "sentiment_sum": 0.0,
                 "sentiment_weight": 0.0,
@@ -340,6 +342,8 @@ def build_topics_aligned(
             m = 1
         b["mentions"] += m
         b["heat"] += float(t.get("heat") or 0.0)
+        b["organic_heat"] += float(t.get("organic_heat") or 0.0)
+        b["promo_heat"] += float(t.get("promo_heat") or 0.0)
         try:
             s = float(t.get("sentiment") or 0.0)
         except Exception:
@@ -459,6 +463,8 @@ def build_topics_aligned(
                 "name": b["name"],
                 "category": b["category"],
                 "heat": round(float(b["heat"]), 3),
+                "organic_heat": round(float(b["organic_heat"]), 3),
+                "promo_heat": round(float(b["promo_heat"]), 3),
                 "mentions": int(b["mentions"]),
                 "sentiment": round(float(avg_sent), 2),
                 "score": round(float(score), 3),

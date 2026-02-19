@@ -9,6 +9,8 @@ interface TopicRadarItem {
   name: string
   category?: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   sentiment?: number
   mentions: number
   spam_distribution?: {
@@ -69,14 +71,17 @@ const hasSpamData = computed(() => {
   return all.some(i => i.spam_distribution != null)
 })
 
-// 当前视角下的有效声量（软权重，非硬筛选）
-// 有数据：取有机/推广实际提及数；无数据：保持总热度不变
+// 当前视角下的有效热度
+// 优先使用 CII 加权的 organic_heat/promo_heat；回退到 spam_distribution 计数；最后用总热度
 const getEffectiveX = (item: TopicRadarItem): number => {
   if (spamDimension.value === 'all') return item.heat || 0
-  const sd = item.spam_distribution
-  if (!sd) return item.heat || 0
-  if (spamDimension.value === 'organic') return sd.low_spam.total
-  return sd.high_spam.total
+  if (spamDimension.value === 'organic') {
+    if (item.organic_heat != null) return item.organic_heat
+    return item.spam_distribution?.low_spam.total ?? (item.heat || 0)
+  }
+  // promo
+  if (item.promo_heat != null) return item.promo_heat
+  return item.spam_distribution?.high_spam.total ?? (item.heat || 0)
 }
 
 // 检查是否有图表数据
@@ -335,16 +340,16 @@ const handleUnmetClick = (item: TopicRadarItem) => {
         <TabSwitch v-model="spamDimension" :options="spamDimensionOptions" />
       </div>
 
-      <!-- 软权重说明 -->
+      <!-- 视角说明 -->
       <div
         v-if="spamDimension !== 'all'"
         class="mb-2 px-2.5 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed"
       >
         <template v-if="spamDimension === 'organic'">
-          X 轴为<b>有机声量</b>（低推广内容的实际提及数）。无分层数据的话题沿用总热度位置，不被过滤。
+          X 轴为<b>有机热度</b>（低推广内容的 CII 加权热度）；Y 轴情感为全量口径（话题维度暂无分层情感）。
         </template>
         <template v-else>
-          X 轴为<b>推广声量</b>（高推广内容的实际提及数）。无分层数据的话题沿用总热度位置，不被过滤。
+          X 轴为<b>推广热度</b>（高推广内容的 CII 加权热度）；Y 轴情感为全量口径（话题维度暂无分层情感）。
         </template>
       </div>
 

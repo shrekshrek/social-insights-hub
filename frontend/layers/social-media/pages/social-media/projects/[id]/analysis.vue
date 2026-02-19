@@ -1453,6 +1453,8 @@ const copyText = async (text: string) => {
               :data="sovRanking"
               :max-items="15"
               :selected="selectedLandscapeEntity"
+              :global-organic-heat="overview?.total_organic_heat"
+              :global-promo-heat="overview?.total_promo_heat"
               @select="handleSOVSelect"
             />
             <IndustryQuadrantChart

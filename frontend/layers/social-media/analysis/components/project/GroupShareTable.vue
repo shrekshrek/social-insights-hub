@@ -112,10 +112,16 @@ const getEffectiveMentions = (item: { mentions?: number; spam_distribution?: Spa
   return item.mentions || 0
 }
 
+const getEffectiveHeat = (item: { heat?: number; organic_heat?: number; promo_heat?: number; spam_distribution?: SpamDistribution }): number => {
+  if (spamView.value === 'organic') return item.organic_heat ?? getOrganicMentions(item)
+  if (spamView.value === 'promo') return item.promo_heat ?? getPromoMentions(item)
+  return item.heat || 0
+}
+
 const getMetricValue = (item: { heat?: number; organic_heat?: number; promo_heat?: number; mentions?: number; spam_distribution?: SpamDistribution }): number => {
   if (metricMode.value === 'efficiency') {
     const denom = getEffectiveMentions(item)
-    return denom > 0 ? (item.heat || 0) / denom : 0
+    return denom > 0 ? getEffectiveHeat(item) / denom : 0
   }
   if (metricMode.value === 'mentions') return getEffectiveMentions(item)
   if (spamView.value === 'organic') return item.organic_heat ?? getOrganicMentions(item)
@@ -146,6 +152,8 @@ const totalPromoHeat = computed(() =>
 interface TreeNode {
   name: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   mentions: number
   share: number
   innerShare?: number
@@ -208,6 +216,8 @@ const treeData = computed<TreeNode[]>(() => {
         return {
           name: e.name,
           heat: e.heat || 0,
+          organic_heat: e.organic_heat,
+          promo_heat: e.promo_heat,
           mentions: e.mentions || 0,
           share: shareBase > 0 ? childShareMetric / shareBase : 0,
           isGroup: false as const,
@@ -233,6 +243,8 @@ const treeData = computed<TreeNode[]>(() => {
     return {
       name: g.name,
       heat: g.heat || 0,
+      organic_heat: g.organic_heat,
+      promo_heat: g.promo_heat,
       mentions: g.mentions || 0,
       share: shareBase > 0 ? groupShareMetric / shareBase : 0,
       isGroup: true,
@@ -282,10 +294,10 @@ const formatNumber = (n: number) => {
 
 const formatPercent = (n: number) => `${(n * 100).toFixed(1)}%`
 
-const formatMetricValue = (node: { heat: number; mentions: number; spam_distribution?: SpamDistribution }) => {
+const formatMetricValue = (node: { heat: number; organic_heat?: number; promo_heat?: number; mentions: number; spam_distribution?: SpamDistribution }) => {
   if (metricMode.value === 'efficiency') {
     const denom = getEffectiveMentions(node)
-    return `${denom > 0 ? (node.heat / denom).toFixed(1) : '-'}x`
+    return `${denom > 0 ? (getEffectiveHeat(node) / denom).toFixed(1) : '-'}x`
   }
   return formatNumber(getEffectiveMentions(node))
 }

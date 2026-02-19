@@ -87,6 +87,8 @@ export interface AlignedTopic {
   name: string
   category?: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   mentions: number
   score: number
   sentiment?: number

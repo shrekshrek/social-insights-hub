@@ -55,7 +55,7 @@ def build_snapshot_layers(
             pass
 
     sov_ranking: list[dict[str, Any]] = []
-    for e in entities_aligned[:60]:
+    for e in entities_aligned[:100]:
         if not isinstance(e, dict):
             continue
         try:
@@ -352,6 +352,8 @@ def build_snapshot_layers(
             "name": t.get("name") or "",
             "category": t.get("category") or "其他",
             "heat": float(t.get("heat") or 0.0),
+            "organic_heat": t.get("organic_heat"),
+            "promo_heat": t.get("promo_heat"),
             "mentions": int(t.get("mentions") or 0),
             "sentiment": round(sent, 2),
             "spam_distribution": t.get("spam_distribution"),

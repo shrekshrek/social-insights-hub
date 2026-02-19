@@ -26,6 +26,10 @@ const props = defineProps<{
   data: SOVRankingItem[]
   maxItems?: number
   selected?: string | null
+  /** 全量实体的有机热度总和（后端提供时用于计算全局口径的有机 SOV 份额） */
+  globalOrganicHeat?: number
+  /** 全量实体的推广热度总和（后端提供时用于计算全局口径的推广 SOV 份额） */
+  globalPromoHeat?: number
 }>()
 
 const emit = defineEmits<{
@@ -133,11 +137,13 @@ const totalPromoHeat = computed(() =>
 const getDisplayShare = (item: SOVRankingItem): number => {
   if (spamView.value === 'organic') {
     const metric = item.organic_heat ?? getOrganicMentions(item)
-    return totalOrganicHeat.value > 0 ? metric / totalOrganicHeat.value : 0
+    const denom = props.globalOrganicHeat ?? totalOrganicHeat.value
+    return denom > 0 ? metric / denom : 0
   }
   if (spamView.value === 'promo') {
     const metric = item.promo_heat ?? getPromoMentions(item)
-    return totalPromoHeat.value > 0 ? metric / totalPromoHeat.value : 0
+    const denom = props.globalPromoHeat ?? totalPromoHeat.value
+    return denom > 0 ? metric / denom : 0
   }
   return item.share || 0
 }

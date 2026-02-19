@@ -185,6 +185,10 @@ export interface LandscapeLayer {
     global_sentiment?: number
     platform_volume?: PlatformDistribution
     keyword_volume?: KeywordDistribution
+    /** 全量实体的有机热度总和（用于计算全局口径的有机 SOV 份额） */
+    total_organic_heat?: number
+    /** 全量实体的推广热度总和（用于计算全局口径的推广 SOV 份额） */
+    total_promo_heat?: number
   }
   /** SOV 排行榜 */
   sov_ranking?: SOVRankingItem[]

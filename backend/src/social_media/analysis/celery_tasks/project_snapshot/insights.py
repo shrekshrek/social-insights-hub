@@ -38,11 +38,21 @@ def build_snapshot_layers(
 
     # ===== Landscape layer =====
     total_heat = 0.0
+    total_organic_heat = 0.0
+    total_promo_heat = 0.0
     for e in entities_aligned or []:
         try:
             total_heat += float(e.get("heat") or 0.0)
         except Exception:
             continue
+        try:
+            total_organic_heat += float(e.get("organic_heat") or 0.0)
+        except Exception:
+            pass
+        try:
+            total_promo_heat += float(e.get("promo_heat") or 0.0)
+        except Exception:
+            pass
 
     sov_ranking: list[dict[str, Any]] = []
     for e in entities_aligned[:60]:
@@ -249,6 +259,10 @@ def build_snapshot_layers(
                 overview_safe["global_sentiment"] = (
                     round((sent_sum / sent_w), 2) if sent_w > 0 else 0.0
                 )
+
+    # 全局有机/推广热度总量（用于前端计算全局口径的有机/推广 SOV 份额）
+    overview_safe["total_organic_heat"] = round(total_organic_heat, 3)
+    overview_safe["total_promo_heat"] = round(total_promo_heat, 3)
 
     # --- 行业象限 (Industry Quadrant)：Top 50 实体的 [热度 x 情感] 散点图数据 ---
     industry_quadrant: list[dict[str, Any]] = []

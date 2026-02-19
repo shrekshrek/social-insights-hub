@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import SpamRatioBar from '../shared/SpamRatioBar.vue'
 
 interface OriginalTerm {
   text: string
   count: number
+}
+
+interface SpamDistribution {
+  high_spam: { total: number; post: number; comment: number }
+  low_spam: { total: number; post: number; comment: number }
 }
 
 interface TopicItem {
@@ -12,6 +18,7 @@ interface TopicItem {
   heat: number
   sentiment?: number
   mentions: number
+  spam_distribution?: SpamDistribution
   original_terms?: OriginalTerm[]
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
@@ -124,6 +131,16 @@ const getSentimentColor = (s?: number) => {
             >
               {{ item.sentiment !== undefined ? (item.sentiment >= 0 ? '+' : '') + item.sentiment.toFixed(2) : '-' }}
             </div>
+          </div>
+        </div>
+
+        <!-- 推广/有机分布 -->
+        <div v-if="item.spam_distribution" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+          <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">推广 / 有机分布</div>
+          <SpamRatioBar :spam-distribution="item.spam_distribution" />
+          <div class="mt-1.5 flex gap-4 text-[11px] text-gray-500 dark:text-gray-400">
+            <span>有机 <b class="font-mono text-gray-700 dark:text-gray-300">{{ item.spam_distribution.low_spam.total }}</b> 条</span>
+            <span>推广 <b class="font-mono text-gray-700 dark:text-gray-300">{{ item.spam_distribution.high_spam.total }}</b> 条</span>
           </div>
         </div>
 

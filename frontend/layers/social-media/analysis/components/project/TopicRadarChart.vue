@@ -3,6 +3,7 @@ import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
 import TopicDrilldownPanel from './TopicDrilldownPanel.vue'
 import TabSwitch from '../shared/TabSwitch.vue'
+import SpamRatioBar from '../shared/SpamRatioBar.vue'
 
 interface TopicRadarItem {
   name: string
@@ -52,53 +53,52 @@ const closePanel = () => {
 // 当前激活的 Tab
 const activeTab = ref<'radar' | 'unmet'>('radar')
 
-// Spam 维度筛选
+// Spam 声量视角
 type SpamDimension = 'all' | 'organic' | 'promo'
 const spamDimension = ref<SpamDimension>('all')
 
 const spamDimensionOptions = [
-  { value: 'all', label: '全部' },
+  { value: 'all', label: '全量' },
   { value: 'organic', label: '有机' },
   { value: 'promo', label: '推广' },
 ]
 
-// 根据 spam 维度过滤话题
-const filterBySpamDimension = (items: TopicRadarItem[]): TopicRadarItem[] => {
-  if (spamDimension.value === 'all') return items
-  return items.filter(item => {
-    const sd = item.spam_distribution
-    // 无数据时在所有维度都显示（无法判断推广/有机）
-    if (!sd) return true
-    const total = sd.high_spam.total + sd.low_spam.total
-    if (total === 0) return true
-    const organicRatio = sd.low_spam.total / total
-    if (spamDimension.value === 'organic') return organicRatio > 0.5
-    if (spamDimension.value === 'promo') return organicRatio <= 0.5
-    return true
-  })
+// 能力检测：是否有任何 spam 分布数据
+const hasSpamData = computed(() => {
+  const all = [...(props.pains || []), ...(props.gains || []), ...(props.controversies || []), ...(props.unmetNeeds || [])]
+  return all.some(i => i.spam_distribution != null)
+})
+
+// 当前视角下的有效声量（软权重，非硬筛选）
+// 有数据：取有机/推广实际提及数；无数据：保持总热度不变
+const getEffectiveX = (item: TopicRadarItem): number => {
+  if (spamDimension.value === 'all') return item.heat || 0
+  const sd = item.spam_distribution
+  if (!sd) return item.heat || 0
+  if (spamDimension.value === 'organic') return sd.low_spam.total
+  return sd.high_spam.total
 }
 
 // 检查是否有图表数据
 const hasChartData = computed(() => {
-  const pains = filterBySpamDimension(props.pains || [])
-  const gains = filterBySpamDimension(props.gains || [])
-  const controversies = filterBySpamDimension(props.controversies || [])
-  return pains.length > 0 || gains.length > 0 || controversies.length > 0
+  return (props.pains?.length || 0) + (props.gains?.length || 0) + (props.controversies?.length || 0) > 0
 })
 
 // ECharts 配置：气泡图 (X=声量, Y=情感)
 const getOption = (): EChartsOption => {
-  const pains = filterBySpamDimension(props.pains || [])
-  const gains = filterBySpamDimension(props.gains || [])
-  const controversies = filterBySpamDimension(props.controversies || [])
+  const pains = props.pains || []
+  const gains = props.gains || []
+  const controversies = props.controversies || []
 
   if (!pains.length && !gains.length && !controversies.length) return {}
 
-  // 计算最大热度用于归一化气泡大小
+  // 气泡大小仍用总热度（保持跨模式视觉权重一致）
   const allItems = [...pains, ...gains, ...controversies]
   const maxHeat = Math.max(...allItems.map(i => i.heat || 0), 1)
-  const sortedHeats = allItems.map(i => i.heat || 0).sort((a, b) => a - b)
-  const volumeThreshold = sortedHeats.length ? sortedHeats[Math.floor(sortedHeats.length / 2)] : 0
+  // X 轴中位数用有效声量（使分区线与当前视角一致）
+  const effectiveXAll = allItems.map(i => getEffectiveX(i)).filter(x => x > 0)
+  const sortedEffectiveX = effectiveXAll.slice().sort((a, b) => a - b)
+  const volumeThreshold = sortedEffectiveX.length ? sortedEffectiveX[Math.floor(sortedEffectiveX.length / 2)]! : 0
   const labelNameSet = new Set(
     allItems
       .slice()
@@ -144,9 +144,9 @@ const getOption = (): EChartsOption => {
       },
     },
     data: items.map(i => [
-      i.heat,
+      getEffectiveX(i),    // X = 当前视角有效声量（有机/推广/总热度）
       i.sentiment ?? 0,
-      i.heat,
+      i.heat,              // 气泡大小 = 总热度（跨模式视觉权重一致）
       i.name,
       i.category || '',
       i.mentions,
@@ -190,7 +190,9 @@ const getOption = (): EChartsOption => {
       trigger: 'item',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formatter: (params: any) => {
-        const [heat, sentiment, , name, category, mentions, , item] = params.data as [number, number, number, string, string, number, string, TopicRadarItem]
+        const [effectiveX, sentiment, heat, name, category, mentions, , item] = params.data as [number, number, number, string, string, number, string, TopicRadarItem]
+        const xLabel = spamDimension.value === 'organic' ? '有机声量' : spamDimension.value === 'promo' ? '推广声量' : '热度'
+        const xDisplay = spamDimension.value === 'all' ? heat.toFixed(0) : effectiveX.toString()
         let spamInfo = ''
         if (item?.spam_distribution) {
           const sd = item.spam_distribution
@@ -211,7 +213,7 @@ const getOption = (): EChartsOption => {
           <div style="font-weight:600;margin-bottom:4px">${name}</div>
           <div style="font-size:11px;color:#888">${category || '未分类'}</div>
           <div style="margin-top:6px;font-size:12px">
-            <div>热度：<b>${heat.toFixed(0)}</b></div>
+            <div>${xLabel}：<b>${xDisplay}</b></div>
             <div>情感：<b style="color:${sentiment >= 0 ? '#10b981' : '#ef4444'}">${sentiment.toFixed(2)}</b></div>
             <div>提及：<b>${mentions}</b></div>
           </div>
@@ -227,7 +229,7 @@ const getOption = (): EChartsOption => {
     },
     xAxis: {
       type: 'value',
-      name: '声量',
+      name: spamDimension.value === 'organic' ? '有机声量' : spamDimension.value === 'promo' ? '推广声量' : '声量',
       nameLocation: 'middle',
       nameGap: 28,
       nameTextStyle: { fontSize: 11, color: '#6b7280' },
@@ -327,10 +329,23 @@ const handleUnmetClick = (item: TopicRadarItem) => {
 
     <!-- 雷达气泡图 -->
     <div v-show="activeTab === 'radar'">
-      <!-- Spam 维度筛选 -->
-      <div class="mb-3 flex items-center justify-between">
-        <span class="text-xs text-gray-500 dark:text-gray-400">维度筛选</span>
+      <!-- Spam 声量视角 -->
+      <div v-if="hasSpamData" class="mb-3 flex items-center justify-between">
+        <span class="text-xs text-gray-500 dark:text-gray-400">声量视角</span>
         <TabSwitch v-model="spamDimension" :options="spamDimensionOptions" />
+      </div>
+
+      <!-- 软权重说明 -->
+      <div
+        v-if="spamDimension !== 'all'"
+        class="mb-2 px-2.5 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed"
+      >
+        <template v-if="spamDimension === 'organic'">
+          X 轴为<b>有机声量</b>（低推广内容的实际提及数）。无分层数据的话题沿用总热度位置，不被过滤。
+        </template>
+        <template v-else>
+          X 轴为<b>推广声量</b>（高推广内容的实际提及数）。无分层数据的话题沿用总热度位置，不被过滤。
+        </template>
       </div>
 
       <div v-if="hasChartData" ref="chartRef" class="h-100" />
@@ -379,6 +394,11 @@ const handleUnmetClick = (item: TopicRadarItem) => {
               <div class="font-mono text-gray-700 dark:text-gray-300">热度 {{ item.heat.toFixed(0) }}</div>
               <div class="text-red-600 dark:text-red-400">情感 {{ (item.sentiment ?? 0).toFixed(2) }}</div>
             </div>
+          </div>
+
+          <!-- 推广/有机分布 -->
+          <div v-if="item.spam_distribution" class="mt-2 pt-2 border-t border-red-100 dark:border-red-900/30">
+            <SpamRatioBar :spam-distribution="item.spam_distribution" />
           </div>
 
           <!-- 原话摘要 -->

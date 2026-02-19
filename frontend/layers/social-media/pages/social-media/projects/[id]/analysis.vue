@@ -38,6 +38,12 @@ interface ProjectTopicOrEntity {
   name: string
   category?: string
   sentiment?: number
+  /** 有机内容情感（spam_score < 6.0 的帖子） */
+  organic_sentiment?: number
+  /** 推广内容情感（spam_score >= 6.0 的帖子） */
+  promo_sentiment?: number
+  organic_heat?: number
+  promo_heat?: number
   role?: string
   type?: string
   heat: number
@@ -60,6 +66,8 @@ interface ProjectOverviewData {
   unique_posts?: number
   total_heat?: number
   global_sentiment?: number
+  organic_global_sentiment?: number | null
+  promo_global_sentiment?: number | null
   platform_volume?: Record<string, number>
   keyword_volume?: Record<string, number>
 }
@@ -79,19 +87,39 @@ interface SOVRankingItem {
   parent?: string
   role?: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   mentions: number
   share: number
   sentiment?: number
+  organic_sentiment?: number
+  promo_sentiment?: number
   sentiment_distribution?: Record<string, number>
   platform_distribution?: Record<string, number>
   source_tasks?: SourceTask[]
   post_ids_sample?: PostRef[]
+  spam_distribution?: SpamDistribution
 }
 
 interface GroupShareItem {
   name: string
+  parent?: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
+  total_heat?: number
   mentions: number
+  total_mentions?: number
+  share?: number
+  contribution?: number
+  spam_distribution?: SpamDistribution
+  members?: Array<{
+    name: string
+    heat: number
+    mentions: number
+    contribution: number
+    spam_distribution?: SpamDistribution
+  }>
 }
 
 interface PlatformDNAItem {
@@ -105,10 +133,15 @@ interface IndustryQuadrantPoint {
   name: string
   role?: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   sentiment: number
+  organic_sentiment?: number
+  promo_sentiment?: number
   mentions: number
   source_tasks?: SourceTask[]
   post_ids_sample?: PostRef[]
+  spam_distribution?: SpamDistribution
 }
 
 interface ProjectSnapshotLandscapeLayer {
@@ -141,6 +174,14 @@ interface SWOTItem {
   target_mentions: number
   competitor_mentions: number
   delta: number
+  target_organic_sentiment?: number
+  target_promo_sentiment?: number
+  competitor_organic_sentiment?: number
+  competitor_promo_sentiment?: number
+  target_spam_distribution?: SpamDistribution
+  competitor_spam_distribution?: SpamDistribution
+  post_ids_sample?: PostRef[]
+  original_terms?: OriginalTerm[]
 }
 
 interface SWOTData {
@@ -156,8 +197,13 @@ interface ProductLineHealthItem {
   mentions: number
   contribution: number
   sentiment: number
+  organic_sentiment?: number
+  promo_sentiment?: number
   top_pain?: string
   platform_distribution?: Record<string, number>
+  spam_distribution?: SpamDistribution
+  source_tasks?: SourceTask[]
+  post_ids_sample?: PostRef[]
 }
 
 interface ProductLineHealthData {
@@ -173,12 +219,20 @@ interface PlatformScissorsItem {
   subject_share: number
   industry_share: number
   delta: number
+  subject_organic_mentions?: number
+  subject_promo_mentions?: number
+  industry_organic_mentions?: number
+  industry_promo_mentions?: number
 }
 
 interface PlatformScissorsData {
   subject_total_mentions: number
   industry_total_mentions: number
   by_platform: PlatformScissorsItem[]
+  subject_total_organic_mentions?: number
+  subject_total_promo_mentions?: number
+  industry_total_organic_mentions?: number
+  industry_total_promo_mentions?: number
 }
 
 interface GapData {
@@ -330,6 +384,9 @@ const focus = computed<ProjectSnapshotFocusLayer | null>(() => layers.value?.foc
 const topEntities = computed<ProjectTopicOrEntity[]>(() => foundation.value?.aligned_entities || [])
 const topTopics = computed<ProjectTopicOrEntity[]>(() => foundation.value?.aligned_topics || [])
 
+/** 快照是否含有 4D spam 数据（用于 PostListModal 推广/有机 tab 显示） */
+const hasSnapshotSpamData = computed(() => topEntities.value.some(e => e.spam_distribution != null))
+
 // ==================== Landscape Layer Data ====================
 const sovRanking = computed(() => landscape.value?.sov_ranking || [])
 const groupShare = computed(() => landscape.value?.group_share || [])
@@ -376,6 +433,12 @@ const focusPanelItem = ref<{
   target_mentions?: number
   competitor_mentions?: number
   delta?: number
+  target_organic_sentiment?: number
+  target_promo_sentiment?: number
+  competitor_organic_sentiment?: number
+  competitor_promo_sentiment?: number
+  target_spam_distribution?: SpamDistribution
+  competitor_spam_distribution?: SpamDistribution
   original_terms?: OriginalTerm[]
   post_ids_sample?: PostRef[]
 } | null>(null)
@@ -417,6 +480,12 @@ const openFocusDimensionPanel = (
     target_mentions?: number
     competitor_mentions?: number
     delta?: number
+    target_organic_sentiment?: number
+    target_promo_sentiment?: number
+    competitor_organic_sentiment?: number
+    competitor_promo_sentiment?: number
+    target_spam_distribution?: SpamDistribution
+    competitor_spam_distribution?: SpamDistribution
     original_terms?: OriginalTerm[]
     post_ids_sample?: PostRef[]
   } | null,
@@ -566,6 +635,12 @@ const handleSwotSelect = (
     target_mentions?: number
     competitor_mentions?: number
     delta?: number
+    target_organic_sentiment?: number
+    target_promo_sentiment?: number
+    competitor_organic_sentiment?: number
+    competitor_promo_sentiment?: number
+    target_spam_distribution?: SpamDistribution
+    competitor_spam_distribution?: SpamDistribution
     original_terms?: OriginalTerm[]
     post_ids_sample?: PostRef[]
   } | null,
@@ -582,10 +657,22 @@ const handleGapSelect = (item: {
   target_mentions?: number
   competitor_mentions?: number
   delta?: number
+  target_organic_sentiment?: number
+  target_promo_sentiment?: number
+  competitor_organic_sentiment?: number
+  competitor_promo_sentiment?: number
+  target_spam_distribution?: SpamDistribution
+  competitor_spam_distribution?: SpamDistribution
   original_terms?: OriginalTerm[]
   post_ids_sample?: PostRef[]
 } | null) => {
   openFocusDimensionPanel(item, 'gap')
+}
+
+const handleSOVSelect = (item: { name: string; role?: string; heat?: number; mentions?: number; sentiment?: number } | null) => {
+  if (!item) return
+  handleSelectLandscapeEntity(item)
+  openEntityPanel(item.name, item)
 }
 
 const handleIndustryQuadrantSelect = (item: IndustryQuadrantPoint | null) => {
@@ -611,6 +698,42 @@ watch(snapshotId, () => {
 // ==================== Topic Layer Data ====================
 const topicRadar = computed(() => intent.value?.topic_radar || null)
 const unmetNeeds = computed(() => intent.value?.unmet_needs || [])
+
+type TopicAspectSortKey = 'heat' | 'sentiment' | 'mention_count'
+const topicAspectSort = ref<TopicAspectSortKey>('heat')
+const topicAspectSortDir = ref<'desc' | 'asc'>('desc')
+
+const toggleTopicAspectSort = (key: TopicAspectSortKey) => {
+  if (topicAspectSort.value === key) {
+    topicAspectSortDir.value = topicAspectSortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    topicAspectSort.value = key
+    topicAspectSortDir.value = 'desc'
+  }
+}
+
+const topicAspects = computed(() => {
+  const raw = intent.value?.topic_aspects || []
+  return raw.slice().sort((a, b) => {
+    let va: number, vb: number
+    if (topicAspectSort.value === 'sentiment') {
+      va = a.sentiment ?? 0
+      vb = b.sentiment ?? 0
+    } else if (topicAspectSort.value === 'mention_count') {
+      va = a.mention_count ?? 0
+      vb = b.mention_count ?? 0
+    } else {
+      va = a.heat ?? 0
+      vb = b.heat ?? 0
+    }
+    return topicAspectSortDir.value === 'desc' ? vb - va : va - vb
+  })
+})
+
+// ==================== Drivers / Entity Matrix ====================
+const driversData = computed(() => stage2.value?.drivers || null)
+const entityMatrix = computed(() => driversData.value?.entity_matrix || [])
+const matrixDimensions = computed(() => driversData.value?.dimensions_top || [])
 
 // ==================== Focus Layer Data ====================
 const swotData = computed(() => focus.value?.swot || null)
@@ -1034,6 +1157,61 @@ const copyText = async (text: string) => {
                 </UBadge>
               </div>
             </div>
+
+            <!-- alias_normalization 统计 -->
+            <div v-if="stage2?.alias_normalization" class="mt-3 p-3 rounded bg-gray-50 dark:bg-gray-800 space-y-2 text-xs">
+              <div class="font-medium text-gray-700 dark:text-gray-300">别名归一化统计</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div v-if="stage2.alias_normalization.entities">
+                  <div class="text-gray-500 dark:text-gray-400 mb-1">实体</div>
+                  <div class="flex items-center gap-2">
+                    <UBadge :color="stage2.alias_normalization.entities.used ? 'success' : 'neutral'" variant="subtle" size="xs">
+                      {{ stage2.alias_normalization.entities.used ? 'LLM 已用' : '未用 LLM' }}
+                    </UBadge>
+                    <span class="font-mono text-gray-600 dark:text-gray-400">
+                      {{ stage2.alias_normalization.entities.before_count ?? '?' }} → {{ stage2.alias_normalization.entities.after_count ?? '?' }}
+                    </span>
+                  </div>
+                  <div
+                    v-if="stage2.alias_normalization.entities.entity_mapping && Object.keys(stage2.alias_normalization.entities.entity_mapping).length"
+                    class="mt-1 text-gray-500 dark:text-gray-500 truncate"
+                    :title="Object.entries(stage2.alias_normalization.entities.entity_mapping).slice(0, 3).map(([k, v]) => `${k} → ${v}`).join('；')"
+                  >
+                    样例：{{ Object.entries(stage2.alias_normalization.entities.entity_mapping).slice(0, 2).map(([k, v]) => `${k}→${v}`).join('，') }}
+                  </div>
+                </div>
+                <div v-if="stage2.alias_normalization.topics">
+                  <div class="text-gray-500 dark:text-gray-400 mb-1">话题</div>
+                  <div class="flex items-center gap-2">
+                    <UBadge :color="stage2.alias_normalization.topics.used ? 'success' : 'neutral'" variant="subtle" size="xs">
+                      {{ stage2.alias_normalization.topics.used ? 'LLM 已用' : '未用 LLM' }}
+                    </UBadge>
+                    <span class="font-mono text-gray-600 dark:text-gray-400">
+                      {{ stage2.alias_normalization.topics.before_count ?? '?' }} → {{ stage2.alias_normalization.topics.after_count ?? '?' }}
+                    </span>
+                  </div>
+                  <div
+                    v-if="stage2.alias_normalization.topics.topic_mapping_by_category"
+                    class="mt-1 text-gray-500 dark:text-gray-500"
+                  >
+                    分类数：{{ Object.keys(stage2.alias_normalization.topics.topic_mapping_by_category).length }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- category_alignment 统计 -->
+            <div v-if="stage2?.category_alignment" class="mt-2 p-3 rounded bg-gray-50 dark:bg-gray-800 space-y-1 text-xs">
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-gray-700 dark:text-gray-300">话题类别对齐</span>
+                <UBadge :color="stage2.category_alignment.used ? 'success' : 'neutral'" variant="subtle" size="xs">
+                  {{ stage2.category_alignment.used ? 'LLM 已用' : '未用 LLM' }}
+                </UBadge>
+                <span v-if="stage2.category_alignment.category_map" class="text-gray-500 dark:text-gray-400 font-mono">
+                  映射 {{ Object.keys(stage2.category_alignment.category_map).length }} 个类别
+                </span>
+              </div>
+            </div>
           </div>
 
           <div v-if="!isPipelineReady" class="mt-4 text-xs text-gray-500 dark:text-gray-400">
@@ -1150,7 +1328,7 @@ const copyText = async (text: string) => {
             <div class="space-y-1">
               <div class="text-xs text-gray-500 dark:text-gray-400">全局情感 (Sentiment)</div>
               <div class="flex items-center gap-2">
-                <span 
+                <span
                   class="text-2xl font-mono font-semibold"
                   :class="(overview?.global_sentiment || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
                 >
@@ -1159,6 +1337,36 @@ const copyText = async (text: string) => {
               </div>
               <div class="text-xs text-gray-400 mt-1">
                 NSR 指数（按任务量加权，-1 ~ +1）
+              </div>
+              <!-- 有机/推广 NSR 分层 -->
+              <div
+                v-if="overview?.organic_global_sentiment != null || overview?.promo_global_sentiment != null"
+                class="flex items-center gap-3 mt-1 text-[11px]"
+              >
+                <span
+                  v-if="overview?.organic_global_sentiment != null"
+                  class="flex items-center gap-1"
+                  title="有机内容 NSR（低推广）"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span class="text-gray-500 dark:text-gray-400">有机</span>
+                  <span
+                    class="font-mono"
+                    :class="(overview.organic_global_sentiment ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  >{{ (overview.organic_global_sentiment ?? 0) >= 0 ? '+' : '' }}{{ Number(overview.organic_global_sentiment).toFixed(2) }}</span>
+                </span>
+                <span
+                  v-if="overview?.promo_global_sentiment != null"
+                  class="flex items-center gap-1"
+                  title="推广内容 NSR（高推广）"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span class="text-gray-500 dark:text-gray-400">推广</span>
+                  <span
+                    class="font-mono"
+                    :class="(overview.promo_global_sentiment ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  >{{ (overview.promo_global_sentiment ?? 0) >= 0 ? '+' : '' }}{{ Number(overview.promo_global_sentiment).toFixed(2) }}</span>
+                </span>
               </div>
             </div>
 
@@ -1245,7 +1453,7 @@ const copyText = async (text: string) => {
               :data="sovRanking"
               :max-items="15"
               :selected="selectedLandscapeEntity"
-              @select="handleSelectLandscapeEntity"
+              @select="handleSOVSelect"
             />
             <IndustryQuadrantChart
               :data="industryQuadrant"
@@ -1257,6 +1465,63 @@ const copyText = async (text: string) => {
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <GroupShareTable :data="groupShare" :entities="topEntities" :max-items="10" />
             <PlatformDNAChart :data="platformDNA" :max-items="10" />
+          </div>
+
+          <!-- 维度情感矩阵（entity × dimension 热力表：来自 stage2.drivers.entity_matrix） -->
+          <div
+            v-if="entityMatrix.length && matrixDimensions.length"
+            class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
+          >
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">维度情感矩阵</h3>
+            <div class="overflow-x-auto">
+              <table class="text-xs w-full">
+                <thead>
+                  <tr class="text-left border-b border-gray-100 dark:border-gray-800">
+                    <th class="py-2 pr-3 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-900">实体</th>
+                    <th
+                      v-for="dim in matrixDimensions.slice(0, 8)"
+                      :key="dim"
+                      class="py-2 px-1 font-medium text-gray-500 dark:text-gray-400 text-center whitespace-nowrap"
+                      :title="dim"
+                    >
+                      {{ dim.length > 5 ? `${dim.slice(0, 5)}…` : dim }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50 dark:divide-gray-800/50">
+                  <tr
+                    v-for="row in entityMatrix.slice(0, 10)"
+                    :key="row.entity"
+                    class="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                  >
+                    <td class="py-1.5 pr-3 font-medium text-gray-900 dark:text-white whitespace-nowrap sticky left-0 bg-white dark:bg-gray-900 group-hover:bg-gray-50">{{ row.entity }}</td>
+                    <td
+                      v-for="dim in matrixDimensions.slice(0, 8)"
+                      :key="dim"
+                      class="py-1.5 px-1 text-center"
+                    >
+                      <template v-if="(row.dimensions as Record<string, { mentions: number; sentiment: number; pos: number; neg: number }>)[dim]">
+                        <span
+                          class="inline-block px-1 py-0.5 rounded text-[10px] font-mono"
+                          :class="(row.dimensions as any)[dim].sentiment >= 0.1
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : (row.dimensions as any)[dim].sentiment <= -0.1
+                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+                              : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'"
+                          :title="`提及 ${(row.dimensions as any)[dim].mentions}，正 ${(row.dimensions as any)[dim].pos}，负 ${(row.dimensions as any)[dim].neg}`"
+                        >
+                          {{ (row.dimensions as any)[dim].sentiment >= 0 ? '+' : '' }}{{ Number((row.dimensions as any)[dim].sentiment).toFixed(1) }}
+                        </span>
+                      </template>
+                      <span v-else class="text-gray-300 dark:text-gray-700">—</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
+              前 {{ Math.min(entityMatrix.length, 10) }} 个实体 × 前 {{ Math.min(matrixDimensions.length, 8) }} 个维度；单元格颜色为情感值，悬停查看提及详情。
+            </div>
           </div>
         </section>
 
@@ -1275,6 +1540,69 @@ const copyText = async (text: string) => {
             :unmet-needs="unmetNeeds"
             @open-posts="openTopicPostList"
           />
+
+          <!-- 话题分类概览（topic_aspects：按分类聚合的热度/情感/提及） -->
+          <div v-if="topicAspects.length" class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">话题分类概览</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                    <th class="py-2 pr-4 font-medium">分类</th>
+                    <th
+                      class="py-2 pr-4 font-medium text-right cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200"
+                      @click="toggleTopicAspectSort('heat')"
+                    >
+                      热度{{ topicAspectSort === 'heat' ? (topicAspectSortDir === 'desc' ? ' ↓' : ' ↑') : '' }}
+                    </th>
+                    <th
+                      class="py-2 pr-4 font-medium text-right cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200"
+                      @click="toggleTopicAspectSort('sentiment')"
+                    >
+                      情感{{ topicAspectSort === 'sentiment' ? (topicAspectSortDir === 'desc' ? ' ↓' : ' ↑') : '' }}
+                    </th>
+                    <th
+                      class="py-2 pr-4 font-medium text-right cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200"
+                      @click="toggleTopicAspectSort('mention_count')"
+                    >
+                      提及{{ topicAspectSort === 'mention_count' ? (topicAspectSortDir === 'desc' ? ' ↓' : ' ↑') : '' }}
+                    </th>
+                    <th class="py-2 font-medium">关键词</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50 dark:divide-gray-800/50">
+                  <tr
+                    v-for="aspect in topicAspects.slice(0, 15)"
+                    :key="aspect.category"
+                    class="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                  >
+                    <td class="py-2 pr-4 font-medium text-gray-900 dark:text-white">{{ aspect.category }}</td>
+                    <td class="py-2 pr-4 text-right font-mono text-gray-700 dark:text-gray-300">{{ formatCompactNumber(aspect.heat) }}</td>
+                    <td
+                      class="py-2 pr-4 text-right font-mono"
+                      :class="aspect.sentiment >= 0.1 ? 'text-emerald-600 dark:text-emerald-400' : aspect.sentiment <= -0.1 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-500 dark:text-gray-400'"
+                    >
+                      {{ aspect.sentiment >= 0 ? '+' : '' }}{{ aspect.sentiment.toFixed(2) }}
+                    </td>
+                    <td class="py-2 pr-4 text-right font-mono text-gray-500 dark:text-gray-400">
+                      {{ typeof aspect.mention_count === 'number' ? aspect.mention_count : '-' }}
+                    </td>
+                    <td class="py-2">
+                      <div class="flex flex-wrap gap-1">
+                        <span
+                          v-for="kw in (aspect.top_keywords || []).slice(0, 4)"
+                          :key="kw"
+                          class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                        >
+                          {{ kw }}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <!-- ===== Focus Layer (聚焦层) - 条件触发 ===== -->
@@ -1346,6 +1674,7 @@ const copyText = async (text: string) => {
           v-model:open="postListModalOpen"
           :groups="postListModalGroups"
           :title="postListModalTitle"
+          :has-spam-data="hasSnapshotSpamData"
         />
 
         <!-- 证据面板（完整 Top 列表） -->
@@ -1522,9 +1851,44 @@ const copyText = async (text: string) => {
                   </div>
                 </div>
                 <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                  <div class="text-xs text-gray-500 dark:text-gray-400">情感</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">情感（总体）</div>
                   <div class="text-lg font-mono font-semibold text-gray-900 dark:text-white mt-1">
                     {{ Number((entityPanelEntity as any).sentiment || 0).toFixed(2) }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 有机 / 推广分层情感 -->
+              <div
+                v-if="(entityPanelEntity as any).organic_sentiment != null || (entityPanelEntity as any).promo_sentiment != null"
+                class="grid grid-cols-2 gap-3"
+              >
+                <div class="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-100 dark:border-emerald-800/40">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">有机情感</div>
+                  <div
+                    class="text-lg font-mono font-semibold mt-1"
+                    :class="Number((entityPanelEntity as any).organic_sentiment || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  >
+                    {{ (entityPanelEntity as any).organic_sentiment != null
+                        ? (Number((entityPanelEntity as any).organic_sentiment) >= 0 ? '+' : '') + Number((entityPanelEntity as any).organic_sentiment).toFixed(2)
+                        : '-' }}
+                  </div>
+                  <div
+                    v-if="(entityPanelEntity as any).organic_sentiment != null && Math.abs(Number((entityPanelEntity as any).organic_sentiment) - Number((entityPanelEntity as any).sentiment || 0)) >= 0.1"
+                    class="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5"
+                  >
+                    ⚠ 与总体差距 ≥0.1
+                  </div>
+                </div>
+                <div class="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/15 border border-amber-100 dark:border-amber-800/40">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">推广情感</div>
+                  <div
+                    class="text-lg font-mono font-semibold mt-1"
+                    :class="Number((entityPanelEntity as any).promo_sentiment || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  >
+                    {{ (entityPanelEntity as any).promo_sentiment != null
+                        ? (Number((entityPanelEntity as any).promo_sentiment) >= 0 ? '+' : '') + Number((entityPanelEntity as any).promo_sentiment).toFixed(2)
+                        : '-' }}
                   </div>
                 </div>
               </div>
@@ -1560,6 +1924,105 @@ const copyText = async (text: string) => {
                   >
                     <div class="text-gray-800 dark:text-gray-200">{{ term.text }}</div>
                     <div class="text-xs text-gray-400 mt-1">出现 {{ term.count }} 次</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 来源任务分解 -->
+              <div v-if="(entityPanelEntity as any).source_tasks?.length" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  来源任务（{{ (entityPanelEntity as any).source_tasks.length }}）
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span
+                    v-for="st in (entityPanelEntity as any).source_tasks.slice(0, 8)"
+                    :key="st.task_id"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-gray-700 text-xs"
+                  >
+                    <span class="text-gray-500 dark:text-gray-400 font-mono">#{{ st.task_id }}</span>
+                    <span class="text-gray-700 dark:text-gray-300 font-mono">{{ st.mentions }}</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- 角色 / 类型分布 -->
+              <div
+                v-if="(entityPanelEntity as any).role_breakdown || (entityPanelEntity as any).type_breakdown"
+                class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 space-y-2"
+              >
+                <div v-if="(entityPanelEntity as any).role_breakdown" class="space-y-1">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">角色分布</div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <span
+                      v-for="(cnt, role) in (entityPanelEntity as any).role_breakdown"
+                      :key="role"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-gray-700 text-xs"
+                    >
+                      <span class="text-gray-600 dark:text-gray-400">{{ role }}</span>
+                      <span class="font-mono text-gray-900 dark:text-white">{{ cnt }}</span>
+                    </span>
+                  </div>
+                </div>
+                <div v-if="(entityPanelEntity as any).type_breakdown" class="space-y-1">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">类型分布</div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <span
+                      v-for="(cnt, tp) in (entityPanelEntity as any).type_breakdown"
+                      :key="tp"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-gray-700 text-xs"
+                    >
+                      <span class="text-gray-600 dark:text-gray-400">{{ tp }}</span>
+                      <span class="font-mono text-gray-900 dark:text-white">{{ cnt }}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 产品特性 / 产品问题 -->
+              <div
+                v-if="(entityPanelEntity as any).top_features?.length || (entityPanelEntity as any).top_issues?.length"
+                class="space-y-2"
+              >
+                <div
+                  v-if="(entityPanelEntity as any).top_features?.length"
+                  class="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/15"
+                >
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    产品特性 Top {{ Math.min((entityPanelEntity as any).top_features.length, 5) }}
+                  </div>
+                  <div class="space-y-1.5">
+                    <div
+                      v-for="(feat, fIdx) in (entityPanelEntity as any).top_features.slice(0, 5)"
+                      :key="`feat-${fIdx}`"
+                      class="flex items-baseline justify-between gap-2"
+                    >
+                      <span
+                        class="text-xs text-gray-800 dark:text-gray-200 truncate flex-1"
+                        :title="feat.text"
+                      >{{ feat.text }}</span>
+                      <span class="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 shrink-0">×{{ feat.mentions }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  v-if="(entityPanelEntity as any).top_issues?.length"
+                  class="p-3 rounded-lg bg-rose-50 dark:bg-rose-900/15"
+                >
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    产品问题 Top {{ Math.min((entityPanelEntity as any).top_issues.length, 5) }}
+                  </div>
+                  <div class="space-y-1.5">
+                    <div
+                      v-for="(issue, iIdx) in (entityPanelEntity as any).top_issues.slice(0, 5)"
+                      :key="`issue-${iIdx}`"
+                      class="flex items-baseline justify-between gap-2"
+                    >
+                      <span
+                        class="text-xs text-gray-800 dark:text-gray-200 truncate flex-1"
+                        :title="issue.text"
+                      >{{ issue.text }}</span>
+                      <span class="text-[10px] font-mono text-rose-700 dark:text-rose-400 shrink-0">×{{ issue.mentions }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1614,6 +2077,58 @@ const copyText = async (text: string) => {
                     {{ Number(focusPanelItem.competitor_sentiment || 0).toFixed(2) }}
                   </div>
                   <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">提及 {{ Number(focusPanelItem.competitor_mentions || 0) }}</div>
+                </div>
+              </div>
+
+              <!-- 有机 / 推广分层情感 -->
+              <div
+                v-if="focusPanelItem.target_organic_sentiment != null || focusPanelItem.competitor_organic_sentiment != null
+                  || focusPanelItem.target_promo_sentiment != null || focusPanelItem.competitor_promo_sentiment != null"
+                class="grid grid-cols-2 gap-3"
+              >
+                <div class="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-100 dark:border-emerald-800/40">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">我方有机情感</div>
+                  <div
+                    class="text-base font-mono font-semibold mt-1"
+                    :class="Number(focusPanelItem.target_organic_sentiment || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  >
+                    {{ focusPanelItem.target_organic_sentiment != null
+                      ? (Number(focusPanelItem.target_organic_sentiment) >= 0 ? '+' : '') + Number(focusPanelItem.target_organic_sentiment).toFixed(2)
+                      : '-' }}
+                  </div>
+                  <div v-if="focusPanelItem.target_promo_sentiment != null" class="text-[10px] text-gray-400 mt-0.5 font-mono">
+                    推广 {{ Number(focusPanelItem.target_promo_sentiment) >= 0 ? '+' : '' }}{{ Number(focusPanelItem.target_promo_sentiment).toFixed(2) }}
+                  </div>
+                </div>
+                <div class="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-100 dark:border-emerald-800/40">
+                  <div class="text-xs text-gray-500 dark:text-gray-400">竞品有机情感</div>
+                  <div
+                    class="text-base font-mono font-semibold mt-1"
+                    :class="Number(focusPanelItem.competitor_organic_sentiment || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  >
+                    {{ focusPanelItem.competitor_organic_sentiment != null
+                      ? (Number(focusPanelItem.competitor_organic_sentiment) >= 0 ? '+' : '') + Number(focusPanelItem.competitor_organic_sentiment).toFixed(2)
+                      : '-' }}
+                  </div>
+                  <div v-if="focusPanelItem.competitor_promo_sentiment != null" class="text-[10px] text-gray-400 mt-0.5 font-mono">
+                    推广 {{ Number(focusPanelItem.competitor_promo_sentiment) >= 0 ? '+' : '' }}{{ Number(focusPanelItem.competitor_promo_sentiment).toFixed(2) }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 推广/有机分布条 -->
+              <div
+                v-if="focusPanelItem.target_spam_distribution || focusPanelItem.competitor_spam_distribution"
+                class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 space-y-2"
+              >
+                <div class="text-xs text-gray-500 dark:text-gray-400">推广/有机分布</div>
+                <div v-if="focusPanelItem.target_spam_distribution" class="flex items-start gap-2">
+                  <span class="text-xs text-gray-500 dark:text-gray-400 w-6 shrink-0 pt-0.5">我方</span>
+                  <SpamRatioBar :spam-distribution="focusPanelItem.target_spam_distribution" />
+                </div>
+                <div v-if="focusPanelItem.competitor_spam_distribution" class="flex items-start gap-2">
+                  <span class="text-xs text-gray-500 dark:text-gray-400 w-6 shrink-0 pt-0.5">竞品</span>
+                  <SpamRatioBar :spam-distribution="focusPanelItem.competitor_spam_distribution" />
                 </div>
               </div>
 

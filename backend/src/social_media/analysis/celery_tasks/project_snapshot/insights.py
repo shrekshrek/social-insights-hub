@@ -69,13 +69,18 @@ def build_snapshot_layers(
                 "parent": parent,
                 "role": role,
                 "heat": round(heat, 3),
+                "organic_heat": e.get("organic_heat"),
+                "promo_heat": e.get("promo_heat"),
                 "mentions": mentions,
                 "share": round((heat / total_heat), 6) if total_heat > 0 else 0.0,
                 "sentiment": round(sentiment, 2),
+                "organic_sentiment": e.get("organic_sentiment"),
+                "promo_sentiment": e.get("promo_sentiment"),
                 "sentiment_distribution": e.get("sentiment_distribution") or {},
                 "platform_distribution": e.get("platform_distribution") or {},
                 "post_ids_sample": post_ids_sample,
                 "source_tasks": source_tasks,
+                "spam_distribution": e.get("spam_distribution"),
             }
         )
 
@@ -95,16 +100,31 @@ def build_snapshot_layers(
             {
                 "name": group,
                 "heat": 0.0,
+                "organic_heat": 0.0,
+                "promo_heat": 0.0,
                 "mentions": 0,
                 "_spam_high_post": 0,
                 "_spam_high_comment": 0,
                 "_spam_low_post": 0,
                 "_spam_low_comment": 0,
                 "_has_spam": False,
+                # 有机/推广情感累加
+                "organic_sent_weighted_sum": 0.0,
+                "organic_sent_weight": 0.0,
+                "promo_sent_weighted_sum": 0.0,
+                "promo_sent_weight": 0.0,
             },
         )
         try:
             b["heat"] += float(e.get("heat") or 0.0)
+        except Exception:
+            pass
+        try:
+            b["organic_heat"] += float(e.get("organic_heat") or 0.0)
+        except Exception:
+            pass
+        try:
+            b["promo_heat"] += float(e.get("promo_heat") or 0.0)
         except Exception:
             pass
         try:
@@ -122,11 +142,30 @@ def build_snapshot_layers(
                 b["_spam_low_post"] += int(ls.get("post") or 0)
                 b["_spam_low_comment"] += int(ls.get("comment") or 0)
                 b["_has_spam"] = True
+                # 有机/推广情感加权累加
+                low_total = int(ls.get("total") or 0)
+                high_total = int(hs.get("total") or 0)
+                organic_sent = e.get("organic_sentiment")
+                promo_sent = e.get("promo_sentiment")
+                if organic_sent is not None and low_total > 0:
+                    try:
+                        b["organic_sent_weighted_sum"] += float(organic_sent) * low_total
+                        b["organic_sent_weight"] += low_total
+                    except Exception:
+                        pass
+                if promo_sent is not None and high_total > 0:
+                    try:
+                        b["promo_sent_weighted_sum"] += float(promo_sent) * high_total
+                        b["promo_sent_weight"] += high_total
+                    except Exception:
+                        pass
     group_share_items = []
     for k, v in group_bucket.items():
-        item = {
+        item: dict[str, Any] = {
             "name": k,
             "heat": round(float(v.get("heat") or 0.0), 3),
+            "organic_heat": round(float(v.get("organic_heat") or 0.0), 3),
+            "promo_heat": round(float(v.get("promo_heat") or 0.0), 3),
             "mentions": int(v.get("mentions") or 0),
         }
         # 构建 spam_distribution
@@ -139,6 +178,17 @@ def build_snapshot_layers(
                 "high_spam": {"total": hp + hc, "post": hp, "comment": hc},
                 "low_spam": {"total": lp + lc, "post": lp, "comment": lc},
             }
+            # 有机/推广情感
+            item["organic_sentiment"] = (
+                round(v["organic_sent_weighted_sum"] / v["organic_sent_weight"], 2)
+                if (v.get("organic_sent_weight") or 0) > 0
+                else None
+            )
+            item["promo_sentiment"] = (
+                round(v["promo_sent_weighted_sum"] / v["promo_sent_weight"], 2)
+                if (v.get("promo_sent_weight") or 0) > 0
+                else None
+            )
         else:
             item["spam_distribution"] = None
         group_share_items.append(item)
@@ -213,10 +263,15 @@ def build_snapshot_layers(
                 "name": name,
                 "role": item.get("role") or "Context",
                 "heat": item.get("heat") or 0.0,
+                "organic_heat": item.get("organic_heat"),
+                "promo_heat": item.get("promo_heat"),
                 "sentiment": item.get("sentiment") or 0.0,
+                "organic_sentiment": item.get("organic_sentiment"),
+                "promo_sentiment": item.get("promo_sentiment"),
                 "mentions": item.get("mentions") or 0,
                 "post_ids_sample": item.get("post_ids_sample") or [],
                 "source_tasks": item.get("source_tasks") or [],
+                "spam_distribution": item.get("spam_distribution"),
             }
         )
 

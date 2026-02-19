@@ -48,7 +48,9 @@ watch(
     if (!isOpen) return
     spamGroup.value = undefined
     // 重置 tabTotals
-    Object.keys(tabTotals).forEach(k => delete tabTotals[k])
+    for (const k of Object.keys(tabTotals)) {
+      tabTotals[k] = undefined
+    }
     if (hasGroups.value) {
       selectedTaskId.value = groups.value[0]?.taskId
     } else {

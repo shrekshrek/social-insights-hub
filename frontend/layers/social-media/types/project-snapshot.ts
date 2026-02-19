@@ -55,10 +55,18 @@ export interface AlignedEntity {
   mentions: number
   score: number
   sentiment?: number
+  /** 推广内容情感（spam_score >= 6.0 的帖子） */
+  promo_sentiment?: number
+  /** 有机内容情感（spam_score < 6.0 的帖子） */
+  organic_sentiment?: number
   sentiment_distribution?: {
     positive: number
     negative: number
     neutral: number
+  }
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
   }
   original_terms?: OriginalTerm[]
   source_tasks?: SourceTask[]
@@ -86,6 +94,10 @@ export interface AlignedTopic {
     positive: number
     negative: number
     neutral: number
+  }
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
   }
   original_terms?: OriginalTerm[]
   source_tasks?: SourceTask[]
@@ -150,6 +162,14 @@ export interface IndustryQuadrantPoint {
   heat: number
   sentiment: number
   mentions: number
+  /** 有机内容情感（spam_score < 6.0 的帖子） */
+  organic_sentiment?: number
+  /** 推广内容情感（spam_score >= 6.0 的帖子） */
+  promo_sentiment?: number
+  /** 有机内容热度（spam_score < 6.0 的帖子热度总和） */
+  organic_heat?: number
+  /** 推广内容热度（spam_score >= 6.0 的帖子热度总和） */
+  promo_heat?: number
   spam_distribution?: {
     high_spam: { total: number; post: number; comment: number }
     low_spam: { total: number; post: number; comment: number }
@@ -236,6 +256,11 @@ export interface SWOTItem {
   target_mentions: number
   competitor_mentions: number
   delta: number
+  /** 有机内容分层情感（后端提供时使用，否则前端退回占比视图） */
+  target_organic_sentiment?: number
+  target_promo_sentiment?: number
+  competitor_organic_sentiment?: number
+  competitor_promo_sentiment?: number
   target_spam_distribution?: {
     high_spam: { total: number; post: number; comment: number }
     low_spam: { total: number; post: number; comment: number }
@@ -264,6 +289,10 @@ export interface ProductLineHealthItem {
   /** 对 Target 总声量的贡献度 (%) */
   contribution: number
   sentiment: number
+  /** 有机内容情感（spam_score < 6.0 的帖子） */
+  organic_sentiment?: number
+  /** 推广内容情感（spam_score >= 6.0 的帖子） */
+  promo_sentiment?: number
   /** Top 1 痛点 */
   top_pain?: string
   platform_distribution?: PlatformDistribution
@@ -279,9 +308,29 @@ export interface ProductLineHealthItem {
 /** 平台剪刀差项 */
 export interface PlatformScissorsItem {
   platform: string
+  subject_mentions: number
+  industry_mentions: number
   subject_share: number
-  industry_avg_share: number
-  gap: number
+  industry_share: number
+  delta: number
+  /** 主体在该平台的有机/推广提及量 */
+  subject_organic_mentions?: number
+  subject_promo_mentions?: number
+  /** 行业在该平台的有机/推广提及量 */
+  industry_organic_mentions?: number
+  industry_promo_mentions?: number
+}
+
+/** 平台剪刀差汇总 */
+export interface PlatformScissorsData {
+  subject_total_mentions: number
+  industry_total_mentions: number
+  by_platform: PlatformScissorsItem[]
+  /** 主体/行业有机推广总量（用于跨平台份额归一化） */
+  subject_total_organic_mentions?: number
+  subject_total_promo_mentions?: number
+  industry_total_organic_mentions?: number
+  industry_total_promo_mentions?: number
 }
 
 /** Gap 分析项 */

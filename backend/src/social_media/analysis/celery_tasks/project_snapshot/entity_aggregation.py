@@ -395,6 +395,8 @@ def build_entities_aligned(
                 "type": e.get("type"),
                 "role": e.get("role"),
                 "heat": 0.0,
+                "organic_heat": 0.0,
+                "promo_heat": 0.0,
                 "mentions": 0,
                 # 情感聚合字段（用于行业象限散点图）
                 "sentiment_weighted_sum": 0.0,
@@ -422,10 +424,17 @@ def build_entities_aligned(
                 "_spam_low_post": 0,
                 "_spam_low_comment": 0,
                 "_spam_found": False,
+                # 有机/推广情感累加器
+                "organic_sent_weighted_sum": 0.0,
+                "organic_sent_weight": 0.0,
+                "promo_sent_weighted_sum": 0.0,
+                "promo_sent_weight": 0.0,
             }
             bucket[canon] = b
         b["original_names"].append(raw_name)
         b["heat"] += float(e.get("heat") or 0.0)
+        b["organic_heat"] += float(e.get("organic_heat") or 0.0)
+        b["promo_heat"] += float(e.get("promo_heat") or 0.0)
         entity_mentions = int(e.get("mentions") or 0)
         b["mentions"] += entity_mentions
         # 情感累加（加权平均，按 mentions 加权）
@@ -489,6 +498,23 @@ def build_entities_aligned(
             if isinstance(ls, dict):
                 b["_spam_low_post"] += int(ls.get("post") or 0)
                 b["_spam_low_comment"] += int(ls.get("comment") or 0)
+            # 有机/推广情感累加（按 spam_distribution 总量加权）
+            low_total = int((ls or {}).get("total") or 0) if isinstance(ls, dict) else 0
+            high_total = int((hs or {}).get("total") or 0) if isinstance(hs, dict) else 0
+            organic_sent = e.get("organic_sentiment")
+            promo_sent = e.get("promo_sentiment")
+            if organic_sent is not None and low_total > 0:
+                try:
+                    b["organic_sent_weighted_sum"] += float(organic_sent) * low_total
+                    b["organic_sent_weight"] += low_total
+                except Exception:
+                    pass
+            if promo_sent is not None and high_total > 0:
+                try:
+                    b["promo_sent_weighted_sum"] += float(promo_sent) * high_total
+                    b["promo_sent_weight"] += high_total
+                except Exception:
+                    pass
         # 帖子样本合并（去重 + 限制数量）
         for ref in e.get("post_ids_sample") or []:
             if len(b["post_ids_sample"]) >= max_post_ids_sample:
@@ -551,6 +577,13 @@ def build_entities_aligned(
                 "high_spam": {"total": hp + hc, "post": hp, "comment": hc},
                 "low_spam": {"total": lp + lc, "post": lp, "comment": lc},
             }
+        # 有机/推广情感
+        organic_sentiment = None
+        if (b.get("organic_sent_weight") or 0) > 0:
+            organic_sentiment = round(b["organic_sent_weighted_sum"] / b["organic_sent_weight"], 2)
+        promo_sentiment = None
+        if (b.get("promo_sent_weight") or 0) > 0:
+            promo_sentiment = round(b["promo_sent_weighted_sum"] / b["promo_sent_weight"], 2)
 
         aligned.append(
             {
@@ -560,10 +593,14 @@ def build_entities_aligned(
                 or b.get("role"),
                 "parent": (tags_mapping.get(b["name"], {}) or {}).get("parent") or "",
                 "heat": round(heat, 3),
+                "organic_heat": round(float(b.get("organic_heat") or 0.0), 3),
+                "promo_heat": round(float(b.get("promo_heat") or 0.0), 3),
                 "mentions": mentions,
                 "score": round(score, 3),
                 # 情感字段（用于行业象限散点图）
                 "sentiment": sentiment,
+                "organic_sentiment": organic_sentiment,
+                "promo_sentiment": promo_sentiment,
                 "sentiment_distribution": {
                     "positive": b.get("positive_count") or 0,
                     "negative": b.get("negative_count") or 0,

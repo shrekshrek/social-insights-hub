@@ -11,7 +11,12 @@ interface SpamDistribution {
 interface GroupShareItem {
   name: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   mentions: number
+  sentiment?: number
+  organic_sentiment?: number
+  promo_sentiment?: number
   spam_distribution?: SpamDistribution
 }
 
@@ -21,14 +26,33 @@ const props = defineProps<{
     name: string
     parent?: string
     heat?: number
+    organic_heat?: number
+    promo_heat?: number
     mentions?: number
     role?: string
+    sentiment?: number
+    organic_sentiment?: number
+    promo_sentiment?: number
     spam_distribution?: SpamDistribution
   }>
   maxItems?: number
 }>()
 
 const maxItems = computed(() => props.maxItems ?? 10)
+
+// ==================== 声量视角 ====================
+
+type SpamView = 'all' | 'promo' | 'organic'
+const spamView = ref<SpamView>('all')
+
+const spamViewOptions = [
+  { value: 'all', label: '全量' },
+  { value: 'promo', label: '推广' },
+  { value: 'organic', label: '有机' },
+]
+
+// ==================== 指标模式（不含有机/推广，已移至视角）====================
+
 type MetricMode = 'heat' | 'mentions' | 'efficiency'
 const metricMode = ref<MetricMode>('heat')
 
@@ -38,11 +62,87 @@ const metricModeOptions = [
   { value: 'efficiency', label: '效能' },
 ]
 
-const metricLabel = computed(() => (metricMode.value === 'mentions' ? '提及' : metricMode.value === 'efficiency' ? '效能' : '热度'))
-const shareLabel = computed(() => (metricMode.value === 'mentions' ? '份额(提及)' : '份额(热度)'))
-const innerShareLabel = computed(() => (metricMode.value === 'mentions' ? '集团内(提及)' : '集团内(热度)'))
+// ==================== 能力检测 ====================
 
-// 构建树结构：parent -> children
+const hasSpamData = computed(() =>
+  (props.data || []).some(i => i.spam_distribution != null),
+)
+
+// ==================== 有机/推广指标辅助 ====================
+
+const getOrganicMentions = (item: { spam_distribution?: SpamDistribution }): number =>
+  item.spam_distribution?.low_spam.total ?? 0
+
+const getPromoMentions = (item: { spam_distribution?: SpamDistribution }): number =>
+  item.spam_distribution?.high_spam.total ?? 0
+
+// ==================== 动态标签 ====================
+
+const metricLabel = computed(() => {
+  if (metricMode.value === 'efficiency') return '效能'
+  if (metricMode.value === 'mentions') {
+    if (spamView.value === 'organic') return '有机提及'
+    if (spamView.value === 'promo') return '推广提及'
+    return '提及'
+  }
+  if (spamView.value === 'organic') return '有机热度'
+  if (spamView.value === 'promo') return '推广热度'
+  return '热度'
+})
+
+const shareLabel = computed(() => {
+  if (spamView.value === 'organic') return '有机份额'
+  if (spamView.value === 'promo') return '推广份额'
+  if (metricMode.value === 'mentions') return '份额(提及)'
+  return '份额(热度)'
+})
+
+const innerShareLabel = computed(() => {
+  if (spamView.value === 'organic') return '集团内(有机)'
+  if (spamView.value === 'promo') return '集团内(推广)'
+  if (metricMode.value === 'mentions') return '集团内(提及)'
+  return '集团内(热度)'
+})
+
+// ==================== 指标计算（结合视角）====================
+
+const getEffectiveMentions = (item: { mentions?: number; spam_distribution?: SpamDistribution }): number => {
+  if (spamView.value === 'organic') return getOrganicMentions(item)
+  if (spamView.value === 'promo') return getPromoMentions(item)
+  return item.mentions || 0
+}
+
+const getMetricValue = (item: { heat?: number; organic_heat?: number; promo_heat?: number; mentions?: number; spam_distribution?: SpamDistribution }): number => {
+  if (metricMode.value === 'efficiency') {
+    const denom = getEffectiveMentions(item)
+    return denom > 0 ? (item.heat || 0) / denom : 0
+  }
+  if (metricMode.value === 'mentions') return getEffectiveMentions(item)
+  if (spamView.value === 'organic') return item.organic_heat ?? getOrganicMentions(item)
+  if (spamView.value === 'promo') return item.promo_heat ?? getPromoMentions(item)
+  return item.heat || 0
+}
+
+// ==================== 份额分母 ====================
+
+const totalOrganicMentions = computed(() =>
+  (props.data || []).reduce((s, g) => s + getOrganicMentions(g), 0),
+)
+
+const totalPromoMentions = computed(() =>
+  (props.data || []).reduce((s, g) => s + getPromoMentions(g), 0),
+)
+
+const totalOrganicHeat = computed(() =>
+  (props.data || []).reduce((s, g) => s + (g.organic_heat ?? getOrganicMentions(g)), 0),
+)
+
+const totalPromoHeat = computed(() =>
+  (props.data || []).reduce((s, g) => s + (g.promo_heat ?? getPromoMentions(g)), 0),
+)
+
+// ==================== 树结构 ====================
+
 interface TreeNode {
   name: string
   heat: number
@@ -53,6 +153,9 @@ interface TreeNode {
   role?: string
   memberCount?: number
   top3Share?: number
+  sentiment?: number
+  organic_sentiment?: number
+  promo_sentiment?: number
   spam_distribution?: SpamDistribution
   children: TreeNode[]
 }
@@ -62,21 +165,27 @@ const treeData = computed<TreeNode[]>(() => {
   const entities = props.entities || []
   if (!groups.length) return []
 
-  // 计算总热度
   const totalHeat = groups.reduce((sum, g) => sum + (g.heat || 0), 0)
   const totalMentions = groups.reduce((sum, g) => sum + (g.mentions || 0), 0)
-  const shareMode = metricMode.value === 'mentions' ? 'mentions' : 'heat'
-  const totalShareBase = shareMode === 'mentions' ? totalMentions : totalHeat
+  const totalOrganic = totalOrganicMentions.value
+  const totalPromo = totalPromoMentions.value
 
-  const getMetricValue = (item: { heat?: number; mentions?: number }) => {
-    const heat = item.heat || 0
-    const mentions = item.mentions || 0
-    if (metricMode.value === 'mentions') return mentions
-    if (metricMode.value === 'efficiency') return mentions > 0 ? heat / mentions : 0
-    return heat
+  // 份额分母：视角优先，视角为 all 时由指标模式决定
+  const getShareBase = (): number => {
+    if (spamView.value === 'organic') return Math.max(totalOrganicHeat.value, 1)
+    if (spamView.value === 'promo') return Math.max(totalPromoHeat.value, 1)
+    if (metricMode.value === 'mentions') return Math.max(totalMentions, 1)
+    return Math.max(totalHeat, 1)
   }
 
-  // 构建 parent -> entity 映射
+  const getItemShareMetric = (item: { heat?: number; organic_heat?: number; promo_heat?: number; mentions?: number; spam_distribution?: SpamDistribution }): number => {
+    if (spamView.value === 'organic') return item.organic_heat ?? getOrganicMentions(item)
+    if (spamView.value === 'promo') return item.promo_heat ?? getPromoMentions(item)
+    if (metricMode.value === 'mentions') return item.mentions || 0
+    return item.heat || 0
+  }
+
+  // parent → entities 映射
   const entityByParent: Record<string, typeof entities> = {}
   for (const e of entities) {
     const parent = (e.parent || '').trim() || e.name
@@ -84,60 +193,62 @@ const treeData = computed<TreeNode[]>(() => {
     entityByParent[parent].push(e)
   }
 
-  // 构建树
-  const tree: TreeNode[] = []
+  const shareBase = getShareBase()
+
   const sortedGroups = groups
     .slice()
     .sort((a, b) => getMetricValue(b) - getMetricValue(a))
     .slice(0, maxItems.value)
 
-  for (const g of sortedGroups) {
+  return sortedGroups.map(g => {
     const childrenAll = (entityByParent[g.name] || [])
       .filter(e => e.name !== g.name)
-      .map(e => ({
-        name: e.name,
-        heat: e.heat || 0,
-        mentions: e.mentions || 0,
-        share: totalShareBase > 0 ? ((shareMode === 'mentions' ? (e.mentions || 0) : (e.heat || 0)) / totalShareBase) : 0,
-        isGroup: false,
-        role: e.role,
-        spam_distribution: e.spam_distribution,
-        children: [],
-      }))
+      .map(e => {
+        const childShareMetric = getItemShareMetric(e)
+        return {
+          name: e.name,
+          heat: e.heat || 0,
+          mentions: e.mentions || 0,
+          share: shareBase > 0 ? childShareMetric / shareBase : 0,
+          isGroup: false as const,
+          role: e.role,
+          sentiment: e.sentiment,
+          organic_sentiment: e.organic_sentiment,
+          promo_sentiment: e.promo_sentiment,
+          spam_distribution: e.spam_distribution,
+          children: [] as TreeNode[],
+          _shareMetric: childShareMetric,
+        }
+      })
       .sort((a, b) => getMetricValue(b) - getMetricValue(a))
 
-    const groupShareBase = shareMode === 'mentions' ? (g.mentions || 0) : (g.heat || 0)
-    const totalShareValue = shareMode === 'mentions' ? (g.mentions || 0) : (g.heat || 0)
-    const top3Value = childrenAll.slice(0, 3).reduce((sum, c) => {
-      const v = shareMode === 'mentions' ? (c.mentions || 0) : (c.heat || 0)
-      return sum + v
-    }, 0)
+    const groupShareMetric = getItemShareMetric(g)
+    const top3Value = childrenAll.slice(0, 3).reduce((sum, c) => sum + c._shareMetric, 0)
 
-    const children = childrenAll
-      .map(child => ({
-        ...child,
-        innerShare: groupShareBase > 0
-          ? ((shareMode === 'mentions' ? (child.mentions || 0) : (child.heat || 0)) / groupShareBase)
-          : 0,
-      }))
+    const children = childrenAll.map(child => ({
+      ...child,
+      innerShare: groupShareMetric > 0 ? child._shareMetric / groupShareMetric : 0,
+    }))
 
-    tree.push({
+    return {
       name: g.name,
       heat: g.heat || 0,
       mentions: g.mentions || 0,
-      share: totalShareBase > 0 ? totalShareValue / totalShareBase : 0,
+      share: shareBase > 0 ? groupShareMetric / shareBase : 0,
       isGroup: true,
       memberCount: childrenAll.length,
-      top3Share: groupShareBase > 0 ? top3Value / groupShareBase : 0,
+      top3Share: groupShareMetric > 0 ? top3Value / groupShareMetric : 0,
+      sentiment: g.sentiment,
+      organic_sentiment: g.organic_sentiment,
+      promo_sentiment: g.promo_sentiment,
       spam_distribution: g.spam_distribution,
       children: children.slice(0, 5),
-    })
-  }
-
-  return tree
+    }
+  })
 })
 
-// 展开状态
+// ==================== 展开状态 ====================
+
 const expandedGroups = ref<Set<string>>(new Set())
 const toggleGroup = (name: string) => {
   const s = new Set(expandedGroups.value)
@@ -147,7 +258,22 @@ const toggleGroup = (name: string) => {
 }
 const isExpanded = (name: string) => expandedGroups.value.has(name)
 
-// 格式化
+// ==================== 情感显示 ====================
+
+const getDisplaySentiment = (node: { sentiment?: number; organic_sentiment?: number; promo_sentiment?: number }): number | null => {
+  if (spamView.value === 'organic') return node.organic_sentiment ?? node.sentiment ?? null
+  if (spamView.value === 'promo') return node.promo_sentiment ?? node.sentiment ?? null
+  return node.sentiment ?? null
+}
+
+const hasSentimentData = computed(() =>
+  treeData.value.some(n => n.sentiment != null),
+)
+
+const fmtSentiment = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}`
+
+// ==================== 格式化 ====================
+
 const formatNumber = (n: number) => {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
@@ -156,14 +282,14 @@ const formatNumber = (n: number) => {
 
 const formatPercent = (n: number) => `${(n * 100).toFixed(1)}%`
 
-const formatMetricValue = (item: { heat: number; mentions: number }) => {
+const formatMetricValue = (node: { heat: number; mentions: number; spam_distribution?: SpamDistribution }) => {
   if (metricMode.value === 'efficiency') {
-    return `${item.mentions > 0 ? (item.heat / item.mentions).toFixed(1) : '-'}x`
+    const denom = getEffectiveMentions(node)
+    return `${denom > 0 ? (node.heat / denom).toFixed(1) : '-'}x`
   }
-  return formatNumber(metricMode.value === 'mentions' ? item.mentions : item.heat)
+  return formatNumber(getEffectiveMentions(node))
 }
 
-// 最大份额用于进度条
 const maxShare = computed(() => {
   const shares = treeData.value.map(t => t.share)
   return Math.max(...shares, 0.000001)
@@ -172,12 +298,27 @@ const maxShare = computed(() => {
 
 <template>
   <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 h-[520px] flex flex-col">
+    <!-- 标题栏 -->
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">集团军声量</h3>
       <div class="flex items-center gap-2">
         <TabSwitch v-model="metricMode" :options="metricModeOptions" />
+        <TabSwitch v-if="hasSpamData" v-model="spamView" :options="spamViewOptions" />
         <span class="text-xs text-gray-500 dark:text-gray-400">按 Parent 聚合</span>
       </div>
+    </div>
+
+    <!-- 视角说明 -->
+    <div
+      v-if="spamView !== 'all'"
+      class="mb-2 px-2.5 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-700 dark:text-blue-400"
+    >
+      <template v-if="spamView === 'organic'">
+        <b>有机视角</b>：提及数与份额均以有机声量（低推广内容）为口径
+      </template>
+      <template v-else>
+        <b>推广视角</b>：提及数与份额均以推广声量（高推广内容）为口径
+      </template>
     </div>
 
     <div class="flex-1 overflow-auto">
@@ -221,6 +362,15 @@ const maxShare = computed(() => {
                   >
                     Top3 {{ formatPercent(node.top3Share) }}
                   </span>
+                  <!-- 情感（后端填充后自动显示） -->
+                  <span
+                    v-if="hasSentimentData && getDisplaySentiment(node) != null"
+                    class="text-[10px] font-mono"
+                    :class="(getDisplaySentiment(node) ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                    :title="spamView === 'organic' ? '有机情感' : spamView === 'promo' ? '推广情感' : '整体情感'"
+                  >
+                    {{ fmtSentiment(getDisplaySentiment(node) ?? 0) }}
+                  </span>
                 </div>
                 <div v-if="node.spam_distribution" class="ml-5">
                   <SpamRatioBar :spam-distribution="node.spam_distribution" />
@@ -261,6 +411,14 @@ const maxShare = computed(() => {
                       :class="child.role === 'Target' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'"
                     >
                       {{ child.role === 'Target' ? '主体' : '竞品' }}
+                    </span>
+                    <!-- 子实体情感 -->
+                    <span
+                      v-if="hasSentimentData && getDisplaySentiment(child) != null"
+                      class="text-[10px] font-mono"
+                      :class="(getDisplaySentiment(child) ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                    >
+                      {{ fmtSentiment(getDisplaySentiment(child) ?? 0) }}
                     </span>
                   </div>
                   <div v-if="child.spam_distribution">

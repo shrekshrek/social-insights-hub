@@ -349,6 +349,11 @@ def build_project_snapshot_result(
     # 情感聚合 (用于计算加权平均)
     global_sentiment_sum = 0.0
     global_sentiment_count = 0
+    # 有机/推广情感聚合（来自 metrics.nsr_by_spam）
+    organic_sentiment_sum = 0.0
+    organic_sentiment_count = 0
+    promo_sentiment_sum = 0.0
+    promo_sentiment_count = 0
 
     # ==================== 2. Entity & Topic Buckets ====================
     entity_bucket: dict[str, dict[str, Any]] = {}
@@ -437,6 +442,23 @@ def build_project_snapshot_result(
         # 简单加权：假设NSR代表该任务所有帖子的平均情感
         global_sentiment_sum += nsr * count
         global_sentiment_count += count
+        # 有机/推广情感（来自 metrics.nsr_by_spam，按任务量加权）
+        nsr_by_spam = metrics.get("nsr_by_spam")
+        if isinstance(nsr_by_spam, dict):
+            low_nsr = nsr_by_spam.get("low")
+            high_nsr = nsr_by_spam.get("high")
+            if low_nsr is not None and count > 0:
+                try:
+                    organic_sentiment_sum += float(low_nsr) * count
+                    organic_sentiment_count += count
+                except Exception:
+                    pass
+            if high_nsr is not None and count > 0:
+                try:
+                    promo_sentiment_sum += float(high_nsr) * count
+                    promo_sentiment_count += count
+                except Exception:
+                    pass
 
         # 3. Entities Aggregation
         # 规范口径：项目级快照只使用 canonical 字段 aggregated_entities，不使用 insights 兜底
@@ -486,6 +508,8 @@ def build_project_snapshot_result(
                     "category": (e or {}).get("category"),
                     "parent": "",
                     "heat": 0.0,  # normalized heat (Raw_CII * platform_weight) over deduped posts
+                    "organic_heat": 0.0,  # heat from low_spam (organic) posts
+                    "promo_heat": 0.0,  # heat from high_spam (promotional) posts
                     "mentions_set": set(),  # set[post_key]
                     "post_ids_sample": [],
                     "source_tasks": defaultdict(set),
@@ -496,6 +520,11 @@ def build_project_snapshot_result(
                     "positive_count": 0,
                     "negative_count": 0,
                     "neutral_count": 0,
+                    # 有机/推广情感分层（按 spam_distribution 权重）
+                    "organic_sent_weighted_sum": 0.0,
+                    "organic_sent_weight": 0.0,
+                    "promo_sent_weighted_sum": 0.0,
+                    "promo_sent_weight": 0.0,
                     # Spam 来源追踪（post_key 维度）
                     "post_source_keys": set(),
                     "comment_source_keys": set(),
@@ -542,6 +571,25 @@ def build_project_snapshot_result(
                     bucket["neutral_count"] += int(sent_dist.get("neutral") or 0)
                 except Exception:
                     pass
+            # 累加有机/推广情感（按任务级 spam_distribution 权重）
+            task_spam_dist = (e or {}).get("spam_distribution")
+            if isinstance(task_spam_dist, dict):
+                low_total = int((task_spam_dist.get("low_spam") or {}).get("total") or 0)
+                high_total = int((task_spam_dist.get("high_spam") or {}).get("total") or 0)
+                organic_sent = (e or {}).get("organic_sentiment")
+                promo_sent = (e or {}).get("promo_sentiment")
+                if organic_sent is not None and low_total > 0:
+                    try:
+                        bucket["organic_sent_weighted_sum"] += float(organic_sent) * low_total
+                        bucket["organic_sent_weight"] += low_total
+                    except Exception:
+                        pass
+                if promo_sent is not None and high_total > 0:
+                    try:
+                        bucket["promo_sent_weighted_sum"] += float(promo_sent) * high_total
+                        bucket["promo_sent_weight"] += high_total
+                    except Exception:
+                        pass
 
             # 构建任务级来源集合（用于 spam 4D 分布的 post/comment 归类）
             task_post_src: set[int] = set()
@@ -580,7 +628,13 @@ def build_project_snapshot_result(
                 # heat 累加：normalized_heat（Raw_CII * platform_weight）
                 info = post_info_by_key.get(pk) or {}
                 try:
-                    bucket["heat"] += float(info.get("normalized_heat") or 0.0)
+                    h = float(info.get("normalized_heat") or 0.0)
+                    bucket["heat"] += h
+                    spam_group = spam_map_by_key.get(pk)
+                    if spam_group == "low":
+                        bucket["organic_heat"] += h
+                    elif spam_group == "high":
+                        bucket["promo_heat"] += h
                 except Exception:
                     pass
                 # 分布：按去重后的主归属 keyword/platform 计数（总和=mentions）
@@ -728,6 +782,8 @@ def build_project_snapshot_result(
                     "name": name,
                     "category": category,
                     "heat": 0.0,  # normalized heat over deduped posts
+                    "organic_heat": 0.0,  # heat from low_spam (organic) posts
+                    "promo_heat": 0.0,  # heat from high_spam (promotional) posts
                     "sentiment_sum": 0.0,
                     "sentiment_weight": 0.0,
                     "mentions_set": set(),  # set[post_key]
@@ -780,6 +836,11 @@ def build_project_snapshot_result(
                 except Exception:
                     h = 0.0
                 bucket["heat"] += h
+                spam_group_t = spam_map_by_key.get(pk)
+                if spam_group_t == "low":
+                    bucket["organic_heat"] += h
+                elif spam_group_t == "high":
+                    bucket["promo_heat"] += h
                 # sentiment：按 mentions（去重后帖子数）加权
                 bucket["sentiment_sum"] += float(sentiment) * 1.0
                 bucket["sentiment_weight"] += 1.0
@@ -905,6 +966,14 @@ def build_project_snapshot_result(
         else:
             avg_sentiment = 0.0
 
+        # 计算有机/推广情感
+        organic_sentiment = None
+        if (b.get("organic_sent_weight") or 0) > 0:
+            organic_sentiment = round(b["organic_sent_weighted_sum"] / b["organic_sent_weight"], 2)
+        promo_sentiment = None
+        if (b.get("promo_sent_weight") or 0) > 0:
+            promo_sentiment = round(b["promo_sent_weighted_sum"] / b["promo_sent_weight"], 2)
+
         # Spam 4D 分布
         spam_dist = _compute_spam_dist_4d_by_key(
             b["post_source_keys"], b["comment_source_keys"], spam_map_by_key
@@ -921,10 +990,14 @@ def build_project_snapshot_result(
                 "category": b["category"],
                 "parent": main_parent,
                 "heat": round(heat, 3),
+                "organic_heat": round(float(b.get("organic_heat") or 0.0), 3),
+                "promo_heat": round(float(b.get("promo_heat") or 0.0), 3),
                 "mentions": mentions,
                 "score": round(score, 3),
                 # 情感字段（用于行业象限散点图）
                 "sentiment": avg_sentiment,
+                "organic_sentiment": organic_sentiment,
+                "promo_sentiment": promo_sentiment,
                 "sentiment_distribution": {
                     "positive": b.get("positive_count") or 0,
                     "negative": b.get("negative_count") or 0,
@@ -988,6 +1061,8 @@ def build_project_snapshot_result(
                 "category": b["category"],
                 "sentiment": round(avg_sentiment, 2),
                 "heat": round(heat, 3),
+                "organic_heat": round(float(b.get("organic_heat") or 0.0), 3),
+                "promo_heat": round(float(b.get("promo_heat") or 0.0), 3),
                 "mentions": mentions,
                 "score": round(score, 3),
                 "spam_distribution": spam_dist_t,
@@ -1041,6 +1116,16 @@ def build_project_snapshot_result(
         if global_sentiment_count > 0
         else 0.0
     )
+    organic_avg_sentiment = (
+        organic_sentiment_sum / organic_sentiment_count
+        if organic_sentiment_count > 0
+        else None
+    )
+    promo_avg_sentiment = (
+        promo_sentiment_sum / promo_sentiment_count
+        if promo_sentiment_count > 0
+        else None
+    )
 
     overview = {
         # 任务级总量（不去重）
@@ -1049,6 +1134,8 @@ def build_project_snapshot_result(
         "unique_posts": unique_posts,
         "total_heat": round(total_heat, 2),
         "global_sentiment": round(global_avg_sentiment, 2),
+        "organic_global_sentiment": round(organic_avg_sentiment, 2) if organic_avg_sentiment is not None else None,
+        "promo_global_sentiment": round(promo_avg_sentiment, 2) if promo_avg_sentiment is not None else None,
         "platform_volume": dict(platform_volume),
         "keyword_volume": dict(keyword_volume),
     }

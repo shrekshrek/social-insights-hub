@@ -13,6 +13,8 @@ interface ProductLineHealthItem {
   mentions: number
   contribution: number
   sentiment: number
+  organic_sentiment?: number
+  promo_sentiment?: number
   top_pain?: string
   platform_distribution?: Record<string, number>
   spam_distribution?: SpamDistribution
@@ -129,12 +131,23 @@ const maxContribution = computed(() => {
               </div>
             </td>
             <td class="py-2.5 pr-3 text-center">
-              <span
-                class="inline-block px-2 py-0.5 rounded text-xs font-mono"
-                :class="[getSentimentColor(item.sentiment), getSentimentBg(item.sentiment)]"
-              >
-                {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(2) }}
-              </span>
+              <div class="flex flex-col items-center gap-0.5">
+                <span
+                  class="inline-block px-2 py-0.5 rounded text-xs font-mono"
+                  :class="[getSentimentColor(item.sentiment), getSentimentBg(item.sentiment)]"
+                >
+                  {{ item.sentiment >= 0 ? '+' : '' }}{{ item.sentiment.toFixed(2) }}
+                </span>
+                <span
+                  v-if="item.organic_sentiment != null"
+                  class="text-[10px] font-mono"
+                  :class="getSentimentColor(item.organic_sentiment)"
+                  :title="`有机情感: ${item.organic_sentiment >= 0 ? '+' : ''}${item.organic_sentiment.toFixed(2)}${Math.abs(item.organic_sentiment - item.sentiment) >= 0.1 ? '（与总体差距 ≥0.1，推广内容可能存在失真）' : ''}`"
+                >
+                  机{{ item.organic_sentiment >= 0 ? '+' : '' }}{{ item.organic_sentiment.toFixed(2) }}
+                  <span v-if="Math.abs(item.organic_sentiment - item.sentiment) >= 0.1" class="text-amber-500">⚠</span>
+                </span>
+              </div>
             </td>
             <td class="py-2.5">
               <span

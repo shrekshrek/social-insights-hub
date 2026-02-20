@@ -667,12 +667,8 @@ const hasAnySpamData = computed(() =>
               <ul v-if="issue.opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
                 <li v-for="(op, idx) in issue.opinions.slice(0, 3)" :key="idx">{{ op.text }} ({{ op.count }})</li>
               </ul>
-              <div class="flex items-center gap-2 text-xs text-gray-400">
-                <span>帖子 {{ issue.post_source_count || 0 }} / 评论 {{ issue.comment_source_count || 0 }}</span>
-                <template v-if="issue.spam_distribution">
-                  <span class="text-gray-300 dark:text-gray-600">|</span>
-                  <SpamRatioBar :spam-distribution="issue.spam_distribution" />
-                </template>
+              <div v-if="issue.spam_distribution" class="flex items-center gap-2 text-xs text-gray-400">
+                <SpamRatioBar :spam-distribution="issue.spam_distribution" />
               </div>
             </div>
           </div>
@@ -713,12 +709,8 @@ const hasAnySpamData = computed(() =>
               <ul v-if="feature.opinions?.length" class="text-xs text-gray-600 dark:text-gray-400 mb-1 list-disc list-inside space-y-0.5">
                 <li v-for="(op, idx) in feature.opinions.slice(0, 3)" :key="idx">{{ op.text }} ({{ op.count }})</li>
               </ul>
-              <div class="flex items-center gap-2 text-xs text-gray-400">
-                <span>帖子 {{ feature.post_source_count || 0 }} / 评论 {{ feature.comment_source_count || 0 }}</span>
-                <template v-if="feature.spam_distribution">
-                  <span class="text-gray-300 dark:text-gray-600">|</span>
-                  <SpamRatioBar :spam-distribution="feature.spam_distribution" />
-                </template>
+              <div v-if="feature.spam_distribution" class="flex items-center gap-2 text-xs text-gray-400">
+                <SpamRatioBar :spam-distribution="feature.spam_distribution" />
               </div>
             </div>
           </div>

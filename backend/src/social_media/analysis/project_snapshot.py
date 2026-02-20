@@ -407,19 +407,6 @@ def build_project_snapshot_result(
         "avg_age_days": round(sum(ages) / len(ages), 1) if ages else 0.0,
     }
 
-    # 维度聚合 (Aspect Analysis)
-    aspect_bucket: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {
-            "heat": 0.0,
-            "sentiment_sum": 0.0,
-            "sentiment_weight": 0.0,
-            "mention_count": 0,
-            "keywords": defaultdict(int),
-            "platforms": defaultdict(int),
-            "top_terms": defaultdict(int),  # category 下的高频词
-        }
-    )
-
     for task_data in task_data_list:
         tid = task_data["task_id"]
         result = task_data.get("analysis_result") or {}
@@ -902,16 +889,6 @@ def build_project_snapshot_result(
                     str(primary_keyword_by_key.get(pk) or keyword)
                 ] += 1
 
-                # Aspect Aggregation（按去重后的 mentions 计数）
-                asp = aspect_bucket[category]
-                asp["heat"] += h
-                asp["sentiment_sum"] += float(sentiment) * 1.0
-                asp["sentiment_weight"] += 1.0
-                asp["mention_count"] += 1
-                asp["keywords"][str(primary_keyword_by_key.get(pk) or keyword)] += 1
-                asp["platforms"][str(info.get("platform") or platform)] += 1
-                asp["top_terms"][name] += 1
-
                 try:
                     primary_tid = int(primary_task_by_key.get(pk) or tid)
                 except Exception:
@@ -1158,31 +1135,6 @@ def build_project_snapshot_result(
     project_topics.sort(key=lambda x: x.get("score", 0.0), reverse=True)
     project_topics = project_topics[:max_items]
 
-    # ==================== Finalize Aspects ====================
-    project_aspects = []
-    for cat, data in aspect_bucket.items():
-        avg_sent = (
-            data["sentiment_sum"] / data["sentiment_weight"]
-            if data["sentiment_weight"] > 0
-            else 0.0
-        )
-        project_aspects.append(
-            {
-                "category": cat,
-                "heat": round(data["heat"], 2),
-                "sentiment": round(avg_sent, 2),
-                "mention_count": data["mention_count"],
-                "top_keywords": sorted(
-                    data["top_terms"].keys(),
-                    key=lambda k: data["top_terms"][k],
-                    reverse=True,
-                )[:5],
-                "platform_distribution": dict(data["platforms"]),
-                "keyword_distribution": dict(data["keywords"]),
-            }
-        )
-    project_aspects.sort(key=lambda x: x["heat"], reverse=True)
-
     # ==================== Finalize Overview ====================
     global_avg_sentiment = (
         global_sentiment_sum / global_sentiment_count
@@ -1257,10 +1209,8 @@ def build_project_snapshot_result(
                 "freshness": freshness,
                 "overview": overview,
             },
-            # 文档口径：Topic 层命名为 intent
-            "intent": {
-                "topic_aspects": project_aspects,
-            },
+            # intent 层由 Stage3 build_snapshot_layers 填充
+            "intent": {},
             # Focus 由 Stage2/Stage3 基于 subject 条件触发填充
             "focus": None,
         },

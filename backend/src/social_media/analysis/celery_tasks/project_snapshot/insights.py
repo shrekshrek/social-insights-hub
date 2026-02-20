@@ -266,31 +266,6 @@ def build_snapshot_layers(
     overview_safe["total_organic_heat"] = round(total_organic_heat, 3)
     overview_safe["total_promo_heat"] = round(total_promo_heat, 3)
 
-    # --- 行业象限 (Industry Quadrant)：Top 50 实体的 [热度 x 情感] 散点图数据 ---
-    industry_quadrant: list[dict[str, Any]] = []
-    for item in sov_ranking[:50]:
-        if not isinstance(item, dict):
-            continue
-        name = item.get("name") or ""
-        if not name:
-            continue
-        industry_quadrant.append(
-            {
-                "name": name,
-                "role": item.get("role") or "Context",
-                "heat": item.get("heat") or 0.0,
-                "organic_heat": item.get("organic_heat"),
-                "promo_heat": item.get("promo_heat"),
-                "sentiment": item.get("sentiment") or 0.0,
-                "organic_sentiment": item.get("organic_sentiment"),
-                "promo_sentiment": item.get("promo_sentiment"),
-                "mentions": item.get("mentions") or 0,
-                "post_ids_sample": item.get("post_ids_sample") or [],
-                "source_tasks": item.get("source_tasks") or [],
-                "spam_distribution": item.get("spam_distribution"),
-            }
-        )
-
     # --- 平台阵地 DNA：Top N 品牌在各平台的声量占比分布 ---
     platform_dna: list[dict[str, Any]] = []
     # 先收集所有平台
@@ -348,8 +323,7 @@ def build_snapshot_layers(
     landscape = {
         "sov_ranking": sov_ranking,
         "group_share": group_share,
-        "industry_quadrant": industry_quadrant,  # 行业象限散点图数据
-        "platform_dna": platform_dna,  # 平台阵地 DNA
+        "platform_dna": platform_dna,
         "freshness": freshness,
         # 透传 Stage1 overview（包含 platform_volume / keyword_volume / global_sentiment 等）
         "overview": overview_safe,
@@ -579,9 +553,14 @@ def build_snapshot_layers(
             "gap": None,
         }
         # --- 平台剪刀差：目标阵地分布 vs 行业整体分布 ---
+        # 优先用去重后口径（与实体 platform_distribution 一致），旧快照降级到原始任务量
+        _upv = overview_safe.get("unique_platform_volume")
+        _pv = overview_safe.get("platform_volume")
         industry_platform = (
-            overview_safe.get("platform_volume")
-            if isinstance(overview_safe.get("platform_volume"), dict)
+            _upv
+            if isinstance(_upv, dict) and _upv
+            else _pv
+            if isinstance(_pv, dict)
             else {}
         )
         if not industry_platform:
@@ -1035,11 +1014,11 @@ def build_snapshot_layers(
                         }
                     )
 
-                # Gap：竞品强项明显，但目标缺失/偏弱（用于“差异化诊断”）
+                # Gap：竞品强项明显，但目标在该维度声量缺失（盲点诊断）
+                # 有意区别于 Threats（情感劣势）：Gap = 目标根本没覆盖到该维度
                 if cm >= min_mentions and cs >= 0.2:
                     low_presence = tm < max(min_mentions, int(cm * 0.3))
-                    weak_sent = ts < 0.1
-                    if low_presence or weak_sent:
+                    if low_presence:
                         gaps.append(
                             {
                                 **item_base,

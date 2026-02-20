@@ -91,6 +91,8 @@ def test_context_graph_dimension_filtering():
     # all 版本应该包含所有节点
     all_nodes = result["all"]["nodes"]
     all_names = {n["name"] for n in all_nodes}
+    assert "Feature 1" in all_names
+    assert "Feature 2" in all_names
 
     # organic 版本应该只包含 Feature 2
     organic_nodes = result["organic"]["nodes"]

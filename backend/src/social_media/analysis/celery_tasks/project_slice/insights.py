@@ -88,6 +88,8 @@ def build_slice_layers(
                 "organic_sentiment": e.get("organic_sentiment"),
                 "promo_sentiment": e.get("promo_sentiment"),
                 "platform_distribution": e.get("platform_distribution") or {},
+                "organic_platform_distribution": e.get("organic_platform_distribution") or {},
+                "promo_platform_distribution": e.get("promo_platform_distribution") or {},
                 "post_ids_sample": post_ids_sample,
                 "source_tasks": source_tasks,
                 "spam_distribution": e.get("spam_distribution"),
@@ -271,10 +273,47 @@ def build_slice_layers(
             }
         )
 
+    # Industry Quadrant data：全量实体散点图（热度 × 情感，按 mentions > 0 过滤）
+    industry_quadrant: list[dict[str, Any]] = []
+    for e in entities_aligned or []:
+        if not isinstance(e, dict):
+            continue
+        name = e.get("name") or ""
+        if not name:
+            continue
+        mentions = int(e.get("mentions") or 0)
+        if mentions <= 0:
+            continue
+        try:
+            heat = float(e.get("heat") or 0.0)
+        except Exception:
+            heat = 0.0
+        try:
+            sentiment = float(e.get("sentiment") or 0.0)
+        except Exception:
+            sentiment = 0.0
+        industry_quadrant.append(
+            {
+                "name": name,
+                "role": _norm_role(e.get("role")),
+                "heat": round(heat, 3),
+                "organic_heat": e.get("organic_heat"),
+                "promo_heat": e.get("promo_heat"),
+                "sentiment": round(sentiment, 2),
+                "organic_sentiment": e.get("organic_sentiment"),
+                "promo_sentiment": e.get("promo_sentiment"),
+                "mentions": mentions,
+                "spam_distribution": e.get("spam_distribution"),
+                "source_tasks": e.get("source_tasks") or [],
+                "post_ids_sample": (e.get("post_ids_sample") or [])[:10],
+            }
+        )
+
     landscape = {
         "sov_ranking": sov_ranking,
         "group_share": group_share,
         "platform_dna": platform_dna,
+        "industry_quadrant": industry_quadrant,
         "freshness": freshness,
         # 透传 Stage1 overview（包含 platform_volume / keyword_volume / global_sentiment 等）
         "overview": overview_safe,

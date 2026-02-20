@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import TabSwitch from '../shared/TabSwitch.vue'
-import SpamRatioBar from '../shared/SpamRatioBar.vue'
 
 interface SpamDistribution {
   high_spam: { total: number; post: number; comment: number }
@@ -14,6 +13,7 @@ interface GroupShareItem {
   organic_heat?: number
   promo_heat?: number
   mentions: number
+  role?: string
   sentiment?: number
   organic_sentiment?: number
   promo_sentiment?: number
@@ -53,13 +53,12 @@ const spamViewOptions = [
 
 // ==================== 指标模式（不含有机/推广，已移至视角）====================
 
-type MetricMode = 'heat' | 'mentions' | 'efficiency'
+type MetricMode = 'heat' | 'mentions'
 const metricMode = ref<MetricMode>('heat')
 
 const metricModeOptions = [
   { value: 'heat', label: '热度' },
   { value: 'mentions', label: '提及' },
-  { value: 'efficiency', label: '效能' },
 ]
 
 // ==================== 能力检测 ====================
@@ -79,7 +78,6 @@ const getPromoMentions = (item: { spam_distribution?: SpamDistribution }): numbe
 // ==================== 动态标签 ====================
 
 const metricLabel = computed(() => {
-  if (metricMode.value === 'efficiency') return '效能'
   if (metricMode.value === 'mentions') {
     if (spamView.value === 'organic') return '有机提及'
     if (spamView.value === 'promo') return '推广提及'
@@ -93,15 +91,15 @@ const metricLabel = computed(() => {
 const shareLabel = computed(() => {
   if (spamView.value === 'organic') return '有机份额'
   if (spamView.value === 'promo') return '推广份额'
-  if (metricMode.value === 'mentions') return '份额(提及)'
-  return '份额(热度)'
+  if (metricMode.value === 'mentions') return '份额'
+  return '份额'
 })
 
 const innerShareLabel = computed(() => {
-  if (spamView.value === 'organic') return '集团内(有机)'
-  if (spamView.value === 'promo') return '集团内(推广)'
-  if (metricMode.value === 'mentions') return '集团内(提及)'
-  return '集团内(热度)'
+  if (spamView.value === 'organic') return '集团内'
+  if (spamView.value === 'promo') return '集团内'
+  if (metricMode.value === 'mentions') return '集团内'
+  return '集团内'
 })
 
 // ==================== 指标计算（结合视角）====================
@@ -119,10 +117,6 @@ const getEffectiveHeat = (item: { heat?: number; organic_heat?: number; promo_he
 }
 
 const getMetricValue = (item: { heat?: number; organic_heat?: number; promo_heat?: number; mentions?: number; spam_distribution?: SpamDistribution }): number => {
-  if (metricMode.value === 'efficiency') {
-    const denom = getEffectiveMentions(item)
-    return denom > 0 ? getEffectiveHeat(item) / denom : 0
-  }
   if (metricMode.value === 'mentions') return getEffectiveMentions(item)
   if (spamView.value === 'organic') return item.organic_heat ?? getOrganicMentions(item)
   if (spamView.value === 'promo') return item.promo_heat ?? getPromoMentions(item)
@@ -130,14 +124,6 @@ const getMetricValue = (item: { heat?: number; organic_heat?: number; promo_heat
 }
 
 // ==================== 份额分母 ====================
-
-const totalOrganicMentions = computed(() =>
-  (props.data || []).reduce((s, g) => s + getOrganicMentions(g), 0),
-)
-
-const totalPromoMentions = computed(() =>
-  (props.data || []).reduce((s, g) => s + getPromoMentions(g), 0),
-)
 
 const totalOrganicHeat = computed(() =>
   (props.data || []).reduce((s, g) => s + (g.organic_heat ?? getOrganicMentions(g)), 0),
@@ -175,9 +161,6 @@ const treeData = computed<TreeNode[]>(() => {
 
   const totalHeat = groups.reduce((sum, g) => sum + (g.heat || 0), 0)
   const totalMentions = groups.reduce((sum, g) => sum + (g.mentions || 0), 0)
-  const totalOrganic = totalOrganicMentions.value
-  const totalPromo = totalPromoMentions.value
-
   // 份额分母：视角优先，视角为 all 时由指标模式决定
   const getShareBase = (): number => {
     if (spamView.value === 'organic') return Math.max(totalOrganicHeat.value, 1)
@@ -240,6 +223,10 @@ const treeData = computed<TreeNode[]>(() => {
       innerShare: groupShareMetric > 0 ? child._shareMetric / groupShareMetric : 0,
     }))
 
+    // 角色：优先用后端字段，否则从子实体推断（全部同角色时显示）
+    const childRoles = new Set(childrenAll.map(c => c.role).filter(Boolean))
+    const inferredRole = g.role ?? (childRoles.size === 1 ? [...childRoles][0] : undefined)
+
     return {
       name: g.name,
       heat: g.heat || 0,
@@ -248,6 +235,7 @@ const treeData = computed<TreeNode[]>(() => {
       mentions: g.mentions || 0,
       share: shareBase > 0 ? groupShareMetric / shareBase : 0,
       isGroup: true,
+      role: inferredRole,
       memberCount: childrenAll.length,
       top3Share: groupShareMetric > 0 ? top3Value / groupShareMetric : 0,
       sentiment: g.sentiment,
@@ -278,9 +266,6 @@ const getDisplaySentiment = (node: { sentiment?: number; organic_sentiment?: num
   return node.sentiment ?? null
 }
 
-const hasSentimentData = computed(() =>
-  treeData.value.some(n => n.sentiment != null),
-)
 
 const fmtSentiment = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}`
 
@@ -295,11 +280,15 @@ const formatNumber = (n: number) => {
 const formatPercent = (n: number) => `${(n * 100).toFixed(1)}%`
 
 const formatMetricValue = (node: { heat: number; organic_heat?: number; promo_heat?: number; mentions: number; spam_distribution?: SpamDistribution }) => {
-  if (metricMode.value === 'efficiency') {
-    const denom = getEffectiveMentions(node)
-    return `${denom > 0 ? (getEffectiveHeat(node) / denom).toFixed(1) : '-'}x`
-  }
-  return formatNumber(getEffectiveMentions(node))
+  if (metricMode.value === 'mentions') return formatNumber(getEffectiveMentions(node))
+  return formatNumber(getEffectiveHeat(node))
+}
+
+const getOrganicPct = (item: { spam_distribution?: SpamDistribution }): number => {
+  const org = getOrganicMentions(item)
+  const promo = getPromoMentions(item)
+  const total = org + promo
+  return total > 0 ? Math.round(org / total * 100) : 0
 }
 
 const maxShare = computed(() => {
@@ -312,36 +301,25 @@ const maxShare = computed(() => {
   <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 h-[520px] flex flex-col">
     <!-- 标题栏 -->
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-sm font-semibold text-gray-900 dark:text-white">集团军声量</h3>
+      <div class="flex items-center gap-3">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">集团军声量</h3>
+        <TabSwitch v-if="hasSpamData" v-model="spamView" :options="spamViewOptions" />
+      </div>
       <div class="flex items-center gap-2">
         <TabSwitch v-model="metricMode" :options="metricModeOptions" />
-        <TabSwitch v-if="hasSpamData" v-model="spamView" :options="spamViewOptions" />
         <span class="text-xs text-gray-500 dark:text-gray-400">按 Parent 聚合</span>
       </div>
-    </div>
-
-    <!-- 视角说明 -->
-    <div
-      v-if="spamView !== 'all'"
-      class="mb-2 px-2.5 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-700 dark:text-blue-400"
-    >
-      <template v-if="spamView === 'organic'">
-        <b>有机视角</b>：提及数与份额均以有机声量（低推广内容）为口径
-      </template>
-      <template v-else>
-        <b>推广视角</b>：提及数与份额均以推广声量（高推广内容）为口径
-      </template>
     </div>
 
     <div class="flex-1 overflow-auto">
       <table class="w-full text-sm">
         <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
           <tr class="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
-            <th class="py-2 pr-4 font-medium">集团/品牌</th>
-            <th class="py-2 pr-4 font-medium text-right">{{ metricLabel }}</th>
-            <th class="py-2 pr-4 font-medium text-right">{{ shareLabel }}</th>
-            <th class="py-2 pr-4 font-medium text-right">{{ innerShareLabel }}</th>
-            <th class="py-2 font-medium w-32">分布</th>
+            <th class="py-2 pr-2.5 font-medium">集团/品牌</th>
+            <th class="py-2 pr-2.5 font-medium text-right">{{ metricLabel }}</th>
+            <th class="py-2 pr-2.5 font-medium text-right">{{ shareLabel }}</th>
+            <th class="py-2 pr-2.5 font-medium text-right">{{ innerShareLabel }}</th>
+            <th class="py-2 font-medium w-20">分布</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-50 dark:divide-gray-800/50">
@@ -352,8 +330,8 @@ const maxShare = computed(() => {
               :class="{ 'bg-gray-50/50 dark:bg-gray-800/20': isExpanded(node.name) }"
               @click="node.children.length && toggleGroup(node.name)"
             >
-              <td class="py-2.5 pr-4">
-                <div class="flex items-center gap-2 mb-1">
+              <td class="py-2.5 pr-2.5">
+                <div class="flex items-center gap-2">
                   <UIcon
                     v-if="node.children.length"
                     name="i-heroicons-chevron-right"
@@ -362,6 +340,13 @@ const maxShare = computed(() => {
                   />
                   <span v-else class="w-3.5" />
                   <span class="font-medium text-gray-900 dark:text-white">{{ node.name }}</span>
+                  <span
+                    v-if="node.role && node.role !== 'Context'"
+                    class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                    :class="node.role === 'Target' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'"
+                  >
+                    {{ node.role === 'Target' ? '主体' : '竞品' }}
+                  </span>
                   <span
                     v-if="node.memberCount"
                     class="text-[10px] text-gray-400 dark:text-gray-500"
@@ -374,9 +359,15 @@ const maxShare = computed(() => {
                   >
                     Top3 {{ formatPercent(node.top3Share) }}
                   </span>
-                  <!-- 情感（后端填充后自动显示） -->
                   <span
-                    v-if="hasSentimentData && getDisplaySentiment(node) != null"
+                    v-if="node.spam_distribution"
+                    class="text-[10px] text-gray-400 dark:text-gray-500"
+                    title="有机占比"
+                  >
+                    机{{ getOrganicPct(node) }}%
+                  </span>
+                  <span
+                    v-if="getDisplaySentiment(node) != null"
                     class="text-[10px] font-mono"
                     :class="(getDisplaySentiment(node) ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
                     :title="spamView === 'organic' ? '有机情感' : spamView === 'promo' ? '推广情感' : '整体情感'"
@@ -384,20 +375,17 @@ const maxShare = computed(() => {
                     {{ fmtSentiment(getDisplaySentiment(node) ?? 0) }}
                   </span>
                 </div>
-                <div v-if="node.spam_distribution" class="ml-5">
-                  <SpamRatioBar :spam-distribution="node.spam_distribution" />
-                </div>
               </td>
-              <td class="py-2.5 pr-4 text-right font-mono text-gray-700 dark:text-gray-300">
+              <td class="py-2.5 pr-2.5 text-right font-mono text-gray-700 dark:text-gray-300">
                 {{ formatMetricValue(node) }}
               </td>
-              <td class="py-2.5 pr-4 text-right font-mono text-gray-700 dark:text-gray-300">
+              <td class="py-2.5 pr-2.5 text-right font-mono text-gray-700 dark:text-gray-300">
                 {{ formatPercent(node.share) }}
               </td>
-              <td class="py-2.5 pr-4 text-right font-mono text-gray-400 dark:text-gray-500">
+              <td class="py-2.5 pr-2.5 text-right font-mono text-gray-400 dark:text-gray-500">
                 —
               </td>
-              <td class="py-2.5">
+              <td class="py-2.5 pr-2.5">
                 <div class="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                   <div
                     class="h-full bg-primary-500 rounded-full transition-all"
@@ -414,8 +402,8 @@ const maxShare = computed(() => {
                 :key="`${node.name}-${child.name}`"
                 class="bg-gray-50/50 dark:bg-gray-800/20"
               >
-                <td class="py-2 pr-4 pl-8">
-                  <div class="flex items-center gap-1.5 mb-1">
+                <td class="py-2 pr-2.5 pl-8">
+                  <div class="flex items-center gap-1.5">
                     <span class="text-gray-600 dark:text-gray-400">{{ child.name }}</span>
                     <span
                       v-if="child.role && child.role !== 'Context'"
@@ -424,29 +412,32 @@ const maxShare = computed(() => {
                     >
                       {{ child.role === 'Target' ? '主体' : '竞品' }}
                     </span>
-                    <!-- 子实体情感 -->
                     <span
-                      v-if="hasSentimentData && getDisplaySentiment(child) != null"
+                      v-if="child.spam_distribution"
+                      class="text-[10px] text-gray-400 dark:text-gray-500"
+                      title="有机占比"
+                    >
+                      机{{ getOrganicPct(child) }}%
+                    </span>
+                    <span
+                      v-if="getDisplaySentiment(child) != null"
                       class="text-[10px] font-mono"
                       :class="(getDisplaySentiment(child) ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
                     >
                       {{ fmtSentiment(getDisplaySentiment(child) ?? 0) }}
                     </span>
                   </div>
-                  <div v-if="child.spam_distribution">
-                    <SpamRatioBar :spam-distribution="child.spam_distribution" />
-                  </div>
                 </td>
-                <td class="py-2 pr-4 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
+                <td class="py-2 pr-2.5 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
                   {{ formatMetricValue(child) }}
                 </td>
-                <td class="py-2 pr-4 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
+                <td class="py-2 pr-2.5 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
                   {{ formatPercent(child.share) }}
                 </td>
-                <td class="py-2 pr-4 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
+                <td class="py-2 pr-2.5 text-right font-mono text-xs text-gray-500 dark:text-gray-400">
                   {{ formatPercent(child.innerShare || 0) }}
                 </td>
-                <td class="py-2">
+                <td class="py-2 pr-2.5">
                   <div class="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div
                       class="h-full bg-primary-300 dark:bg-primary-600 rounded-full"

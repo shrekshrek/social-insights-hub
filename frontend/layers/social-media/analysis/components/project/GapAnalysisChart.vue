@@ -47,8 +47,8 @@ const gapViewMode = ref<GapViewMode>('all')
 
 const gapViewOptions = [
   { value: 'all', label: '全量' },
-  { value: 'organic', label: '有机' },
   { value: 'promo', label: '推广' },
+  { value: 'organic', label: '有机' },
 ]
 
 // ==================== 数据与能力检测 ====================
@@ -60,10 +60,6 @@ const hasSpamData = computed(() =>
   items.value.some(i => i.target_spam_distribution != null || i.competitor_spam_distribution != null),
 )
 
-/** 后端是否提供了精确的分层情感值（影响有机模式的数据来源） */
-const hasOrganicSentiment = computed(() =>
-  items.value.some(i => i.target_organic_sentiment != null || i.competitor_organic_sentiment != null),
-)
 
 // ==================== 视图数值计算 ====================
 
@@ -296,32 +292,19 @@ onMounted(updateChart)
   <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
     <!-- 标题行 -->
     <div class="flex items-center justify-between mb-3">
-      <div>
+      <div class="flex items-center gap-3">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Gap 分析</h3>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          <template v-if="gapViewMode === 'all'">竞品优势 vs {{ subject || '目标' }}缺失点</template>
-          <template v-else-if="gapViewMode === 'organic'">有机声音维度对比：{{ subject || '目标' }} vs 竞品</template>
-          <template v-else>推广内容维度对比：{{ subject || '目标' }} vs 竞品</template>
-        </p>
+        <TabSwitch
+          v-if="hasSpamData"
+          v-model="gapViewMode"
+          :options="gapViewOptions"
+        />
       </div>
-      <TabSwitch
-        v-if="hasSpamData"
-        v-model="gapViewMode"
-        :options="gapViewOptions"
-      />
-    </div>
-
-    <!-- 占比模式说明（无分层情感时显示） -->
-    <div
-      v-if="gapViewMode !== 'all' && !hasOrganicSentiment && hasSpamData"
-      class="mb-3 px-2.5 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed"
-    >
-      <template v-if="gapViewMode === 'organic'">
-        当前显示<b>有机占比 Gap</b>（暂无分层情感值）。<b>右侧</b>表示我方在该维度有更多真实用户声音，<b>左侧</b>表示竞品有机声音占优。
-      </template>
-      <template v-else>
-        当前显示<b>推广占比 Gap</b>（暂无分层情感值）。<b>右侧</b>表示我方在该维度推广声音更多，<b>左侧</b>表示竞品推广声音占优。
-      </template>
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        <template v-if="gapViewMode === 'all'">竞品优势 vs {{ subject || '目标' }}缺失点</template>
+        <template v-else-if="gapViewMode === 'organic'">有机声音维度对比</template>
+        <template v-else>推广内容维度对比</template>
+      </p>
     </div>
 
     <!-- 图表 -->

@@ -32,8 +32,8 @@ const quadrantViewMode = ref<QuadrantViewMode>('all')
 
 const quadrantViewOptions = [
   { value: 'all', label: '全量' },
-  { value: 'organic', label: '有机' },
   { value: 'promo', label: '推广' },
+  { value: 'organic', label: '有机' },
 ]
 
 // ==================== 能力检测 ====================
@@ -43,11 +43,6 @@ const items = computed(() => props.data || [])
 /** 是否有 spam 分布数据（决定是否显示视图切换） */
 const hasSpamData = computed(() =>
   items.value.some(p => p.spam_distribution != null),
-)
-
-/** 后端是否提供了精确分层情感值 */
-const hasOrganicSentiment = computed(() =>
-  items.value.some(p => p.organic_sentiment != null || p.promo_sentiment != null),
 )
 
 // ==================== 角色与样式 ====================
@@ -394,31 +389,20 @@ onMounted(() => {
   <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
     <!-- 标题行 -->
     <div class="flex items-center justify-between mb-3 shrink-0">
-      <h3 class="text-sm font-semibold text-gray-900 dark:text-white">行业象限</h3>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">行业象限</h3>
         <TabSwitch
           v-if="hasSpamData"
           v-model="quadrantViewMode"
           :options="quadrantViewOptions"
         />
+      </div>
+      <div class="flex items-center gap-2">
         <TabSwitch v-model="scaleMode" :options="scaleModeOptions" />
         <span class="text-xs text-gray-500 dark:text-gray-400">
           {{ quadrantViewMode === 'organic' ? '有机热度 × 情感' : quadrantViewMode === 'promo' ? '推广热度 × 情感' : '热度 × 情感' }}
         </span>
       </div>
-    </div>
-
-    <!-- 占比模式说明（无分层情感时显示） -->
-    <div
-      v-if="quadrantViewMode !== 'all' && !hasOrganicSentiment && hasSpamData"
-      class="mb-2 px-2.5 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed"
-    >
-      <template v-if="quadrantViewMode === 'organic'">
-        当前 X 轴为<b>有机热度</b>，Y 轴情感暂无分层精确值（使用总体情感）。点的位置反映真实用户声音规模。
-      </template>
-      <template v-else>
-        当前 X 轴为<b>推广热度</b>，Y 轴情感暂无分层精确值（使用总体情感）。点的位置反映推广内容规模。
-      </template>
     </div>
 
     <!-- 角色图例 -->

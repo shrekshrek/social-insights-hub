@@ -416,18 +416,10 @@ def build_project_slice_result(
 
         # 1. Volume
         vol_data = (result.get("meta") or {}).get("data_volume") or {}
-        count = vol_data.get("total", 0) or 0
-        # 兜底：旧任务/异常任务 meta.data_volume 可能缺失
-        if not isinstance(count, int):
-            try:
-                count = int(count)
-            except Exception:
-                count = 0
-        if count <= 0:
-            try:
-                count = int(task_data.get("posts_count", 0) or 0)
-            except Exception:
-                count = 0
+        try:
+            count = int(vol_data.get("total") or 0)
+        except Exception:
+            count = 0
         total_volume += count
         platform_volume[platform] += count
         keyword_volume[keyword] += count

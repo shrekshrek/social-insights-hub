@@ -81,7 +81,7 @@ interface ProjectTopicAspectItem {
   promo_heat?: number
   sentiment: number
   mention_count?: number
-  top_keywords?: string[]
+  representative_topics?: string[]
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
 }
@@ -1569,7 +1569,7 @@ const copyText = async (text: string) => {
                     >
                       提及{{ topicAspectSort === 'mention_count' ? (topicAspectSortDir === 'desc' ? ' ↓' : ' ↑') : '' }}
                     </th>
-                    <th class="py-2 font-medium">关键词</th>
+                    <th class="py-2 font-medium">代表话题</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50 dark:divide-gray-800/50">
@@ -1578,12 +1578,18 @@ const copyText = async (text: string) => {
                     :key="aspect.category"
                     class="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                   >
-                    <td class="py-2 pr-4 font-medium text-gray-900 dark:text-white">{{ aspect.category }}</td>
-                    <td class="py-2 pr-4 text-right">
-                      <div class="font-mono text-gray-700 dark:text-gray-300">{{ formatCompactNumber(aspect.heat) }}</div>
-                      <div v-if="aspect.organic_heat != null || aspect.promo_heat != null" class="flex justify-end gap-1.5 mt-0.5">
-                        <span v-if="aspect.organic_heat != null" class="text-[10px] font-mono text-emerald-600 dark:text-emerald-400" title="有机热度">↑{{ formatCompactNumber(aspect.organic_heat) }}</span>
-                        <span v-if="aspect.promo_heat != null" class="text-[10px] font-mono text-amber-500 dark:text-amber-400" title="推广热度">↑{{ formatCompactNumber(aspect.promo_heat) }}</span>
+                    <td class="py-2 pr-4 font-medium text-gray-900 dark:text-white whitespace-nowrap">{{ aspect.category }}</td>
+                    <td class="py-2 pr-4 text-right whitespace-nowrap">
+                      <div class="flex items-center justify-end gap-2">
+                        <span class="font-mono text-gray-700 dark:text-gray-300">{{ formatCompactNumber(aspect.heat) }}</span>
+                        <div
+                          v-if="(aspect.organic_heat ?? 0) + (aspect.promo_heat ?? 0) > 0"
+                          class="flex h-1.5 w-10 rounded-full overflow-hidden"
+                          :title="`有机 ${formatCompactNumber(aspect.organic_heat ?? 0)} · 推广 ${formatCompactNumber(aspect.promo_heat ?? 0)}`"
+                        >
+                          <div class="h-full bg-amber-400" :style="{ flex: aspect.promo_heat ?? 0 }" />
+                          <div class="h-full bg-emerald-500" :style="{ flex: aspect.organic_heat ?? 0 }" />
+                        </div>
                       </div>
                     </td>
                     <td
@@ -1598,7 +1604,7 @@ const copyText = async (text: string) => {
                     <td class="py-2">
                       <div class="flex flex-wrap gap-1">
                         <span
-                          v-for="kw in (aspect.top_keywords || []).slice(0, 4)"
+                          v-for="kw in (aspect.representative_topics || []).slice(0, 4)"
                           :key="kw"
                           class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                         >

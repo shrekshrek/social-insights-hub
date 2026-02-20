@@ -3,7 +3,6 @@ import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
 import TopicDrilldownPanel from './TopicDrilldownPanel.vue'
 import TabSwitch from '../shared/TabSwitch.vue'
-import SpamRatioBar from '../shared/SpamRatioBar.vue'
 
 interface TopicRadarItem {
   name: string
@@ -66,8 +65,8 @@ const spamDimension = ref<SpamDimension>('all')
 
 const spamDimensionOptions = [
   { value: 'all', label: '全量' },
-  { value: 'organic', label: '有机' },
   { value: 'promo', label: '推广' },
+  { value: 'organic', label: '有机' },
 ]
 
 // 能力检测：是否有任何 spam 分布数据
@@ -322,8 +321,14 @@ const handleUnmetClick = (item: TopicRadarItem) => {
 <template>
   <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-sm font-semibold text-gray-900 dark:text-white">话题雷达</h3>
-
+      <div class="flex items-center gap-3">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">话题雷达</h3>
+        <TabSwitch
+          v-if="hasSpamData && activeTab === 'radar'"
+          v-model="spamDimension"
+          :options="spamDimensionOptions"
+        />
+      </div>
       <!-- Tab 切换 -->
       <div class="flex gap-1 text-xs">
         <button
@@ -345,24 +350,6 @@ const handleUnmetClick = (item: TopicRadarItem) => {
 
     <!-- 雷达气泡图 -->
     <div v-show="activeTab === 'radar'">
-      <!-- Spam 声量视角 -->
-      <div v-if="hasSpamData" class="mb-3 flex items-center justify-between">
-        <span class="text-xs text-gray-500 dark:text-gray-400">声量视角</span>
-        <TabSwitch v-model="spamDimension" :options="spamDimensionOptions" />
-      </div>
-
-      <!-- 视角说明 -->
-      <div
-        v-if="spamDimension !== 'all'"
-        class="mb-2 px-2.5 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed"
-      >
-        <template v-if="spamDimension === 'organic'">
-          X 轴为<b>有机热度</b>（低推广内容的 CII 加权热度）；Y 轴情感为全量口径（话题维度暂无分层情感）。
-        </template>
-        <template v-else>
-          X 轴为<b>推广热度</b>（高推广内容的 CII 加权热度）；Y 轴情感为全量口径（话题维度暂无分层情感）。
-        </template>
-      </div>
 
       <div v-if="hasChartData" ref="chartRef" class="h-100" />
       <div v-else class="h-80 flex items-center justify-center text-sm text-gray-400">
@@ -401,6 +388,13 @@ const handleUnmetClick = (item: TopicRadarItem) => {
                 <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
                   行业共性痛点
                 </span>
+                <span
+                  v-if="item.spam_distribution"
+                  class="text-[10px] text-gray-400 dark:text-gray-500"
+                  title="有机占比"
+                >
+                  机{{ item.spam_distribution.low_spam.total + item.spam_distribution.high_spam.total > 0 ? Math.round(item.spam_distribution.low_spam.total / (item.spam_distribution.low_spam.total + item.spam_distribution.high_spam.total) * 100) : 0 }}%
+                </span>
               </div>
               <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {{ item.category || '未分类' }}
@@ -412,10 +406,6 @@ const handleUnmetClick = (item: TopicRadarItem) => {
             </div>
           </div>
 
-          <!-- 推广/有机分布 -->
-          <div v-if="item.spam_distribution" class="mt-2 pt-2 border-t border-red-100 dark:border-red-900/30">
-            <SpamRatioBar :spam-distribution="item.spam_distribution" />
-          </div>
 
           <!-- 原话摘要 -->
           <div

@@ -49,7 +49,7 @@ sentiment   summary                     metrics/charts/insights
 与 `spam_distribution`（仅存 mention 计数）并行的**热度分层**字段，用于前端有机/推广视角的 X 轴和份额计算：
 - 公式：`organic_heat = Σ normalized_heat`（`spam_group == "low"` 的帖子），`promo_heat` 同理
 - 生成位置：`project_snapshot.py` Stage 1，与 `normalized_heat = raw_cii × platform_weight` 同循环内按 `spam_map_by_key[pk]` 分拆
-- 传递路径：Stage 1 → Stage 2 (`entity_aggregation.py`: 直接累加) → Stage 3 (`insights.py`: sov_ranking / group_share / industry_quadrant 透传)
+- 传递路径：Stage 1 → Stage 2 (`entity_aggregation.py`: 直接累加) → Stage 3 (`insights.py`: sov_ranking / group_share 透传)
 - 实体和话题均携带此字段；旧快照（无该字段）前端自动回退到 `spam_distribution.low_spam.total`
 
 ## 聚合流程 (orchestrator.py)

@@ -449,7 +449,7 @@ async def create_project_slice(
 
     - 创建切片：同步完成 Stage1 统计聚合（overview/details/charts/topic_aspects）
     - 自动启动：Stage2（全局归一化/归因增强）与 Stage3（整体总结）
-    - 前端应轮询该切片详情，直至 stage2.status=completed 后再展示核心板块
+    - 前端应轮询该切片详情，直至 pipeline.stage2.status=completed 后再展示核心板块
     """
     slice_record = await service.create_project_slice(
         db=db,
@@ -477,26 +477,24 @@ async def create_project_slice(
     result_data = dict(result_data)
 
     # 初始化流水线状态（供前端轮询展示）
-    stage2 = {
-        "status": "processing",
-        "started_at": now,
-        "updated_at": now,
-        "steps": {
-            "entity_normalization": {"status": "pending"},
-            "opinion_normalization": {"status": "pending"},
-            "derived_analysis": {"status": "pending"},
-            "summary": {"status": "pending"},
+    async_result = run_project_slice_task.delay(slice_id=slice_record.id)
+    result_data["pipeline"] = {
+        "stage2": {
+            "status": "processing",
+            "started_at": now,
+            "updated_at": now,
+            "celery_task_id": str(async_result.id),
+            "steps": {
+                "entity_normalization": {"status": "pending"},
+                "opinion_normalization": {"status": "pending"},
+                "derived_analysis": {"status": "pending"},
+            },
+        },
+        "stage3": {
+            "status": "pending",
+            "updated_at": now,
         },
     }
-    stage3 = {
-        "status": "pending",
-        "updated_at": now,
-    }
-
-    async_result = run_project_slice_task.delay(slice_id=slice_record.id)
-    stage2["celery_task_id"] = str(async_result.id)
-    result_data["stage2"] = stage2
-    result_data["stage3"] = stage3
     slice_record.result_data = result_data
     flag_modified(slice_record, "result_data")
     await db.commit()

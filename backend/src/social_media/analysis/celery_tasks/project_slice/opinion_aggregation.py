@@ -3,6 +3,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.social_media.analysis.constants import (
+    MAX_POST_IDS_SAMPLE,
+    ORIGINAL_TERMS_MAX,
+    ORIGINAL_TERM_MAX_LEN,
+)
+
 from src.social_media.analysis.celery_tasks.llm_utils import (
     invoke_chain_with_stats_sync,
 )
@@ -290,12 +296,12 @@ def build_topics_aligned(
     topic_mapping_by_category: dict[str, dict[str, str]],
 ) -> list[dict[str, Any]]:
     """根据 category_aligned + mapping 合并 topics_for_norm，产出对齐后的观点列表。"""
-    max_post_ids_sample = 50
+    max_post_ids_sample = MAX_POST_IDS_SAMPLE
 
     def _cap_text(s: str) -> str:
         s = (s or "").strip()
-        if len(s) > 100:
-            s = s[:100]
+        if len(s) > ORIGINAL_TERM_MAX_LEN:
+            s = s[:ORIGINAL_TERM_MAX_LEN]
         return s
 
     bucket: dict[str, dict[str, Any]] = {}
@@ -522,7 +528,7 @@ def build_topics_aligned(
                         (b.get("original_terms_counts") or {}).items(),
                         key=lambda x: (len(x[0] or ""), x[1]),
                         reverse=True,
-                    )[:20]
+                    )[:ORIGINAL_TERMS_MAX]
                 ],
             }
         )

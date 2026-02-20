@@ -46,8 +46,8 @@ const swotViewMode = ref<SWOTViewMode>('all')
 
 const swotViewOptions = [
   { value: 'all', label: '全量' },
-  { value: 'organic', label: '有机' },
   { value: 'promo', label: '推广' },
+  { value: 'organic', label: '有机' },
 ]
 
 // ==================== 能力检测 ====================
@@ -230,21 +230,21 @@ const viewLabel = computed(() => {
   <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
     <!-- 标题行 -->
     <div class="flex items-center justify-between mb-4">
-      <div>
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">SWOT 矩阵</h3>
-        <p v-if="subject" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          分析主体：{{ subject }}
-        </p>
-      </div>
       <div class="flex items-center gap-3">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">SWOT 矩阵</h3>
+          <p v-if="subject" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            分析主体：{{ subject }}
+          </p>
+        </div>
         <TabSwitch
           v-if="hasSpamData"
           v-model="swotViewMode"
           :options="swotViewOptions"
         />
-        <div class="text-[11px] text-gray-500 dark:text-gray-400">
-          竞 = 竞品集合均值
-        </div>
+      </div>
+      <div class="text-[11px] text-gray-500 dark:text-gray-400">
+        竞 = 竞品集合均值
       </div>
     </div>
 
@@ -306,15 +306,19 @@ const viewLabel = computed(() => {
                 <!-- 全量视图（原有显示） -->
                 <template v-else>
                   <span
-                    :class="item.target_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                    :class="item.target_mentions > 0
+                      ? (item.target_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')
+                      : 'text-gray-400 dark:text-gray-500'"
                   >
-                    我{{ fmtSentiment(item.target_sentiment) }}
+                    我{{ item.target_mentions > 0 ? fmtSentiment(item.target_sentiment) : '—' }}
                   </span>
                   <span class="text-gray-400">vs</span>
                   <span
-                    :class="item.competitor_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                    :class="item.competitor_mentions > 0
+                      ? (item.competitor_sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')
+                      : 'text-gray-400 dark:text-gray-500'"
                   >
-                    竞{{ fmtSentiment(item.competitor_sentiment) }}
+                    竞{{ item.competitor_mentions > 0 ? fmtSentiment(item.competitor_sentiment) : '—' }}
                   </span>
                 </template>
               </div>

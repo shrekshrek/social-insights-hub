@@ -9,6 +9,8 @@
 import logging
 from typing import Any
 
+from src.social_media.analysis.constants import SPAM_HIGH_THRESHOLD
+
 logger = logging.getLogger(__name__)
 
 
@@ -121,7 +123,7 @@ def build_spam_distributions(
     competitor_series: list[dict],
     time_distribution: list[dict],
     posts_data: list[dict],
-    threshold: float = 6.0,
+    threshold: float = SPAM_HIGH_THRESHOLD,
 ) -> dict[str, Any]:
     """为全部分析模块附加 spam 分布信息。
 

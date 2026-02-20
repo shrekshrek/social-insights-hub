@@ -26,6 +26,7 @@ from .schemas import (
 )
 
 from .project_slice import build_project_slice_result
+from .constants import SPAM_HIGH_THRESHOLD
 
 
 # ==================== Task-Level Analysis ====================
@@ -389,7 +390,7 @@ async def create_project_slice(
         post_info_by_key=post_info_by_key,
         primary_keyword_by_key=primary_keyword_by_key,
         primary_task_by_key=primary_task_by_key,
-        spam_threshold=6.0,
+        spam_threshold=SPAM_HIGH_THRESHOLD,
     )
 
     slice_record = ProjectAnalysisSlice(
@@ -588,9 +589,9 @@ async def get_task_post_analyses(
 
     # spam 分组过滤（独立于搜索条件）
     if spam_group == "high":
-        stmt = stmt.where(PostAnalysis.spam_score >= 6.0)
+        stmt = stmt.where(PostAnalysis.spam_score >= SPAM_HIGH_THRESHOLD)
     elif spam_group == "low":
-        stmt = stmt.where(PostAnalysis.spam_score < 6.0)
+        stmt = stmt.where(PostAnalysis.spam_score < SPAM_HIGH_THRESHOLD)
 
     # 搜索条件
     if post_ids:

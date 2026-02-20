@@ -143,7 +143,8 @@ const getListMetric = (item: GapItem) => {
   const subjectLabel = props.subject || '目标'
 
   if (gapViewMode.value === 'all') {
-    return `竞品 ${formatSentiment(item.competitor_sentiment)} (${item.competitor_mentions}条) · ${subjectLabel} ${formatSentiment(item.target_sentiment)} (${item.target_mentions}条)`
+    const targetDisplay = item.target_mentions > 0 ? formatSentiment(item.target_sentiment) : '—'
+    return `竞品 ${formatSentiment(item.competitor_sentiment)} (${item.competitor_mentions}条) · ${subjectLabel} ${targetDisplay} (${item.target_mentions}条)`
   }
   const dimension = gapViewMode.value === 'organic' ? '有机' : '推广'
   const unit = isRatioMode ? '占比' : '情感'

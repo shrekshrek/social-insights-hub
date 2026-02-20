@@ -12,7 +12,8 @@ from src.social_media.analysis.jobs import (
     complete_analysis_job_sync,
 )
 
-from .utils import ensure_stage_state, now_iso, set_step, merge_token_usage_stats
+from src.social_media.analysis.constants import TOP_TERMS_FOR_LLM, MIN_CELL_MENTIONS
+from .utils import ensure_pipeline_state, now_iso, set_step, merge_token_usage_stats
 from .entity_aggregation import normalize_entity_aliases, build_entities_aligned
 from .opinion_aggregation import (
     normalize_opinion_aliases_by_category,
@@ -28,10 +29,14 @@ logger = logging.getLogger(__name__)
 def run_project_slice_pipeline_sync(
     *,
     slice_id: int,
-    top_terms_for_llm: int = 160,
-    min_cell_mentions: int = 5,
+    top_terms_for_llm: int = TOP_TERMS_FOR_LLM,
+    min_cell_mentions: int = MIN_CELL_MENTIONS,
 ) -> dict:
-    """项目级切片 Stage2 + Stage3 编排（分步写回 stage2.steps / stage3）"""
+    """项目级切片 Stage2 + Stage3 编排
+
+    写回结构：result_data.pipeline.stage2（归一化步骤）/ pipeline.stage3（报告生成）
+    衍生数据（drivers）写入 result_data.foundation.drivers（不属于执行状态追踪）。
+    """
     db = SyncSessionLocal()
     try:
         stmt = select(ProjectAnalysisSlice).where(
@@ -51,7 +56,7 @@ def run_project_slice_pipeline_sync(
             result = {}
         # 触发变更追踪：用新 dict 承载本次流水线更新
         result = dict(result)
-        stage2, stage3 = ensure_stage_state(result)
+        stage2, stage3 = ensure_pipeline_state(result)
         stage2.setdefault("jobs", {})
 
         def commit_result():
@@ -80,7 +85,6 @@ def run_project_slice_pipeline_sync(
                     "generated_at": now_iso(),
                 }
             )
-            result["stage2"] = stage2
             commit_result()
             return {"status": "skipped", "slice_id": slice_id}
 
@@ -306,18 +310,22 @@ def run_project_slice_pipeline_sync(
             top_terms_for_llm=top_terms_for_llm,
             min_cell_mentions=min_cell_mentions,
         )
+        # drivers 写入 foundation（衍生的分析数据，不属于执行状态）
+        foundation_for_drv = (
+            result.get("foundation") if isinstance(result.get("foundation"), dict) else {}
+        )
         if drv.get("status") != "completed":
-            stage2["drivers"] = {"status": "skipped", "reason": drv.get("reason")}
-            set_step(stage2, "drivers", "completed", llm_used=False)
+            foundation_for_drv["drivers"] = {"status": "skipped", "reason": drv.get("reason")}
         else:
             stage2["llm"] = drv.get("llm")
-            stage2["drivers"] = drv.get("drivers")
+            foundation_for_drv["drivers"] = drv.get("drivers")
             set_step(
                 stage2,
                 "derived_analysis",
                 "processing",
                 llm_used=bool((drv.get("llm") or {}).get("used")),
             )
+        result["foundation"] = foundation_for_drv
         commit_result()
 
         # Step0-2 输出对齐：把 Stage2 的对齐结果写回 foundation（不破坏旧字段）
@@ -337,6 +345,9 @@ def run_project_slice_pipeline_sync(
             if isinstance(layers0.get("landscape"), dict)
             else {}
         )
+        foundation_cur = (
+            result.get("foundation") if isinstance(result.get("foundation"), dict) else {}
+        )
         layers = build_slice_layers(
             meta=result.get("meta") or {},
             overview=land0.get("overview")
@@ -347,8 +358,8 @@ def run_project_slice_pipeline_sync(
             else {},
             entities_aligned=entities_aligned,
             topics_aligned=topics_aligned,
-            drivers=stage2.get("drivers")
-            if isinstance(stage2.get("drivers"), dict)
+            drivers=foundation_cur.get("drivers")
+            if isinstance(foundation_cur.get("drivers"), dict)
             else None,
         )
         result["layers"] = layers
@@ -358,8 +369,7 @@ def run_project_slice_pipeline_sync(
         stage2["generated_at"] = now_iso()
         commit_result()
 
-        # ========== Stage3 reports (Step4) ==========
-        set_step(stage2, "summary", "processing")
+        # ========== Stage3：LLM 报告生成 ==========
         summary_job = create_analysis_job_sync(
             db=db,
             project_id=slice_record.project_id,
@@ -372,44 +382,36 @@ def run_project_slice_pipeline_sync(
         )
         summary_job.source_task_ids = slice_record.included_task_ids
         db.commit()
-        stage2["jobs"]["project_slice_summary_job_id"] = summary_job.id
-        stage2["steps"]["summary"]["job_id"] = summary_job.id
-        commit_result()
-
-        stage3 = result.get("stage3") if isinstance(result.get("stage3"), dict) else {}
+        stage3["job_id"] = summary_job.id
         stage3["status"] = "processing"
         stage3["started_at"] = stage3.get("started_at") or now_iso()
         stage3["updated_at"] = now_iso()
-        result["stage3"] = stage3
         commit_result()
 
         meta = result.get("meta") or {}
-        foundation = result.get("foundation") or {}
+        foundation_final = result.get("foundation") or {}
         layers = result.get("layers") or {}
         drivers_matrix = (
-            ((stage2.get("drivers") or {}).get("entity_matrix") or [])
-            if isinstance(stage2.get("drivers"), dict)
+            ((foundation_final.get("drivers") or {}).get("entity_matrix") or [])
+            if isinstance(foundation_final.get("drivers"), dict)
             else []
         )
 
         rep = generate_project_reports(
             meta=meta,
-            foundation=foundation,
+            foundation=foundation_final,
             layers=layers,
             drivers_matrix=drivers_matrix,
         )
-        stage3 = result.get("stage3") if isinstance(result.get("stage3"), dict) else {}
         stage3["status"] = rep.get("status") or "failed"
         stage3["updated_at"] = now_iso()
-        # 合理性：即使 stage3 判定为 failed，也应写入已生成的部分报告（便于前端展示/排障）
+        # 即使 stage3 判定为 failed，也写入已生成的部分报告（便于前端展示/排障）
         result["reports"] = rep.get("reports") or {}
         if rep.get("status") == "completed":
             stage3["generated_at"] = now_iso()
         else:
             stage3["error"] = rep.get("error") or "unknown_error"
         stage3["llm"] = rep.get("llm") or {}
-        result["stage3"] = stage3
-        set_step(stage2, "summary", "completed")
 
         token_usage_summary = (rep.get("llm") or {}).get("token_stats") or {
             "summary": {

@@ -135,13 +135,13 @@ const getOption = (): EChartsOption => {
   // 点大小仍用 mentions（保持跨模式一致的视觉权重）
   const maxMentions = Math.max(...points.map(p => p.mentions || 0), 1)
 
-  // 显示 label 的 top N（按全量热度排序）
+  // 显示 label 的 top N（按当前视角有效热度排序，与散点 X 轴一致）
   const labelNameSet = new Set(
     points
-      .slice()
-      .sort((a, b) => (b.heat || 0) - (a.heat || 0))
+      .map((p, i) => ({ name: p.name, xVal: displayVals[i]?.xVal ?? 0 }))
+      .sort((a, b) => b.xVal - a.xVal)
       .slice(0, 30)
-      .map(p => p.name)
+      .map(({ name }) => name)
       .filter(Boolean),
   )
   const selectedName = (props.selected || '').toString().trim()

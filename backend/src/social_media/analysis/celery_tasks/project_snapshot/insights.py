@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from typing import Any
 
@@ -86,7 +87,6 @@ def build_snapshot_layers(
                 "sentiment": round(sentiment, 2),
                 "organic_sentiment": e.get("organic_sentiment"),
                 "promo_sentiment": e.get("promo_sentiment"),
-                "sentiment_distribution": e.get("sentiment_distribution") or {},
                 "platform_distribution": e.get("platform_distribution") or {},
                 "post_ids_sample": post_ids_sample,
                 "source_tasks": source_tasks,
@@ -159,7 +159,9 @@ def build_snapshot_layers(
                 promo_sent = e.get("promo_sentiment")
                 if organic_sent is not None and low_total > 0:
                     try:
-                        b["organic_sent_weighted_sum"] += float(organic_sent) * low_total
+                        b["organic_sent_weighted_sum"] += (
+                            float(organic_sent) * low_total
+                        )
                         b["organic_sent_weight"] += low_total
                     except Exception:
                         pass
@@ -219,7 +221,7 @@ def build_snapshot_layers(
     if isinstance(diag, list):
         need_platform = not isinstance(overview_safe.get("platform_volume"), dict)
         need_keyword = not isinstance(overview_safe.get("keyword_volume"), dict)
-        need_sent = not isinstance(overview_safe.get("global_sentiment"), (int, float))
+        need_sent = not isinstance(overview_safe.get("global_nsr"), (int, float))
         need_total = not isinstance(overview_safe.get("total_volume"), (int, float))
 
         if need_platform or need_keyword or need_sent or need_total:
@@ -256,7 +258,7 @@ def build_snapshot_layers(
             if need_keyword:
                 overview_safe["keyword_volume"] = dict(kw)
             if need_sent:
-                overview_safe["global_sentiment"] = (
+                overview_safe["global_nsr"] = (
                     round((sent_sum / sent_w), 2) if sent_w > 0 else 0.0
                 )
 
@@ -308,20 +310,38 @@ def build_snapshot_layers(
         if not name:
             continue
         p_dist = item.get("platform_distribution") or {}
+        org_dist = item.get("organic_platform_distribution") or {}
+        promo_dist = item.get("promo_platform_distribution") or {}
         total_mentions = sum(int(v or 0) for v in p_dist.values()) if p_dist else 0
-        # 构建各平台占比
+        total_organic = sum(int(v or 0) for v in org_dist.values()) if org_dist else 0
+        total_promo = sum(int(v or 0) for v in promo_dist.values()) if promo_dist else 0
+        # 构建各平台占比（全量 / 有机 / 推广）
         platform_shares: dict[str, float] = {}
+        organic_platform_shares: dict[str, float] = {}
+        promo_platform_shares: dict[str, float] = {}
         for p in all_platforms_sorted:
             cnt = int(p_dist.get(p) or 0)
+            org_cnt = int(org_dist.get(p) or 0)
+            promo_cnt = int(promo_dist.get(p) or 0)
             platform_shares[p] = (
                 round(cnt / total_mentions, 4) if total_mentions > 0 else 0.0
+            )
+            organic_platform_shares[p] = (
+                round(org_cnt / total_organic, 4) if total_organic > 0 else 0.0
+            )
+            promo_platform_shares[p] = (
+                round(promo_cnt / total_promo, 4) if total_promo > 0 else 0.0
             )
         platform_dna.append(
             {
                 "name": name,
                 "role": item.get("role") or "Context",
                 "total_mentions": total_mentions,
+                "total_organic_mentions": total_organic,
+                "total_promo_mentions": total_promo,
                 "platform_shares": platform_shares,
+                "organic_platform_shares": organic_platform_shares,
+                "promo_platform_shares": promo_platform_shares,
             }
         )
 
@@ -348,6 +368,8 @@ def build_snapshot_layers(
             sent = float(t.get("sentiment") or 0.0)
         except Exception:
             sent = 0.0
+        pos_m = int(t.get("positive_mentions") or 0)
+        neg_m = int(t.get("negative_mentions") or 0)
         item = {
             "name": t.get("name") or "",
             "category": t.get("category") or "其他",
@@ -356,6 +378,10 @@ def build_snapshot_layers(
             "promo_heat": t.get("promo_heat"),
             "mentions": int(t.get("mentions") or 0),
             "sentiment": round(sent, 2),
+            "organic_sentiment": t.get("organic_sentiment"),
+            "promo_sentiment": t.get("promo_sentiment"),
+            "positive_mentions": pos_m,
+            "negative_mentions": neg_m,
             "spam_distribution": t.get("spam_distribution"),
             "platform_distribution": t.get("platform_distribution") or {},
             "keyword_distribution": t.get("keyword_distribution") or {},
@@ -363,13 +389,17 @@ def build_snapshot_layers(
             "post_ids_sample": t.get("post_ids_sample") or [],
             "source_tasks": t.get("source_tasks") or [],
         }
-        # 经验阈值：sentiment<-0.2 视为负向主导，>0.2 视为正向主导
+        # 分桶：负向主导→pains，正向主导→gains，真正有争议→controversies
+        # 争议性条件：极性总数≥6 且少数派≥30%（双向声音都显著）
+        polar_total = pos_m + neg_m
+        is_controversial = polar_total >= 6 and min(pos_m, neg_m) / polar_total >= 0.3
         if sent <= -0.2:
             pains.append(item)
         elif sent >= 0.2:
             gains.append(item)
-        else:
+        elif is_controversial:
             controversies.append(item)
+        # 情感中性且极性不够的话题不列入 radar（已被 topic_aspects 覆盖）
 
     pains.sort(key=lambda x: x.get("heat", 0.0), reverse=True)
     gains.sort(key=lambda x: x.get("heat", 0.0), reverse=True)
@@ -386,6 +416,8 @@ def build_snapshot_layers(
             b = {
                 "category": cat,
                 "heat": 0.0,
+                "organic_heat": 0.0,
+                "promo_heat": 0.0,
                 "sentiment_sum": 0.0,
                 "sentiment_weight": 0.0,
                 "mention_count": 0,
@@ -399,6 +431,8 @@ def build_snapshot_layers(
         mentions = int(t.get("mentions") or 0)
         sent = float(t.get("sentiment") or 0.0)
         b["heat"] += heat
+        b["organic_heat"] += float(t.get("organic_heat") or 0.0)
+        b["promo_heat"] += float(t.get("promo_heat") or 0.0)
         b["sentiment_sum"] += sent * float(mentions)
         b["sentiment_weight"] += float(mentions)
         b["mention_count"] += mentions
@@ -416,13 +450,20 @@ def build_snapshot_layers(
             if b["sentiment_weight"] > 0
             else 0.0
         )
+        _heat = float(b["heat"])
+        _mc = int(b["mention_count"])
+        _score = round(math.log(_heat + 1) * math.log(_mc + 1), 3) if _mc > 0 else 0.0
         topic_aspects.append(
             {
                 "category": cat,
-                "heat": round(float(b["heat"]), 2),
+                "heat": round(_heat, 2),
+                "organic_heat": round(float(b["organic_heat"]), 2),
+                "promo_heat": round(float(b["promo_heat"]), 2),
                 "sentiment": round(float(avg_sent), 2),
-                "mention_count": int(b["mention_count"]),
-                "top_keywords": [
+                "mention_count": _mc,
+                "score": _score,
+                # 该 category 下提及量最多的话题名（非搜索关键词）
+                "representative_topics": [
                     k
                     for k, _ in sorted(
                         b["top_terms"].items(), key=lambda x: x[1], reverse=True
@@ -433,7 +474,7 @@ def build_snapshot_layers(
                 "keyword_distribution": dict(b["keyword_distribution"]),
             }
         )
-    topic_aspects.sort(key=lambda x: x.get("heat", 0.0), reverse=True)
+    topic_aspects.sort(key=lambda x: x.get("score", 0.0), reverse=True)
 
     # 3) unmet_needs：按“负面 + 覆盖面广”的代理指标筛选（跨平台/跨关键词更像‘行业共性问题’）
     unmet_candidates: list[dict[str, Any]] = []
@@ -469,8 +510,11 @@ def build_snapshot_layers(
                 "name": x.get("name"),
                 "category": x.get("category"),
                 "heat": heat,
+                "organic_heat": x.get("organic_heat"),
                 "mentions": mentions,
                 "sentiment": x.get("sentiment"),
+                "organic_sentiment": x.get("organic_sentiment"),
+                "promo_sentiment": x.get("promo_sentiment"),
                 "spam_distribution": x.get("spam_distribution"),
                 "coverage": coverage,
                 "platform_coverage": p_cov,
@@ -480,17 +524,21 @@ def build_snapshot_layers(
                 "source_tasks": x.get("source_tasks") or [],
             }
         )
+    # 优先按有机热度排序（行业共性痛点应以真实用户声音为准）；回退到总热度
     unmet_candidates.sort(
-        key=lambda d: (float(d.get("heat") or 0.0), int(d.get("coverage") or 0)),
+        key=lambda d: (
+            float(d.get("organic_heat") or d.get("heat") or 0.0),
+            int(d.get("coverage") or 0),
+        ),
         reverse=True,
     )
     unmet_needs = unmet_candidates[:10]
 
     intent = {
         "topic_radar": {
-            "pains": pains[:20],
-            "gains": gains[:20],
-            "controversies": controversies[:20],
+            "pains": pains[:40],
+            "gains": gains[:40],
+            "controversies": controversies[:40],
         },
         "unmet_needs": unmet_needs,
         "topic_aspects": topic_aspects[:50],
@@ -623,6 +671,13 @@ def build_snapshot_layers(
                 elif isinstance(first_issue, str):
                     top_pain = first_issue
 
+            organic_sentiment = e.get("organic_sentiment")
+            if organic_sentiment is not None:
+                try:
+                    organic_sentiment = round(float(organic_sentiment), 2)
+                except Exception:
+                    organic_sentiment = None
+
             product_line_members.append(
                 {
                     "name": name,
@@ -630,6 +685,7 @@ def build_snapshot_layers(
                     "mentions": int(e.get("mentions") or 0),
                     "contribution": round(contribution, 4),
                     "sentiment": round(sentiment, 2),
+                    "organic_sentiment": organic_sentiment,
                     "top_pain": top_pain,
                     "platform_distribution": e.get("platform_distribution") or {},
                     "keyword_distribution": e.get("keyword_distribution") or {},
@@ -746,7 +802,17 @@ def build_snapshot_layers(
 
             dim_evidence: dict[str, dict[str, Any]] = {}
 
-            def _acc(which: str, dim: str, sent: float, m: int, spam_dist: Any = None) -> None:
+            def _acc(
+                which: str,
+                dim: str,
+                sent: float,
+                m: int,
+                spam_dist: Any = None,
+                cell_org_sent: float | None = None,
+                cell_promo_sent: float | None = None,
+                cell_org_m: int = 0,
+                cell_promo_m: int = 0,
+            ) -> None:
                 if not dim or m <= 0:
                     return
                 rec = dim_agg.setdefault(
@@ -756,6 +822,14 @@ def build_snapshot_layers(
                         "target_m": 0.0,
                         "comp_sent_sum": 0.0,
                         "comp_m": 0.0,
+                        "target_org_sent_sum": 0.0,
+                        "target_org_m": 0.0,
+                        "target_promo_sent_sum": 0.0,
+                        "target_promo_m": 0.0,
+                        "comp_org_sent_sum": 0.0,
+                        "comp_org_m": 0.0,
+                        "comp_promo_sent_sum": 0.0,
+                        "comp_promo_m": 0.0,
                         "target_spam_high_post": 0,
                         "target_spam_high_comment": 0,
                         "target_spam_low_post": 0,
@@ -771,18 +845,38 @@ def build_snapshot_layers(
                 if which == "target":
                     rec["target_sent_sum"] += sent * float(m)
                     rec["target_m"] += float(m)
+                    if cell_org_sent is not None and cell_org_m > 0:
+                        rec["target_org_sent_sum"] += cell_org_sent * float(cell_org_m)
+                        rec["target_org_m"] += float(cell_org_m)
+                    if cell_promo_sent is not None and cell_promo_m > 0:
+                        rec["target_promo_sent_sum"] += cell_promo_sent * float(
+                            cell_promo_m
+                        )
+                        rec["target_promo_m"] += float(cell_promo_m)
                     if isinstance(spam_dist, dict):
                         hs = spam_dist.get("high_spam")
                         ls = spam_dist.get("low_spam")
                         if isinstance(hs, dict) and isinstance(ls, dict):
                             rec["target_spam_high_post"] += int(hs.get("post") or 0)
-                            rec["target_spam_high_comment"] += int(hs.get("comment") or 0)
+                            rec["target_spam_high_comment"] += int(
+                                hs.get("comment") or 0
+                            )
                             rec["target_spam_low_post"] += int(ls.get("post") or 0)
-                            rec["target_spam_low_comment"] += int(ls.get("comment") or 0)
+                            rec["target_spam_low_comment"] += int(
+                                ls.get("comment") or 0
+                            )
                             rec["target_has_spam"] = True
                 else:
                     rec["comp_sent_sum"] += sent * float(m)
                     rec["comp_m"] += float(m)
+                    if cell_org_sent is not None and cell_org_m > 0:
+                        rec["comp_org_sent_sum"] += cell_org_sent * float(cell_org_m)
+                        rec["comp_org_m"] += float(cell_org_m)
+                    if cell_promo_sent is not None and cell_promo_m > 0:
+                        rec["comp_promo_sent_sum"] += cell_promo_sent * float(
+                            cell_promo_m
+                        )
+                        rec["comp_promo_m"] += float(cell_promo_m)
                     if isinstance(spam_dist, dict):
                         hs = spam_dist.get("high_spam")
                         ls = spam_dist.get("low_spam")
@@ -818,7 +912,27 @@ def build_snapshot_layers(
                     except Exception:
                         m = 0
                     spam_dist = cell.get("spam_distribution")
-                    _acc(which, str(dim), sent, m, spam_dist)
+                    cell_org_sent = cell.get("organic_sentiment")
+                    cell_promo_sent = cell.get("promo_sentiment")
+                    try:
+                        cell_org_m = int(cell.get("organic_mentions") or 0)
+                    except Exception:
+                        cell_org_m = 0
+                    try:
+                        cell_promo_m = int(cell.get("promo_mentions") or 0)
+                    except Exception:
+                        cell_promo_m = 0
+                    _acc(
+                        which,
+                        str(dim),
+                        sent,
+                        m,
+                        spam_dist,
+                        cell_org_sent,
+                        cell_promo_sent,
+                        cell_org_m,
+                        cell_promo_m,
+                    )
                     # evidence merge
                     dim_key = str(dim)
                     evd = dim_evidence.setdefault(dim_key, {"target": {}, "comp": {}})
@@ -865,10 +979,26 @@ def build_snapshot_layers(
                         "low_spam": {"total": clp + clc, "post": clp, "comment": clc},
                     }
 
+                def _avg(s: str, w: str) -> float | None:
+                    wv = float(rec.get(w) or 0.0)
+                    return round(float(rec[s]) / wv, 2) if wv > 0 else None
+
                 item_base = {
                     "dimension": dim,
                     "target_sentiment": round(ts, 2),
                     "competitor_sentiment": round(cs, 2),
+                    "target_organic_sentiment": _avg(
+                        "target_org_sent_sum", "target_org_m"
+                    ),
+                    "target_promo_sentiment": _avg(
+                        "target_promo_sent_sum", "target_promo_m"
+                    ),
+                    "competitor_organic_sentiment": _avg(
+                        "comp_org_sent_sum", "comp_org_m"
+                    ),
+                    "competitor_promo_sentiment": _avg(
+                        "comp_promo_sent_sum", "comp_promo_m"
+                    ),
                     "target_mentions": int(tm),
                     "competitor_mentions": int(cm),
                     "delta": round(delta, 2),

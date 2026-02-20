@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""项目级快照三报告 Chain（Landscape/Topic/Focus）
+"""项目级切片三报告 Chain（Landscape/Topic/Focus）
 
 LLM 直接输出 Markdown 文本，后端解析后写入 `reports.*_report`。
 """
@@ -27,7 +27,7 @@ REPORT_OUTPUT_FORMAT_SPEC = """请直接输出 Markdown 格式的报告内容。
 
 LANDSCAPE_SYSTEM = (
     """你是一位麦肯锡风格的资深市场分析师。
-你将基于【项目级快照的结构化数据】撰写一份**高可读性、洞察深刻**的宏观行业格局报告。
+你将基于【项目级切片的结构化数据】撰写一份**高可读性、洞察深刻**的宏观行业格局报告。
 
 ## 写作原则
 1. **结论先行 (Pyramid Principle)**：段落开头直接抛出核心洞察，再用数据支撑。
@@ -76,7 +76,7 @@ LANDSCAPE_USER = """【meta】
 
 TOPIC_SYSTEM = (
     """你是一位洞察敏锐的用户体验专家。
-你将基于【项目级快照的结构化数据】撰写一份**直击痛点**的话题洞察报告。
+你将基于【项目级切片的结构化数据】撰写一份**直击痛点**的话题洞察报告。
 
 ## 写作原则
 1. **Jobs-to-be-Done 思维**：不要只看用户在聊什么（Topic），要分析用户**试图完成什么任务**，以及在过程中遇到了什么阻碍。
@@ -198,19 +198,19 @@ def _chain(system: str, user: str) -> Runnable:
     return prompt | llm
 
 
-def create_project_snapshot_landscape_report_chain() -> Runnable:
+def create_project_slice_landscape_report_chain() -> Runnable:
     return _chain(LANDSCAPE_SYSTEM, LANDSCAPE_USER)
 
 
-def create_project_snapshot_topic_report_chain() -> Runnable:
+def create_project_slice_topic_report_chain() -> Runnable:
     return _chain(TOPIC_SYSTEM, TOPIC_USER)
 
 
-def create_project_snapshot_focus_report_chain() -> Runnable:
+def create_project_slice_focus_report_chain() -> Runnable:
     return _chain(FOCUS_SYSTEM, FOCUS_USER)
 
 
-def parse_project_snapshot_report_response(response_text: str) -> Dict[str, Any]:
+def parse_project_slice_report_response(response_text: str) -> Dict[str, Any]:
     """解析 report 响应。
     
     新策略：LLM 直接输出 Markdown 文本。

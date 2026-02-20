@@ -29,7 +29,7 @@ async def get_analysis_jobs(
     from src.social_media.projects.models import SocialProject
     from src.social_media.tasks.models import DataTask
     from src.auth.models import User
-    from src.social_media.analysis.models import ProjectAnalysisSnapshot
+    from src.social_media.analysis.models import ProjectAnalysisSlice
 
     # 构建基础查询
     stmt = (
@@ -89,31 +89,31 @@ async def get_analysis_jobs(
     result = await db.execute(stmt)
     rows = result.all()
 
-    # ===== 批量补齐快照信息（用于项目级快照相关的 AnalysisJob 展示）=====
-    snapshot_ids: set[int] = set()
+    # ===== 批量补齐切片信息（用于项目级切片相关的 AnalysisJob 展示）=====
+    slice_ids: set[int] = set()
     for row in rows:
         job = row.AnalysisJob
         cfg = job.analysis_config if isinstance(job.analysis_config, dict) else {}
-        sid = cfg.get("snapshot_id")
+        sid = cfg.get("slice_id")
         if job.task_id is None and isinstance(sid, int):
-            snapshot_ids.add(sid)
+            slice_ids.add(sid)
 
-    snapshot_name_by_id: dict[int, str | None] = {}
-    if snapshot_ids:
+    slice_name_by_id: dict[int, str | None] = {}
+    if slice_ids:
         snap_stmt = select(
-            ProjectAnalysisSnapshot.id, ProjectAnalysisSnapshot.name
-        ).where(ProjectAnalysisSnapshot.id.in_(list(snapshot_ids)))
+            ProjectAnalysisSlice.id, ProjectAnalysisSlice.name
+        ).where(ProjectAnalysisSlice.id.in_(list(slice_ids)))
         snap_rows = (await db.execute(snap_stmt)).all()
-        snapshot_name_by_id = {int(r[0]): r[1] for r in snap_rows}
+        slice_name_by_id = {int(r[0]): r[1] for r in snap_rows}
 
     # 转换为字典列表（包含关联名称）
     items = []
     for row in rows:
         job = row.AnalysisJob
         cfg = job.analysis_config if isinstance(job.analysis_config, dict) else {}
-        snapshot_id = cfg.get("snapshot_id") if job.task_id is None else None
-        if not isinstance(snapshot_id, int):
-            snapshot_id = None
+        slice_id = cfg.get("slice_id") if job.task_id is None else None
+        if not isinstance(slice_id, int):
+            slice_id = None
         item = {
             "id": job.id,
             "project_id": job.project_id,
@@ -139,9 +139,9 @@ async def get_analysis_jobs(
             # 关联名称
             "project_name": row.project_name,
             "task_name": row.task_name,
-            "snapshot_id": snapshot_id,
-            "snapshot_name": snapshot_name_by_id.get(snapshot_id)
-            if snapshot_id is not None
+            "slice_id": slice_id,
+            "slice_name": slice_name_by_id.get(slice_id)
+            if slice_id is not None
             else None,
             "user_name": row.user_name,
         }

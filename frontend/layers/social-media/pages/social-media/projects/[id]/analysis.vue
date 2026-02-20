@@ -18,7 +18,7 @@ definePageMeta({ layout: 'default' })
 
 const toast = useToast()
 
-// ==================== Types (new snapshot contract only) ====================
+// ==================== Types (new slice contract only) ====================
 interface OriginalTerm { text: string; count: number }
 
 interface SourceTask { task_id: number; mentions: number }
@@ -65,6 +65,8 @@ interface ProjectOverviewData {
   total_volume?: number
   unique_posts?: number
   total_heat?: number
+  total_organic_heat?: number
+  total_promo_heat?: number
   global_sentiment?: number
   organic_global_sentiment?: number | null
   promo_global_sentiment?: number | null
@@ -146,7 +148,7 @@ interface IndustryQuadrantPoint {
   spam_distribution?: SpamDistribution
 }
 
-interface ProjectSnapshotLandscapeLayer {
+interface ProjectSliceLandscapeLayer {
   freshness?: {
     last_7_days_count?: number
     last_30_days_count?: number
@@ -159,7 +161,7 @@ interface ProjectSnapshotLandscapeLayer {
   industry_quadrant?: IndustryQuadrantPoint[]
 }
 
-interface ProjectSnapshotIntentLayer {
+interface ProjectSliceIntentLayer {
   topic_aspects?: ProjectTopicAspectItem[]
   topic_radar?: {
     pains?: ProjectTopicOrEntity[]
@@ -241,7 +243,7 @@ interface GapData {
   dimensions: SWOTItem[]
 }
 
-interface ProjectSnapshotFocusLayer {
+interface ProjectSliceFocusLayer {
   subject?: string
   targets?: string[]
   competitors?: string[]
@@ -251,29 +253,29 @@ interface ProjectSnapshotFocusLayer {
   gap?: GapData | null
 }
 
-interface ProjectSnapshotLayers {
-  landscape?: ProjectSnapshotLandscapeLayer
-  intent?: ProjectSnapshotIntentLayer
-  focus?: ProjectSnapshotFocusLayer | null
+interface ProjectSliceLayers {
+  landscape?: ProjectSliceLandscapeLayer
+  intent?: ProjectSliceIntentLayer
+  focus?: ProjectSliceFocusLayer | null
 }
 
-interface ProjectSnapshotReport {
+interface ProjectSliceReport {
   content?: string
 }
 
-interface ProjectSnapshotReports {
-  landscape_report?: ProjectSnapshotReport | null
-  topic_report?: ProjectSnapshotReport | null
-  focus_report?: ProjectSnapshotReport | null
+interface ProjectSliceReports {
+  landscape_report?: ProjectSliceReport | null
+  topic_report?: ProjectSliceReport | null
+  focus_report?: ProjectSliceReport | null
 }
 
-interface ProjectSnapshotFoundation {
+interface ProjectSliceFoundation {
   dedup_stats?: Record<string, unknown>
   aligned_entities?: ProjectTopicOrEntity[]
   aligned_topics?: ProjectTopicOrEntity[]
 }
 
-interface ProjectSnapshotResultData {
+interface ProjectSliceResultData {
   meta?: {
     project_id: number
     generated_at: string
@@ -282,9 +284,9 @@ interface ProjectSnapshotResultData {
     weights_used?: Record<string, number>
     scope?: Record<string, unknown>
   }
-  foundation?: ProjectSnapshotFoundation
-  layers?: ProjectSnapshotLayers
-  reports?: ProjectSnapshotReports
+  foundation?: ProjectSliceFoundation
+  layers?: ProjectSliceLayers
+  reports?: ProjectSliceReports
   stage2?: {
     status: 'completed' | 'processing' | 'failed' | 'skipped'
     started_at?: string
@@ -335,13 +337,13 @@ interface ProjectSnapshotResultData {
   }
 }
 
-interface ProjectSnapshot {
+interface ProjectSlice {
   id: number
   name: string | null
   project_id: number
   user_id: number
   included_task_ids: number[]
-  result_data: ProjectSnapshotResultData
+  result_data: ProjectSliceResultData
   created_at: string
   updated_at: string
 }
@@ -349,45 +351,45 @@ interface ProjectSnapshot {
 // ==================== Data Loading ====================
 const route = useRoute()
 const projectId = computed(() => Number(route.params.id))
-const snapshotId = computed(() => route.query.snapshot_id ? Number(route.query.snapshot_id) : null)
+const sliceId = computed(() => route.query.slice_id ? Number(route.query.slice_id) : null)
 
 const { useApiData } = useApi()
-const { data: snapshot, pending: snapshotLoading, refresh: refreshSnapshot } = useApiData<ProjectSnapshot>(
-  computed(() => snapshotId.value ? `/social-media/analysis/projects/${projectId.value}/snapshots/${snapshotId.value}` : ''),
+const { data: slice, pending: sliceLoading, refresh: refreshSlice } = useApiData<ProjectSlice>(
+  computed(() => sliceId.value ? `/social-media/analysis/projects/${projectId.value}/slices/${sliceId.value}` : ''),
   {
-    key: computed(() => `project-snapshot-detail-${projectId.value}-${snapshotId.value}`),
+    key: computed(() => `project-slice-detail-${projectId.value}-${sliceId.value}`),
     silent404: true,
-    immediate: computed(() => Boolean(snapshotId.value)),
+    immediate: computed(() => Boolean(sliceId.value)),
     getCachedData: () => undefined,
   }
 )
 
 const handleRefresh = async () => {
-  if (!snapshotId.value) return
-  await refreshSnapshot()
+  if (!sliceId.value) return
+  await refreshSlice()
 }
 
 // ==================== View Models ====================
-const snapshotResult = computed<ProjectSnapshotResultData | null>(() => snapshot.value?.result_data || null)
-const stage2 = computed(() => snapshotResult.value?.stage2 || null)
-const stage3 = computed(() => snapshotResult.value?.stage3 || null)
+const sliceResult = computed<ProjectSliceResultData | null>(() => slice.value?.result_data || null)
+const stage2 = computed(() => sliceResult.value?.stage2 || null)
+const stage3 = computed(() => sliceResult.value?.stage3 || null)
 
-const meta = computed(() => snapshotResult.value?.meta || null)
+const meta = computed(() => sliceResult.value?.meta || null)
 const competitors = computed(() => (meta.value?.competitors || []))
-const foundation = computed(() => snapshotResult.value?.foundation || null)
-const layers = computed(() => snapshotResult.value?.layers || null)
-const reports = computed(() => snapshotResult.value?.reports || null)
+const foundation = computed(() => sliceResult.value?.foundation || null)
+const layers = computed(() => sliceResult.value?.layers || null)
+const reports = computed(() => sliceResult.value?.reports || null)
 
-const landscape = computed<ProjectSnapshotLandscapeLayer | null>(() => layers.value?.landscape || null)
+const landscape = computed<ProjectSliceLandscapeLayer | null>(() => layers.value?.landscape || null)
 const overview = computed<ProjectOverviewData | null>(() => landscape.value?.overview || null)
 const freshness = computed(() => landscape.value?.freshness || null)
 const intent = computed(() => layers.value?.intent || null)
-const focus = computed<ProjectSnapshotFocusLayer | null>(() => layers.value?.focus || null)
+const focus = computed<ProjectSliceFocusLayer | null>(() => layers.value?.focus || null)
 const topEntities = computed<ProjectTopicOrEntity[]>(() => foundation.value?.aligned_entities || [])
 const topTopics = computed<ProjectTopicOrEntity[]>(() => foundation.value?.aligned_topics || [])
 
-/** 快照是否含有 4D spam 数据（用于 PostListModal 推广/有机 tab 显示） */
-const hasSnapshotSpamData = computed(() => topEntities.value.some(e => e.spam_distribution != null))
+/** 切片是否含有 4D spam 数据（用于 PostListModal 推广/有机 tab 显示） */
+const hasSliceSpamData = computed(() => topEntities.value.some(e => e.spam_distribution != null))
 
 // ==================== Landscape Layer Data ====================
 const sovRanking = computed(() => landscape.value?.sov_ranking || [])
@@ -684,7 +686,7 @@ const handleIndustryQuadrantSelect = (item: IndustryQuadrantPoint | null) => {
   openEntityPanel(item.name, item)
 }
 
-watch(snapshotId, () => {
+watch(sliceId, () => {
   selectedLandscapeEntity.value = null
   postListModalOpen.value = false
   postListModalGroups.value = []
@@ -807,12 +809,12 @@ const { apiRequest } = useApi()
 
 // 轮询时只检查状态，不触发完整数据刷新
 const pollStatus = async () => {
-  if (!snapshotId.value) return
+  if (!sliceId.value) return
 
   try {
     // 使用 apiRequest 获取最新数据（不会触发 useApiData 的响应式更新）
-    const freshData = await apiRequest<ProjectSnapshot>(
-      `/social-media/analysis/projects/${projectId.value}/snapshots/${snapshotId.value}`
+    const freshData = await apiRequest<ProjectSlice>(
+      `/social-media/analysis/projects/${projectId.value}/slices/${sliceId.value}`
     )
     if (!freshData) return
 
@@ -829,11 +831,11 @@ const pollStatus = async () => {
     const isCompleted = newStage3Status === 'completed' || newStage3Status === 'failed'
 
     if (statusChanged || isCompleted) {
-      await refreshSnapshot()
+      await refreshSlice()
     }
   } catch (e) {
     // 静默失败，避免轮询错误打断用户操作
-    console.warn('[Snapshot Poll] Status check failed:', e)
+    console.warn('[Slice Poll] Status check failed:', e)
   }
 }
 
@@ -860,7 +862,7 @@ watch(isReportsReady, (ready, wasReady) => {
     stopPolling()
     toast.add({
       title: '报告生成完成',
-      description: '项目快照分析已完成',
+      description: '项目切片分析已完成',
       color: 'success',
     })
   }
@@ -1032,16 +1034,16 @@ const copyText = async (text: string) => {
         <div>
           <ClientOnly>
             <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
-              {{ snapshot?.name || `快照 ${snapshotId}` }}
+              {{ slice?.name || `切片 ${sliceId}` }}
             </h1>
             <template #fallback>
               <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
-                {{ `快照 ${snapshotId}` }}
+                {{ `切片 ${sliceId}` }}
               </h1>
             </template>
           </ClientOnly>
           <p class="text-sm text-gray-500 dark:text-gray-400">
-            项目级合并分析快照
+            项目级合并分析切片
           </p>
           <ClientOnly>
             <div class="flex items-center gap-3 mt-1 text-sm">
@@ -1063,7 +1065,7 @@ const copyText = async (text: string) => {
         </div>
       </div>
       <ClientOnly>
-        <UButton icon="i-heroicons-arrow-path" variant="ghost" :loading="snapshotLoading" @click="handleRefresh">
+        <UButton icon="i-heroicons-arrow-path" variant="ghost" :loading="sliceLoading" @click="handleRefresh">
           刷新
         </UButton>
       </ClientOnly>
@@ -1074,9 +1076,9 @@ const copyText = async (text: string) => {
         <div class="text-center py-12 text-gray-400">加载中...</div>
       </template>
 
-      <div v-if="snapshotLoading" class="text-center py-12 text-gray-400">加载中...</div>
-      <div v-else-if="!snapshotId" class="text-center py-12 text-gray-400">未指定快照 ID，请从项目详情页选择快照查看</div>
-      <div v-else-if="!snapshot" class="text-center py-12 text-gray-400">快照不存在或已删除</div>
+      <div v-if="sliceLoading" class="text-center py-12 text-gray-400">加载中...</div>
+      <div v-else-if="!sliceId" class="text-center py-12 text-gray-400">未指定切片 ID，请从项目详情页选择切片查看</div>
+      <div v-else-if="!slice" class="text-center py-12 text-gray-400">切片不存在或已删除</div>
 
       <div v-else class="space-y-6">
         <!-- 分析报告（生成进度） -->
@@ -1084,7 +1086,7 @@ const copyText = async (text: string) => {
           <div class="flex items-center justify-between gap-4 mb-2">
             <h2 class="text-lg font-medium text-gray-900 dark:text-white">🧾 分析报告</h2>
             <div class="text-xs text-gray-500 dark:text-gray-400">
-              <span class="font-mono">snapshot_id={{ snapshot.id }}</span>
+              <span class="font-mono">slice_id={{ slice.id }}</span>
             </div>
           </div>
           <!-- summary row -->
@@ -1302,9 +1304,9 @@ const copyText = async (text: string) => {
           <div class="flex items-center justify-between gap-4 mb-4">
             <h2 class="text-lg font-medium text-gray-900 dark:text-white">🌍 概览</h2>
             <div class="text-xs text-gray-500 dark:text-gray-400">
-              <span class="font-mono">snapshot_id={{ snapshot.id }}</span>
+              <span class="font-mono">slice_id={{ slice.id }}</span>
               <span class="mx-2">·</span>
-              <span>任务数 {{ snapshot.included_task_ids?.length || 0 }}</span>
+              <span>任务数 {{ slice.included_task_ids?.length || 0 }}</span>
             </div>
           </div>
 
@@ -1684,7 +1686,7 @@ const copyText = async (text: string) => {
           v-model:open="postListModalOpen"
           :groups="postListModalGroups"
           :title="postListModalTitle"
-          :has-spam-data="hasSnapshotSpamData"
+          :has-spam-data="hasSliceSpamData"
         />
 
         <!-- 证据面板（完整 Top 列表） -->

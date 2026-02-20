@@ -1,5 +1,5 @@
 /**
- * 项目快照分析 - 类型定义
+ * 项目切片洞察 - 类型定义
  * 对应后端 Step 3 分层指标计算输出
  */
 
@@ -387,11 +387,11 @@ export interface FocusLayer {
 }
 
 // ===========================================
-// 完整快照结构
+// 完整切片结构
 // ===========================================
 
-/** 快照元数据 */
-export interface SnapshotMeta {
+/** 切片元数据 */
+export interface SliceMeta {
   project_id: number
   generated_at: string
   subject?: string | null
@@ -400,29 +400,29 @@ export interface SnapshotMeta {
   scope?: Record<string, unknown>
 }
 
-/** 快照基础数据 (归一化后) */
-export interface SnapshotFoundation {
+/** 切片基础数据 (归一化后) */
+export interface SliceFoundation {
   dedup_stats?: Record<string, unknown>
   aligned_entities?: AlignedEntity[]
   aligned_topics?: AlignedTopic[]
 }
 
 /** 分层分析结果 */
-export interface SnapshotLayers {
+export interface SliceLayers {
   landscape?: LandscapeLayer
   topic?: TopicLayer
   focus?: FocusLayer | null
 }
 
 /** AI 报告 */
-export interface SnapshotReport {
+export interface SliceReport {
   content?: string
 }
 
-export interface SnapshotReports {
-  landscape_report?: SnapshotReport | null
-  topic_report?: SnapshotReport | null
-  focus_report?: SnapshotReport | null
+export interface SliceReports {
+  landscape_report?: SliceReport | null
+  topic_report?: SliceReport | null
+  focus_report?: SliceReport | null
 }
 
 /** Stage2 处理状态 */
@@ -479,24 +479,24 @@ export interface Stage3Status {
   error?: string
 }
 
-/** 快照结果数据 */
-export interface ProjectSnapshotResultData {
-  meta?: SnapshotMeta
-  foundation?: SnapshotFoundation
-  layers?: SnapshotLayers
-  reports?: SnapshotReports
+/** 切片结果数据 */
+export interface ProjectSliceResultData {
+  meta?: SliceMeta
+  foundation?: SliceFoundation
+  layers?: SliceLayers
+  reports?: SliceReports
   stage2?: Stage2Status
   stage3?: Stage3Status
 }
 
-/** 项目快照完整结构 */
-export interface ProjectSnapshot {
+/** 项目切片完整结构 */
+export interface ProjectSlice {
   id: number
   name: string | null
   project_id: number
   user_id: number
   included_task_ids: number[]
-  result_data: ProjectSnapshotResultData
+  result_data: ProjectSliceResultData
   created_at: string
   updated_at: string
 }

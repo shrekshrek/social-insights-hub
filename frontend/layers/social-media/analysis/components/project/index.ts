@@ -1,6 +1,6 @@
 /**
- * 项目快照分析组件
- * 对应 PROJECT_SNAPSHOT_PIPELINE_FINAL.md Step 3 分层指标计算
+ * 项目切片洞察组件
+ * 对应 PROJECT_SLICE_PIPELINE_FINAL.md Step 3 分层指标计算
  */
 
 // Landscape Layer (大盘层)

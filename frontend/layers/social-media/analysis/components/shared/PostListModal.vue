@@ -12,7 +12,7 @@ const props = defineProps<{
   open: boolean
   taskId?: number
   postIds?: number[]
-  /** 多任务样本：用于项目快照等跨任务场景 */
+  /** 多任务样本：用于项目切片等跨任务场景 */
   groups?: Array<{ taskId: number; postIds: number[]; label?: string; platform?: string }>
   title?: string
   /** 是否显示推广/有机分组 tab */

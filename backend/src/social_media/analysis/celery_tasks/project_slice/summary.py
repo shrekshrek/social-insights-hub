@@ -6,11 +6,11 @@ from typing import Any
 from src.social_media.analysis.celery_tasks.llm_utils import (
     invoke_chain_with_stats_sync,
 )
-from src.langchain.chains.project_snapshot_reports_chain import (
-    create_project_snapshot_focus_report_chain,
-    create_project_snapshot_landscape_report_chain,
-    create_project_snapshot_topic_report_chain,
-    parse_project_snapshot_report_response,
+from src.langchain.chains.project_slice_reports_chain import (
+    create_project_slice_focus_report_chain,
+    create_project_slice_landscape_report_chain,
+    create_project_slice_topic_report_chain,
+    parse_project_slice_report_response,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ def generate_project_reports(
     try:
         # Landscape: 注入 Top 实体的 original_terms
         landscape_terms = _extract_original_terms(aligned_entities, 30)
-        chain = create_project_snapshot_landscape_report_chain()
+        chain = create_project_slice_landscape_report_chain()
         resp, stats = invoke_chain_with_stats_sync(
             chain,
             {
@@ -115,18 +115,18 @@ def generate_project_reports(
             "chat",
         )
         text = resp.content if hasattr(resp, "content") else str(resp)
-        reports["landscape_report"] = parse_project_snapshot_report_response(text)
+        reports["landscape_report"] = parse_project_slice_report_response(text)
         token_parts.append(stats or {})
         llm_used = True
     except Exception as e:
-        logger.error(f"[Snapshot Reports] Landscape report failed: {e}", exc_info=True)
+        logger.error(f"[Slice Reports] Landscape report failed: {e}", exc_info=True)
 
     try:
         # Topic: 注入 痛点/爽点/未满足需求 的 original_terms
         pains_terms = _extract_topic_terms_by_type(intent_layer, "pains", 20)
         gains_terms = _extract_topic_terms_by_type(intent_layer, "gains", 20)
         unmet_terms = _extract_original_terms(intent_layer.get("unmet_needs") or [], 15)
-        chain = create_project_snapshot_topic_report_chain()
+        chain = create_project_slice_topic_report_chain()
         resp, stats = invoke_chain_with_stats_sync(
             chain,
             {
@@ -140,11 +140,11 @@ def generate_project_reports(
             "chat",
         )
         text = resp.content if hasattr(resp, "content") else str(resp)
-        reports["topic_report"] = parse_project_snapshot_report_response(text)
+        reports["topic_report"] = parse_project_slice_report_response(text)
         token_parts.append(stats or {})
         llm_used = True
     except Exception as e:
-        logger.error(f"[Snapshot Reports] Topic report failed: {e}", exc_info=True)
+        logger.error(f"[Slice Reports] Topic report failed: {e}", exc_info=True)
 
     if subject:
         try:
@@ -155,7 +155,7 @@ def generate_project_reports(
             comp_pos = _extract_entity_terms_by_role_sentiment(
                 aligned_entities, "competitor", "positive", 15
             )
-            chain = create_project_snapshot_focus_report_chain()
+            chain = create_project_slice_focus_report_chain()
             resp, stats = invoke_chain_with_stats_sync(
                 chain,
                 {
@@ -168,11 +168,11 @@ def generate_project_reports(
                 "chat",
             )
             text = resp.content if hasattr(resp, "content") else str(resp)
-            reports["focus_report"] = parse_project_snapshot_report_response(text)
+            reports["focus_report"] = parse_project_slice_report_response(text)
             token_parts.append(stats or {})
             llm_used = True
         except Exception as e:
-            logger.error(f"[Snapshot Reports] Focus report failed: {e}", exc_info=True)
+            logger.error(f"[Slice Reports] Focus report failed: {e}", exc_info=True)
 
     # token stats 合并（复用既有工具结构）
     token_usage = {
@@ -233,7 +233,7 @@ def generate_project_reports(
         # 即使不满足硬约束，也保留报告内容（但标记警告）
         if not has_required and reports.get("focus_report"):
             logger.warning(
-                f"[Snapshot Reports] Focus report missing sections: "
+                f"[Slice Reports] Focus report missing sections: "
                 f"marketing={has_marketing}, product={has_product}, pr={has_pr}"
             )
         # 只要有 focus_report 内容就算成功（移除丢弃逻辑）

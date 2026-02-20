@@ -98,7 +98,7 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 | users | 用户 CRUD, 角色分配 | — (操作 auth.users) | — | `/api/v1/users` | auth, rbac |
 | projects | 项目管理, 平台初始化 | `social_projects`, `platforms` | `check_project_access()`, 模型 | `/api/v1/social-media/projects` | auth, rbac |
 | tasks | 任务管理, 多平台适配器, 帖子/评论存储 | `data_tasks`, `social_posts`, `social_comments` | 模型, `task_crud`, `adapters` | `/api/v1/social-media/tasks` | auth, rbac, projects |
-| analysis | LLM 分析编排, 批处理, 成本追踪 | `post_analyses`, `analysis_jobs`, `project_analysis_snapshots` | — (终端模块) | `/api/v1/social-media/analysis` | auth, rbac, projects, tasks, langchain |
+| analysis | LLM 分析编排, 批处理, 成本追踪 | `post_analyses`, `analysis_jobs`, `project_analysis_slices` | — (终端模块) | `/api/v1/social-media/analysis` | auth, rbac, projects, tasks, langchain |
 | langchain | DeepSeek LLM 实例, 分析链 | — (纯计算) | `get_deepseek_chat()`, 各 chain | — (无 API) | 基础设施 (config) |
 | agent | 爬虫代理 API, 数据上传 | — (操作 tasks 数据) | — (面向爬虫) | `/api/v1/agent` | tasks |
 
@@ -113,8 +113,8 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 | opinion_normalization_chain | 观点列表 | 去重+归一化观点 | aggregation/opinion |
 | category_normalization_chain | 观点分类 | 归一化分类 | aggregation/opinion |
 | attribute_normalization_chain | 实体属性 | 归一化属性 | aggregation/entity |
-| project_entity_merge_chain | 多任务实体 | 项目级实体合并 | project_snapshot |
-| project_snapshot_reports_chain | 聚合数据 | 项目级报告摘要 | project_snapshot |
+| project_entity_merge_chain | 多任务实体 | 项目级实体合并 | project_slice |
+| project_slice_reports_chain | 聚合数据 | 项目级报告摘要 | project_slice |
 
 ---
 
@@ -146,7 +146,7 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 
 | 子模块 | 页面 | Composables | 关键组件 |
 |--------|------|-------------|----------|
-| projects/ | 列表, 创建, 详情, 快照分析 | usePlatforms, useSocialProjects | TaskComparisonSlideover |
+| projects/ | 列表, 创建, 详情, 切片洞察 | usePlatforms, useSocialProjects | TaskComparisonSlideover |
 | tasks/ | 列表, 创建, 详情, 数据上传 | useTasks, usePosts, useJSONUpload | — |
 | analysis/ | — (嵌入 task/project 详情页) | useAnalysis, useAnalysisStats, useTokenUsage | TaskAnalysisReport, IpaChart, ContextGraphChart, CompetitorRadarChart, TimeDistributionChart, SpamRatioBar, PostListModal 等 |
 
@@ -172,7 +172,7 @@ SocialPost ──1:N──▶ SocialComment
 SocialProject ──1:N──▶ AnalysisJob ◀──N:1── DataTask (可 NULL)
 User ──1:N──▶ AnalysisJob
 
-SocialProject ──1:N──▶ ProjectAnalysisSnapshot
+SocialProject ──1:N──▶ ProjectAnalysisSlice
 ```
 
 ### 5.2 核心表
@@ -187,7 +187,7 @@ SocialProject ──1:N──▶ ProjectAnalysisSnapshot
 | social_posts, social_comments | tasks | 帖子/评论数据 |
 | post_analyses | analysis | 帖子分析结果 (1:1 SocialPost) |
 | analysis_jobs | analysis | 分析任务状态+成本记录 |
-| project_analysis_snapshots | analysis | 项目级分析快照 (不可变) |
+| project_analysis_slices | analysis | 项目级分析切片 (不可变) |
 
 ---
 
@@ -214,10 +214,10 @@ Stage 3: 聚合 (aggregation_tasks)       ← LLM: 归一化
 
 ```
 选择多个 DataTask
-  → Stage 1 (同步): 统计聚合 + spam 分布计算 → 创建 ProjectAnalysisSnapshot
+  → Stage 1 (同步): 统计聚合 + spam 分布计算 → 创建 ProjectAnalysisSlice
   → Stage 2 (Celery): 跨任务实体/观点合并 (LLM)，传递 spam_distribution
   → Stage 3 (Celery): 项目级报告摘要 (LLM)
-  → 更新 ProjectAnalysisSnapshot.result_data
+  → 更新 ProjectAnalysisSlice.result_data
 ```
 
 Stage 1 通过 outerjoin PostAnalysis 获取 spam_score，构建 `spam_map_by_key`（post_key → high/low），为每个实体/话题计算 4D spam 分布（`high_spam/low_spam × post/comment`）。Stage 2 归一化时累加传递该分布。
@@ -274,7 +274,7 @@ service → check_project_access(user_id, project_id)
 | Dependency Injection | FastAPI `Depends()` 管理 DB session, 当前用户, 权限 |
 | Adapter Pattern | `tasks/adapters/` 处理各平台数据格式差异 |
 | Async Task Chain | Celery 编排多阶段分析管线 |
-| Snapshot Pattern | `ProjectAnalysisSnapshot` 保存不可变报告历史 |
+| Slice Pattern | `ProjectAnalysisSlice` 保存不可变报告历史 |
 | Cost Tracking | 每次 LLM 调用记录 token 用量+费用 |
 | Code-Driven RBAC | 权限在代码中定义, 启动时自动同步到数据库 |
 | API Proxy | 前端统一注入 JWT, 转发到后端 |

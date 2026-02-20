@@ -120,7 +120,7 @@ export interface PostAnalysisCreate {
 /**
  * 分析类型
  * - 任务级: screening_posts, deep_posts, deep_comments, aggregation, entity_normalization, opinion_normalization
- * - 项目级: entity_normalization, opinion_normalization (task_id=null), project_snapshot_summary, topic_clustering, competitive
+ * - 项目级: entity_normalization, opinion_normalization (task_id=null), project_slice_summary, topic_clustering, competitive
  */
 export type AnalysisType =
   | 'screening_posts'
@@ -129,7 +129,7 @@ export type AnalysisType =
   | 'aggregation'
   | 'entity_normalization'
   | 'opinion_normalization'
-  | 'project_snapshot_summary'
+  | 'project_slice_summary'
   | 'topic_clustering'
   | 'competitive'
 
@@ -179,8 +179,8 @@ export interface AnalysisJob {
   // 关联信息（从列表接口返回）
   project_name?: string
   task_name?: string
-  snapshot_id?: number
-  snapshot_name?: string | null
+  slice_id?: number
+  slice_name?: string | null
   user_name?: string
 }
 

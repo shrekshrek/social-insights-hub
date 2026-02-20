@@ -40,9 +40,9 @@ from .schemas import (
     PostAnalysisWithPostInfo,
     DeepAnalysisPreviewResponse,
     TaskAnalysisResultResponse,
-    CreateProjectSnapshotRequest,
-    ProjectSnapshotResponse,
-    ProjectSnapshotListResponse,
+    CreateProjectSliceRequest,
+    ProjectSliceResponse,
+    ProjectSliceListResponse,
 )
 
 
@@ -434,24 +434,24 @@ async def delete_task_analyses(
 
 
 @router.post(
-    "/projects/{project_id}/snapshots",
-    response_model=ProjectSnapshotResponse,
+    "/projects/{project_id}/slices",
+    response_model=ProjectSliceResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="手动生成项目级合并分析快照",
+    summary="手动生成项目级合并分析切片",
 )
-async def create_project_snapshot(
+async def create_project_slice(
     project_id: int,
-    request: CreateProjectSnapshotRequest,
+    request: CreateProjectSliceRequest,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """生成项目级合并分析快照，并自动启动项目级归一化与总结（异步）。
+    """生成项目级合并分析切片，并自动启动项目级归一化与总结（异步）。
 
-    - 创建快照：同步完成 Stage1 统计聚合（overview/details/charts/topic_aspects）
+    - 创建切片：同步完成 Stage1 统计聚合（overview/details/charts/topic_aspects）
     - 自动启动：Stage2（全局归一化/归因增强）与 Stage3（整体总结）
-    - 前端应轮询该快照详情，直至 stage2.status=completed 后再展示核心板块
+    - 前端应轮询该切片详情，直至 stage2.status=completed 后再展示核心板块
     """
-    snapshot = await service.create_project_snapshot(
+    slice_record = await service.create_project_slice(
         db=db,
         project_id=project_id,
         task_ids=request.task_ids,
@@ -464,13 +464,13 @@ async def create_project_snapshot(
 
     # 创建后立刻启动异步增强（不需要额外接口）
     from datetime import datetime, timezone
-    from src.social_media.analysis.celery_tasks.project_snapshot_tasks import (
-        run_project_snapshot_task,
+    from src.social_media.analysis.celery_tasks.project_slice_tasks import (
+        run_project_slice_task,
     )
 
     now = datetime.now(timezone.utc).isoformat()
     # 重要：result_data 是 JSON 字段，直接原地修改可能不会被 SQLAlchemy 追踪到（导致不落库）
-    result_data = snapshot.result_data or {}
+    result_data = slice_record.result_data or {}
     if not isinstance(result_data, dict):
         result_data = {}
     # 触发变更追踪：用新 dict 承载本次更新
@@ -493,30 +493,30 @@ async def create_project_snapshot(
         "updated_at": now,
     }
 
-    async_result = run_project_snapshot_task.delay(snapshot_id=snapshot.id)
+    async_result = run_project_slice_task.delay(slice_id=slice_record.id)
     stage2["celery_task_id"] = str(async_result.id)
     result_data["stage2"] = stage2
     result_data["stage3"] = stage3
-    snapshot.result_data = result_data
-    flag_modified(snapshot, "result_data")
+    slice_record.result_data = result_data
+    flag_modified(slice_record, "result_data")
     await db.commit()
-    await db.refresh(snapshot)
-    return ProjectSnapshotResponse.model_validate(snapshot)
+    await db.refresh(slice_record)
+    return ProjectSliceResponse.model_validate(slice_record)
 
 
 @router.get(
-    "/projects/{project_id}/snapshots",
-    response_model=ProjectSnapshotListResponse,
-    summary="获取项目级合并分析快照列表",
+    "/projects/{project_id}/slices",
+    response_model=ProjectSliceListResponse,
+    summary="获取项目级合并分析切片列表",
 )
-async def list_project_snapshots(
+async def list_project_slices(
     project_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取项目下的历史快照列表（按创建时间倒序）"""
+    """获取项目下的历史切片列表（按创建时间倒序）"""
     from src.social_media.projects import crud as project_crud
-    from .models import ProjectAnalysisSnapshot
+    from .models import ProjectAnalysisSlice
     from sqlalchemy import select
 
     has_access = await project_crud.check_project_access(
@@ -529,31 +529,31 @@ async def list_project_snapshots(
         )
 
     stmt = (
-        select(ProjectAnalysisSnapshot)
-        .where(ProjectAnalysisSnapshot.project_id == project_id)
-        .order_by(ProjectAnalysisSnapshot.created_at.desc())
+        select(ProjectAnalysisSlice)
+        .where(ProjectAnalysisSlice.project_id == project_id)
+        .order_by(ProjectAnalysisSlice.created_at.desc())
     )
     result = await db.execute(stmt)
     items = list(result.scalars().all())
-    return ProjectSnapshotListResponse(
-        items=[ProjectSnapshotResponse.model_validate(i) for i in items]
+    return ProjectSliceListResponse(
+        items=[ProjectSliceResponse.model_validate(i) for i in items]
     )
 
 
 @router.get(
-    "/projects/{project_id}/snapshots/{snapshot_id}",
-    response_model=ProjectSnapshotResponse,
-    summary="获取项目级合并分析快照详情",
+    "/projects/{project_id}/slices/{slice_id}",
+    response_model=ProjectSliceResponse,
+    summary="获取项目级合并分析切片详情",
 )
-async def get_project_snapshot(
+async def get_project_slice(
     project_id: int,
-    snapshot_id: int,
+    slice_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取单个快照详情"""
+    """获取单个切片详情"""
     from src.social_media.projects import crud as project_crud
-    from .models import ProjectAnalysisSnapshot
+    from .models import ProjectAnalysisSlice
     from sqlalchemy import select
 
     has_access = await project_crud.check_project_access(
@@ -566,34 +566,34 @@ async def get_project_snapshot(
         )
 
     stmt = (
-        select(ProjectAnalysisSnapshot)
-        .where(ProjectAnalysisSnapshot.id == snapshot_id)
-        .where(ProjectAnalysisSnapshot.project_id == project_id)
+        select(ProjectAnalysisSlice)
+        .where(ProjectAnalysisSlice.id == slice_id)
+        .where(ProjectAnalysisSlice.project_id == project_id)
     )
     result = await db.execute(stmt)
-    snapshot = result.scalar_one_or_none()
-    if not snapshot:
+    slice_record = result.scalar_one_or_none()
+    if not slice_record:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
         )
-    return ProjectSnapshotResponse.model_validate(snapshot)
+    return ProjectSliceResponse.model_validate(slice_record)
 
 
 @router.delete(
-    "/projects/{project_id}/snapshots/{snapshot_id}",
+    "/projects/{project_id}/slices/{slice_id}",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
-    summary="删除项目级合并分析快照",
+    summary="删除项目级合并分析切片",
 )
-async def delete_project_snapshot(
+async def delete_project_slice(
     project_id: int,
-    snapshot_id: int,
+    slice_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """删除单个快照（硬删除）"""
+    """删除单个切片（硬删除）"""
     from src.social_media.projects import crud as project_crud
-    from .models import ProjectAnalysisSnapshot
+    from .models import ProjectAnalysisSlice
     from sqlalchemy import select
 
     has_access = await project_crud.check_project_access(
@@ -606,20 +606,20 @@ async def delete_project_snapshot(
         )
 
     stmt = (
-        select(ProjectAnalysisSnapshot)
-        .where(ProjectAnalysisSnapshot.id == snapshot_id)
-        .where(ProjectAnalysisSnapshot.project_id == project_id)
+        select(ProjectAnalysisSlice)
+        .where(ProjectAnalysisSlice.id == slice_id)
+        .where(ProjectAnalysisSlice.project_id == project_id)
     )
     result = await db.execute(stmt)
-    snapshot = result.scalar_one_or_none()
-    if not snapshot:
+    slice_record = result.scalar_one_or_none()
+    if not slice_record:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
         )
 
-    await db.delete(snapshot)
+    await db.delete(slice_record)
     await db.commit()
-    return MessageResponse(message=f"Snapshot {snapshot_id} deleted successfully")
+    return MessageResponse(message=f"Slice {slice_id} deleted successfully")
 
 
 @router.post(

@@ -18,7 +18,7 @@ def _norm_role(role: Any) -> str:
     return "Context"
 
 
-def build_snapshot_layers(
+def build_slice_layers(
     *,
     meta: dict[str, Any],
     overview: dict[str, Any],
@@ -30,7 +30,7 @@ def build_snapshot_layers(
     """Step3：分层指标计算（Landscape/Topic/Focus）。
 
     说明：
-    - 输出结构与 PROJECT_SNAPSHOT_PIPELINE_FINAL.md 对齐，但保持 KISS：先覆盖核心指标。
+    - 输出结构与 PROJECT_SLICE_PIPELINE_FINAL.md 对齐，但保持 KISS：先覆盖核心指标。
     - Focus 仅在 meta.subject 存在时返回，否则为 None。
     """
     freshness = freshness or {}
@@ -553,7 +553,7 @@ def build_snapshot_layers(
             "gap": None,
         }
         # --- 平台剪刀差：目标阵地分布 vs 行业整体分布 ---
-        # 优先用去重后口径（与实体 platform_distribution 一致），旧快照降级到原始任务量
+        # 优先用去重后口径（与实体 platform_distribution 一致），旧切片降级到原始任务量
         _upv = overview_safe.get("unique_platform_volume")
         _pv = overview_safe.get("platform_volume")
         industry_platform = (

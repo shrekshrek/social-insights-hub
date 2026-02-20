@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import type { EChartsOption } from 'echarts'
-import type { IndustryQuadrantPoint } from '../../../types/project-snapshot'
+import type { IndustryQuadrantPoint } from '../../../types/project-slice'
 import TabSwitch from '../shared/TabSwitch.vue'
 
 const props = defineProps<{

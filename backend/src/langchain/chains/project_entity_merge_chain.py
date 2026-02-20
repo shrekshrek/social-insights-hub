@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""项目级实体合并/打标 Chain（Project Snapshot Entity Merge）
+"""项目级实体合并/打标 Chain（Project Slice Entity Merge）
 
-目标：在项目级快照场景下，对跨任务聚合后的 Top 实体进行再归一化，并输出稳定的 Role/Parent 标签。
+目标：在项目级切片场景下，对跨任务聚合后的 Top 实体进行再归一化，并输出稳定的 Role/Parent 标签。
 采用 **两阶段模式 (Merge -> Review)** 以最大限度减少幻觉和跨品类错误。
 """
 

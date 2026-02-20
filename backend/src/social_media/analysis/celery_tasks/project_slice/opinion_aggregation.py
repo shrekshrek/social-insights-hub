@@ -109,7 +109,7 @@ def _align_categories_for_topics(
                     token_stats = stats
     except Exception as e:
         logger.error(
-            f"[Snapshot Opinion] Category alignment failed: {e}", exc_info=True
+            f"[Slice Opinion] Category alignment failed: {e}", exc_info=True
         )
 
     def map_category(cat: str) -> str:
@@ -175,7 +175,7 @@ def normalize_opinion_aliases_by_category(
         grouped[cat_name][nm] = grouped[cat_name].get(nm, 0) + w
 
     for cat_name, mp in grouped.items():
-        # 候选池来自快照 top_topics（建议 200），这里按类目控制送入归一化的上限
+        # 候选池来自切片 top_topics（建议 200），这里按类目控制送入归一化的上限
         top_terms = dict(sorted(mp.items(), key=lambda x: x[1], reverse=True)[:100])
         # 程序预聚类（降噪/降 token）
         rep_counts, raw_to_rep, rep_members = _program_cluster_terms(top_terms)
@@ -202,7 +202,7 @@ def normalize_opinion_aliases_by_category(
                 continue
         except Exception as e:
             logger.error(
-                f"[Snapshot Stage2] Topic alias normalization failed: {e}",
+                f"[Slice Stage2] Topic alias normalization failed: {e}",
                 exc_info=True,
             )
 

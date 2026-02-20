@@ -5910,7 +5910,7 @@ packages:
   zrender@5.6.1:
     resolution: {integrity: sha512-OFXkDJKcrlx5su2XbzJvj/34Q3m6PvyCZkVPHGYpcCJ52ek4U/ymZyfuV1nKE23AyBJ51E/6Yr0mhZ7xGTO4ag==}
 
-snapshots:
+slices:
 
   '@adonisjs/hash@9.1.1':
     dependencies:

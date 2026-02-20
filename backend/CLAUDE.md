@@ -50,7 +50,7 @@ backend/src/
 │   ├── tasks/               # 数据采集任务, 多平台适配器
 │   │   └── adapters/        # 抖音/小红书/微博等平台适配
 │   └── analysis/            # LLM 分析编排, 成本追踪
-│       ├── celery_tasks/    # screening, deep, aggregation, snapshot
+│       ├── celery_tasks/    # screening, deep, aggregation, slice
 │       └── jobs/            # AnalysisJob CRUD
 ├── langchain/               # LLM 实例管理, 分析链定义
 │   └── chains/              # 9 条分析链

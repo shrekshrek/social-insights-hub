@@ -153,8 +153,14 @@ export interface GroupShareItem {
 
 /** 平台阵地 DNA 项 */
 export interface PlatformDNAItem {
-  entity: string
-  platforms: Record<string, number>
+  name: string
+  role?: string
+  total_mentions: number
+  total_organic_mentions?: number
+  total_promo_mentions?: number
+  platform_shares: Record<string, number>
+  organic_platform_shares?: Record<string, number>
+  promo_platform_shares?: Record<string, number>
 }
 
 /** 行业象限数据点 (实体级) */
@@ -212,7 +218,14 @@ export interface TopicRadarItem {
   name: string
   category?: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   sentiment: number
+  sentiment_distribution?: {
+    positive: number
+    negative: number
+    neutral: number
+  }
   mentions: number
   spam_distribution?: {
     high_spam: { total: number; post: number; comment: number }
@@ -234,6 +247,8 @@ export interface TopicLayer {
   topic_aspects?: Array<{
     category: string
     heat: number
+    organic_heat?: number
+    promo_heat?: number
     sentiment: number
     mention_count?: number
     top_keywords?: string[]

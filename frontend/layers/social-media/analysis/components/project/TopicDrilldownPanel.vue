@@ -12,17 +12,29 @@ interface SpamDistribution {
   low_spam: { total: number; post: number; comment: number }
 }
 
+interface SentimentDistribution {
+  positive: number
+  negative: number
+  neutral: number
+}
+
 interface TopicItem {
   name: string
   category?: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   sentiment?: number
+  sentiment_distribution?: SentimentDistribution
   mentions: number
   spam_distribution?: SpamDistribution
   original_terms?: OriginalTerm[]
   platform_distribution?: Record<string, number>
   keyword_distribution?: Record<string, number>
   post_ids_sample?: Array<{ task_id: number; post_id: number }>
+  coverage?: number
+  platform_coverage?: number
+  keyword_coverage?: number
 }
 
 const props = defineProps<{
@@ -79,6 +91,13 @@ const formatDistribution = (dist?: Record<string, number>) => {
     .slice(0, 6)
 }
 
+// 情感分布总计
+const sentimentDistTotal = computed(() => {
+  const sd = props.item?.sentiment_distribution
+  if (!sd) return 0
+  return (sd.positive || 0) + (sd.negative || 0) + (sd.neutral || 0)
+})
+
 // 情感颜色
 const getSentimentColor = (s?: number) => {
   if (s === undefined) return 'text-gray-600 dark:text-gray-400'
@@ -116,6 +135,10 @@ const getSentimentColor = (s?: number) => {
             <div class="text-lg font-mono font-semibold text-gray-900 dark:text-white mt-1">
               {{ item.heat.toFixed(0) }}
             </div>
+            <div v-if="item.organic_heat != null || item.promo_heat != null" class="flex gap-2 mt-1">
+              <span v-if="item.organic_heat != null" class="text-[10px] font-mono text-emerald-600 dark:text-emerald-400" title="有机热度">↑{{ item.organic_heat.toFixed(0) }}</span>
+              <span v-if="item.promo_heat != null" class="text-[10px] font-mono text-amber-500 dark:text-amber-400" title="推广热度">↑{{ item.promo_heat.toFixed(0) }}</span>
+            </div>
           </div>
           <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
             <div class="text-xs text-gray-500 dark:text-gray-400">提及数</div>
@@ -141,6 +164,31 @@ const getSentimentColor = (s?: number) => {
           <div class="mt-1.5 flex gap-4 text-[11px] text-gray-500 dark:text-gray-400">
             <span>有机 <b class="font-mono text-gray-700 dark:text-gray-300">{{ item.spam_distribution.low_spam.total }}</b> 条</span>
             <span>推广 <b class="font-mono text-gray-700 dark:text-gray-300">{{ item.spam_distribution.high_spam.total }}</b> 条</span>
+          </div>
+        </div>
+
+        <!-- 情感分布（正/负/中性占比；争议点此处最有解释价值） -->
+        <div v-if="item.sentiment_distribution && sentimentDistTotal > 0" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+          <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">情感分布</div>
+          <div class="flex flex-wrap gap-4 text-xs">
+            <div class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span class="text-gray-500 dark:text-gray-400">正面</span>
+              <span class="font-mono text-gray-900 dark:text-white">{{ item.sentiment_distribution.positive }}</span>
+              <span class="text-gray-400">({{ ((item.sentiment_distribution.positive / sentimentDistTotal) * 100).toFixed(0) }}%)</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+              <span class="text-gray-500 dark:text-gray-400">负面</span>
+              <span class="font-mono text-gray-900 dark:text-white">{{ item.sentiment_distribution.negative }}</span>
+              <span class="text-gray-400">({{ ((item.sentiment_distribution.negative / sentimentDistTotal) * 100).toFixed(0) }}%)</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
+              <span class="text-gray-500 dark:text-gray-400">中性</span>
+              <span class="font-mono text-gray-900 dark:text-white">{{ item.sentiment_distribution.neutral }}</span>
+              <span class="text-gray-400">({{ ((item.sentiment_distribution.neutral / sentimentDistTotal) * 100).toFixed(0) }}%)</span>
+            </div>
           </div>
         </div>
 
@@ -216,10 +264,15 @@ const getSentimentColor = (s?: number) => {
         >
           <div class="flex items-start gap-2">
             <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
-            <div>
+            <div class="min-w-0 flex-1">
               <div class="text-sm font-medium text-purple-900 dark:text-purple-100">产品机会洞察</div>
               <div class="text-xs text-purple-700 dark:text-purple-300 mt-1">
                 这是一个跨平台/跨关键词的行业共性痛点。如果您能解决这个问题，将形成差异化竞争优势。
+              </div>
+              <!-- 覆盖度依据 -->
+              <div v-if="item.platform_coverage != null || item.keyword_coverage != null" class="flex gap-3 mt-2 text-[11px] text-purple-600 dark:text-purple-400 font-mono">
+                <span v-if="item.platform_coverage != null">跨 <b>{{ item.platform_coverage }}</b> 个平台</span>
+                <span v-if="item.keyword_coverage != null">× <b>{{ item.keyword_coverage }}</b> 个关键词</span>
               </div>
             </div>
           </div>

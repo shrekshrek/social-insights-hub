@@ -59,6 +59,11 @@ def build_drivers_from_entities(
                     {
                         "pos": 0,
                         "neg": 0,
+                        # 有机/推广正负计数（基于 organic_mentions / promo_mentions）
+                        "organic_pos": 0,
+                        "organic_neg": 0,
+                        "promo_pos": 0,
+                        "promo_neg": 0,
                         "platform_dist": {},
                         "keyword_dist": {},
                         # 证据：聚合 term 对应的帖子样本与用户原话（用于 Focus/SWOT/Gap 下钻）
@@ -73,10 +78,22 @@ def build_drivers_from_entities(
                         "_has_spam_data": False,
                     },
                 )
+                try:
+                    org_m = int(it.get("organic_mentions") or 0)
+                except Exception:
+                    org_m = 0
+                try:
+                    promo_m = int(it.get("promo_mentions") or 0)
+                except Exception:
+                    promo_m = 0
                 if polarity == "pos":
                     rec["pos"] += m
+                    rec["organic_pos"] += org_m
+                    rec["promo_pos"] += promo_m
                 else:
                     rec["neg"] += m
+                    rec["organic_neg"] += org_m
+                    rec["promo_neg"] += promo_m
 
                 p_dist = it.get("platform_distribution") or {}
                 k_dist = it.get("keyword_distribution") or {}
@@ -205,6 +222,11 @@ def build_drivers_from_entities(
                     "pos": 0,
                     "neg": 0,
                     "sentiment": 0.0,
+                    # 有机/推广正负计数（用于精确计算 organic/promo sentiment）
+                    "organic_pos": 0,
+                    "organic_neg": 0,
+                    "promo_pos": 0,
+                    "promo_neg": 0,
                     "platform_distribution": defaultdict(int),
                     "keyword_distribution": defaultdict(int),
                     "raw_terms": [],
@@ -225,6 +247,10 @@ def build_drivers_from_entities(
             cell["mentions"] += pos + neg
             cell["pos"] += pos
             cell["neg"] += neg
+            cell["organic_pos"] += int(rec.get("organic_pos") or 0)
+            cell["organic_neg"] += int(rec.get("organic_neg") or 0)
+            cell["promo_pos"] += int(rec.get("promo_pos") or 0)
+            cell["promo_neg"] += int(rec.get("promo_neg") or 0)
             cell["raw_terms"].append(raw_term)
             for k, v in (rec.get("platform_dist") or {}).items():
                 cell["platform_distribution"][k] += int(v or 0)
@@ -281,6 +307,26 @@ def build_drivers_from_entities(
                 cell["sentiment"] = round(
                     (float(cell["pos"]) - float(cell["neg"])) / float(total), 2
                 )
+            # 有机情感（精确计算）
+            org_total = int(cell["organic_pos"]) + int(cell["organic_neg"])
+            if org_total > 0:
+                cell["organic_sentiment"] = round(
+                    (float(cell["organic_pos"]) - float(cell["organic_neg"])) / float(org_total), 2
+                )
+                cell["organic_mentions"] = org_total
+            else:
+                cell["organic_sentiment"] = None
+                cell["organic_mentions"] = 0
+            # 推广情感（精确计算）
+            promo_total = int(cell["promo_pos"]) + int(cell["promo_neg"])
+            if promo_total > 0:
+                cell["promo_sentiment"] = round(
+                    (float(cell["promo_pos"]) - float(cell["promo_neg"])) / float(promo_total), 2
+                )
+                cell["promo_mentions"] = promo_total
+            else:
+                cell["promo_sentiment"] = None
+                cell["promo_mentions"] = 0
             cell["platform_distribution"] = dict(cell["platform_distribution"])
             cell["keyword_distribution"] = dict(cell["keyword_distribution"])
 
@@ -304,6 +350,10 @@ def build_drivers_from_entities(
             cell.pop("_spam_low_post", None)
             cell.pop("_spam_low_comment", None)
             cell.pop("_has_spam_data", None)
+            cell.pop("organic_pos", None)
+            cell.pop("organic_neg", None)
+            cell.pop("promo_pos", None)
+            cell.pop("promo_neg", None)
             ot_counts = (
                 cell.pop("original_terms_counts", {})
                 if isinstance(cell.get("original_terms_counts"), dict)

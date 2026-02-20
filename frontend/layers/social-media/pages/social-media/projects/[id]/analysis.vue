@@ -75,6 +75,8 @@ interface ProjectOverviewData {
 interface ProjectTopicAspectItem {
   category: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   sentiment: number
   mention_count?: number
   top_keywords?: string[]
@@ -1579,7 +1581,13 @@ const copyText = async (text: string) => {
                     class="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                   >
                     <td class="py-2 pr-4 font-medium text-gray-900 dark:text-white">{{ aspect.category }}</td>
-                    <td class="py-2 pr-4 text-right font-mono text-gray-700 dark:text-gray-300">{{ formatCompactNumber(aspect.heat) }}</td>
+                    <td class="py-2 pr-4 text-right">
+                      <div class="font-mono text-gray-700 dark:text-gray-300">{{ formatCompactNumber(aspect.heat) }}</div>
+                      <div v-if="aspect.organic_heat != null || aspect.promo_heat != null" class="flex justify-end gap-1.5 mt-0.5">
+                        <span v-if="aspect.organic_heat != null" class="text-[10px] font-mono text-emerald-600 dark:text-emerald-400" title="有机热度">↑{{ formatCompactNumber(aspect.organic_heat) }}</span>
+                        <span v-if="aspect.promo_heat != null" class="text-[10px] font-mono text-amber-500 dark:text-amber-400" title="推广热度">↑{{ formatCompactNumber(aspect.promo_heat) }}</span>
+                      </div>
+                    </td>
                     <td
                       class="py-2 pr-4 text-right font-mono"
                       :class="aspect.sentiment >= 0.1 ? 'text-emerald-600 dark:text-emerald-400' : aspect.sentiment <= -0.1 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-500 dark:text-gray-400'"

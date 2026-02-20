@@ -142,6 +142,8 @@ def merge_attr_items(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]
             {
                 "text": text,
                 "mentions": 0,
+                "organic_mentions": 0,
+                "promo_mentions": 0,
                 "platform_distribution": {},
                 "keyword_distribution": {},
                 "original_terms": [],
@@ -150,6 +152,14 @@ def merge_attr_items(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]
             },
         )
         b["mentions"] += m
+        try:
+            b["organic_mentions"] += int(it.get("organic_mentions") or 0)
+        except Exception:
+            pass
+        try:
+            b["promo_mentions"] += int(it.get("promo_mentions") or 0)
+        except Exception:
+            pass
         for k, v in (it.get("platform_distribution") or {}).items():
             try:
                 vv = int(v or 0)

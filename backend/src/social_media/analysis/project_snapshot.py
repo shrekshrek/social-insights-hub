@@ -128,6 +128,9 @@ def _ensure_attr_bucket() -> dict[str, Any]:
                 "original_terms_counts": defaultdict(int),
                 "platform_dist": defaultdict(int),
                 "keyword_dist": defaultdict(int),
+                # 有机/推广提及计数（基于 spam_map_by_key）
+                "organic_mentions_count": 0,
+                "promo_mentions_count": 0,
             }
         )
     }
@@ -146,6 +149,7 @@ def _merge_entity_attr_items(
     post_info_by_key: dict[str, dict[str, Any]],
     primary_keyword_by_key: dict[str, str],
     primary_task_by_key: dict[str, int],
+    spam_map_by_key: dict[str, str],
 ) -> None:
     """把任务级 entity.{features/issues/...} 合并进项目级 bucket。
 
@@ -201,6 +205,11 @@ def _merge_entity_attr_items(
             info = post_info_by_key.get(pk) or {}
             sub["platform_dist"][str(info.get("platform") or platform)] += 1
             sub["keyword_dist"][str(primary_keyword_by_key.get(pk) or keyword)] += 1
+            spam_group = spam_map_by_key.get(pk)
+            if spam_group == "low":
+                sub["organic_mentions_count"] += 1
+            elif spam_group == "high":
+                sub["promo_mentions_count"] += 1
             if len(sub["post_ids_sample"]) < max_post_ids_sample:
                 sub["post_ids_sample"].append(
                     {
@@ -530,6 +539,8 @@ def build_project_snapshot_result(
                     "comment_source_keys": set(),
                     # New: Distribution Fingerprints
                     "platform_dist": defaultdict(int),
+                    "organic_platform_dist": defaultdict(int),
+                    "promo_platform_dist": defaultdict(int),
                     "keyword_dist": defaultdict(int),
                     # New: aggregated attributes (features/issues/...)
                     "attr_buckets": {
@@ -574,19 +585,27 @@ def build_project_snapshot_result(
             # 累加有机/推广情感（按任务级 spam_distribution 权重）
             task_spam_dist = (e or {}).get("spam_distribution")
             if isinstance(task_spam_dist, dict):
-                low_total = int((task_spam_dist.get("low_spam") or {}).get("total") or 0)
-                high_total = int((task_spam_dist.get("high_spam") or {}).get("total") or 0)
+                low_total = int(
+                    (task_spam_dist.get("low_spam") or {}).get("total") or 0
+                )
+                high_total = int(
+                    (task_spam_dist.get("high_spam") or {}).get("total") or 0
+                )
                 organic_sent = (e or {}).get("organic_sentiment")
                 promo_sent = (e or {}).get("promo_sentiment")
                 if organic_sent is not None and low_total > 0:
                     try:
-                        bucket["organic_sent_weighted_sum"] += float(organic_sent) * low_total
+                        bucket["organic_sent_weighted_sum"] += (
+                            float(organic_sent) * low_total
+                        )
                         bucket["organic_sent_weight"] += low_total
                     except Exception:
                         pass
                 if promo_sent is not None and high_total > 0:
                     try:
-                        bucket["promo_sent_weighted_sum"] += float(promo_sent) * high_total
+                        bucket["promo_sent_weighted_sum"] += (
+                            float(promo_sent) * high_total
+                        )
                         bucket["promo_sent_weight"] += high_total
                     except Exception:
                         pass
@@ -638,7 +657,12 @@ def build_project_snapshot_result(
                 except Exception:
                     pass
                 # 分布：按去重后的主归属 keyword/platform 计数（总和=mentions）
-                bucket["platform_dist"][str(info.get("platform") or platform)] += 1
+                plat_key = str(info.get("platform") or platform)
+                bucket["platform_dist"][plat_key] += 1
+                if spam_group == "low":
+                    bucket["organic_platform_dist"][plat_key] += 1
+                elif spam_group == "high":
+                    bucket["promo_platform_dist"][plat_key] += 1
                 bucket["keyword_dist"][
                     str(primary_keyword_by_key.get(pk) or keyword)
                 ] += 1
@@ -670,6 +694,7 @@ def build_project_snapshot_result(
                 post_info_by_key=post_info_by_key,
                 primary_keyword_by_key=primary_keyword_by_key,
                 primary_task_by_key=primary_task_by_key,
+                spam_map_by_key=spam_map_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -683,6 +708,7 @@ def build_project_snapshot_result(
                 post_info_by_key=post_info_by_key,
                 primary_keyword_by_key=primary_keyword_by_key,
                 primary_task_by_key=primary_task_by_key,
+                spam_map_by_key=spam_map_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -696,6 +722,7 @@ def build_project_snapshot_result(
                 post_info_by_key=post_info_by_key,
                 primary_keyword_by_key=primary_keyword_by_key,
                 primary_task_by_key=primary_task_by_key,
+                spam_map_by_key=spam_map_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -709,6 +736,7 @@ def build_project_snapshot_result(
                 post_info_by_key=post_info_by_key,
                 primary_keyword_by_key=primary_keyword_by_key,
                 primary_task_by_key=primary_task_by_key,
+                spam_map_by_key=spam_map_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -722,6 +750,7 @@ def build_project_snapshot_result(
                 post_info_by_key=post_info_by_key,
                 primary_keyword_by_key=primary_keyword_by_key,
                 primary_task_by_key=primary_task_by_key,
+                spam_map_by_key=spam_map_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -735,6 +764,7 @@ def build_project_snapshot_result(
                 post_info_by_key=post_info_by_key,
                 primary_keyword_by_key=primary_keyword_by_key,
                 primary_task_by_key=primary_task_by_key,
+                spam_map_by_key=spam_map_by_key,
             )
             _merge_entity_attr_items(
                 bucket=bucket,
@@ -748,6 +778,7 @@ def build_project_snapshot_result(
                 post_info_by_key=post_info_by_key,
                 primary_keyword_by_key=primary_keyword_by_key,
                 primary_task_by_key=primary_task_by_key,
+                spam_map_by_key=spam_map_by_key,
             )
 
         # 4. Topics Aggregation
@@ -795,6 +826,14 @@ def build_project_snapshot_result(
                     # Spam 来源追踪
                     "post_source_keys": set(),
                     "comment_source_keys": set(),
+                    # 正/负极性计数（用于争议性检测）
+                    "positive_mentions": 0,
+                    "negative_mentions": 0,
+                    # 有机/推广情感（按 spam_group 分层）
+                    "organic_sent_sum": 0.0,
+                    "organic_sent_w": 0.0,
+                    "promo_sent_sum": 0.0,
+                    "promo_sent_w": 0.0,
                 }
                 topic_bucket[key] = bucket
 
@@ -844,6 +883,18 @@ def build_project_snapshot_result(
                 # sentiment：按 mentions（去重后帖子数）加权
                 bucket["sentiment_sum"] += float(sentiment) * 1.0
                 bucket["sentiment_weight"] += 1.0
+                # 正/负极性计数（用于争议性检测）
+                if float(sentiment) > 0:
+                    bucket["positive_mentions"] += 1
+                elif float(sentiment) < 0:
+                    bucket["negative_mentions"] += 1
+                # 有机/推广情感分层
+                if spam_group_t == "low":
+                    bucket["organic_sent_sum"] += float(sentiment)
+                    bucket["organic_sent_w"] += 1.0
+                elif spam_group_t == "high":
+                    bucket["promo_sent_sum"] += float(sentiment)
+                    bucket["promo_sent_w"] += 1.0
 
                 # distributions（总和=mentions）
                 bucket["platform_dist"][str(info.get("platform") or platform)] += 1
@@ -943,6 +994,8 @@ def build_project_snapshot_result(
                     {
                         "text": text,
                         "mentions": mentions_attr,
+                        "organic_mentions": int(sub.get("organic_mentions_count") or 0),
+                        "promo_mentions": int(sub.get("promo_mentions_count") or 0),
                         "original_terms": [
                             {"text": ot, "count": cnt}
                             for ot, cnt in sorted(
@@ -969,10 +1022,14 @@ def build_project_snapshot_result(
         # 计算有机/推广情感
         organic_sentiment = None
         if (b.get("organic_sent_weight") or 0) > 0:
-            organic_sentiment = round(b["organic_sent_weighted_sum"] / b["organic_sent_weight"], 2)
+            organic_sentiment = round(
+                b["organic_sent_weighted_sum"] / b["organic_sent_weight"], 2
+            )
         promo_sentiment = None
         if (b.get("promo_sent_weight") or 0) > 0:
-            promo_sentiment = round(b["promo_sent_weighted_sum"] / b["promo_sent_weight"], 2)
+            promo_sentiment = round(
+                b["promo_sent_weighted_sum"] / b["promo_sent_weight"], 2
+            )
 
         # Spam 4D 分布
         spam_dist = _compute_spam_dist_4d_by_key(
@@ -1016,6 +1073,8 @@ def build_project_snapshot_result(
                 "post_ids_sample": b["post_ids_sample"],
                 # Distributions
                 "platform_distribution": dict(b["platform_dist"]),
+                "organic_platform_distribution": dict(b["organic_platform_dist"]),
+                "promo_platform_distribution": dict(b["promo_platform_dist"]),
                 "keyword_distribution": dict(b["keyword_dist"]),
                 # Aggregated attributes (Stage 1)
                 "top_features": _finalize_attr("features"),
@@ -1042,6 +1101,16 @@ def build_project_snapshot_result(
             if b["sentiment_weight"] > 0
             else 0.0
         )
+        organic_sentiment_t = (
+            round(b["organic_sent_sum"] / b["organic_sent_w"], 2)
+            if (b.get("organic_sent_w") or 0) > 0
+            else None
+        )
+        promo_sentiment_t = (
+            round(b["promo_sent_sum"] / b["promo_sent_w"], 2)
+            if (b.get("promo_sent_w") or 0) > 0
+            else None
+        )
 
         source_tasks = [
             {"task_id": tid, "mentions": len(pids)}
@@ -1060,6 +1129,10 @@ def build_project_snapshot_result(
                 "name": b["name"],
                 "category": b["category"],
                 "sentiment": round(avg_sentiment, 2),
+                "organic_sentiment": organic_sentiment_t,
+                "promo_sentiment": promo_sentiment_t,
+                "positive_mentions": int(b.get("positive_mentions") or 0),
+                "negative_mentions": int(b.get("negative_mentions") or 0),
                 "heat": round(heat, 3),
                 "organic_heat": round(float(b.get("organic_heat") or 0.0), 3),
                 "promo_heat": round(float(b.get("promo_heat") or 0.0), 3),
@@ -1127,16 +1200,30 @@ def build_project_snapshot_result(
         else None
     )
 
+    # 去重后各平台帖子量（unique post_key 口径，与 unique_posts 总量一致）
+    unique_platform_volume: dict[str, int] = defaultdict(int)
+    for _pk, _info in post_info_by_key.items():
+        _plat = str(_info.get("platform") or "unknown")
+        unique_platform_volume[_plat] += 1
+
     overview = {
-        # 任务级总量（不去重）
+        # 任务级总量（不去重，与 platform_volume / keyword_volume 口径一致）
         "total_volume": total_volume,
-        # 项目级去重后的帖子量（基于 platform+post_id_on_platform）
+        # 项目级去重后帖子量（基于 platform+post_id_on_platform）
         "unique_posts": unique_posts,
         "total_heat": round(total_heat, 2),
-        "global_sentiment": round(global_avg_sentiment, 2),
-        "organic_global_sentiment": round(organic_avg_sentiment, 2) if organic_avg_sentiment is not None else None,
-        "promo_global_sentiment": round(promo_avg_sentiment, 2) if promo_avg_sentiment is not None else None,
+        # NSR 口径（-2~+2），与实体/话题 sentiment（-1~+1）量纲不同
+        "global_nsr": round(global_avg_sentiment, 2),
+        "organic_nsr": round(organic_avg_sentiment, 2)
+        if organic_avg_sentiment is not None
+        else None,
+        "promo_nsr": round(promo_avg_sentiment, 2)
+        if promo_avg_sentiment is not None
+        else None,
+        # 任务级原始平台分布（未去重，与 total_volume 口径一致）
         "platform_volume": dict(platform_volume),
+        # 去重后平台分布（与 unique_posts 口径一致）
+        "unique_platform_volume": dict(unique_platform_volume),
         "keyword_volume": dict(keyword_volume),
     }
 

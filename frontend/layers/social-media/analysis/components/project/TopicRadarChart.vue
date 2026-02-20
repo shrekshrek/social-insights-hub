@@ -12,6 +12,11 @@ interface TopicRadarItem {
   organic_heat?: number
   promo_heat?: number
   sentiment?: number
+  sentiment_distribution?: {
+    positive: number
+    negative: number
+    neutral: number
+  }
   mentions: number
   spam_distribution?: {
     high_spam: { total: number; post: number; comment: number }
@@ -107,7 +112,7 @@ const getOption = (): EChartsOption => {
   const labelNameSet = new Set(
     allItems
       .slice()
-      .sort((a, b) => (b.heat || 0) - (a.heat || 0))
+      .sort((a, b) => getEffectiveX(b) - getEffectiveX(a))
       .slice(0, 30)
       .map(i => i.name)
       .filter(Boolean)
@@ -198,6 +203,12 @@ const getOption = (): EChartsOption => {
         const [effectiveX, sentiment, heat, name, category, mentions, , item] = params.data as [number, number, number, string, string, number, string, TopicRadarItem]
         const xLabel = spamDimension.value === 'organic' ? '有机声量' : spamDimension.value === 'promo' ? '推广声量' : '热度'
         const xDisplay = spamDimension.value === 'all' ? heat.toFixed(0) : effectiveX.toString()
+        const mentionsLabel = spamDimension.value === 'organic' ? '有机提及' : spamDimension.value === 'promo' ? '推广提及' : '提及'
+        const displayMentions = spamDimension.value === 'organic'
+          ? (item?.spam_distribution?.low_spam.total ?? mentions)
+          : spamDimension.value === 'promo'
+            ? (item?.spam_distribution?.high_spam.total ?? mentions)
+            : mentions
         let spamInfo = ''
         if (item?.spam_distribution) {
           const sd = item.spam_distribution
@@ -220,7 +231,7 @@ const getOption = (): EChartsOption => {
           <div style="margin-top:6px;font-size:12px">
             <div>${xLabel}：<b>${xDisplay}</b></div>
             <div>情感：<b style="color:${sentiment >= 0 ? '#10b981' : '#ef4444'}">${sentiment.toFixed(2)}</b></div>
-            <div>提及：<b>${mentions}</b></div>
+            <div>${mentionsLabel}：<b>${displayMentions}</b></div>
           </div>
           ${spamInfo}
         `

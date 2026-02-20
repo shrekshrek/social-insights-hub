@@ -7,7 +7,11 @@ interface PlatformDNAItem {
   name: string
   role?: string
   total_mentions: number
+  total_organic_mentions?: number
+  total_promo_mentions?: number
   platform_shares: Record<string, number>
+  organic_platform_shares?: Record<string, number>
+  promo_platform_shares?: Record<string, number>
 }
 
 const props = defineProps<{
@@ -25,20 +29,47 @@ const viewModeOptions = [
   { value: 'heatmap', label: '矩阵' },
 ]
 
+type SpamDimension = 'all' | 'organic' | 'promo'
+const spamDimension = ref<SpamDimension>('all')
+
+const spamDimensionOptions = [
+  { value: 'all', label: '全量' },
+  { value: 'organic', label: '有机' },
+  { value: 'promo', label: '推广' },
+]
+
+const hasSpamData = computed(() =>
+  rawItems.value.some(
+    i => (i.total_organic_mentions ?? 0) > 0 || (i.total_promo_mentions ?? 0) > 0,
+  ),
+)
+
+const getEffectiveShares = (item: PlatformDNAItem): Record<string, number> => {
+  if (spamDimension.value === 'organic') return item.organic_platform_shares || {}
+  if (spamDimension.value === 'promo') return item.promo_platform_shares || {}
+  return item.platform_shares || {}
+}
+
+const getEffectiveTotalMentions = (item: PlatformDNAItem): number => {
+  if (spamDimension.value === 'organic') return item.total_organic_mentions ?? item.total_mentions
+  if (spamDimension.value === 'promo') return item.total_promo_mentions ?? item.total_mentions
+  return item.total_mentions
+}
+
 const maxItems = computed(() => props.maxItems ?? 10)
 const rawItems = computed(() => props.data || [])
 const sortedItems = computed(() => {
   const list = rawItems.value.slice()
-  list.sort((a, b) => (b.total_mentions || 0) - (a.total_mentions || 0))
+  list.sort((a, b) => getEffectiveTotalMentions(b) - getEffectiveTotalMentions(a))
   return list
 })
 const items = computed(() => sortedItems.value.slice(0, maxItems.value))
 
-// 收集所有平台
+// 收集所有平台（从当前视角的 shares 中读取，保证有数据的平台才显示）
 const allPlatforms = computed(() => {
   const platformSet = new Set<string>()
   for (const item of items.value) {
-    for (const p of Object.keys(item.platform_shares || {})) {
+    for (const p of Object.keys(getEffectiveShares(item))) {
       platformSet.add(p)
     }
   }
@@ -126,7 +157,7 @@ const getStackOption = (): EChartsOption => {
       focus: 'series' as const,
     },
     data: items.value.map(item => {
-      const share = (item.platform_shares || {})[platform] || 0
+      const share = getEffectiveShares(item)[platform] || 0
       return parseFloat((share * 100).toFixed(1))
     }),
   }))
@@ -145,7 +176,7 @@ const getStackOption = (): EChartsOption => {
     },
     data: items.value.map(item => ({
       value: [item.name, 102],
-      total: item.total_mentions || 0,
+      total: getEffectiveTotalMentions(item),
     })),
   }
 
@@ -167,7 +198,8 @@ const getStackOption = (): EChartsOption => {
             content += `<div>${p.marker} ${p.seriesName}: <b>${p.value}%</b></div>`
           }
         }
-        content += `<div style="margin-top:6px">总量：<b>${formatNumber(total)}</b></div>`
+        const totalLabel = spamDimension.value === 'organic' ? '有机量' : spamDimension.value === 'promo' ? '推广量' : '总量'
+        content += `<div style="margin-top:6px">${totalLabel}：<b>${formatNumber(total)}</b></div>`
         return content
       },
     },
@@ -219,7 +251,7 @@ const getHeatmapOption = (): EChartsOption => {
   const data: Array<[number, number, number]> = []
   items.value.forEach((item, yIdx) => {
     allPlatforms.value.forEach((platform, xIdx) => {
-      const share = (item.platform_shares || {})[platform] || 0
+      const share = getEffectiveShares(item)[platform] || 0
       data.push([xIdx, yIdx, parseFloat((share * 100).toFixed(1))])
     })
   })
@@ -236,11 +268,13 @@ const getHeatmapOption = (): EChartsOption => {
         const [xIdx, yIdx, value] = raw as [number, number, number]
         const platform = allPlatforms.value[xIdx] || ''
         const brand = items.value[yIdx]?.name || ''
-        const total = items.value[yIdx]?.total_mentions || 0
+        const brandItem = items.value[yIdx]
+        const total = brandItem ? getEffectiveTotalMentions(brandItem) : 0
+        const totalLabel = spamDimension.value === 'organic' ? '有机量' : spamDimension.value === 'promo' ? '推广量' : '总量'
         return `
           <div style="font-weight:600;margin-bottom:4px">${brand}</div>
           <div>${platform}: <b>${value}%</b></div>
-          <div style="margin-top:4px">总量：<b>${formatNumber(total)}</b></div>
+          <div style="margin-top:4px">${totalLabel}：<b>${formatNumber(total)}</b></div>
         `
       },
     },
@@ -308,6 +342,7 @@ const updateChart = async () => {
 
 watch(() => props.data, updateChart, { deep: true })
 watch(viewMode, updateChart)
+watch(spamDimension, updateChart)
 
 onMounted(() => {
   updateChart()
@@ -319,13 +354,20 @@ onMounted(() => {
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">平台阵地 DNA</h3>
       <div class="flex items-center gap-2">
+        <TabSwitch
+          v-if="hasSpamData"
+          v-model="spamDimension"
+          :options="spamDimensionOptions"
+        />
         <TabSwitch v-model="viewMode" :options="viewModeOptions" />
-        <span class="text-xs text-gray-500 dark:text-gray-400">Top {{ items.length }} 品牌 · 按总量</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400">
+          Top {{ items.length }} 品牌 · 按{{ spamDimension === 'organic' ? '有机' : spamDimension === 'promo' ? '推广' : '总' }}量
+        </span>
       </div>
     </div>
     <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-2">
       <span>堆叠：平台占比结构；矩阵：行=品牌、列=平台、颜色越深占比越高</span>
-      <span v-if="viewMode === 'stack'">柱顶数字为总量</span>
+      <span v-if="viewMode === 'stack'">柱顶数字为{{ spamDimension === 'organic' ? '有机量' : spamDimension === 'promo' ? '推广量' : '总量' }}</span>
     </div>
 
     <div v-if="items.length && allPlatforms.length" ref="chartRef" class="flex-1 min-h-[360px]" />

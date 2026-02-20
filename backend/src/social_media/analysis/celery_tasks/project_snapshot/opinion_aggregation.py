@@ -331,6 +331,14 @@ def build_topics_aligned(
                 "_spam_low_post": 0,
                 "_spam_low_comment": 0,
                 "_spam_found": False,
+                # 正/负极性计数（用于争议性检测）
+                "positive_mentions": 0,
+                "negative_mentions": 0,
+                # 有机/推广情感
+                "organic_sent_sum": 0.0,
+                "organic_sent_w": 0.0,
+                "promo_sent_sum": 0.0,
+                "promo_sent_w": 0.0,
             }
             bucket[key] = b
 
@@ -350,6 +358,22 @@ def build_topics_aligned(
             s = 0.0
         b["sentiment_sum"] += s * float(m)
         b["sentiment_weight"] += float(m)
+        b["positive_mentions"] += int(t.get("positive_mentions") or 0)
+        b["negative_mentions"] += int(t.get("negative_mentions") or 0)
+        org_sent = t.get("organic_sentiment")
+        if org_sent is not None and m > 0:
+            try:
+                b["organic_sent_sum"] += float(org_sent) * float(m)
+                b["organic_sent_w"] += float(m)
+            except Exception:
+                pass
+        promo_sent = t.get("promo_sentiment")
+        if promo_sent is not None and m > 0:
+            try:
+                b["promo_sent_sum"] += float(promo_sent) * float(m)
+                b["promo_sent_w"] += float(m)
+            except Exception:
+                pass
 
         for k, v in (t.get("platform_distribution") or {}).items():
             try:
@@ -467,6 +491,18 @@ def build_topics_aligned(
                 "promo_heat": round(float(b["promo_heat"]), 3),
                 "mentions": int(b["mentions"]),
                 "sentiment": round(float(avg_sent), 2),
+                "organic_sentiment": (
+                    round(b["organic_sent_sum"] / b["organic_sent_w"], 2)
+                    if (b.get("organic_sent_w") or 0) > 0
+                    else None
+                ),
+                "promo_sentiment": (
+                    round(b["promo_sent_sum"] / b["promo_sent_w"], 2)
+                    if (b.get("promo_sent_w") or 0) > 0
+                    else None
+                ),
+                "positive_mentions": int(b.get("positive_mentions") or 0),
+                "negative_mentions": int(b.get("negative_mentions") or 0),
                 "score": round(float(score), 3),
                 "spam_distribution": spam_distribution,
                 "platform_distribution": b["platform_distribution"],

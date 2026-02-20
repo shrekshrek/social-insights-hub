@@ -405,6 +405,8 @@ def build_entities_aligned(
                 "negative_count": 0,
                 "neutral_count": 0,
                 "platform_distribution": {},
+                "organic_platform_distribution": {},
+                "promo_platform_distribution": {},
                 "keyword_distribution": {},
                 "top_features": [],
                 "top_issues": [],
@@ -463,6 +465,24 @@ def build_entities_aligned(
             if vv:
                 b["platform_distribution"][k] = (
                     int(b["platform_distribution"].get(k, 0)) + vv
+                )
+        for k, v in (e.get("organic_platform_distribution") or {}).items():
+            try:
+                vv = int(v or 0)
+            except Exception:
+                vv = 0
+            if vv:
+                b["organic_platform_distribution"][k] = (
+                    int(b["organic_platform_distribution"].get(k, 0)) + vv
+                )
+        for k, v in (e.get("promo_platform_distribution") or {}).items():
+            try:
+                vv = int(v or 0)
+            except Exception:
+                vv = 0
+            if vv:
+                b["promo_platform_distribution"][k] = (
+                    int(b["promo_platform_distribution"].get(k, 0)) + vv
                 )
         for k, v in (e.get("keyword_distribution") or {}).items():
             try:
@@ -608,6 +628,8 @@ def build_entities_aligned(
                 },
                 "spam_distribution": spam_distribution,
                 "platform_distribution": b["platform_distribution"],
+                "organic_platform_distribution": b.get("organic_platform_distribution") or {},
+                "promo_platform_distribution": b.get("promo_platform_distribution") or {},
                 "keyword_distribution": b["keyword_distribution"],
                 "source_tasks": [
                     {"task_id": tid, "mentions": cnt}

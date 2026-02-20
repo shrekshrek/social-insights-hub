@@ -212,55 +212,6 @@ def build_slice_layers(
     )[:30]
 
     overview_safe = overview if isinstance(overview, dict) else {}
-    # 兜底：如果 Stage1 overview 在历史版本中被覆盖/裁剪，可用 meta.task_diagnostics 重建关键字段
-    # （保证前端“概览”的 platform_volume/keyword_volume/global_sentiment 不丢）
-    if isinstance(meta, dict):
-        diag = meta.get("task_diagnostics")
-    else:
-        diag = None
-    if isinstance(diag, list):
-        need_platform = not isinstance(overview_safe.get("platform_volume"), dict)
-        need_keyword = not isinstance(overview_safe.get("keyword_volume"), dict)
-        need_sent = not isinstance(overview_safe.get("global_nsr"), (int, float))
-        need_total = not isinstance(overview_safe.get("total_volume"), (int, float))
-
-        if need_platform or need_keyword or need_sent or need_total:
-            plat = defaultdict(int)
-            kw = defaultdict(int)
-            sent_sum = 0.0
-            sent_w = 0
-            total = 0
-            for r in diag:
-                if not isinstance(r, dict):
-                    continue
-                p = str(r.get("platform") or "unknown")
-                k = str(r.get("keyword") or "unknown")
-                try:
-                    c = int(r.get("data_volume_total") or 0)
-                except Exception:
-                    c = 0
-                if c < 0:
-                    c = 0
-                total += c
-                plat[p] += c
-                kw[k] += c
-                try:
-                    nsr = float(r.get("nsr") or 0.0)
-                except Exception:
-                    nsr = 0.0
-                sent_sum += nsr * float(c)
-                sent_w += c
-
-            if need_total:
-                overview_safe["total_volume"] = total
-            if need_platform:
-                overview_safe["platform_volume"] = dict(plat)
-            if need_keyword:
-                overview_safe["keyword_volume"] = dict(kw)
-            if need_sent:
-                overview_safe["global_nsr"] = (
-                    round((sent_sum / sent_w), 2) if sent_w > 0 else 0.0
-                )
 
     # 全局有机/推广热度总量（用于前端计算全局口径的有机/推广 SOV 份额）
     overview_safe["total_organic_heat"] = round(total_organic_heat, 3)
@@ -553,25 +504,7 @@ def build_slice_layers(
             "gap": None,
         }
         # --- 平台剪刀差：目标阵地分布 vs 行业整体分布 ---
-        # 优先用去重后口径（与实体 platform_distribution 一致），旧切片降级到原始任务量
-        _upv = overview_safe.get("unique_platform_volume")
-        _pv = overview_safe.get("platform_volume")
-        industry_platform = (
-            _upv
-            if isinstance(_upv, dict) and _upv
-            else _pv
-            if isinstance(_pv, dict)
-            else {}
-        )
-        if not industry_platform:
-            # fallback：用实体 platform_distribution 聚合一个“行业分布”近似
-            tmp = defaultdict(int)
-            for e in entities_aligned or []:
-                if not isinstance(e, dict):
-                    continue
-                for k, v in (e.get("platform_distribution") or {}).items():
-                    tmp[str(k)] += int(v or 0)
-            industry_platform = dict(tmp)
+        industry_platform = overview_safe.get("unique_platform_volume") or {}
 
         subject_platform = defaultdict(int)
         for e in targets:

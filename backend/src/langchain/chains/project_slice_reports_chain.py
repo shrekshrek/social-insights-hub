@@ -51,7 +51,13 @@ LANDSCAPE_SYSTEM = (
 - **头部玩家画像**：用一句话精准概括 Top3 品牌的核心心智（例如：3M——靠品牌光环躺赢；龙膜——性价比之王但服务拉胯）。
 
 ### 3. 关键趋势与心智 (Key Trends)
-- 提炼 2-3 个正在发生的行业趋势（如“消费降级导致平替兴起”、“服务体验成为新战场”）。
+- 提炼 2-3 个正在发生的行业趋势（如”消费降级导致平替兴起”、”服务体验成为新战场”）。
+
+## 声量口径说明
+数据中含 `organic_heat`（自然声量，low_spam 帖子的加权热度）与 `promo_heat`（推广声量，high_spam 帖子的加权热度）两个维度。分析品牌声量时：
+- **优先引用 `organic_heat`** 作为品牌真实市场认知的衡量标准。
+- 若某品牌 `promo_heat` 显著高于 `organic_heat`，说明其声量主要由推广驱动，需在报告中点明（”声量虚高”）。
+- `organic_sentiment` / `promo_sentiment` 代表自然用户 vs 推广内容的情感方向，差距悬殊时是重要信号。
 
 ## 长度控制
 - 全文 500-700 字。
@@ -106,6 +112,14 @@ TOPIC_SYSTEM = (
 
 ### 4. 爽点与驱动力 (Delighters & Drivers)
 - 用户为什么会买单？哪些瞬间让他们感到满意？
+
+## 声量与情感口径说明
+话题数据含两套情感维度：
+- `sentiment`：综合情感（所有帖子加权均值）。
+- `organic_sentiment`：自然用户的真实情感（low_spam 帖子）。
+- `promo_sentiment`：推广内容的情感（high_spam 帖子）。
+
+分析时请注意：**若同一话题 `organic_sentiment` 为负而 `promo_sentiment` 为正**，说明存在"推广叙事与真实口碑背离"，这是用户信任危机的前兆，需在报告中重点点出。
 
 ## 长度控制
 - 全文 600-900 字。
@@ -168,9 +182,17 @@ FOCUS_SYSTEM = (
 - **产品改进 (Product)**：需要优化什么功能？或推出什么新品？
 - **危机公关/服务 (PR/Service)**：如何应对当前的负面舆情？
 
+## 竞品对比数据口径说明
+`drivers_matrix` 中每个维度（dimension）包含：
+- `organic_mentions` / `promo_mentions`：自然提及数 vs 推广提及数。
+- `organic_sentiment` / `promo_sentiment`：自然情感 vs 推广情感。
+- `target_spam_distribution` / `competitor_spam_distribution`：各自的广告浓度分布。
+
+评估竞品优劣势时，**`organic_*` 字段比综合值更可信**——竞品某维度有机口碑好才是真正的威胁；若竞品优势主要来自 `promo_sentiment`，则说明是营销驱动而非产品实力，可降低警惕等级。
+
 ## 长度控制
 - 全文 800-1200 字。
-- 重点放在“行动建议”上。
+- 重点放在”行动建议”上。
 """
     + REPORT_OUTPUT_FORMAT_SPEC
 )

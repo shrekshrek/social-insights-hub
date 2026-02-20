@@ -292,14 +292,14 @@ class AnalysisJob(Base):
 
 
 class ProjectAnalysisSlice(Base):
-    “””项目级手动合并分析切片
+    """项目级手动合并分析切片
 
     设计意图：
     - 与 AnalysisJob（LLM/Celery 任务流水）分离
     - 专门用于保存”勾选多个任务 -> 生成一份合并报告”的历史切片
-    “””
+    """
 
-    __tablename__ = “project_analysis_slices”
+    __tablename__ = "project_analysis_slices"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 

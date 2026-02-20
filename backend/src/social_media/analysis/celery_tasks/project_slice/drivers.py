@@ -194,7 +194,7 @@ def build_drivers_from_entities(
                 llm_used = True
                 token_stats = stats
     except Exception as e:
-        logger.error(f"[Snapshot Stage2] LLM clustering failed: {e}", exc_info=True)
+        logger.error(f"[Slice Stage2] LLM clustering failed: {e}", exc_info=True)
 
     if not clusters:
         clusters = fallback_cluster_terms(term_counts)

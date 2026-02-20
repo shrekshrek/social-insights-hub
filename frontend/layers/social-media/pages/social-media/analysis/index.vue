@@ -93,7 +93,7 @@ const typeOptions = [
   { label: '评论深度', value: 'deep_comments' },
   { label: '实体归一化', value: 'entity_normalization' },
   { label: '观点归一化', value: 'opinion_normalization' },
-  { label: '项目快照总分析', value: 'project_snapshot_summary' },
+  { label: '项目切片总分析', value: 'project_slice_summary' },
   { label: '主题聚类', value: 'topic_clustering' },
   { label: '竞品分析', value: 'competitive' },
 ]
@@ -145,7 +145,7 @@ const getAnalysisTypeLabel = (type: string) => {
     deep_comments: '评论深度',
     entity_normalization: '实体归一化',
     opinion_normalization: '观点归一化',
-    project_snapshot_summary: '项目快照总分析',
+    project_slice_summary: '项目切片总分析',
     topic_clustering: '主题聚类',
     competitive: '竞品分析',
   }
@@ -302,14 +302,14 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           ])
         }
 
-        // 项目级快照：显示快照名并跳转快照详情
-        if (row.original.snapshot_id) {
-          const label = row.original.snapshot_name || `快照 #${row.original.snapshot_id}`
+        // 项目级切片：显示切片名并跳转切片详情
+        if (row.original.slice_id) {
+          const label = row.original.slice_name || `切片 #${row.original.slice_id}`
           return h(Button, {
             variant: 'link',
             size: 'xs',
             class: 'p-0 font-normal',
-            to: `/social-media/projects/${row.original.project_id}/analysis?snapshot_id=${row.original.snapshot_id}`,
+            to: `/social-media/projects/${row.original.project_id}/analysis?slice_id=${row.original.slice_id}`,
           }, () => label)
         }
 

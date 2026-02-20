@@ -237,7 +237,7 @@ def normalize_entity_aliases(
                 entity_token_stats = stats
     except Exception as e:
         logger.error(
-            f"[Snapshot Stage2] Entity alias normalization failed: {e}", exc_info=True
+            f"[Slice Stage2] Entity alias normalization failed: {e}", exc_info=True
         )
 
     if not entity_mapping:
@@ -375,7 +375,7 @@ def build_entities_aligned(
 ) -> list[dict[str, Any]]:
     """根据 entity_mapping 合并 Stage1 top_entities，产出对齐后的实体列表。
 
-    关键变更（对齐 PROJECT_SNAPSHOT_PIPELINE_FINAL.md）：
+    关键变更（对齐 PROJECT_SLICE_PIPELINE_FINAL.md）：
     - 合并 original_terms 列表并截断 Top 20（长度优先）。
     """
     tags_mapping = tags_mapping or {}

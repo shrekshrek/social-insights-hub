@@ -3,7 +3,7 @@ import { computed, ref, h, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
 import type { DataTaskWithRelations } from '../../../../tasks/types'
-import type { ProjectSnapshot } from '../../../../types/project-snapshot'
+import type { ProjectSlice } from '../../../../types/project-slice'
 import TaskComparisonSlideover from '../../../../projects/components/TaskComparisonSlideover.vue'
 
 definePageMeta({
@@ -15,7 +15,7 @@ const projectId = computed(() => Number(route.params.id))
 
 const { getProject, deleteProject } = useSocialProjects()
 const { getTasks } = useTasks()
-const { createProjectSnapshot, deleteProjectSnapshot } = useAnalysis()
+const { createProjectSlice, deleteProjectSlice } = useAnalysis()
 const { useApiData } = useApi()
 
 // 获取项目详情（使用顶层 await）
@@ -32,9 +32,9 @@ const { data: tasksData, pending: tasksLoading, refresh: refreshTasks } = await 
 
 const tasks = computed(() => tasksData.value?.items || [])
 
-// ==================== 项目快照（Phase 1）====================
+// ==================== 项目切片（Phase 1）====================
 
-// 已选择的任务（用于生成快照）
+// 已选择的任务（用于生成切片）
 const selectedTaskIds = ref<number[]>([])
 const setTaskSelected = (taskId: number, checked: boolean) => {
   const s = new Set(selectedTaskIds.value)
@@ -48,26 +48,26 @@ const toggleSelectAll = (checked: boolean) => {
   selectedTaskIds.value = checked ? Array.from(new Set(allTaskIds.value)) : []
 }
 
-interface ProjectSnapshotListResponse {
-  items: ProjectSnapshot[]
+interface ProjectSliceListResponse {
+  items: ProjectSlice[]
 }
-const { data: snapshotsData, pending: snapshotsLoading, refresh: refreshSnapshots } = useApiData<ProjectSnapshotListResponse>(
-  computed(() => `/social-media/analysis/projects/${projectId.value}/snapshots`),
-  { key: computed(() => `project-snapshots-${projectId.value}`), getCachedData: () => undefined }
+const { data: slicesData, pending: slicesLoading, refresh: refreshSlices } = useApiData<ProjectSliceListResponse>(
+  computed(() => `/social-media/analysis/projects/${projectId.value}/slices`),
+  { key: computed(() => `project-slices-${projectId.value}`), getCachedData: () => undefined }
 )
-const snapshots = computed<ProjectSnapshot[]>(() => snapshotsData.value?.items || [])
+const slices = computed<ProjectSlice[]>(() => slicesData.value?.items || [])
 
-const handleRefreshSnapshots = async () => {
-  await refreshSnapshots()
+const handleRefreshSlices = async () => {
+  await refreshSlices()
 }
 
-const generatingSnapshot = ref(false)
-const snapshotNameInput = ref('')
-const snapshotSubjectInput = ref('')
-const snapshotCompetitorsInput = ref('')
-const snapshotWeightsJsonInput = ref('')
+const generatingSlice = ref(false)
+const sliceNameInput = ref('')
+const sliceSubjectInput = ref('')
+const sliceCompetitorsInput = ref('')
+const sliceWeightsJsonInput = ref('')
 const enableCustomPlatformWeights = ref(false)
-const showSnapshotModal = ref(false)
+const showSliceModal = ref(false)
 
 // 任务对比
 const showComparisonSlideover = ref(false)
@@ -113,14 +113,14 @@ const openComparisonSlideover = () => {
   showComparisonSlideover.value = true
 }
 
-const openSnapshotModal = () => {
+const openSliceModal = () => {
   if (!selectedTaskIds.value.length) return
-  snapshotNameInput.value = ''
-  snapshotSubjectInput.value = ''
-  snapshotCompetitorsInput.value = ''
-  snapshotWeightsJsonInput.value = ''
+  sliceNameInput.value = ''
+  sliceSubjectInput.value = ''
+  sliceCompetitorsInput.value = ''
+  sliceWeightsJsonInput.value = ''
   enableCustomPlatformWeights.value = false
-  showSnapshotModal.value = true
+  showSliceModal.value = true
 }
 
 const toast = useToast()
@@ -158,9 +158,9 @@ const keywordCandidates = computed(() => {
 })
 
 const addCompetitor = (kw: string) => {
-  const cur = parseCompetitors(snapshotCompetitorsInput.value)
+  const cur = parseCompetitors(sliceCompetitorsInput.value)
   if (!cur.includes(kw)) cur.push(kw)
-  snapshotCompetitorsInput.value = cur.join('，')
+  sliceCompetitorsInput.value = cur.join('，')
 }
 
 const parsePlatformWeights = (raw: string): Record<string, number> | undefined => {
@@ -183,12 +183,12 @@ const parsePlatformWeights = (raw: string): Record<string, number> | undefined =
   return Object.keys(weights).length ? weights : undefined
 }
 
-const handleGenerateSnapshot = async () => {
+const handleGenerateSlice = async () => {
   // 先校验配置，避免关闭弹窗后报错找不到入口
   let platformWeights: Record<string, number> | undefined
   if (enableCustomPlatformWeights.value) {
     try {
-      platformWeights = parsePlatformWeights(snapshotWeightsJsonInput.value)
+      platformWeights = parsePlatformWeights(sliceWeightsJsonInput.value)
     } catch (e) {
       toast.add({
         title: '平台权重配置有误',
@@ -199,53 +199,53 @@ const handleGenerateSnapshot = async () => {
     }
   }
 
-  showSnapshotModal.value = false
+  showSliceModal.value = false
 
-  generatingSnapshot.value = true
+  generatingSlice.value = true
   try {
-    const name = snapshotNameInput.value.trim() || undefined
-    const subject = snapshotSubjectInput.value.trim() || undefined
-    const competitors = parseCompetitors(snapshotCompetitorsInput.value)
-    const created = await createProjectSnapshot(projectId.value, selectedTaskIds.value, name, {
+    const name = sliceNameInput.value.trim() || undefined
+    const subject = sliceSubjectInput.value.trim() || undefined
+    const competitors = parseCompetitors(sliceCompetitorsInput.value)
+    const created = await createProjectSlice(projectId.value, selectedTaskIds.value, name, {
       subject: subject || null,
       competitors: competitors.length ? competitors : null,
       platform_weights: platformWeights || null,
     })
     selectedTaskIds.value = []
-    snapshotNameInput.value = ''
-    snapshotSubjectInput.value = ''
-    snapshotCompetitorsInput.value = ''
-    snapshotWeightsJsonInput.value = ''
+    sliceNameInput.value = ''
+    sliceSubjectInput.value = ''
+    sliceCompetitorsInput.value = ''
+    sliceWeightsJsonInput.value = ''
     enableCustomPlatformWeights.value = false
-    await refreshSnapshots()
-    // 生成后直接跳转到该快照详情页，避免 snapshot_id 丢失导致页面显示"快照 null"
-    await navigateTo(`/social-media/projects/${projectId.value}/analysis?snapshot_id=${created.id}`)
+    await refreshSlices()
+    // 生成后直接跳转到该切片详情页，避免 slice_id 丢失导致页面显示"切片 null"
+    await navigateTo(`/social-media/projects/${projectId.value}/analysis?slice_id=${created.id}`)
   } catch {
     // apiRequest 已在 onResponseError 中显示了错误 toast，这里不需要重复显示
     // 只需要捕获错误防止 unhandled rejection
   } finally {
-    generatingSnapshot.value = false
+    generatingSlice.value = false
   }
 }
 
-const deletingSnapshotId = ref<number | null>(null)
-const handleDeleteSnapshot = async (snapshotId: number) => {
+const deletingSliceId = ref<number | null>(null)
+const handleDeleteSlice = async (sliceId: number) => {
   const { $confirm } = useNuxtApp()
   const confirmed = await $confirm({
-    title: '删除快照',
-    message: `确定要删除快照 ${snapshotId} 吗？此操作不可恢复。`,
+    title: '删除切片',
+    message: `确定要删除切片 ${sliceId} 吗？此操作不可恢复。`,
     confirmText: '删除',
     cancelText: '取消',
     type: 'error',
   })
   if (!confirmed) return
 
-  deletingSnapshotId.value = snapshotId
+  deletingSliceId.value = sliceId
   try {
-    await deleteProjectSnapshot(projectId.value, snapshotId)
-    await refreshSnapshots()
+    await deleteProjectSlice(projectId.value, sliceId)
+    await refreshSlices()
   } finally {
-    deletingSnapshotId.value = null
+    deletingSliceId.value = null
   }
 }
 
@@ -253,7 +253,7 @@ const handleDeleteSnapshot = async (snapshotId: number) => {
 const refreshing = ref(false)
 const handleRefresh = async () => {
   refreshing.value = true
-  await Promise.all([refreshProject(), refreshTasks(), refreshSnapshots()])
+  await Promise.all([refreshProject(), refreshTasks(), refreshSlices()])
   refreshing.value = false
 }
 
@@ -331,7 +331,7 @@ const getStatusText = (status: string) => {
   return texts[status] || status
 }
 
-const getSnapshotStageColor = (status?: string) => {
+const getSliceStageColor = (status?: string) => {
   const colors: Record<string, string> = {
     pending: 'neutral',
     processing: 'info',
@@ -343,7 +343,7 @@ const getSnapshotStageColor = (status?: string) => {
   return colors[status] || 'neutral'
 }
 
-const getSnapshotStageText = (status?: string) => {
+const getSliceStageText = (status?: string) => {
   const texts: Record<string, string> = {
     pending: '未开始',
     processing: '进行中',
@@ -371,14 +371,14 @@ const formatTaskIdsPreview = (ids?: number[]): string => {
   return arr.length > 6 ? `${head} …` : head
 }
 
-const snapshotColumns = computed<TableColumn<ProjectSnapshot>[]>(() => {
+const sliceColumns = computed<TableColumn<ProjectSlice>[]>(() => {
   const Badge = UBadge as Component
   const Button = UButton as Component
 
   return [
     {
       accessorKey: 'name',
-      header: '快照',
+      header: '切片',
       cell: ({ row }) => {
         const s = row.original
         const subject = s.result_data?.meta?.subject || null
@@ -386,7 +386,7 @@ const snapshotColumns = computed<TableColumn<ProjectSnapshot>[]>(() => {
         const hasFocus = Boolean(subject)
         return h('div', { class: 'min-w-0' }, [
           h('div', { class: 'flex items-center gap-2 min-w-0' }, [
-            h('div', { class: 'min-w-0 truncate font-medium text-gray-900 dark:text-white' }, s.name || `快照 ${s.id}`),
+            h('div', { class: 'min-w-0 truncate font-medium text-gray-900 dark:text-white' }, s.name || `切片 ${s.id}`),
             h('span', { class: 'shrink-0 text-xs text-gray-400 font-normal' }, `#${s.id}`),
             hasFocus
               ? h(Badge, { size: 'xs', variant: 'subtle', color: 'primary' }, () => 'Focus')
@@ -422,8 +422,8 @@ const snapshotColumns = computed<TableColumn<ProjectSnapshot>[]>(() => {
         const stage2 = s.result_data?.stage2?.status
         const stage3 = s.result_data?.stage3?.status
         return h('div', { class: 'flex flex-col gap-1 items-start' }, [
-          h(Badge, { size: 'xs', variant: 'solid', color: getSnapshotStageColor(stage2) }, () => `Stage2：${getSnapshotStageText(stage2)}`),
-          h(Badge, { size: 'xs', variant: 'solid', color: getSnapshotStageColor(stage3) }, () => `Stage3：${getSnapshotStageText(stage3)}`),
+          h(Badge, { size: 'xs', variant: 'solid', color: getSliceStageColor(stage2) }, () => `Stage2：${getSliceStageText(stage2)}`),
+          h(Badge, { size: 'xs', variant: 'solid', color: getSliceStageColor(stage3) }, () => `Stage3：${getSliceStageText(stage3)}`),
         ])
       },
     },
@@ -459,15 +459,15 @@ const snapshotColumns = computed<TableColumn<ProjectSnapshot>[]>(() => {
             size: 'xs',
             variant: 'ghost',
             icon: 'i-heroicons-eye',
-            onClick: () => navigateTo(`/social-media/projects/${projectId.value}/analysis?snapshot_id=${s.id}`),
+            onClick: () => navigateTo(`/social-media/projects/${projectId.value}/analysis?slice_id=${s.id}`),
           }, () => '查看'),
           h(Button, {
             size: 'xs',
             variant: 'ghost',
             color: 'error',
             icon: 'i-heroicons-trash',
-            loading: deletingSnapshotId.value === s.id,
-            onClick: () => handleDeleteSnapshot(s.id),
+            loading: deletingSliceId.value === s.id,
+            onClick: () => handleDeleteSlice(s.id),
           }, () => '删除'),
         ])
       },
@@ -714,10 +714,10 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
                 size="sm"
                 icon="i-heroicons-sparkles"
                 :disabled="!selectedTaskIds.length"
-                :loading="generatingSnapshot"
-                @click="openSnapshotModal"
+                :loading="generatingSlice"
+                @click="openSliceModal"
               >
-                生成快照
+                生成切片
               </UButton>
             </div>
           </ClientOnly>
@@ -755,20 +755,20 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       </ClientOnly>
     </UCard>
 
-    <!-- 项目快照列表 -->
+    <!-- 项目切片列表 -->
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold">
-            项目快照 (<ClientOnly fallback="...">{{ snapshots.length }}</ClientOnly>)
+            项目切片 (<ClientOnly fallback="...">{{ slices.length }}</ClientOnly>)
           </h2>
           <ClientOnly>
             <UButton
               size="sm"
               variant="ghost"
               icon="i-heroicons-arrow-path"
-              :loading="snapshotsLoading"
-              @click="handleRefreshSnapshots"
+              :loading="slicesLoading"
+              @click="handleRefreshSlices"
             >
               刷新
             </UButton>
@@ -780,48 +780,48 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         <template #fallback>
           <div class="text-center py-8">
             <p class="text-gray-600 dark:text-gray-400">
-              加载快照中...
+              加载切片中...
             </p>
           </div>
         </template>
 
-        <div v-if="snapshotsLoading" class="text-sm text-gray-400">
+        <div v-if="slicesLoading" class="text-sm text-gray-400">
           加载中...
         </div>
-        <div v-else-if="!snapshots.length" class="text-sm text-gray-400">
-          暂无快照（可在上方勾选任务后生成）
+        <div v-else-if="!slices.length" class="text-sm text-gray-400">
+          暂无切片（可在上方勾选任务后生成）
         </div>
 
         <UTable
           v-else
-          :data="snapshots"
-          :columns="snapshotColumns"
-          :loading="snapshotsLoading"
+          :data="slices"
+          :columns="sliceColumns"
+          :loading="slicesLoading"
           class="w-full"
         />
       </ClientOnly>
     </UCard>
 
-    <!-- 生成快照弹窗 -->
+    <!-- 生成切片弹窗 -->
     <ClientOnly>
       <UModal
-        v-model:open="showSnapshotModal"
-        title="生成项目快照"
-        :description="`将基于已选 ${selectedTaskIds.length} 个任务（ID: ${selectedTaskIds.join(', ')}）生成一份项目级合并分析快照。`"
+        v-model:open="showSliceModal"
+        title="生成项目切片"
+        :description="`将基于已选 ${selectedTaskIds.length} 个任务（ID: ${selectedTaskIds.join(', ')}）生成一份项目级合并分析切片。`"
         :ui="{ footer: 'justify-end' }"
       >
         <template #body>
           <div class="space-y-4">
-            <UFormField label="快照名称（可选）">
+            <UFormField label="切片名称（可选）">
               <UInput
-                v-model="snapshotNameInput"
-                placeholder="输入快照名称"
+                v-model="sliceNameInput"
+                placeholder="输入切片名称"
                 class="w-full"
               />
             </UFormField>
             <UFormField label="主体（可选，用于 Focus / 战略诊断）" help="例如：产品名/品牌名。为空则不生成 Focus 报告。">
               <UInput
-                v-model="snapshotSubjectInput"
+                v-model="sliceSubjectInput"
                 placeholder="输入主体，例如：iPhone 16"
                 class="w-full"
               />
@@ -837,7 +837,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
                   size="xs"
                   variant="soft"
                   color="primary"
-                  @click="snapshotSubjectInput = kw"
+                  @click="sliceSubjectInput = kw"
                 >
                   设为主体：{{ kw }}
                 </UButton>
@@ -855,7 +855,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
             </div>
             <UFormField label="竞品列表（可选）" help="用逗号或换行分隔。用于 Role 仲裁与 Focus 对比。">
               <UTextarea
-                v-model="snapshotCompetitorsInput"
+                v-model="sliceCompetitorsInput"
                 :rows="3"
                 placeholder="例如：华为 Mate 60，小米 15\n或每行一个"
                 class="w-full"
@@ -877,7 +877,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
                 help='JSON 对象，例如：{"bilibili":1.5,"weibo":0.8}。key 使用平台 slug（后端平台标识），value 必须 > 0。'
               >
                 <UTextarea
-                  v-model="snapshotWeightsJsonInput"
+                  v-model="sliceWeightsJsonInput"
                   :rows="4"
                   placeholder='{"bilibili": 1.5}'
                   class="w-full font-mono"
@@ -889,13 +889,13 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         <template #footer>
           <UButton
             variant="outline"
-            @click="showSnapshotModal = false"
+            @click="showSliceModal = false"
           >
             取消
           </UButton>
           <UButton
-            :loading="generatingSnapshot"
-            @click="handleGenerateSnapshot"
+            :loading="generatingSlice"
+            @click="handleGenerateSlice"
           >
             开始生成
           </UButton>

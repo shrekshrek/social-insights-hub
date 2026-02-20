@@ -1,4 +1,4 @@
-# 项目级快照分析流水线 (Project Snapshot Pipeline - Final)
+# 项目级切片洞察分析流水线 (Project Slice Pipeline - Final)
 
 > **版本**: Final-Plus (Corrected Version 8)
 > **核心理念**: 数据同源 + 分层计算 + **原话引用**

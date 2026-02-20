@@ -38,7 +38,7 @@ class AnalysisType(str, Enum):
     # 项目级分析（task_id 为空）
     TOPIC_CLUSTERING = "topic_clustering"  # 主题聚类
     COMPETITIVE_ANALYSIS = "competitive"  # 竞品分析
-    PROJECT_SNAPSHOT_SUMMARY = "project_snapshot_summary"  # 项目快照整体总结（Stage3）
+    PROJECT_SLICE_SUMMARY = "project_slice_summary"  # 项目切片整体总结（Stage3）
 
 
 class AnalysisStatus(str, Enum):
@@ -291,22 +291,22 @@ class AnalysisJob(Base):
         return self.task_id is None
 
 
-class ProjectAnalysisSnapshot(Base):
-    """项目级手动合并分析快照
+class ProjectAnalysisSlice(Base):
+    “””项目级手动合并分析切片
 
     设计意图：
     - 与 AnalysisJob（LLM/Celery 任务流水）分离
-    - 专门用于保存“勾选多个任务 -> 生成一份合并报告”的历史快照
-    """
+    - 专门用于保存”勾选多个任务 -> 生成一份合并报告”的历史切片
+    “””
 
-    __tablename__ = "project_analysis_snapshots"
+    __tablename__ = “project_analysis_slices”
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
     name: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
-        comment="快照名称（可选）",
+        comment="切片名称（可选）",
     )
 
     project_id: Mapped[int] = mapped_column(
@@ -319,7 +319,7 @@ class ProjectAnalysisSnapshot(Base):
         ForeignKey("users.id"),
         nullable=False,
         index=True,
-        comment="创建快照的用户ID",
+        comment="创建切片的用户ID",
     )
 
     included_task_ids: Mapped[list[int]] = mapped_column(
@@ -333,7 +333,7 @@ class ProjectAnalysisSnapshot(Base):
     result_data: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON),
         nullable=False,
-        comment="快照结果数据",
+        comment="切片结果数据",
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -358,6 +358,6 @@ class ProjectAnalysisSnapshot(Base):
     )
 
     __table_args__ = (
-        Index("idx_project_snapshots_project", "project_id"),
-        Index("idx_project_snapshots_created_at", "created_at"),
+        Index("idx_project_slices_project", "project_id"),
+        Index("idx_project_slices_created_at", "created_at"),
     )

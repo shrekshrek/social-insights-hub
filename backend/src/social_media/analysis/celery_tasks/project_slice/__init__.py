@@ -1,4 +1,4 @@
-"""项目级快照流水线（Project Snapshot）
+"""项目级切片流水线（Project Slice）
 
 目录结构参考任务级 `celery_tasks/aggregation/`：
 - orchestrator.py: 主编排（Stage2 + Stage3）
@@ -11,6 +11,6 @@
 - utils.py: 通用工具（进度写回、降级规则等）
 """
 
-from .orchestrator import run_project_snapshot_pipeline_sync
+from .orchestrator import run_project_slice_pipeline_sync
 
-__all__ = ["run_project_snapshot_pipeline_sync"]
+__all__ = ["run_project_slice_pipeline_sync"]

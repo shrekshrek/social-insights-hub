@@ -65,7 +65,7 @@ def run_aggregation_task(
         )
 
         # 兼容回填：历史版本/裁剪结果可能只包含 insights.top_*，缺少 aggregated_* 顶层字段
-        # 项目快照聚合依赖 aggregated_*，因此这里确保两者一致，避免出现 ins>0 但 agg=0 的分裂状态
+        # 项目切片聚合依赖 aggregated_*，因此这里确保两者一致，避免出现 ins>0 但 agg=0 的分裂状态
         try:
             insights = (aggregation_result or {}).get("insights") or {}
             # opinions

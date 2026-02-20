@@ -1,4 +1,4 @@
-"""项目级手动快照（多任务合并聚合）
+"""项目级手动切片（多任务合并聚合）
 
 目标：基于任务级 analysis_result 做多维数据整合，支持全域声量、竞品对比和来源追溯。
 """
@@ -223,7 +223,7 @@ def _merge_entity_attr_items(
         )
 
 
-def build_project_snapshot_result(
+def build_project_slice_result(
     *,
     project_id: int,
     included_task_ids: list[int],
@@ -239,7 +239,7 @@ def build_project_snapshot_result(
     primary_task_by_key: dict[str, int] | None = None,
     spam_threshold: float = 6.0,
 ) -> dict[str, Any]:
-    """从多个任务的 analysis_result 生成项目级快照结果。
+    """从多个任务的 analysis_result 生成项目级切片结果。
 
     Args:
         project_id: 项目ID
@@ -457,7 +457,7 @@ def build_project_snapshot_result(
                     pass
 
         # 3. Entities Aggregation
-        # 规范口径：项目级快照只使用 canonical 字段 aggregated_entities，不使用 insights 兜底
+        # 规范口径：项目级切片只使用 canonical 字段 aggregated_entities，不使用 insights 兜底
         raw_agg_entities = result.get("aggregated_entities")
         raw_insights_entities = (result.get("insights") or {}).get("top_entities")
         raw_agg_entities_list = (
@@ -769,7 +769,7 @@ def build_project_snapshot_result(
             )
 
         # 4. Topics Aggregation
-        # 规范口径：项目级快照只使用 canonical 字段 aggregated_opinions，不使用 insights 兜底
+        # 规范口径：项目级切片只使用 canonical 字段 aggregated_opinions，不使用 insights 兜底
         raw_agg_opinions = result.get("aggregated_opinions")
         raw_insights_topics = (result.get("insights") or {}).get("top_topics")
         raw_agg_opinions_list = (
@@ -903,7 +903,7 @@ def build_project_snapshot_result(
                 bucket["original_terms_counts"], (o or {}).get("original_terms")
             )
 
-        # 5. Diagnostics (帮助定位“为什么快照里某块为空”)
+        # 5. Diagnostics (帮助定位”为什么切片里某块为空”)
         task_diagnostics.append(
             {
                 "task_id": tid,
@@ -1209,7 +1209,7 @@ def build_project_snapshot_result(
                 "freshness": freshness,
                 "overview": overview,
             },
-            # intent 层由 Stage3 build_snapshot_layers 填充
+            # intent 层由 Stage3 build_slice_layers 填充
             "intent": {},
             # Focus 由 Stage2/Stage3 基于 subject 条件触发填充
             "focus": None,

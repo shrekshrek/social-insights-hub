@@ -7,7 +7,7 @@
 - `POST /analysis/deep-comments` — 评论深度分析（实体/观点 + 来源追踪）
 - `POST /analysis/aggregation` — 任务级聚合（同步执行，返回完整结果）
 - `GET /analysis/task/{task_id}/result` — 获取聚合结果
-- `POST /analysis/snapshots` — 项目级快照（多任务合并）
+- `POST /analysis/slices — 项目级切片洞察（多任务合并）
 
 ## Data Flow
 
@@ -37,20 +37,20 @@ sentiment   summary                     metrics/charts/insights
 
 默认 spam 阈值: `6.0`（spam_score >= 6.0 为高广告组）
 
-### 项目级快照 Spam 分布
-项目级快照复用 4D 分布，但操作 `post_key` (str) 而非 `post_id` (int)：
+### 项目级切片 Spam 分布
+项目级切片复用 4D 分布，但操作 `post_key` (str) 而非 `post_id` (int)：
 - `service.py`: outerjoin PostAnalysis 查询 `spam_score`，写入 `post_info_by_key`
-- `project_snapshot.py`: 构建 `spam_map_by_key`（post_key → high/low），追踪 `post_source_keys` / `comment_source_keys`，通过 `_compute_spam_dist_4d_by_key()` 计算分布
+- `project_slice.py`: 构建 `spam_map_by_key`（post_key → high/low），追踪 `post_source_keys` / `comment_source_keys`，通过 `_compute_spam_dist_4d_by_key()` 计算分布
 - Stage 2 (`entity_aggregation.py` / `opinion_aggregation.py`): 累加 `_spam_*` 计数器传递分布
 - 结果写入 `foundation.aligned_entities[].spam_distribution` 和 `aligned_topics[].spam_distribution`
 - `meta.spam_config.threshold` 记录使用的阈值
 
-### 项目级快照 organic_heat / promo_heat
+### 项目级切片 organic_heat / promo_heat
 与 `spam_distribution`（仅存 mention 计数）并行的**热度分层**字段，用于前端有机/推广视角的 X 轴和份额计算：
 - 公式：`organic_heat = Σ normalized_heat`（`spam_group == "low"` 的帖子），`promo_heat` 同理
-- 生成位置：`project_snapshot.py` Stage 1，与 `normalized_heat = raw_cii × platform_weight` 同循环内按 `spam_map_by_key[pk]` 分拆
+- 生成位置：`project_slice.py` Stage 1，与 `normalized_heat = raw_cii × platform_weight` 同循环内按 `spam_map_by_key[pk]` 分拆
 - 传递路径：Stage 1 → Stage 2 (`entity_aggregation.py`: 直接累加) → Stage 3 (`insights.py`: sov_ranking / group_share 透传)
-- 实体和话题均携带此字段；旧快照（无该字段）前端自动回退到 `spam_distribution.low_spam.total`
+- 实体和话题均携带此字段；旧切片（无该字段）前端自动回退到 `spam_distribution.low_spam.total`
 
 ## 聚合流程 (orchestrator.py)
 

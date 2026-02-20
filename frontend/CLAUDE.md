@@ -59,7 +59,7 @@ frontend/
 │       └── analysis/            # 分析报告, 图表可视化
 │           ├── components/
 │           │   ├── task/        # 任务级报告组件
-│           │   ├── project/     # 项目级快照组件
+│           │   ├── project/     # 项目级切片洞察组件
 │           │   ├── shared/      # SpamRatioBar, TabSwitch 等
 │           │   ├── deep-result/ # 深度分析结果
 │           │   └── cost/        # Token 用量/成本

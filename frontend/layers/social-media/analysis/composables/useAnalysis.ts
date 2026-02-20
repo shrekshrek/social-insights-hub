@@ -320,9 +320,9 @@ export const useAnalysis = () => {
   }
 
   /**
-   * 手动生成项目级合并分析快照（同步完成）
+   * 手动生成项目级合并分析切片（同步完成）
    */
-  const createProjectSnapshot = async (
+  const createProjectSlice = async (
     projectId: number,
     taskIds: number[],
     name?: string,
@@ -333,7 +333,7 @@ export const useAnalysis = () => {
     }
   ) => {
     const result = await apiRequest<{ id: number; name: string | null }>(
-      `/social-media/analysis/projects/${projectId}/snapshots`,
+      `/social-media/analysis/projects/${projectId}/slices`,
       {
         method: 'POST',
         body: {
@@ -345,21 +345,21 @@ export const useAnalysis = () => {
         },
       }
     )
-    showSuccess('项目快照已生成')
+    showSuccess('项目切片已生成')
     return result
   }
 
   /**
-   * 删除项目级合并分析快照
+   * 删除项目级合并分析切片
    */
-  const deleteProjectSnapshot = async (projectId: number, snapshotId: number) => {
+  const deleteProjectSlice = async (projectId: number, sliceId: number) => {
     await apiRequest(
-      `/social-media/analysis/projects/${projectId}/snapshots/${snapshotId}`,
+      `/social-media/analysis/projects/${projectId}/slices/${sliceId}`,
       {
         method: 'DELETE',
       }
     )
-    showSuccess('快照已删除')
+    showSuccess('切片已删除')
     return true
   }
 
@@ -385,8 +385,8 @@ export const useAnalysis = () => {
     runTopicClustering,
     runCompetitiveAnalysis,
 
-    // 项目级合并快照（Phase 1）
-    createProjectSnapshot,
-    deleteProjectSnapshot,
+    // 项目级合并切片（Phase 1）
+    createProjectSlice,
+    deleteProjectSlice,
   }
 }

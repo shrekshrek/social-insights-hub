@@ -9,7 +9,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
-from .models import PostAnalysis, AnalysisJob, ProjectAnalysisSnapshot
+from .models import PostAnalysis, AnalysisJob, ProjectAnalysisSlice
 from .jobs import create_analysis_job_async
 from .jobs.crud import (  # noqa: F401 - re-exported for router
     get_analysis_jobs,
@@ -25,7 +25,7 @@ from .schemas import (
     AnalysisStatsResponse,
 )
 
-from .project_snapshot import build_project_snapshot_result
+from .project_slice import build_project_slice_result
 
 
 # ==================== Task-Level Analysis ====================
@@ -201,10 +201,10 @@ async def run_post_deep_analysis(
     )
 
 
-# ==================== Project Snapshot (Manual) ====================
+# ==================== Project Slice (Manual) ====================
 
 
-async def create_project_snapshot(
+async def create_project_slice(
     db: AsyncSession,
     project_id: int,
     task_ids: list[int],
@@ -213,8 +213,8 @@ async def create_project_snapshot(
     subject: str | None = None,
     competitors: list[str] | None = None,
     platform_weights: dict[str, float] | None = None,
-) -> ProjectAnalysisSnapshot:
-    """手动生成项目级合并分析快照（同步完成，写入 project_analysis_snapshots 表）。"""
+) -> ProjectAnalysisSlice:
+    """手动生成项目级合并分析切片（同步完成，写入 project_analysis_slices 表）。"""
     from src.social_media.projects import crud as project_crud
     from src.social_media.tasks.models import DataTask
 
@@ -263,7 +263,7 @@ async def create_project_snapshot(
                 detail=f"Task {t.id} has no analysis_result. Please run task aggregation first.",
             )
 
-        # 规范口径：项目快照只认 canonical 字段 aggregated_*（不使用 insights 兜底）
+        # 规范口径：项目切片只认 canonical 字段 aggregated_*（不使用 insights 兜底）
         ar = t.analysis_result or {}
         if not isinstance(ar.get("aggregated_opinions"), list):
             missing_agg_opinions.append(t.id)
@@ -291,7 +291,7 @@ async def create_project_snapshot(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "message": "Some tasks have incompatible analysis_result schema (missing canonical aggregated_* fields). "
-                "Please re-run task aggregation for these tasks, then re-generate the project snapshot.",
+                "Please re-run task aggregation for these tasks, then re-generate the project slice.",
                 "missing_aggregated_opinions_task_ids": missing_agg_opinions,
                 "missing_aggregated_entities_task_ids": missing_agg_entities,
             },
@@ -373,12 +373,12 @@ async def create_project_snapshot(
 
         # 主归属（首见原则）——用于 keyword 分布在去重后仍能“总和=总量”
         if post_key not in primary_keyword_by_key:
-            # row 没有 task_id，因此无法直接判定；这里先留空，后续由 build_project_snapshot_result 按任务维度补齐
+            # row 没有 task_id，因此无法直接判定；这里先留空，后续由 build_project_slice_result 按任务维度补齐
             primary_keyword_by_key[post_key] = ""
         if post_key not in primary_task_by_key:
             primary_task_by_key[post_key] = 0
 
-    snapshot_result = build_project_snapshot_result(
+    slice_result = build_project_slice_result(
         project_id=project_id,
         included_task_ids=task_ids,
         task_data_list=rich_task_data,
@@ -392,17 +392,17 @@ async def create_project_snapshot(
         spam_threshold=6.0,
     )
 
-    snapshot = ProjectAnalysisSnapshot(
+    slice_record = ProjectAnalysisSlice(
         name=name,
         project_id=project_id,
         user_id=current_user_id,
         included_task_ids=task_ids,
-        result_data=snapshot_result,
+        result_data=slice_result,
     )
-    db.add(snapshot)
+    db.add(slice_record)
     await db.commit()
-    await db.refresh(snapshot)
-    return snapshot
+    await db.refresh(slice_record)
+    return slice_record
 
 
 async def run_comment_deep_analysis(

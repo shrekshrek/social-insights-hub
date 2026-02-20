@@ -271,8 +271,8 @@ class AnalysisJobResponse(CustomBaseModel):
     # 关联信息（可选，用于列表展示）
     project_name: str | None = None
     task_name: str | None = None
-    snapshot_id: int | None = None
-    snapshot_name: str | None = None
+    slice_id: int | None = None
+    slice_name: str | None = None
     user_name: str | None = None
 
 
@@ -340,14 +340,14 @@ class RunCompetitiveRequest(CustomBaseModel):
     competitors: list[str] | None = Field(None, description="竞品列表")
 
 
-# ==================== Project Snapshot (Manual) ====================
+# ==================== Project Slice (Manual) ====================
 
 
-class CreateProjectSnapshotRequest(CustomBaseModel):
-    """手动生成项目级合并分析快照（不依赖 query/filter_spec）"""
+class CreateProjectSliceRequest(CustomBaseModel):
+    """手动生成项目级合并分析切片（不依赖 query/filter_spec）"""
 
     task_ids: list[int] = Field(..., min_length=1, description="参与合并的任务ID列表")
-    name: str | None = Field(None, max_length=255, description="快照名称（可选）")
+    name: str | None = Field(None, max_length=255, description="切片名称（可选）")
     subject: str | None = Field(
         None,
         max_length=200,
@@ -363,7 +363,7 @@ class CreateProjectSnapshotRequest(CustomBaseModel):
     )
 
 
-class ProjectSnapshotResponse(CustomBaseModel):
+class ProjectSliceResponse(CustomBaseModel):
     id: int
     name: str | None = None
     project_id: int
@@ -374,8 +374,8 @@ class ProjectSnapshotResponse(CustomBaseModel):
     updated_at: datetime
 
 
-class ProjectSnapshotListResponse(CustomBaseModel):
-    items: list[ProjectSnapshotResponse]
+class ProjectSliceListResponse(CustomBaseModel):
+    items: list[ProjectSliceResponse]
 
 
 class RunAnalysisResponse(CustomBaseModel):

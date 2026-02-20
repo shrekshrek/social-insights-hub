@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from src.database import SyncSessionLocal
-from src.social_media.analysis.models import ProjectAnalysisSnapshot, AnalysisType
+from src.social_media.analysis.models import ProjectAnalysisSlice, AnalysisType
 from src.social_media.analysis.jobs import (
     create_analysis_job_sync,
     complete_analysis_job_sync,
@@ -19,34 +19,34 @@ from .opinion_aggregation import (
     build_topics_aligned,
 )
 from .drivers import build_drivers_from_entities
-from .insights import build_snapshot_layers
+from .insights import build_slice_layers
 from .summary import generate_project_reports
 
 logger = logging.getLogger(__name__)
 
 
-def run_project_snapshot_pipeline_sync(
+def run_project_slice_pipeline_sync(
     *,
-    snapshot_id: int,
+    slice_id: int,
     top_terms_for_llm: int = 160,
     min_cell_mentions: int = 5,
 ) -> dict:
-    """项目级快照 Stage2 + Stage3 编排（分步写回 stage2.steps / stage3）"""
+    """项目级切片 Stage2 + Stage3 编排（分步写回 stage2.steps / stage3）"""
     db = SyncSessionLocal()
     try:
-        stmt = select(ProjectAnalysisSnapshot).where(
-            ProjectAnalysisSnapshot.id == snapshot_id
+        stmt = select(ProjectAnalysisSlice).where(
+            ProjectAnalysisSlice.id == slice_id
         )
-        snapshot = db.execute(stmt).scalar_one_or_none()
-        if not snapshot:
+        slice_record = db.execute(stmt).scalar_one_or_none()
+        if not slice_record:
             return {
                 "status": "failed",
-                "error": "snapshot_not_found",
-                "snapshot_id": snapshot_id,
+                "error": "slice_not_found",
+                "slice_id": slice_id,
             }
 
         # 重要：result_data 是 JSON 字段，原地修改默认不会被 SQLAlchemy 追踪到（导致不落库）
-        result = snapshot.result_data or {}
+        result = slice_record.result_data or {}
         if not isinstance(result, dict):
             result = {}
         # 触发变更追踪：用新 dict 承载本次流水线更新
@@ -55,8 +55,8 @@ def run_project_snapshot_pipeline_sync(
         stage2.setdefault("jobs", {})
 
         def commit_result():
-            snapshot.result_data = result
-            flag_modified(snapshot, "result_data")
+            slice_record.result_data = result
+            flag_modified(slice_record, "result_data")
             db.commit()
 
         # 初始化
@@ -82,7 +82,7 @@ def run_project_snapshot_pipeline_sync(
             )
             result["stage2"] = stage2
             commit_result()
-            return {"status": "skipped", "snapshot_id": snapshot_id}
+            return {"status": "skipped", "slice_id": slice_id}
 
         scope = (result.get("meta") or {}).get("scope") or {}
         task_keywords = (
@@ -102,34 +102,34 @@ def run_project_snapshot_pipeline_sync(
         # 注意：source_count 会在归一化完成后根据实际程序聚类后的数量更新
         entity_job = create_analysis_job_sync(
             db=db,
-            project_id=snapshot.project_id,
+            project_id=slice_record.project_id,
             task_id=None,
-            user_id=snapshot.user_id,
+            user_id=slice_record.user_id,
             analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
             source_count=0,  # 稍后更新为程序归一后的数量
             analysis_config={
-                "snapshot_id": snapshot_id,
+                "slice_id": slice_id,
                 "step": "entity_normalization",
             },
             status="processing",
         )
-        entity_job.source_task_ids = snapshot.included_task_ids
+        entity_job.source_task_ids = slice_record.included_task_ids
         db.commit()
 
         opinion_job = create_analysis_job_sync(
             db=db,
-            project_id=snapshot.project_id,
+            project_id=slice_record.project_id,
             task_id=None,
-            user_id=snapshot.user_id,
+            user_id=slice_record.user_id,
             analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
             source_count=0,  # 稍后更新为程序归一后的数量
             analysis_config={
-                "snapshot_id": snapshot_id,
+                "slice_id": slice_id,
                 "step": "opinion_normalization",
             },
             status="processing",
         )
-        opinion_job.source_task_ids = snapshot.included_task_ids
+        opinion_job.source_task_ids = slice_record.included_task_ids
         db.commit()
 
         stage2["jobs"]["entity_normalization_job_id"] = entity_job.id
@@ -155,7 +155,7 @@ def run_project_snapshot_pipeline_sync(
                 top_topics=[t for t in top_topics if isinstance(t, dict)],
             )
 
-        logger.info(f"[项目快照] 并行启动实体归一和观点归一: snapshot_id={snapshot_id}")
+        logger.info(f"[项目切片] 并行启动实体归一和观点归一: slice_id={slice_id}")
         with ThreadPoolExecutor(max_workers=2) as executor:
             future_entity = executor.submit(run_entity_normalization)
             future_opinion = executor.submit(run_opinion_normalization)
@@ -165,15 +165,15 @@ def run_project_snapshot_pipeline_sync(
                     if future == future_entity:
                         ent_norm_result = future.result()
                         logger.info(
-                            f"[项目快照] 实体归一完成: snapshot_id={snapshot_id}"
+                            f"[项目切片] 实体归一完成: slice_id={slice_id}"
                         )
                     else:
                         op_norm_result = future.result()
                         logger.info(
-                            f"[项目快照] 观点归一完成: snapshot_id={snapshot_id}"
+                            f"[项目切片] 观点归一完成: slice_id={slice_id}"
                         )
                 except Exception as e:
-                    logger.error(f"[项目快照] 归一化任务失败: {e}")
+                    logger.error(f"[项目切片] 归一化任务失败: {e}")
 
         # 3. 处理实体归一结果
         ent_input_count = ent_norm_result.get("input_count") or len(
@@ -227,7 +227,7 @@ def run_project_snapshot_pipeline_sync(
             analyzed_count=len(entities_aligned),
             token_usage=token_usage_entity,
             result_data={
-                "snapshot_id": snapshot_id,
+                "slice_id": slice_id,
                 "input_count": ent_input_count,
                 "program_clustered_count": ent_program_count,
                 "after_count": len(entities_aligned),
@@ -286,7 +286,7 @@ def run_project_snapshot_pipeline_sync(
             analyzed_count=len(topics_aligned),
             token_usage=token_usage_opinion,
             result_data={
-                "snapshot_id": snapshot_id,
+                "slice_id": slice_id,
                 "input_count": op_input_count,
                 "program_clustered_count": op_program_count,
                 "after_count": len(topics_aligned),
@@ -337,7 +337,7 @@ def run_project_snapshot_pipeline_sync(
             if isinstance(layers0.get("landscape"), dict)
             else {}
         )
-        layers = build_snapshot_layers(
+        layers = build_slice_layers(
             meta=result.get("meta") or {},
             overview=land0.get("overview")
             if isinstance(land0.get("overview"), dict)
@@ -362,17 +362,17 @@ def run_project_snapshot_pipeline_sync(
         set_step(stage2, "summary", "processing")
         summary_job = create_analysis_job_sync(
             db=db,
-            project_id=snapshot.project_id,
+            project_id=slice_record.project_id,
             task_id=None,
-            user_id=snapshot.user_id,
-            analysis_type=AnalysisType.PROJECT_SNAPSHOT_SUMMARY.value,
+            user_id=slice_record.user_id,
+            analysis_type=AnalysisType.PROJECT_SLICE_SUMMARY.value,
             source_count=1,
-            analysis_config={"snapshot_id": snapshot_id, "step": "summary"},
+            analysis_config={"slice_id": slice_id, "step": "summary"},
             status="processing",
         )
-        summary_job.source_task_ids = snapshot.included_task_ids
+        summary_job.source_task_ids = slice_record.included_task_ids
         db.commit()
-        stage2["jobs"]["project_snapshot_summary_job_id"] = summary_job.id
+        stage2["jobs"]["project_slice_summary_job_id"] = summary_job.id
         stage2["steps"]["summary"]["job_id"] = summary_job.id
         commit_result()
 
@@ -427,7 +427,7 @@ def run_project_snapshot_pipeline_sync(
             job=summary_job,
             analyzed_count=1,
             token_usage=token_usage_summary,
-            result_data={"snapshot_id": snapshot_id, "status": stage3.get("status")},
+            result_data={"slice_id": slice_id, "status": stage3.get("status")},
             error_message=None
             if stage3.get("status") == "completed"
             else (stage3.get("error") or "reports_failed"),
@@ -436,7 +436,7 @@ def run_project_snapshot_pipeline_sync(
 
         return {
             "status": "completed",
-            "snapshot_id": snapshot_id,
+            "slice_id": slice_id,
             "stage2": stage2.get("status"),
             "stage3": stage3.get("status"),
         }

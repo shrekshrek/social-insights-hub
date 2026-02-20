@@ -1,6 +1,6 @@
-# 模块方案: analysis/project_snapshot_spam (后端+前端)
+# 模块方案: analysis/project_slice_spam (后端+前端)
 
-> 项目级快照实体/话题增加 4D spam 分布数据，前端展示 SpamRatioBar。
+> 项目级切片实体/话题增加 4D spam 分布数据，前端展示 SpamRatioBar。
 
 **状态**: 已完成
 
@@ -8,9 +8,9 @@
 
 ## 背景
 
-任务级分析已有完整的 spam 维度体系（4D 分布 + 3 层图表预计算 + 排序控件），但项目级快照在合并多任务数据时完全丢失了 spam 信息。这导致项目级的实体和话题无法区分推广/有机来源，降低了分析的可信度。
+任务级分析已有完整的 spam 维度体系（4D 分布 + 3 层图表预计算 + 排序控件），但项目级切片在合并多任务数据时完全丢失了 spam 信息。这导致项目级的实体和话题无法区分推广/有机来源，降低了分析的可信度。
 
-**目标**: 在项目级快照的实体和话题上添加 4D spam 分布数据，前端展示 SpamRatioBar。
+**目标**: 在项目级切片的实体和话题上添加 4D spam 分布数据，前端展示 SpamRatioBar。
 
 ---
 
@@ -27,9 +27,9 @@
 - SELECT 加入 `PostAnalysis.spam_score`
 - `outerjoin(PostAnalysis, PostAnalysis.post_id == SocialPost.id)`
 - `post_info_by_key` 写入 `spam_score`
-- 传递 `spam_threshold=6.0` 给 `build_project_snapshot_result()`
+- 传递 `spam_threshold=6.0` 给 `build_project_slice_result()`
 
-### Step 2: project_snapshot.py — 核心逻辑 ✅
+### Step 2: project_slice.py — 核心逻辑 ✅
 
 - 新增 `_compute_spam_dist_4d_by_key()` 辅助函数（基于 post_key 而非 post_id）
 - 函数签名加 `spam_threshold: float = 6.0`
@@ -62,9 +62,9 @@
 | 文件 | 改动类型 |
 |------|----------|
 | `backend/src/social_media/analysis/service.py` | 查询加 PostAnalysis join |
-| `backend/src/social_media/analysis/project_snapshot.py` | 核心：spam_map + 来源追踪 + 4D 计算 |
-| `backend/.../project_snapshot/entity_aggregation.py` | Stage 2 传递 |
-| `backend/.../project_snapshot/opinion_aggregation.py` | Stage 2 传递 |
+| `backend/src/social_media/analysis/project_slice.py` | 核心：spam_map + 来源追踪 + 4D 计算 |
+| `backend/.../project_slice/entity_aggregation.py` | Stage 2 传递 |
+| `backend/.../project_slice/opinion_aggregation.py` | Stage 2 传递 |
 | `frontend/.../projects/[id]/analysis.vue` | 类型 + SpamRatioBar 展示 |
 
 ---

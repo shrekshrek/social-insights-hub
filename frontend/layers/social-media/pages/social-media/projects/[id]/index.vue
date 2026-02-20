@@ -419,11 +419,11 @@ const sliceColumns = computed<TableColumn<ProjectSlice>[]>(() => {
       header: '进度',
       cell: ({ row }) => {
         const s = row.original
-        const stage2 = s.result_data?.stage2?.status
-        const stage3 = s.result_data?.stage3?.status
+        const stage2 = s.result_data?.pipeline?.stage2?.status
+        const stage3 = s.result_data?.pipeline?.stage3?.status
         return h('div', { class: 'flex flex-col gap-1 items-start' }, [
-          h(Badge, { size: 'xs', variant: 'solid', color: getSliceStageColor(stage2) }, () => `Stage2：${getSliceStageText(stage2)}`),
-          h(Badge, { size: 'xs', variant: 'solid', color: getSliceStageColor(stage3) }, () => `Stage3：${getSliceStageText(stage3)}`),
+          h(Badge, { size: 'xs', variant: 'solid', color: getSliceStageColor(stage2) }, () => `归一化：${getSliceStageText(stage2)}`),
+          h(Badge, { size: 'xs', variant: 'solid', color: getSliceStageColor(stage3) }, () => `报告：${getSliceStageText(stage3)}`),
         ])
       },
     },

@@ -12,6 +12,13 @@ from src.langchain.chains.attribute_normalization_chain import (
     parse_normalization_response,
 )
 
+from src.social_media.analysis.constants import (
+    TOP_TERMS_FOR_LLM,
+    MIN_CELL_MENTIONS,
+    MAX_POST_IDS_SAMPLE,
+    ORIGINAL_TERMS_MAX,
+    ORIGINAL_TERM_MAX_LEN,
+)
 from .utils import format_terms_for_llm, fallback_cluster_terms, build_term_to_cluster
 
 logger = logging.getLogger(__name__)
@@ -20,14 +27,14 @@ logger = logging.getLogger(__name__)
 def build_drivers_from_entities(
     *,
     top_entities: list[dict[str, Any]],
-    top_terms_for_llm: int = 160,
-    min_cell_mentions: int = 5,
+    top_terms_for_llm: int = TOP_TERMS_FOR_LLM,
+    min_cell_mentions: int = MIN_CELL_MENTIONS,
 ) -> dict[str, Any]:
     """Stage2-A1：实体属性归纳/聚类 + 实体×维度矩阵（基于 Stage1 top_features/top_issues）。"""
     term_counts: dict[str, int] = {}
     entity_terms: dict[str, dict[str, dict[str, Any]]] = {}
     # 工程防御：drivers 维度的证据也只保留“样本”，避免 result_data 膨胀
-    max_post_ids_sample = 50
+    max_post_ids_sample = MAX_POST_IDS_SAMPLE
 
     for e in top_entities or []:
         if not isinstance(e, dict):
@@ -148,8 +155,8 @@ def build_drivers_from_entities(
                         text = (ot.get("text") or "").strip()
                         if not text:
                             continue
-                        if len(text) > 100:
-                            text = text[:100]
+                        if len(text) > ORIGINAL_TERM_MAX_LEN:
+                            text = text[:ORIGINAL_TERM_MAX_LEN]
                         try:
                             cnt = int(ot.get("count") or 0)
                         except Exception:
@@ -370,7 +377,7 @@ def build_drivers_from_entities(
                     ot_counts.items(),
                     key=lambda x: (len(str(x[0] or "")), int(x[1] or 0)),
                     reverse=True,
-                )[:20]
+                )[:ORIGINAL_TERMS_MAX]
             ]
 
         entity_matrix.append({"entity": entity_name, "dimensions": dim_map})

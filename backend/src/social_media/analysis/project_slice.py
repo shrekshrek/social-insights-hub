@@ -9,6 +9,12 @@ from collections import defaultdict, Counter
 from datetime import datetime, timezone
 from typing import Any
 
+from src.social_media.analysis.constants import (
+    SPAM_HIGH_THRESHOLD,
+    MAX_POST_IDS_SAMPLE,
+    ORIGINAL_TERMS_MAX,
+    ORIGINAL_TERM_MAX_LEN,
+)
 from src.social_media.analysis.celery_tasks.aggregation.utils import (
     calculate_score,
     normalize_name,
@@ -57,8 +63,8 @@ def _merge_original_terms(
         text = str(text).strip()
         if not text:
             continue
-        if len(text) > 100:
-            text = text[:100]
+        if len(text) > ORIGINAL_TERM_MAX_LEN:
+            text = text[:ORIGINAL_TERM_MAX_LEN]
         try:
             count = int((t or {}).get("count", 0))
         except Exception:
@@ -229,7 +235,7 @@ def build_project_slice_result(
     included_task_ids: list[int],
     task_data_list: list[dict[str, Any]],
     max_items: int = 200,
-    max_post_ids_sample: int = 50,
+    max_post_ids_sample: int = MAX_POST_IDS_SAMPLE,
     subject: str | None = None,
     competitors: list[str] | None = None,
     platform_weights: dict[str, float] | None = None,
@@ -237,7 +243,7 @@ def build_project_slice_result(
     post_info_by_key: dict[str, dict[str, Any]] | None = None,
     primary_keyword_by_key: dict[str, str] | None = None,
     primary_task_by_key: dict[str, int] | None = None,
-    spam_threshold: float = 6.0,
+    spam_threshold: float = SPAM_HIGH_THRESHOLD,
 ) -> dict[str, Any]:
     """从多个任务的 analysis_result 生成项目级切片结果。
 
@@ -971,7 +977,7 @@ def build_project_slice_result(
                                 (sub.get("original_terms_counts") or {}).items(),
                                 key=lambda x: (len(x[0] or ""), x[1]),
                                 reverse=True,
-                            )[:20]
+                            )[:ORIGINAL_TERMS_MAX]
                         ],
                         "post_ids_sample": sub.get("post_ids_sample") or [],
                         "platform_distribution": dict(sub.get("platform_dist") or {}),
@@ -1036,7 +1042,7 @@ def build_project_slice_result(
                         b["original_terms_counts"].items(),
                         key=lambda x: (len(x[0] or ""), x[1]),
                         reverse=True,
-                    )[:20]
+                    )[:ORIGINAL_TERMS_MAX]
                 ],
                 "source_tasks": source_tasks,
                 "post_ids_sample": b["post_ids_sample"],
@@ -1114,7 +1120,7 @@ def build_project_slice_result(
                         b["original_terms_counts"].items(),
                         key=lambda x: (len(x[0] or ""), x[1]),
                         reverse=True,
-                    )[:20]
+                    )[:ORIGINAL_TERMS_MAX]
                 ],
                 "source_tasks": source_tasks,
                 "post_ids_sample": b["post_ids_sample"],
@@ -1172,8 +1178,9 @@ def build_project_slice_result(
     }
 
     # ===== 输出（最终方案结构）=====
-    # 说明：不再输出旧版 overview/details/charts/insights 顶层字段；
-    # 旧信息将被折叠进 foundation/layers，供 Step2/Step3/Step4 消费。
+    # meta: 切片配置；foundation: 原始聚合数据（Stage2 归一后覆盖）；
+    # layers: 三层指标（Stage2 计算）；reports: LLM 报告（Stage3 生成）；
+    # pipeline: 各阶段执行状态追踪（stage1 同步、stage2/stage3 异步由 router 写入）。
     return {
         "meta": {
             "project_id": project_id,
@@ -1210,5 +1217,14 @@ def build_project_slice_result(
             "landscape_report": None,
             "topic_report": None,
             "focus_report": None,
+        },
+        # pipeline.stage1 在此同步写入；stage2/stage3 由 router.py 在 Celery 任务启动后写入
+        "pipeline": {
+            "stage1": {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "entities_count": len(project_entities),
+                "topics_count": len(project_topics),
+            }
         },
     }

@@ -273,6 +273,14 @@ interface ProjectSliceFoundation {
   dedup_stats?: Record<string, unknown>
   aligned_entities?: ProjectTopicOrEntity[]
   aligned_topics?: ProjectTopicOrEntity[]
+  drivers?: {
+    min_cell_mentions?: number
+    dimensions_top?: string[]
+    entity_matrix?: Array<{
+      entity: string
+      dimensions: Record<string, { mentions: number; pos: number; neg: number; sentiment: number }>
+    }>
+  }
 }
 
 interface ProjectSliceResultData {
@@ -287,53 +295,51 @@ interface ProjectSliceResultData {
   foundation?: ProjectSliceFoundation
   layers?: ProjectSliceLayers
   reports?: ProjectSliceReports
-  stage2?: {
-    status: 'completed' | 'processing' | 'failed' | 'skipped'
-    started_at?: string
-    updated_at?: string
-    steps?: Record<string, { status: 'pending' | 'processing' | 'completed' | 'failed'; llm_used?: boolean }>
-    generated_at?: string
-    llm?: { used?: boolean }
-    category_alignment?: {
-      used?: boolean
-      category_map?: Record<string, string>
-      topic_aspects_aligned?: ProjectTopicAspectItem[]
+  pipeline?: {
+    stage1?: {
+      status: 'completed'
+      completed_at?: string
+      entities_count?: number
+      topics_count?: number
     }
-    alias_normalization?: {
-      entities?: {
+    stage2?: {
+      status: 'completed' | 'processing' | 'failed' | 'skipped'
+      started_at?: string
+      updated_at?: string
+      generated_at?: string
+      celery_task_id?: string
+      llm?: { used?: boolean }
+      steps?: Record<string, { status: 'pending' | 'processing' | 'completed' | 'failed'; llm_used?: boolean; job_id?: number }>
+      jobs?: Record<string, number>
+      category_alignment?: {
         used?: boolean
-        before_count?: number
-        after_count?: number
-        entity_mapping?: Record<string, string>
+        category_map?: Record<string, string>
+        topic_aspects_aligned?: ProjectTopicAspectItem[]
       }
-      topics?: {
-        used?: boolean
-        before_count?: number
-        after_count?: number
-        topic_mapping_by_category?: Record<string, Record<string, string>>
+      alias_normalization?: {
+        entities?: {
+          used?: boolean
+          before_count?: number
+          after_count?: number
+          entity_mapping?: Record<string, string>
+        }
+        topics?: {
+          used?: boolean
+          before_count?: number
+          after_count?: number
+          topic_mapping_by_category?: Record<string, Record<string, string>>
+        }
       }
     }
-    drivers?: {
-      min_cell_mentions?: number
-      dimensions_top?: string[]
-      entity_matrix?: Array<{
-        entity: string
-        dimensions: Record<string, {
-          mentions: number
-          pos: number
-          neg: number
-          sentiment: number
-        }>
-      }>
+    stage3?: {
+      status: 'pending' | 'processing' | 'completed' | 'failed'
+      job_id?: number
+      started_at?: string
+      updated_at?: string
+      generated_at?: string
+      llm?: { used?: boolean }
+      error?: string
     }
-  }
-  stage3?: {
-    status: 'pending' | 'processing' | 'completed' | 'failed'
-    started_at?: string
-    updated_at?: string
-    generated_at?: string
-    llm?: { used?: boolean }
-    error?: string
   }
 }
 
@@ -371,8 +377,9 @@ const handleRefresh = async () => {
 
 // ==================== View Models ====================
 const sliceResult = computed<ProjectSliceResultData | null>(() => slice.value?.result_data || null)
-const stage2 = computed(() => sliceResult.value?.stage2 || null)
-const stage3 = computed(() => sliceResult.value?.stage3 || null)
+const pipeline = computed(() => sliceResult.value?.pipeline || null)
+const stage2 = computed(() => pipeline.value?.stage2 || null)
+const stage3 = computed(() => pipeline.value?.stage3 || null)
 
 const meta = computed(() => sliceResult.value?.meta || null)
 const competitors = computed(() => (meta.value?.competitors || []))
@@ -735,7 +742,7 @@ const topicAspects = computed(() => {
 })
 
 // ==================== Drivers / Entity Matrix ====================
-const driversData = computed(() => stage2.value?.drivers || null)
+const driversData = computed(() => foundation.value?.drivers || null)
 const entityMatrix = computed(() => driversData.value?.entity_matrix || [])
 const matrixDimensions = computed(() => driversData.value?.dimensions_top || [])
 
@@ -803,7 +810,7 @@ const activeReportEvidence = computed(() => {
 
 // ==================== 自动轮询机制（优化：只检查状态，避免页面跳动）====================
 let pollTimer: ReturnType<typeof setInterval> | null = null
-const lastPolledStatus = ref<{ stage2?: string; stage3?: string }>({})
+const lastPolledStatus = ref<{ stage2?: string; stage3?: string; }>({ })
 
 const { apiRequest } = useApi()
 
@@ -818,8 +825,8 @@ const pollStatus = async () => {
     )
     if (!freshData) return
 
-    const newStage2Status = freshData.result_data?.stage2?.status
-    const newStage3Status = freshData.result_data?.stage3?.status
+    const newStage2Status = freshData.result_data?.pipeline?.stage2?.status
+    const newStage3Status = freshData.result_data?.pipeline?.stage3?.status
     const oldStage2Status = lastPolledStatus.value.stage2
     const oldStage3Status = lastPolledStatus.value.stage3
 
@@ -843,8 +850,8 @@ const startPolling = () => {
   if (pollTimer) return
   // 初始化状态缓存
   lastPolledStatus.value = {
-    stage2: stage2.value?.status,
-    stage3: stage3.value?.status,
+    stage2: stage2.value?.status ?? undefined,
+    stage3: stage3.value?.status ?? undefined,
   }
   pollTimer = setInterval(pollStatus, 3000)
 }
@@ -1100,8 +1107,8 @@ const copyText = async (text: string) => {
             <UBadge :color="getStatusColor((stage2?.steps as any)?.derived_analysis?.status)" variant="subtle" size="xs">
               程序化：{{ getStatusLabel((stage2?.steps as any)?.derived_analysis?.status) }}
             </UBadge>
-            <UBadge :color="getStatusColor(stage3?.status || (stage2?.steps as any)?.summary?.status)" variant="subtle" size="xs">
-              报告：{{ getStatusLabel(stage3?.status || (stage2?.steps as any)?.summary?.status) }}
+            <UBadge :color="getStatusColor(stage3?.status)" variant="subtle" size="xs">
+              报告：{{ getStatusLabel(stage3?.status) }}
             </UBadge>
             <span class="ml-auto">
               <UButton
@@ -1119,6 +1126,14 @@ const copyText = async (text: string) => {
               执行记录用于排查与审计：完成后可折叠，不影响下方阅读。
             </div>
             <div v-if="stage2?.steps" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+              <!-- Stage1：同步数据聚合 -->
+              <div v-if="pipeline?.stage1" class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-gray-900 dark:text-white">数据聚合</span>
+                  <span class="text-xs text-gray-400">{{ pipeline.stage1.entities_count }} 实体 / {{ pipeline.stage1.topics_count }} 话题</span>
+                </div>
+                <UBadge color="success" variant="solid" size="xs">完成</UBadge>
+              </div>
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-gray-900 dark:text-white">实体归一化</span>
@@ -1152,12 +1167,12 @@ const copyText = async (text: string) => {
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-gray-900 dark:text-white">报告生成</span>
-                  <span v-if="(stage2.steps as any).summary?.job_id" class="text-xs text-gray-400 font-mono">
-                    job={{ (stage2.steps as any).summary.job_id }}
+                  <span v-if="stage3?.job_id" class="text-xs text-gray-400 font-mono">
+                    job={{ stage3.job_id }}
                   </span>
                 </div>
-                <UBadge :color="getStatusColor(stage3?.status || (stage2.steps as any).summary?.status)" variant="solid" size="xs">
-                  {{ getStatusLabel(stage3?.status || (stage2.steps as any).summary?.status) }}
+                <UBadge :color="getStatusColor(stage3?.status)" variant="solid" size="xs">
+                  {{ getStatusLabel(stage3?.status) }}
                 </UBadge>
               </div>
             </div>

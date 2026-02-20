@@ -44,6 +44,7 @@ from src.social_media.analysis.celery_tasks.aggregation.utils import (
 from src.social_media.analysis.celery_tasks.aggregation.spam_distribution import (
     _build_spam_map,
 )
+from src.social_media.analysis.constants import SPAM_HIGH_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -768,7 +769,7 @@ def aggregate_entities(
     enable_llm_normalization: bool = True,
     top_n: int = 10,
     top_k_attrs: int = 50,  # 新增参数
-    spam_threshold: float = 6.0,  # 新增：spam 分组阈值
+    spam_threshold: float = SPAM_HIGH_THRESHOLD,
 ) -> dict[str, Any]:
     """聚合任务内的实体，生成焦点地图"""
     start_time = time.time()

@@ -29,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.social_media.analysis.models import PostAnalysis, AnalysisType
+from src.social_media.analysis.constants import SPAM_HIGH_THRESHOLD
 from src.social_media.analysis.jobs import (
     create_analysis_job_sync,
     complete_analysis_job_sync,
@@ -163,7 +164,7 @@ def aggregate_task_analysis(
     enable_entity_normalization: bool = True,
     entity_job_id: int | None = None,
     opinion_job_id: int | None = None,
-    spam_threshold: float = 6.0,
+    spam_threshold: float = SPAM_HIGH_THRESHOLD,
 ) -> dict[str, Any]:
     """执行任务级分析聚合
 

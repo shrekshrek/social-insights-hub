@@ -14,6 +14,11 @@ from src.langchain.chains.entity_normalization_chain import (
     format_entities_for_clustering,
 )
 
+from src.social_media.analysis.constants import (
+    MAX_POST_IDS_SAMPLE,
+    ORIGINAL_TERMS_MAX,
+    ORIGINAL_TERM_MAX_LEN,
+)
 from .utils import fallback_alias_map, merge_attr_items
 
 logger = logging.getLogger(__name__)
@@ -356,8 +361,8 @@ def _merge_original_terms_to_counts(
         if not text:
             continue
         # 工程防御：限制单条原话长度
-        if len(text) > 100:
-            text = text[:100]
+        if len(text) > ORIGINAL_TERM_MAX_LEN:
+            text = text[:ORIGINAL_TERM_MAX_LEN]
         try:
             count = int(t.get("count") or 0)
         except Exception:
@@ -379,7 +384,7 @@ def build_entities_aligned(
     - 合并 original_terms 列表并截断 Top 20（长度优先）。
     """
     tags_mapping = tags_mapping or {}
-    max_post_ids_sample = 50
+    max_post_ids_sample = MAX_POST_IDS_SAMPLE
     bucket: dict[str, dict[str, Any]] = {}
     for e in top_entities or []:
         if not isinstance(e, dict):
@@ -577,14 +582,14 @@ def build_entities_aligned(
             sentiment = round(b["sentiment_weighted_sum"] / sentiment_weight, 2)
         else:
             sentiment = 0.0
-        # 构建 original_terms 列表（长度优先排序，截断 Top 20）
+        # 构建 original_terms 列表（长度优先排序，截断 Top ORIGINAL_TERMS_MAX）
         original_terms = [
             {"text": text, "count": count}
             for text, count in sorted(
                 (b.get("original_terms_counts") or {}).items(),
                 key=lambda x: (len(x[0] or ""), x[1]),  # 长度优先，次按 count
                 reverse=True,
-            )[:20]
+            )[:ORIGINAL_TERMS_MAX]
         ]
         # Spam 4D 分布
         spam_distribution = None

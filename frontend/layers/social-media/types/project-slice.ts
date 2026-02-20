@@ -405,6 +405,20 @@ export interface SliceFoundation {
   dedup_stats?: Record<string, unknown>
   aligned_entities?: AlignedEntity[]
   aligned_topics?: AlignedTopic[]
+  /** 程序化驱动因素矩阵（Stage2 衍生分析写入，Stage3 LLM 报告消费） */
+  drivers?: {
+    min_cell_mentions?: number
+    dimensions_top?: string[]
+    entity_matrix?: Array<{
+      entity: string
+      dimensions: Record<string, {
+        mentions: number
+        pos: number
+        neg: number
+        sentiment: number
+      }>
+    }>
+  }
 }
 
 /** 分层分析结果 */
@@ -425,20 +439,32 @@ export interface SliceReports {
   focus_report?: SliceReport | null
 }
 
-/** Stage2 处理状态 */
+/** Stage1 状态（同步，切片创建时写入） */
+export interface Stage1Status {
+  status: 'completed'
+  completed_at?: string
+  entities_count?: number
+  topics_count?: number
+}
+
+/** Stage2 状态（异步 Celery：实体归一 / 观点归一 / 程序化衍生分析） */
 export interface Stage2Status {
   status: 'completed' | 'processing' | 'failed' | 'skipped'
   started_at?: string
   updated_at?: string
   generated_at?: string
+  celery_task_id?: string
   llm?: { used?: boolean }
   steps?: Record<string, {
     status: 'pending' | 'processing' | 'completed' | 'failed'
     llm_used?: boolean
+    job_id?: number
   }>
+  jobs?: Record<string, number>
   category_alignment?: {
     used?: boolean
     category_map?: Record<string, string>
+    topic_aspects_aligned?: Record<string, unknown>[]
   }
   alias_normalization?: {
     entities?: {
@@ -454,29 +480,24 @@ export interface Stage2Status {
       topic_mapping_by_category?: Record<string, Record<string, string>>
     }
   }
-  drivers?: {
-    min_cell_mentions?: number
-    dimensions_top?: string[]
-    entity_matrix?: Array<{
-      entity: string
-      dimensions: Record<string, {
-        mentions: number
-        pos: number
-        neg: number
-        sentiment: number
-      }>
-    }>
-  }
 }
 
-/** Stage3 处理状态 */
+/** Stage3 状态（异步：LLM 报告生成，唯一追踪器） */
 export interface Stage3Status {
   status: 'pending' | 'processing' | 'completed' | 'failed'
+  job_id?: number
   started_at?: string
   updated_at?: string
   generated_at?: string
   llm?: { used?: boolean }
   error?: string
+}
+
+/** 流水线执行状态（stage1 同步 + stage2/3 异步） */
+export interface PipelineStatus {
+  stage1?: Stage1Status
+  stage2?: Stage2Status
+  stage3?: Stage3Status
 }
 
 /** 切片结果数据 */
@@ -485,8 +506,7 @@ export interface ProjectSliceResultData {
   foundation?: SliceFoundation
   layers?: SliceLayers
   reports?: SliceReports
-  stage2?: Stage2Status
-  stage3?: Stage3Status
+  pipeline?: PipelineStatus
 }
 
 /** 项目切片完整结构 */

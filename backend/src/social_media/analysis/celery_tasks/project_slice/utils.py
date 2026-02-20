@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.social_media.analysis.celery_tasks.aggregation.utils import are_similar
+from src.social_media.analysis.constants import TOP_TERMS_FOR_LLM, MAX_POST_IDS_SAMPLE
 
 logger = logging.getLogger(__name__)
 
@@ -13,22 +14,22 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def ensure_stage_state(result: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """确保 result_data 中存在 stage2/stage3 的基础结构。"""
-    stage2 = result.get("stage2") if isinstance(result.get("stage2"), dict) else {}
-    stage3 = result.get("stage3") if isinstance(result.get("stage3"), dict) else {}
+def ensure_pipeline_state(result: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """确保 result_data 中存在 pipeline.stage2/stage3 的基础结构。
+
+    Stage1 由 project_slice.py 在切片创建时同步写入 pipeline.stage1。
+    Stage2 = 实体归一 / 观点归一 / 程序化衍生（异步 Celery）。
+    Stage3 = LLM 报告生成（异步，stage3 为唯一追踪器，不在 stage2.steps 中重复）。
+    """
+    pipeline = result.get("pipeline") if isinstance(result.get("pipeline"), dict) else {}
+    stage2 = pipeline.get("stage2") if isinstance(pipeline.get("stage2"), dict) else {}
+    stage3 = pipeline.get("stage3") if isinstance(pipeline.get("stage3"), dict) else {}
 
     stage2.setdefault("status", "processing")
     stage2.setdefault("started_at", now_iso())
     stage2["updated_at"] = now_iso()
     stage2.setdefault("steps", {})
-    # 产品口径：实体归一 / 观点归一 / 程序化衍生 / 全局LLM总分析
-    for k in [
-        "entity_normalization",
-        "opinion_normalization",
-        "derived_analysis",
-        "summary",
-    ]:
+    for k in ["entity_normalization", "opinion_normalization", "derived_analysis"]:
         step = (
             stage2["steps"].get(k) if isinstance(stage2["steps"].get(k), dict) else {}
         )
@@ -38,8 +39,9 @@ def ensure_stage_state(result: dict[str, Any]) -> tuple[dict[str, Any], dict[str
     stage3.setdefault("status", "pending")
     stage3["updated_at"] = now_iso()
 
-    result["stage2"] = stage2
-    result["stage3"] = stage3
+    pipeline["stage2"] = stage2
+    pipeline["stage3"] = stage3
+    result["pipeline"] = pipeline
     return stage2, stage3
 
 
@@ -55,7 +57,7 @@ def set_step(stage2: dict[str, Any], step: str, status: str, **extra: Any) -> No
     stage2["updated_at"] = now_iso()
 
 
-def format_terms_for_llm(term_counts: dict[str, int], top_k: int = 160) -> str:
+def format_terms_for_llm(term_counts: dict[str, int], top_k: int = TOP_TERMS_FOR_LLM) -> str:
     items = sorted(term_counts.items(), key=lambda x: x[1], reverse=True)[:top_k]
     return "\n".join([f"- {t} ({c})" for t, c in items if t and c > 0])
 
@@ -124,7 +126,7 @@ def merge_attr_items(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]
     if not items:
         return []
     bucket: dict[str, dict[str, Any]] = {}
-    max_post_ids_sample = 50
+    max_post_ids_sample = MAX_POST_IDS_SAMPLE
     for it in items:
         if not isinstance(it, dict):
             continue

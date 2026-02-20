@@ -11,6 +11,7 @@ from src.celery_app import celery_app
 from src.social_media.analysis.celery_tasks.project_slice import (
     run_project_slice_pipeline_sync,
 )
+from src.social_media.analysis.constants import TOP_TERMS_FOR_LLM, MIN_CELL_MENTIONS
 
 
 @celery_app.task(
@@ -22,8 +23,8 @@ def run_project_slice_task(
     self,
     *,
     slice_id: int,
-    top_terms_for_llm: int = 160,
-    min_cell_mentions: int = 5,
+    top_terms_for_llm: int = TOP_TERMS_FOR_LLM,
+    min_cell_mentions: int = MIN_CELL_MENTIONS,
 ) -> dict[str, Any]:
     """对项目切片执行 Stage2/Stage3 流水线（写回 result_data.stage2/stage3）。"""
     return run_project_slice_pipeline_sync(

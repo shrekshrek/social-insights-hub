@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import Field
 
 from src.schemas import CustomBaseModel
+from src.social_media.analysis.constants import SPAM_HIGH_THRESHOLD
 
 
 # ==================== Token 使用统计 ====================
@@ -480,7 +481,7 @@ class SpamCountBreakdown(CustomBaseModel):
 class SpamConfig(CustomBaseModel):
     """Spam 分组配置"""
 
-    threshold: float = 6.0
+    threshold: float = SPAM_HIGH_THRESHOLD
 
 
 class NsrBySpam(CustomBaseModel):

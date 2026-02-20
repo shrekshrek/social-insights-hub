@@ -1483,14 +1483,13 @@ const copyText = async (text: string) => {
               <table class="text-xs w-full">
                 <thead>
                   <tr class="text-left border-b border-gray-100 dark:border-gray-800">
-                    <th class="py-2 pr-3 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-900">实体</th>
+                    <th class="py-2 pr-3 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-900 align-top">实体</th>
                     <th
                       v-for="dim in matrixDimensions.slice(0, 8)"
                       :key="dim"
-                      class="py-2 px-1 font-medium text-gray-500 dark:text-gray-400 text-center whitespace-nowrap"
-                      :title="dim"
+                      class="py-2 px-2 font-medium text-gray-500 dark:text-gray-400 text-center align-top max-w-[80px]"
                     >
-                      {{ dim.length > 5 ? `${dim.slice(0, 5)}…` : dim }}
+                      {{ dim }}
                     </th>
                   </tr>
                 </thead>
@@ -1524,9 +1523,6 @@ const copyText = async (text: string) => {
                   </tr>
                 </tbody>
               </table>
-            </div>
-            <div class="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
-              前 {{ Math.min(entityMatrix.length, 10) }} 个实体 × 前 {{ Math.min(matrixDimensions.length, 8) }} 个维度；单元格颜色为情感值，悬停查看提及详情。
             </div>
           </div>
         </section>

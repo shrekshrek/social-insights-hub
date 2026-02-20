@@ -47,16 +47,15 @@ const spamViewOptions = [
   { value: 'organic', label: '有机' },
 ]
 
-// ==================== 排序模式（全量视角下生效）====================
+// ==================== 排序模式 ====================
 
-type SortMode = 'share' | 'mentions' | 'efficiency'
+type SortMode = 'share' | 'mentions'
 const maxItems = computed(() => props.maxItems ?? 15)
 const sortMode = ref<SortMode>('share')
 
 const sortModeOptions = [
   { value: 'share', label: '份额' },
   { value: 'mentions', label: '提及' },
-  { value: 'efficiency', label: '效能' },
 ]
 
 // ==================== 能力检测 ====================
@@ -65,9 +64,6 @@ const hasSpamData = computed(() =>
   (props.data || []).some(i => i.spam_distribution != null),
 )
 
-const hasSentimentData = computed(() =>
-  (props.data || []).some(i => i.sentiment != null),
-)
 
 // ==================== 有机/推广指标辅助 ====================
 
@@ -95,36 +91,21 @@ const getEffectiveMentions = (item: SOVRankingItem): number => {
 const sortedItems = computed(() => {
   const list = (props.data || []).slice()
 
-  if (spamView.value === 'organic') {
-    return list.sort((a, b) => (b.organic_heat ?? getOrganicMentions(b)) - (a.organic_heat ?? getOrganicMentions(a)))
-  }
-  if (spamView.value === 'promo') {
-    return list.sort((a, b) => (b.promo_heat ?? getPromoMentions(b)) - (a.promo_heat ?? getPromoMentions(a)))
-  }
-
-  // 全量视角：应用排序模式
   if (sortMode.value === 'mentions') {
+    if (spamView.value === 'organic') return list.sort((a, b) => getOrganicMentions(b) - getOrganicMentions(a))
+    if (spamView.value === 'promo') return list.sort((a, b) => getPromoMentions(b) - getPromoMentions(a))
     return list.sort((a, b) => (b.mentions || 0) - (a.mentions || 0))
   }
-  if (sortMode.value === 'efficiency') {
-    const byEff = (x: SOVRankingItem) =>
-      x.mentions > 0 ? (x.heat || 0) / x.mentions : -Infinity
-    return list.sort((a, b) => byEff(b) - byEff(a))
-  }
+
+  // 份额：按热度降序（各视角使用对应热度字段）
+  if (spamView.value === 'organic') return list.sort((a, b) => (b.organic_heat ?? getOrganicMentions(b)) - (a.organic_heat ?? getOrganicMentions(a)))
+  if (spamView.value === 'promo') return list.sort((a, b) => (b.promo_heat ?? getPromoMentions(b)) - (a.promo_heat ?? getPromoMentions(a)))
   return list.sort((a, b) => (b.share || 0) - (a.share || 0))
 })
 
 const items = computed(() => sortedItems.value.slice(0, maxItems.value))
 
 // ==================== SOV 份额（按视角）====================
-
-const totalOrganicMentions = computed(() =>
-  (props.data || []).reduce((s, i) => s + getOrganicMentions(i), 0),
-)
-
-const totalPromoMentions = computed(() =>
-  (props.data || []).reduce((s, i) => s + getPromoMentions(i), 0),
-)
 
 const totalOrganicHeat = computed(() =>
   (props.data || []).reduce((s, i) => s + (i.organic_heat ?? getOrganicMentions(i)), 0),
@@ -194,26 +175,12 @@ const formatNumber = (n: number) => {
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-3">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">SOV 排行榜</h3>
-        <!-- 排序模式：仅全量视角下显示 -->
-        <TabSwitch v-if="spamView === 'all'" v-model="sortMode" :options="sortModeOptions" />
+        <TabSwitch v-if="hasSpamData" v-model="spamView" :options="spamViewOptions" />
       </div>
       <div class="flex items-center gap-2">
-        <TabSwitch v-if="hasSpamData" v-model="spamView" :options="spamViewOptions" />
+        <TabSwitch v-model="sortMode" :options="sortModeOptions" />
         <span class="text-xs text-gray-500 dark:text-gray-400">Top {{ items.length }}</span>
       </div>
-    </div>
-
-    <!-- 视角说明 -->
-    <div
-      v-if="spamView !== 'all'"
-      class="mb-2 px-2.5 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-700 dark:text-blue-400"
-    >
-      <template v-if="spamView === 'organic'">
-        <b>有机视角</b>：按有机声量排序，份额为有机 SOV 份额（低推广内容的 share of voice）
-      </template>
-      <template v-else>
-        <b>推广视角</b>：按推广声量排序，份额为推广 SOV 份额（高推广内容的 share of voice）
-      </template>
     </div>
 
     <!-- 列表 -->
@@ -252,47 +219,26 @@ const formatNumber = (n: number) => {
 
               <!-- 行内指标 -->
               <div class="shrink-0 flex items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                <!-- 全量视角 -->
-                <template v-if="spamView === 'all'">
-                  <span title="热度值">
-                    热 <span class="font-mono text-gray-700 dark:text-gray-300">{{ formatNumber(item.heat) }}</span>
-                  </span>
-                  <span title="提及帖数">
-                    帖 <span class="font-mono text-gray-700 dark:text-gray-300">{{ formatNumber(item.mentions) }}</span>
-                  </span>
-                  <span title="效能倍数 (热度 / 提及)">
-                    效 <span class="font-mono text-gray-700 dark:text-gray-300">{{ item.mentions > 0 ? (item.heat / item.mentions).toFixed(1) : '-' }}</span>x
-                  </span>
-                  <span v-if="item.spam_distribution" title="有机占比" class="hidden md:inline">
-                    机 <span class="font-mono text-gray-700 dark:text-gray-300">{{ (getOrganicRatio(item) * 100).toFixed(0) }}</span>%
-                  </span>
-                  <!-- 情感（全量，后端填充后自动显示） -->
-                  <span
-                    v-if="hasSentimentData && item.sentiment != null"
-                    class="hidden lg:inline font-mono"
-                    :class="item.sentiment >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
-                    title="整体情感"
-                  >
-                    {{ fmtSentiment(item.sentiment) }}
-                  </span>
-                </template>
-
-                <!-- 有机/推广视角 -->
-                <template v-else>
-                  <span :title="spamView === 'organic' ? '有机提及' : '推广提及'">
-                    {{ spamView === 'organic' ? '机' : '广' }}
-                    <span class="font-mono text-gray-700 dark:text-gray-300">{{ formatNumber(getEffectiveMentions(item)) }}</span>
-                  </span>
-                  <!-- 情感（有机/推广，后端填充后自动显示） -->
-                  <span
-                    v-if="getDisplaySentiment(item) != null"
-                    class="font-mono"
-                    :class="(getDisplaySentiment(item) ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
-                    :title="spamView === 'organic' ? '有机情感' : '推广情感'"
-                  >
-                    {{ fmtSentiment(getDisplaySentiment(item) ?? 0) }}
-                  </span>
-                </template>
+                <!-- 热度 / 提及（按视角显示对应数字） -->
+                <span :title="spamView === 'organic' ? '有机热度' : spamView === 'promo' ? '推广热度' : '热度'">
+                  热 <span class="font-mono text-gray-700 dark:text-gray-300">{{ formatNumber(spamView === 'organic' ? (item.organic_heat ?? getOrganicMentions(item)) : spamView === 'promo' ? (item.promo_heat ?? getPromoMentions(item)) : item.heat) }}</span>
+                </span>
+                <span :title="spamView === 'organic' ? '有机提及' : spamView === 'promo' ? '推广提及' : '提及帖数'">
+                  帖 <span class="font-mono text-gray-700 dark:text-gray-300">{{ formatNumber(getEffectiveMentions(item)) }}</span>
+                </span>
+                <!-- 有机占比（仅全量视角显示） -->
+                <span v-if="spamView === 'all' && item.spam_distribution" title="有机占比" class="hidden md:inline">
+                  机 <span class="font-mono text-gray-700 dark:text-gray-300">{{ (getOrganicRatio(item) * 100).toFixed(0) }}</span>%
+                </span>
+                <!-- 情感 -->
+                <span
+                  v-if="getDisplaySentiment(item) != null"
+                  class="hidden lg:inline font-mono"
+                  :class="(getDisplaySentiment(item) ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                  :title="spamView === 'organic' ? '有机情感' : spamView === 'promo' ? '推广情感' : '整体情感'"
+                >
+                  {{ fmtSentiment(getDisplaySentiment(item) ?? 0) }}
+                </span>
               </div>
             </div>
 

@@ -78,21 +78,21 @@ const allPlatforms = computed(() => {
 
 // 官方 7 个平台颜色（对齐 backend/src/social_media/projects/init_data.py）
 const platformColors: Record<string, string> = {
-  // 微博 - 橙红色
-  weibo: '#ff6b6b',
-  wb: '#ff6b6b',
+  // 微博 - 红色
+  weibo: '#e6162d',
+  wb: '#e6162d',
   // B站 - 粉色
   bilibili: '#fb7299',
   bili: '#fb7299',
-  // 抖音 - 黑色
-  douyin: '#161823',
-  dy: '#161823',
+  // 抖音 - 青色（logo 标志色，避免黑色在深色模式不可见）
+  douyin: '#00bcd4',
+  dy: '#00bcd4',
   // 快手 - 橙色
-  kuaishou: '#ff9500',
-  ks: '#ff9500',
+  kuaishou: '#ff6a00',
+  ks: '#ff6a00',
   // 小红书 - 红色
-  xiaohongshu: '#fe2c55',
-  xhs: '#fe2c55',
+  xiaohongshu: '#ff2442',
+  xhs: '#ff2442',
   // 知乎 - 蓝色
   zhihu: '#0084ff',
   // 贴吧 - 紫色
@@ -191,7 +191,8 @@ const getStackOption = (): EChartsOption => {
         if (!seriesParams.length) return ''
         const idx = seriesParams[0]?.dataIndex ?? 0
         const entityName = items.value[idx]?.name || ''
-        const total = items.value[idx]?.total_mentions || 0
+        const entityItem = items.value[idx]
+        const total = entityItem ? getEffectiveTotalMentions(entityItem) : 0
         let content = `<div style="font-weight:600;margin-bottom:6px">${entityName}</div>`
         for (const p of seriesParams) {
           if (parseFloat(p.value) > 0) {
@@ -352,22 +353,18 @@ onMounted(() => {
 <template>
   <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 h-full flex flex-col">
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-sm font-semibold text-gray-900 dark:text-white">平台阵地 DNA</h3>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">平台阵地 DNA</h3>
         <TabSwitch
           v-if="hasSpamData"
           v-model="spamDimension"
           :options="spamDimensionOptions"
         />
-        <TabSwitch v-model="viewMode" :options="viewModeOptions" />
-        <span class="text-xs text-gray-500 dark:text-gray-400">
-          Top {{ items.length }} 品牌 · 按{{ spamDimension === 'organic' ? '有机' : spamDimension === 'promo' ? '推广' : '总' }}量
-        </span>
       </div>
-    </div>
-    <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-2">
-      <span>堆叠：平台占比结构；矩阵：行=品牌、列=平台、颜色越深占比越高</span>
-      <span v-if="viewMode === 'stack'">柱顶数字为{{ spamDimension === 'organic' ? '有机量' : spamDimension === 'promo' ? '推广量' : '总量' }}</span>
+      <div class="flex items-center gap-2">
+        <TabSwitch v-model="viewMode" :options="viewModeOptions" />
+        <span class="text-xs text-gray-500 dark:text-gray-400">Top {{ items.length }}</span>
+      </div>
     </div>
 
     <div v-if="items.length && allPlatforms.length" ref="chartRef" class="flex-1 min-h-[360px]" />

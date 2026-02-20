@@ -34,8 +34,8 @@ const spamDimension = ref<SpamDimension>('all')
 
 const spamDimensionOptions = [
   { value: 'all', label: '全量' },
-  { value: 'organic', label: '有机' },
   { value: 'promo', label: '推广' },
+  { value: 'organic', label: '有机' },
 ]
 
 const hasSpamData = computed(() =>

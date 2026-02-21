@@ -1,9 +1,11 @@
 
 # 前端架构说明文档
 
-- **版本**: `v1.0`
-- **日期**: `2025-07-24`
+- **版本**: `v2.0`
+- **日期**: `2026-02-21`
 - **状态**: `完成`
+
+> 高级架构总览见 [`docs/architecture.md`](./architecture.md)，本文档聚焦前端各 Layer 的实现细节。
 
 ---
 
@@ -49,7 +51,18 @@ frontend/
 │   ├── auth/                 # 认证模块
 │   ├── rbac/                 # 角色权限管理模块
 │   ├── users/                # 用户管理模块
-│   └── ui-kit/               # 共享UI组件库
+│   ├── ui-kit/               # 共享UI组件库
+│   └── social-media/         # 社交媒体核心业务 Layer
+│       ├── projects/         # 项目管理、切片洞察页面
+│       ├── tasks/            # 任务管理、数据上传页面
+│       └── analysis/         # 分析报告组件、图表、类型定义
+│           ├── components/
+│           │   ├── task/     # 任务级报告 (TaskAnalysisReport等)
+│           │   ├── project/  # 项目级切片 (ProjectSlice相关)
+│           │   ├── shared/   # SpamRatioBar, TabSwitch, PostListModal 等
+│           │   └── cost/     # Token 用量/成本面板
+│           ├── composables/  # useAnalysis, useTokenUsage 等
+│           └── types/        # 60+ 分析数据接口定义
 ├── app/                       # Nuxt 4 主应用目录
 │   ├── pages/                # 全局页面
 │   ├── components/           # 全局通用组件
@@ -104,6 +117,26 @@ frontend/
 -   **`users` Layer**:
     -   **职责**: 提供用户管理界面。
     -   **内容**: 包含用户列表、用户详情、用户表单等组件，以及封装用户管理 API 的 `useUsersApi.ts`。
+-   **`social-media` Layer**（核心业务）:
+    -   **职责**: 社交媒体监控的完整业务流程——项目管理、数据采集任务、LLM 分析报告展示。
+    -   **子模块**:
+
+        | 子模块 | 关键页面 | 核心 Composables |
+        |--------|----------|-----------------|
+        | `projects/` | 项目列表/创建/详情、切片洞察对比 | `useSocialProjects`, `usePlatforms` |
+        | `tasks/` | 任务列表/创建/详情、JSON 数据上传 | `useTasks`, `usePosts`, `useJSONUpload` |
+        | `analysis/` | 分析报告（嵌入 task/project 详情页） | `useAnalysis`, `useAnalysisStats`, `useTokenUsage` |
+
+    -   **分析组件层次**:
+        - `TaskAnalysisReport.vue`: 任务级完整分析报告（NSR/CII/SERP/四象限/话题/实体/KOL）
+        - `IpaChart.vue`, `ContextGraphChart.vue`, `CompetitorRadarChart.vue`, `TimeDistributionChart.vue`: ECharts 图表
+        - `SpamRatioBar.vue`, `TabSwitch.vue`, `PostListModal.vue`, `ClickableCount.vue`: 共享 UI 工具组件
+        - `analysis/types/`: 60+ TypeScript 接口，覆盖 `TaskAnalysisResultData`, `ProjectSliceResultData` 等全部数据结构
+
+    -   **Spam 维度可视化** (重要约定):
+        - **列表类** (实体/话题): 4D SpamDistribution (high/low × post/comment) + TabSwitch 排序控件
+        - **图表类** (IPA/竞品/关联网络): 2D 预计算 (all/organic/promo) + TabSwitch 维度筛选
+        - `SpamRatioBar`: 展示 high_spam/low_spam 原始帖数 + 评论数，不显示百分比
 
 ---
 

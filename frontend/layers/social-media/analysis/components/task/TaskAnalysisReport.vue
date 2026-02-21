@@ -51,8 +51,8 @@ const kolVoicesExpanded = ref(false)
 const kolFilterMode = ref('all')
 const kolFilterOptions = [
   { value: 'all', label: '全部' },
-  { value: 'promo', label: '仅推广' },
-  { value: 'organic', label: '仅有机' },
+  { value: 'promo', label: '推广' },
+  { value: 'organic', label: '有机' },
 ]
 
 /** 是否有任何 KOL 声音携带 spam 数据 */
@@ -183,8 +183,8 @@ const contextGraphFilterMode = ref('all')
 const competitorRadarFilterMode = ref('all')
 const dimensionFilterOptions = [
   { value: 'all', label: '全部' },
-  { value: 'promo', label: '仅推广' },
-  { value: 'organic', label: '仅有机' },
+  { value: 'promo', label: '推广' },
+  { value: 'organic', label: '有机' },
 ]
 
 /** 是否有关联网络 spam 数据（检查 organic 和 promo 是否与 all 不同） */
@@ -418,7 +418,7 @@ const hasAnySpamData = computed(() =>
             </UBadge>
           </div>
           <p class="text-2xl font-bold text-gray-900 dark:text-white">
-            {{ getSentimentLabel(data.metrics.nsr) }}
+            {{ getSentimentLabel(data.metrics.nsr / 2) }}
           </p>
           <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">范围: -2 ~ +2</p>
           <div v-if="data.metrics.nsr_by_spam" class="mt-1 flex items-center gap-2 text-xs">
@@ -902,8 +902,8 @@ const hasAnySpamData = computed(() =>
               <span class="font-medium text-gray-900 dark:text-white">{{ item.author }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <UBadge :color="getSentimentColor(item.sentiment)" variant="subtle" size="xs">
-                {{ getSentimentLabel(item.sentiment) }}
+              <UBadge :color="getSentimentColor(item.sentiment / 2)" variant="subtle" size="xs">
+                {{ getSentimentLabel(item.sentiment / 2) }}
               </UBadge>
               <UBadge v-if="getSpamGroupLabel(item.spam_group)" :color="getSpamGroupColor(item.spam_group)" variant="subtle" size="xs">
                 {{ getSpamGroupLabel(item.spam_group) }}

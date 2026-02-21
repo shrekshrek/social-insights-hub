@@ -269,7 +269,7 @@ def aggregate_task_analysis(
     serp_health = calculate_serp_health(posts_data_sorted)
 
     # 营销浓度
-    marketing_stats = calculate_marketing_density(posts_data)
+    marketing_stats = calculate_marketing_density(posts_data, threshold=spam_threshold)
 
     # 舆论反差度
     sentiment_conflict = calculate_sentiment_conflict(posts_data)

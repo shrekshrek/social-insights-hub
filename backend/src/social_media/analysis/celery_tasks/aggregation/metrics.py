@@ -7,6 +7,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any
 
+from src.social_media.analysis.constants import SPAM_HIGH_THRESHOLD
 from src.social_media.tasks.models import SocialPost
 
 
@@ -95,8 +96,11 @@ def calculate_serp_health(posts_data: list[dict[str, Any]], top_n: int = 20) -> 
 # ============================================================================
 
 
-def calculate_marketing_density(posts_data: list[dict[str, Any]]) -> dict[str, Any]:
-    """计算营销浓度 (spam_score >= 4 视为营销内容)"""
+def calculate_marketing_density(
+    posts_data: list[dict[str, Any]],
+    threshold: float = SPAM_HIGH_THRESHOLD,
+) -> dict[str, Any]:
+    """计算营销浓度 (spam_score >= threshold 视为推广内容，与 spam 分组口径一致)"""
     if not posts_data:
         return {
             "promotion_ratio": 0.0,
@@ -112,7 +116,7 @@ def calculate_marketing_density(posts_data: list[dict[str, Any]]) -> dict[str, A
         spam_score = post.get("spam_score")
         if spam_score is None:
             continue
-        if spam_score >= 4:
+        if spam_score >= threshold:
             promotion_count += 1
         else:
             organic_count += 1
@@ -140,15 +144,24 @@ def calculate_marketing_density(posts_data: list[dict[str, Any]]) -> dict[str, A
 
 
 def calculate_sentiment_conflict(posts_data: list[dict[str, Any]]) -> dict[str, Any]:
-    """计算舆论反差度 (帖子情感 vs 评论情感)"""
+    """计算舆论反差度 (帖子情感 vs 评论情感)
+
+    帖子情感来自初筛 sentiment [-2, +2]。
+    评论情感从 comment_deep_result.general_opinions 的 sentiment 字段（-1/0/1）平均得到。
+    """
     conflicts = []
 
     for post in posts_data:
         post_sentiment = post.get("sentiment")
         comment_deep_result = post.get("comment_deep_result") or {}
-        comment_sentiment = comment_deep_result.get("overall_sentiment")
+        opinions = comment_deep_result.get("general_opinions") or []
 
-        if post_sentiment is not None and comment_sentiment is not None:
+        if not opinions:
+            continue
+
+        comment_sentiment = sum(op.get("sentiment", 0) for op in opinions) / len(opinions)
+
+        if post_sentiment is not None:
             conflict = post_sentiment - comment_sentiment
             conflicts.append({"conflict": conflict})
 

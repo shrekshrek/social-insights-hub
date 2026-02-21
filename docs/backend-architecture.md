@@ -1,8 +1,10 @@
 # 后端架构说明文档
 
-- **版本**: `v1.0`
-- **日期**: `2025-01-19`
+- **版本**: `v2.0`
+- **日期**: `2026-02-21`
 - **状态**: `完成`
+
+> 高级架构总览见 [`docs/architecture.md`](./architecture.md)，本文档聚焦后端各模块的实现细节。
 
 ---
 
@@ -48,8 +50,22 @@
 backend/
 ├── src/                      # 主源码目录
 │   ├── auth/                # 认证与授权模块
-│   ├── rbac/                # 权限管理模块  
+│   ├── rbac/                # 权限管理模块
 │   ├── users/               # 用户管理模块
+│   ├── social_media/        # 社交媒体业务核心
+│   │   ├── projects/        # 监控项目管理
+│   │   ├── tasks/           # 数据采集任务
+│   │   │   └── adapters/    # 多平台适配器 (抖音/小红书/微博等)
+│   │   └── analysis/        # LLM 分析编排
+│   │       ├── celery_tasks/ # 分析管线 Celery 任务
+│   │       │   ├── screening/       # Stage 1: 初筛
+│   │       │   ├── deep_analysis/   # Stage 2: 深度分析
+│   │       │   ├── aggregation/     # Stage 3: 聚合计算
+│   │       │   └── project_slice/   # 项目级切片分析
+│   │       └── jobs/        # AnalysisJob CRUD
+│   ├── langchain/           # LLM 引擎 (无 API 路由)
+│   │   └── chains/          # 9 条分析链
+│   ├── agent/               # 爬虫代理 API (API Key 认证)
 │   ├── main.py              # FastAPI应用入口
 │   ├── config.py            # 全局配置
 │   ├── database.py          # 数据库连接配置
@@ -126,7 +142,109 @@ backend/
 - 用户列表和分页
 - 当前用户信息获取
 
-### 3.4 核心模块
+### 3.4 社交媒体项目模块 (social_media/projects/)
+**职责**: 监控项目管理、社交平台初始化、项目参与者管理
+
+**主要组件**:
+- `models.py`: `SocialProject`, `Platform`, `SocialProjectParticipant` 数据模型
+- `router.py`: 项目 CRUD、平台查询、参与者管理 API 端点
+- `service.py`: 项目创建/更新/删除、平台初始化等业务逻辑
+- `dependencies.py`: `check_project_access()` — 所有后续模块共用的项目访问权限检查
+
+**核心功能**:
+- 多平台项目创建（关联 1 个或多个社交平台）
+- 项目参与者（协作者）管理
+- 项目访问控制（owner + participants）
+
+**被依赖**:
+- `tasks`, `analysis`, `agent` 模块均通过 `check_project_access()` 进行项目级权限校验
+
+---
+
+### 3.5 数据采集任务模块 (social_media/tasks/)
+**职责**: 数据采集任务管理、多平台帖子/评论存储、平台适配器
+
+**主要组件**:
+- `models.py`: `DataTask`, `SocialPost`, `SocialComment` 数据模型
+- `adapters/`: 各平台适配器，将平台特定数据格式转换为统一内部格式
+- `router.py`: 任务 CRUD、帖子/评论查询 API 端点
+- `service.py`: 任务状态管理、批量数据写入、CII 预计算
+
+**支持平台**: 抖音、小红书、微博、B站、快手、知乎、贴吧（7 个）
+
+**核心功能**:
+- 任务生命周期管理（pending / processing / completed / failed）
+- 多平台帖子/评论数据统一存储
+- CII 互动指数（点赞×1 + 评论×2 + 分享×5 + 收藏×3 的对数归一化）预计算
+
+---
+
+### 3.6 分析编排模块 (social_media/analysis/)
+**职责**: LLM 分析管线编排、任务级聚合报告、项目级切片洞察、分析成本追踪
+
+**分析管线**:
+
+```
+Stage 1 screening/   → LLM 初筛: spam/value/relevance/sentiment → PostAnalysis
+Stage 2 deep_analysis/ → LLM 深度: 实体/观点/摘要 → PostAnalysis.post/comment_deep_result
+Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → DataTask.analysis_result
+        project_slice/ → 项目切片: 跨任务合并 + LLM 报告 → ProjectAnalysisSlice.result_data
+```
+
+**关键指标体系**:
+- **NSR** (净情感率): 加权情感均值，范围 [-2, +2]
+- **CII** (内容互动指数): 互动数对数归一化
+- **SERP** (搜索健康度): Top20 内容的 NSR 映射到 [0, 100]
+- **营销浓度**: spam_score ≥ 6.0 视为推广内容
+- **4D Spam 分布**: high_spam/low_spam × post/comment 四维分布
+
+**双重情感体系** (重要):
+- 宏观指标（NSR/SERP/四象限）: 初筛情感 -2 ~ +2
+- 微观指标（实体/话题）: 深度分析情感 -1 ~ +1
+
+**主要组件**:
+- `models.py`: `PostAnalysis`, `AnalysisJob`, `ProjectAnalysisSlice`
+- `jobs/`: `AnalysisJob` CRUD 工具函数（同步/异步双版本）
+- `celery_tasks/`: 四阶段分析管线 Celery 任务
+
+---
+
+### 3.7 LangChain LLM 引擎 (langchain/)
+**职责**: DeepSeek LLM 实例管理、9 条分析链定义
+
+**无独立 API 路由**，由 `analysis/` 模块通过函数调用使用。
+
+| 链 | 输入 | 输出 |
+|----|------|------|
+| `screening_chain` | 帖子内容+关键词 | spam/value/relevance/sentiment 分数 |
+| `post_extraction_chain` | 帖子内容 | 实体+观点+摘要 |
+| `comment_extraction_chain` | 评论内容 | 评论实体+观点 |
+| `entity_normalization_chain` | 实体列表 | 去重归一化实体 |
+| `opinion_normalization_chain` | 观点列表 | 去重归一化观点 |
+| `category_normalization_chain` | 观点分类 | 归一化分类 |
+| `attribute_normalization_chain` | 实体属性 | 归一化属性 |
+| `project_entity_merge_chain` | 多任务实体 | 项目级合并实体 |
+| `project_slice_reports_chain` | 聚合数据 | Landscape/Topic/Focus 三份报告 |
+
+每次调用自动记录 token 用量和费用到 `AnalysisJob`。
+
+---
+
+### 3.8 爬虫代理模块 (agent/)
+**职责**: 为外部爬虫提供数据上传接口
+
+**认证方式**: API Key（Header `X-API-Key`），区别于业务端的 JWT 认证
+
+**核心功能**:
+- 接收外部爬虫推送的原始帖子/评论数据
+- 通过 `tasks/adapters` 转换后写入数据库
+- 支持 `auto_analyze=True` 参数自动触发完整分析管线
+
+**API 前缀**: `/api/v1/agent`
+
+---
+
+### 3.9 核心模块
 **全局组件**:
 - `main.py`: FastAPI应用入口，路由注册，中间件配置
 - `config.py`: 配置管理，环境变量加载
@@ -141,11 +259,26 @@ backend/
 ## 4. 数据库设计
 
 ### 4.1 数据表概览
+
+**基础模块**:
 - `users`: 用户基础信息
 - `roles`: 角色定义
 - `permissions`: 权限定义
 - `role_permissions`: 角色-权限关联表
 - `user_roles`: 用户-角色关联表
+
+**社交媒体模块**:
+- `platforms`: 社交平台定义（7 个平台）
+- `social_projects`: 监控项目
+- `social_project_participants`: 项目参与者关联表
+- `data_tasks`: 数据采集任务
+- `social_posts`: 帖子数据
+- `social_comments`: 评论数据
+
+**分析模块**:
+- `post_analyses`: 帖子分析结果（1:1 对应 SocialPost）
+- `analysis_jobs`: 分析任务状态 + LLM 成本记录
+- `project_analysis_slices`: 项目级分析切片（不可变快照）
 
 ### 4.2 表结构详情
 
@@ -238,7 +371,38 @@ backend/
 - `POST /users/{user_id}/roles`: 为用户分配角色
 - `DELETE /users/{user_id}/roles/{role_id}`: 移除用户角色
 
-### 5.5 系统端点
+### 5.5 社交媒体端点 (/api/v1/social-media)
+
+**项目** (`/projects`):
+- `GET /`: 项目列表
+- `POST /`: 创建项目
+- `GET /{id}`: 项目详情
+- `PUT /{id}`: 更新项目
+- `DELETE /{id}`: 删除项目
+- `POST /{id}/participants`: 添加参与者
+
+**任务** (`/tasks`):
+- `GET /`: 任务列表
+- `POST /`: 创建任务
+- `GET /{id}`: 任务详情（含帖子统计）
+- `GET /{id}/posts`: 帖子列表
+- `POST /{id}/upload-json`: 上传 JSON 数据
+
+**分析** (`/analysis`):
+- `POST /screening`: 启动初筛分析
+- `POST /deep-posts`: 启动帖子深度分析
+- `POST /deep-comments`: 启动评论深度分析
+- `POST /aggregation`: 执行聚合（同步返回结果）
+- `GET /task/{task_id}/result`: 获取任务分析结果
+- `POST /slices`: 创建项目级切片
+- `GET /slices/{slice_id}`: 获取切片详情
+- `DELETE /slices/{slice_id}`: 删除切片
+- `GET /jobs/`: 分析任务列表（含成本统计）
+
+### 5.6 爬虫代理端点 (/api/v1/agent)
+- `POST /upload`: 上传爬虫采集数据（API Key 认证）
+
+### 5.7 系统端点
 - `GET /health`: 健康检查
 
 ---

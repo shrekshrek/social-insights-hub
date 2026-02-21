@@ -27,6 +27,10 @@
 | analysis/spam_dimension_chart/前端 | 已完成 | 竞品雷达 HTML 图例 + 品牌可见性控制 + 维度 TabSwitch；类型一致性修复 |
 | analysis/project_slice_spam/后端 | 已完成 | 项目级切片实体/话题 4D spam 分布：PostAnalysis join 查询 spam_score，构建 spam_map_by_key，post/comment 来源追踪，Stage2 归一化传递 |
 | analysis/project_slice_spam/前端 | 已完成 | ProjectTopicOrEntity 接口加 spam_distribution，证据面板话题行/实体行/实体侧边栏展示 SpamRatioBar |
+| analysis/task_metrics_qa/后端 | 已完成 | 修复3个指标Bug：舆论反差度始终为零（改用 general_opinions 均值）、营销浓度阈值从硬编码4改为 SPAM_HIGH_THRESHOLD(6.0)、orchestrator 传递 spam_threshold 参数 |
+| analysis/task_metrics_qa/前端 | 已完成 | NSR 情感标签 /2 归一化（-2~+2→-1~+1 范围）、KOL 声音情感标签和颜色同步 /2 归一化 |
+| 代码命名/snapshot→slice/全栈 | 已完成 | 后端文件/目录重命名 + DB migration + 前端类型/API 路径全部更新为 slice |
+| 文档补全/architecture | 已完成 | backend-architecture.md 补充 social_media/langchain/agent 模块；frontend-architecture.md 补充 social-media Layer 及 spam 可视化约定 |
 | 部署配置 | 已完成 | Docker Compose 开发/生产双配置 |
 
 ## 已完成的里程碑
@@ -35,15 +39,13 @@
 - v1.x: 社交媒体数据采集与分析功能 (projects + tasks + analysis + langchain + agent)
 - v1.x: 数据任务分析 spam 维度功能完成 (4D 分布 + 维度排序 + 图表预计算 + 全栈类型一致性)
 - v1.x: 项目级切片 spam 维度增强 (实体/话题 4D 分布 + SpamRatioBar 展示)
+- v1.x: 任务级分析指标 QA 与修复 (舆论反差度/营销浓度阈值/NSR+KOL 情感标签归一化)
+- v1.x: 全栈代码命名统一 (snapshot → slice) + 架构文档补全
 
 ## 待改进项
 
-- `docs/backend-architecture.md` 缺少 social_media、langchain、agent 模块描述（仅包含 auth/rbac/users）
-- `docs/frontend-architecture.md` 缺少 social-media Layer 描述
-- 测试覆盖率待提升
+- 测试覆盖率待提升（后端 aggregation 模块无单元测试）
 
 ## 下次继续的入口
 
-项目级切片 spam 维度增强已完成（实体/话题 4D 分布 + Stage2 传递 + SpamRatioBar 前端展示）。可选方向：
-1. **测试覆盖率提升** — 后端 aggregation 模块缺少单元测试，前端图表组件可加 slice 测试
-2. **文档补全** — `docs/backend-architecture.md` 和 `docs/frontend-architecture.md` 缺少 social_media 模块描述
+暂无规划。

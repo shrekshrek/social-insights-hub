@@ -842,7 +842,7 @@ const activeReportEvidence = computed(() => {
 let pollTimer: ReturnType<typeof setInterval> | null = null
 const lastPolledStatus = ref<{ stage2?: string; stage3?: string; }>({ })
 
-const { apiRequest } = useApi()
+const { apiRequest, apiDownload, showSuccess, showError } = useApi()
 
 // 轮询时只检查状态，不触发完整数据刷新
 const pollStatus = async () => {
@@ -1058,6 +1058,25 @@ const copyText = async (text: string) => {
     toast.add({ title: '已复制到剪贴板', color: 'success' })
   } catch {
     toast.add({ title: '复制失败', description: '请检查浏览器权限或手动复制', color: 'error' })
+  }
+}
+
+// ==================== 导出 Word ====================
+const exporting = ref(false)
+const hasReports = computed(() => Boolean(reports.value?.landscape_report || reports.value?.topic_report))
+
+const handleExport = async () => {
+  if (!sliceId.value || exporting.value) return
+  exporting.value = true
+  try {
+    await apiDownload(
+      `/social-media/analysis/projects/${projectId.value}/slices/${sliceId.value}/export`,
+    )
+    showSuccess('报告已导出')
+  } catch {
+    showError('导出失败，请稍后重试')
+  } finally {
+    exporting.value = false
   }
 }
 </script>
@@ -1342,6 +1361,9 @@ const copyText = async (text: string) => {
                 </span>
                 <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" :disabled="!activeReportContent" @click="copyText(activeReportContent)">
                   复制
+                </UButton>
+                <UButton size="xs" variant="ghost" icon="i-heroicons-arrow-down-tray" :loading="exporting" :disabled="!hasReports" @click="handleExport">
+                  导出 Word
                 </UButton>
                 <UButton
                   v-if="activeReportContent && activeReportEvidence.length"

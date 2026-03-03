@@ -15,7 +15,12 @@ API 结构：
 - /stats                         全局统计
 """
 
+from io import BytesIO
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, status, Query, HTTPException
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -663,6 +668,77 @@ async def delete_project_slice(
     await db.delete(slice_record)
     await db.commit()
     return MessageResponse(message=f"Slice {slice_id} deleted successfully")
+
+
+# ==================== 切片导出 ====================
+
+
+@router.get(
+    "/projects/{project_id}/slices/{slice_id}/export",
+    status_code=status.HTTP_200_OK,
+    summary="导出切片报告为 Word 文档",
+    tags=["Social Media - Analysis"],
+)
+async def export_project_slice(
+    project_id: int,
+    slice_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """导出切片的 AI 报告为 Word (.docx) 文档。
+
+    包含封面、概览摘要和已完成的报告（行业格局、话题洞察、战略诊断）。
+    """
+    from src.social_media.projects import crud as project_crud
+    from .models import ProjectAnalysisSlice
+    from .export_docx import generate_slice_report_docx
+
+    has_access = await project_crud.check_project_access(
+        db, project_id, current_user.id
+    )
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project",
+        )
+
+    stmt = (
+        select(ProjectAnalysisSlice)
+        .where(ProjectAnalysisSlice.id == slice_id)
+        .where(ProjectAnalysisSlice.project_id == project_id)
+    )
+    result = await db.execute(stmt)
+    slice_record = result.scalar_one_or_none()
+    if not slice_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
+        )
+
+    reports = (slice_record.result_data or {}).get("reports")
+    if not reports:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该切片尚未生成报告，无法导出",
+        )
+
+    buf: BytesIO = generate_slice_report_docx(slice_record)
+
+    project_name = (
+        slice_record.project.name if slice_record.project else "report"
+    )
+    slice_name = slice_record.name or f"slice_{slice_id}"
+    filename = f"{project_name}_{slice_name}.docx"
+    encoded_filename = quote(filename)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename*=UTF-8''{encoded_filename}"
+            ),
+        },
+    )
 
 
 # ==================== 统计 ====================

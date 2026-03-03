@@ -292,8 +292,6 @@ const analysisTypeLabel = computed(() => {
     screening_comments: '评论初筛',
     deep_posts: '帖子深度分析',
     deep_comments: '评论深度分析',
-    topic_clustering: '主题聚类',
-    competitive: '竞品分析',
   }
   return labels[props.result.analysis_type] || props.result.analysis_type
 })

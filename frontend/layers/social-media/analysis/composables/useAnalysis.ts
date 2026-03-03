@@ -283,42 +283,6 @@ export const useAnalysis = () => {
     )
   }
 
-  // ==================== 项目级分析操作（预留）====================
-
-  /**
-   * 运行主题聚类分析（预留）
-   */
-  const runTopicClustering = async (projectId: number, taskIds?: number[]) => {
-    const result = await apiRequest<RunAnalysisResponse>(
-      `/social-media/analysis/projects/${projectId}/clustering`,
-      {
-        method: 'POST',
-        body: { task_ids: taskIds },
-      }
-    )
-    showSuccess('主题聚类任务已启动')
-    return result
-  }
-
-  /**
-   * 运行竞品分析（预留）
-   */
-  const runCompetitiveAnalysis = async (
-    projectId: number,
-    competitors: string[],
-    taskIds?: number[]
-  ) => {
-    const result = await apiRequest<RunAnalysisResponse>(
-      `/social-media/analysis/projects/${projectId}/competitive`,
-      {
-        method: 'POST',
-        body: { task_ids: taskIds, competitors },
-      }
-    )
-    showSuccess('竞品分析任务已启动')
-    return result
-  }
-
   /**
    * 手动生成项目级合并分析切片（同步完成）
    */
@@ -396,11 +360,7 @@ export const useAnalysis = () => {
     runTaskAggregation,
     getTaskAggregation,
 
-    // 项目级分析操作（预留）
-    runTopicClustering,
-    runCompetitiveAnalysis,
-
-    // 项目级合并切片（Phase 1）
+    // 项目级合并切片
     createProjectSlice,
     deleteProjectSlice,
     renameProjectSlice,

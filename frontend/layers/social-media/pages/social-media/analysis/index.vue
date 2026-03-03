@@ -94,8 +94,6 @@ const typeOptions = [
   { label: '实体归一化', value: 'entity_normalization' },
   { label: '观点归一化', value: 'opinion_normalization' },
   { label: '项目切片总分析', value: 'project_slice_summary' },
-  { label: '主题聚类', value: 'topic_clustering' },
-  { label: '竞品分析', value: 'competitive' },
 ]
 
 // 状态选项
@@ -146,8 +144,6 @@ const getAnalysisTypeLabel = (type: string) => {
     entity_normalization: '实体归一化',
     opinion_normalization: '观点归一化',
     project_slice_summary: '项目切片总分析',
-    topic_clustering: '主题聚类',
-    competitive: '竞品分析',
   }
   return labels[type] || type
 }

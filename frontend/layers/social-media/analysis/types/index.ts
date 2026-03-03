@@ -119,8 +119,8 @@ export interface PostAnalysisCreate {
 
 /**
  * 分析类型
- * - 任务级: screening_posts, deep_posts, deep_comments, aggregation, entity_normalization, opinion_normalization
- * - 项目级: entity_normalization, opinion_normalization (task_id=null), project_slice_summary, topic_clustering, competitive
+ * - 任务级: screening_posts, deep_posts, deep_comments, aggregation
+ * - 项目级: entity_normalization, opinion_normalization (task_id=null), project_slice_summary
  */
 export type AnalysisType =
   | 'screening_posts'
@@ -130,8 +130,6 @@ export type AnalysisType =
   | 'entity_normalization'
   | 'opinion_normalization'
   | 'project_slice_summary'
-  | 'topic_clustering'
-  | 'competitive'
 
 export type AnalysisStatus = 'pending' | 'processing' | 'completed' | 'failed'
 

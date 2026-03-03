@@ -129,26 +129,27 @@ export interface SOVRankingItem {
   post_ids_sample?: PostRef[]
 }
 
-/** 集团军声量项 */
+/** 集团军声量项（Parent 聚合数据源） */
 export interface GroupShareItem {
-  parent: string
-  total_heat: number
-  total_mentions: number
-  share: number
+  name: string
+  heat: number
+  organic_heat?: number
+  promo_heat?: number
+  mentions: number
+  share?: number
+  role?: string
+  sentiment?: number
+  organic_sentiment?: number
+  promo_sentiment?: number
   spam_distribution?: {
     high_spam: { total: number; post: number; comment: number }
     low_spam: { total: number; post: number; comment: number }
   }
-  members: Array<{
-    name: string
-    heat: number
-    mentions: number
-    contribution: number
-    spam_distribution?: {
-      high_spam: { total: number; post: number; comment: number }
-      low_spam: { total: number; post: number; comment: number }
-    }
-  }>
+  platform_distribution?: PlatformDistribution
+  organic_platform_distribution?: PlatformDistribution
+  promo_platform_distribution?: PlatformDistribution
+  post_ids_sample?: PostRef[]
+  source_tasks?: SourceTask[]
 }
 
 /** 平台阵地 DNA 项 */
@@ -202,8 +203,10 @@ export interface LandscapeLayer {
   sov_ranking?: SOVRankingItem[]
   /** 集团军声量 */
   group_share?: GroupShareItem[]
-  /** 平台阵地 DNA */
+  /** 平台阵地 DNA（个体） */
   platform_dna?: PlatformDNAItem[]
+  /** 平台阵地 DNA（品牌聚合） */
+  platform_dna_grouped?: PlatformDNAItem[]
   /** 行业象限 (实体级 Heat x Sentiment) */
   industry_quadrant?: IndustryQuadrantPoint[]
   freshness?: Record<string, unknown>

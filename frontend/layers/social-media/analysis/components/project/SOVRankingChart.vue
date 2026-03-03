@@ -22,8 +22,27 @@ interface SOVRankingItem {
   platform_distribution?: Record<string, number>
 }
 
+interface GroupShareItemForSOV {
+  name: string
+  heat: number
+  organic_heat?: number
+  promo_heat?: number
+  mentions: number
+  share?: number
+  role?: string
+  sentiment?: number
+  organic_sentiment?: number
+  promo_sentiment?: number
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
+  platform_distribution?: Record<string, number>
+}
+
 const props = defineProps<{
   data: SOVRankingItem[]
+  groupData?: GroupShareItemForSOV[]
   maxItems?: number
   selected?: string | null
   /** 全量实体的有机热度总和（后端提供时用于计算全局口径的有机 SOV 份额） */
@@ -35,6 +54,39 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'select', item: SOVRankingItem): void
 }>()
+
+// ==================== 聚合模式 ====================
+
+type AggregateMode = 'entity' | 'brand'
+const aggregateMode = ref<AggregateMode>('entity')
+
+const aggregateModeOptions = [
+  { value: 'entity', label: '个体' },
+  { value: 'brand', label: '品牌' },
+]
+
+const hasGroupData = computed(() => (props.groupData || []).length > 0)
+
+/** 当前生效的数据源：个体使用 data，品牌使用 groupData（适配为 SOVRankingItem 兼容形状） */
+const effectiveData = computed<SOVRankingItem[]>(() => {
+  if (aggregateMode.value === 'brand' && hasGroupData.value) {
+    return (props.groupData || []).map(g => ({
+      name: g.name,
+      role: g.role,
+      heat: g.heat,
+      organic_heat: g.organic_heat,
+      promo_heat: g.promo_heat,
+      mentions: g.mentions,
+      share: g.share ?? 0,
+      sentiment: g.sentiment,
+      organic_sentiment: g.organic_sentiment,
+      promo_sentiment: g.promo_sentiment,
+      spam_distribution: g.spam_distribution,
+      platform_distribution: g.platform_distribution,
+    }))
+  }
+  return props.data || []
+})
 
 // ==================== 声量视角 ====================
 
@@ -61,7 +113,7 @@ const sortModeOptions = [
 // ==================== 能力检测 ====================
 
 const hasSpamData = computed(() =>
-  (props.data || []).some(i => i.spam_distribution != null),
+  effectiveData.value.some(i => i.spam_distribution != null),
 )
 
 
@@ -89,7 +141,7 @@ const getEffectiveMentions = (item: SOVRankingItem): number => {
 // ==================== 排序 ====================
 
 const sortedItems = computed(() => {
-  const list = (props.data || []).slice()
+  const list = effectiveData.value.slice()
 
   if (sortMode.value === 'mentions') {
     if (spamView.value === 'organic') return list.sort((a, b) => getOrganicMentions(b) - getOrganicMentions(a))
@@ -108,11 +160,11 @@ const items = computed(() => sortedItems.value.slice(0, maxItems.value))
 // ==================== SOV 份额（按视角）====================
 
 const totalOrganicHeat = computed(() =>
-  (props.data || []).reduce((s, i) => s + (i.organic_heat ?? getOrganicMentions(i)), 0),
+  effectiveData.value.reduce((s, i) => s + (i.organic_heat ?? getOrganicMentions(i)), 0),
 )
 
 const totalPromoHeat = computed(() =>
-  (props.data || []).reduce((s, i) => s + (i.promo_heat ?? getPromoMentions(i)), 0),
+  effectiveData.value.reduce((s, i) => s + (i.promo_heat ?? getPromoMentions(i)), 0),
 )
 
 const getDisplayShare = (item: SOVRankingItem): number => {
@@ -175,6 +227,7 @@ const formatNumber = (n: number) => {
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-3">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">SOV 排行榜</h3>
+        <TabSwitch v-if="hasGroupData" v-model="aggregateMode" :options="aggregateModeOptions" />
         <TabSwitch v-if="hasSpamData" v-model="spamView" :options="spamViewOptions" />
       </div>
       <div class="flex items-center gap-2">

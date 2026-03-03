@@ -20,6 +20,59 @@ def _norm_role(role: Any) -> str:
     return "Context"
 
 
+def _compute_platform_dna(items: list[dict[str, Any]], *, top_n: int = 20) -> list[dict[str, Any]]:
+    """从带有 platform_distribution 的条目列表计算平台 DNA。
+
+    复用于 sov_ranking（个体）和 group_share（品牌聚合）。
+    """
+    subset = items[:top_n]
+    all_platforms: set[str] = set()
+    for item in subset:
+        if not isinstance(item, dict):
+            continue
+        p_dist = item.get("platform_distribution") or {}
+        if isinstance(p_dist, dict):
+            all_platforms.update(p_dist.keys())
+    all_platforms_sorted = sorted(all_platforms)
+
+    result: list[dict[str, Any]] = []
+    for item in subset:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or ""
+        if not name:
+            continue
+        p_dist = item.get("platform_distribution") or {}
+        org_dist = item.get("organic_platform_distribution") or {}
+        promo_dist = item.get("promo_platform_distribution") or {}
+        total_mentions = sum(int(v or 0) for v in p_dist.values()) if p_dist else 0
+        total_organic = sum(int(v or 0) for v in org_dist.values()) if org_dist else 0
+        total_promo = sum(int(v or 0) for v in promo_dist.values()) if promo_dist else 0
+        platform_shares: dict[str, float] = {}
+        organic_platform_shares: dict[str, float] = {}
+        promo_platform_shares: dict[str, float] = {}
+        for p in all_platforms_sorted:
+            cnt = int(p_dist.get(p) or 0)
+            org_cnt = int(org_dist.get(p) or 0)
+            promo_cnt = int(promo_dist.get(p) or 0)
+            platform_shares[p] = round(cnt / total_mentions, 4) if total_mentions > 0 else 0.0
+            organic_platform_shares[p] = round(org_cnt / total_organic, 4) if total_organic > 0 else 0.0
+            promo_platform_shares[p] = round(promo_cnt / total_promo, 4) if total_promo > 0 else 0.0
+        result.append(
+            {
+                "name": name,
+                "role": item.get("role") or "Context",
+                "total_mentions": total_mentions,
+                "total_organic_mentions": total_organic,
+                "total_promo_mentions": total_promo,
+                "platform_shares": platform_shares,
+                "organic_platform_shares": organic_platform_shares,
+                "promo_platform_shares": promo_platform_shares,
+            }
+        )
+    return result
+
+
 def _build_landscape(
     *,
     entities_aligned: list[dict[str, Any]],
@@ -88,8 +141,9 @@ def _build_landscape(
             }
         )
 
-    # Group Share（集团军声量）
+    # Group Share（集团军声量 — 统一 Parent 聚合数据源）
     group_bucket: dict[str, dict[str, Any]] = {}
+    max_post_ids = MAX_POST_IDS_SAMPLE
     for e in entities_aligned or []:
         if not isinstance(e, dict):
             continue
@@ -115,6 +169,20 @@ def _build_landscape(
                 "organic_sent_weight": 0.0,
                 "promo_sent_weighted_sum": 0.0,
                 "promo_sent_weight": 0.0,
+                # NEW: sentiment 加权累加
+                "_sent_weighted_sum": 0.0,
+                "_sent_weight": 0.0,
+                # NEW: role 投票
+                "_role_votes": defaultdict(int),
+                # NEW: platform_distribution 逐 key 累加
+                "_plat_dist": defaultdict(int),
+                "_org_plat_dist": defaultdict(int),
+                "_promo_plat_dist": defaultdict(int),
+                # NEW: post_ids_sample 合并去重
+                "_post_set": set(),
+                "_post_ids_sample": [],
+                # NEW: source_tasks 逐 task_id 累加
+                "_source_tasks_map": defaultdict(int),
             },
         )
         try:
@@ -130,9 +198,69 @@ def _build_landscape(
         except Exception:
             pass
         try:
-            b["mentions"] += int(e.get("mentions") or 0)
+            e_mentions = int(e.get("mentions") or 0)
+            b["mentions"] += e_mentions
+        except Exception:
+            e_mentions = 0
+
+        # NEW: sentiment 按 mentions 加权
+        try:
+            e_sent = float(e.get("sentiment") or 0.0)
+            if e_mentions > 0:
+                b["_sent_weighted_sum"] += e_sent * e_mentions
+                b["_sent_weight"] += e_mentions
         except Exception:
             pass
+
+        # NEW: role 按 mentions 加权投票
+        role = _norm_role(e.get("role"))
+        b["_role_votes"][role] += e_mentions if e_mentions > 0 else 1
+
+        # NEW: platform_distribution 逐 key 求和
+        for dist_src, dist_dst in (
+            ("platform_distribution", "_plat_dist"),
+            ("organic_platform_distribution", "_org_plat_dist"),
+            ("promo_platform_distribution", "_promo_plat_dist"),
+        ):
+            src = e.get(dist_src)
+            if isinstance(src, dict):
+                for pk, pv in src.items():
+                    try:
+                        b[dist_dst][str(pk)] += int(pv or 0)
+                    except Exception:
+                        pass
+
+        # NEW: post_ids_sample 合并去重
+        for ref in e.get("post_ids_sample") or []:
+            if len(b["_post_ids_sample"]) >= max_post_ids:
+                break
+            if not isinstance(ref, dict):
+                continue
+            try:
+                tid = int(ref.get("task_id") or 0)
+                pid = int(ref.get("post_id") or 0)
+            except Exception:
+                continue
+            if tid <= 0 or pid <= 0:
+                continue
+            key = f"{tid}:{pid}"
+            if key in b["_post_set"]:
+                continue
+            b["_post_set"].add(key)
+            b["_post_ids_sample"].append({"task_id": tid, "post_id": pid})
+
+        # NEW: source_tasks 逐 task_id 累加 mentions
+        for st in e.get("source_tasks") or []:
+            if not isinstance(st, dict):
+                continue
+            try:
+                st_tid = int(st.get("task_id") or 0)
+                st_m = int(st.get("mentions") or 0)
+            except Exception:
+                continue
+            if st_tid > 0:
+                b["_source_tasks_map"][st_tid] += st_m
+
         sd = e.get("spam_distribution")
         if isinstance(sd, dict):
             hs = sd.get("high_spam")
@@ -162,13 +290,48 @@ def _build_landscape(
 
     group_share_items: list[dict[str, Any]] = []
     for k, v in group_bucket.items():
+        heat = round(float(v.get("heat") or 0.0), 3)
         item: dict[str, Any] = {
             "name": k,
-            "heat": round(float(v.get("heat") or 0.0), 3),
+            "heat": heat,
             "organic_heat": round(float(v.get("organic_heat") or 0.0), 3),
             "promo_heat": round(float(v.get("promo_heat") or 0.0), 3),
             "mentions": int(v.get("mentions") or 0),
+            "share": round(heat / total_heat, 6) if total_heat > 0 else 0.0,
         }
+
+        # role: 按 mentions 加权投票取多数
+        role_votes = v.get("_role_votes") or {}
+        item["role"] = max(role_votes, key=lambda r: role_votes[r]) if role_votes else "Context"
+
+        # sentiment: 按 mentions 加权平均
+        sw = float(v.get("_sent_weight") or 0.0)
+        item["sentiment"] = round(float(v["_sent_weighted_sum"]) / sw, 2) if sw > 0 else 0.0
+
+        # platform_distribution
+        plat = dict(v.get("_plat_dist") or {})
+        if plat:
+            item["platform_distribution"] = plat
+        org_plat = dict(v.get("_org_plat_dist") or {})
+        if org_plat:
+            item["organic_platform_distribution"] = org_plat
+        promo_plat = dict(v.get("_promo_plat_dist") or {})
+        if promo_plat:
+            item["promo_platform_distribution"] = promo_plat
+
+        # post_ids_sample
+        post_ids = v.get("_post_ids_sample") or []
+        if post_ids:
+            item["post_ids_sample"] = post_ids[:max_post_ids]
+
+        # source_tasks
+        st_map = v.get("_source_tasks_map") or {}
+        if st_map:
+            item["source_tasks"] = [
+                {"task_id": tid, "mentions": m}
+                for tid, m in sorted(st_map.items(), key=lambda x: x[1], reverse=True)
+            ]
+
         if v.get("_has_spam"):
             hp = int(v.get("_spam_high_post") or 0)
             hc = int(v.get("_spam_high_comment") or 0)
@@ -198,51 +361,9 @@ def _build_landscape(
         reverse=True,
     )[:30]
 
-    # 平台阵地 DNA（Top 20）
-    all_platforms: set[str] = set()
-    for sov_item in sov_ranking[:20]:
-        if not isinstance(sov_item, dict):
-            continue
-        p_dist = sov_item.get("platform_distribution") or {}
-        if isinstance(p_dist, dict):
-            all_platforms.update(p_dist.keys())
-    all_platforms_sorted = sorted(all_platforms)
-
-    platform_dna: list[dict[str, Any]] = []
-    for sov_item in sov_ranking[:20]:
-        if not isinstance(sov_item, dict):
-            continue
-        name = sov_item.get("name") or ""
-        if not name:
-            continue
-        p_dist = sov_item.get("platform_distribution") or {}
-        org_dist = sov_item.get("organic_platform_distribution") or {}
-        promo_dist = sov_item.get("promo_platform_distribution") or {}
-        total_mentions = sum(int(v or 0) for v in p_dist.values()) if p_dist else 0
-        total_organic = sum(int(v or 0) for v in org_dist.values()) if org_dist else 0
-        total_promo = sum(int(v or 0) for v in promo_dist.values()) if promo_dist else 0
-        platform_shares: dict[str, float] = {}
-        organic_platform_shares: dict[str, float] = {}
-        promo_platform_shares: dict[str, float] = {}
-        for p in all_platforms_sorted:
-            cnt = int(p_dist.get(p) or 0)
-            org_cnt = int(org_dist.get(p) or 0)
-            promo_cnt = int(promo_dist.get(p) or 0)
-            platform_shares[p] = round(cnt / total_mentions, 4) if total_mentions > 0 else 0.0
-            organic_platform_shares[p] = round(org_cnt / total_organic, 4) if total_organic > 0 else 0.0
-            promo_platform_shares[p] = round(promo_cnt / total_promo, 4) if total_promo > 0 else 0.0
-        platform_dna.append(
-            {
-                "name": name,
-                "role": sov_item.get("role") or "Context",
-                "total_mentions": total_mentions,
-                "total_organic_mentions": total_organic,
-                "total_promo_mentions": total_promo,
-                "platform_shares": platform_shares,
-                "organic_platform_shares": organic_platform_shares,
-                "promo_platform_shares": promo_platform_shares,
-            }
-        )
+    # 平台阵地 DNA（Top 20）— 个体 + 品牌聚合
+    platform_dna = _compute_platform_dna(sov_ranking, top_n=20)
+    platform_dna_grouped = _compute_platform_dna(group_share, top_n=20)
 
     # 行业象限（全量实体散点图）
     industry_quadrant: list[dict[str, Any]] = []
@@ -284,6 +405,7 @@ def _build_landscape(
         "sov_ranking": sov_ranking,
         "group_share": group_share,
         "platform_dna": platform_dna,
+        "platform_dna_grouped": platform_dna_grouped,
         "industry_quadrant": industry_quadrant,
         "freshness": freshness,
         "overview": overview_safe,

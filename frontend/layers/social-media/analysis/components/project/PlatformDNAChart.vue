@@ -16,6 +16,7 @@ interface PlatformDNAItem {
 
 const props = defineProps<{
   data: PlatformDNAItem[]
+  groupData?: PlatformDNAItem[]
   maxItems?: number
 }>()
 
@@ -38,6 +39,18 @@ const spamDimensionOptions = [
   { value: 'organic', label: '有机' },
 ]
 
+// ==================== 聚合模式 ====================
+
+type AggregateMode = 'entity' | 'brand'
+const aggregateMode = ref<AggregateMode>('entity')
+
+const aggregateModeOptions = [
+  { value: 'entity', label: '个体' },
+  { value: 'brand', label: '品牌' },
+]
+
+const hasGroupData = computed(() => (props.groupData || []).length > 0)
+
 const hasSpamData = computed(() =>
   rawItems.value.some(
     i => (i.total_organic_mentions ?? 0) > 0 || (i.total_promo_mentions ?? 0) > 0,
@@ -57,7 +70,12 @@ const getEffectiveTotalMentions = (item: PlatformDNAItem): number => {
 }
 
 const maxItems = computed(() => props.maxItems ?? 10)
-const rawItems = computed(() => props.data || [])
+const rawItems = computed(() => {
+  if (aggregateMode.value === 'brand' && hasGroupData.value) {
+    return props.groupData || []
+  }
+  return props.data || []
+})
 const sortedItems = computed(() => {
   const list = rawItems.value.slice()
   list.sort((a, b) => getEffectiveTotalMentions(b) - getEffectiveTotalMentions(a))
@@ -344,6 +362,7 @@ const updateChart = async () => {
 watch(() => props.data, updateChart, { deep: true })
 watch(viewMode, updateChart)
 watch(spamDimension, updateChart)
+watch(aggregateMode, updateChart)
 
 onMounted(() => {
   updateChart()
@@ -355,6 +374,7 @@ onMounted(() => {
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-3">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">平台阵地 DNA</h3>
+        <TabSwitch v-if="hasGroupData" v-model="aggregateMode" :options="aggregateModeOptions" />
         <TabSwitch
           v-if="hasSpamData"
           v-model="spamDimension"

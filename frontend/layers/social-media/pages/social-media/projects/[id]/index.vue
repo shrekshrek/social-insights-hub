@@ -5,6 +5,7 @@ import { UBadge, UButton } from '#components'
 import type { DataTaskWithRelations } from '../../../../tasks/types'
 import type { ProjectSlice } from '../../../../types/project-slice'
 import TaskComparisonSlideover from '../../../../projects/components/TaskComparisonSlideover.vue'
+import QuickTaskForm from '../../../../projects/components/QuickTaskForm.vue'
 
 definePageMeta({
   layout: 'default',
@@ -13,7 +14,7 @@ definePageMeta({
 const route = useRoute()
 const projectId = computed(() => Number(route.params.id))
 
-const { getProject, deleteProject } = useSocialProjects()
+const { getProject, deleteProject, batchCreateTasks } = useSocialProjects()
 const { getTasks } = useTasks()
 const { createProjectSlice, deleteProjectSlice } = useAnalysis()
 const { useApiData } = useApi()
@@ -111,6 +112,75 @@ const openComparisonSlideover = () => {
     return
   }
   showComparisonSlideover.value = true
+}
+
+// ==================== 批量创建任务 ====================
+
+const showBatchTaskModal = ref(false)
+const batchTaskSubmitting = ref(false)
+
+const batchTaskState = reactive({
+  platform_ids: [] as number[],
+  task_type: 'search' as 'search' | 'homefeed',
+  data_source: 'remote_crawler' as 'remote_crawler' | 'local_upload',
+  keywords: '',
+  max_notes_count: 100,
+  enable_comments: true,
+  per_note_max_comments_count: 20,
+  publish_time_type: 0,
+  sort_type: 'popularity_descending',
+  auto_analyze: true,
+})
+
+const resetBatchTaskState = () => {
+  batchTaskState.platform_ids = []
+  batchTaskState.task_type = 'search'
+  batchTaskState.data_source = 'remote_crawler'
+  batchTaskState.keywords = ''
+  batchTaskState.max_notes_count = 100
+  batchTaskState.enable_comments = true
+  batchTaskState.per_note_max_comments_count = 20
+  batchTaskState.publish_time_type = 0
+  batchTaskState.sort_type = 'popularity_descending'
+  batchTaskState.auto_analyze = true
+}
+
+const openBatchTaskModal = () => {
+  resetBatchTaskState()
+  showBatchTaskModal.value = true
+}
+
+const handleBatchCreateTasks = async () => {
+  if (batchTaskState.platform_ids.length === 0) {
+    toast.add({ title: '请至少选择一个平台', color: 'warning' })
+    return
+  }
+  if (batchTaskState.task_type === 'search' && !batchTaskState.keywords?.trim()) {
+    toast.add({ title: '搜索任务必须提供关键词', color: 'warning' })
+    return
+  }
+
+  batchTaskSubmitting.value = true
+  try {
+    await batchCreateTasks(projectId.value, {
+      platform_ids: batchTaskState.platform_ids,
+      task_type: batchTaskState.task_type,
+      data_source: batchTaskState.data_source,
+      keywords: batchTaskState.keywords || undefined,
+      max_notes_count: batchTaskState.max_notes_count,
+      enable_comments: batchTaskState.enable_comments,
+      per_note_max_comments_count: batchTaskState.per_note_max_comments_count,
+      publish_time_type: batchTaskState.publish_time_type,
+      sort_type: batchTaskState.sort_type,
+      auto_analyze: batchTaskState.auto_analyze,
+    })
+    showBatchTaskModal.value = false
+    await refreshTasks()
+  } catch {
+    // apiRequest 已处理错误 toast
+  } finally {
+    batchTaskSubmitting.value = false
+  }
 }
 
 const openSliceModal = () => {
@@ -593,6 +663,13 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           </UButton>
           <UButton
             variant="outline"
+            icon="i-heroicons-squares-plus"
+            @click="openBatchTaskModal"
+          >
+            批量创建
+          </UButton>
+          <UButton
+            variant="outline"
             icon="i-heroicons-arrow-path"
             :loading="refreshing"
             @click="handleRefresh"
@@ -760,7 +837,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       <template #header>
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold">
-            项目切片 (<ClientOnly fallback="...">{{ slices.length }}</ClientOnly>)
+            切片列表 (<ClientOnly fallback="...">{{ slices.length }}</ClientOnly>)
           </h2>
           <ClientOnly>
             <UButton
@@ -898,6 +975,38 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
             @click="handleGenerateSlice"
           >
             开始生成
+          </UButton>
+        </template>
+      </UModal>
+    </ClientOnly>
+
+    <!-- 批量创建任务弹窗 -->
+    <ClientOnly>
+      <UModal
+        v-model:open="showBatchTaskModal"
+        title="批量创建任务"
+        description="为多个平台批量创建相同配置的任务"
+        :ui="{ footer: 'justify-end' }"
+      >
+        <template #body>
+          <QuickTaskForm
+            v-model:state="batchTaskState"
+            :disabled="batchTaskSubmitting"
+          />
+        </template>
+        <template #footer>
+          <UButton
+            variant="outline"
+            :disabled="batchTaskSubmitting"
+            @click="showBatchTaskModal = false"
+          >
+            取消
+          </UButton>
+          <UButton
+            :loading="batchTaskSubmitting"
+            @click="handleBatchCreateTasks"
+          >
+            创建
           </UButton>
         </template>
       </UModal>

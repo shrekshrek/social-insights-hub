@@ -375,6 +375,36 @@ const handleRefresh = async () => {
   await refreshSlice()
 }
 
+// ==================== 切片重命名 ====================
+const { renameProjectSlice } = useAnalysis()
+const editingName = ref(false)
+const nameInput = ref('')
+const renameSaving = ref(false)
+
+const startRename = () => {
+  nameInput.value = slice.value?.name || ''
+  editingName.value = true
+}
+
+const cancelRename = () => {
+  editingName.value = false
+}
+
+const saveRename = async () => {
+  const trimmed = nameInput.value.trim()
+  if (!trimmed || !sliceId.value) return
+  renameSaving.value = true
+  try {
+    await renameProjectSlice(projectId.value, sliceId.value, trimmed)
+    editingName.value = false
+    await refreshSlice()
+  } catch {
+    // apiRequest 已处理错误 toast
+  } finally {
+    renameSaving.value = false
+  }
+}
+
 // ==================== View Models ====================
 const sliceResult = computed<ProjectSliceResultData | null>(() => slice.value?.result_data || null)
 const pipeline = computed(() => sliceResult.value?.pipeline || null)
@@ -1040,9 +1070,41 @@ const copyText = async (text: string) => {
         <UButton variant="ghost" icon="i-heroicons-arrow-left" :to="`/social-media/projects/${projectId}`" />
         <div>
           <ClientOnly>
-            <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
-              {{ slice?.name || `切片 ${sliceId}` }}
-            </h1>
+            <div v-if="editingName" class="flex items-center gap-2">
+              <UInput
+                v-model="nameInput"
+                size="lg"
+                autofocus
+                class="w-64"
+                @keyup.enter="saveRename"
+                @keyup.escape="cancelRename"
+              />
+              <UButton
+                size="xs"
+                icon="i-heroicons-check"
+                :loading="renameSaving"
+                @click="saveRename"
+              />
+              <UButton
+                size="xs"
+                variant="ghost"
+                icon="i-heroicons-x-mark"
+                :disabled="renameSaving"
+                @click="cancelRename"
+              />
+            </div>
+            <div v-else class="flex items-center gap-2 group">
+              <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+                {{ slice?.name || `切片 ${sliceId}` }}
+              </h1>
+              <UButton
+                size="xs"
+                variant="ghost"
+                icon="i-heroicons-pencil-square"
+                class="opacity-0 group-hover:opacity-100 transition-opacity"
+                @click="startRename"
+              />
+            </div>
             <template #fallback>
               <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
                 {{ `切片 ${sliceId}` }}

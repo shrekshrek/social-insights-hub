@@ -363,6 +363,21 @@ export const useAnalysis = () => {
     return true
   }
 
+  /**
+   * 重命名项目级合并分析切片
+   */
+  const renameProjectSlice = async (projectId: number, sliceId: number, name: string) => {
+    const result = await apiRequest<{ id: number; name: string }>(
+      `/social-media/analysis/projects/${projectId}/slices/${sliceId}`,
+      {
+        method: 'PATCH',
+        body: { name },
+      }
+    )
+    showSuccess('切片已重命名')
+    return result
+  }
+
   return {
     // 全局分析任务
     getAnalysisJobs,
@@ -388,5 +403,6 @@ export const useAnalysis = () => {
     // 项目级合并切片（Phase 1）
     createProjectSlice,
     deleteProjectSlice,
+    renameProjectSlice,
   }
 }

@@ -6,7 +6,12 @@ from fastapi import HTTPException, status
 
 from . import crud
 from .models import SocialProject, Platform
-from .schemas import SocialProjectCreate, SocialProjectUpdate, DeepAnalysisSettings
+from .schemas import (
+    SocialProjectCreate,
+    SocialProjectUpdate,
+    DeepAnalysisSettings,
+    QuickTaskCreate,
+)
 
 
 # ==================== Platform Service ====================
@@ -97,6 +102,55 @@ async def create_project(
         await db.commit()
 
     return {"project": project, "created_tasks": created_tasks}
+
+
+async def batch_create_tasks_for_project(
+    db: AsyncSession,
+    project_id: int,
+    quick_tasks: QuickTaskCreate,
+    current_user_id: int,
+) -> List:
+    """为已有项目批量创建任务"""
+    from src.social_media.tasks.crud import bulk_create_tasks
+
+    # 验证平台ID是否存在
+    for platform_id in quick_tasks.platform_ids:
+        platform = await crud.get_platform_by_id(db, platform_id)
+        if not platform:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Platform with id {platform_id} not found",
+            )
+
+    # 构建 task_params（爬虫高级选项）
+    task_params = None
+    if quick_tasks.data_source == "remote_crawler":
+        task_params = {
+            "max_notes_count": quick_tasks.max_notes_count,
+            "enable_comments": 1 if quick_tasks.enable_comments else 0,
+            "per_note_max_comments_count": quick_tasks.per_note_max_comments_count,
+            "publish_time_type": quick_tasks.publish_time_type,
+            "sort_type": quick_tasks.sort_type,
+        }
+
+    created_tasks = await bulk_create_tasks(
+        db=db,
+        project_id=project_id,
+        platform_ids=quick_tasks.platform_ids,
+        task_type=quick_tasks.task_type,
+        data_source=quick_tasks.data_source,
+        creator_id=current_user_id,
+        keywords=quick_tasks.keywords,
+        task_params=task_params,
+        auto_analyze=(
+            quick_tasks.auto_analyze
+            if quick_tasks.data_source == "remote_crawler"
+            else False
+        ),
+    )
+
+    await db.commit()
+    return created_tasks
 
 
 async def get_project(db: AsyncSession, project_id: int) -> Optional[SocialProject]:

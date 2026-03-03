@@ -69,6 +69,10 @@ export interface SocialProjectCreateResponse {
   created_tasks: DataTaskWithRelations[]
 }
 
+export interface BatchTasksCreateResponse {
+  created_tasks: DataTaskWithRelations[]
+}
+
 // ==================== Data Task ====================
 
 export type TaskType = 'search' | 'detail' | 'creator' | 'homefeed'

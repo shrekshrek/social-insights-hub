@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import { z } from 'zod'
 import type { DateValue } from '@internationalized/date'
+import QuickTaskForm from '../../../projects/components/QuickTaskForm.vue'
 
 definePageMeta({
   layout: 'default',
 })
 
 const { createProject } = useSocialProjects()
-const { getPlatforms } = usePlatforms()
-
-// 获取平台列表
-const { data: platforms, pending: platformsLoading } = getPlatforms()
 
 // 路由
 const router = useRouter()
@@ -38,38 +35,7 @@ const projectSchema = z.object({
   }).optional(),
 })
 
-// 快速任务Schema
-const quickTaskSchema = z.object({
-  platform_ids: z.array(z.number()).min(1, '请至少选择一个平台'),
-  task_type: z.enum(['search', 'homefeed'], {
-    message: '请选择任务类型'
-  }),
-  data_source: z.enum(['remote_crawler', 'local_upload'], {
-    message: '请选择数据源'
-  }),
-  keywords: z.string().optional(),
-  // 远程爬虫高级选项
-  max_notes_count: z.number().min(1).max(10000).default(100),
-  enable_comments: z.boolean().default(true),
-  per_note_max_comments_count: z.number().min(0).max(10000).default(20),
-  // 平台特定选项
-  publish_time_type: z.number().default(0),
-  sort_type: z.string().default('popularity_descending'),
-  // 自动分析
-  auto_analyze: z.boolean().default(true),
-}).refine((data) => {
-  // search类型必须提供keywords
-  if (data.task_type === 'search' && !data.keywords?.trim()) {
-    return false
-  }
-  return true
-}, {
-  message: 'Search任务必须提供关键词',
-  path: ['keywords'],
-})
-
 type ProjectSchema = z.output<typeof projectSchema>
-type QuickTaskSchema = z.output<typeof quickTaskSchema>
 
 // 表单初始值
 const projectState = reactive<ProjectSchema>({
@@ -78,18 +44,16 @@ const projectState = reactive<ProjectSchema>({
   date_range: undefined,
 })
 
-const quickTaskState = reactive<QuickTaskSchema>({
-  platform_ids: [],
-  task_type: 'search',
-  data_source: 'remote_crawler',
+const quickTaskState = reactive({
+  platform_ids: [] as number[],
+  task_type: 'search' as 'search' | 'homefeed',
+  data_source: 'remote_crawler' as 'remote_crawler' | 'local_upload',
   keywords: '',
-  // 远程爬虫高级选项
   max_notes_count: 100,
   enable_comments: true,
   per_note_max_comments_count: 20,
   publish_time_type: 0,
   sort_type: 'popularity_descending',
-  // 自动分析
   auto_analyze: true,
 })
 
@@ -120,91 +84,6 @@ const dateRangeText = computed(() => {
   return ''
 })
 
-// 平台选项
-const platformOptions = computed(() => {
-  if (!platforms.value) return []
-  return platforms.value.map((p) => ({
-    label: p.name,
-    value: p.id,
-    description: p.description,
-  }))
-})
-
-// 任务类型选项
-const taskTypeOptions = [
-  { label: '搜索任务', value: 'search', description: '根据关键词搜索内容' },
-  { label: '主页任务', value: 'homefeed', description: '采集平台主页推荐内容' },
-]
-
-// 数据源选项
-const dataSourceOptions = [
-  { label: '远程爬虫', value: 'remote_crawler', description: '使用爬虫实时采集数据' },
-  { label: '本地上传', value: 'local_upload', description: '上传本地JSON数据文件' },
-]
-
-// 是否需要显示关键词输入框
-const showKeywordsInput = computed(() => {
-  return quickTaskState.task_type === 'search'
-})
-
-// 是否显示远程爬虫高级选项
-const showCrawlerOptions = computed(() => quickTaskState.data_source === 'remote_crawler')
-
-// 选中的平台代码列表
-const selectedPlatformCodes = computed(() => {
-  if (!platforms.value) return []
-  return platforms.value
-    .filter(p => quickTaskState.platform_ids.includes(p.id))
-    .map(p => p.code)
-})
-
-// 是否显示抖音专属选项（选中的平台包含抖音）
-const showDouyinOptions = computed(() => {
-  return showCrawlerOptions.value && selectedPlatformCodes.value.includes('dy')
-})
-
-// 是否显示小红书专属选项（选中的平台包含小红书）
-const showXhsOptions = computed(() => {
-  return showCrawlerOptions.value && selectedPlatformCodes.value.includes('xhs')
-})
-
-// 抖音发布时间选项
-const publishTimeOptions = [
-  { label: '不限', value: 0 },
-  { label: '一天内', value: 1 },
-  { label: '一周内', value: 7 },
-  { label: '半年内', value: 182 },
-]
-
-// 小红书排序选项
-const sortTypeOptions = [
-  { label: '综合排序', value: 'general' },
-  { label: '最热', value: 'popularity_descending' },
-  { label: '最新', value: 'time_descending' },
-]
-
-// 任务创建摘要
-const taskSummary = computed(() => {
-  if (!enableQuickTasks.value || quickTaskState.platform_ids.length === 0) {
-    return null
-  }
-
-  const platformNames = platformOptions.value
-    .filter(p => quickTaskState.platform_ids.includes(p.value))
-    .map(p => p.label)
-
-  const taskTypeLabel = taskTypeOptions.find(t => t.value === quickTaskState.task_type)?.label || ''
-  const dataSourceLabel = dataSourceOptions.find(d => d.value === quickTaskState.data_source)?.label || ''
-
-  return {
-    count: quickTaskState.platform_ids.length,
-    platforms: platformNames,
-    taskType: taskTypeLabel,
-    dataSource: dataSourceLabel,
-    keywords: quickTaskState.keywords
-  }
-})
-
 // 提交表单
 const handleSubmit = async () => {
   submitting.value = true
@@ -223,13 +102,11 @@ const handleSubmit = async () => {
         task_type: quickTaskState.task_type,
         data_source: quickTaskState.data_source,
         keywords: quickTaskState.keywords || undefined,
-        // 远程爬虫高级选项
         max_notes_count: quickTaskState.max_notes_count,
         enable_comments: quickTaskState.enable_comments,
         per_note_max_comments_count: quickTaskState.per_note_max_comments_count,
         publish_time_type: quickTaskState.publish_time_type,
         sort_type: quickTaskState.sort_type,
-        // 自动分析
         auto_analyze: quickTaskState.auto_analyze,
       }
       projectData.quick_tasks = quickTasks
@@ -380,224 +257,10 @@ const handleSubmit = async () => {
         </div>
       </template>
 
-      <div v-if="enableQuickTasks">
-        <UForm
-          :schema="quickTaskSchema"
-          :state="quickTaskState"
-        >
-          <div class="space-y-5">
-            <!-- 任务类型和数据源 - 两列并排 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <!-- 任务类型 -->
-              <UFormField
-                label="任务类型"
-                name="task_type"
-                required
-              >
-                <USelect
-                  v-model="quickTaskState.task_type"
-                  :items="taskTypeOptions"
-                  value-key="value"
-                  placeholder="选择任务类型"
-                  class="w-full"
-                />
-              </UFormField>
-
-              <!-- 数据源 -->
-              <UFormField
-                label="数据源"
-                name="data_source"
-                required
-              >
-                <USelect
-                  v-model="quickTaskState.data_source"
-                  :items="dataSourceOptions"
-                  value-key="value"
-                  placeholder="选择数据源"
-                  class="w-full"
-                />
-              </UFormField>
-            </div>
-
-            <!-- 关键词（仅search任务） -->
-            <UFormField
-              v-if="showKeywordsInput"
-              label="搜索关键词"
-              name="keywords"
-              required
-            >
-              <UInput
-                v-model="quickTaskState.keywords"
-                placeholder="例如：品牌名、产品名、话题标签"
-                class="w-full"
-              />
-            </UFormField>
-
-            <!-- 选择平台 - 占据整行 -->
-            <UFormField
-              label="目标平台"
-              name="platform_ids"
-              required
-            >
-              <div v-if="platformsLoading" class="text-sm text-gray-500">
-                加载中...
-              </div>
-              <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                <label
-                  v-for="platform in platformOptions"
-                  :key="platform.value"
-                  class="relative flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                  :class="{
-                    'ring-2 ring-primary-500 border-primary-500': quickTaskState.platform_ids.includes(platform.value)
-                  }"
-                >
-                  <input
-                    v-model="quickTaskState.platform_ids"
-                    type="checkbox"
-                    :value="platform.value"
-                    class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  >
-                  <div class="ml-3 flex-1">
-                    <div class="font-medium text-sm">
-                      {{ platform.label }}
-                    </div>
-                    <div
-                      v-if="platform.description"
-                      class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"
-                    >
-                      {{ platform.description }}
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </UFormField>
-
-            <!-- 远程爬虫高级选项 -->
-            <ClientOnly>
-              <template v-if="showCrawlerOptions">
-                <USeparator label="爬虫配置" />
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <!-- 最大爬取数 -->
-                  <UFormField
-                    label="最大爬取数"
-                    help="爬取的最大条目数量"
-                  >
-                    <UInput
-                      v-model.number="quickTaskState.max_notes_count"
-                      type="number"
-                      :min="1"
-                      :max="10000"
-                      class="w-full"
-                    />
-                  </UFormField>
-
-                  <!-- 爬取评论 -->
-                  <UFormField
-                    label="爬取评论"
-                    help="是否爬取帖子的评论"
-                  >
-                    <USwitch v-model="quickTaskState.enable_comments" />
-                  </UFormField>
-
-                  <!-- 单帖最大评论数 -->
-                  <UFormField
-                    v-if="quickTaskState.enable_comments"
-                    label="单帖最大评论数"
-                    help="每个帖子爬取的最大评论数，0表示不限"
-                  >
-                    <UInput
-                      v-model.number="quickTaskState.per_note_max_comments_count"
-                      type="number"
-                      :min="0"
-                      :max="10000"
-                      class="w-full"
-                    />
-                  </UFormField>
-                </div>
-
-                <!-- 抖音专属选项 -->
-                <div
-                  v-if="showDouyinOptions"
-                  class="grid grid-cols-1 md:grid-cols-2 gap-5"
-                >
-                  <UFormField
-                    label="发布时间筛选"
-                    help="按发布时间筛选视频（抖音专属）"
-                  >
-                    <USelect
-                      v-model="quickTaskState.publish_time_type"
-                      :items="publishTimeOptions"
-                      value-key="value"
-                      class="w-full"
-                    />
-                  </UFormField>
-                </div>
-
-                <!-- 小红书专属选项 -->
-                <div
-                  v-if="showXhsOptions"
-                  class="grid grid-cols-1 md:grid-cols-2 gap-5"
-                >
-                  <UFormField
-                    label="排序方式"
-                    help="搜索结果排序方式（小红书专属）"
-                  >
-                    <USelect
-                      v-model="quickTaskState.sort_type"
-                      :items="sortTypeOptions"
-                      value-key="value"
-                      class="w-full"
-                    />
-                  </UFormField>
-                </div>
-
-                <!-- 自动分析选项 -->
-                <USeparator label="分析配置" />
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <UFormField
-                    label="自动分析"
-                    help="数据采集完成后自动执行全流程分析（初筛→深度→报告）"
-                  >
-                    <USwitch v-model="quickTaskState.auto_analyze" />
-                  </UFormField>
-                </div>
-              </template>
-            </ClientOnly>
-          </div>
-
-          <!-- 任务摘要 -->
-          <div
-            v-if="taskSummary"
-            class="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700"
-          >
-            <div class="flex items-center gap-2 mb-3">
-              <UIcon name="i-lucide-info" class="text-blue-500" />
-              <span class="text-sm font-medium">将创建 {{ taskSummary.count }} 个任务</span>
-            </div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1.5">
-              <div>{{ taskSummary.taskType }} · {{ taskSummary.dataSource }}</div>
-              <div
-                v-if="taskSummary.keywords"
-                class="text-blue-600 dark:text-blue-400"
-              >
-                {{ taskSummary.keywords }}
-              </div>
-              <div class="flex flex-wrap gap-1.5 mt-2">
-                <UBadge
-                  v-for="platform in taskSummary.platforms"
-                  :key="platform"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ platform }}
-                </UBadge>
-              </div>
-            </div>
-          </div>
-        </UForm>
-      </div>
+      <QuickTaskForm
+        v-if="enableQuickTasks"
+        v-model:state="quickTaskState"
+      />
 
       <div v-else class="text-sm text-gray-500 py-8 text-center">
         <p>稍后可在项目详情页创建任务</p>

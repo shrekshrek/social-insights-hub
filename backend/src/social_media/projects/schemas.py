@@ -136,6 +136,14 @@ class SocialProjectCreateResponse(CustomBaseModel):
     )
 
 
+class BatchTasksCreateResponse(CustomBaseModel):
+    """批量创建任务响应"""
+
+    created_tasks: List[dict] = Field(
+        default_factory=list, description="批量创建的任务列表"
+    )
+
+
 # ==================== Project-Participant Management ====================
 
 

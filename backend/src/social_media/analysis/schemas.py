@@ -379,6 +379,12 @@ class ProjectSliceListResponse(CustomBaseModel):
     items: list[ProjectSliceResponse]
 
 
+class UpdateProjectSliceRequest(CustomBaseModel):
+    """更新切片（仅支持改名）"""
+
+    name: str = Field(..., min_length=1, max_length=255, description="切片名称")
+
+
 class RunAnalysisResponse(CustomBaseModel):
     """启动分析任务响应"""
 

@@ -43,6 +43,7 @@ from .schemas import (
     CreateProjectSliceRequest,
     ProjectSliceResponse,
     ProjectSliceListResponse,
+    UpdateProjectSliceRequest,
 )
 
 
@@ -574,6 +575,53 @@ async def get_project_slice(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
         )
+    return ProjectSliceResponse.model_validate(slice_record)
+
+
+@router.patch(
+    "/projects/{project_id}/slices/{slice_id}",
+    response_model=ProjectSliceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="更新切片名称",
+    description="重命名项目级合并分析切片",
+    tags=["Social Media - Analysis"],
+)
+async def update_project_slice(
+    project_id: int,
+    slice_id: int,
+    request: UpdateProjectSliceRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """更新切片名称。需要项目访问权限。"""
+    from src.social_media.projects import crud as project_crud
+    from .models import ProjectAnalysisSlice
+    from sqlalchemy import select
+
+    has_access = await project_crud.check_project_access(
+        db, project_id, current_user.id
+    )
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project",
+        )
+
+    stmt = (
+        select(ProjectAnalysisSlice)
+        .where(ProjectAnalysisSlice.id == slice_id)
+        .where(ProjectAnalysisSlice.project_id == project_id)
+    )
+    result = await db.execute(stmt)
+    slice_record = result.scalar_one_or_none()
+    if not slice_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
+        )
+
+    slice_record.name = request.name
+    await db.commit()
+    await db.refresh(slice_record)
     return ProjectSliceResponse.model_validate(slice_record)
 
 

@@ -253,6 +253,49 @@ async def delete_project(
     return MessageResponse(message=f"Project '{project.name}' deleted successfully")
 
 
+# ==================== Batch Task Creation ====================
+
+
+@router.post(
+    "/projects/{project_id}/batch-tasks",
+    response_model=schemas.BatchTasksCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Batch create tasks for project",
+    description="为已有项目批量创建任务（支持多平台）",
+)
+async def batch_create_tasks(
+    quick_tasks: schemas.QuickTaskCreate,
+    db: AsyncSession = Depends(get_async_db),
+    project: SocialProject = Depends(validate_project_access),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    为已有项目批量创建任务。
+
+    复用项目创建时的 QuickTaskCreate 配置，
+    可以一次为多个平台创建相同配置的任务。
+    """
+    created_tasks = await service.batch_create_tasks_for_project(
+        db, project.id, quick_tasks, current_user.id
+    )
+
+    # 转换任务为字典列表
+    from src.social_media.tasks.schemas import DataTaskReadWithRelations
+
+    tasks_list = []
+    for task in created_tasks:
+        task_dict = DataTaskReadWithRelations.model_validate(task).model_dump()
+        task_dict["project_name"] = project.name
+        task_dict["platform_name"] = task.platform.name if task.platform else None
+        task_dict["platform_code"] = task.platform.code if task.platform else None
+        task_dict["creator_username"] = (
+            task.creator.username if task.creator else None
+        )
+        tasks_list.append(task_dict)
+
+    return schemas.BatchTasksCreateResponse(created_tasks=tasks_list)
+
+
 # ==================== Project-Participant Management ====================
 
 

@@ -3,6 +3,8 @@ import type {
   SocialProjectCreate,
   SocialProjectUpdate,
   SocialProjectCreateResponse,
+  QuickTaskCreate,
+  BatchTasksCreateResponse,
 } from '../../tasks/types'
 
 export const useSocialProjects = () => {
@@ -55,6 +57,19 @@ export const useSocialProjects = () => {
     return true
   }
 
+  // 批量创建任务
+  const batchCreateTasks = async (projectId: number, data: QuickTaskCreate) => {
+    const result = await apiRequest<BatchTasksCreateResponse>(
+      `/social-media/projects/${projectId}/batch-tasks`,
+      {
+        method: 'POST',
+        body: data,
+      }
+    )
+    showSuccess(`已成功创建 ${result.created_tasks.length} 个任务`)
+    return result
+  }
+
   // 添加项目参与者
   const addParticipant = async (projectId: number, userId: number) => {
     const result = await apiRequest<SocialProject>(
@@ -85,6 +100,7 @@ export const useSocialProjects = () => {
     createProject,
     updateProject,
     deleteProject,
+    batchCreateTasks,
     addParticipant,
     removeParticipant,
   }

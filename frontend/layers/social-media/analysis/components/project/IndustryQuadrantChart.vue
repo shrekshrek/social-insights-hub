@@ -4,8 +4,27 @@ import type { EChartsOption } from 'echarts'
 import type { IndustryQuadrantPoint } from '../../../types/project-slice'
 import TabSwitch from '../shared/TabSwitch.vue'
 
+interface GroupShareItemForQuadrant {
+  name: string
+  heat: number
+  organic_heat?: number
+  promo_heat?: number
+  mentions: number
+  role?: string
+  sentiment?: number
+  organic_sentiment?: number
+  promo_sentiment?: number
+  spam_distribution?: {
+    high_spam: { total: number; post: number; comment: number }
+    low_spam: { total: number; post: number; comment: number }
+  }
+  source_tasks?: Array<{ task_id: number; mentions: number }>
+  post_ids_sample?: Array<{ task_id: number; post_id: number }>
+}
+
 const props = defineProps<{
   data: IndustryQuadrantPoint[]
+  groupData?: GroupShareItemForQuadrant[]
   selected?: string | null
 }>()
 
@@ -36,9 +55,42 @@ const quadrantViewOptions = [
   { value: 'organic', label: '有机' },
 ]
 
+// ==================== 聚合模式 ====================
+
+type AggregateMode = 'entity' | 'brand'
+const aggregateMode = ref<AggregateMode>('entity')
+
+const aggregateModeOptions = [
+  { value: 'entity', label: '个体' },
+  { value: 'brand', label: '品牌' },
+]
+
+const hasGroupData = computed(() => (props.groupData || []).length > 0)
+
+/** 当前生效的数据源 */
+const effectiveItems = computed<IndustryQuadrantPoint[]>(() => {
+  if (aggregateMode.value === 'brand' && hasGroupData.value) {
+    return (props.groupData || []).filter(g => g.mentions > 0).map(g => ({
+      name: g.name,
+      role: g.role,
+      heat: g.heat,
+      organic_heat: g.organic_heat,
+      promo_heat: g.promo_heat,
+      sentiment: g.sentiment ?? 0,
+      organic_sentiment: g.organic_sentiment,
+      promo_sentiment: g.promo_sentiment,
+      mentions: g.mentions,
+      spam_distribution: g.spam_distribution,
+      source_tasks: g.source_tasks,
+      post_ids_sample: g.post_ids_sample,
+    }))
+  }
+  return props.data || []
+})
+
 // ==================== 能力检测 ====================
 
-const items = computed(() => props.data || [])
+const items = computed(() => effectiveItems.value)
 
 /** 是否有 spam 分布数据（决定是否显示视图切换） */
 const hasSpamData = computed(() =>
@@ -379,6 +431,7 @@ watch(() => props.data, updateChart, { deep: true })
 watch(() => props.selected, () => applyHighlight())
 watch(scaleMode, updateChart)
 watch(quadrantViewMode, updateChart)
+watch(aggregateMode, updateChart)
 
 onMounted(() => {
   updateChart()
@@ -391,6 +444,7 @@ onMounted(() => {
     <div class="flex items-center justify-between mb-3 shrink-0">
       <div class="flex items-center gap-3">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">行业象限</h3>
+        <TabSwitch v-if="hasGroupData" v-model="aggregateMode" :options="aggregateModeOptions" />
         <TabSwitch
           v-if="hasSpamData"
           v-model="quadrantViewMode"

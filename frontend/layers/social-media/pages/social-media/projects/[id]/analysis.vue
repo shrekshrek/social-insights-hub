@@ -115,8 +115,17 @@ interface GroupShareItem {
   mentions: number
   total_mentions?: number
   share?: number
+  role?: string
+  sentiment?: number
+  organic_sentiment?: number
+  promo_sentiment?: number
   contribution?: number
   spam_distribution?: SpamDistribution
+  platform_distribution?: Record<string, number>
+  organic_platform_distribution?: Record<string, number>
+  promo_platform_distribution?: Record<string, number>
+  post_ids_sample?: PostRef[]
+  source_tasks?: SourceTask[]
   members?: Array<{
     name: string
     heat: number
@@ -158,6 +167,7 @@ interface ProjectSliceLandscapeLayer {
   sov_ranking?: SOVRankingItem[]
   group_share?: GroupShareItem[]
   platform_dna?: PlatformDNAItem[]
+  platform_dna_grouped?: PlatformDNAItem[]
   industry_quadrant?: IndustryQuadrantPoint[]
 }
 
@@ -432,6 +442,7 @@ const hasSliceSpamData = computed(() => topEntities.value.some(e => e.spam_distr
 const sovRanking = computed(() => landscape.value?.sov_ranking || [])
 const groupShare = computed(() => landscape.value?.group_share || [])
 const platformDNA = computed(() => landscape.value?.platform_dna || [])
+const platformDNAGrouped = computed(() => landscape.value?.platform_dna_grouped || [])
 const industryQuadrant = computed(() => landscape.value?.industry_quadrant || [])
 
 const selectedLandscapeEntity = ref<string | null>(null)
@@ -1554,6 +1565,7 @@ const handleExport = async () => {
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <SOVRankingChart
               :data="sovRanking"
+              :group-data="groupShare"
               :max-items="15"
               :selected="selectedLandscapeEntity"
               :global-organic-heat="overview?.total_organic_heat"
@@ -1562,6 +1574,7 @@ const handleExport = async () => {
             />
             <IndustryQuadrantChart
               :data="industryQuadrant"
+              :group-data="groupShare"
               :selected="selectedLandscapeEntity"
               @select="handleIndustryQuadrantSelect"
             />
@@ -1569,7 +1582,7 @@ const handleExport = async () => {
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <GroupShareTable :data="groupShare" :entities="topEntities" :max-items="10" />
-            <PlatformDNAChart :data="platformDNA" :max-items="10" />
+            <PlatformDNAChart :data="platformDNA" :group-data="platformDNAGrouped" :max-items="10" />
           </div>
 
           <!-- 维度情感矩阵（entity × dimension 热力表：来自 stage2.drivers.entity_matrix） -->

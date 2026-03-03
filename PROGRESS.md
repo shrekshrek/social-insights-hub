@@ -10,12 +10,12 @@
 | rbac/前端 | 已完成 | 角色权限管理界面 |
 | users/后端 | 已完成 | 用户 CRUD、角色分配 |
 | users/前端 | 已完成 | 用户管理界面 |
-| social_media/projects/后端 | 已完成 | 项目管理、平台初始化、参与者管理 |
-| social_media/projects/前端 | 已完成 | 项目列表、创建、详情、切片洞察 |
+| social_media/projects/后端 | 已完成 | 项目管理、平台初始化、参与者管理、批量创建任务 API |
+| social_media/projects/前端 | 已完成 | 项目列表、创建、详情、切片洞察、批量创建任务弹窗、QuickTaskForm 组件提取 |
 | social_media/tasks/后端 | 已完成 | 任务管理、多平台适配器、帖子/评论存储 |
 | social_media/tasks/前端 | 已完成 | 任务列表、创建、详情、数据上传 |
 | social_media/analysis/后端 | 已完成 | LLM 分析编排、批处理、成本追踪、报告聚合 |
-| social_media/analysis/前端 | 已完成 | 分析报告展示、图表可视化、成本面板 |
+| social_media/analysis/前端 | 已完成 | 分析报告展示、图表可视化、成本面板、切片重命名 |
 | langchain/后端 | 已完成 | DeepSeek 集成、9 条分析链 |
 | agent/后端 | 已完成 | 爬虫代理 API、API Key 认证、数据上传 |
 | analysis/spam_distribution/后端 | 已完成 | 全模块 spam 分布: 实体/观点(4维) + 四象限/KOL(标记) + IPA/竞品/时间(2维) + NSR拆分 |
@@ -41,6 +41,7 @@
 - v1.x: 项目级切片 spam 维度增强 (实体/话题 4D 分布 + SpamRatioBar 展示)
 - v1.x: 任务级分析指标 QA 与修复 (舆论反差度/营销浓度阈值/NSR+KOL 情感标签归一化)
 - v1.x: 全栈代码命名统一 (snapshot → slice) + 架构文档补全
+- v1.x: 项目详情页批量创建任务 + 切片重命名功能
 
 ## 待改进项
 

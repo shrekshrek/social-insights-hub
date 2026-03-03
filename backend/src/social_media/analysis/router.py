@@ -11,8 +11,7 @@ API 结构：
 - /tasks/{task_id}/aggregation   POST运行聚合分析 / GET获取聚合结果
 - /tasks/{task_id}/posts         帖子分析结果列表
 - /tasks/{task_id}/preview       深度分析预览
-- /projects/{project_id}/clustering   运行主题聚类（预留）
-- /projects/{project_id}/competitive  运行竞品分析（预留）
+- /projects/{project_id}/slices  项目级切片 CRUD
 - /stats                         全局统计
 """
 
@@ -29,8 +28,6 @@ from . import service
 from .schemas import (
     RunScreeningRequest,
     RunDeepAnalysisRequest,
-    RunClusteringRequest,
-    RunCompetitiveRequest,
     RunAnalysisResponse,
     AnalysisJobResponse,
     AnalysisJobListResponse,
@@ -431,7 +428,7 @@ async def delete_task_analyses(
     return result
 
 
-# ==================== 项目级分析操作（预留）====================
+# ==================== 项目级切片操作 ====================
 
 
 @router.post(
@@ -666,58 +663,6 @@ async def delete_project_slice(
     await db.delete(slice_record)
     await db.commit()
     return MessageResponse(message=f"Slice {slice_id} deleted successfully")
-
-
-@router.post(
-    "/projects/{project_id}/clustering",
-    response_model=RunAnalysisResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="运行主题聚类分析（预留）",
-)
-async def run_topic_clustering(
-    project_id: int,
-    request: RunClusteringRequest,
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    运行主题聚类分析（项目级）
-
-    - 对项目下的帖子进行主题聚类
-    - 支持指定源任务范围
-    - 异步任务处理
-    """
-    # TODO: 实现主题聚类
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Topic clustering not implemented yet",
-    )
-
-
-@router.post(
-    "/projects/{project_id}/competitive",
-    response_model=RunAnalysisResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="运行竞品分析（预留）",
-)
-async def run_competitive_analysis(
-    project_id: int,
-    request: RunCompetitiveRequest,
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    运行竞品分析（项目级）
-
-    - 对项目下的帖子进行竞品提及分析
-    - 支持指定竞品关键词
-    - 异步任务处理
-    """
-    # TODO: 实现竞品分析
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Competitive analysis not implemented yet",
-    )
 
 
 # ==================== 统计 ====================

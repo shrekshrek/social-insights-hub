@@ -325,22 +325,6 @@ class RunDeepAnalysisRequest(CustomBaseModel):
     analysis_focus: list[str] | None = Field(None, description="分析重点（预留扩展）")
 
 
-class RunClusteringRequest(CustomBaseModel):
-    """运行主题聚类分析请求（项目级分析）"""
-
-    project_id: int = Field(..., gt=0, description="项目ID")
-    task_ids: list[int] | None = Field(None, description="源任务ID列表")
-    config: dict | None = Field(None, description="聚类配置")
-
-
-class RunCompetitiveRequest(CustomBaseModel):
-    """运行竞品分析请求（项目级分析）"""
-
-    project_id: int = Field(..., gt=0, description="项目ID")
-    task_ids: list[int] | None = Field(None, description="源任务ID列表")
-    competitors: list[str] | None = Field(None, description="竞品列表")
-
-
 # ==================== Project Slice (Manual) ====================
 
 

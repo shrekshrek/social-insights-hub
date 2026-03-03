@@ -320,9 +320,53 @@ export const useApi = () => {
     })
   }
 
+  /**
+   * 下载二进制文件（如 Word 文档）
+   * 通过创建临时 <a> 触发浏览器下载
+   */
+  const apiDownload = async (path: string, fallbackFilename?: string): Promise<void> => {
+    const fullPath = buildApiPath(path)
+    const token = await ensureAuthenticated()
+
+    const response = await $fetch.raw(fullPath, {
+      headers: { Authorization: `Bearer ${token}` },
+      responseType: 'blob',
+      baseURL: '',
+    })
+
+    const blob = response._data as Blob
+    if (!blob || blob.size === 0) {
+      showError('下载失败：服务端返回空文件')
+      return
+    }
+
+    // 从 Content-Disposition 提取文件名
+    const disposition = response.headers.get('content-disposition') || ''
+    let filename = fallbackFilename || 'download'
+    const utf8Match = disposition.match(/filename\*=UTF-8''(.+)/i)
+    if (utf8Match?.[1]) {
+      filename = decodeURIComponent(utf8Match[1])
+    } else {
+      const asciiMatch = disposition.match(/filename="?([^";\n]+)"?/i)
+      if (asciiMatch?.[1]) {
+        filename = asciiMatch[1]
+      }
+    }
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return {
     apiRequest,
     useApiData,
+    apiDownload,
     showSuccess,
     showError,
     showWarning,

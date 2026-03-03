@@ -74,13 +74,33 @@ export default defineEventHandler(async (event) => {
       }
     }
     
-    // 转发请求到后端
+    // 判断是否为文件下载请求（避免对普通 JSON 接口造成额外开销）
+    const isBinaryRequest = cleanPath.endsWith('/export')
+
+    if (isBinaryRequest) {
+      // 二进制文件：使用 raw + arrayBuffer 以获取响应头和原始数据
+      const response = await $fetch.raw(targetUrl, {
+        method,
+        headers,
+        body,
+        responseType: 'arrayBuffer',
+      })
+      const contentType = response.headers.get('content-type') || ''
+      const disposition = response.headers.get('content-disposition')
+      setResponseHeader(event, 'Content-Type', contentType)
+      if (disposition) {
+        setResponseHeader(event, 'Content-Disposition', disposition)
+      }
+      return Buffer.from(response._data as ArrayBuffer)
+    }
+
+    // 普通 JSON 请求：保持原有逻辑
     const response = await $fetch(targetUrl, {
       method,
       headers,
       body,
     })
-    
+
     return response
   } catch (error: unknown) {
     // 处理错误响应

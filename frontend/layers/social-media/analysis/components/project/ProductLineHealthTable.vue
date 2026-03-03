@@ -82,15 +82,15 @@ const maxContribution = computed(() => {
       </div>
     </div>
 
-    <div v-if="members.length" class="overflow-x-auto">
-      <table class="w-full text-sm">
+    <div v-if="members.length" class="max-h-96 overflow-y-auto">
+      <table class="w-full text-sm table-fixed">
         <thead>
-          <tr class="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
-            <th class="py-2 pr-3 font-medium">产品线</th>
-            <th class="py-2 pr-3 font-medium text-right">热度</th>
-            <th class="py-2 pr-3 font-medium text-right">贡献度</th>
-            <th class="py-2 pr-3 font-medium text-center">情感</th>
-            <th class="py-2 font-medium">Top 痛点</th>
+          <tr class="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800 sticky top-0 bg-white dark:bg-gray-900 z-10">
+            <th class="py-2 pr-2 font-medium w-[30%]">产品线</th>
+            <th class="py-2 pr-2 font-medium text-right w-[12%]">热度</th>
+            <th class="py-2 pr-2 font-medium text-right w-[20%]">贡献度</th>
+            <th class="py-2 pr-2 font-medium text-center w-[16%]">情感</th>
+            <th class="py-2 font-medium w-[22%]">Top 痛点</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-50 dark:divide-gray-800/50">
@@ -100,7 +100,7 @@ const maxContribution = computed(() => {
             class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer"
             @click="emit('select', item)"
           >
-            <td class="py-2.5 pr-3">
+            <td class="py-2.5 pr-2">
               <div class="flex items-center gap-2 mb-1">
                 <span
                   class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-medium shrink-0"
@@ -108,29 +108,29 @@ const maxContribution = computed(() => {
                 >
                   {{ idx + 1 }}
                 </span>
-                <span class="text-gray-900 dark:text-white">{{ item.name }}</span>
+                <span class="text-gray-900 dark:text-white truncate">{{ item.name }}</span>
               </div>
               <div v-if="item.spam_distribution" class="ml-7">
                 <SpamRatioBar :spam-distribution="item.spam_distribution" />
               </div>
             </td>
-            <td class="py-2.5 pr-3 text-right font-mono text-gray-700 dark:text-gray-300">
+            <td class="py-2.5 pr-2 text-right font-mono text-gray-700 dark:text-gray-300">
               {{ formatNumber(item.heat) }}
             </td>
-            <td class="py-2.5 pr-3">
-              <div class="flex items-center gap-2">
-                <div class="w-16 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <td class="py-2.5 pr-2">
+              <div class="flex items-center gap-1">
+                <div class="flex-1 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                   <div
                     class="h-full bg-primary-500 rounded-full"
                     :style="{ width: `${(item.contribution / maxContribution) * 100}%` }"
                   />
                 </div>
-                <span class="text-xs font-mono text-gray-600 dark:text-gray-400 w-12 text-right">
+                <span class="text-xs font-mono text-gray-600 dark:text-gray-400 shrink-0">
                   {{ formatPercent(item.contribution) }}
                 </span>
               </div>
             </td>
-            <td class="py-2.5 pr-3 text-center">
+            <td class="py-2.5 pr-2 text-center">
               <div class="flex flex-col items-center gap-0.5">
                 <span
                   class="inline-block px-2 py-0.5 rounded text-xs font-mono"
@@ -152,7 +152,7 @@ const maxContribution = computed(() => {
             <td class="py-2.5">
               <span
                 v-if="item.top_pain"
-                class="text-xs text-red-600 dark:text-red-400 truncate max-w-32 inline-block"
+                class="text-xs text-red-600 dark:text-red-400 truncate block"
                 :title="item.top_pain"
               >
                 {{ item.top_pain }}

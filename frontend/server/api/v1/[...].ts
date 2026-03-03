@@ -85,13 +85,17 @@ export default defineEventHandler(async (event) => {
         body,
         responseType: 'arrayBuffer',
       })
-      const contentType = response.headers.get('content-type') || ''
+      const contentType = response.headers.get('content-type') || 'application/octet-stream'
       const disposition = response.headers.get('content-disposition')
-      setResponseHeader(event, 'Content-Type', contentType)
+
+      // 直接写入底层 response，避免 Nitro 序列化覆盖头部
+      const res = event.node.res
+      res.setHeader('Content-Type', contentType)
       if (disposition) {
-        setResponseHeader(event, 'Content-Disposition', disposition)
+        res.setHeader('Content-Disposition', disposition)
       }
-      return Buffer.from(response._data as ArrayBuffer)
+      res.end(Buffer.from(response._data as ArrayBuffer))
+      return
     }
 
     // 普通 JSON 请求：保持原有逻辑

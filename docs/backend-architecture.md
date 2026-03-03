@@ -380,6 +380,7 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 - `PUT /{id}`: 更新项目
 - `DELETE /{id}`: 删除项目
 - `POST /{id}/participants`: 添加参与者
+- `POST /{id}/batch-tasks`: 批量创建任务（复用 QuickTaskCreate）
 
 **任务** (`/tasks`):
 - `GET /`: 任务列表
@@ -395,7 +396,9 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 - `POST /aggregation`: 执行聚合（同步返回结果）
 - `GET /task/{task_id}/result`: 获取任务分析结果
 - `POST /slices`: 创建项目级切片
+- `GET /slices`: 获取切片列表
 - `GET /slices/{slice_id}`: 获取切片详情
+- `PATCH /slices/{slice_id}`: 重命名切片
 - `DELETE /slices/{slice_id}`: 删除切片
 - `GET /jobs/`: 分析任务列表（含成本统计）
 

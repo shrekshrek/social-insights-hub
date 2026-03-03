@@ -121,11 +121,11 @@ frontend/
     -   **职责**: 社交媒体监控的完整业务流程——项目管理、数据采集任务、LLM 分析报告展示。
     -   **子模块**:
 
-        | 子模块 | 关键页面 | 核心 Composables |
-        |--------|----------|-----------------|
-        | `projects/` | 项目列表/创建/详情、切片洞察对比 | `useSocialProjects`, `usePlatforms` |
+        | 子模块 | 关键页面/组件 | 核心 Composables |
+        |--------|--------------|-----------------|
+        | `projects/` | 项目列表/创建/详情、切片洞察对比、`QuickTaskForm`（批量创建任务表单） | `useSocialProjects`, `usePlatforms` |
         | `tasks/` | 任务列表/创建/详情、JSON 数据上传 | `useTasks`, `usePosts`, `useJSONUpload` |
-        | `analysis/` | 分析报告（嵌入 task/project 详情页） | `useAnalysis`, `useAnalysisStats`, `useTokenUsage` |
+        | `analysis/` | 分析报告（嵌入 task/project 详情页）、切片重命名 | `useAnalysis`, `useAnalysisStats`, `useTokenUsage` |
 
     -   **分析组件层次**:
         - `TaskAnalysisReport.vue`: 任务级完整分析报告（NSR/CII/SERP/四象限/话题/实体/KOL）

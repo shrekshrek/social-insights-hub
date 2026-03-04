@@ -38,11 +38,12 @@ Base = declarative_base(metadata=metadata)
 
 
 # ==================== Sync Engine for Celery Tasks ====================
-# Create sync engine for Celery tasks (works with gevent pool)
+# Celery tasks use read→LLM→write pattern with short-lived DB sessions,
+# so a smaller pool is sufficient even at high gevent concurrency.
 sync_engine = create_engine(
-    settings.DATABASE_URL,  # Use psycopg2 driver (default)
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
+    settings.DATABASE_URL,  # Use psycopg driver
+    pool_size=settings.SYNC_DB_POOL_SIZE,
+    max_overflow=settings.SYNC_DB_MAX_OVERFLOW,
     pool_timeout=settings.DB_POOL_TIMEOUT,
     pool_recycle=settings.DB_POOL_RECYCLE,
     pool_pre_ping=True,

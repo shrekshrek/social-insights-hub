@@ -15,11 +15,15 @@ class Settings(BaseSettings):
     # Database settings
     DATABASE_URL: str = "postgresql+psycopg://user:password@localhost/dbname"
 
-    # Database connection pool settings (optimized for AI tasks)
+    # Database connection pool settings — async engine (FastAPI)
     DB_POOL_SIZE: int = 50
     DB_MAX_OVERFLOW: int = 100
     DB_POOL_TIMEOUT: int = 60
     DB_POOL_RECYCLE: int = 1800  # 30 minutes
+
+    # Sync engine pool settings (Celery workers — short-lived connections)
+    SYNC_DB_POOL_SIZE: int = 10
+    SYNC_DB_MAX_OVERFLOW: int = 20
 
     # Redis settings
     REDIS_URL: str = "redis://localhost:6379"

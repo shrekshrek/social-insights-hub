@@ -7,6 +7,7 @@ services:
     image: postgres:16-alpine
     # 不使用固定 container_name，让 Docker Compose 基于项目名自动生成
     # 格式: {project_name}_postgres_db_1
+    command: postgres -c max_connections=200
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}

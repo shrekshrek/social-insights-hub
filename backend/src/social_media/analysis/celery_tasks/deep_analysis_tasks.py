@@ -89,58 +89,60 @@ def _analyze_single_post(
     post_id: int,
     analysis_focus: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """分析单个帖子的深度内容（同步，内部函数）"""
+    """分析单个帖子的深度内容（同步，内部函数）
+
+    采用 读取→LLM→写回 三阶段模式，避免 LLM 调用期间长时间占用数据库连接。
+    """
+    # Phase 1: 读取数据（毫秒级，快速释放连接）
     with SyncSessionLocal() as db:
-        try:
-            # 1. 获取帖子数据
-            post = db.query(SocialPost).filter(SocialPost.id == post_id).first()
-            if not post:
-                logger.warning(f"帖子 {post_id} 不存在")
-                return {"success": False, "error": "post_not_found"}
+        post = db.query(SocialPost).filter(SocialPost.id == post_id).first()
+        if not post:
+            logger.warning(f"帖子 {post_id} 不存在")
+            return {"success": False, "error": "post_not_found"}
+        content = f"标题：{post.title or '无'}\n正文：{post.content}"
 
-            # 2. 准备输入内容
-            content = f"标题：{post.title or '无'}\n正文：{post.content}"
+    # Phase 2: 调用LLM进行深度分析（秒级，不占数据库连接）
+    try:
+        chain = create_post_extraction_chain()
+        response, token_stats = invoke_chain_with_stats_sync(
+            chain=chain, input_dict={"content": content}, llm_type="chat"
+        )
+    except Exception as e:
+        logger.error(f"深度分析帖子 {post_id} LLM调用失败: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
-            # 3. 调用LLM进行深度分析（使用chain）
-            chain = create_post_extraction_chain()
-            response, token_stats = invoke_chain_with_stats_sync(
-                chain=chain, input_dict={"content": content}, llm_type="chat"
-            )
+    # Phase 3: 解析响应（纯CPU，无需连接）
+    response_content = response.content
+    try:
+        json_match = re.search(r"\{[\s\S]*\}", response_content)
+        if json_match:
+            json_str = json_match.group()
+            extraction_data = json.loads(json_str)
+        else:
+            extraction_data = json.loads(response_content)
 
-            # 4. 解析响应
-            response_content = response.content
-            try:
-                json_match = re.search(r"\{[\s\S]*\}", response_content)
-                if json_match:
-                    json_str = json_match.group()
-                    extraction_data = json.loads(json_str)
-                else:
-                    extraction_data = json.loads(response_content)
+        extraction_data = _filter_invalid_entities(extraction_data)
+        extraction_data = _fix_sentiment_in_result(extraction_data)
 
-                # 数据清洗：过滤无效实体、修复 sentiment 字段
-                extraction_data = _filter_invalid_entities(extraction_data)
-                extraction_data = _fix_sentiment_in_result(extraction_data)
+        validated_result = PostDeepResult(**extraction_data)
+        extraction_dict = validated_result.model_dump()
 
-                # 验证数据结构
-                validated_result = PostDeepResult(**extraction_data)
-                extraction_dict = validated_result.model_dump()
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"解析AI响应失败: {e}\nResponse: {response_content}")
+        return {"success": False, "error": f"parse_error: {str(e)}"}
 
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.error(f"解析AI响应失败: {e}\nResponse: {response_content}")
-                return {"success": False, "error": f"parse_error: {str(e)}"}
-
-            # 5. 保存分析结果到数据库
+    # Phase 4: 写回结果（毫秒级，快速释放连接）
+    try:
+        with SyncSessionLocal() as db:
             post_analysis = (
                 db.query(PostAnalysis).filter(PostAnalysis.post_id == post_id).first()
             )
 
             if post_analysis:
-                # 更新现有记录
                 post_analysis.post_deep_result = extraction_dict
                 post_analysis.analyzed_at = datetime.now(timezone.utc)
                 post_analysis.analysis_model = "deepseek-chat"
             else:
-                # 创建新记录
                 post_analysis = PostAnalysis(
                     task_id=task_id,
                     post_id=post_id,
@@ -151,18 +153,16 @@ def _analyze_single_post(
                 db.add(post_analysis)
 
             db.commit()
+    except Exception as e:
+        logger.error(f"深度分析帖子 {post_id} 保存结果失败: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
-            logger.info(f"帖子 {post_id} 深度分析完成")
-            return {
-                "success": True,
-                "post_id": post_id,
-                "token_stats": token_stats,
-            }
-
-        except Exception as e:
-            logger.error(f"深度分析帖子 {post_id} 失败: {e}", exc_info=True)
-            db.rollback()
-            return {"success": False, "error": str(e)}
+    logger.info(f"帖子 {post_id} 深度分析完成")
+    return {
+        "success": True,
+        "post_id": post_id,
+        "token_stats": token_stats,
+    }
 
 
 @celery_app.task(
@@ -335,13 +335,13 @@ def run_post_deep_task(
     # 2. 为每个帖子创建一个子任务
     subtasks = group(
         [
-        analyze_single_post_deep.s(
-            result_id=result_id,
-            task_id=task_id,
-            post_id=post_id,
-            analysis_focus=analysis_focus,
-        )
-        for post_id in post_ids
+            analyze_single_post_deep.s(
+                result_id=result_id,
+                task_id=task_id,
+                post_id=post_id,
+                analysis_focus=analysis_focus,
+            )
+            for post_id in post_ids
         ]
     )
 
@@ -438,98 +438,103 @@ def _analyze_single_post_comments(
     - 批量调用LLM进行评论聚合分析
     - 根据评论点赞数计算 support_score（支持度）
     - 结果存储在 PostAnalysis.comment_deep_result 中
+
+    采用 读取→LLM→写回 三阶段模式，避免 LLM 调用期间长时间占用数据库连接。
     """
     max_comments = settings.CELERY_TASK_MAX_COMMENTS_PER_POST_FOR_DEEP_ANALYSIS
 
+    # Phase 1: 读取数据（毫秒级，快速释放连接）
     with SyncSessionLocal() as db:
-        try:
-            # 1. 获取帖子信息
-            post = db.query(SocialPost).filter(SocialPost.id == post_id).first()
-            if not post:
-                logger.warning(f"帖子 {post_id} 不存在")
-                return {"success": False, "error": "post_not_found"}
+        post = db.query(SocialPost).filter(SocialPost.id == post_id).first()
+        if not post:
+            logger.warning(f"帖子 {post_id} 不存在")
+            return {"success": False, "error": "post_not_found"}
 
-            # 2. 获取PostAnalysis以便添加上下文（仅使用AI总结）
+        context = ""
+        existing_analysis = (
+            db.query(PostAnalysis).filter(PostAnalysis.post_id == post_id).first()
+        )
+        if existing_analysis and existing_analysis.post_deep_result:
+            summary = existing_analysis.post_deep_result.get("summary", "")
+            if summary:
+                context = f"背景上下文：{summary}"
+
+        comments = (
+            db.query(SocialComment)
+            .filter(SocialComment.post_id == post_id)
+            .order_by(SocialComment.likes_count.desc())
+            .limit(max_comments)
+            .all()
+        )
+
+        if not comments:
+            logger.info(f"帖子 {post_id} 没有评论，跳过")
+            return {"success": False, "error": "no_comments"}
+
+        valid_comments = [
+            (i + 1, c.content, int(c.likes_count or 0))
+            for i, c in enumerate(comments)
+            if c.content
+        ]
+
+    if not valid_comments:
+        return {"success": False, "error": "no_valid_comments"}
+
+    likes_map: Dict[int, int] = {idx: likes for idx, _, likes in valid_comments}
+
+    # Phase 2: 调用LLM进行评论分析（秒级，不占数据库连接）
+    formatted_comments = "\n".join(
+        [f"评论[{idx}]: {content}" for idx, content, _ in valid_comments]
+    )
+    context_text = f"背景上下文：\n{context}"
+
+    try:
+        chain = create_comment_extraction_chain()
+        response, token_stats = invoke_chain_with_stats_sync(
+            chain=chain,
+            input_dict={
+                "context": context_text,
+                "comments": formatted_comments,
+            },
+            llm_type="chat",
+        )
+    except Exception as e:
+        logger.error(f"分析帖子 {post_id} 评论LLM调用失败: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+    # Phase 3: 解析响应（纯CPU，无需连接）
+    response_content = response.content
+    try:
+        json_match = re.search(r"\{[\s\S]*\}", response_content)
+        if json_match:
+            json_str = json_match.group()
+            extraction_data = json.loads(json_str)
+        else:
+            extraction_data = json.loads(response_content)
+
+        extraction_data = _filter_invalid_entities(extraction_data)
+        extraction_data = _fix_sentiment_in_result(extraction_data)
+        extraction_data = _enrich_with_support_score(extraction_data, likes_map)
+
+        validated_result = CommentDeepResult(**extraction_data)
+        extraction_dict = validated_result.model_dump()
+
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"解析评论AI响应失败: {e}\nResponse: {response_content}")
+        return {"success": False, "error": f"parse_error: {str(e)}"}
+
+    # Phase 4: 写回结果（毫秒级，快速释放连接）
+    try:
+        with SyncSessionLocal() as db:
             post_analysis = (
                 db.query(PostAnalysis).filter(PostAnalysis.post_id == post_id).first()
             )
 
-            context = ""
-            if post_analysis and post_analysis.post_deep_result:
-                summary = post_analysis.post_deep_result.get("summary", "")
-                if summary:
-                    context = f"背景上下文：{summary}"
-
-            # 3. 获取评论（点赞最高的前N条）
-            comments = (
-                db.query(SocialComment)
-                .filter(SocialComment.post_id == post_id)
-                .order_by(SocialComment.likes_count.desc())
-                .limit(max_comments)
-                .all()
-            )
-
-            if not comments:
-                logger.info(f"帖子 {post_id} 没有评论，跳过")
-                return {"success": False, "error": "no_comments"}
-
-            # 4. 构建评论数据：编号、内容、点赞数映射
-            # 编号从 1 开始，与 LLM 输出的 source_comments 对应
-            valid_comments = [
-                (i + 1, c.content, int(c.likes_count or 0))
-                for i, c in enumerate(comments)
-                if c.content
-            ]
-            if not valid_comments:
-                return {"success": False, "error": "no_valid_comments"}
-
-            # 构建编号到点赞数的映射
-            likes_map: Dict[int, int] = {idx: likes for idx, _, likes in valid_comments}
-
-            # 5. 调用LLM进行评论分析（使用chain）
-            # 格式：评论[编号]: 内容
-            formatted_comments = "\n".join(
-                [f"评论[{idx}]: {content}" for idx, content, _ in valid_comments]
-            )
-            context_text = f"背景上下文：\n{context}"
-
-            chain = create_comment_extraction_chain()
-            response, token_stats = invoke_chain_with_stats_sync(
-                chain=chain,
-                input_dict={
-                    "context": context_text,
-                    "comments": formatted_comments,
-                },
-                llm_type="chat",
-            )
-
-            # 6. 解析响应
-            response_content = response.content
-            try:
-                json_match = re.search(r"\{[\s\S]*\}", response_content)
-                if json_match:
-                    json_str = json_match.group()
-                    extraction_data = json.loads(json_str)
-                else:
-                    extraction_data = json.loads(response_content)
-
-                # 数据清洗：过滤无效实体、修复 sentiment 字段
-                extraction_data = _filter_invalid_entities(extraction_data)
-                extraction_data = _fix_sentiment_in_result(extraction_data)
-
-                # 根据 source_comments 计算 support_score
-                extraction_data = _enrich_with_support_score(extraction_data, likes_map)
-
-                # 验证数据结构
-                validated_result = CommentDeepResult(**extraction_data)
-                extraction_dict = validated_result.model_dump()
-
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.error(f"解析评论AI响应失败: {e}\nResponse: {response_content}")
-                return {"success": False, "error": f"parse_error: {str(e)}"}
-
-            # 6. 保存到 PostAnalysis.comment_deep_result
-            if not post_analysis:
+            if post_analysis:
+                post_analysis.comment_deep_result = extraction_dict
+                post_analysis.analyzed_at = datetime.now(timezone.utc)
+                post_analysis.analysis_model = "deepseek-chat"
+            else:
                 post_analysis = PostAnalysis(
                     task_id=task_id,
                     post_id=post_id,
@@ -538,27 +543,21 @@ def _analyze_single_post_comments(
                     analysis_model="deepseek-chat",
                 )
                 db.add(post_analysis)
-            else:
-                post_analysis.comment_deep_result = extraction_dict
-                post_analysis.analyzed_at = datetime.now(timezone.utc)
-                post_analysis.analysis_model = "deepseek-chat"
 
             db.commit()
+    except Exception as e:
+        logger.error(f"分析帖子 {post_id} 评论保存结果失败: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
-            logger.info(
-                f"帖子 {post_id} 的评论深度分析完成（分析了{len(valid_comments)}条评论）"
-            )
-            return {
-                "success": True,
-                "post_id": post_id,
-                "comments_analyzed": len(valid_comments),
-                "token_stats": token_stats,
-            }
-
-        except Exception as e:
-            logger.error(f"分析帖子 {post_id} 的评论失败: {e}", exc_info=True)
-            db.rollback()
-            return {"success": False, "error": str(e)}
+    logger.info(
+        f"帖子 {post_id} 的评论深度分析完成（分析了{len(valid_comments)}条评论）"
+    )
+    return {
+        "success": True,
+        "post_id": post_id,
+        "comments_analyzed": len(valid_comments),
+        "token_stats": token_stats,
+    }
 
 
 @celery_app.task(
@@ -737,13 +736,13 @@ def run_comment_deep_task(
     # 2. 为每个帖子创建评论分析子任务
     subtasks = group(
         [
-        analyze_single_post_comments_deep.s(
-            result_id=result_id,
-            task_id=task_id,
-            post_id=post_id,
-            analysis_focus=analysis_focus,
-        )
-        for post_id in post_ids
+            analyze_single_post_comments_deep.s(
+                result_id=result_id,
+                task_id=task_id,
+                post_id=post_id,
+                analysis_focus=analysis_focus,
+            )
+            for post_id in post_ids
         ]
     )
 

@@ -138,14 +138,14 @@ Phase 2/3 结构类似，每个产物都有 statement + evidence + 对上游产�
 | `layers.landscape.sov_ranking[:10]` | ✓ 竞品声量份额 | | | ✅ |
 | `layers.landscape.overview.unique_platform_volume` | | ✓ 平台分布 | | ✅ |
 | `layers.landscape.platform_dna[:10]` | | ✓ 各实体平台声量占比 (name/role/platform_shares) | | ✅ |
-| `layers.landscape.time_distribution` | | ✓ 时间趋势/传播节奏 | | ⚠️ 待补全 |
-| `layers.landscape.kol_voices[:10]` | | ✓ KOL 声音风格 | ✓ KOL 生态 | ⚠️ 待补全 |
+| ~~`layers.landscape.time_distribution`~~ | | ~~✓ 时间趋势~~ | | ✅ 已补全但已从 Chain 移除 |
+| `layers.landscape.kol_voices[:10]` | | ✓ KOL 声音风格 | ✓ KOL 生态 | ✅ 已补全 |
 | `layers.intent.topic_radar.pains[:10]` | ✓ 痛点话题 (Tension 核心数据源) | | | ✅ |
 | `layers.intent.topic_radar.controversies[:5]` | ✓ 争议话题 (正负提及量) | | | ✅ |
 | `layers.intent.topic_radar.gains[:5]` | ✓ 增益话题 (机会发现) | | | ✅ |
 | `layers.intent.unmet_needs` | ✓ 未满足需求 | | | ✅ |
 | `layers.intent.topic_aspects[:8]` | | | ✓ 话题分类维度 (内容支柱数据源) | ✅ |
-| `layers.intent.ipa_analysis` | | | ✓ 高互动内容特征 | ⚠️ 待补全 |
+| ~~`layers.intent.ipa_analysis`~~ | | | ~~✓ IPA 四象限~~ | ✅ 已补全但已从 Chain 移除 |
 | `layers.focus.swot` | ✓ 竞品维度 (dimension + delta) | | | ✅ |
 | `layers.focus.gap.dimensions[:5]` | ✓ 竞品盲区维度 (Opportunity 数据源) | | | ✅ |
 | Phase 1 结果 (上游) | — | ✓ 全量 | ✓ 全量 | N/A |
@@ -154,7 +154,7 @@ Phase 2/3 结构类似，每个产物都有 statement + evidence + 对上游产�
 
 **设计决策**：不使用切片报告（landscape_report / topic_report / focus_report）作为 Chain 输入。报告是对同一份结构化数据的 LLM 叙事总结，结构化字段已足够全面，避免 LLM→LLM 二手信息传递。
 
-**⚠️ 待补全**的 3 个字段需要扩展切片流水线后才能生效，方案见 `2026-03-05-slice-pipeline-enrichment-design.md`。当前这些字段为空时，Chain 会基于已有数据生成（质量略降但不报错）。
+**数据依赖精简**：3 个字段已由切片流水线补全，但经评估后仅 `kol_voices` 保留为 Chain 输入。`time_distribution`（采集样本分布会误导 LLM 节奏建议）和 `ipa_analysis`（与 topic_aspects + top_features + SWOT 冗余）已从 Chain format 函数移除，数据仍在切片中生成供未来前端使用。
 
 ---
 

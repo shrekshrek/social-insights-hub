@@ -361,6 +361,11 @@ def run_project_slice_pipeline_sync(
             drivers=foundation_cur.get("drivers")
             if isinstance(foundation_cur.get("drivers"), dict)
             else None,
+            # Stage 1 预计算数据透传
+            time_distribution=land0.get("time_distribution"),
+            kol_voices=land0.get("kol_voices")
+            if isinstance(land0.get("kol_voices"), list)
+            else None,
         )
         result["layers"] = layers
 

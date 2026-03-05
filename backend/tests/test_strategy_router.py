@@ -1,4 +1,7 @@
-"""策略路由集成测试 — Step 1 新增行为"""
+"""策略路由集成测试 — Step 1 + Step 2 新增行为"""
+
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -103,10 +106,32 @@ async def test_generate_phase1_without_slices_returns_400(
 # ── 新增端点冒烟测试 ─────────────────────────────────────────────────────────
 
 
-async def test_consult_strategy_stub_response(
-    async_client: AsyncClient, auth_headers: dict
+_MOCK_CONSULT_OUTPUT = json.dumps({
+    "understanding_summary": "用户想监测竞品表现",
+    "clarification_questions": [],
+    "monitor_suggestions": [
+        {
+            "name": "竞品声量监测",
+            "platforms": ["xiaohongshu"],
+            "keywords": ["竞品A"],
+            "task_type": "posts",
+            "rationale": "了解竞品曝光",
+        }
+    ],
+    "slice_plan": [{"name": "竞品对比", "purpose": "对比", "expected_sources": ["竞品声量监测"]}],
+    "confidence": 0.8,
+})
+
+
+@patch("src.strategies.service.create_strategy_consult_chain")
+async def test_consult_strategy_returns_consult_response(
+    mock_chain_factory, async_client: AsyncClient, auth_headers: dict
 ):
-    """/consult 返回 ConsultResponse 并推进状态到 consulting"""
+    """/consult 返回 ConsultResponse 并推进状态到 consulting（mock LLM）"""
+    mock_chain = AsyncMock()
+    mock_chain.ainvoke.return_value = MagicMock(content=_MOCK_CONSULT_OUTPUT)
+    mock_chain_factory.return_value = mock_chain
+
     create_resp = await async_client.post(
         f"{BASE}/strategies",
         json={"name": "咨询测试策略"},
@@ -122,7 +147,8 @@ async def test_consult_strategy_stub_response(
     assert resp.status_code == 200
     data = resp.json()
     assert data["round_number"] == 1
-    assert "monitor_suggestions" in data
+    assert data["understanding_summary"] == "用户想监测竞品表现"
+    assert len(data["monitor_suggestions"]) == 1
     assert "slice_plan" in data
 
     detail = await async_client.get(

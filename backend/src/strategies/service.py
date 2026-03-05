@@ -8,6 +8,11 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.langchain.chains.strategy_consult_chain import (
+    create_strategy_consult_chain,
+    format_consult_inputs,
+    parse_consult_response,
+)
 from src.langchain.chains.strategy_phase1_chain import (
     create_strategy_phase1_chain,
     format_slice_data_for_phase1,
@@ -351,17 +356,41 @@ async def consult_strategy(
 ) -> ConsultResponse:
     """AI 多轮咨询：理解需求 → 追问 → 输出监测建议草案
 
-    TODO Step 2: 接入 strategy_consult_chain
+    LLM 解析失败时抛出 HTTPException(500)，strategy 不更新。
     """
     round_number = len(strategy.consultation_rounds or []) + 1
-    # 占位：返回空响应
+
+    chain = create_strategy_consult_chain()
+    inputs = format_consult_inputs(
+        user_input=user_input,
+        brief=strategy.brand_brief,
+        consultation_rounds=list(strategy.consultation_rounds or []),
+        answers=answers,
+    )
+
+    start = time.time()
+    llm_result = await chain.ainvoke(inputs)
+    duration = time.time() - start
+
+    try:
+        parsed = parse_consult_response(llm_result.content)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI 咨询解析失败: {e}",
+        ) from e
+
     response = ConsultResponse(
         round_number=round_number,
-        understanding_summary="（AI 咨询功能开发中）",
-        clarification_questions=[],
-        monitor_suggestions=[],
-        slice_plan=[],
-        confidence=0.0,
+        understanding_summary=parsed["understanding_summary"],
+        clarification_questions=parsed["clarification_questions"],
+        monitor_suggestions=parsed["monitor_suggestions"],
+        slice_plan=parsed["slice_plan"],
+        confidence=parsed["confidence"],
+    )
+    logger.info(
+        "Strategy %d Consult 第 %d 轮完成 (%.1fs, confidence=%.2f)",
+        strategy.id, round_number, duration, parsed["confidence"],
     )
 
     rounds = list(strategy.consultation_rounds or [])

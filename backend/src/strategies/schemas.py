@@ -102,10 +102,10 @@ class StrategyRead(CustomBaseModel):
     id: int
     name: str
     status: str
-    brand_brief: dict | None = None
-    consultation_rounds: list = Field(default_factory=list)
+    brand_brief: BrandBrief | None = None
+    consultation_rounds: list[dict] = Field(default_factory=list)
     suggested_monitor_ids: list[int] = Field(default_factory=list)
-    slice_plan: list = Field(default_factory=list)
+    slice_plan: list[dict] = Field(default_factory=list)
     evaluation_result: dict | None = None
     phase1_result: dict | None = None
     phase2_result: dict | None = None

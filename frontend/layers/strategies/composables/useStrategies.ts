@@ -103,40 +103,50 @@ export const useStrategies = () => {
 
   // AI 多轮咨询
   const consult = async (id: number, input: string, answers?: Record<string, string>) => {
-    return apiRequest<ConsultResponse>(`/strategies/${id}/consult`, {
+    const result = await apiRequest<ConsultResponse>(`/strategies/${id}/consult`, {
       method: 'POST',
       body: { user_input: input, answers: answers ?? null },
     })
+    showSuccess('咨询完成')
+    return result
   }
 
   // 确认 AI 建议，一键创建监测
   const confirmPlan = async (id: number, suggestions: MonitorSuggestion[]) => {
-    return apiRequest<ConfirmPlanResponse>(`/strategies/${id}/confirm-plan`, {
+    const result = await apiRequest<ConfirmPlanResponse>(`/strategies/${id}/confirm-plan`, {
       method: 'POST',
       body: { monitor_suggestions: suggestions },
     })
+    showSuccess(`已创建 ${result.created_monitor_ids.length} 个监测`)
+    return result
   }
 
   // 批量关联切片
   const addSlices = async (id: number, sliceIds: number[]) => {
-    return apiRequest<Strategy>(`/strategies/${id}/slices`, {
+    const result = await apiRequest<Strategy>(`/strategies/${id}/slices`, {
       method: 'POST',
       body: { slice_ids: sliceIds },
     })
+    showSuccess(`已关联 ${sliceIds.length} 个切片`)
+    return result
   }
 
   // AI 评估切片充分性
   const evaluate = async (id: number) => {
-    return apiRequest<EvaluationResult>(`/strategies/${id}/evaluate`, {
+    const result = await apiRequest<EvaluationResult>(`/strategies/${id}/evaluate`, {
       method: 'POST',
     })
+    showSuccess('评估完成')
+    return result
   }
 
   // 确认数据就绪
   const confirmReady = async (id: number) => {
-    return apiRequest<Strategy>(`/strategies/${id}/confirm-ready`, {
+    const result = await apiRequest<Strategy>(`/strategies/${id}/confirm-ready`, {
       method: 'POST',
     })
+    showSuccess('数据已标记就绪')
+    return result
   }
 
   return {

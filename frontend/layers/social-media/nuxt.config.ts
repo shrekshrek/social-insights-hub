@@ -4,10 +4,10 @@ export default defineNuxtConfig({
   // 自动导入配置 - 支持子模块结构
   imports: {
     dirs: [
-      'projects/composables/**',
+      'monitors/composables/**',
       'tasks/composables/**',
       'analysis/composables/**',
-      'projects/types/**',
+      'monitors/types/**',
       'tasks/types/**',
       'analysis/types/**',
       'stores/**',
@@ -17,7 +17,7 @@ export default defineNuxtConfig({
   },
   // 组件自动导入 - 支持所有子模块的组件
   components: [
-    { path: './projects/components', pathPrefix: false },
+    { path: './monitors/components', pathPrefix: false },
     { path: './tasks/components', pathPrefix: false },
     { path: './analysis/components', pathPrefix: false }
   ]

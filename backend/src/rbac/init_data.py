@@ -139,22 +139,22 @@ BUSINESS_PERMISSIONS = [
     # *create_module_permissions("inventory", ["access", "read", "write", "delete", "export", "import"]),
     #
     # ========================================================================
-    # 项目管理
+    # 监测管理
     # ========================================================================
     *create_module_permissions(
-        "project",
+        "monitor",
         ["access", "read", "write", "delete"],
         display_names={
-            "access": "访问项目管理",
-            "read": "查看项目",
-            "write": "编辑项目",
-            "delete": "删除项目",
+            "access": "访问监测管理",
+            "read": "查看监测",
+            "write": "编辑监测",
+            "delete": "删除监测",
         },
         descriptions={
-            "access": "允许访问项目管理页面",
-            "read": "允许查看项目详情和列表",
-            "write": "允许创建和编辑项目",
-            "delete": "允许删除项目及其关联数据",
+            "access": "允许访问监测管理页面",
+            "read": "允许查看监测详情和列表",
+            "write": "允许创建和编辑监测",
+            "delete": "允许删除监测及其关联数据",
         },
     ),
     # ========================================================================

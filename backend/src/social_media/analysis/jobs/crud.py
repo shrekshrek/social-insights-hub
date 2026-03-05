@@ -18,7 +18,7 @@ async def get_analysis_jobs(
     current_user_id: int,
     page: int = 1,
     page_size: int = 20,
-    project_id: int | None = None,
+    monitor_id: int | None = None,
     task_id: int | None = None,
     analysis_type: str | None = None,
     status: str | None = None,
@@ -26,20 +26,20 @@ async def get_analysis_jobs(
     end_date: str | None = None,
 ) -> tuple[List[Dict[str, Any]], int]:
     """获取全局分析任务列表（带筛选和关联信息）"""
-    from src.social_media.projects.models import SocialProject
+    from src.social_media.monitors.models import Monitor
     from src.social_media.tasks.models import DataTask
     from src.auth.models import User
-    from src.social_media.analysis.models import ProjectAnalysisSlice
+    from src.social_media.analysis.models import AnalysisSlice
 
     # 构建基础查询
     stmt = (
         select(
             AnalysisJob,
-            SocialProject.name.label("project_name"),
+            Monitor.name.label("monitor_name"),
             DataTask.name.label("task_name"),
             User.username.label("user_name"),
         )
-        .join(SocialProject, AnalysisJob.project_id == SocialProject.id)
+        .join(Monitor, AnalysisJob.monitor_id == Monitor.id)
         .join(DataTask, AnalysisJob.task_id == DataTask.id, isouter=True)
         .join(User, AnalysisJob.user_id == User.id)
     )
@@ -47,8 +47,8 @@ async def get_analysis_jobs(
     # 筛选条件
     conditions = []
 
-    if project_id is not None:
-        conditions.append(AnalysisJob.project_id == project_id)
+    if monitor_id is not None:
+        conditions.append(AnalysisJob.monitor_id == monitor_id)
 
     if task_id is not None:
         conditions.append(AnalysisJob.task_id == task_id)
@@ -101,8 +101,8 @@ async def get_analysis_jobs(
     slice_name_by_id: dict[int, str | None] = {}
     if slice_ids:
         snap_stmt = select(
-            ProjectAnalysisSlice.id, ProjectAnalysisSlice.name
-        ).where(ProjectAnalysisSlice.id.in_(list(slice_ids)))
+            AnalysisSlice.id, AnalysisSlice.name
+        ).where(AnalysisSlice.id.in_(list(slice_ids)))
         snap_rows = (await db.execute(snap_stmt)).all()
         slice_name_by_id = {int(r[0]): r[1] for r in snap_rows}
 
@@ -116,7 +116,7 @@ async def get_analysis_jobs(
             slice_id = None
         item = {
             "id": job.id,
-            "project_id": job.project_id,
+            "monitor_id": job.monitor_id,
             "task_id": job.task_id,
             "user_id": job.user_id,
             "analysis_type": job.analysis_type,
@@ -137,7 +137,7 @@ async def get_analysis_jobs(
             "created_at": job.created_at,
             "updated_at": job.updated_at,
             # 关联名称
-            "project_name": row.project_name,
+            "monitor_name": row.monitor_name,
             "task_name": row.task_name,
             "slice_id": slice_id,
             "slice_name": slice_name_by_id.get(slice_id)
@@ -154,20 +154,20 @@ async def get_analysis_job(
     db: AsyncSession, job_id: int, current_user_id: int
 ) -> Optional[Dict[str, Any]]:
     """获取单个分析任务详情（带关联信息）"""
-    from src.social_media.projects.models import SocialProject
+    from src.social_media.monitors.models import Monitor
     from src.social_media.tasks.models import DataTask
     from src.auth.models import User
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
 
     # 查询分析任务及关联信息
     stmt = (
         select(
             AnalysisJob,
-            SocialProject.name.label("project_name"),
+            Monitor.name.label("monitor_name"),
             DataTask.name.label("task_name"),
             User.username.label("user_name"),
         )
-        .join(SocialProject, AnalysisJob.project_id == SocialProject.id)
+        .join(Monitor, AnalysisJob.monitor_id == Monitor.id)
         .join(DataTask, AnalysisJob.task_id == DataTask.id, isouter=True)
         .join(User, AnalysisJob.user_id == User.id)
         .where(AnalysisJob.id == job_id)
@@ -182,8 +182,8 @@ async def get_analysis_job(
     job = row.AnalysisJob
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(
-        db, job.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, job.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -192,7 +192,7 @@ async def get_analysis_job(
 
     return {
         "id": job.id,
-        "project_id": job.project_id,
+        "monitor_id": job.monitor_id,
         "task_id": job.task_id,
         "user_id": job.user_id,
         "analysis_type": job.analysis_type,
@@ -212,7 +212,7 @@ async def get_analysis_job(
         "error_message": job.error_message,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
-        "project_name": row.project_name,
+        "monitor_name": row.monitor_name,
         "task_name": row.task_name,
         "user_name": row.user_name,
     }
@@ -222,7 +222,7 @@ async def get_analysis_progress(
     db: AsyncSession, job_id: int, current_user_id: int
 ) -> AnalysisProgressResponse:
     """获取分析任务进度"""
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
 
     # 查询分析任务
     stmt = select(AnalysisJob).where(AnalysisJob.id == job_id)
@@ -236,8 +236,8 @@ async def get_analysis_progress(
         )
 
     # 验证权限
-    has_access = await project_crud.check_project_access(
-        db, job.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, job.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -281,7 +281,7 @@ async def cancel_analysis_job(
 ) -> bool:
     """取消分析任务"""
     from celery import current_app as celery_app
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
 
     # 查询分析任务
     stmt = select(AnalysisJob).where(AnalysisJob.id == job_id)
@@ -295,8 +295,8 @@ async def cancel_analysis_job(
         )
 
     # 验证权限
-    has_access = await project_crud.check_project_access(
-        db, job.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, job.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -326,7 +326,7 @@ async def delete_analysis_job(
     db: AsyncSession, job_id: int, current_user_id: int
 ) -> bool:
     """删除分析任务"""
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
 
     # 查询分析任务
     stmt = select(AnalysisJob).where(AnalysisJob.id == job_id)
@@ -340,8 +340,8 @@ async def delete_analysis_job(
         )
 
     # 验证权限
-    has_access = await project_crud.check_project_access(
-        db, job.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, job.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(

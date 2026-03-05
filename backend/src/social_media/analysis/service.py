@@ -9,7 +9,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
-from .models import PostAnalysis, AnalysisJob, ProjectAnalysisSlice
+from .models import PostAnalysis, AnalysisJob, AnalysisSlice
 from .jobs import create_analysis_job_async
 from .jobs.crud import (  # noqa: F401 - re-exported for router
     get_analysis_jobs,
@@ -25,7 +25,7 @@ from .schemas import (
     AnalysisStatsResponse,
 )
 
-from .project_slice import build_project_slice_result
+from .monitor_slice import build_monitor_slice_result
 from .constants import SPAM_HIGH_THRESHOLD
 
 
@@ -37,7 +37,7 @@ async def run_post_screening(
 ) -> RunAnalysisResponse:
     """运行帖子AI初筛分析"""
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
     from .celery_tasks.screening_tasks import run_screening_task
 
     # 验证任务是否存在
@@ -49,8 +49,8 @@ async def run_post_screening(
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -84,7 +84,7 @@ async def run_post_screening(
     # 创建分析任务记录
     analysis_job = await create_analysis_job_async(
         db=db,
-        project_id=task.project_id,
+        monitor_id=task.monitor_id,
         task_id=request.task_id,
         user_id=current_user_id,
         analysis_type="screening_posts",
@@ -92,14 +92,14 @@ async def run_post_screening(
     )
 
     # 获取项目关键词
-    project_keywords = task.keywords or ""
+    monitor_keywords = task.keywords or ""
 
     # 启动Celery任务
     celery_result = run_screening_task.delay(
         result_id=analysis_job.id,
         task_id=request.task_id,
         post_ids=post_ids,
-        project_keywords=project_keywords,
+        monitor_keywords=monitor_keywords,
     )
 
     # 更新celery_task_id
@@ -124,7 +124,7 @@ async def run_post_deep_analysis(
 ) -> RunAnalysisResponse:
     """运行帖子深度分析"""
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
     from .celery_tasks.deep_analysis_tasks import run_post_deep_task
 
     # 验证任务和权限
@@ -135,8 +135,8 @@ async def run_post_deep_analysis(
             detail=f"Task {request.task_id} not found",
         )
 
-    has_access = await project_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -168,7 +168,7 @@ async def run_post_deep_analysis(
     # 创建分析任务记录
     analysis_job = await create_analysis_job_async(
         db=db,
-        project_id=task.project_id,
+        monitor_id=task.monitor_id,
         task_id=request.task_id,
         user_id=current_user_id,
         analysis_type="deep_posts",
@@ -205,28 +205,28 @@ async def run_post_deep_analysis(
 # ==================== Project Slice (Manual) ====================
 
 
-async def create_project_slice(
+async def create_monitor_slice(
     db: AsyncSession,
-    project_id: int,
+    monitor_id: int,
     task_ids: list[int],
     current_user_id: int,
     name: str | None = None,
     subject: str | None = None,
     competitors: list[str] | None = None,
     platform_weights: dict[str, float] | None = None,
-) -> ProjectAnalysisSlice:
-    """手动生成项目级合并分析切片（同步完成，写入 project_analysis_slices 表）。"""
-    from src.social_media.projects import crud as project_crud
+) -> AnalysisSlice:
+    """手动生成项目级合并分析切片（同步完成，写入 analysis_slices 表）。"""
+    from src.social_media.monitors import crud as monitor_crud
     from src.social_media.tasks.models import DataTask
 
     # 权限校验
-    has_access = await project_crud.check_project_access(
-        db, project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this project",
+            detail="You don't have access to this monitor",
         )
 
     # 任务校验：必须属于该项目且未删除
@@ -239,7 +239,7 @@ async def create_project_slice(
         select(DataTask)
         .options(selectinload(DataTask.platform))
         .where(DataTask.id.in_(task_ids))
-        .where(DataTask.project_id == project_id)
+        .where(DataTask.monitor_id == monitor_id)
         .where(DataTask.is_deleted.is_(False))
     )
     result = await db.execute(stmt)
@@ -250,7 +250,7 @@ async def create_project_slice(
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Some tasks not found in this project: {missing}",
+            detail=f"Some tasks not found in this monitor: {missing}",
         )
 
     # 必须已有任务级聚合结果
@@ -292,7 +292,7 @@ async def create_project_slice(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "message": "Some tasks have incompatible analysis_result schema (missing canonical aggregated_* fields). "
-                "Please re-run task aggregation for these tasks, then re-generate the project slice.",
+                "Please re-run task aggregation for these tasks, then re-generate the monitor slice.",
                 "missing_aggregated_opinions_task_ids": missing_agg_opinions,
                 "missing_aggregated_entities_task_ids": missing_agg_entities,
             },
@@ -301,7 +301,7 @@ async def create_project_slice(
     # Step0 辅助：为项目级去重/权重/新鲜度准备帖子映射（platform+post_id_on_platform）
     # 说明：项目级聚合的“去重口径”基于 SocialPost 的平台帖ID，而不是任务内自增ID
     from src.social_media.tasks.models import SocialPost
-    from src.social_media.projects.models import Platform
+    from src.social_media.monitors.models import Platform
     from src.social_media.analysis.celery_tasks.aggregation.metrics import calculate_cii
 
     posts_stmt = (
@@ -374,13 +374,13 @@ async def create_project_slice(
 
         # 主归属（首见原则）——用于 keyword 分布在去重后仍能“总和=总量”
         if post_key not in primary_keyword_by_key:
-            # row 没有 task_id，因此无法直接判定；这里先留空，后续由 build_project_slice_result 按任务维度补齐
+            # row 没有 task_id，因此无法直接判定；这里先留空，后续由 build_monitor_slice_result 按任务维度补齐
             primary_keyword_by_key[post_key] = ""
         if post_key not in primary_task_by_key:
             primary_task_by_key[post_key] = 0
 
-    slice_result = build_project_slice_result(
-        project_id=project_id,
+    slice_result = build_monitor_slice_result(
+        monitor_id=monitor_id,
         included_task_ids=task_ids,
         task_data_list=rich_task_data,
         subject=subject,
@@ -393,9 +393,9 @@ async def create_project_slice(
         spam_threshold=SPAM_HIGH_THRESHOLD,
     )
 
-    slice_record = ProjectAnalysisSlice(
+    slice_record = AnalysisSlice(
         name=name,
-        project_id=project_id,
+        monitor_id=monitor_id,
         user_id=current_user_id,
         included_task_ids=task_ids,
         result_data=slice_result,
@@ -416,7 +416,7 @@ async def run_comment_deep_analysis(
 ) -> RunAnalysisResponse:
     """运行评论深度分析"""
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
     from .celery_tasks.deep_analysis_tasks import run_comment_deep_task
 
     # 验证任务和权限
@@ -427,8 +427,8 @@ async def run_comment_deep_analysis(
             detail=f"Task {request.task_id} not found",
         )
 
-    has_access = await project_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -460,7 +460,7 @@ async def run_comment_deep_analysis(
     # 创建分析任务记录
     analysis_job = await create_analysis_job_async(
         db=db,
-        project_id=task.project_id,
+        monitor_id=task.monitor_id,
         task_id=request.task_id,
         user_id=current_user_id,
         analysis_type="deep_comments",
@@ -529,7 +529,7 @@ async def get_task_post_analyses(
         - 深度分析结果（post_deep_result, comment_deep_result）
     """
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
     from src.social_media.tasks.models import SocialPost
 
     # 验证任务是否存在
@@ -540,8 +540,8 @@ async def get_task_post_analyses(
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -669,7 +669,7 @@ async def preview_deep_analysis_candidates(
         dict 包含总帖数、已初筛数、符合阈值数、已完成深度/评论分析数、候选ID列表
     """
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
     from src.social_media.tasks.models import SocialPost
 
     # 验证任务与权限
@@ -678,8 +678,8 @@ async def preview_deep_analysis_candidates(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
         )
-    has_access = await project_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -784,7 +784,7 @@ async def delete_task_analyses(
         删除结果，包含删除的记录数
     """
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
     from sqlalchemy import delete
 
     # 验证任务是否存在
@@ -795,8 +795,8 @@ async def delete_task_analyses(
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -896,7 +896,7 @@ async def run_task_aggregation(
         RunAnalysisResponse: 包含 celery_task_id
     """
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
     from .celery_tasks.aggregation_tasks import run_aggregation_task
 
     # 验证任务是否存在
@@ -907,8 +907,8 @@ async def run_task_aggregation(
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -935,7 +935,7 @@ async def run_task_aggregation(
     # 这样前端可以立即检测到任务在运行，不需要等待 Celery 任务内部创建
     entity_job = await create_analysis_job_async(
         db=db,
-        project_id=task.project_id,
+        monitor_id=task.monitor_id,
         task_id=task_id,
         user_id=current_user_id,
         analysis_type="entity_normalization",
@@ -943,7 +943,7 @@ async def run_task_aggregation(
     )
     opinion_job = await create_analysis_job_async(
         db=db,
-        project_id=task.project_id,
+        monitor_id=task.monitor_id,
         task_id=task_id,
         user_id=current_user_id,
         analysis_type="opinion_normalization",
@@ -953,7 +953,7 @@ async def run_task_aggregation(
     # 启动 Celery 任务，传递预创建的 job_id
     celery_result = run_aggregation_task.delay(
         task_id=task_id,
-        project_id=task.project_id,
+        monitor_id=task.monitor_id,
         user_id=current_user_id,
         entity_job_id=entity_job.id,
         opinion_job_id=opinion_job.id,
@@ -987,7 +987,7 @@ async def get_task_aggregation(
     """
     from src.social_media.tasks import crud as task_crud
     from src.social_media.tasks.models import DataTask
-    from src.social_media.projects import crud as project_crud
+    from src.social_media.monitors import crud as monitor_crud
 
     # 验证任务是否存在
     task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
@@ -997,8 +997,8 @@ async def get_task_aggregation(
         )
 
     # 验证用户权限
-    has_access = await project_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await monitor_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(

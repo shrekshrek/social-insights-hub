@@ -124,18 +124,18 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
     },
     {
-      accessorKey: 'project_name',
+      accessorKey: 'monitor_name',
       header: '所属项目',
       cell: ({ row }) => {
-        if (!row.original.project_name || !row.original.project_id) {
+        if (!row.original.monitor_name || !row.original.monitor_id) {
           return h('span', { class: 'text-gray-400' }, '-')
         }
         return h(Button, {
           variant: 'link',
           size: 'xs',
           class: 'p-0 font-normal',
-          to: `/social-media/projects/${row.original.project_id}`,
-        }, () => row.original.project_name)
+          to: `/social-media/monitors/${row.original.monitor_id}`,
+        }, () => row.original.monitor_name)
       },
     },
     {

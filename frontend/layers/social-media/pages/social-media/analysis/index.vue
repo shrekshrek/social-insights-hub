@@ -21,7 +21,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const selectedType = ref<AnalysisType | undefined>()
 const selectedStatus = ref<AnalysisStatus | undefined>()
-const searchProjectId = ref<number | undefined>()
+const searchMonitorId = ref<number | undefined>()
 const searchTaskId = ref<number | undefined>()
 const refreshing = ref(false)
 
@@ -32,8 +32,8 @@ const params = computed(() => ({
   analysis_type: selectedType.value,
   status: selectedStatus.value,
   // 处理空值和 NaN
-  project_id: typeof searchProjectId.value === 'number' && !Number.isNaN(searchProjectId.value)
-    ? searchProjectId.value
+  monitor_id: typeof searchMonitorId.value === 'number' && !Number.isNaN(searchMonitorId.value)
+    ? searchMonitorId.value
     : undefined,
   task_id: typeof searchTaskId.value === 'number' && !Number.isNaN(searchTaskId.value)
     ? searchTaskId.value
@@ -93,7 +93,7 @@ const typeOptions = [
   { label: '评论深度', value: 'deep_comments' },
   { label: '实体归一化', value: 'entity_normalization' },
   { label: '观点归一化', value: 'opinion_normalization' },
-  { label: '项目切片总分析', value: 'project_slice_summary' },
+  { label: '监测切片总分析', value: 'monitor_slice_summary' },
 ]
 
 // 状态选项
@@ -143,7 +143,7 @@ const getAnalysisTypeLabel = (type: string) => {
     deep_comments: '评论深度',
     entity_normalization: '实体归一化',
     opinion_normalization: '观点归一化',
-    project_slice_summary: '项目切片总分析',
+    monitor_slice_summary: '监测切片总分析',
   }
   return labels[type] || type
 }
@@ -255,23 +255,23 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       },
     },
     {
-      accessorKey: 'project_name',
+      accessorKey: 'monitor_name',
       header: '项目',
       cell: ({ row }) => {
-        const projectId = row.original.project_id
-        const projectName = row.original.project_name
-        if (!projectId) {
+        const monitorId = row.original.monitor_id
+        const monitorName = row.original.monitor_name
+        if (!monitorId) {
           return h('span', { class: 'text-gray-400' }, '-')
         }
         return h('div', { class: 'flex items-center gap-1' }, [
-          h('span', { class: 'text-xs text-gray-400 font-mono' }, `#${projectId}`),
-          projectName
+          h('span', { class: 'text-xs text-gray-400 font-mono' }, `#${monitorId}`),
+          monitorName
             ? h(Button, {
                 variant: 'link',
                 size: 'xs',
                 class: 'p-0 font-normal truncate max-w-24',
-                to: `/social-media/projects/${projectId}`,
-              }, () => projectName)
+                to: `/social-media/monitors/${monitorId}`,
+              }, () => monitorName)
             : null,
         ])
       },
@@ -305,7 +305,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
             variant: 'link',
             size: 'xs',
             class: 'p-0 font-normal',
-            to: `/social-media/projects/${row.original.project_id}/analysis?slice_id=${row.original.slice_id}`,
+            to: `/social-media/monitors/${row.original.monitor_id}/analysis?slice_id=${row.original.slice_id}`,
           }, () => label)
         }
 
@@ -420,7 +420,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
 
           <div class="flex items-center gap-3">
             <UInput
-              v-model.number="searchProjectId"
+              v-model.number="searchMonitorId"
               type="number"
               placeholder="项目ID"
               class="w-24"

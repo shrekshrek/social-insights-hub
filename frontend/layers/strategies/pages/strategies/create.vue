@@ -95,54 +95,54 @@
       <ClientOnly>
         <template #fallback>
           <div class="text-center py-8">
-            <p class="text-gray-600 dark:text-gray-400">加载项目列表...</p>
+            <p class="text-gray-600 dark:text-gray-400">加载监测列表...</p>
           </div>
         </template>
 
-        <div v-if="projectsPending" class="text-center py-8">
+        <div v-if="monitorsPending" class="text-center py-8">
           <p class="text-gray-500">加载中...</p>
         </div>
 
-        <div v-else-if="projects.length === 0" class="text-center py-8">
-          <p class="text-gray-500">暂无项目，请先创建监控项目并生成分析切片</p>
+        <div v-else-if="monitors.length === 0" class="text-center py-8">
+          <p class="text-gray-500">暂无监测，请先创建监测项目并生成分析切片</p>
         </div>
 
         <div v-else class="space-y-4">
           <div
-            v-for="project in projects"
-            :key="project.id"
+            v-for="monitor in monitors"
+            :key="monitor.id"
             class="border border-gray-200 dark:border-gray-700 rounded-lg"
           >
-            <!-- 项目标题 (可折叠) -->
+            <!-- 监测标题 (可折叠) -->
             <button
               class="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-t-lg"
-              @click="toggleProject(project.id)"
+              @click="toggleMonitor(monitor.id)"
             >
               <div class="flex items-center gap-2">
                 <UIcon
-                  :name="expandedProjects.has(project.id) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
+                  :name="expandedMonitors.has(monitor.id) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
                   class="text-gray-400"
                 />
-                <span class="font-medium">{{ project.name }}</span>
+                <span class="font-medium">{{ monitor.name }}</span>
               </div>
               <span class="text-sm text-gray-500">
-                {{ getProjectSliceCount(project.id) }} 个切片
+                {{ getMonitorSliceCount(monitor.id) }} 个切片
               </span>
             </button>
 
             <!-- 切片列表 -->
             <div
-              v-if="expandedProjects.has(project.id)"
+              v-if="expandedMonitors.has(monitor.id)"
               class="border-t border-gray-200 dark:border-gray-700 p-3 space-y-2"
             >
               <div
-                v-if="!projectSlicesMap[project.id] || projectSlicesMap[project.id]!.length === 0"
+                v-if="!monitorSlicesMap[monitor.id] || monitorSlicesMap[monitor.id]!.length === 0"
                 class="text-sm text-gray-400 py-2"
               >
-                该项目暂无分析切片
+                该监测暂无分析切片
               </div>
               <label
-                v-for="slice in (projectSlicesMap[project.id] || [])"
+                v-for="slice in (monitorSlicesMap[monitor.id] || [])"
                 :key="slice.id"
                 class="flex items-center gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
               >
@@ -172,14 +172,14 @@ definePageMeta({
   title: '新建策略',
 })
 
-interface ProjectSliceItem {
+interface MonitorSliceItem {
   id: number
   name: string | null
-  project_id: number
+  monitor_id: number
   created_at: string
 }
 
-interface ProjectItem {
+interface MonitorItem {
   id: number
   name: string
 }
@@ -198,42 +198,42 @@ const brief = ref({
   notes: '',
 })
 const selectedSliceIds = ref<number[]>([])
-const expandedProjects = ref(new Set<number>())
-const projectSlicesMap = ref<Record<number, ProjectSliceItem[]>>({})
+const expandedMonitors = ref(new Set<number>())
+const monitorSlicesMap = ref<Record<number, MonitorSliceItem[]>>({})
 
 // 加载项目列表 (不分页，取前100个)
-const { data: projectsData, pending: projectsPending } = useApiDataFn<{
-  items: ProjectItem[]
+const { data: monitorsData, pending: monitorsPending } = useApiDataFn<{
+  items: MonitorItem[]
   total: number
-}>('/social-media/projects?page_size=100', {
-  key: 'strategy-create-projects',
+}>('/social-media/monitors?page_size=100', {
+  key: 'strategy-create-monitors',
 })
 
-const projects = computed(() => projectsData.value?.items || [])
+const monitors = computed(() => monitorsData.value?.items || [])
 
 const canSubmit = computed(() => {
   return form.value.name.trim().length > 0 && selectedSliceIds.value.length > 0
 })
 
-const toggleProject = async (projectId: number) => {
-  if (expandedProjects.value.has(projectId)) {
-    expandedProjects.value.delete(projectId)
+const toggleMonitor = async (monitorId: number) => {
+  if (expandedMonitors.value.has(monitorId)) {
+    expandedMonitors.value.delete(monitorId)
   } else {
-    expandedProjects.value.add(projectId)
+    expandedMonitors.value.add(monitorId)
     // 首次展开时加载切片
-    if (!projectSlicesMap.value[projectId]) {
+    if (!monitorSlicesMap.value[monitorId]) {
       try {
-        const result = await apiRequest<{ items: ProjectSliceItem[] }>(
-          `/social-media/analysis/projects/${projectId}/slices`
+        const result = await apiRequest<{ items: MonitorSliceItem[] }>(
+          `/social-media/analysis/monitors/${monitorId}/slices`
         )
-        projectSlicesMap.value = {
-          ...projectSlicesMap.value,
-          [projectId]: result.items,
+        monitorSlicesMap.value = {
+          ...monitorSlicesMap.value,
+          [monitorId]: result.items,
         }
       } catch {
-        projectSlicesMap.value = {
-          ...projectSlicesMap.value,
-          [projectId]: [],
+        monitorSlicesMap.value = {
+          ...monitorSlicesMap.value,
+          [monitorId]: [],
         }
       }
     }
@@ -249,8 +249,8 @@ const toggleSlice = (sliceId: number) => {
   }
 }
 
-const getProjectSliceCount = (projectId: number) => {
-  return (projectSlicesMap.value[projectId] || []).length
+const getMonitorSliceCount = (monitorId: number) => {
+  return (monitorSlicesMap.value[monitorId] || []).length
 }
 
 const formatDate = (dateString: string) => {

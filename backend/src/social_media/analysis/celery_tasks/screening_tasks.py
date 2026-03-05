@@ -51,7 +51,7 @@ def _analyze_batch_posts(
     result_id: int,
     task_id: int,
     post_ids: list[int],
-    project_keywords: str,
+    monitor_keywords: str,
 ) -> Dict[str, Any]:
     """批量分析多个帖子（同步实现，减少API调用次数）
 
@@ -59,7 +59,7 @@ def _analyze_batch_posts(
         result_id: 分析结果ID
         task_id: 任务ID
         post_ids: 要分析的帖子ID列表（通常5个一批）
-        project_keywords: 项目关键词
+        monitor_keywords: 项目关键词
 
     Returns:
         批量分析结果
@@ -94,7 +94,7 @@ def _analyze_batch_posts(
             response, token_stats = invoke_chain_with_stats_sync(
                 chain=chain,
                 input_dict={
-                    "project_keywords": project_keywords,
+                    "monitor_keywords": monitor_keywords,
                     "posts_content": posts_content,
                 },
                 llm_type="chat",
@@ -247,7 +247,7 @@ def analyze_batch_posts_screening(
     result_id: int,
     task_id: int,
     post_ids: list[int],
-    project_keywords: str,
+    monitor_keywords: str,
 ) -> Dict[str, Any]:
     """批量分析帖子的初筛任务（子任务）
 
@@ -258,12 +258,12 @@ def analyze_batch_posts_screening(
         result_id: 分析结果ID
         task_id: 任务ID
         post_ids: 要分析的帖子ID列表（通常5个一批）
-        project_keywords: 项目关键词
+        monitor_keywords: 项目关键词
 
     Returns:
         批量分析结果
     """
-    return _analyze_batch_posts(result_id, task_id, post_ids, project_keywords)
+    return _analyze_batch_posts(result_id, task_id, post_ids, monitor_keywords)
 
 
 @celery_app.task(
@@ -327,7 +327,7 @@ def run_screening_task(
     result_id: int,
     task_id: int,
     post_ids: list[int],
-    project_keywords: str,
+    monitor_keywords: str,
 ) -> Dict[str, Any]:
     """帖子初筛分析协调器（批量模式）
 
@@ -357,7 +357,7 @@ def run_screening_task(
                 result_id=result_id,
                 task_id=task_id,
                 post_ids=batch,
-                project_keywords=project_keywords,
+                monitor_keywords=monitor_keywords,
             )
             for batch in batches
         )

@@ -28,7 +28,7 @@ class DataTaskBase(CustomBaseModel):
 class DataTaskCreate(DataTaskBase):
     """创建任务"""
 
-    project_id: int = Field(..., gt=0, description="项目ID")
+    monitor_id: int = Field(..., gt=0, description="项目ID")
     data_source: str = Field(
         ...,
         pattern="^(remote_crawler|local_upload)$",
@@ -51,7 +51,7 @@ class DataTaskRead(DataTaskBase):
     """任务详情返回"""
 
     id: int
-    project_id: int
+    monitor_id: int
     creator_id: int
     data_source: str
     status: str
@@ -69,7 +69,7 @@ class DataTaskRead(DataTaskBase):
 class DataTaskReadWithRelations(DataTaskRead):
     """任务详情（包含关联信息）"""
 
-    project_name: Optional[str] = None
+    monitor_name: Optional[str] = None
     platform_name: Optional[str] = None
     platform_code: Optional[str] = None
     creator_username: Optional[str] = None
@@ -307,7 +307,7 @@ class CrossTaskPostQuery(CustomBaseModel):
 
     platform_id: int
     post_id_on_platform: str
-    project_id: Optional[int] = None
+    monitor_id: Optional[int] = None
 
 
 class PostQueryResponse(CustomBaseModel):

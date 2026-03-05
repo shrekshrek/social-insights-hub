@@ -39,8 +39,8 @@ class SliceSummary(CustomBaseModel):
 
     slice_id: int
     slice_name: str | None = None
-    project_id: int
-    project_name: str
+    monitor_id: int
+    monitor_name: str
 
 
 class StrategyListItem(CustomBaseModel):

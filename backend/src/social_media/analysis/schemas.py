@@ -204,7 +204,7 @@ class PostAnalysisResponse(CustomBaseModel):
 class AnalysisJobCreate(CustomBaseModel):
     """创建分析任务"""
 
-    project_id: int = Field(..., gt=0, description="项目ID")
+    monitor_id: int = Field(..., gt=0, description="项目ID")
     task_id: int | None = Field(None, gt=0, description="任务ID（任务级分析时必填）")
     analysis_type: str = Field(
         ...,
@@ -236,7 +236,7 @@ class AnalysisJobResponse(CustomBaseModel):
     """分析任务响应"""
 
     id: int
-    project_id: int
+    monitor_id: int
     task_id: int | None
     user_id: int
     analysis_type: str
@@ -270,7 +270,7 @@ class AnalysisJobResponse(CustomBaseModel):
     updated_at: datetime
 
     # 关联信息（可选，用于列表展示）
-    project_name: str | None = None
+    monitor_name: str | None = None
     task_name: str | None = None
     slice_id: int | None = None
     slice_name: str | None = None
@@ -351,7 +351,7 @@ class CreateProjectSliceRequest(CustomBaseModel):
 class ProjectSliceResponse(CustomBaseModel):
     id: int
     name: str | None = None
-    project_id: int
+    monitor_id: int
     user_id: int
     included_task_ids: list[int]
     result_data: dict

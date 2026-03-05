@@ -46,7 +46,7 @@ backend/src/
 ├── rbac/                    # 角色权限, 代码驱动同步
 ├── users/                   # 用户 CRUD, 角色分配
 ├── social_media/
-│   ├── projects/            # 监控项目, 平台初始化
+│   ├── monitors/            # 监测项目, 平台初始化
 │   ├── tasks/               # 数据采集任务, 多平台适配器
 │   │   └── adapters/        # 抖音/小红书/微博等平台适配
 │   └── analysis/            # LLM 分析编排, 成本追踪

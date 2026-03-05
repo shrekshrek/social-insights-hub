@@ -64,7 +64,7 @@ Brand Opportunity 来源：`sov_ranking` / `focus.swot`(+delta) / `focus.gap` / 
 
 ## Important Notes
 
-- Strategy 是与 Project 平级的顶级实体，通过 `strategy_slices` 关联任意项目的切片
+- Strategy 是与 Monitor 平级的顶级实体，通过 `strategy_slices` 关联任意监测的切片
 - 生成 Phase 2 要求 Phase 1 已完成（status >= phase1_done），Phase 3 同理
 - `service.py` 中 `_load_slice_data()` 直接读切片 `result_data` JSONB 字段，不回查帖子数据库
 - Word 导出依赖 `python-docx`，仅在 Docker 容器内安装

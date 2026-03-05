@@ -19,15 +19,15 @@ async def create_task(
 ) -> DataTask:
     """创建任务"""
     # 验证项目是否存在
-    from src.social_media.projects import crud as social_crud
+    from src.social_media.monitors import crud as social_crud
 
-    project = await social_crud.get_project_by_id(
-        db, task_in.project_id, load_relations=False
+    monitor = await social_crud.get_monitor_by_id(
+        db, task_in.monitor_id, load_relations=False
     )
-    if not project:
+    if not monitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with id {task_in.project_id} not found",
+            detail=f"Monitor with id {task_in.monitor_id} not found",
         )
 
     # 验证平台是否存在
@@ -39,13 +39,13 @@ async def create_task(
         )
 
     # 验证用户是否有项目访问权限
-    has_access = await social_crud.check_project_access(
-        db, task_in.project_id, current_user_id
+    has_access = await social_crud.check_monitor_access(
+        db, task_in.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this project",
+            detail="You don't have access to this monitor",
         )
 
     # 准备任务数据
@@ -68,10 +68,10 @@ async def get_task(
         return None
 
     # 验证用户是否有项目访问权限
-    from src.social_media.projects import crud as social_crud
+    from src.social_media.monitors import crud as social_crud
 
-    has_access = await social_crud.check_project_access(
-        db, task.project_id, current_user_id
+    has_access = await social_crud.check_monitor_access(
+        db, task.monitor_id, current_user_id
     )
     if not has_access:
         raise HTTPException(
@@ -86,7 +86,7 @@ async def get_tasks_list(
     db: AsyncSession,
     page: int = 1,
     page_size: int = 20,
-    project_id: Optional[int] = None,
+    monitor_id: Optional[int] = None,
     platform_id: Optional[int] = None,
     task_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -96,17 +96,17 @@ async def get_tasks_list(
     current_user_id: Optional[int] = None,
 ) -> tuple[List[DataTask], int]:
     """获取任务列表（带过滤和分页）"""
-    # 如果指定了project_id，验证访问权限
-    if project_id is not None and current_user_id is not None:
-        from src.social_media.projects import crud as social_crud
+    # 如果指定了monitor_id，验证访问权限
+    if monitor_id is not None and current_user_id is not None:
+        from src.social_media.monitors import crud as social_crud
 
-        has_access = await social_crud.check_project_access(
-            db, project_id, current_user_id
+        has_access = await social_crud.check_monitor_access(
+            db, monitor_id, current_user_id
         )
         if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this project",
+                detail="You don't have access to this monitor",
             )
 
     skip = (page - 1) * page_size
@@ -114,7 +114,7 @@ async def get_tasks_list(
         db,
         skip=skip,
         limit=page_size,
-        project_id=project_id,
+        monitor_id=monitor_id,
         platform_id=platform_id,
         task_type=task_type,
         status=status,
@@ -424,28 +424,28 @@ async def query_cross_task_posts(
     db: AsyncSession,
     platform_id: int,
     post_id_on_platform: str,
-    project_id: Optional[int] = None,
+    monitor_id: Optional[int] = None,
     current_user_id: int = None,
 ) -> List[SocialPost]:
     """跨任务查询同一帖子的历史数据"""
-    # 如果指定了project_id，验证访问权限
-    if project_id is not None and current_user_id is not None:
-        from src.social_media.projects import crud as social_crud
+    # 如果指定了monitor_id，验证访问权限
+    if monitor_id is not None and current_user_id is not None:
+        from src.social_media.monitors import crud as social_crud
 
-        has_access = await social_crud.check_project_access(
-            db, project_id, current_user_id
+        has_access = await social_crud.check_monitor_access(
+            db, monitor_id, current_user_id
         )
         if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this project",
+                detail="You don't have access to this monitor",
             )
 
     posts = await crud.get_posts_by_platform_post_id(
         db,
         platform_id=platform_id,
         post_id_on_platform=post_id_on_platform,
-        project_id=project_id,
+        monitor_id=monitor_id,
     )
 
     return posts

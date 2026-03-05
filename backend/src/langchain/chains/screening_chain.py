@@ -48,7 +48,7 @@ SCREENING_SYSTEM_TEMPLATE = """你是舆情分析专家，负责对社交媒体�
 
 SCREENING_USER_TEMPLATE = """请对以下社交媒体帖子进行批量初筛评分：
 
-项目关键词：{project_keywords}
+项目关键词：{monitor_keywords}
 
 {posts_content}
 

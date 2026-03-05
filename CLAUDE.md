@@ -44,7 +44,7 @@
 | auth/ | JWT 认证、用户注册登录、令牌管理 |
 | rbac/ | 角色权限管理，代码驱动启动时自动同步 |
 | users/ | 用户 CRUD、角色分配 |
-| social_media/projects/ | 监控项目管理，平台初始化 |
+| social_media/monitors/ | 监测项目管理，平台初始化 |
 | social_media/tasks/ | 数据采集任务管理，多平台适配器 |
 | social_media/analysis/ | LLM 分析链、批处理、成本追踪 |
 | langchain/ | DeepSeek LLM 集成，筛选/提取/归一化/情感分析链 |
@@ -60,7 +60,7 @@
 | auth/ | 登录注册、认证状态管理 |
 | rbac/ | 角色权限管理界面 |
 | users/ | 用户管理界面 |
-| social-media/ | 项目/任务/分析界面 (含 projects/, tasks/, analysis/, types/) |
+| social-media/ | 监测/任务/分析界面 (含 monitors/, tasks/, analysis/, types/) |
 
 ### 前端核心文件
 

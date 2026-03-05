@@ -91,7 +91,7 @@ def _wait_for_analysis_job(job_id: int, timeout: int = TASK_WAIT_TIMEOUT) -> boo
     return False
 
 
-def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | None:
+def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | None:
     """执行原文初筛
 
     Returns:
@@ -130,7 +130,7 @@ def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | N
 
         analysis_job = create_analysis_job_sync(
             db=db,
-            project_id=task.project_id,
+            monitor_id=task.monitor_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="screening_posts",
@@ -143,7 +143,7 @@ def _run_screening(task_id: int, user_id: int, project_keywords: str) -> int | N
             result_id=job_id,
             task_id=task_id,
             post_ids=post_ids,
-            project_keywords=project_keywords,
+            monitor_keywords=monitor_keywords,
         )
 
         # 更新为真实的 celery_task_id
@@ -199,7 +199,7 @@ def _run_deep_posts(
 
         analysis_job = create_analysis_job_sync(
             db=db,
-            project_id=task.project_id,
+            monitor_id=task.monitor_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="deep_posts",
@@ -269,7 +269,7 @@ def _run_deep_comments(
 
         analysis_job = create_analysis_job_sync(
             db=db,
-            project_id=task.project_id,
+            monitor_id=task.monitor_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="deep_comments",
@@ -329,7 +329,7 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         # 创建实体归一化任务（和手动聚合一致）
         entity_job = create_analysis_job_sync(
             db=db,
-            project_id=task.project_id,
+            monitor_id=task.monitor_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="entity_normalization",
@@ -339,7 +339,7 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         # 创建观点归一化任务（和手动聚合一致）
         opinion_job = create_analysis_job_sync(
             db=db,
-            project_id=task.project_id,
+            monitor_id=task.monitor_id,
             task_id=task_id,
             user_id=user_id,
             analysis_type="opinion_normalization",
@@ -349,7 +349,7 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         # 启动 Celery 任务，传递预创建的 job_id
         celery_result = run_aggregation_task.delay(
             task_id=task_id,
-            project_id=task.project_id,
+            monitor_id=task.monitor_id,
             user_id=user_id,
             entity_job_id=entity_job.id,
             opinion_job_id=opinion_job.id,
@@ -376,7 +376,7 @@ def run_auto_analysis(
     self,
     task_id: int,
     user_id: int,
-    project_keywords: str = "",
+    monitor_keywords: str = "",
     spam_max: float = DEFAULT_SPAM_MAX,
     value_min: float = DEFAULT_VALUE_MIN,
     relevance_min: float = DEFAULT_RELEVANCE_MIN,
@@ -409,7 +409,7 @@ def run_auto_analysis(
     try:
         # 1. 原文初筛
         logger.info(f"Task {task_id}: Step 1/4 - Running screening...")
-        screening_job_id = _run_screening(task_id, user_id, project_keywords)
+        screening_job_id = _run_screening(task_id, user_id, monitor_keywords)
         results["screening"] = {"job_id": screening_job_id}
 
         if screening_job_id:

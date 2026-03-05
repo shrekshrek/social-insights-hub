@@ -11,7 +11,7 @@ from src.schemas import HealthResponse, RootResponse
 from src.auth.router import router as auth_router
 from src.users.router import router as users_router
 from src.rbac.router import router as rbac_router
-from src.social_media.projects.router import router as projects_router
+from src.social_media.monitors.router import router as monitors_router
 from src.social_media.tasks.router import router as tasks_router
 from src.social_media.analysis.router import router as analysis_router
 from src.agent.router import router as agent_router
@@ -19,7 +19,7 @@ from src.strategies.router import router as strategies_router
 from src.config import settings
 from src.database import get_async_db, AsyncSessionLocal
 from src.rbac.init_data import init_rbac_data
-from src.social_media.projects.init_data import init_platforms
+from src.social_media.monitors.init_data import init_platforms
 from src.middleware import (
     GZipRequestMiddleware,
     RequestLoggingMiddleware,
@@ -188,7 +188,7 @@ async def read_root():
 app.include_router(auth_router, prefix=settings.API_PREFIX)
 app.include_router(users_router, prefix=settings.API_PREFIX)
 app.include_router(rbac_router, prefix=settings.API_PREFIX)
-app.include_router(projects_router, prefix=settings.API_PREFIX)
+app.include_router(monitors_router, prefix=settings.API_PREFIX)
 app.include_router(tasks_router, prefix=settings.API_PREFIX)
 app.include_router(analysis_router, prefix=settings.API_PREFIX)
 app.include_router(agent_router, prefix=settings.API_PREFIX)

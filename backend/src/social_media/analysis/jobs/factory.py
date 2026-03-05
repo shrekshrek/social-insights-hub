@@ -15,7 +15,7 @@ from src.social_media.analysis.models import AnalysisJob
 
 def create_analysis_job_sync(
     db: Session,
-    project_id: int,
+    monitor_id: int,
     task_id: int | None,
     user_id: int,
     analysis_type: str,
@@ -28,7 +28,7 @@ def create_analysis_job_sync(
 
     Args:
         db: 同步数据库会话
-        project_id: 项目ID
+        monitor_id: 项目ID
         task_id: 任务ID（任务级分析时填写；项目级分析时可为空）
         user_id: 用户ID
         analysis_type: 分析类型 (AnalysisType 枚举值)
@@ -45,7 +45,7 @@ def create_analysis_job_sync(
         celery_task_id = f"sync-{analysis_type}-{uuid.uuid4().hex[:8]}"
 
     job = AnalysisJob(
-        project_id=project_id,
+        monitor_id=monitor_id,
         task_id=task_id,
         user_id=user_id,
         analysis_type=analysis_type,
@@ -63,7 +63,7 @@ def create_analysis_job_sync(
 
 async def create_analysis_job_async(
     db: AsyncSession,
-    project_id: int,
+    monitor_id: int,
     task_id: int | None,
     user_id: int,
     analysis_type: str,
@@ -76,7 +76,7 @@ async def create_analysis_job_async(
 
     Args:
         db: 异步数据库会话
-        project_id: 项目ID
+        monitor_id: 项目ID
         task_id: 任务ID
         user_id: 用户ID
         analysis_type: 分析类型 (AnalysisType 枚举值)
@@ -94,7 +94,7 @@ async def create_analysis_job_async(
         celery_task_id = f"pending-{analysis_type}-{uuid.uuid4().hex[:8]}"
 
     job = AnalysisJob(
-        project_id=project_id,
+        monitor_id=monitor_id,
         task_id=task_id,
         user_id=user_id,
         analysis_type=analysis_type,

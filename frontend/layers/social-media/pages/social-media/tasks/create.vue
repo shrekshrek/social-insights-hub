@@ -7,18 +7,18 @@ definePageMeta({
 
 const route = useRoute()
 const { createTask } = useTasks()
-const { getProjects, getProject } = useSocialProjects()
+const { getMonitors, getMonitor } = useMonitors()
 const { getPlatforms } = usePlatforms()
 
-// 从URL获取project_id（如果有的话）
-const preselectedProjectId = route.query.project_id ? Number(route.query.project_id) : undefined
+// 从URL获取monitor_id（如果有的话）
+const preselectedMonitorId = route.query.monitor_id ? Number(route.query.monitor_id) : undefined
 
-// 判断是否从项目详情页进入（有预选项目ID）
-const isFromProjectDetail = computed(() => !!preselectedProjectId)
+// 判断是否从监测详情页进入（有预选监测ID）
+const isFromMonitorDetail = computed(() => !!preselectedMonitorId)
 
-// 如果是从项目详情页进入，获取项目信息
-const { data: preselectedProject } = preselectedProjectId
-  ? getProject(preselectedProjectId)
+// 如果是从监测详情页进入，获取监测信息
+const { data: preselectedMonitor } = preselectedMonitorId
+  ? getMonitor(preselectedMonitorId)
   : { data: ref(null) }
 
 // 获取平台列表
@@ -32,8 +32,8 @@ const submitting = ref(false)
 
 // 计算返回路径
 const cancelReturnPath = computed(() => {
-  if (isFromProjectDetail.value && preselectedProjectId) {
-    return `/social-media/projects/${preselectedProjectId}`
+  if (isFromMonitorDetail.value && preselectedMonitorId) {
+    return `/social-media/monitors/${preselectedMonitorId}`
   }
   return '/social-media/tasks'
 })
@@ -51,7 +51,7 @@ const handleBack = () => {
 const schema = z.object({
   name: z.string().min(1, '任务名称不能为空').max(255, '任务名称不能超过255个字符'),
   description: z.string().optional(),
-  project_id: z.number({ message: '请选择项目' }),
+  monitor_id: z.number({ message: '请选择项目' }),
   platform_id: z.number({ message: '请选择平台' }),
   task_type: z.enum(['search', 'detail', 'creator', 'homefeed'], { message: '请选择任务类型' }),
   data_source: z.enum(['local_upload', 'remote_crawler'], { message: '请选择数据源' }),
@@ -66,7 +66,7 @@ const schema = z.object({
 const state = reactive<{
   name: string
   description: string
-  project_id: number | undefined
+  monitor_id: number | undefined
   platform_id: number | undefined
   task_type: 'search' | 'detail' | 'creator' | 'homefeed'
   data_source: 'local_upload' | 'remote_crawler'
@@ -84,7 +84,7 @@ const state = reactive<{
 }>({
   name: '',
   description: '',
-  project_id: preselectedProjectId,
+  monitor_id: preselectedMonitorId,
   platform_id: undefined,
   task_type: 'search',
   data_source: 'local_upload',
@@ -101,46 +101,46 @@ const state = reactive<{
 })
 
 // 项目搜索相关
-const projectSearchQuery = ref('')
-const projectSearchFocused = ref(false)
-const searchingProjects = ref(false)
-const selectedProjectCache = ref<{ id: number; name: string } | null>(null)
+const monitorSearchQuery = ref('')
+const monitorSearchFocused = ref(false)
+const searchingMonitors = ref(false)
+const selectedMonitorCache = ref<{ id: number; name: string } | null>(null)
 
 // 动态搜索参数
-const projectSearchParams = computed(() => {
+const monitorSearchParams = computed(() => {
   const params: Record<string, unknown> = {
     page: 1,
     page_size: 50,
   }
-  if (projectSearchQuery.value.trim()) {
-    params.search = projectSearchQuery.value.trim()
+  if (monitorSearchQuery.value.trim()) {
+    params.search = monitorSearchQuery.value.trim()
   }
   return params
 })
 
 // 获取项目列表（根据搜索参数动态更新）
-const { data: projectsData, pending: projectsPending } = getProjects(projectSearchParams)
+const { data: monitorsData, pending: monitorsPending } = getMonitors(monitorSearchParams)
 
-// 项目选项
-const projectOptions = computed(() => {
-  if (!projectsData.value) return []
-  return projectsData.value.items.map((p) => ({
+// 监测选项
+const monitorOptions = computed(() => {
+  if (!monitorsData.value) return []
+  return monitorsData.value.items.map((p) => ({
     label: p.name,
     value: p.id,
   }))
 })
 
 // 选中的项目名称
-const selectedProjectName = computed(() => {
-  if (!state.project_id) return ''
+const selectedMonitorName = computed(() => {
+  if (!state.monitor_id) return ''
 
   // 先从当前搜索结果中查找
-  const fromResults = projectOptions.value.find(p => p.value === state.project_id)
+  const fromResults = monitorOptions.value.find(p => p.value === state.monitor_id)
   if (fromResults) return fromResults.label
 
   // 如果不在当前结果中，使用缓存的名称
-  if (selectedProjectCache.value?.id === state.project_id) {
-    return selectedProjectCache.value.name
+  if (selectedMonitorCache.value?.id === state.monitor_id) {
+    return selectedMonitorCache.value.name
   }
 
   return ''
@@ -151,37 +151,37 @@ let searchDebounceTimer: NodeJS.Timeout | null = null
 
 // 处理搜索输入（带防抖）
 const handleSearchInput = (value: string) => {
-  projectSearchQuery.value = value
+  monitorSearchQuery.value = value
 
   if (searchDebounceTimer) {
     clearTimeout(searchDebounceTimer)
   }
 
-  searchingProjects.value = true
+  searchingMonitors.value = true
   searchDebounceTimer = setTimeout(() => {
-    searchingProjects.value = false
+    searchingMonitors.value = false
   }, 300)
 }
 
 // 选择项目
-const selectProject = (projectId: number, projectName: string) => {
-  state.project_id = projectId
-  selectedProjectCache.value = { id: projectId, name: projectName }
-  projectSearchQuery.value = ''
-  projectSearchFocused.value = false
+const selectMonitor = (monitorId: number, monitorName: string) => {
+  state.monitor_id = monitorId
+  selectedMonitorCache.value = { id: monitorId, name: monitorName }
+  monitorSearchQuery.value = ''
+  monitorSearchFocused.value = false
 }
 
 // 处理输入框焦点
-const handleProjectInputFocus = () => {
-  projectSearchFocused.value = true
-  projectSearchQuery.value = ''
+const handleMonitorInputFocus = () => {
+  monitorSearchFocused.value = true
+  monitorSearchQuery.value = ''
 }
 
 // 处理输入框失焦（延迟以允许点击选项）
-const handleProjectInputBlur = () => {
+const handleMonitorInputBlur = () => {
   setTimeout(() => {
-    projectSearchFocused.value = false
-    projectSearchQuery.value = ''
+    monitorSearchFocused.value = false
+    monitorSearchQuery.value = ''
   }, 200)
 }
 
@@ -408,7 +408,7 @@ const handleSubmit = async () => {
     const taskData: DataTaskCreate = {
       name: state.name,
       description: state.description || undefined,
-      project_id: state.project_id!,
+      monitor_id: state.monitor_id!,
       platform_id: state.platform_id!,
       task_type: state.task_type,
       data_source: state.data_source,
@@ -503,11 +503,11 @@ const handleSubmit = async () => {
 
             <!-- 所属项目（从项目详情页进入时只显示项目名称） -->
             <UFormField
-              v-if="isFromProjectDetail"
+              v-if="isFromMonitorDetail"
               label="所属项目"
             >
               <UInput
-                :model-value="preselectedProject?.name || '加载中...'"
+                :model-value="preselectedMonitor?.name || '加载中...'"
                 disabled
                 class="w-full"
               />
@@ -517,39 +517,39 @@ const handleSubmit = async () => {
             <UFormField
               v-else
               label="所属项目"
-              name="project_id"
+              name="monitor_id"
               required
             >
               <div class="relative">
                 <UInput
-                  :model-value="projectSearchFocused ? projectSearchQuery : selectedProjectName"
+                  :model-value="monitorSearchFocused ? monitorSearchQuery : selectedMonitorName"
                   placeholder="输入项目名称搜索..."
                   icon="i-lucide-search"
-                  :loading="projectsPending"
+                  :loading="monitorsPending"
                   class="w-full"
                   @update:model-value="handleSearchInput"
-                  @focus="handleProjectInputFocus"
-                  @blur="handleProjectInputBlur"
+                  @focus="handleMonitorInputFocus"
+                  @blur="handleMonitorInputBlur"
                 />
 
                 <!-- 下拉列表 -->
                 <div
-                  v-if="projectSearchFocused && !projectsPending"
+                  v-if="monitorSearchFocused && !monitorsPending"
                   class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-auto"
                 >
                   <!-- 有结果 -->
-                  <template v-if="projectOptions.length > 0">
+                  <template v-if="monitorOptions.length > 0">
                     <button
-                      v-for="project in projectOptions"
-                      :key="project.value"
+                      v-for="monitor in monitorOptions"
+                      :key="monitor.value"
                       type="button"
                       class="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 text-sm"
                       :class="{
-                        'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400': state.project_id === project.value
+                        'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400': state.monitor_id === monitor.value
                       }"
-                      @click="selectProject(project.value, project.label)"
+                      @click="selectMonitor(monitor.value, monitor.label)"
                     >
-                      {{ project.label }}
+                      {{ monitor.label }}
                     </button>
                   </template>
 
@@ -558,13 +558,13 @@ const handleSubmit = async () => {
                     v-else
                     class="px-3 py-2 text-sm text-gray-500"
                   >
-                    {{ projectSearchQuery ? '未找到匹配的项目' : '开始输入以搜索项目' }}
+                    {{ monitorSearchQuery ? '未找到匹配的监测' : '开始输入以搜索监测' }}
                   </div>
                 </div>
 
                 <!-- 加载状态 -->
                 <div
-                  v-if="projectSearchFocused && projectsPending"
+                  v-if="monitorSearchFocused && monitorsPending"
                   class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg px-3 py-2"
                 >
                   <div class="flex items-center gap-2 text-sm text-gray-500">

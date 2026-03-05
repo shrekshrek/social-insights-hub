@@ -21,7 +21,7 @@ async def get_task_by_id(
 
     if load_relations:
         query = query.options(
-            selectinload(DataTask.project),
+            selectinload(DataTask.monitor),
             selectinload(DataTask.platform),
             selectinload(DataTask.creator),
         )
@@ -34,7 +34,7 @@ async def get_tasks(
     db: AsyncSession,
     skip: int = 0,
     limit: int = 20,
-    project_id: Optional[int] = None,
+    monitor_id: Optional[int] = None,
     platform_id: Optional[int] = None,
     task_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -46,8 +46,8 @@ async def get_tasks(
     # 构建查询条件
     conditions = [DataTask.is_deleted.is_(False)]
 
-    if project_id is not None:
-        conditions.append(DataTask.project_id == project_id)
+    if monitor_id is not None:
+        conditions.append(DataTask.monitor_id == monitor_id)
 
     if platform_id is not None:
         conditions.append(DataTask.platform_id == platform_id)
@@ -84,7 +84,7 @@ async def get_tasks(
         select(DataTask)
         .where(and_(*conditions))
         .options(
-            selectinload(DataTask.project),
+            selectinload(DataTask.monitor),
             selectinload(DataTask.platform),
             selectinload(DataTask.creator),
         )
@@ -104,7 +104,7 @@ async def create_task(db: AsyncSession, task_data: dict, creator_id: int) -> Dat
     task = DataTask(**task_data, creator_id=creator_id)
     db.add(task)
     await db.flush()  # 获取任务ID
-    await db.refresh(task, ["project", "platform", "creator"])
+    await db.refresh(task, ["monitor", "platform", "creator"])
     return task
 
 
@@ -303,7 +303,7 @@ async def get_posts_by_platform_post_id(
     db: AsyncSession,
     platform_id: int,
     post_id_on_platform: str,
-    project_id: Optional[int] = None,
+    monitor_id: Optional[int] = None,
 ) -> List[SocialPost]:
     """跨任务查询同一帖子（按发布时间倒序）"""
     conditions = [
@@ -313,8 +313,8 @@ async def get_posts_by_platform_post_id(
     ]
 
     # 如果指定项目，只查询该项目下的任务
-    if project_id is not None:
-        conditions.append(DataTask.project_id == project_id)
+    if monitor_id is not None:
+        conditions.append(DataTask.monitor_id == monitor_id)
 
         query = (
             select(SocialPost)
@@ -482,7 +482,7 @@ async def create_comments_bulk(
 
 async def bulk_create_tasks(
     db: AsyncSession,
-    project_id: int,
+    monitor_id: int,
     platform_ids: List[int],
     task_type: str,
     data_source: str,
@@ -495,7 +495,7 @@ async def bulk_create_tasks(
 
     Args:
         db: 数据库会话
-        project_id: 项目ID
+        monitor_id: 项目ID
         platform_ids: 平台ID列表
         task_type: 任务类型（search/homefeed）
         data_source: 数据源
@@ -517,7 +517,7 @@ async def bulk_create_tasks(
     # 预取平台 code，便于裁剪平台专属参数，避免误传导致爬虫端报错
     platform_code_map: dict[int, str] = {}
     if task_params:
-        from src.social_media.projects.models import Platform
+        from src.social_media.monitors.models import Platform
 
         result = await db.execute(
             select(Platform.id, Platform.code).where(Platform.id.in_(platform_ids))
@@ -546,7 +546,7 @@ async def bulk_create_tasks(
                 per_task_params = None
 
         task_data = {
-            "project_id": project_id,
+            "monitor_id": monitor_id,
             "platform_id": platform_id,
             "task_type": task_type,
             "data_source": data_source,
@@ -568,7 +568,7 @@ async def bulk_create_tasks(
     result = await db.execute(
         select(DataTask)
         .options(
-            selectinload(DataTask.project),
+            selectinload(DataTask.monitor),
             selectinload(DataTask.platform),
             selectinload(DataTask.creator),
         )

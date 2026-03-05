@@ -399,6 +399,7 @@ def build_entities_aligned(
                 "name": canon,
                 "type": e.get("type"),
                 "role": e.get("role"),
+                "category": e.get("category"),
                 "heat": 0.0,
                 "organic_heat": 0.0,
                 "promo_heat": 0.0,
@@ -614,6 +615,7 @@ def build_entities_aligned(
             {
                 "name": b["name"],
                 "type": b.get("type"),
+                "category": b.get("category"),
                 "role": (tags_mapping.get(b["name"], {}) or {}).get("role")
                 or b.get("role"),
                 "parent": (tags_mapping.get(b["name"], {}) or {}).get("parent") or "",

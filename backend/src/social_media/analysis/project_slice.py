@@ -766,10 +766,10 @@ def build_project_slice_result(
                     bucket["post_source_keys"].add(pk)
                 # heat 累加：normalized_heat（Raw_CII * platform_weight）
                 info = post_info_by_key.get(pk) or {}
+                spam_group = spam_map_by_key.get(pk)
                 try:
                     h = float(info.get("normalized_heat") or 0.0)
                     bucket["heat"] += h
-                    spam_group = spam_map_by_key.get(pk)
                     if spam_group == "low":
                         bucket["organic_heat"] += h
                     elif spam_group == "high":

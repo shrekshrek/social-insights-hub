@@ -1,8 +1,10 @@
 """Strategy Word Export 单元测试"""
 
+import pytest
 from io import BytesIO
 from unittest.mock import MagicMock
 
+pytest.importorskip("docx", reason="python-docx 仅在 Docker 容器内安装，跳过宿主机测试")
 from src.strategies.export_docx import generate_strategy_docx
 
 

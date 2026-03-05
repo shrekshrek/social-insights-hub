@@ -1,360 +1,411 @@
-# 模块方案: 切片流水线数据补全
+# 实施方案：Strategy 模块重构（Steps 1-6）
 
-> 为切片 result_data 补全 time_distribution、kol_voices、ipa_analysis，使策略模块和前端都能受益。
+> 将策略从"末端消费者"重构为"流程发起者与编排者"
+> 前置工作（Step 0: Project → Monitor 改名）已完成（commit 73278c4）
 
-**设计文档**: `docs/plans/2026-03-05-slice-pipeline-enrichment-design.md`
+---
+
+## 模块职责
+
+在现有 3 阶段策略生成（Phase 1/2/3）基础上，增加：
+- **阶段 A（需求对齐）**: 结构化 Brief → AI 多轮咨询 → 一键创建监测
+- **阶段 C（数据评估）**: 切片关联 → AI 充分性评估 → 确认就绪
+- **Phase 生成保持兼容**: 快速路径（直接带切片创建）和引导路径均可进入生成
 
 ---
 
 ## 1. Data Model
 
-无新表。仅扩展 `ProjectAnalysisSlice.result_data` JSONB 的 3 个字段位置：
+### strategies 表变更（ALTER 不重建）
 
-| 字段路径 | 计算阶段 | 数据结构 |
-|----------|----------|----------|
-| `layers.landscape.time_distribution` | Stage 1 | `{distribution: [{date, count}], organic_distribution, promo_distribution, skipped_count}` |
-| `layers.landscape.kol_voices` | Stage 1 | `[{post_id, task_id, author, title, cii, sentiment, summary, platform, spam_group}]` (top 10) |
-| `layers.intent.ipa_analysis` | Stage 2 | `{quadrants: {strength, improvement, maintain, opportunity}, thresholds: {x, y}}` |
+```sql
+-- 新增 4 列
+ALTER TABLE strategies ADD COLUMN consultation_rounds   JSONB DEFAULT '[]';
+ALTER TABLE strategies ADD COLUMN suggested_monitor_ids JSONB DEFAULT '[]';
+ALTER TABLE strategies ADD COLUMN slice_plan            JSONB DEFAULT '[]';
+ALTER TABLE strategies ADD COLUMN evaluation_result     JSONB DEFAULT NULL;
 
-time_distribution 输出格式：
+-- 修改 status 枚举约束
+ALTER TABLE strategies DROP CONSTRAINT strategies_status_check;
+ALTER TABLE strategies ALTER COLUMN status SET DEFAULT 'briefing';
+ALTER TABLE strategies ADD CONSTRAINT strategies_status_check
+  CHECK (status IN (
+    'briefing', 'consulting', 'monitors_created',
+    'slices_ready', 'phase1_done', 'phase2_done', 'completed'
+  ));
+```
+
+### models.py 对应字段
 
 ```python
-{
-    "distribution": [
-        {"date": "2025-12-01", "count": 15},
-        {"date": "2025-12-02", "count": 23},
-    ],
-    "organic_distribution": [
-        {"date": "2025-12-01", "count": 10},
-        {"date": "2025-12-02", "count": 18},
-    ],
-    "promo_distribution": [
-        {"date": "2025-12-01", "count": 5},
-        {"date": "2025-12-02", "count": 5},
-    ],
-    "skipped_count": 3,  # published_at 为 None 的帖子数
+status = Column(String(20), default="briefing", nullable=False)
+consultation_rounds   = Column(JSONB, default=list)
+suggested_monitor_ids = Column(JSONB, default=list)
+slice_plan            = Column(JSONB, default=list)
+evaluation_result     = Column(JSONB, nullable=True)
+```
+
+### service.py STATUS_ORDER 扩展
+
+```python
+STATUS_ORDER = {
+    "briefing": 0, "consulting": 1, "monitors_created": 2,
+    "slices_ready": 3, "phase1_done": 4, "phase2_done": 5, "completed": 6,
 }
 ```
 
-kol_voices 输出格式：
+### Phase1 前置条件变更
 
-```python
-[
-    {
-        "post_id": 123,        # SocialPost.id（保留最佳条目的 ID）
-        "task_id": 45,         # 来源任务（用于前端跳转）
-        "author": "测评达人A",
-        "title": "深度评测：...",
-        "cii": 8.5,
-        "sentiment": 1.2,
-        "summary": "...",
-        "platform": "xhs",
-        "spam_group": "low",   # 从 spam_map_by_key 映射
-    }
-]
-```
+**从** `status >= draft`（任意可生成）
+**改为** `len(strategy.slices) > 0`（切片非空即可）
 
-ipa_analysis 输出格式（复用任务级结构）：
+不绑定具体 status，兼容快速路径和引导路径。
 
-```python
-{
-    "quadrants": {
-        "strength": [
-            {"name": "...", "mentions": 20, "sentiment": 0.5, "heat": 100.0, "z": 0.8, "source_type": "topic"}
-        ],
-        "improvement": [...],
-        "maintain": [...],
-        "opportunity": [...]
-    },
-    "thresholds": {"x": 10, "y": 0.0}
-}
-```
+### strategy_slices 表
+
+不变。strategy_references 不变。
 
 ---
 
 ## 2. API / Interface Design
 
-无新 API 端点。数据通过现有接口自动返回：
-- 切片详情 `GET /analysis/slices/{id}/result` → 含新字段
-- 策略 Chain 的 `_load_slice_data()` → 自动读取 `layers.*` 字段
+### 新增端点（5 个）
+
+| 方法 | 路径 | 说明 | 状态变化 |
+|------|------|------|----------|
+| POST | `/strategies/{id}/consult` | 多轮 AI 咨询 | briefing → consulting（首轮），后续保持 consulting |
+| POST | `/strategies/{id}/confirm-plan` | 确认建议，一键创建监测 | * → monitors_created |
+| POST | `/strategies/{id}/slices` | 批量关联切片 | 无 |
+| POST | `/strategies/{id}/evaluate` | AI 评估切片充分性 | 无（写 evaluation_result） |
+| POST | `/strategies/{id}/confirm-ready` | 确认数据就绪 | * → slices_ready |
+
+### 变更端点
+
+| 端点 | 变更 |
+|------|------|
+| `POST /strategies` | `slice_ids` 改为 `Optional[list[int]] = []`，`brand_brief` 类型改为 `BrandBrief \| None` |
+| `POST /strategies/{id}/generate/phase1` | 前置从 status 检查改为 slices 非空检查 |
+
+### Schemas
+
+```python
+# --- 结构化 Brief ---
+class BrandBrief(CustomBaseModel):
+    brand_name: str
+    industry: str | None = None
+    analysis_goal: str
+    competitors: list[str] = []
+    focus_areas: list[str] = []        # ["口碑", "竞品", "趋势"]
+    time_range: str | None = None
+    constraints: str | None = None
+
+# --- 咨询 ---
+class ConsultRequest(CustomBaseModel):
+    user_input: str
+    answers: dict[str, str] | None = None   # {question_id: answer}
+
+class ConsultResponse(CustomBaseModel):
+    round_number: int
+    understanding_summary: str
+    clarification_questions: list[dict]     # [{id, question}]
+    monitor_suggestions: list[dict]         # MonitorSuggestion
+    slice_plan: list[dict]                  # SlicePlanItem
+    confidence: float
+
+# --- 确认计划 ---
+class ConfirmPlanRequest(CustomBaseModel):
+    monitor_suggestions: list[dict]         # 用户可修改后的建议
+
+class ConfirmPlanResponse(CustomBaseModel):
+    created_monitor_ids: list[int]
+    strategy: StrategyDetail
+
+# --- 批量切片关联 ---
+class AddSlicesRequest(CustomBaseModel):
+    slice_ids: list[int]                    # min_length=1
+
+# --- 评估（无请求体）---
+class EvaluationResultResponse(CustomBaseModel):
+    overall_score: float
+    is_sufficient: bool
+    coverage_analysis: list[dict]
+    slice_suggestions: list[dict]
+    gap_analysis: list[dict]
+    supplementary_tasks: list[dict] | None
+
+# --- StrategyCreate 变更 ---
+class StrategyCreate(CustomBaseModel):
+    name: str
+    slice_ids: list[int] = []              # 改为可选，默认空
+    brand_brief: BrandBrief | None = None
+```
 
 ---
 
 ## 3. Implementation Steps
 
-### Step 1: 实现 time_distribution 计算
+### Step 1 — 数据模型 + 迁移 + Schema 骨架
 
-**文件**: `backend/src/social_media/analysis/project_slice.py` (修改)
+**文件:**
+- `backend/src/strategies/models.py` (modify)
+- `backend/src/strategies/schemas.py` (modify)
+- `backend/src/strategies/service.py` (modify: STATUS_ORDER + phase1 前置条件)
+- `backend/src/strategies/router.py` (modify: 新增5端点，返回占位数据)
+- `backend/alembic/versions/xxx_strategy_new_fields.py` (new)
 
-**接口**:
-```python
-def _compute_time_distribution(
-    post_info_by_key: dict[str, dict[str, Any]],
-    spam_map_by_key: dict[str, str],
-) -> dict[str, Any]:
-    """从去重后的帖子信息计算时间分布。
+**接口:**
+- `Strategy` 响应新增: `consultation_rounds`, `suggested_monitor_ids`, `slice_plan`, `evaluation_result`
+- `StrategyCreate.slice_ids` 改为 `Optional[list[int]] = []`
+- `create()` 创建时 status 默认为 `briefing`（而非 `draft`）
+- 5 个新端点返回占位 JSON（不调 LLM）
 
-    Returns:
-        {distribution, organic_distribution, promo_distribution, skipped_count}
-    """
-```
+**关键断言:**
+- POST /strategies 不传 slice_ids → 创建成功，status=briefing
+- POST /strategies/{id}/generate/phase1 当无切片 → 400 "请先关联分析切片"
+- POST /strategies/{id}/generate/phase1 当有切片（任意 status）→ 正常生成
+- 旧 draft 策略迁移后 status 变为 briefing，仍可生成（只要有切片）
 
-**逻辑**:
-1. 遍历 `post_info_by_key`，解析 `published_at` 为日期字符串 (YYYY-MM-DD)
-2. 按日期聚合 count（全量 / organic / promo 三组）
-3. 无法解析 `published_at` 的条目计入 `skipped_count`
-4. 按日期排序返回
-
-**关键断言**:
-- 3 条帖子 2 个日期 → distribution 有 2 项，count 之和 = 3
-- 含 spam_score >= 6 的帖子 → promo_distribution 有对应条目
-- published_at 为 None 的帖子 → skipped_count 递增
-- 空 post_info_by_key → 返回 `{distribution: [], organic_distribution: [], promo_distribution: [], skipped_count: 0}`
-
-**验证**: `pnpm be:test -- -k "test_compute_time_distribution"`
-
-**依赖**: 无
+**验证:** `pnpm be:lint && pnpm be:test`
+**依赖:** Step 0 已完成
 
 ---
 
-### Step 2: 实现 kol_voices 合并
+### Step 2 — AI 咨询 Chain
 
-**文件**: `backend/src/social_media/analysis/project_slice.py` (修改)
+**文件:**
+- `backend/src/langchain/chains/strategy_consult_chain.py` (new)
+- `backend/src/strategies/service.py` (modify: add `consult_strategy()`)
+- `backend/src/strategies/router.py` (modify: consult 端点接真实 chain)
 
-**接口**:
+**接口:**
 ```python
-def _merge_kol_voices(
-    task_data_list: list[dict[str, Any]],
-    post_key_by_id: dict[int, str],
-    spam_map_by_key: dict[str, str],
-    *,
-    top_n: int = 10,
-) -> list[dict[str, Any]]:
-    """从各任务的 kol_voices 合并去重，按 CII 排序取 top_n。"""
+# chain 输入变量
+brief_section: str      # 格式化的 BrandBrief 文本
+history_section: str    # 历史轮次摘要
+user_input: str         # 本轮用户输入
+
+# chain 输出（JSON）
+{
+  "understanding_summary": str,
+  "clarification_questions": [{"id": str, "question": str}],
+  "monitor_suggestions": [{"name", "platforms", "keywords", "task_type", "rationale"}],
+  "slice_plan": [{"name", "purpose", "expected_sources"}],
+  "confidence": float
+}
+
+# service 方法签名
+async def consult_strategy(
+    strategy_id: int, user_input: str,
+    answers: dict[str, str] | None, db: AsyncSession
+) -> ConsultResponse
 ```
 
-**逻辑**:
-1. 遍历每个任务的 `analysis_result.insights.kol_voices`
-2. 通过 `post_key_by_id[post_id]` 转为 post_key，按 post_key 去重
-3. 同一 post_key 保留 CII 最高的条目
-4. 从 `spam_map_by_key` 映射 spam_group（找不到则为 None）
-5. 按 CII 降序排序，取 top_n
+**关键断言:**
+- 有效 brief + 用户输入 → AI 回复包含 monitor_suggestions（≥1）
+- 连续两次 consult → consultation_rounds 长度累加（不覆盖）
+- LLM 解析失败 → 500，strategy 不更新
+- 首轮后 status = consulting
 
-**关键断言**:
-- 2 个任务含同一帖子（不同 post_id，相同 post_key）→ 去重后仅 1 条，保留 CII 高的
-- 合并 15 条 → 返回 top 10
-- KOL 的 spam_group 从 spam_map_by_key 正确映射
-- 某任务无 insights 或 kol_voices → 跳过不报错
-- post_key_by_id 中找不到 post_id → 跳过该 KOL
-
-**验证**: `pnpm be:test -- -k "test_merge_kol_voices"`
-
-**依赖**: 无
+**验证:** `pnpm be:test` (mock LLM)
+**依赖:** Step 1
 
 ---
 
-### Step 3: 集成到 build_project_slice_result
+### Step 3 — confirm-plan（一键创建监测）
 
-**文件**: `backend/src/social_media/analysis/project_slice.py` (修改)
+**文件:**
+- `backend/src/strategies/service.py` (modify: add `confirm_plan()`)
+- `backend/src/strategies/router.py` (modify: confirm-plan 端点)
 
-**改动**:
-在 `build_project_slice_result()` 的返回值中，`layers.landscape` 下新增两个字段：
+**接口:**
 ```python
-"layers": {
-    "landscape": {
-        "freshness": freshness,
-        "overview": overview,
-        "time_distribution": _compute_time_distribution(post_info_by_key, spam_map_by_key),
-        "kol_voices": _merge_kol_voices(task_data_list, post_key_by_id, spam_map_by_key),
-    },
-    ...
+async def confirm_plan(
+    strategy_id: int,
+    monitor_suggestions: list[dict],
+    current_user_id: int,
+    db: AsyncSession
+) -> ConfirmPlanResponse
+# 内部调用 monitors.service.create_monitor() 逐个创建
+# 写入 suggested_monitor_ids，status → monitors_created
+```
+
+**关键断言:**
+- 2 条 suggestion → DB 新增 2 个 Monitor，suggested_monitor_ids=[id1, id2]
+- Monitor 创建部分失败 → 已创建的保留，返回 partial_errors 字段
+- 重复调用 confirm-plan → suggested_monitor_ids 追加（不覆盖）
+
+**验证:** `pnpm be:test`
+**依赖:** Step 2
+
+---
+
+### Step 4 — AI 评估 Chain + 批量切片关联 + confirm-ready
+
+**文件:**
+- `backend/src/langchain/chains/strategy_evaluate_chain.py` (new)
+- `backend/src/strategies/service.py` (modify: add `evaluate()`, `batch_add_slices()`, `confirm_ready()`)
+- `backend/src/strategies/router.py` (modify: slices/evaluate/confirm-ready 端点接真实逻辑)
+
+**接口:**
+```python
+# evaluate chain 输入
+brief_section: str          # BrandBrief 文本
+slice_plan_section: str     # slice_plan 文本
+slice_summary_section: str  # 已关联切片的数据摘要
+
+# evaluate chain 输出（JSON）
+{
+  "overall_score": float,
+  "is_sufficient": bool,
+  "coverage_analysis": [...],
+  "slice_suggestions": [...],
+  "gap_analysis": [...],
+  "supplementary_tasks": [...] | null
+}
+
+# service 方法签名
+async def batch_add_slices(strategy_id: int, slice_ids: list[int], db) -> Strategy
+async def evaluate(strategy_id: int, db) -> EvaluationResultResponse
+async def confirm_ready(strategy_id: int, db) -> Strategy
+```
+
+**关键断言:**
+- evaluate 时无关联切片 → is_sufficient=false, overall_score < 0.3
+- batch_add_slices 重复 slice_id → upsert，不报错
+- confirm_ready 在任意 status 下均可触发（向前跳转至 slices_ready）
+- confirm_ready 在 completed 状态 → 400
+
+**验证:** `pnpm be:test`
+**依赖:** Step 1（evaluate/confirm-ready 独立于 Step 2/3）
+
+---
+
+### Step 5 — 前端重构
+
+**文件:**
+- `frontend/layers/strategies/types/index.ts` (modify)
+- `frontend/layers/strategies/composables/useStrategies.ts` (modify: 5 个新方法)
+- `frontend/layers/strategies/pages/strategies/create.vue` (modify: Brief 表单重构)
+- `frontend/layers/strategies/pages/strategies/[id]/index.vue` (rewrite: 阶段指示器 + 4 面板)
+
+**类型变更:**
+```typescript
+// 新状态
+export type StrategyStatus =
+  | 'briefing' | 'consulting' | 'monitors_created'
+  | 'slices_ready' | 'phase1_done' | 'phase2_done' | 'completed'
+
+// Strategy 接口新增字段
+consultation_rounds: ConsultRound[]
+suggested_monitor_ids: number[]
+slice_plan: SlicePlanItem[]
+evaluation_result: EvaluationResult | null
+
+// StrategyCreate 变更
+export interface StrategyCreate {
+  name: string
+  slice_ids?: number[]          // 改为可选
+  brand_brief?: BrandBrief | null
+}
+
+// BrandBrief 结构化
+export interface BrandBrief {
+  brand_name: string
+  industry?: string
+  analysis_goal: string
+  competitors?: string[]
+  focus_areas?: string[]
+  time_range?: string
+  constraints?: string
 }
 ```
 
-**关键断言**:
-- `build_project_slice_result()` 返回值中 `layers.landscape.time_distribution` 是 dict
-- `build_project_slice_result()` 返回值中 `layers.landscape.kol_voices` 是 list
+**useStrategies.ts 新增方法:**
+```typescript
+consult(id: number, input: string, answers?: Record<string, string>) → ConsultResponse
+confirmPlan(id: number, suggestions: MonitorSuggestion[]) → ConfirmPlanResponse
+addSlices(id: number, sliceIds: number[]) → Strategy
+evaluate(id: number) → EvaluationResult
+confirmReady(id: number) → Strategy
+```
 
-**验证**: `pnpm be:test -- -k "test_build_project_slice"`
+**create.vue 变更:**
+- Brief 表单改为结构化字段（brand_name + analysis_goal 必填，其余可选）
+- 切片选择区域保留（快速路径），作为可选折叠面板
+- 创建后跳转详情页
 
-**依赖**: Step 1, Step 2
+**[id]/index.vue 变更:**
+- 顶部阶段进度指示器（A: 需求对齐 / B: 数据采集 / C: 数据评估 / D: 策略生成）
+- 阶段 A 面板: Brief 展示 + 咨询轮次 + confirm-plan 按钮
+- 阶段 B 面板: 提示语（人工操作，跳转监测页）
+- 阶段 C 面板: 切片关联表 + AI 评估结果 + confirm-ready 按钮
+- 阶段 D 面板: 现有 Phase 1/2/3 卡片（基本保留）
+- STATUS_MAP 更新为 7 个状态颜色/标签
+
+**验证:** `pnpm fe:typecheck && pnpm fe:lint`
+**依赖:** Steps 1-4
 
 ---
 
-### Step 4: Stage 2 透传 + IPA 集成
+### Step 6 — Phase Chain 微调（可最后执行）
 
-**文件**: `backend/src/social_media/analysis/celery_tasks/project_slice/orchestrator.py` (修改), `backend/src/social_media/analysis/celery_tasks/project_slice/insights.py` (修改)
+**文件:**
+- `backend/src/langchain/chains/strategy_phase1_chain.py` (modify)
+- `backend/src/langchain/chains/strategy_phase2_chain.py` (modify)
+- `backend/src/langchain/chains/strategy_phase3_chain.py` (modify)
+- `backend/src/strategies/service.py` (modify: load_phase_inputs 加 brief/evaluation 上下文)
 
-**改动 — orchestrator.py**:
-从 Stage 1 的 `land0` 中读取 time_distribution 和 kol_voices，传给 `build_slice_layers()`:
-```python
-layers = build_slice_layers(
-    meta=result.get("meta") or {},
-    overview=land0.get("overview") ...,
-    freshness=land0.get("freshness") ...,
-    entities_aligned=entities_aligned,
-    topics_aligned=topics_aligned,
-    drivers=...,
-    # 新增：Stage 1 预计算数据透传
-    time_distribution=land0.get("time_distribution"),
-    kol_voices=land0.get("kol_voices"),
-)
-```
+**变更要点:**
+- 每条 chain 的 HUMAN_TEMPLATE 新增 `{brief_section}` 和 `{consult_summary}` 变量
+- `_format_for_phase1/2/3` 补充这两个变量的格式化函数
+- 若 evaluation_result 存在，Phase1 输入额外附加 `{evaluation_summary}`
 
-**改动 — insights.py `build_slice_layers()`**:
-```python
-def build_slice_layers(
-    *,
-    meta: dict[str, Any],
-    overview: dict[str, Any],
-    freshness: dict[str, Any] | None,
-    entities_aligned: list[dict[str, Any]],
-    topics_aligned: list[dict[str, Any]],
-    drivers: dict[str, Any] | None,
-    # 新增
-    time_distribution: dict[str, Any] | None = None,
-    kol_voices: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-```
-
-传给 `_build_landscape()`，并在 intent 中调用 `_build_ipa()`。
-
-**改动 — insights.py `_build_landscape()`**:
-新增 `time_distribution` 和 `kol_voices` 参数，写入返回 dict。
-
-**关键断言**:
-- Stage 2 输出的 `layers.landscape` 包含 Stage 1 预计算的 time_distribution
-- Stage 2 输出的 `layers.landscape` 包含 Stage 1 预计算的 kol_voices
-- Stage 2 输出的 `layers.intent` 包含 ipa_analysis（有 subject 时）
-
-**验证**: `pnpm be:test -- -k "test_build_slice_layers"`
-
-**依赖**: Step 3
-
----
-
-### Step 5: 实现 _build_ipa 函数
-
-**文件**: `backend/src/social_media/analysis/celery_tasks/project_slice/insights.py` (修改)
-
-**接口**:
-```python
-def _build_ipa(
-    *,
-    topics_aligned: list[dict[str, Any]],
-    entities_aligned: list[dict[str, Any]],
-    subject: str,
-    min_mentions: int = 3,
-) -> dict[str, Any] | None:
-    """基于切片级归一化数据计算 IPA 四象限。
-
-    数据来源:
-    1. topics_aligned — mentions 作为 importance，sentiment 作为 performance
-    2. target entity 的 top_features (sentiment=+0.5) 和 top_issues (sentiment=-0.5)
-
-    Returns:
-        {quadrants: {strength, improvement, maintain, opportunity}, thresholds: {x, y}}
-        如果无法找到 target entity 或无有效候选项，返回 None。
-    """
-```
-
-**逻辑**:
-1. 在 `entities_aligned` 中找 `role == "Target"` 的实体（可能多个，取第一个）
-2. 收集 IPA 候选点:
-   - `topics_aligned` 中 `mentions >= min_mentions` 的话题 → `{name, mentions, sentiment, heat, source_type: "topic"}`
-   - target entity 的 `top_features` → `{name=text, mentions, sentiment=+0.5, heat=mentions*avg_heat, source_type: "feature"}`
-   - target entity 的 `top_issues` → `{name=text, mentions, sentiment=-0.5, heat=mentions*avg_heat, source_type: "issue"}`
-3. 计算 avg_heat_per_mention = topics 总 heat / 总 mentions（给 features/issues 估算 heat 用）
-4. X 阈值 = 候选点 mentions 中位数，Y 阈值 = 0.0
-5. 按 (mentions vs X, sentiment vs Y) 分配到四象限
-6. 归一化 z 值（heat → 0~1 范围，用于前端气泡大小）
-
-**关键断言**:
-- 有 target entity + 话题 mentions >= 3 → 返回四象限结构
-- target features (sentiment=+0.5, mentions=高) → 进入 strength 象限
-- target issues (sentiment=-0.5, mentions=高) → 进入 improvement 象限
-- 无 target entity → 返回 None
-- 所有候选 mentions < min_mentions → 返回 None
-- X 阈值 = 中位数 mentions，Y 阈值 = 0.0
-
-**验证**: `pnpm be:test -- -k "test_build_ipa"`
-
-**依赖**: 无
-
----
-
-### Step 6: 将 _build_ipa 集成到 build_slice_layers
-
-**文件**: `backend/src/social_media/analysis/celery_tasks/project_slice/insights.py` (修改)
-
-**改动**:
-在 `build_slice_layers()` 中，`_build_intent()` 之后调用 `_build_ipa()`：
-```python
-intent = _build_intent(topics_aligned=topics_aligned)
-
-# IPA（仅在有 subject 时计算）
-if subject:
-    ipa = _build_ipa(
-        topics_aligned=topics_aligned,
-        entities_aligned=entities_aligned,
-        subject=subject,
-    )
-    if ipa is not None:
-        intent["ipa_analysis"] = ipa
-```
-
-**关键断言**:
-- 有 subject → intent 含 ipa_analysis 键
-- 无 subject → intent 无 ipa_analysis 键
-
-**验证**: `pnpm be:test -- -k "test_build_slice_layers"`
-
-**依赖**: Step 4, Step 5
+**验证:** 手动测试 Phase1 生成输出
+**依赖:** Steps 1-5
 
 ---
 
 ## 4. Edge Cases & Error Handling
 
-| 场景 | 处理方式 |
-|------|----------|
-| `published_at` 为 None 或格式异常 | 计入 `skipped_count`，不中断 |
-| 全部帖子无 `published_at` | `distribution` 为空列表 |
-| 某任务 `analysis_result` 无 `insights` 或 `kol_voices` | 跳过该任务 |
-| `post_key_by_id` 中找不到某 KOL 的 `post_id` | 跳过该条 KOL |
-| 无 target entity（subject 为空或 role 不匹配） | `_build_ipa()` 返回 None，intent 不含 ipa_analysis |
-| `topics_aligned` 全部 mentions < 3 且 target 无 features/issues | `_build_ipa()` 返回 None |
-| 旧切片无新字段 | 前端兼容 null；策略 Chain 的 format 函数对空值跳过 |
-| `published_at` 为 ISO 格式字符串（含时区） | 正确解析为日期 |
-| task_data_list 为空 | kol_voices 返回空列表 |
+| 场景 | 处理 |
+|------|------|
+| 创建策略时 Brief 为空 | 允许（briefing 状态，Brief 可后填）|
+| 咨询时 Brief 为空 | brief_section 渲染为 "用户未提供 Brief"，仍调 LLM |
+| LLM 输出不符合 JSON schema | 捕获 OutputParserException → 500 + 日志，不更新 strategy |
+| confirm-plan 部分监测创建失败 | 已创建写入 suggested_monitor_ids，失败条目放 partial_errors |
+| 跳过咨询直接关联切片 | 合法，status 可从 briefing 直接手动推进 |
+| evaluate 时切片数据不完整 | slice_summary 渲染提示，AI 输出 is_sufficient=false |
+| generate phase1 无切片 | 400 "请先关联分析切片" |
+| confirm-ready 在 completed 状态 | 400 "策略已完成" |
+| 重复 consult | 每次追加到 consultation_rounds，无次数限制 |
 
 ---
 
 ## 5. Test Strategy
 
-### 需要测试
+**后端（pytest）:**
+- `test_strategies_model.py` — 新字段 default 值正确，STATUS_ORDER 覆盖 7 个值
+- `test_strategies_service.py` — mock LLM 测试 consult/evaluate 状态流转
+- `test_strategies_router.py` — 现有 CRUD 测试保持通过；新端点 happy path + 错误场景
 
-| 函数 | 测试文件 | 场景数 |
-|------|----------|--------|
-| `_compute_time_distribution` | `tests/social_media/analysis/test_project_slice.py` | 4: 正常多日期、无 published_at、organic/promo 拆分、空输入 |
-| `_merge_kol_voices` | `tests/social_media/analysis/test_project_slice.py` | 4: 跨任务去重、CII 排序取 top_n、spam_group 映射、空/异常数据 |
-| `_build_ipa` | `tests/social_media/analysis/test_slice_insights.py` | 5: 四象限分配、features/issues 映射、无 target、空数据、阈值计算 |
+**前端:**
+- `pnpm fe:typecheck` — 所有新 interface 类型正确
+- `pnpm fe:lint` — ESLint 通过
 
-### 不需要单独测试
-
-- orchestrator 透传（简单赋值，集成覆盖）
-- `_build_landscape` 新增参数（简单透传）
-- `build_slice_layers` 的签名变更（由 `_build_ipa` 和透传的测试组合覆盖）
+**不测试:**
+- LLM prompt 质量（人工评审）
+- Chain 实际 LLM 调用（mock 替代）
 
 ---
 
 ## 6. Key Decisions
 
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| time_distribution 在 Stage 1 计算 | ✅ | Stage 1 已有 `post_info_by_key`（含 published_at），不需额外数据 |
-| kol_voices 在 Stage 1 合并 | ✅ | Stage 1 已有 `task_data_list`（含 analysis_result.insights.kol_voices），不需回查数据库 |
-| IPA 在 Stage 2 计算 | ✅ | IPA 需要归一化后的 topics_aligned 和 entities_aligned，这些在 Stage 2 完成 |
-| KOL 去重用 post_key | ✅ | `platform:post_id_on_platform` 是跨任务唯一标识；`SocialPost.id` 在不同任务中不同 |
-| IPA 不用任务级 `aggregated_opinions` | ✅ | 切片有归一化后的 `topics_aligned`，数据质量更高且已去重 |
-| time_distribution 不含 post_ids | ✅ | 切片 post_key 无法直接映射到前端可用的 task_id:post_id |
-| Stage 2 透传而非重算 | ✅ | 简单透明，避免重复计算；orchestrator 已有读 Stage 1 layers 的模式 |
+| 决策 | 理由 |
+|------|------|
+| Phase1 前置改为「切片非空」而非「status >= slices_ready」 | 兼容快速路径（直接带切片创建），引导流程可选 |
+| consultation_rounds 存 JSONB，不建独立表 | 通常 1~3 轮，无独立查询需求，简化 schema |
+| suggested_monitor_ids 弱关联，不建外键 | 删策略不影响监测，监测独立存在 |
+| confirm-plan 接受用户修改后的 suggestions | AI 建议仅参考，控制权在用户 |
+| evaluate 无请求体，切片数据从 DB 自动读 | 避免前端重复传输大 payload |
+| create.vue 保留切片选择为可选折叠面板 | 快速路径：创建时直接带切片，无需走咨询流程 |
+| Step 6（Phase Chain 微调）独立为最后步骤 | 不阻塞主体功能交付，可单独迭代 |

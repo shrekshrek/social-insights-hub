@@ -28,6 +28,9 @@ from src.social_media.monitors.crud import check_monitor_access
 
 from .models import Strategy, StrategySlice
 from .schemas import (
+    ConfirmPlanResponse,
+    ConsultResponse,
+    EvaluationResultResponse,
     StrategyCreate,
     StrategyUpdate,
     StrategyRead,
@@ -62,10 +65,11 @@ async def create_strategy(
             )
 
     # 创建 Strategy
+    brief_dict = data.brand_brief.model_dump() if data.brand_brief else None
     strategy = Strategy(
         name=data.name,
         created_by=user_id,
-        brand_brief=data.brand_brief,
+        brand_brief=brief_dict,
     )
     db.add(strategy)
     await db.flush()
@@ -214,7 +218,24 @@ def build_strategy_list_item(strategy: Strategy) -> StrategyListItem:
 # ==================== 生成 + 编辑 ====================
 
 # 状态流转顺序
-STATUS_ORDER = {"draft": 0, "phase1_done": 1, "phase2_done": 2, "completed": 3}
+STATUS_ORDER = {
+    "briefing": 0,
+    "consulting": 1,
+    "monitors_created": 2,
+    "slices_ready": 3,
+    "phase1_done": 4,
+    "phase2_done": 5,
+    "completed": 6,
+}
+
+
+def _validate_has_slices(strategy: Strategy) -> None:
+    """校验策略已关联切片（phase1 前置条件）"""
+    if not strategy.slices:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请先关联分析切片",
+        )
 
 
 def _validate_slices_have_data(slices_data: list[dict], strategy: Strategy) -> None:
@@ -229,6 +250,7 @@ def _validate_slices_have_data(slices_data: list[dict], strategy: Strategy) -> N
 
 async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     """生成 Phase 1 (洞察层): Social Tension + Brand Opportunity"""
+    _validate_has_slices(strategy)
     slices_data = await load_slice_data(db, strategy)
     _validate_slices_have_data(slices_data, strategy)
 
@@ -316,6 +338,136 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     await db.commit()
     return await get_strategy_by_id(db, strategy.id)
+
+
+# ==================== 新增：阶段 A 咨询流程 ====================
+
+
+async def consult_strategy(
+    db: AsyncSession,
+    strategy: Strategy,
+    user_input: str,
+    answers: dict[str, str] | None,
+) -> ConsultResponse:
+    """AI 多轮咨询：理解需求 → 追问 → 输出监测建议草案
+
+    TODO Step 2: 接入 strategy_consult_chain
+    """
+    round_number = len(strategy.consultation_rounds or []) + 1
+    # 占位：返回空响应
+    response = ConsultResponse(
+        round_number=round_number,
+        understanding_summary="（AI 咨询功能开发中）",
+        clarification_questions=[],
+        monitor_suggestions=[],
+        slice_plan=[],
+        confidence=0.0,
+    )
+
+    rounds = list(strategy.consultation_rounds or [])
+    rounds.append({
+        "round_number": round_number,
+        "user_input": user_input,
+        "answers": answers,
+        "ai_response": response.model_dump(),
+    })
+    strategy.consultation_rounds = rounds
+    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["consulting"]:
+        strategy.status = "consulting"
+
+    await db.commit()
+    return response
+
+
+async def confirm_plan(
+    db: AsyncSession,
+    strategy: Strategy,
+    monitor_suggestions: list[dict],
+    current_user_id: int,
+) -> ConfirmPlanResponse:
+    """确认 AI 建议，一键创建监测
+
+    TODO Step 3: 调用 monitors.service.create_monitor()
+    """
+    strategy.status = "monitors_created"
+    await db.commit()
+    updated = await get_strategy_by_id(db, strategy.id)
+    return ConfirmPlanResponse(
+        created_monitor_ids=[],
+        partial_errors=["confirm-plan 功能开发中"],
+        strategy=build_strategy_read(updated),
+    )
+
+
+async def batch_add_slices(
+    db: AsyncSession,
+    strategy: Strategy,
+    slice_ids: list[int],
+    user_id: int,
+) -> Strategy:
+    """批量关联切片（upsert）"""
+    for sid in slice_ids:
+        slice_obj = await db.get(AnalysisSlice, sid)
+        if not slice_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"切片 {sid} 不存在",
+            )
+        has_access = await check_monitor_access(db, slice_obj.monitor_id, user_id)
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"无权访问切片 {sid} 所属监测",
+            )
+
+        # upsert: 检查是否已存在
+        existing = await db.get(StrategySlice, {"strategy_id": strategy.id, "slice_id": sid})
+        if not existing:
+            db.add(StrategySlice(strategy_id=strategy.id, slice_id=sid))
+
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def evaluate_strategy(
+    db: AsyncSession,
+    strategy: Strategy,
+) -> EvaluationResultResponse:
+    """AI 评估切片充分性
+
+    TODO Step 4: 接入 strategy_evaluate_chain
+    """
+    has_slices = bool(strategy.slices)
+    result = EvaluationResultResponse(
+        overall_score=0.0 if not has_slices else 0.5,
+        is_sufficient=False if not has_slices else False,
+        coverage_analysis=[],
+        slice_suggestions=[],
+        gap_analysis=[{"note": "AI 评估功能开发中"}],
+        supplementary_tasks=None,
+    )
+
+    strategy.evaluation_result = result.model_dump()
+    await db.commit()
+    return result
+
+
+async def confirm_ready(
+    db: AsyncSession,
+    strategy: Strategy,
+) -> Strategy:
+    """用户确认数据就绪，状态推进到 slices_ready"""
+    if STATUS_ORDER.get(strategy.status, 0) >= STATUS_ORDER["completed"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="策略已完成，无需重新确认就绪",
+        )
+    strategy.status = "slices_ready"
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+# ==================== 编辑 Phase ====================
 
 
 async def edit_phase_result(

@@ -13,22 +13,25 @@ from src.strategies.service import (
 
 
 class TestStatusOrder:
-    def test_draft_is_lowest(self):
-        assert STATUS_ORDER["draft"] == 0
+    def test_briefing_is_lowest(self):
+        assert STATUS_ORDER["briefing"] == 0
+
+    def test_consulting_after_briefing(self):
+        assert STATUS_ORDER["consulting"] > STATUS_ORDER["briefing"]
 
     def test_phase1_done_before_phase2_done(self):
         assert STATUS_ORDER["phase1_done"] < STATUS_ORDER["phase2_done"]
 
     def test_completed_is_highest(self):
-        assert STATUS_ORDER["completed"] == 3
+        assert STATUS_ORDER["completed"] == max(STATUS_ORDER.values())
 
 
 class TestGeneratePhase2Precondition:
     @pytest.mark.asyncio
-    async def test_rejects_draft_status(self):
-        """generate_phase2 在 status=draft 时 → 409"""
+    async def test_rejects_briefing_status(self):
+        """generate_phase2 在 status=briefing 时 → 409"""
         strategy = MagicMock()
-        strategy.status = "draft"
+        strategy.status = "briefing"
         db = AsyncMock()
 
         from fastapi import HTTPException
@@ -53,10 +56,10 @@ class TestGeneratePhase3Precondition:
         assert exc_info.value.status_code == 409
 
     @pytest.mark.asyncio
-    async def test_rejects_draft(self):
-        """generate_phase3 在 status=draft 时 → 409"""
+    async def test_rejects_briefing(self):
+        """generate_phase3 在 status=briefing 时 → 409"""
         strategy = MagicMock()
-        strategy.status = "draft"
+        strategy.status = "briefing"
         db = AsyncMock()
 
         from fastapi import HTTPException

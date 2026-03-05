@@ -43,10 +43,13 @@
 - v1.x: 全栈代码命名统一 (snapshot → slice) + 架构文档补全
 - v1.x: 项目详情页批量创建任务 + 切片重命名功能
 
+| strategies/后端 | 方案已确认 | 策略定义模块：3 阶段 AI 生成（洞察→策略→创意），独立顶级模块 |
+| strategies/前端 | 方案已确认 | 策略列表/创建/详情页，3 阶段结果展示与编辑 |
+
 ## 待改进项
 
 - 测试覆盖率待提升（后端 aggregation 模块无单元测试）
 
 ## 下次继续的入口
 
-暂无规划。
+从 Strategy Define 模块的数据库模型开始实施，参考 `docs/plan.md` Step 1 的表结构设计。后端模块路径 `backend/src/strategies/`，前端 Layer 路径 `frontend/layers/strategies/`。设计文档见 `docs/plans/2026-03-04-strategy-define-design.md`。

@@ -23,8 +23,8 @@ from src.langchain.chains.strategy_phase3_chain import (
     format_data_for_phase3,
     parse_phase3_response,
 )
-from src.social_media.analysis.models import ProjectAnalysisSlice
-from src.social_media.projects.crud import check_project_access
+from src.social_media.analysis.models import AnalysisSlice
+from src.social_media.monitors.crud import check_monitor_access
 
 from .models import Strategy, StrategySlice
 from .schemas import (
@@ -48,13 +48,13 @@ async def create_strategy(
     """
     # 校验每个 slice
     for sid in data.slice_ids:
-        slice_obj = await db.get(ProjectAnalysisSlice, sid)
+        slice_obj = await db.get(AnalysisSlice, sid)
         if not slice_obj:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"切片 {sid} 不存在",
             )
-        has_access = await check_project_access(db, slice_obj.project_id, user_id)
+        has_access = await check_monitor_access(db, slice_obj.monitor_id, user_id)
         if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -121,7 +121,7 @@ async def get_strategy_by_id(db: AsyncSession, strategy_id: int) -> Strategy | N
             selectinload(Strategy.creator),
             selectinload(Strategy.slices).selectinload(
                 StrategySlice.slice
-            ).selectinload(ProjectAnalysisSlice.project),
+            ).selectinload(AnalysisSlice.monitor),
         )
     )
     result = await db.execute(query)
@@ -155,8 +155,8 @@ async def load_slice_data(
     if not slice_ids:
         return []
 
-    query = select(ProjectAnalysisSlice).where(
-        ProjectAnalysisSlice.id.in_(slice_ids)
+    query = select(AnalysisSlice).where(
+        AnalysisSlice.id.in_(slice_ids)
     )
     result = await db.execute(query)
     slices = result.scalars().all()
@@ -172,10 +172,10 @@ def build_strategy_read(strategy: Strategy) -> StrategyRead:
             SliceSummary(
                 slice_id=ss.slice_id,
                 slice_name=slice_obj.name if slice_obj else None,
-                project_id=slice_obj.project_id if slice_obj else 0,
-                project_name=(
-                    slice_obj.project.name
-                    if slice_obj and slice_obj.project
+                monitor_id=slice_obj.monitor_id if slice_obj else 0,
+                monitor_name=(
+                    slice_obj.monitor.name
+                    if slice_obj and slice_obj.monitor
                     else ""
                 ),
             )

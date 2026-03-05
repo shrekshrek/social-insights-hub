@@ -60,7 +60,7 @@ async def get_tasks(
     pagination: PaginationParams = Depends(get_pagination_params),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
-    project_id: Optional[int] = Query(None, description="按项目过滤"),
+    monitor_id: Optional[int] = Query(None, description="按项目过滤"),
     platform_id: Optional[int] = Query(None, description="按平台过滤"),
     task_type: Optional[str] = Query(None, description="按任务类型过滤"),
     status: Optional[str] = Query(None, description="按状态过滤"),
@@ -72,7 +72,7 @@ async def get_tasks(
     获取任务列表。
 
     过滤选项：
-    - project_id: 按项目过滤（需要有项目访问权限）
+    - monitor_id: 按项目过滤（需要有项目访问权限）
     - platform_id: 按平台过滤
     - task_type: search/detail/creator/homefeed
     - status: pending/running/completed/failed
@@ -86,7 +86,7 @@ async def get_tasks(
         db,
         page=pagination.page,
         page_size=pagination.page_size,
-        project_id=project_id,
+        monitor_id=monitor_id,
         platform_id=platform_id,
         task_type=task_type,
         status=status,
@@ -100,7 +100,7 @@ async def get_tasks(
     tasks_with_relations = []
     for task in tasks:
         task_dict = schemas.DataTaskRead.model_validate(task).model_dump()
-        task_dict["project_name"] = task.project.name if task.project else None
+        task_dict["monitor_name"] = task.project.name if task.project else None
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
         task_dict["creator_username"] = task.creator.username if task.creator else None
@@ -131,7 +131,7 @@ async def get_task(
     """
     # 转换为带关联信息的response
     task_dict = schemas.DataTaskRead.model_validate(task).model_dump()
-    task_dict["project_name"] = task.project.name if task.project else None
+    task_dict["monitor_name"] = task.project.name if task.project else None
     task_dict["platform_name"] = task.platform.name if task.platform else None
     task_dict["platform_code"] = task.platform.code if task.platform else None
     task_dict["creator_username"] = task.creator.username if task.creator else None
@@ -385,7 +385,7 @@ async def query_cross_task_posts(
     post_id_on_platform: str,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
-    project_id: Optional[int] = Query(None, description="限定项目范围"),
+    monitor_id: Optional[int] = Query(None, description="限定项目范围"),
 ):
     """
     跨任务查询同一帖子在不同任务中的数据。
@@ -395,7 +395,7 @@ async def query_cross_task_posts(
     参数：
     - platform_id: 平台ID
     - post_id_on_platform: 平台上的帖子ID
-    - project_id: 可选，限定在某个项目范围内查询
+    - monitor_id: 可选，限定在某个项目范围内查询
 
     返回按采集时间倒序排列的所有记录。
     """
@@ -403,7 +403,7 @@ async def query_cross_task_posts(
         db,
         platform_id=platform_id,
         post_id_on_platform=post_id_on_platform,
-        project_id=project_id,
+        monitor_id=monitor_id,
         current_user_id=current_user.id,
     )
 

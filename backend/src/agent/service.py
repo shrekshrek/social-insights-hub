@@ -400,7 +400,7 @@ async def upload_result(
 
             # 获取任务创建者ID作为分析任务的用户ID
             user_id = task.creator_id
-            project_keywords = task.keywords or ""
+            monitor_keywords = task.keywords or ""
 
             # 幂等锁（触发侧）：避免同一 task 并发 upload_result 时重复触发
             # 注意：触发侧与执行侧使用不同 key，避免“已触发”阻断真正执行
@@ -417,7 +417,7 @@ async def upload_result(
                     run_auto_analysis.delay(
                         task_id=task.id,
                         user_id=user_id,
-                        project_keywords=project_keywords,
+                        monitor_keywords=monitor_keywords,
                     )
                     logger.info(f"Task {task_id}: Auto analysis triggered")
                 else:
@@ -433,7 +433,7 @@ async def upload_result(
                 run_auto_analysis.delay(
                     task_id=task.id,
                     user_id=user_id,
-                    project_keywords=project_keywords,
+                    monitor_keywords=monitor_keywords,
                 )
 
         return StoredCounts(posts=posts_count, comments=comments_count)

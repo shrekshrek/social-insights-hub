@@ -159,7 +159,7 @@ def get_quadrant_summary(quadrant_data: list[dict[str, Any]]) -> dict[str, int]:
 def aggregate_task_analysis(
     db: Session,
     task_id: int,
-    project_id: int | None = None,
+    monitor_id: int | None = None,
     user_id: int | None = None,
     enable_entity_normalization: bool = True,
     entity_job_id: int | None = None,
@@ -171,7 +171,7 @@ def aggregate_task_analysis(
     Args:
         db: 数据库会话
         task_id: 任务ID
-        project_id: 项目ID（用于创建 AnalysisJob 记录）
+        monitor_id: 项目ID（用于创建 AnalysisJob 记录）
         user_id: 用户ID（用于创建 AnalysisJob 记录）
         enable_entity_normalization: 是否启用 LLM 实体归一化（会增加成本）
         entity_job_id: 预创建的实体归一化 AnalysisJob ID
@@ -285,11 +285,11 @@ def aggregate_task_analysis(
         if entity_job_id:
             # 使用预创建的 job，更新状态为 processing
             entity_job = start_analysis_job_sync(db, entity_job_id)
-        elif project_id and user_id:
+        elif monitor_id and user_id:
             # 向后兼容：内部创建 job
             entity_job = create_analysis_job_sync(
                 db=db,
-                project_id=project_id,
+                monitor_id=monitor_id,
                 task_id=task_id,
                 user_id=user_id,
                 analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
@@ -300,11 +300,11 @@ def aggregate_task_analysis(
         if opinion_job_id:
             # 使用预创建的 job，更新状态为 processing
             opinion_job = start_analysis_job_sync(db, opinion_job_id)
-        elif project_id and user_id:
+        elif monitor_id and user_id:
             # 向后兼容：内部创建 job
             opinion_job = create_analysis_job_sync(
                 db=db,
-                project_id=project_id,
+                monitor_id=monitor_id,
                 task_id=task_id,
                 user_id=user_id,
                 analysis_type=AnalysisType.OPINION_NORMALIZATION.value,

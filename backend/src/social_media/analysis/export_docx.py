@@ -1,6 +1,6 @@
 """切片报告 Word 导出服务
 
-将 ProjectAnalysisSlice 中的 AI 报告（Markdown）转换为格式化的 Word 文档。
+将 AnalysisSlice 中的 AI 报告（Markdown）转换为格式化的 Word 文档。
 """
 
 from __future__ import annotations
@@ -14,18 +14,18 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 
-from .models import ProjectAnalysisSlice
+from .models import AnalysisSlice
 
 
-def generate_slice_report_docx(slice_record: ProjectAnalysisSlice) -> BytesIO:
+def generate_slice_report_docx(slice_record: AnalysisSlice) -> BytesIO:
     """从切片记录生成 Word 文档并返回 BytesIO 流。"""
     result_data = slice_record.result_data or {}
     reports = result_data.get("reports") or {}
     overview_data = (
         result_data.get("layers", {}).get("landscape", {}).get("overview") or {}
     )
-    project_name = (
-        slice_record.project.name if slice_record.project else "未命名项目"
+    monitor_name = (
+        slice_record.monitor.name if slice_record.monitor else "未命名项目"
     )
     slice_name = slice_record.name or f"切片 #{slice_record.id}"
     generated_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -34,7 +34,7 @@ def generate_slice_report_docx(slice_record: ProjectAnalysisSlice) -> BytesIO:
     _setup_styles(doc)
 
     # 封面
-    _add_cover_page(doc, project_name, slice_name, generated_date)
+    _add_cover_page(doc, monitor_name, slice_name, generated_date)
 
     # 概览摘要
     _add_overview_section(doc, overview_data)
@@ -79,7 +79,7 @@ def _setup_styles(doc: Document) -> None:
 
 
 def _add_cover_page(
-    doc: Document, project_name: str, slice_name: str, date_str: str
+    doc: Document, monitor_name: str, slice_name: str, date_str: str
 ) -> None:
     """生成封面页。"""
     for _ in range(6):
@@ -87,7 +87,7 @@ def _add_cover_page(
 
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p_title.add_run(project_name)
+    run = p_title.add_run(monitor_name)
     run.font.size = Pt(26)
     run.bold = True
     run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)

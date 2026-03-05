@@ -14,7 +14,7 @@ export const useTasks = () => {
       query: params,
       key: computed(() => {
         const p = unref(params)
-        const keys = ['page', 'page_size', 'project_id', 'platform_id', 'task_type', 'status', 'data_source', 'creator_id', 'search']
+        const keys = ['page', 'page_size', 'monitor_id', 'platform_id', 'task_type', 'status', 'data_source', 'creator_id', 'search']
         const paramStr = keys.map(k => `${k}=${p?.[k] || ''}`).join('-')
         return `tasks-list-${paramStr}`
       }),

@@ -143,7 +143,7 @@ class AnalysisTaskBase(Task):
                 logger.error(f"更新AnalysisJob失败: {e}", exc_info=True)
                 await db.rollback()
 
-    async def update_project_result(
+    async def update_monitor_result(
         self,
         result_id: int,
         status: str,

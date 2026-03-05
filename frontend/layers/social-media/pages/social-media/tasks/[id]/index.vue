@@ -13,10 +13,10 @@ const taskId = computed(() => Number(route.params.id));
 // 智能返回路径：根据来源返回到对应页面
 const backPath = computed(() => {
   const from = route.query.from as string;
-  const projectId = route.query.project_id;
+  const monitorId = route.query.monitor_id;
 
-  if (from === "project" && projectId) {
-    return `/social-media/projects/${projectId}`;
+  if (from === "monitor" && monitorId) {
+    return `/social-media/monitors/${monitorId}`;
   }
   return "/social-media/tasks"; // 默认返回任务列表
 });
@@ -606,14 +606,14 @@ const AnalysisPanel = defineAsyncComponent(() =>
                     所属项目
                   </h3>
                   <UButton
-                    v-if="task.project_id"
+                    v-if="task.monitor_id"
                     variant="link"
                     size="sm"
                     class="mt-1 p-0 font-normal"
-                    :to="`/social-media/projects/${task.project_id}`"
-                    :title="task.project_name || '-'"
+                    :to="`/social-media/monitors/${task.monitor_id}`"
+                    :title="task.monitor_name || '-'"
                   >
-                    {{ task.project_name || "-" }}
+                    {{ task.monitor_name || "-" }}
                   </UButton>
                   <p
                     v-else

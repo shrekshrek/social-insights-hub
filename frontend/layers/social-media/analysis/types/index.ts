@@ -120,7 +120,7 @@ export interface PostAnalysisCreate {
 /**
  * 分析类型
  * - 任务级: screening_posts, deep_posts, deep_comments, aggregation
- * - 项目级: entity_normalization, opinion_normalization (task_id=null), project_slice_summary
+ * - 项目级: entity_normalization, opinion_normalization (task_id=null), monitor_slice_summary
  */
 export type AnalysisType =
   | 'screening_posts'
@@ -129,19 +129,19 @@ export type AnalysisType =
   | 'aggregation'
   | 'entity_normalization'
   | 'opinion_normalization'
-  | 'project_slice_summary'
+  | 'monitor_slice_summary'
 
 export type AnalysisStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
 /**
  * 分析任务（统一模型）
  *
- * 合并原 TaskAnalysisResult 和 ProjectAnalysisResult
- * task_id 为空表示项目级分析，非空表示任务级分析
+ * 合并原 TaskAnalysisResult 和 MonitorAnalysisResult
+ * task_id 为空表示监测级分析，非空表示任务级分析
  */
 export interface AnalysisJob {
   id: number
-  project_id: number
+  monitor_id: number
   task_id: number | null
   user_id: number
   analysis_type: AnalysisType
@@ -175,7 +175,7 @@ export interface AnalysisJob {
   updated_at: string
 
   // 关联信息（从列表接口返回）
-  project_name?: string
+  monitor_name?: string
   task_name?: string
   slice_id?: number
   slice_name?: string | null
@@ -212,14 +212,14 @@ export interface RunDeepAnalysisRequest {
 }
 
 export interface RunClusteringRequest {
-  project_id: number
+  monitor_id: number
   task_ids?: number[]
   num_clusters?: number
   method?: 'kmeans' | 'hierarchical' | 'dbscan'
 }
 
 export interface RunCompetitiveRequest {
-  project_id: number
+  monitor_id: number
   task_ids?: number[]
   competitor_keywords: string[]
   metrics?: string[]
@@ -298,7 +298,7 @@ export interface DeepAnalysisPreview {
 export interface AnalysisJobFilterParams {
   page?: number
   page_size?: number
-  project_id?: number
+  monitor_id?: number
   task_id?: number
   analysis_type?: AnalysisType
   status?: AnalysisStatus

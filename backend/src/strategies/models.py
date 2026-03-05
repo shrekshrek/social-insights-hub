@@ -17,7 +17,7 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from src.auth.models import User
-    from src.social_media.analysis.models import ProjectAnalysisSlice
+    from src.social_media.analysis.models import AnalysisSlice
 
 
 class Strategy(Base):
@@ -94,7 +94,7 @@ class StrategySlice(Base):
         primary_key=True,
     )
     slice_id: Mapped[int] = mapped_column(
-        ForeignKey("project_analysis_slices.id", ondelete="CASCADE"),
+        ForeignKey("analysis_slices.id", ondelete="CASCADE"),
         primary_key=True,
     )
 
@@ -102,8 +102,8 @@ class StrategySlice(Base):
     strategy: Mapped["Strategy"] = relationship(
         back_populates="slices",
     )
-    slice: Mapped["ProjectAnalysisSlice"] = relationship(
-        "src.social_media.analysis.models.ProjectAnalysisSlice",
+    slice: Mapped["AnalysisSlice"] = relationship(
+        "src.social_media.analysis.models.AnalysisSlice",
         lazy="selectin",
     )
 

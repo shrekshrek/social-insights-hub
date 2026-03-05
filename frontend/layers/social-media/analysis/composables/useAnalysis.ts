@@ -13,7 +13,7 @@ import type {
 /**
  * 分析操作 Composable
  *
- * 使用统一的 AnalysisJob 模型，通过 task_id 是否为空区分任务级/项目级分析
+ * 使用统一的 AnalysisJob 模型，通过 task_id 是否为空区分任务级/监测级分析
  */
 export const useAnalysis = () => {
   const { apiRequest, useApiData, showSuccess } = useApi()
@@ -31,7 +31,7 @@ export const useAnalysis = () => {
 
         if (p.page) searchParams.set('page', String(p.page))
         if (p.page_size) searchParams.set('page_size', String(p.page_size))
-        if (p.project_id) searchParams.set('project_id', String(p.project_id))
+        if (p.monitor_id) searchParams.set('monitor_id', String(p.monitor_id))
         if (p.task_id) searchParams.set('task_id', String(p.task_id))
         if (p.analysis_type) searchParams.set('analysis_type', p.analysis_type)
         if (p.status) searchParams.set('status', p.status)
@@ -284,10 +284,10 @@ export const useAnalysis = () => {
   }
 
   /**
-   * 手动生成项目级合并分析切片（同步完成）
+   * 手动生成监测级合并分析切片（同步完成）
    */
-  const createProjectSlice = async (
-    projectId: number,
+  const createMonitorSlice = async (
+    monitorId: number,
     taskIds: number[],
     name?: string,
     options?: {
@@ -297,7 +297,7 @@ export const useAnalysis = () => {
     }
   ) => {
     const result = await apiRequest<{ id: number; name: string | null }>(
-      `/social-media/analysis/projects/${projectId}/slices`,
+      `/social-media/analysis/monitors/${monitorId}/slices`,
       {
         method: 'POST',
         body: {
@@ -309,16 +309,16 @@ export const useAnalysis = () => {
         },
       }
     )
-    showSuccess('项目切片已生成')
+    showSuccess('监测切片已生成')
     return result
   }
 
   /**
-   * 删除项目级合并分析切片
+   * 删除监测级合并分析切片
    */
-  const deleteProjectSlice = async (projectId: number, sliceId: number) => {
+  const deleteMonitorSlice = async (monitorId: number, sliceId: number) => {
     await apiRequest(
-      `/social-media/analysis/projects/${projectId}/slices/${sliceId}`,
+      `/social-media/analysis/monitors/${monitorId}/slices/${sliceId}`,
       {
         method: 'DELETE',
       }
@@ -328,11 +328,11 @@ export const useAnalysis = () => {
   }
 
   /**
-   * 重命名项目级合并分析切片
+   * 重命名监测级合并分析切片
    */
-  const renameProjectSlice = async (projectId: number, sliceId: number, name: string) => {
+  const renameMonitorSlice = async (monitorId: number, sliceId: number, name: string) => {
     const result = await apiRequest<{ id: number; name: string }>(
-      `/social-media/analysis/projects/${projectId}/slices/${sliceId}`,
+      `/social-media/analysis/monitors/${monitorId}/slices/${sliceId}`,
       {
         method: 'PATCH',
         body: { name },
@@ -360,9 +360,9 @@ export const useAnalysis = () => {
     runTaskAggregation,
     getTaskAggregation,
 
-    // 项目级合并切片
-    createProjectSlice,
-    deleteProjectSlice,
-    renameProjectSlice,
+    // 监测级合并切片
+    createMonitorSlice,
+    deleteMonitorSlice,
+    renameMonitorSlice,
   }
 }

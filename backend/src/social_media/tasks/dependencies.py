@@ -7,7 +7,7 @@ from typing import Annotated
 from src.auth.models import User
 from src.auth.dependencies import get_current_user
 from src.database import get_async_db
-from src.social_media.projects import crud as social_crud
+from src.social_media.monitors import crud as social_crud
 from . import crud
 from .models import DataTask, SocialPost
 
@@ -32,8 +32,8 @@ async def validate_task_access(
 ) -> DataTask:
     """验证用户是否有任务访问权限（通过项目权限）"""
     # 检查用户是否有项目访问权限
-    has_access = await social_crud.check_project_access(
-        db, task.project_id, current_user.id
+    has_access = await social_crud.check_monitor_access(
+        db, task.monitor_id, current_user.id
     )
 
     if not has_access:
@@ -56,15 +56,15 @@ async def validate_task_owner(
         return task
 
     # 检查是否是项目owner
-    project = await social_crud.get_project_by_id(
-        db, task.project_id, load_relations=False
+    monitor = await social_crud.get_monitor_by_id(
+        db, task.monitor_id, load_relations=False
     )
-    if project and project.owner_id == current_user.id:
+    if monitor and monitor.owner_id == current_user.id:
         return task
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Only task creator or project owner can perform this action",
+        detail="Only task creator or monitor owner can perform this action",
     )
 
 
@@ -95,8 +95,8 @@ async def validate_post_access(
         )
 
     # 检查用户是否有项目访问权限
-    has_access = await social_crud.check_project_access(
-        db, task.project_id, current_user.id
+    has_access = await social_crud.check_monitor_access(
+        db, task.monitor_id, current_user.id
     )
 
     if not has_access:

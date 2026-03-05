@@ -9,7 +9,7 @@ from sqlalchemy.sql import func
 from src.database import Base
 
 if TYPE_CHECKING:
-    from src.social_media.projects.models import SocialProject, Platform
+    from src.social_media.monitors.models import Monitor, Platform
     from src.auth.models import User
 
 
@@ -29,8 +29,8 @@ class DataTask(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # 关联关系
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("social_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    monitor_id: Mapped[int] = mapped_column(
+        ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True
     )
     platform_id: Mapped[int] = mapped_column(
         ForeignKey("platforms.id"), nullable=False, index=True
@@ -122,13 +122,13 @@ class DataTask(Base):
     )
 
     # 关系
-    project: Mapped["SocialProject"] = relationship(
-        "src.social_media.projects.models.SocialProject",
-        foreign_keys=[project_id],
+    monitor: Mapped["Monitor"] = relationship(
+        "src.social_media.monitors.models.Monitor",
+        foreign_keys=[monitor_id],
         lazy="selectin",
     )
     platform: Mapped["Platform"] = relationship(
-        "src.social_media.projects.models.Platform",
+        "src.social_media.monitors.models.Platform",
         foreign_keys=[platform_id],
         lazy="selectin",
     )
@@ -241,7 +241,7 @@ class SocialPost(Base):
         "DataTask", back_populates="posts", lazy="selectin"
     )
     platform: Mapped["Platform"] = relationship(
-        "src.social_media.projects.models.Platform",
+        "src.social_media.monitors.models.Platform",
         foreign_keys=[platform_id],
         lazy="selectin",
     )
@@ -339,7 +339,7 @@ class SocialComment(Base):
         "SocialPost", back_populates="comments", lazy="selectin"
     )
     platform: Mapped["Platform"] = relationship(
-        "src.social_media.projects.models.Platform",
+        "src.social_media.monitors.models.Platform",
         foreign_keys=[platform_id],
         lazy="selectin",
     )

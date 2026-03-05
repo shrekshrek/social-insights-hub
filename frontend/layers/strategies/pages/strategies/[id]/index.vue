@@ -33,7 +33,7 @@
               <span>{{ formatDate(strategy.created_at) }}</span>
               <span v-if="strategy.slices.length > 0">|</span>
               <span v-for="(s, idx) in strategy.slices" :key="s.slice_id" class="text-gray-400">
-                {{ s.project_name }}/{{ s.slice_name || `切片#${s.slice_id}` }}{{ idx < strategy.slices.length - 1 ? '、' : '' }}
+                {{ s.monitor_name }}/{{ s.slice_name || `切片#${s.slice_id}` }}{{ idx < strategy.slices.length - 1 ? '、' : '' }}
               </span>
             </div>
           </ClientOnly>

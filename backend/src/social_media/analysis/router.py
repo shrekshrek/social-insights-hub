@@ -11,7 +11,7 @@ API 结构：
 - /tasks/{task_id}/aggregation   POST运行聚合分析 / GET获取聚合结果
 - /tasks/{task_id}/posts         帖子分析结果列表
 - /tasks/{task_id}/preview       深度分析预览
-- /projects/{project_id}/slices  项目级切片 CRUD
+- /monitors/{monitor_id}/slices  项目级切片 CRUD
 - /stats                         全局统计
 """
 
@@ -66,7 +66,7 @@ router = APIRouter(
 async def get_analysis_jobs(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    project_id: int | None = Query(None, description="按项目ID筛选"),
+    monitor_id: int | None = Query(None, description="按项目ID筛选"),
     task_id: int | None = Query(None, description="按任务ID筛选"),
     analysis_type: str | None = Query(None, description="按分析类型筛选"),
     status_filter: str | None = Query(None, alias="status", description="按状态筛选"),
@@ -79,7 +79,7 @@ async def get_analysis_jobs(
     获取全局分析任务列表
 
     支持筛选条件：
-    - project_id: 按项目筛选
+    - monitor_id: 按项目筛选
     - task_id: 按数据任务筛选
     - analysis_type: screening_posts/deep_posts/deep_comments/topic_clustering/competitive
     - status: pending/processing/completed/failed
@@ -90,7 +90,7 @@ async def get_analysis_jobs(
         current_user_id=current_user.id,
         page=page,
         page_size=page_size,
-        project_id=project_id,
+        monitor_id=monitor_id,
         task_id=task_id,
         analysis_type=analysis_type,
         status=status_filter,
@@ -437,13 +437,13 @@ async def delete_task_analyses(
 
 
 @router.post(
-    "/projects/{project_id}/slices",
+    "/monitors/{monitor_id}/slices",
     response_model=ProjectSliceResponse,
     status_code=status.HTTP_201_CREATED,
     summary="手动生成项目级合并分析切片",
 )
-async def create_project_slice(
-    project_id: int,
+async def create_monitor_slice(
+    monitor_id: int,
     request: CreateProjectSliceRequest,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
@@ -454,9 +454,9 @@ async def create_project_slice(
     - 自动启动：Stage2（全局归一化/归因增强）与 Stage3（整体总结）
     - 前端应轮询该切片详情，直至 pipeline.stage2.status=completed 后再展示核心板块
     """
-    slice_record = await service.create_project_slice(
+    slice_record = await service.create_monitor_slice(
         db=db,
-        project_id=project_id,
+        monitor_id=monitor_id,
         task_ids=request.task_ids,
         current_user_id=current_user.id,
         name=request.name,
@@ -467,8 +467,8 @@ async def create_project_slice(
 
     # 创建后立刻启动异步增强（不需要额外接口）
     from datetime import datetime, timezone
-    from src.social_media.analysis.celery_tasks.project_slice_tasks import (
-        run_project_slice_task,
+    from src.social_media.analysis.celery_tasks.monitor_slice_tasks import (
+        run_monitor_slice_task,
     )
 
     now = datetime.now(timezone.utc).isoformat()
@@ -480,7 +480,7 @@ async def create_project_slice(
     result_data = dict(result_data)
 
     # 初始化流水线状态（供前端轮询展示）
-    async_result = run_project_slice_task.delay(slice_id=slice_record.id)
+    async_result = run_monitor_slice_task.delay(slice_id=slice_record.id)
     result_data["pipeline"] = {
         "stage2": {
             "status": "processing",
@@ -506,33 +506,33 @@ async def create_project_slice(
 
 
 @router.get(
-    "/projects/{project_id}/slices",
+    "/monitors/{monitor_id}/slices",
     response_model=ProjectSliceListResponse,
     summary="获取项目级合并分析切片列表",
 )
-async def list_project_slices(
-    project_id: int,
+async def list_monitor_slices(
+    monitor_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """获取项目下的历史切片列表（按创建时间倒序）"""
-    from src.social_media.projects import crud as project_crud
-    from .models import ProjectAnalysisSlice
+    from src.social_media.monitors import crud as monitor_crud
+    from .models import AnalysisSlice
     from sqlalchemy import select
 
-    has_access = await project_crud.check_project_access(
-        db, project_id, current_user.id
+    has_access = await monitor_crud.check_monitor_access(
+        db, monitor_id, current_user.id
     )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this project",
+            detail="You don't have access to this monitor",
         )
 
     stmt = (
-        select(ProjectAnalysisSlice)
-        .where(ProjectAnalysisSlice.project_id == project_id)
-        .order_by(ProjectAnalysisSlice.created_at.desc())
+        select(AnalysisSlice)
+        .where(AnalysisSlice.monitor_id == monitor_id)
+        .order_by(AnalysisSlice.created_at.desc())
     )
     result = await db.execute(stmt)
     items = list(result.scalars().all())
@@ -542,34 +542,34 @@ async def list_project_slices(
 
 
 @router.get(
-    "/projects/{project_id}/slices/{slice_id}",
+    "/monitors/{monitor_id}/slices/{slice_id}",
     response_model=ProjectSliceResponse,
     summary="获取项目级合并分析切片详情",
 )
-async def get_project_slice(
-    project_id: int,
+async def get_monitor_slice(
+    monitor_id: int,
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """获取单个切片详情"""
-    from src.social_media.projects import crud as project_crud
-    from .models import ProjectAnalysisSlice
+    from src.social_media.monitors import crud as monitor_crud
+    from .models import AnalysisSlice
     from sqlalchemy import select
 
-    has_access = await project_crud.check_project_access(
-        db, project_id, current_user.id
+    has_access = await monitor_crud.check_monitor_access(
+        db, monitor_id, current_user.id
     )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this project",
+            detail="You don't have access to this monitor",
         )
 
     stmt = (
-        select(ProjectAnalysisSlice)
-        .where(ProjectAnalysisSlice.id == slice_id)
-        .where(ProjectAnalysisSlice.project_id == project_id)
+        select(AnalysisSlice)
+        .where(AnalysisSlice.id == slice_id)
+        .where(AnalysisSlice.monitor_id == monitor_id)
     )
     result = await db.execute(stmt)
     slice_record = result.scalar_one_or_none()
@@ -581,38 +581,38 @@ async def get_project_slice(
 
 
 @router.patch(
-    "/projects/{project_id}/slices/{slice_id}",
+    "/monitors/{monitor_id}/slices/{slice_id}",
     response_model=ProjectSliceResponse,
     status_code=status.HTTP_200_OK,
     summary="更新切片名称",
     description="重命名项目级合并分析切片",
     tags=["Social Media - Analysis"],
 )
-async def update_project_slice(
-    project_id: int,
+async def update_monitor_slice(
+    monitor_id: int,
     slice_id: int,
     request: UpdateProjectSliceRequest,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """更新切片名称。需要项目访问权限。"""
-    from src.social_media.projects import crud as project_crud
-    from .models import ProjectAnalysisSlice
+    from src.social_media.monitors import crud as monitor_crud
+    from .models import AnalysisSlice
     from sqlalchemy import select
 
-    has_access = await project_crud.check_project_access(
-        db, project_id, current_user.id
+    has_access = await monitor_crud.check_monitor_access(
+        db, monitor_id, current_user.id
     )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this project",
+            detail="You don't have access to this monitor",
         )
 
     stmt = (
-        select(ProjectAnalysisSlice)
-        .where(ProjectAnalysisSlice.id == slice_id)
-        .where(ProjectAnalysisSlice.project_id == project_id)
+        select(AnalysisSlice)
+        .where(AnalysisSlice.id == slice_id)
+        .where(AnalysisSlice.monitor_id == monitor_id)
     )
     result = await db.execute(stmt)
     slice_record = result.scalar_one_or_none()
@@ -628,35 +628,35 @@ async def update_project_slice(
 
 
 @router.delete(
-    "/projects/{project_id}/slices/{slice_id}",
+    "/monitors/{monitor_id}/slices/{slice_id}",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
     summary="删除项目级合并分析切片",
 )
-async def delete_project_slice(
-    project_id: int,
+async def delete_monitor_slice(
+    monitor_id: int,
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """删除单个切片（硬删除）"""
-    from src.social_media.projects import crud as project_crud
-    from .models import ProjectAnalysisSlice
+    from src.social_media.monitors import crud as monitor_crud
+    from .models import AnalysisSlice
     from sqlalchemy import select
 
-    has_access = await project_crud.check_project_access(
-        db, project_id, current_user.id
+    has_access = await monitor_crud.check_monitor_access(
+        db, monitor_id, current_user.id
     )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this project",
+            detail="You don't have access to this monitor",
         )
 
     stmt = (
-        select(ProjectAnalysisSlice)
-        .where(ProjectAnalysisSlice.id == slice_id)
-        .where(ProjectAnalysisSlice.project_id == project_id)
+        select(AnalysisSlice)
+        .where(AnalysisSlice.id == slice_id)
+        .where(AnalysisSlice.monitor_id == monitor_id)
     )
     result = await db.execute(stmt)
     slice_record = result.scalar_one_or_none()
@@ -674,13 +674,13 @@ async def delete_project_slice(
 
 
 @router.get(
-    "/projects/{project_id}/slices/{slice_id}/export",
+    "/monitors/{monitor_id}/slices/{slice_id}/export",
     status_code=status.HTTP_200_OK,
     summary="导出切片报告为 Word 文档",
     tags=["Social Media - Analysis"],
 )
-async def export_project_slice(
-    project_id: int,
+async def export_monitor_slice(
+    monitor_id: int,
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
@@ -689,23 +689,23 @@ async def export_project_slice(
 
     包含封面、概览摘要和已完成的报告（行业格局、话题洞察、战略诊断）。
     """
-    from src.social_media.projects import crud as project_crud
-    from .models import ProjectAnalysisSlice
+    from src.social_media.monitors import crud as monitor_crud
+    from .models import AnalysisSlice
     from .export_docx import generate_slice_report_docx
 
-    has_access = await project_crud.check_project_access(
-        db, project_id, current_user.id
+    has_access = await monitor_crud.check_monitor_access(
+        db, monitor_id, current_user.id
     )
     if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this project",
+            detail="You don't have access to this monitor",
         )
 
     stmt = (
-        select(ProjectAnalysisSlice)
-        .where(ProjectAnalysisSlice.id == slice_id)
-        .where(ProjectAnalysisSlice.project_id == project_id)
+        select(AnalysisSlice)
+        .where(AnalysisSlice.id == slice_id)
+        .where(AnalysisSlice.monitor_id == monitor_id)
     )
     result = await db.execute(stmt)
     slice_record = result.scalar_one_or_none()
@@ -723,11 +723,11 @@ async def export_project_slice(
 
     buf: BytesIO = generate_slice_report_docx(slice_record)
 
-    project_name = (
-        slice_record.project.name if slice_record.project else "report"
+    monitor_name = (
+        slice_record.monitor.name if slice_record.monitor else "report"
     )
     slice_name = slice_record.name or f"slice_{slice_id}"
-    filename = f"{project_name}_{slice_name}.docx"
+    filename = f"{monitor_name}_{slice_name}.docx"
     encoded_filename = quote(filename)
 
     return StreamingResponse(

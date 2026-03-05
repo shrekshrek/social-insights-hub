@@ -15,14 +15,14 @@ export interface Platform {
   updated_at: string
 }
 
-// ==================== Social Project ====================
+// ==================== Monitor ====================
 
-export interface SocialProject {
+export interface Monitor {
   id: number
   name: string
   description: string | null
-  project_start_date: string | null
-  project_end_date: string | null
+  start_date: string | null
+  end_date: string | null
   owner_id: number
   deep_analysis_settings: Record<string, unknown> | null
   created_at: string
@@ -48,24 +48,24 @@ export interface QuickTaskCreate {
   auto_analyze?: boolean
 }
 
-export interface SocialProjectCreate {
+export interface MonitorCreate {
   name: string
   description?: string
-  project_start_date?: string
-  project_end_date?: string
+  start_date?: string
+  end_date?: string
   participant_ids?: number[]
   quick_tasks?: QuickTaskCreate
 }
 
-export interface SocialProjectUpdate {
+export interface MonitorUpdate {
   name?: string
   description?: string
-  project_start_date?: string
-  project_end_date?: string
+  start_date?: string
+  end_date?: string
 }
 
-export interface SocialProjectCreateResponse {
-  project: SocialProject
+export interface MonitorCreateResponse {
+  monitor: Monitor
   created_tasks: DataTaskWithRelations[]
 }
 
@@ -83,7 +83,7 @@ export interface DataTask {
   id: number
   name: string
   description: string | null
-  project_id: number
+  monitor_id: number
   platform_id: number
   creator_id: number
   task_type: TaskType
@@ -102,7 +102,7 @@ export interface DataTask {
 }
 
 export interface DataTaskWithRelations extends DataTask {
-  project_name: string | null
+  monitor_name: string | null
   platform_name: string | null
   platform_code: string | null
   creator_username: string | null
@@ -111,7 +111,7 @@ export interface DataTaskWithRelations extends DataTask {
 export interface DataTaskCreate {
   name: string
   description?: string
-  project_id: number
+  monitor_id: number
   platform_id: number
   task_type: TaskType
   keywords?: string

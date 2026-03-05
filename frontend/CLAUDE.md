@@ -54,12 +54,12 @@ frontend/
 │   ├── rbac/                    # 角色/权限管理界面
 │   ├── users/                   # 用户管理界面
 │   └── social-media/            # 核心业务
-│       ├── projects/            # 项目管理
+│       ├── monitors/            # 监测项目管理
 │       ├── tasks/               # 任务管理, 数据上传
 │       └── analysis/            # 分析报告, 图表可视化
 │           ├── components/
 │           │   ├── task/        # 任务级报告组件
-│           │   ├── project/     # 项目级切片洞察组件
+│           │   ├── slice/       # 监测级切片洞察组件
 │           │   ├── shared/      # SpamRatioBar, TabSwitch 等
 │           │   ├── deep-result/ # 深度分析结果
 │           │   └── cost/        # Token 用量/成本

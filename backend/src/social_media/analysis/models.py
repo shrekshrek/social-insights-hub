@@ -17,7 +17,7 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from src.social_media.tasks.models import DataTask, SocialPost
-    from src.social_media.projects.models import SocialProject
+    from src.social_media.monitors.models import Monitor
     from src.auth.models import User
 
 
@@ -38,7 +38,7 @@ class AnalysisType(str, Enum):
     # 项目级分析（task_id 为空）
     TOPIC_CLUSTERING = "topic_clustering"  # 主题聚类
     COMPETITIVE_ANALYSIS = "competitive"  # 竞品分析
-    PROJECT_SLICE_SUMMARY = "project_slice_summary"  # 项目切片整体总结（Stage3）
+    PROJECT_SLICE_SUMMARY = "monitor_slice_summary"  # 项目切片整体总结（Stage3）
 
 
 class AnalysisStatus(str, Enum):
@@ -165,8 +165,8 @@ class AnalysisJob(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # ===== 关联关系 =====
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("social_projects.id", ondelete="CASCADE"),
+    monitor_id: Mapped[int] = mapped_column(
+        ForeignKey("monitors.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
         comment="关联的项目ID（必填）",
@@ -254,9 +254,9 @@ class AnalysisJob(Base):
     )
 
     # ===== 关系 =====
-    project: Mapped["SocialProject"] = relationship(
-        "src.social_media.projects.models.SocialProject",
-        foreign_keys=[project_id],
+    monitor: Mapped["Monitor"] = relationship(
+        "src.social_media.monitors.models.Monitor",
+        foreign_keys=[monitor_id],
         lazy="selectin",
     )
     task: Mapped["DataTask | None"] = relationship(
@@ -270,7 +270,7 @@ class AnalysisJob(Base):
 
     # ===== 索引 =====
     __table_args__ = (
-        Index("idx_analysis_job_project", "project_id"),
+        Index("idx_analysis_job_project", "monitor_id"),
         Index("idx_analysis_job_task", "task_id"),
         Index("idx_analysis_job_type_status", "analysis_type", "status"),
         Index("idx_analysis_job_created_at", "created_at"),
@@ -286,12 +286,12 @@ class AnalysisJob(Base):
         return self.task_id is not None
 
     @property
-    def is_project_level(self) -> bool:
+    def is_monitor_level(self) -> bool:
         """是否为项目级分析"""
         return self.task_id is None
 
 
-class ProjectAnalysisSlice(Base):
+class AnalysisSlice(Base):
     """项目级手动合并分析切片
 
     设计意图：
@@ -299,7 +299,7 @@ class ProjectAnalysisSlice(Base):
     - 专门用于保存”勾选多个任务 -> 生成一份合并报告”的历史切片
     """
 
-    __tablename__ = "project_analysis_slices"
+    __tablename__ = "analysis_slices"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -309,8 +309,8 @@ class ProjectAnalysisSlice(Base):
         comment="切片名称（可选）",
     )
 
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("social_projects.id", ondelete="CASCADE"),
+    monitor_id: Mapped[int] = mapped_column(
+        ForeignKey("monitors.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
         comment="关联的项目ID",
@@ -346,9 +346,9 @@ class ProjectAnalysisSlice(Base):
         onupdate=func.now(),
     )
 
-    project: Mapped["SocialProject"] = relationship(
-        "src.social_media.projects.models.SocialProject",
-        foreign_keys=[project_id],
+    monitor: Mapped["Monitor"] = relationship(
+        "src.social_media.monitors.models.Monitor",
+        foreign_keys=[monitor_id],
         lazy="selectin",
     )
     user: Mapped["User"] = relationship(
@@ -358,6 +358,6 @@ class ProjectAnalysisSlice(Base):
     )
 
     __table_args__ = (
-        Index("idx_project_slices_project", "project_id"),
-        Index("idx_project_slices_created_at", "created_at"),
+        Index("idx_monitor_slices_project", "monitor_id"),
+        Index("idx_monitor_slices_created_at", "created_at"),
     )

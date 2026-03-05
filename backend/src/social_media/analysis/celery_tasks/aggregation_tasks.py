@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 def run_aggregation_task(
     self,
     task_id: int,
-    project_id: int | None = None,
+    monitor_id: int | None = None,
     user_id: int | None = None,
     entity_job_id: int | None = None,
     opinion_job_id: int | None = None,
@@ -42,7 +42,7 @@ def run_aggregation_task(
 
     Args:
         task_id: DataTask ID
-        project_id: 项目 ID
+        monitor_id: 项目 ID
         user_id: 用户 ID
         entity_job_id: 预创建的实体归一化 AnalysisJob ID
         opinion_job_id: 预创建的观点归一化 AnalysisJob ID
@@ -58,7 +58,7 @@ def run_aggregation_task(
         aggregation_result = aggregate_task_analysis(
             db=db,
             task_id=task_id,
-            project_id=project_id,
+            monitor_id=monitor_id,
             user_id=user_id,
             entity_job_id=entity_job_id,
             opinion_job_id=opinion_job_id,

@@ -51,7 +51,7 @@ export const usePosts = () => {
       `/social-media/tasks/posts/cross-task/${platformId}/${postIdOnPlatform}`,
       {
         query: params,
-        key: `cross-task-${platformId}-${postIdOnPlatform}-${params?.project_id || ''}`,
+        key: `cross-task-${platformId}-${postIdOnPlatform}-${params?.monitor_id || ''}`,
       }
     )
   }

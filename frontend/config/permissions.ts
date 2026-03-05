@@ -32,11 +32,11 @@ export const PERMISSIONS = {
   // 基础业务
   DASHBOARD_ACCESS: {target: 'dashboard', action: 'access'},
 
-  // 社交媒体洞察
-  SOCIAL_PROJECT_ACCESS: {target: 'social_project', action: 'access'},
-  SOCIAL_PROJECT_READ: {target: 'social_project', action: 'read'},
-  SOCIAL_PROJECT_WRITE: {target: 'social_project', action: 'write'},
-  SOCIAL_PROJECT_DELETE: {target: 'social_project', action: 'delete'},
+  // 监测管理
+  MONITOR_ACCESS: {target: 'monitor', action: 'access'},
+  MONITOR_READ: {target: 'monitor', action: 'read'},
+  MONITOR_WRITE: {target: 'monitor', action: 'write'},
+  MONITOR_DELETE: {target: 'monitor', action: 'delete'},
 
   SOCIAL_TASK_ACCESS: {target: 'social_task', action: 'access'},
   SOCIAL_TASK_READ: {target: 'social_task', action: 'read'},

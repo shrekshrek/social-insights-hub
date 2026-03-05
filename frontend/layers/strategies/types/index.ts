@@ -13,8 +13,8 @@ export type StrategyStatus = 'draft' | 'phase1_done' | 'phase2_done' | 'complete
 export interface SliceSummary {
   slice_id: number
   slice_name: string | null
-  project_id: number
-  project_name: string
+  monitor_id: number
+  monitor_name: string
 }
 
 // ==================== 策略 ====================

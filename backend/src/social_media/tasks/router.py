@@ -100,7 +100,7 @@ async def get_tasks(
     tasks_with_relations = []
     for task in tasks:
         task_dict = schemas.DataTaskRead.model_validate(task).model_dump()
-        task_dict["monitor_name"] = task.project.name if task.project else None
+        task_dict["monitor_name"] = task.monitor.name if task.monitor else None
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
         task_dict["creator_username"] = task.creator.username if task.creator else None
@@ -131,7 +131,7 @@ async def get_task(
     """
     # 转换为带关联信息的response
     task_dict = schemas.DataTaskRead.model_validate(task).model_dump()
-    task_dict["monitor_name"] = task.project.name if task.project else None
+    task_dict["monitor_name"] = task.monitor.name if task.monitor else None
     task_dict["platform_name"] = task.platform.name if task.platform else None
     task_dict["platform_code"] = task.platform.code if task.platform else None
     task_dict["creator_username"] = task.creator.username if task.creator else None

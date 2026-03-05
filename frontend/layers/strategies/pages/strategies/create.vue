@@ -11,7 +11,7 @@
         />
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">新建策略</h1>
-          <p class="text-gray-600 dark:text-gray-400 mt-1">基于已有切片数据创建品牌策略</p>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">填写品牌 Brief，AI 将协助规划监测方案</p>
         </div>
       </div>
 
@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <!-- 表单 -->
+    <!-- 基本信息 + Brand Brief -->
     <UCard>
       <template #header>
         <h2 class="text-lg font-semibold">基本信息</h2>
@@ -40,41 +40,58 @@
           />
         </UFormField>
 
-        <UFormField label="品牌名称">
+        <UFormField label="品牌名称" required>
           <UInput
-            v-model="brief.brand"
+            v-model="brief.brand_name"
             placeholder="例如: 美赞臣"
             class="w-full"
           />
         </UFormField>
 
-        <UFormField label="品类">
+        <UFormField label="分析目标" required>
+          <UTextarea
+            v-model="brief.analysis_goal"
+            placeholder="例如: 分析竞品口碑，找到品牌差异化机会"
+            :rows="2"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UFormField label="行业 / 品类">
           <UInput
-            v-model="brief.category"
+            v-model="brief.industry"
             placeholder="例如: 婴幼儿奶粉"
             class="w-full"
           />
         </UFormField>
 
-        <UFormField label="目标人群">
+        <UFormField label="主要竞品">
           <UInput
-            v-model="brief.target_audience"
-            placeholder="例如: 25-35岁新手妈妈"
+            v-model="competitorsRaw"
+            placeholder="多个竞品用逗号分隔，例如: 飞鹤, 惠氏, 雅培"
             class="w-full"
           />
         </UFormField>
 
-        <UFormField label="品牌定位">
+        <UFormField label="关注维度">
           <UInput
-            v-model="brief.positioning"
-            placeholder="例如: 科学营养，值得信赖"
+            v-model="focusAreasRaw"
+            placeholder="多个维度用逗号分隔，例如: 口碑, 竞品, 趋势"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UFormField label="时间范围">
+          <UInput
+            v-model="brief.time_range"
+            placeholder="例如: 近6个月"
             class="w-full"
           />
         </UFormField>
 
         <UFormField label="补充说明">
           <UTextarea
-            v-model="brief.notes"
+            v-model="brief.constraints"
             placeholder="其他需要 AI 参考的背景信息（可选）"
             :rows="2"
             class="w-full"
@@ -83,16 +100,32 @@
       </div>
     </UCard>
 
-    <!-- 切片选择 -->
+    <!-- 快速路径：可选切片选择 -->
     <UCard>
       <template #header>
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">选择分析切片</h2>
-          <span class="text-sm text-gray-500">已选 {{ selectedSliceIds.length }} 个切片</span>
-        </div>
+        <button
+          class="w-full flex items-center justify-between"
+          @click="showSlices = !showSlices"
+        >
+          <div>
+            <h2 class="text-lg font-semibold text-left">快速路径：直接关联切片（可选）</h2>
+            <p class="text-sm text-gray-500 text-left mt-0.5">
+              若已有分析切片，可跳过 AI 咨询流程直接关联
+            </p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span v-if="selectedSliceIds.length > 0" class="text-sm text-primary-600 font-medium">
+              已选 {{ selectedSliceIds.length }} 个
+            </span>
+            <UIcon
+              :name="showSlices ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+              class="text-gray-400"
+            />
+          </div>
+        </button>
       </template>
 
-      <ClientOnly>
+      <ClientOnly v-if="showSlices">
         <template #fallback>
           <div class="text-center py-8">
             <p class="text-gray-600 dark:text-gray-400">加载监测列表...</p>
@@ -113,7 +146,6 @@
             :key="monitor.id"
             class="border border-gray-200 dark:border-gray-700 rounded-lg"
           >
-            <!-- 监测标题 (可折叠) -->
             <button
               class="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-t-lg"
               @click="toggleMonitor(monitor.id)"
@@ -130,7 +162,6 @@
               </span>
             </button>
 
-            <!-- 切片列表 -->
             <div
               v-if="expandedMonitors.has(monitor.id)"
               class="border-t border-gray-200 dark:border-gray-700 p-3 space-y-2"
@@ -163,11 +194,17 @@
           </div>
         </div>
       </ClientOnly>
+
+      <div v-else class="py-2 text-sm text-gray-400">
+        点击展开选择切片
+      </div>
     </UCard>
   </div>
 </template>
 
 <script setup lang="ts">
+import type { BrandBrief } from '../../types'
+
 definePageMeta({
   title: '新建策略',
 })
@@ -189,19 +226,21 @@ const strategiesApi = useStrategies()
 const { apiRequest, useApiData: useApiDataFn } = useApi()
 
 const submitting = ref(false)
+const showSlices = ref(false)
 const form = ref({ name: '' })
-const brief = ref({
-  brand: '',
-  category: '',
-  target_audience: '',
-  positioning: '',
-  notes: '',
+const brief = ref<Partial<BrandBrief>>({
+  brand_name: '',
+  analysis_goal: '',
+  industry: '',
+  time_range: '',
+  constraints: '',
 })
+const competitorsRaw = ref('')
+const focusAreasRaw = ref('')
 const selectedSliceIds = ref<number[]>([])
 const expandedMonitors = ref(new Set<number>())
 const monitorSlicesMap = ref<Record<number, MonitorSliceItem[]>>({})
 
-// 加载项目列表 (不分页，取前100个)
 const { data: monitorsData, pending: monitorsPending } = useApiDataFn<{
   items: MonitorItem[]
   total: number
@@ -212,7 +251,11 @@ const { data: monitorsData, pending: monitorsPending } = useApiDataFn<{
 const monitors = computed(() => monitorsData.value?.items || [])
 
 const canSubmit = computed(() => {
-  return form.value.name.trim().length > 0 && selectedSliceIds.value.length > 0
+  return (
+    form.value.name.trim().length > 0
+    && (brief.value.brand_name?.trim().length ?? 0) > 0
+    && (brief.value.analysis_goal?.trim().length ?? 0) > 0
+  )
 })
 
 const toggleMonitor = async (monitorId: number) => {
@@ -220,21 +263,14 @@ const toggleMonitor = async (monitorId: number) => {
     expandedMonitors.value.delete(monitorId)
   } else {
     expandedMonitors.value.add(monitorId)
-    // 首次展开时加载切片
     if (!monitorSlicesMap.value[monitorId]) {
       try {
         const result = await apiRequest<{ items: MonitorSliceItem[] }>(
           `/social-media/analysis/monitors/${monitorId}/slices`
         )
-        monitorSlicesMap.value = {
-          ...monitorSlicesMap.value,
-          [monitorId]: result.items,
-        }
+        monitorSlicesMap.value = { ...monitorSlicesMap.value, [monitorId]: result.items }
       } catch {
-        monitorSlicesMap.value = {
-          ...monitorSlicesMap.value,
-          [monitorId]: [],
-        }
+        monitorSlicesMap.value = { ...monitorSlicesMap.value, [monitorId]: [] }
       }
     }
   }
@@ -274,16 +310,29 @@ const handleSubmit = async () => {
 
   submitting.value = true
   try {
-    // 过滤空字段，全空则不传
-    const briefEntries = Object.entries(brief.value).filter(([, v]) => v.trim())
-    const brandBrief = briefEntries.length > 0
-      ? Object.fromEntries(briefEntries)
-      : null
+    const competitors = competitorsRaw.value
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+    const focusAreas = focusAreasRaw.value
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+
+    const brandBrief: BrandBrief = {
+      brand_name: brief.value.brand_name!.trim(),
+      analysis_goal: brief.value.analysis_goal!.trim(),
+      ...(brief.value.industry?.trim() && { industry: brief.value.industry.trim() }),
+      ...(competitors.length > 0 && { competitors }),
+      ...(focusAreas.length > 0 && { focus_areas: focusAreas }),
+      ...(brief.value.time_range?.trim() && { time_range: brief.value.time_range.trim() }),
+      ...(brief.value.constraints?.trim() && { constraints: brief.value.constraints.trim() }),
+    }
 
     const result = await strategiesApi.createStrategy({
       name: form.value.name.trim(),
-      slice_ids: selectedSliceIds.value,
       brand_brief: brandBrief,
+      ...(selectedSliceIds.value.length > 0 && { slice_ids: selectedSliceIds.value }),
     })
     navigateTo(`/strategies/${result.id}`)
   } catch {

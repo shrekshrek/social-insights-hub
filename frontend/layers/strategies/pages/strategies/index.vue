@@ -150,8 +150,11 @@ const handleRefresh = async () => {
 }
 
 const STATUS_MAP: Record<StrategyStatus, { label: string; color: 'neutral' | 'info' | 'warning' | 'success' }> = {
-  draft: { label: '草稿', color: 'neutral' },
-  phase1_done: { label: '洞察完成', color: 'info' },
+  briefing: { label: '需求阶段', color: 'neutral' },
+  consulting: { label: '咨询中', color: 'info' },
+  monitors_created: { label: '监测已创建', color: 'info' },
+  slices_ready: { label: '数据就绪', color: 'warning' },
+  phase1_done: { label: '洞察完成', color: 'warning' },
   phase2_done: { label: '策略完成', color: 'warning' },
   completed: { label: '已完成', color: 'success' },
 }

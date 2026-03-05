@@ -6,7 +6,14 @@ import type { PaginatedResponse } from '~/types/common'
 
 // ==================== 策略状态 ====================
 
-export type StrategyStatus = 'draft' | 'phase1_done' | 'phase2_done' | 'completed'
+export type StrategyStatus =
+  | 'briefing'
+  | 'consulting'
+  | 'monitors_created'
+  | 'slices_ready'
+  | 'phase1_done'
+  | 'phase2_done'
+  | 'completed'
 
 // ==================== 切片摘要 ====================
 
@@ -17,13 +24,93 @@ export interface SliceSummary {
   monitor_name: string
 }
 
+// ==================== Brand Brief ====================
+
+export interface BrandBrief {
+  brand_name: string
+  industry?: string
+  analysis_goal: string
+  competitors?: string[]
+  focus_areas?: string[]
+  time_range?: string
+  constraints?: string
+}
+
+// ==================== 咨询相关 ====================
+
+export interface MonitorSuggestion {
+  name: string
+  platforms?: string[]
+  keywords?: string[]
+  task_type?: string
+  rationale?: string
+}
+
+export interface SlicePlanItem {
+  name: string
+  purpose: string
+  expected_sources?: string[]
+}
+
+export interface ConsultResponse {
+  round_number: number
+  understanding_summary: string
+  clarification_questions: Array<{ id: string; question: string }>
+  monitor_suggestions: MonitorSuggestion[]
+  slice_plan: SlicePlanItem[]
+  confidence: number
+}
+
+export interface ConsultRound {
+  round_number: number
+  user_input: string
+  answers?: Record<string, string> | null
+  ai_response: ConsultResponse
+}
+
+// ==================== 确认计划 ====================
+
+export interface ConfirmPlanResponse {
+  created_monitor_ids: number[]
+  partial_errors: string[]
+  strategy: Strategy
+}
+
+// ==================== 评估相关 ====================
+
+export interface CoverageAnalysis {
+  dimension: string
+  score: number
+  status: string
+  note: string
+}
+
+export interface GapAnalysis {
+  gap_type: string
+  description: string
+  priority: string
+}
+
+export interface EvaluationResult {
+  overall_score: number
+  is_sufficient: boolean
+  coverage_analysis: CoverageAnalysis[]
+  slice_suggestions: Array<{ slice_name: string; issue: string; suggestion: string }>
+  gap_analysis: GapAnalysis[]
+  supplementary_tasks?: Array<{ platform: string; keywords: string[]; reason: string }> | null
+}
+
 // ==================== 策略 ====================
 
 export interface Strategy {
   id: number
   name: string
   status: StrategyStatus
-  brand_brief: Record<string, unknown> | null
+  brand_brief: BrandBrief | null
+  consultation_rounds: ConsultRound[]
+  suggested_monitor_ids: number[]
+  slice_plan: SlicePlanItem[]
+  evaluation_result: EvaluationResult | null
   phase1_result: Record<string, unknown> | null
   phase2_result: Record<string, unknown> | null
   phase3_result: Record<string, unknown> | null
@@ -51,8 +138,8 @@ export type StrategyListResponse = PaginatedResponse<StrategyListItem>
 
 export interface StrategyCreate {
   name: string
-  slice_ids: number[]
-  brand_brief?: Record<string, unknown> | null
+  slice_ids?: number[]
+  brand_brief?: BrandBrief | null
 }
 
 export interface StrategyUpdate {

@@ -3,6 +3,10 @@ import type {
   StrategyCreate,
   StrategyUpdate,
   StrategyListResponse,
+  ConsultResponse,
+  ConfirmPlanResponse,
+  EvaluationResult,
+  MonitorSuggestion,
 } from '../types'
 
 export const useStrategies = () => {
@@ -97,6 +101,44 @@ export const useStrategies = () => {
     await apiDownload(`/strategies/${id}/export`, `${name}_策略报告.docx`)
   }
 
+  // AI 多轮咨询
+  const consult = async (id: number, input: string, answers?: Record<string, string>) => {
+    return apiRequest<ConsultResponse>(`/strategies/${id}/consult`, {
+      method: 'POST',
+      body: { user_input: input, answers: answers ?? null },
+    })
+  }
+
+  // 确认 AI 建议，一键创建监测
+  const confirmPlan = async (id: number, suggestions: MonitorSuggestion[]) => {
+    return apiRequest<ConfirmPlanResponse>(`/strategies/${id}/confirm-plan`, {
+      method: 'POST',
+      body: { monitor_suggestions: suggestions },
+    })
+  }
+
+  // 批量关联切片
+  const addSlices = async (id: number, sliceIds: number[]) => {
+    return apiRequest<Strategy>(`/strategies/${id}/slices`, {
+      method: 'POST',
+      body: { slice_ids: sliceIds },
+    })
+  }
+
+  // AI 评估切片充分性
+  const evaluate = async (id: number) => {
+    return apiRequest<EvaluationResult>(`/strategies/${id}/evaluate`, {
+      method: 'POST',
+    })
+  }
+
+  // 确认数据就绪
+  const confirmReady = async (id: number) => {
+    return apiRequest<Strategy>(`/strategies/${id}/confirm-ready`, {
+      method: 'POST',
+    })
+  }
+
   return {
     getStrategies,
     getStrategy,
@@ -106,5 +148,10 @@ export const useStrategies = () => {
     generatePhase,
     editPhase,
     exportStrategy,
+    consult,
+    confirmPlan,
+    addSlices,
+    evaluate,
+    confirmReady,
   }
 }

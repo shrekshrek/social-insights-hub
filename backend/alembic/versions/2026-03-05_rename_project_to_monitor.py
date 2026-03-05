@@ -43,7 +43,7 @@ def upgrade() -> None:
     # 2a. monitor_participants (composite PK)
     # Drop old FK first, rename column, recreate FK
     op.drop_constraint(
-        "social_project_participants_project_id_fkey",
+        "fk_social_project_participants_project_id_social_projects",
         "monitor_participants",
         type_="foreignkey",
     )
@@ -61,7 +61,7 @@ def upgrade() -> None:
 
     # 2b. social_data_tasks.project_id -> monitor_id
     op.drop_constraint(
-        "social_data_tasks_project_id_fkey",
+        "fk_social_data_tasks_project_id_social_projects",
         "social_data_tasks",
         type_="foreignkey",
     )
@@ -111,7 +111,7 @@ def upgrade() -> None:
 
     # 2d. analysis_slices.project_id -> monitor_id
     op.drop_constraint(
-        "project_analysis_slices_project_id_fkey",
+        "fk_project_analysis_snapshots_project_id_social_projects",
         "analysis_slices",
         type_="foreignkey",
     )
@@ -191,7 +191,7 @@ def downgrade() -> None:
     op.drop_index("idx_analysis_slices_monitor", table_name="analysis_slices")
     op.alter_column("analysis_slices", "monitor_id", new_column_name="project_id")
     op.create_foreign_key(
-        "project_analysis_slices_project_id_fkey",
+        "fk_project_analysis_snapshots_project_id_social_projects",
         "analysis_slices",
         "monitors",
         ["project_id"],
@@ -227,7 +227,7 @@ def downgrade() -> None:
     op.drop_index("ix_social_data_tasks_monitor_id", table_name="social_data_tasks")
     op.alter_column("social_data_tasks", "monitor_id", new_column_name="project_id")
     op.create_foreign_key(
-        "social_data_tasks_project_id_fkey",
+        "fk_social_data_tasks_project_id_social_projects",
         "social_data_tasks",
         "monitors",
         ["project_id"],
@@ -244,7 +244,7 @@ def downgrade() -> None:
     )
     op.alter_column("monitor_participants", "monitor_id", new_column_name="project_id")
     op.create_foreign_key(
-        "social_project_participants_project_id_fkey",
+        "fk_social_project_participants_project_id_social_projects",
         "monitor_participants",
         "monitors",
         ["project_id"],

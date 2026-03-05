@@ -78,6 +78,8 @@ def _build_landscape(
     entities_aligned: list[dict[str, Any]],
     overview: dict[str, Any],
     freshness: dict[str, Any],
+    time_distribution: dict[str, Any] | None = None,
+    kol_voices: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """构建大盘层（Landscape）：SOV 排名、集团军声量、平台 DNA、行业象限。
 
@@ -401,7 +403,7 @@ def _build_landscape(
             }
         )
 
-    return {
+    result = {
         "sov_ranking": sov_ranking,
         "group_share": group_share,
         "platform_dna": platform_dna,
@@ -410,6 +412,11 @@ def _build_landscape(
         "freshness": freshness,
         "overview": overview_safe,
     }
+    if time_distribution is not None:
+        result["time_distribution"] = time_distribution
+    if kol_voices is not None:
+        result["kol_voices"] = kol_voices
+    return result
 
 
 def _build_intent(
@@ -1047,12 +1054,15 @@ def build_slice_layers(
     entities_aligned: list[dict[str, Any]],
     topics_aligned: list[dict[str, Any]],
     drivers: dict[str, Any] | None,
+    time_distribution: dict[str, Any] | None = None,
+    kol_voices: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Step3：分层指标计算（Landscape/Topic/Focus）。
 
     说明：
     - 输出结构与 PROJECT_SLICE_PIPELINE_FINAL.md 对齐，但保持 KISS：先覆盖核心指标。
-    - Focus 仅在 meta.subject 存在时返回，否则为 None。
+    - Focus 仅在 meta.subject 存在时返回。
+    - time_distribution / kol_voices 由 Stage 1 预计算，此处透传。
     """
     subject_raw = (meta or {}).get("subject")
     subject = str(subject_raw).strip() if subject_raw is not None else ""
@@ -1061,6 +1071,8 @@ def build_slice_layers(
         entities_aligned=entities_aligned,
         overview=overview,
         freshness=freshness or {},
+        time_distribution=time_distribution,
+        kol_voices=kol_voices,
     )
 
     intent = _build_intent(topics_aligned=topics_aligned)

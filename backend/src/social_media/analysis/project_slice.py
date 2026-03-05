@@ -229,6 +229,141 @@ def _merge_entity_attr_items(
         )
 
 
+def _compute_time_distribution(
+    post_info_by_key: dict[str, dict[str, Any]],
+    spam_map_by_key: dict[str, str],
+) -> dict[str, Any]:
+    """从去重后的帖子信息计算时间分布。
+
+    Returns:
+        {distribution, organic_distribution, promo_distribution, skipped_count}
+    """
+    all_counts: dict[str, int] = defaultdict(int)
+    organic_counts: dict[str, int] = defaultdict(int)
+    promo_counts: dict[str, int] = defaultdict(int)
+    skipped = 0
+
+    for pk, info in post_info_by_key.items():
+        if not isinstance(info, dict):
+            skipped += 1
+            continue
+        published_at = info.get("published_at")
+        if not published_at:
+            skipped += 1
+            continue
+
+        # 解析日期：统一归 UTC 后取日期，与任务级 calculate_time_distribution 一致
+        date_str = None
+        if isinstance(published_at, datetime):
+            if published_at.tzinfo is None:
+                published_at = published_at.replace(tzinfo=timezone.utc)
+            date_str = published_at.astimezone(timezone.utc).strftime("%Y-%m-%d")
+        elif isinstance(published_at, str):
+            try:
+                raw = published_at.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(raw)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                date_str = dt.astimezone(timezone.utc).strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                skipped += 1
+                continue
+        else:
+            skipped += 1
+            continue
+
+        all_counts[date_str] += 1
+        group = spam_map_by_key.get(pk)
+        if group == "low":
+            organic_counts[date_str] += 1
+        elif group == "high":
+            promo_counts[date_str] += 1
+
+    def _to_list(counts: dict[str, int]) -> list[dict[str, Any]]:
+        return [
+            {"date": d, "count": c}
+            for d, c in sorted(counts.items())
+        ]
+
+    return {
+        "distribution": _to_list(all_counts),
+        "organic_distribution": _to_list(organic_counts),
+        "promo_distribution": _to_list(promo_counts),
+        "skipped_count": skipped,
+    }
+
+
+def _merge_kol_voices(
+    task_data_list: list[dict[str, Any]],
+    post_key_by_id: dict[int, str],
+    spam_map_by_key: dict[str, str],
+    *,
+    top_n: int = 10,
+) -> list[dict[str, Any]]:
+    """从各任务的 kol_voices 合并去重，按 CII 排序取 top_n。
+
+    去重策略：通过 post_key_by_id 将 post_id 转为 post_key，同 post_key 保留 CII 最高的。
+    """
+    best_by_key: dict[str, dict[str, Any]] = {}
+
+    for td in task_data_list:
+        if not isinstance(td, dict):
+            continue
+        task_id = td.get("task_id")
+        ar = td.get("analysis_result")
+        if not isinstance(ar, dict):
+            continue
+        insights = ar.get("insights")
+        if not isinstance(insights, dict):
+            continue
+        voices = insights.get("kol_voices")
+        if not isinstance(voices, list):
+            continue
+
+        for v in voices:
+            if not isinstance(v, dict):
+                continue
+            post_id = v.get("post_id")
+            if post_id is None:
+                continue
+            try:
+                pid = int(post_id)
+            except (ValueError, TypeError):
+                continue
+
+            pk = post_key_by_id.get(pid)
+            if not pk:
+                continue
+
+            try:
+                cii = float(v.get("cii") or 0.0)
+            except (ValueError, TypeError):
+                cii = 0.0
+
+            existing = best_by_key.get(pk)
+            if existing is not None and existing.get("cii", 0.0) >= cii:
+                continue
+
+            best_by_key[pk] = {
+                "post_id": pid,
+                "task_id": task_id,
+                "author": v.get("author") or "",
+                "title": v.get("title") or "",
+                "cii": cii,
+                "sentiment": v.get("sentiment"),
+                "summary": v.get("summary") or "",
+                "platform": v.get("platform") or "",
+                "spam_group": spam_map_by_key.get(pk),
+            }
+
+    sorted_voices = sorted(
+        best_by_key.values(),
+        key=lambda x: x.get("cii", 0.0),
+        reverse=True,
+    )
+    return sorted_voices[:top_n]
+
+
 def build_project_slice_result(
     *,
     project_id: int,
@@ -1207,8 +1342,14 @@ def build_project_slice_result(
             "landscape": {
                 "freshness": freshness,
                 "overview": overview,
+                "time_distribution": _compute_time_distribution(
+                    post_info_by_key, spam_map_by_key,
+                ),
+                "kol_voices": _merge_kol_voices(
+                    task_data_list, post_key_by_id, spam_map_by_key,
+                ),
             },
-            # intent 层由 Stage3 build_slice_layers 填充
+            # intent 层由 Stage2 build_slice_layers 填充
             "intent": {},
             # Focus 由 Stage2/Stage3 基于 subject 条件触发填充
             "focus": None,

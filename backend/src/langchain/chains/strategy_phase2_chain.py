@@ -25,7 +25,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 
 ## 分析框架
 - Brand Social Role 应基于 Opportunity 自然延伸，结合 KOL 声音风格和 Brief 中的品牌定位
-- Social Strategy 应考虑平台特征、时间趋势、传播节奏
+- Social Strategy 应考虑平台特征、KOL 声音风格、传播节奏
 - 每条结论引用上游 Phase 1 的 opportunity index
 
 ## 输出格式
@@ -45,7 +45,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
     "rhythm": "传播节奏建议",
     "evidence": [
       {{"type": "platform_insight", "description": "平台特征支撑", "source": "slice数据"}},
-      {{"type": "time_trend", "description": "时间趋势支撑", "source": "slice数据"}}
+      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "slice数据"}}
     ]
   }}
 }}
@@ -54,7 +54,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - brand_social_role.statement 简洁有力，一句话定义角色
 - brand_social_role.elaboration 解释为什么是这个角色，如何体现
 - social_strategy.rhythm 包含具体的传播节奏建议（如"日常种草+事件引爆"）
-- evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, time_trend, brief_alignment
+- evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, brief_alignment
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -88,7 +88,7 @@ def format_data_for_phase2(
     if brief:
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
 
-    # 提取 KOL 声音、平台特征、时间趋势
+    # 提取 KOL 声音、平台特征
     supplementary_parts = []
     for i, s in enumerate(slices):
         layers = s.get("layers") or {}
@@ -101,10 +101,7 @@ def format_data_for_phase2(
         if kol_voices:
             part["kol_voices"] = kol_voices[:10]
 
-        # 时间分布（在 landscape 层，由切片 Stage 1 计算）
-        time_dist = landscape.get("time_distribution")
-        if time_dist:
-            part["time_distribution"] = time_dist
+        # 注意：不读取 time_distribution — 采集样本的时间分布可能误导 LLM 的节奏建议
 
         # 平台分布（overview 中的去重平台帖子量）
         overview = landscape.get("overview") or {}

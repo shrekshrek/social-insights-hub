@@ -8,13 +8,13 @@
 
 ## 目标
 
-在切片 `result_data` 中补全以下 3 类数据，使策略模块和前端都能受益：
+在切片 `result_data` 中补全以下 3 类数据：
 
 | 数据 | 放置位置 | 消费者 |
 |------|----------|--------|
-| time_distribution | `layers.landscape.time_distribution` | 策略 Phase 2 + 前端时间趋势图 |
-| kol_voices | `layers.landscape.kol_voices` | 策略 Phase 2/3 + 前端 KOL 展示 |
-| ipa_analysis | `layers.intent.ipa_analysis` | 策略 Phase 3 + 前端 IPA 象限 |
+| time_distribution | `layers.landscape.time_distribution` | ~~策略 Phase 2~~ 前端可选展示（已从 Chain 移除：采集样本分布误导节奏建议） |
+| kol_voices | `layers.landscape.kol_voices` | 策略 Phase 2/3 + 前端可选展示 |
+| ~~ipa_analysis~~ | ~~`layers.intent.ipa_analysis`~~ | 已删除（维度不一致 + 与 topic_aspects+top_features+SWOT 冗余，原始数据已在 foundation 层） |
 
 ## 现有切片流水线结构
 
@@ -200,12 +200,12 @@ layers:
 
 ## 与策略模块的关系
 
-此方案完成后，策略模块的 Phase 2/3 Chain 中读取的数据路径将自动生效：
-- `layers.landscape.time_distribution` → Phase 2 时间节奏分析
-- `layers.landscape.kol_voices` → Phase 2/3 KOL 声音引用
-- `layers.intent.ipa_analysis` → Phase 3 IPA 产品力诊断
+经评估，3 个字段中仅 `kol_voices` 保留为策略 Chain 输入：
+- ~~`layers.landscape.time_distribution` → Phase 2 时间节奏分析~~ （已移除：采集样本分布非真实趋势，误导 LLM 节奏建议）
+- `layers.landscape.kol_voices` → Phase 2/3 KOL 声音引用 ✅
+- ~~`layers.intent.ipa_analysis` → Phase 3 IPA 产品力诊断~~ （已删除：维度不一致 + 与现有数据冗余，原始数据已在 foundation 层）
 
-Phase 2/3 Chain 中的数据读取路径已修正完毕（strategies 模块收尾时完成）。补全后数据将自动被读取。
+`time_distribution` 仍在切片中生成（供未来前端可选展示），`ipa_analysis` 已从切片计算中移除。
 
 ## 测试策略
 

@@ -113,13 +113,10 @@ def format_data_for_phase3(
         if kol_voices:
             part["kol_voices"] = kol_voices[:10]
 
-        # IPA（在 intent 层，由切片 Stage 2 计算）
-        intent = layers.get("intent") or {}
-        ipa = intent.get("ipa_analysis")
-        if ipa:
-            part["ipa_analysis"] = ipa
+        # 注意：不读取 ipa_analysis — LLM 已有 topic_aspects + top_features + SWOT，可自行推理四象限关系
 
         # 话题分类维度（Content Strategy 内容支柱的数据源）
+        intent = layers.get("intent") or {}
         topic_aspects = intent.get("topic_aspects")
         if topic_aspects and isinstance(topic_aspects, list):
             part["topic_aspects"] = [

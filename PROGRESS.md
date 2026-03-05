@@ -34,6 +34,7 @@
 | 部署配置 | 已完成 | Docker Compose 开发/生产双配置 |
 | strategies/后端 | 已完成 | 策���定义模块：3 阶段 AI 生成（洞察→策略→创意），Phase 1/2/3 Chain + CRUD API + Word 导出 |
 | strategies/前端 | 已完成 | 策略列表/创建/详情页，3 阶段结果展示与编辑，跨项目切片选择器 |
+| analysis/slice_enrichment/后端 | 已完成 | 切片流水线数据补全：time_distribution(Stage1) + kol_voices(Stage1) + ipa_analysis(Stage2) |
 
 ## 已完成的里程碑
 
@@ -45,12 +46,14 @@
 - v1.x: 全栈代码命名统一 (snapshot → slice) + 架构文档补全
 - v1.x: 项目详情页批量创建任务 + 切片重命名功能
 - v2.0: Strategy Define 全栈实现（3 阶段 AI 策略生成 + 数据依赖精选 + Word 导出）
+- v2.1: 切片流水线数据补全（time_distribution + kol_voices + ipa_analysis，策略 Phase 2/3 数据质量提升）
 
 ## 待改进项
 
 - 测试覆盖率待提升（后端 aggregation 模块无单元测试）
-- 切片流水线数据补全：time_distribution / kol_voices / ipa_analysis（方案见 `docs/plans/2026-03-05-slice-pipeline-enrichment-design.md`）
+- 切片页前端可选展示：time_distribution / kol_voices 数据已由后端生成但前端展示优先级低（time_distribution 是采集样本分布非真实趋势、kol_voices 任务级更直观），如需展示仅考虑 kol_voices
+- 策略 Chain 数据精简：Phase 2 已移除 time_distribution（样本分布误导节奏建议）、Phase 3 已移除 ipa_analysis 读取；切片级 ipa_analysis 计算已删除（维度不一致 + 与现有数据冗余），仅保留 kol_voices 作为唯一新增数据源
 
 ## 下次继续的入口
 
-切片流水线数据补全（`analysis` 模块）：为切片 result_data 补全 time_distribution（Stage 1 计算）、kol_voices（Stage 1 从任务合并）、ipa_analysis（Stage 2 计算）。方案文档 `docs/plans/2026-03-05-slice-pipeline-enrichment-design.md`，改动集中在 `project_slice.py`（Stage 1）和 `celery_tasks/project_slice/insights.py`（Stage 2）。完成后策略 Phase 2/3 的数据质量将显著提升。
+待定。

@@ -52,13 +52,15 @@ Brand Opportunity 来源：`sov_ranking` / `focus.swot`(+delta) / `focus.gap` / 
 
 ### Phase 2 读取的切片字段（策略层）
 
-`kol_voices`⚠️ / `time_distribution`⚠️ / `overview.unique_platform_volume` / `platform_dna`(name/role/platform_shares)
+`kol_voices` / `overview.unique_platform_volume` / `platform_dna`(name/role/platform_shares)
+
+> 已移除 `time_distribution`：采集样本的时间分布可能误导 LLM 的节奏建议
 
 ### Phase 3 读取的切片字段（创意层）
 
-`kol_voices`⚠️ / `ipa_analysis`⚠️ / `topic_aspects` / `aligned_entities[:20].top_features`
+`kol_voices` / `topic_aspects` / `aligned_entities[:20].top_features`
 
-> ⚠️ 标记字段待切片流水线补全，方案见 `docs/plans/2026-03-05-slice-pipeline-enrichment-design.md`
+> 已移除 `ipa_analysis`：切片级 IPA 计算已删除（维度不一致 + 与现有数据冗余）
 
 ## Important Notes
 

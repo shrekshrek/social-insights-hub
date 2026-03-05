@@ -3,6 +3,15 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+_MOCK_EVAL_OUTPUT = json.dumps({
+    "overall_score": 0.3,
+    "is_sufficient": False,
+    "coverage_analysis": [],
+    "slice_suggestions": [],
+    "gap_analysis": [],
+    "supplementary_tasks": None,
+})
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -157,10 +166,15 @@ async def test_consult_strategy_returns_consult_response(
     assert detail.json()["status"] == "consulting"
 
 
+@patch("src.strategies.service.create_strategy_evaluate_chain")
 async def test_evaluate_strategy_stub_response(
-    async_client: AsyncClient, auth_headers: dict
+    mock_chain_factory, async_client: AsyncClient, auth_headers: dict
 ):
-    """/evaluate 返回 EvaluationResultResponse 结构"""
+    """/evaluate 返回 EvaluationResultResponse 结构（mock LLM）"""
+    mock_chain = AsyncMock()
+    mock_chain.ainvoke.return_value = MagicMock(content=_MOCK_EVAL_OUTPUT)
+    mock_chain_factory.return_value = mock_chain
+
     create_resp = await async_client.post(
         f"{BASE}/strategies",
         json={"name": "评估测试策略"},

@@ -13,6 +13,11 @@ from src.langchain.chains.strategy_consult_chain import (
     format_consult_inputs,
     parse_consult_response,
 )
+from src.langchain.chains.strategy_evaluate_chain import (
+    create_strategy_evaluate_chain,
+    format_evaluate_inputs,
+    parse_evaluate_response,
+)
 from src.langchain.chains.strategy_phase1_chain import (
     create_strategy_phase1_chain,
     format_slice_data_for_phase1,
@@ -497,16 +502,40 @@ async def evaluate_strategy(
 ) -> EvaluationResultResponse:
     """AI 评估切片充分性
 
-    TODO Step 4: 接入 strategy_evaluate_chain
+    LLM 解析失败时抛出 HTTPException(500)，strategy.evaluation_result 不更新。
     """
-    has_slices = bool(strategy.slices)
+    slices_data = await load_slice_data(db, strategy)
+
+    chain = create_strategy_evaluate_chain()
+    inputs = format_evaluate_inputs(
+        brief=strategy.brand_brief,
+        slice_plan=list(strategy.slice_plan or []),
+        slices_data=slices_data,
+    )
+
+    start = time.time()
+    llm_result = await chain.ainvoke(inputs)
+    duration = time.time() - start
+
+    try:
+        parsed = parse_evaluate_response(llm_result.content)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI 评估解析失败: {e}",
+        ) from e
+
     result = EvaluationResultResponse(
-        overall_score=0.0 if not has_slices else 0.5,
-        is_sufficient=False if not has_slices else False,
-        coverage_analysis=[],
-        slice_suggestions=[],
-        gap_analysis=[{"note": "AI 评估功能开发中"}],
-        supplementary_tasks=None,
+        overall_score=parsed["overall_score"],
+        is_sufficient=parsed["is_sufficient"],
+        coverage_analysis=parsed["coverage_analysis"],
+        slice_suggestions=parsed["slice_suggestions"],
+        gap_analysis=parsed["gap_analysis"],
+        supplementary_tasks=parsed.get("supplementary_tasks"),
+    )
+    logger.info(
+        "Strategy %d Evaluate 完成 (%.1fs, score=%.2f, sufficient=%s)",
+        strategy.id, duration, parsed["overall_score"], parsed["is_sufficient"],
     )
 
     strategy.evaluation_result = result.model_dump()

@@ -18,7 +18,7 @@
 | social_media/analysis/前端 | 已完成 | 分析报告展示、图表可视化、成本面板、切片重命名 |
 | langchain/后端 | 已完成 | DeepSeek 集成、9 条分析链 |
 | agent/后端 | 已完成 | 爬虫代理 API、API Key 认证、数据上传 |
-| analysis/spam_distribution/后端 | 已完成 | 全模块 spam 分布: 实体/观点(4维) + 四象限/KOL(标记) + IPA/竞品/时间(2维) + NSR拆分 |
+| analysis/spam_distribution/后端 | 已完成 | 全模块 spam 分布: 实体/观点(4维) + 四象限/KOL(标记) + IPA/竞��/时间(2维) + NSR拆分 |
 | analysis/spam_display/前端 | 已完成 | 4维可视化(比例条+popover) + 排序控件 + 时间分布堆叠图 + IPA/竞品tooltip增强 |
 | analysis/spam_4d/后端 | 已完成 | IPA/竞品携带 post_source_ids+comment_source_ids，spam 计算 2D→4D，重命名 spam_distribution |
 | analysis/spam_4d/前端 | 已完成 | IPA/竞品类型升级 SpamCountBreakdown→SpamDistribution，tooltip 展示 4D |
@@ -32,6 +32,8 @@
 | 代码命名/snapshot→slice/全栈 | 已完成 | 后端文件/目录重命名 + DB migration + 前端类型/API 路径全部更新为 slice |
 | 文档补全/architecture | 已完成 | backend-architecture.md 补充 social_media/langchain/agent 模块；frontend-architecture.md 补充 social-media Layer 及 spam 可视化约定 |
 | 部署配置 | 已完成 | Docker Compose 开发/生产双配置 |
+| strategies/后端 | 已完成 | 策���定义模块：3 阶段 AI 生成（洞察→策略→创意），Phase 1/2/3 Chain + CRUD API + Word 导出 |
+| strategies/前端 | 已完成 | 策略列表/创建/详情页，3 阶段结果展示与编辑，跨项目切片选择器 |
 
 ## 已完成的里程碑
 
@@ -42,14 +44,13 @@
 - v1.x: 任务级分析指标 QA 与修复 (舆论反差度/营销浓度阈值/NSR+KOL 情感标签归一化)
 - v1.x: 全栈代码命名统一 (snapshot → slice) + 架构文档补全
 - v1.x: 项目详情页批量创建任务 + 切片重命名功能
-
-| strategies/后端 | 方案已确认 | 策略定义模块：3 阶段 AI 生成（洞察→策略→创意），独立顶级模块 |
-| strategies/前端 | 方案已确认 | 策略列表/创建/详情页，3 阶段结果展示与编辑 |
+- v2.0: Strategy Define 全栈实现（3 阶段 AI 策略生成 + 数据依赖精选 + Word 导出）
 
 ## 待改进项
 
 - 测试覆盖率待提升（后端 aggregation 模块无单元测试）
+- 切片流水线数据补全：time_distribution / kol_voices / ipa_analysis（方案见 `docs/plans/2026-03-05-slice-pipeline-enrichment-design.md`）
 
 ## 下次继续的入口
 
-从 Strategy Define 模块的数据库模型开始实施，参考 `docs/plan.md` Step 1 的表结构设计。后端模块路径 `backend/src/strategies/`，前端 Layer 路径 `frontend/layers/strategies/`。设计文档见 `docs/plans/2026-03-04-strategy-define-design.md`。
+切片流水线数据补全（`analysis` 模块）：为切片 result_data 补全 time_distribution（Stage 1 计算）、kol_voices（Stage 1 从任务合并）、ipa_analysis（Stage 2 计算）。方案文档 `docs/plans/2026-03-05-slice-pipeline-enrichment-design.md`，改动集中在 `project_slice.py`（Stage 1）和 `celery_tasks/project_slice/insights.py`（Stage 2）。完成后策略 Phase 2/3 的数据质量将显著提升。

@@ -43,11 +43,11 @@ export const PERMISSIONS = {
   SOCIAL_TASK_WRITE: {target: 'social_task', action: 'write'},
   SOCIAL_TASK_DELETE: {target: 'social_task', action: 'delete'},
 
-  // 扩展权限示例（根据需要添加）
-  // REPORTS_ACCESS: {target: 'reports', action: 'access'},
-  // REPORTS_READ: {target: 'reports', action: 'read'},
-  // REPORTS_WRITE: {target: 'reports', action: 'write'},
-  // REPORTS_EXPORT: {target: 'reports', action: 'export'},
+  // 策略定义
+  STRATEGY_ACCESS: {target: 'strategy', action: 'access'},
+  STRATEGY_READ: {target: 'strategy', action: 'read'},
+  STRATEGY_WRITE: {target: 'strategy', action: 'write'},
+  STRATEGY_DELETE: {target: 'strategy', action: 'delete'},
 } as const satisfies Record<string, Permission>
 
 // ============================================================================

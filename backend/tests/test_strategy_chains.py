@@ -1,0 +1,166 @@
+"""Strategy LLM Chain 单元测试 — parse 函数 + format 函数"""
+
+import json
+
+from src.langchain.chains.strategy_phase1_chain import (
+    format_slice_data_for_phase1,
+    parse_phase1_response,
+)
+from src.langchain.chains.strategy_phase2_chain import (
+    format_data_for_phase2,
+    parse_phase2_response,
+)
+from src.langchain.chains.strategy_phase3_chain import (
+    format_data_for_phase3,
+    parse_phase3_response,
+)
+
+
+# ==================== Phase 1 ====================
+
+
+class TestParsePhase1:
+    def test_valid_json(self):
+        raw = json.dumps({
+            "social_tensions": [
+                {
+                    "statement": "消费者对价格不满",
+                    "evidence": [{"type": "topic_sentiment", "description": "负面占比62%", "source": "s1"}],
+                    "confidence": "high",
+                }
+            ],
+            "brand_opportunities": [
+                {
+                    "statement": "性价比定位空白",
+                    "evidence": [{"type": "sov_gap", "description": "无头部品牌", "source": "s1"}],
+                    "related_tensions": [0],
+                }
+            ],
+        })
+        result = parse_phase1_response(raw)
+        assert len(result["social_tensions"]) == 1
+        assert result["social_tensions"][0]["confidence"] == "high"
+        assert len(result["brand_opportunities"]) == 1
+
+    def test_json_in_code_block(self):
+        raw = '```json\n{"social_tensions": [], "brand_opportunities": []}\n```'
+        result = parse_phase1_response(raw)
+        assert result["social_tensions"] == []
+
+    def test_invalid_json(self):
+        result = parse_phase1_response("这不是JSON")
+        assert result["social_tensions"] == []
+        assert result["brand_opportunities"] == []
+
+    def test_missing_fields(self):
+        result = parse_phase1_response('{"foo": "bar"}')
+        assert "social_tensions" in result
+        assert "brand_opportunities" in result
+
+
+class TestFormatPhase1:
+    def test_basic_format(self):
+        slices = [
+            {
+                "meta": {"subject": "测试", "competitors": ["A"], "keywords": ["key"]},
+                "foundation": {
+                    "aligned_entities": [{"name": "E1", "role": "target", "heat": 10, "sentiment": 0.5}],
+                    "aligned_topics": [{"name": "T1", "category": "功能", "heat": 5}],
+                },
+                "layers": {
+                    "landscape": {"overview": {"nsr": 0.3}, "sov_ranking": []},
+                    "intent": {"topic_radar": {}, "unmet_needs": []},
+                },
+                "reports": {"landscape_report": "报告内容"},
+            }
+        ]
+        result = format_slice_data_for_phase1(slices, brief={"brand": "test"})
+        assert "Brand Brief" in result["brief_section"]
+        data = json.loads(result["slice_data"])
+        assert len(data) == 1
+        assert data[0]["meta"]["subject"] == "测试"
+
+    def test_no_brief(self):
+        result = format_slice_data_for_phase1([{"meta": {}}])
+        assert result["brief_section"] == ""
+
+
+# ==================== Phase 2 ====================
+
+
+class TestParsePhase2:
+    def test_valid_json(self):
+        raw = json.dumps({
+            "brand_social_role": {
+                "statement": "行业教育者",
+                "elaboration": "阐释",
+                "evidence": [],
+            },
+            "social_strategy": {
+                "statement": "种草+教育",
+                "core_message": "核心信息",
+                "rhythm": "日常种草",
+                "evidence": [],
+            },
+        })
+        result = parse_phase2_response(raw)
+        assert result["brand_social_role"]["statement"] == "行业教育者"
+        assert result["social_strategy"]["rhythm"] == "日常种草"
+
+    def test_invalid_json(self):
+        result = parse_phase2_response("not json")
+        assert result["brand_social_role"]["statement"] == ""
+        assert result["social_strategy"]["statement"] == ""
+
+    def test_missing_fields(self):
+        result = parse_phase2_response("{}")
+        assert "brand_social_role" in result
+        assert "social_strategy" in result
+
+
+class TestFormatPhase2:
+    def test_basic_format(self):
+        result = format_data_for_phase2(
+            phase1_result={"social_tensions": []},
+            slices=[{"layers": {"focus": {"kol_voices": [{"text": "hi"}]}}}],
+            brief=None,
+        )
+        assert "social_tensions" in result["phase1_result"]
+
+
+# ==================== Phase 3 ====================
+
+
+class TestParsePhase3:
+    def test_valid_json(self):
+        raw = json.dumps({
+            "big_idea": {
+                "statement": "真实生活实验室",
+                "elaboration": "阐释",
+                "tension_echo": "回应矛盾",
+                "evidence": [],
+            },
+            "content_strategy": {
+                "pillars": [{"name": "P1", "description": "描述", "reference_examples": []}],
+                "evidence": [],
+            },
+        })
+        result = parse_phase3_response(raw)
+        assert result["big_idea"]["tension_echo"] == "回应矛盾"
+        assert len(result["content_strategy"]["pillars"]) == 1
+
+    def test_invalid_json(self):
+        result = parse_phase3_response("broken")
+        assert result["big_idea"]["statement"] == ""
+        assert result["content_strategy"]["pillars"] == []
+
+
+class TestFormatPhase3:
+    def test_basic_format(self):
+        result = format_data_for_phase3(
+            phase1_result={"social_tensions": []},
+            phase2_result={"brand_social_role": {}},
+            slices=[{"layers": {}, "foundation": {}}],
+        )
+        assert "phase1_result" in result
+        assert "phase2_result" in result

@@ -1,0 +1,180 @@
+"""Strategy Phase 2 Chain — 策略层: Brand Social Role + Social Strategy
+
+基于 Phase 1 的洞察结果，推导品牌在社交场域的角色定位和传播策略。
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
+
+from src.langchain.llm import get_llm
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察推导品牌社交策略。
+
+## 任务
+基于已确认的 Phase 1 洞察结果（Social Tension + Brand Opportunity），推导：
+1. **Brand Social Role（品牌社交角色）**：品牌在社交场域应该扮演什么角色。
+2. **Social Strategy（社交策略）**：整体社交传播的策略方向。
+
+## 分析框架
+- Brand Social Role 应基于 Opportunity 自然延伸，结合 KOL 声音风格和 Brief 中的品牌定位
+- Social Strategy 应考虑平台特征、时间趋势、传播节奏
+- 每条结论引用上游 Phase 1 的 opportunity index
+
+## 输出格式
+只输出 JSON，不要额外文字或 markdown 代码块标记：
+{{
+  "brand_social_role": {{
+    "statement": "品牌应扮演的角色（一句话）",
+    "elaboration": "角色阐释（2-3句）",
+    "evidence": [
+      {{"type": "opportunity_ref", "description": "基于哪个机会推导", "source": "phase1:opportunity:0"}},
+      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "slice数据"}}
+    ]
+  }},
+  "social_strategy": {{
+    "statement": "策略主张（一句话）",
+    "core_message": "核心沟通信息",
+    "rhythm": "传播节奏建议",
+    "evidence": [
+      {{"type": "platform_insight", "description": "平台特征支撑", "source": "slice数据"}},
+      {{"type": "time_trend", "description": "时间趋势支撑", "source": "slice数据"}}
+    ]
+  }}
+}}
+
+## 要求
+- brand_social_role.statement 简洁有力，一句话定义角色
+- brand_social_role.elaboration 解释为什么是这个角色，如何体现
+- social_strategy.rhythm 包含具体的传播节奏建议（如"日常种草+事件引爆"）
+- evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, time_trend, brief_alignment
+"""
+
+USER_TEMPLATE = """{brief_section}
+
+## Phase 1 洞察结果
+
+{phase1_result}
+
+## 补充数据
+
+{supplementary_data}"""
+
+
+def create_strategy_phase2_chain() -> Runnable:
+    """创建 Phase 2 (策略层) LLM 链"""
+    llm = get_llm(llm_type="reasoner")
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", SYSTEM_TEMPLATE),
+        ("user", USER_TEMPLATE),
+    ])
+    return prompt | llm
+
+
+def format_data_for_phase2(
+    phase1_result: dict,
+    slices: list[dict],
+    brief: dict | None = None,
+) -> dict[str, Any]:
+    """将 Phase 1 结果 + 补充数据格式化为 Phase 2 输入"""
+    brief_section = ""
+    if brief:
+        brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+
+    # 提取 KOL 声音、平台特征、时间趋势
+    supplementary_parts = []
+    for i, s in enumerate(slices):
+        layers = s.get("layers") or {}
+        landscape = layers.get("landscape") or {}
+
+        part: dict[str, Any] = {"slice_index": i}
+
+        # KOL 声音（在 landscape 层，由切片 Stage 1 合并）
+        kol_voices = landscape.get("kol_voices", [])
+        if kol_voices:
+            part["kol_voices"] = kol_voices[:10]
+
+        # 时间分布（在 landscape 层，由切片 Stage 1 计算）
+        time_dist = landscape.get("time_distribution")
+        if time_dist:
+            part["time_distribution"] = time_dist
+
+        # 平台分布（overview 中的去重平台帖子量）
+        overview = landscape.get("overview") or {}
+        platform_vol = overview.get("unique_platform_volume")
+        if platform_vol:
+            part["platform_distribution"] = platform_vol
+
+        # 平台 DNA（各实体在不同平台的声量占比，Social Strategy 的平台策略数据源）
+        platform_dna = landscape.get("platform_dna")
+        if platform_dna and isinstance(platform_dna, list):
+            part["platform_dna"] = [
+                {
+                    "name": d.get("name"),
+                    "role": d.get("role"),
+                    "platform_shares": d.get("platform_shares"),
+                }
+                for d in platform_dna[:10]
+                if isinstance(d, dict)
+            ]
+
+        supplementary_parts.append(part)
+
+    return {
+        "brief_section": brief_section,
+        "phase1_result": json.dumps(phase1_result, ensure_ascii=False, indent=2),
+        "supplementary_data": json.dumps(
+            supplementary_parts, ensure_ascii=False, indent=2
+        ),
+    }
+
+
+def parse_phase2_response(response_text: str) -> dict[str, Any]:
+    """解析 Phase 2 LLM 输出"""
+    text = response_text.strip()
+    if "```json" in text:
+        text = text.split("```json")[1].split("```")[0]
+    elif "```" in text:
+        text = text.split("```")[1].split("```")[0]
+
+    try:
+        result = json.loads(text.strip())
+    except json.JSONDecodeError:
+        logger.error("Phase 2 JSON 解析失败: %s...", text[:200])
+        return {
+            "brand_social_role": {
+                "statement": "",
+                "elaboration": "",
+                "evidence": [],
+            },
+            "social_strategy": {
+                "statement": "",
+                "core_message": "",
+                "rhythm": "",
+                "evidence": [],
+            },
+        }
+
+    # 确保字段存在
+    if "brand_social_role" not in result:
+        result["brand_social_role"] = {
+            "statement": "",
+            "elaboration": "",
+            "evidence": [],
+        }
+    if "social_strategy" not in result:
+        result["social_strategy"] = {
+            "statement": "",
+            "core_message": "",
+            "rhythm": "",
+            "evidence": [],
+        }
+
+    return result

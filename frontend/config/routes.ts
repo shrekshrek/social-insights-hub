@@ -82,6 +82,15 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     showInNav: true,
     order: 80,
   },
+  // 策略定义模块
+  '/strategies': {
+    permission: PERMISSIONS.STRATEGY_ACCESS,
+    label: '策略管理',
+    showInNav: true,
+    order: 90,
+  },
+  '/strategies/create': { permission: PERMISSIONS.STRATEGY_WRITE },
+  '/strategies/[id]': { permission: PERMISSIONS.STRATEGY_READ },
 }
 
 /**

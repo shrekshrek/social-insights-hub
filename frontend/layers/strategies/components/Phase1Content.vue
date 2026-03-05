@@ -1,0 +1,60 @@
+<template>
+  <div v-if="result" class="space-y-6">
+    <!-- Social Tensions -->
+    <div v-if="result.social_tensions?.length">
+      <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">Social Tension</h4>
+      <div class="space-y-3">
+        <div
+          v-for="(tension, idx) in result.social_tensions"
+          :key="idx"
+          class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+        >
+          <div class="flex items-start justify-between">
+            <p class="font-medium text-gray-900 dark:text-white">
+              {{ idx + 1 }}. {{ tension.statement }}
+            </p>
+            <UBadge
+              v-if="tension.confidence"
+              :color="tension.confidence === 'high' ? 'success' : tension.confidence === 'medium' ? 'warning' : 'neutral'"
+              variant="subtle"
+              size="xs"
+            >
+              {{ tension.confidence }}
+            </UBadge>
+          </div>
+          <StrategyEvidenceList :evidence="tension.evidence" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Brand Opportunities -->
+    <div v-if="result.brand_opportunities?.length">
+      <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">Brand Opportunity</h4>
+      <div class="space-y-3">
+        <div
+          v-for="(opp, idx) in result.brand_opportunities"
+          :key="idx"
+          class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
+        >
+          <p class="font-medium text-gray-900 dark:text-white">
+            {{ idx + 1 }}. {{ opp.statement }}
+          </p>
+          <p v-if="opp.related_tensions?.length" class="text-xs text-gray-500 mt-1">
+            关联 Tension: {{ opp.related_tensions.map(i => `#${(i as number) + 1}`).join(', ') }}
+          </p>
+          <StrategyEvidenceList :evidence="opp.evidence" />
+        </div>
+      </div>
+    </div>
+  </div>
+  <div v-else class="text-gray-400 text-center py-4">暂无数据</div>
+</template>
+
+<script setup lang="ts">
+import type { Phase1Result } from '../types'
+import { UBadge } from '#components'
+
+defineProps<{
+  result: Phase1Result | null
+}>()
+</script>

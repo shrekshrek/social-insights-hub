@@ -3,15 +3,6 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-_MOCK_EVAL_OUTPUT = json.dumps({
-    "overall_score": 0.3,
-    "is_sufficient": False,
-    "coverage_analysis": [],
-    "slice_suggestions": [],
-    "gap_analysis": [],
-    "supplementary_tasks": None,
-})
-
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -21,6 +12,15 @@ from src.auth.models import User
 from src.auth.security import create_access_token, pwd_context
 
 pytestmark = pytest.mark.asyncio
+
+_MOCK_EVAL_OUTPUT = json.dumps({
+    "overall_score": 0.3,
+    "is_sufficient": False,
+    "coverage_analysis": [],
+    "slice_suggestions": [],
+    "gap_analysis": [],
+    "supplementary_tasks": None,
+})
 
 BASE = "/api/v1"
 

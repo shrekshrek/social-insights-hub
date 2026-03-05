@@ -416,14 +416,47 @@ async def confirm_plan(
 ) -> ConfirmPlanResponse:
     """确认 AI 建议，一键创建监测
 
-    TODO Step 3: 调用 monitors.service.create_monitor()
+    逐条创建监测，部分失败不中断整体流程。
+    重复调用时 suggested_monitor_ids 追加而不覆盖。
     """
+    from src.social_media.monitors.schemas import MonitorCreate
+    from src.social_media.monitors.service import create_monitor
+
+    created_ids: list[int] = []
+    partial_errors: list[str] = []
+
+    for suggestion in monitor_suggestions:
+        name = suggestion.get("name", "").strip()
+        if not name:
+            partial_errors.append("跳过一条空名称的监测建议")
+            continue
+        try:
+            result = await create_monitor(
+                db,
+                MonitorCreate(
+                    name=name,
+                    description=suggestion.get("rationale") or "",
+                ),
+                current_user_id,
+            )
+            monitor = result["monitor"]
+            created_ids.append(monitor.id)
+        except HTTPException as e:
+            partial_errors.append(f"创建监测「{name}」失败: {e.detail}")
+        except Exception as e:
+            logger.error("confirm_plan 创建监测「%s」意外错误: %s", name, e)
+            partial_errors.append(f"创建监测「{name}」意外错误: {e}")
+
+    # 追加到 suggested_monitor_ids（不覆盖历史记录）
+    existing_ids = list(strategy.suggested_monitor_ids or [])
+    strategy.suggested_monitor_ids = existing_ids + created_ids
     strategy.status = "monitors_created"
+
     await db.commit()
     updated = await get_strategy_by_id(db, strategy.id)
     return ConfirmPlanResponse(
-        created_monitor_ids=[],
-        partial_errors=["confirm-plan 功能开发中"],
+        created_monitor_ids=created_ids,
+        partial_errors=partial_errors,
         strategy=build_strategy_read(updated),
     )
 

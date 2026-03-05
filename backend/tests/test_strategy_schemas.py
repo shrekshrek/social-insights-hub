@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.strategies.schemas import StrategyCreate, StrategyUpdate, PhaseResultEdit
+from src.strategies.schemas import BrandBrief, StrategyCreate, StrategyUpdate, PhaseResultEdit
 
 
 class TestStrategyCreate:
@@ -27,18 +27,27 @@ class TestStrategyCreate:
         data = StrategyCreate(name="x" * 255, slice_ids=[1])
         assert len(data.name) == 255
 
-    def test_slice_ids_empty(self):
-        with pytest.raises(ValidationError):
-            StrategyCreate(name="测试", slice_ids=[])
+    def test_slice_ids_optional_empty(self):
+        """slice_ids 现在是可选的，允许空列表（快速路径和引导路径均支持）"""
+        data = StrategyCreate(name="测试", slice_ids=[])
+        assert data.slice_ids == []
 
-    def test_slice_ids_required(self):
-        with pytest.raises(ValidationError):
-            StrategyCreate(name="测试")
+    def test_slice_ids_defaults_empty(self):
+        """不传 slice_ids 时默认为空列表"""
+        data = StrategyCreate(name="测试")
+        assert data.slice_ids == []
 
     def test_with_brand_brief(self):
-        brief = {"brand": "test", "goal": "awareness"}
+        brief = BrandBrief(brand_name="test", analysis_goal="awareness")
         data = StrategyCreate(name="策略", slice_ids=[1], brand_brief=brief)
-        assert data.brand_brief == brief
+        assert data.brand_brief.brand_name == "test"
+        assert data.brand_brief.analysis_goal == "awareness"
+
+    def test_with_brand_brief_dict(self):
+        """brand_brief 支持 dict 形式传入（Pydantic 自动转换）"""
+        brief = {"brand_name": "test", "analysis_goal": "awareness"}
+        data = StrategyCreate(name="策略", slice_ids=[1], brand_brief=brief)
+        assert data.brand_brief.brand_name == "test"
 
 
 class TestStrategyUpdate:

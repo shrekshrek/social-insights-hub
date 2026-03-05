@@ -39,11 +39,23 @@ class Strategy(Base):
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        server_default="draft",
-        comment="状态: draft / phase1_done / phase2_done / completed",
+        server_default="briefing",
+        comment="状态: briefing / consulting / monitors_created / slices_ready / phase1_done / phase2_done / completed",
     )
     brand_brief: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="可选 Brand Brief"
+        JSON, nullable=True, comment="结构化 Brand Brief"
+    )
+    consultation_rounds: Mapped[list] = mapped_column(
+        JSON, nullable=False, server_default="[]", comment="AI 咨询轮次记录"
+    )
+    suggested_monitor_ids: Mapped[list] = mapped_column(
+        JSON, nullable=False, server_default="[]", comment="AI 建议并已创建的监测 ID"
+    )
+    slice_plan: Mapped[list] = mapped_column(
+        JSON, nullable=False, server_default="[]", comment="切片规划草案（咨询产出）"
+    )
+    evaluation_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="AI 充分性评估结果"
     )
     phase1_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="Phase 1: Tension + Opportunity"
@@ -75,7 +87,8 @@ class Strategy(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('draft', 'phase1_done', 'phase2_done', 'completed')",
+            "status IN ('briefing', 'consulting', 'monitors_created', 'slices_ready', "
+            "'phase1_done', 'phase2_done', 'completed')",
             name="valid_status",
         ),
     )

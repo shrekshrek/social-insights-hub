@@ -35,6 +35,8 @@
 | strategies/后端 | 已完成 | 策���定义模块：3 阶段 AI 生成（洞察→策略→创意），Phase 1/2/3 Chain + CRUD API + Word 导出 |
 | strategies/前端 | 已完成 | 策略列表/创建/详情页，3 阶段结果展示与编辑，跨项目切片选择器 |
 | analysis/slice_enrichment/后端 | 已完成 | 切片流水线数据补全：time_distribution(Stage1) + kol_voices(Stage1) + ipa_analysis(Stage2) |
+| strategies/重构/后端 | 方案已确认 | 增加阶段 A（AI 咨询+创建监测）+ 阶段 C（切片评估），Steps 1-6，参考 docs/plan.md |
+| strategies/重构/前端 | 方案已确认 | 阶段指示器 + 4 面板重构，类型扩展，5 个新 composable 方法，参考 docs/plan.md |
 
 ## 已完成的里程碑
 
@@ -56,4 +58,9 @@
 
 ## 下次继续的入口
 
-待定。
+Strategy 模块重构 Step 1 实现：
+- 参考 `docs/plan.md`
+- 从 `backend/src/strategies/models.py` 开始，新增 4 个 JSONB 字段 + 扩展 status 枚举约束
+- 接着创建 Alembic 迁移（`pnpm be:migrate:make "strategy new fields"`）
+- 然后更新 `schemas.py`（BrandBrief 结构化 + StrategyCreate.slice_ids 可选）
+- 最后更新 `service.py`（STATUS_ORDER 扩展 + phase1 前置改为切片非空检查）和 `router.py`（新增5个占位端点）

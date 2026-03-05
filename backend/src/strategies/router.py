@@ -16,6 +16,12 @@ from . import service
 from .dependencies import is_admin_or_super_admin, validate_strategy_owner
 from .models import Strategy
 from .schemas import (
+    AddSlicesRequest,
+    ConfirmPlanRequest,
+    ConfirmPlanResponse,
+    ConsultRequest,
+    ConsultResponse,
+    EvaluationResultResponse,
     PhaseResultEdit,
     StrategyCreate,
     StrategyListItem,
@@ -114,6 +120,93 @@ async def delete_strategy(
     """删除策略"""
     await service.delete_strategy(db, strategy)
     return MessageResponse(message="策略已删除")
+
+
+# ==================== 阶段 A: 咨询流程 ====================
+
+
+@router.post(
+    "/{strategy_id}/consult",
+    response_model=ConsultResponse,
+    status_code=status.HTTP_200_OK,
+    summary="AI 多轮咨询",
+)
+async def consult_strategy(
+    data: ConsultRequest,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """AI 咨询：理解 Brief → 追问澄清 → 输出监测建议草案 + 切片规划"""
+    return await service.consult_strategy(
+        db, strategy, data.user_input, data.answers
+    )
+
+
+@router.post(
+    "/{strategy_id}/confirm-plan",
+    response_model=ConfirmPlanResponse,
+    status_code=status.HTTP_200_OK,
+    summary="确认 AI 建议，一键创建监测",
+)
+async def confirm_plan(
+    data: ConfirmPlanRequest,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """确认 AI 监测建议，一键创建监测+任务，状态推进到 monitors_created"""
+    return await service.confirm_plan(
+        db, strategy, data.monitor_suggestions, current_user.id
+    )
+
+
+# ==================== 阶段 C: 数据评估 ====================
+
+
+@router.post(
+    "/{strategy_id}/slices",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="批量关联切片",
+)
+async def add_slices(
+    data: AddSlicesRequest,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """批量关联切片到策略（支持重复调用，自动 upsert）"""
+    updated = await service.batch_add_slices(db, strategy, data.slice_ids, current_user.id)
+    return service.build_strategy_read(updated)
+
+
+@router.post(
+    "/{strategy_id}/evaluate",
+    response_model=EvaluationResultResponse,
+    status_code=status.HTTP_200_OK,
+    summary="AI 评估切片充分性",
+)
+async def evaluate_strategy(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """AI 评估已关联切片是否满足 Brief 需求，输出充分性评分与缺口分析"""
+    return await service.evaluate_strategy(db, strategy)
+
+
+@router.post(
+    "/{strategy_id}/confirm-ready",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="确认数据就绪",
+)
+async def confirm_ready(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """用户确认数据就绪，状态推进到 slices_ready，解锁 Phase 1 生成"""
+    updated = await service.confirm_ready(db, strategy)
+    return service.build_strategy_read(updated)
 
 
 # ==================== 生成端点 ====================

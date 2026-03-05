@@ -265,7 +265,12 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     _validate_slices_have_data(slices_data, strategy)
 
     chain = create_strategy_phase1_chain()
-    inputs = format_slice_data_for_phase1(slices_data, strategy.brand_brief)
+    inputs = format_slice_data_for_phase1(
+        slices_data,
+        strategy.brand_brief,
+        consultation_rounds=list(strategy.consultation_rounds or []),
+        evaluation_result=strategy.evaluation_result,
+    )
 
     start = time.time()
     response = await chain.ainvoke(inputs)
@@ -298,7 +303,10 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     chain = create_strategy_phase2_chain()
     inputs = format_data_for_phase2(
-        strategy.phase1_result, slices_data, strategy.brand_brief
+        strategy.phase1_result,
+        slices_data,
+        strategy.brand_brief,
+        consultation_rounds=list(strategy.consultation_rounds or []),
     )
 
     start = time.time()
@@ -331,7 +339,11 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     chain = create_strategy_phase3_chain()
     inputs = format_data_for_phase3(
-        strategy.phase1_result, strategy.phase2_result, slices_data, strategy.brand_brief
+        strategy.phase1_result,
+        strategy.phase2_result,
+        slices_data,
+        strategy.brand_brief,
+        consultation_rounds=list(strategy.consultation_rounds or []),
     )
 
     start = time.time()

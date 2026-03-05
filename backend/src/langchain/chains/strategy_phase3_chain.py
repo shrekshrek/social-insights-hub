@@ -65,6 +65,8 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 
 USER_TEMPLATE = """{brief_section}
 
+{consult_summary}
+
 ## Phase 1 洞察结果
 
 {phase1_result}
@@ -93,11 +95,26 @@ def format_data_for_phase3(
     phase2_result: dict,
     slices: list[dict],
     brief: dict | None = None,
+    consultation_rounds: list[dict] | None = None,
 ) -> dict[str, Any]:
     """将 Phase 1+2 结果 + 补充数据格式化为 Phase 3 输入"""
     brief_section = ""
     if brief:
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+
+    consult_summary = ""
+    if consultation_rounds:
+        latest = consultation_rounds[-1]
+        ai_resp = latest.get("ai_response") or {}
+        lines = ["## AI 咨询摘要"]
+        if ai_resp.get("understanding_summary"):
+            lines.append(f"需求理解：{ai_resp['understanding_summary']}")
+        slice_plan = ai_resp.get("slice_plan") or []
+        if slice_plan:
+            lines.append("预期分析切片：")
+            for item in slice_plan:
+                lines.append(f"- {item.get('name', '')}：{item.get('purpose', '')}")
+        consult_summary = "\n".join(lines)
 
     # 提取高互动内容分析 + KOL 生态
     supplementary_parts = []
@@ -152,6 +169,7 @@ def format_data_for_phase3(
 
     return {
         "brief_section": brief_section,
+        "consult_summary": consult_summary,
         "phase1_result": json.dumps(phase1_result, ensure_ascii=False, indent=2),
         "phase2_result": json.dumps(phase2_result, ensure_ascii=False, indent=2),
         "supplementary_data": json.dumps(

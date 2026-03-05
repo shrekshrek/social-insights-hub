@@ -61,6 +61,10 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 
 USER_TEMPLATE = """{brief_section}
 
+{consult_summary}
+
+{evaluation_summary}
+
 ## 切片数据
 
 {slice_data}"""
@@ -77,7 +81,10 @@ def create_strategy_phase1_chain() -> Runnable:
 
 
 def format_slice_data_for_phase1(
-    slices: list[dict], brief: dict | None = None
+    slices: list[dict],
+    brief: dict | None = None,
+    consultation_rounds: list[dict] | None = None,
+    evaluation_result: dict | None = None,
 ) -> dict[str, Any]:
     """将切片 result_data 格式化为 Phase 1 输入
 
@@ -87,6 +94,35 @@ def format_slice_data_for_phase1(
     brief_section = ""
     if brief:
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+
+    # 咨询摘要：取最新一轮的需求理解 + 切片规划
+    consult_summary = ""
+    if consultation_rounds:
+        latest = consultation_rounds[-1]
+        ai_resp = latest.get("ai_response") or {}
+        lines = ["## AI 咨询摘要"]
+        if ai_resp.get("understanding_summary"):
+            lines.append(f"需求理解：{ai_resp['understanding_summary']}")
+        slice_plan = ai_resp.get("slice_plan") or []
+        if slice_plan:
+            lines.append("预期分析切片：")
+            for item in slice_plan:
+                lines.append(f"- {item.get('name', '')}：{item.get('purpose', '')}")
+        consult_summary = "\n".join(lines)
+
+    # 评估摘要：数据缺口提示 LLM 注意数据局限性
+    evaluation_summary = ""
+    if evaluation_result:
+        score = evaluation_result.get("overall_score", 0)
+        is_sufficient = evaluation_result.get("is_sufficient", False)
+        lines = [
+            f"## 数据充分性评估（评分 {score:.0%}，{'数据充分' if is_sufficient else '数据待补充'}）"
+        ]
+        for gap in (evaluation_result.get("gap_analysis") or []):
+            priority = gap.get("priority", "")
+            desc = gap.get("description", "")
+            lines.append(f"- 数据缺口（{priority}优先级）：{desc}")
+        evaluation_summary = "\n".join(lines)
 
     slice_parts = []
     for i, s in enumerate(slices):
@@ -208,6 +244,8 @@ def format_slice_data_for_phase1(
 
     return {
         "brief_section": brief_section,
+        "consult_summary": consult_summary,
+        "evaluation_summary": evaluation_summary,
         "slice_data": json.dumps(slice_parts, ensure_ascii=False, indent=2),
     }
 

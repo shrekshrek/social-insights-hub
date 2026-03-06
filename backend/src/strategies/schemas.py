@@ -51,10 +51,9 @@ class PhaseResultEdit(CustomBaseModel):
 
 
 class ConsultRequest(CustomBaseModel):
-    """AI 咨询请求"""
+    """AI 监测方案生成请求"""
 
-    user_input: str = Field(..., min_length=1, description="用户本轮输入")
-    answers: dict[str, str] | None = Field(None, description="对上轮追问的回答 {question_id: answer}")
+    user_input: str = Field("", description="用户补充说明（可为空，AI 将基于 Brand Brief 直接规划）")
 
 
 class ConfirmPlanRequest(CustomBaseModel):
@@ -62,6 +61,9 @@ class ConfirmPlanRequest(CustomBaseModel):
 
     monitor_suggestions: list[dict[str, Any]] = Field(
         ..., min_length=1, description="用户确认（可修改）后的监测建议列表"
+    )
+    notes_per_task: int = Field(
+        50, ge=50, le=100, description="每个任务的采集数量（50 或 100）"
     )
 
 
@@ -121,14 +123,10 @@ class StrategyRead(CustomBaseModel):
 
 
 class ConsultResponse(CustomBaseModel):
-    """AI 咨询响应"""
+    """AI 监测方案响应"""
 
-    round_number: int
-    understanding_summary: str
-    clarification_questions: list[dict[str, Any]] = Field(default_factory=list)
     monitor_suggestions: list[dict[str, Any]] = Field(default_factory=list)
     slice_plan: list[dict[str, Any]] = Field(default_factory=list)
-    confidence: float
 
 
 class ConfirmPlanResponse(CustomBaseModel):

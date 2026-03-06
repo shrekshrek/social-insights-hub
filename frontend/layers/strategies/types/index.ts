@@ -53,19 +53,8 @@ export interface SlicePlanItem {
 }
 
 export interface ConsultResponse {
-  round_number: number
-  understanding_summary: string
-  clarification_questions: Array<{ id: string; question: string }>
   monitor_suggestions: MonitorSuggestion[]
   slice_plan: SlicePlanItem[]
-  confidence: number
-}
-
-export interface ConsultRound {
-  round_number: number
-  user_input: string
-  answers?: Record<string, string> | null
-  ai_response: ConsultResponse
 }
 
 // ==================== 确认计划 ====================
@@ -107,7 +96,7 @@ export interface Strategy {
   name: string
   status: StrategyStatus
   brand_brief: BrandBrief | null
-  consultation_rounds: ConsultRound[]
+  consultation_rounds: Array<{ user_input: string; ai_response: ConsultResponse }>
   suggested_monitor_ids: number[]
   slice_plan: SlicePlanItem[]
   evaluation_result: EvaluationResult | null

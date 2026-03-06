@@ -44,6 +44,11 @@ export const useStrategies = () => {
     )
   }
 
+  // 直接拉取策略（用于 mutation 后刷新，绕过 useFetch 缓存）
+  const fetchStrategy = async (id: number) => {
+    return await apiRequest<Strategy>(`/strategies/${id}`)
+  }
+
   // 创建策略
   const createStrategy = async (data: StrategyCreate) => {
     const result = await apiRequest<Strategy>('/strategies', {
@@ -101,21 +106,21 @@ export const useStrategies = () => {
     await apiDownload(`/strategies/${id}/export`, `${name}_策略报告.docx`)
   }
 
-  // AI 多轮咨询
-  const consult = async (id: number, input: string, answers?: Record<string, string>) => {
+  // AI 生成监测方案
+  const consult = async (id: number, input: string = '') => {
     const result = await apiRequest<ConsultResponse>(`/strategies/${id}/consult`, {
       method: 'POST',
-      body: { user_input: input, answers: answers ?? null },
+      body: { user_input: input },
     })
-    showSuccess('咨询完成')
+    showSuccess('监测方案已生成')
     return result
   }
 
   // 确认 AI 建议，一键创建监测
-  const confirmPlan = async (id: number, suggestions: MonitorSuggestion[]) => {
+  const confirmPlan = async (id: number, suggestions: MonitorSuggestion[], notesPerTask: number = 50) => {
     const result = await apiRequest<ConfirmPlanResponse>(`/strategies/${id}/confirm-plan`, {
       method: 'POST',
-      body: { monitor_suggestions: suggestions },
+      body: { monitor_suggestions: suggestions, notes_per_task: notesPerTask },
     })
     showSuccess(`已创建 ${result.created_monitor_ids.length} 个监测`)
     return result
@@ -152,6 +157,7 @@ export const useStrategies = () => {
   return {
     getStrategies,
     getStrategy,
+    fetchStrategy,
     createStrategy,
     updateStrategy,
     deleteStrategy,

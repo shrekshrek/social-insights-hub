@@ -129,16 +129,16 @@ async def delete_strategy(
     "/{strategy_id}/consult",
     response_model=ConsultResponse,
     status_code=status.HTTP_200_OK,
-    summary="AI 多轮咨询",
+    summary="AI 生成监测方案",
 )
 async def consult_strategy(
     data: ConsultRequest,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """AI 咨询：理解 Brief → 追问澄清 → 输出监测建议草案 + 切片规划"""
+    """基于 Brand Brief 直接输出监测方案（每次覆盖上次结果）"""
     return await service.consult_strategy(
-        db, strategy, data.user_input, data.answers
+        db, strategy, data.user_input
     )
 
 
@@ -156,7 +156,8 @@ async def confirm_plan(
 ):
     """确认 AI 监测建议，一键创建监测+任务，状态推进到 monitors_created"""
     return await service.confirm_plan(
-        db, strategy, data.monitor_suggestions, current_user.id
+        db, strategy, data.monitor_suggestions, current_user.id,
+        notes_per_task=data.notes_per_task,
     )
 
 

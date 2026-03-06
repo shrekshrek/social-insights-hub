@@ -36,6 +36,7 @@ from src.langchain.chains.strategy_phase3_chain import (
 )
 from src.social_media.analysis.models import AnalysisSlice
 from src.social_media.monitors.crud import check_monitor_access
+from src.social_media.monitors.models import Monitor
 
 from .models import Strategy, StrategySlice
 from .schemas import (
@@ -201,6 +202,10 @@ def build_strategy_read(strategy: Strategy) -> StrategyRead:
         name=strategy.name,
         status=strategy.status,
         brand_brief=strategy.brand_brief,
+        consultation_rounds=list(strategy.consultation_rounds or []),
+        suggested_monitor_ids=list(strategy.suggested_monitor_ids or []),
+        slice_plan=list(strategy.slice_plan or []),
+        evaluation_result=strategy.evaluation_result,
         phase1_result=strategy.phase1_result,
         phase2_result=strategy.phase2_result,
         phase3_result=strategy.phase3_result,
@@ -224,6 +229,18 @@ def build_strategy_list_item(strategy: Strategy) -> StrategyListItem:
         created_at=strategy.created_at,
         updated_at=strategy.updated_at,
     )
+
+
+async def filter_existing_monitor_ids(
+    db: AsyncSession, monitor_ids: list[int]
+) -> list[int]:
+    """过滤出仍存在的监测 ID"""
+    if not monitor_ids:
+        return []
+    query = select(Monitor.id).where(Monitor.id.in_(monitor_ids))
+    result = await db.execute(query)
+    existing = {row[0] for row in result.all()}
+    return [mid for mid in monitor_ids if mid in existing]
 
 
 # ==================== 生成 + 编辑 ====================
@@ -370,20 +387,16 @@ async def consult_strategy(
     db: AsyncSession,
     strategy: Strategy,
     user_input: str,
-    answers: dict[str, str] | None,
 ) -> ConsultResponse:
-    """AI 多轮咨询：理解需求 → 追问 → 输出监测建议草案
+    """AI 监测方案规划：基于 Brand Brief 直接输出监测建议
 
+    每次调用覆盖上一次结果（不累积轮次）。
     LLM 解析失败时抛出 HTTPException(500)，strategy 不更新。
     """
-    round_number = len(strategy.consultation_rounds or []) + 1
-
     chain = create_strategy_consult_chain()
     inputs = format_consult_inputs(
         user_input=user_input,
         brief=strategy.brand_brief,
-        consultation_rounds=list(strategy.consultation_rounds or []),
-        answers=answers,
     )
 
     start = time.time()
@@ -395,31 +408,29 @@ async def consult_strategy(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"AI 咨询解析失败: {e}",
+            detail=f"AI 方案规划解析失败: {e}",
         ) from e
 
     response = ConsultResponse(
-        round_number=round_number,
-        understanding_summary=parsed["understanding_summary"],
-        clarification_questions=parsed["clarification_questions"],
         monitor_suggestions=parsed["monitor_suggestions"],
         slice_plan=parsed["slice_plan"],
-        confidence=parsed["confidence"],
     )
     logger.info(
-        "Strategy %d Consult 第 %d 轮完成 (%.1fs, confidence=%.2f)",
-        strategy.id, round_number, duration, parsed["confidence"],
+        "Strategy %d 监测方案生成完成 (%.1fs, %d 个监测建议)",
+        strategy.id, duration, len(parsed["monitor_suggestions"]),
     )
 
-    rounds = list(strategy.consultation_rounds or [])
-    rounds.append({
-        "round_number": round_number,
+    # 保存方案到 consultation_rounds（覆盖式，只保留最新一次）
+    strategy.consultation_rounds = [{
         "user_input": user_input,
-        "answers": answers,
         "ai_response": response.model_dump(),
-    })
-    strategy.consultation_rounds = rounds
+    }]
     flag_modified(strategy, "consultation_rounds")
+
+    # 保存切片规划
+    strategy.slice_plan = parsed["slice_plan"]
+    flag_modified(strategy, "slice_plan")
+
     if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["consulting"]:
         strategy.status = "consulting"
 
@@ -427,55 +438,119 @@ async def consult_strategy(
     return response
 
 
+PLATFORM_NAME_TO_CODE = {
+    "douyin": "dy",
+    "weibo": "wb",
+    "bilibili": "bili",
+    "xiaohongshu": "xhs",
+    "kuaishou": "ks",
+    "zhihu": "zhihu",
+    "tieba": "tieba",
+}
+
+
 async def confirm_plan(
     db: AsyncSession,
     strategy: Strategy,
     monitor_suggestions: list[dict],
     current_user_id: int,
+    *,
+    notes_per_task: int = 50,
 ) -> ConfirmPlanResponse:
-    """确认 AI 建议，一键创建监测
+    """确认 AI 建议，创建一个监测项目 + 所有数据任务
 
-    逐条创建监测，部分失败不中断整体流程。
-    重复调用时 suggested_monitor_ids 追加而不覆盖。
+    所有 AI 建议的搜索维度（行业/品牌/竞品）作为任务放进同一个监测，
+    便于后续自由组合切片做交叉分析。
     """
     from src.social_media.monitors.schemas import MonitorCreate
     from src.social_media.monitors.service import create_monitor
+    from src.social_media.monitors.crud import get_platform_by_code, get_monitor_by_name
+    from src.social_media.tasks.schemas import DataTaskCreate
+    from src.social_media.tasks.service import create_task
 
-    created_ids: list[int] = []
     partial_errors: list[str] = []
 
-    for suggestion in monitor_suggestions:
-        name = suggestion.get("name", "").strip()
-        if not name:
-            partial_errors.append("跳过一条空名称的监测建议")
-            continue
-        try:
-            result = await create_monitor(
-                db,
-                MonitorCreate(
-                    name=name,
-                    description=suggestion.get("rationale") or "",
-                ),
-                current_user_id,
-            )
-            monitor = result["monitor"]
-            created_ids.append(monitor.id)
-        except HTTPException as e:
-            partial_errors.append(f"创建监测「{name}」失败: {e.detail}")
-        except Exception as e:
-            logger.error("confirm_plan 创建监测「%s」意外错误: %s", name, e)
-            partial_errors.append(f"创建监测「{name}」意外错误: {e}")
+    # 确定不重复的监测名称
+    base_name = strategy.name
+    monitor_name = base_name
+    suffix = 1
+    while await get_monitor_by_name(db, monitor_name):
+        suffix += 1
+        monitor_name = f"{base_name}({suffix})"
 
-    # 追加到 suggested_monitor_ids（不覆盖历史记录）
-    existing_ids = list(strategy.suggested_monitor_ids or [])
-    strategy.suggested_monitor_ids = existing_ids + created_ids
+    # 创建一个监测项目
+    try:
+        result = await create_monitor(
+            db,
+            MonitorCreate(
+                name=monitor_name,
+                description=f"策略「{strategy.name}」的监测数据采集",
+            ),
+            current_user_id,
+        )
+        monitor = result["monitor"]
+    except HTTPException as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail=f"创建监测项目失败: {e.detail}",
+        ) from e
+
+    # 爬虫参数：采集量由用户选择
+    task_params = {
+        "max_notes_count": notes_per_task,
+        "enable_comments": 1,
+        "per_note_max_comments_count": 20,
+    }
+
+    # 为每个关键词 x 平台组合创建独立任务
+    for suggestion in monitor_suggestions:
+        suggestion_name = suggestion.get("name", "").strip()
+        if not suggestion_name:
+            partial_errors.append("跳过一条空名称的建议")
+            continue
+
+        platforms = suggestion.get("platforms") or []
+        keywords = suggestion.get("keywords") or []
+        if not keywords:
+            keywords = [suggestion_name]
+
+        for keyword in keywords:
+            keyword = keyword.strip()
+            if not keyword:
+                continue
+            for platform_name in platforms:
+                code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
+                try:
+                    platform = await get_platform_by_code(db, code)
+                    if not platform:
+                        partial_errors.append(f"平台「{platform_name}」不存在，跳过")
+                        continue
+                    await create_task(
+                        db,
+                        DataTaskCreate(
+                            name=f"{keyword}-{platform.name}",
+                            monitor_id=monitor.id,
+                            platform_id=platform.id,
+                            task_type="search",
+                            keywords=keyword,
+                            data_source="remote_crawler",
+                            task_params=task_params,
+                        ),
+                        current_user_id,
+                    )
+                except Exception as e:
+                    logger.error("创建任务「%s-%s」失败: %s", keyword, platform_name, e)
+                    partial_errors.append(f"创建任务「{keyword}-{platform_name}」失败: {e}")
+
+    # 记录监测 ID（覆盖式，每次确认只保留最新创建的监测）
+    strategy.suggested_monitor_ids = [monitor.id]
     flag_modified(strategy, "suggested_monitor_ids")
     strategy.status = "monitors_created"
 
     await db.commit()
     updated = await get_strategy_by_id(db, strategy.id)
     return ConfirmPlanResponse(
-        created_monitor_ids=created_ids,
+        created_monitor_ids=[monitor.id],
         partial_errors=partial_errors,
         strategy=build_strategy_read(updated),
     )

@@ -30,10 +30,12 @@ OLD_CONSTRAINT = "status IN ('draft', 'phase1_done', 'phase2_done', 'completed')
 def upgrade() -> None:
     op.execute("ALTER TABLE strategies DROP CONSTRAINT ck_strategies_valid_status")
     op.execute("UPDATE strategies SET status = 'briefing' WHERE status = 'draft'")
+    op.execute("ALTER TABLE strategies ALTER COLUMN status SET DEFAULT 'briefing'")
     op.execute(f"ALTER TABLE strategies ADD CONSTRAINT ck_strategies_valid_status CHECK ({NEW_CONSTRAINT})")
 
 
 def downgrade() -> None:
     op.execute("UPDATE strategies SET status = 'draft' WHERE status = 'briefing'")
+    op.execute("ALTER TABLE strategies ALTER COLUMN status SET DEFAULT 'draft'")
     op.execute("ALTER TABLE strategies DROP CONSTRAINT ck_strategies_valid_status")
     op.execute(f"ALTER TABLE strategies ADD CONSTRAINT ck_strategies_valid_status CHECK ({OLD_CONSTRAINT})")

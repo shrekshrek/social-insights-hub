@@ -197,8 +197,22 @@ async def update_monitor(
 
 
 async def delete_monitor(db: AsyncSession, monitor: Monitor) -> None:
-    """删除项目"""
+    """删除项目，并清理策略中的关联引用"""
+    monitor_id = monitor.id
     await crud.delete_monitor(db, monitor)
+
+    # 清理策略表中 suggested_monitor_ids 里对该监测的引用
+    from src.strategies.models import Strategy
+    from sqlalchemy.orm.attributes import flag_modified
+
+    stmt = select(Strategy).where(Strategy.suggested_monitor_ids.isnot(None))
+    result = await db.execute(stmt)
+    for strat in result.scalars().all():
+        ids = list(strat.suggested_monitor_ids or [])
+        if monitor_id in ids:
+            strat.suggested_monitor_ids = [mid for mid in ids if mid != monitor_id]
+            flag_modified(strat, "suggested_monitor_ids")
+    await db.commit()
 
 
 # ==================== Monitor-Participant Relations ====================

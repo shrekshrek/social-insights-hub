@@ -107,121 +107,206 @@
         </div>
       </template>
 
-      <!-- ===== 阶段 A: 需求对齐 ===== -->
+      <!-- ===== 阶段 A: 监测规划 ===== -->
       <UCard>
         <template #header>
           <div class="flex items-center gap-2">
             <span class="font-bold text-primary-600">A</span>
-            <h2 class="text-lg font-semibold">需求对齐</h2>
+            <h2 class="text-lg font-semibold">监测规划</h2>
           </div>
         </template>
 
         <!-- Brand Brief 摘要 -->
         <div
           v-if="strategy.brand_brief"
-          class="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm space-y-1"
+          class="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm"
         >
-          <div class="flex gap-2">
-            <span class="text-gray-400 w-16 shrink-0">品牌</span>
-            <span class="font-medium">{{ strategy.brand_brief.brand_name }}</span>
-          </div>
-          <div class="flex gap-2">
-            <span class="text-gray-400 w-16 shrink-0">目标</span>
-            <span>{{ strategy.brand_brief.analysis_goal }}</span>
-          </div>
-          <div v-if="strategy.brand_brief.competitors?.length" class="flex gap-2">
-            <span class="text-gray-400 w-16 shrink-0">竞品</span>
-            <span>{{ strategy.brand_brief.competitors.join('、') }}</span>
-          </div>
-          <div v-if="strategy.brand_brief.industry" class="flex gap-2">
-            <span class="text-gray-400 w-16 shrink-0">行业</span>
-            <span>{{ strategy.brand_brief.industry }}</span>
-          </div>
-        </div>
-        <div v-else class="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-sm text-amber-700 dark:text-amber-300">
-          未填写 Brand Brief，建议先更新策略信息以获得更好的 AI 咨询效果。
-        </div>
-
-        <!-- 咨询历史 -->
-        <div
-          v-if="strategy.consultation_rounds?.length"
-          class="mb-4 space-y-3"
-        >
-          <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">咨询记录</h3>
-          <div
-            v-for="round in strategy.consultation_rounds"
-            :key="round.round_number"
-            class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm space-y-2"
-          >
-            <div class="text-gray-500">第 {{ round.round_number }} 轮 · 用户：{{ round.user_input }}</div>
-            <div class="text-gray-700 dark:text-gray-300">{{ round.ai_response?.understanding_summary }}</div>
-            <div v-if="round.ai_response?.monitor_suggestions?.length" class="text-gray-500">
-              建议监测：{{ round.ai_response.monitor_suggestions.map(s => s.name).join('、') }}
-            </div>
-            <div
-              v-if="round.ai_response?.clarification_questions?.length"
-              class="text-amber-600 dark:text-amber-400"
-            >
-              追问：{{ round.ai_response.clarification_questions.map(q => q.question).join(' / ') }}
-            </div>
+          <span class="font-medium">{{ strategy.brand_brief.brand_name }}</span>
+          <span class="text-gray-400 mx-1.5">·</span>
+          <span class="text-gray-600 dark:text-gray-400">{{ strategy.brand_brief.analysis_goal }}</span>
+          <div v-if="strategy.brand_brief.constraints" class="text-gray-400 mt-1">
+            {{ strategy.brand_brief.constraints }}
           </div>
         </div>
 
-        <!-- 发起新咨询 -->
-        <div class="space-y-3">
+        <!-- 未生成方案：显示生成按钮 -->
+        <div v-if="!latestMonitorSuggestions.length">
           <UTextarea
             v-model="consultInput"
-            :placeholder="strategy.consultation_rounds?.length ? '补充说明或回答 AI 的追问...' : '（可选）补充说明分析需求，AI 将结合品牌简报规划监测方案'"
-            :rows="3"
-            class="w-full"
+            placeholder="（可选）补充说明，例如: 重点看抖音和小红书、关注某个竞品..."
+            :rows="2"
+            class="w-full mb-3"
           />
-          <div class="flex items-center gap-3">
-            <UButton
-              :loading="consultLoading"
-              :disabled="!!strategy?.consultation_rounds?.length && !consultInput.trim()"
-              @click="handleConsult"
-            >
-              {{ strategy.consultation_rounds?.length ? '继续咨询' : '开始咨询' }}
-            </UButton>
-            <span v-if="strategy.consultation_rounds?.length" class="text-sm text-gray-500">
-              已咨询 {{ strategy.consultation_rounds.length }} 轮
-            </span>
-          </div>
+          <UButton
+            :loading="consultLoading"
+            icon="i-heroicons-sparkles"
+            @click="handleConsult"
+          >
+            生成监测方案
+          </UButton>
         </div>
 
-        <!-- 确认计划（有监测建议时显示） -->
-        <div
-          v-if="latestMonitorSuggestions.length"
-          class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
-        >
+        <!-- 已有方案：展示建议列表（可编辑） -->
+        <div v-else>
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">
-              AI 推荐监测（{{ latestMonitorSuggestions.length }} 个）
+              AI 推荐监测（{{ editableSuggestions.length }} 个）
             </h3>
-          </div>
-          <div class="space-y-2 mb-3">
-            <div
-              v-for="(s, i) in latestMonitorSuggestions"
-              :key="i"
-              class="flex items-start gap-2 text-sm p-2 bg-blue-50 dark:bg-blue-900/20 rounded"
+            <UButton
+              v-if="!editingPlan"
+              variant="ghost"
+              size="xs"
+              icon="i-heroicons-pencil-square"
+              @click="editingPlan = true"
             >
-              <UIcon name="i-heroicons-chart-bar" class="text-blue-500 mt-0.5 shrink-0" />
-              <div>
-                <span class="font-medium text-blue-700 dark:text-blue-300">{{ s.name }}</span>
-                <span v-if="s.rationale" class="text-gray-500 ml-1">— {{ s.rationale }}</span>
+              编辑方案
+            </UButton>
+            <UButton
+              v-else
+              variant="ghost"
+              size="xs"
+              icon="i-heroicons-check"
+              @click="editingPlan = false"
+            >
+              完成编辑
+            </UButton>
+          </div>
+          <div class="space-y-2 mb-4">
+            <div
+              v-for="(s, i) in editableSuggestions"
+              :key="i"
+              class="text-sm p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
+            >
+              <!-- 只读模式 -->
+              <div v-if="!editingPlan" class="flex items-start gap-2">
+                <UIcon name="i-heroicons-chart-bar" class="text-blue-500 mt-0.5 shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <span class="font-medium text-blue-700 dark:text-blue-300">{{ s.name }}</span>
+                  <span v-if="s.rationale" class="text-gray-500 ml-1">— {{ s.rationale }}</span>
+                  <div class="flex flex-wrap gap-x-3 text-xs text-gray-400 mt-0.5">
+                    <span v-if="s.platforms?.length">平台: {{ s.platforms.map(p => platformLabel(p)).join('、') }}</span>
+                    <span v-if="s.keywords?.length">关键词: {{ s.keywords.join('、') }}</span>
+                  </div>
+                </div>
+              </div>
+              <!-- 编辑模式 -->
+              <div v-else class="space-y-3">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-chart-bar" class="text-blue-500 shrink-0" />
+                  <UInput
+                    :model-value="s.name"
+                    size="sm"
+                    class="flex-1"
+                    placeholder="监测名称"
+                    @update:model-value="(v: string) => updateSuggestion(i, 'name', v)"
+                  />
+                  <UButton
+                    variant="ghost"
+                    size="xs"
+                    color="error"
+                    icon="i-heroicons-trash"
+                    @click="removeSuggestion(i)"
+                  />
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">关键词（每个关键词独立采集）</label>
+                  <div class="flex flex-wrap items-center gap-1.5 p-1.5 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 min-h-[34px]">
+                    <span
+                      v-for="(kw, ki) in (s.keywords || [])"
+                      :key="ki"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs"
+                    >
+                      {{ kw }}
+                      <button
+                        type="button"
+                        class="hover:text-red-500 transition-colors"
+                        @click="removeKeyword(i, ki)"
+                      >
+                        <UIcon name="i-heroicons-x-mark" class="text-[10px]" />
+                      </button>
+                    </span>
+                    <input
+                      :ref="(el: any) => { keywordInputRefs[i] = el }"
+                      type="text"
+                      class="flex-1 min-w-[80px] text-xs border-none outline-none bg-transparent py-0.5 px-1 text-gray-900 dark:text-white placeholder-gray-400"
+                      placeholder="输入后回车添加"
+                      @keydown.enter.prevent="addKeywordFromInput(i, $event)"
+                      @keydown.,="addKeywordFromInput(i, $event)"
+                    >
+                  </div>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">平台</label>
+                  <div class="flex flex-wrap gap-2">
+                    <label
+                      v-for="p in PLATFORM_OPTIONS"
+                      :key="p.llmCode"
+                      class="flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer transition-colors"
+                      :class="s.platforms?.includes(p.llmCode)
+                        ? 'border-primary-400 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="s.platforms?.includes(p.llmCode)"
+                        class="sr-only"
+                        @change="toggleSuggestionPlatform(i, p.llmCode)"
+                      >
+                      {{ p.label }}
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          <UButton
-            :loading="confirmPlanLoading"
-            icon="i-heroicons-check-circle"
-            @click="handleConfirmPlan"
-          >
-            一键创建监测
-          </UButton>
-          <span v-if="strategy.suggested_monitor_ids?.length" class="ml-3 text-sm text-gray-500">
-            已创建 {{ strategy.suggested_monitor_ids.length }} 个监测
-          </span>
+
+          <!-- 采集量选择 + 预估 -->
+          <div class="flex items-center gap-4 mb-4 p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
+            <div class="flex items-center gap-2">
+              <span class="text-gray-600 dark:text-gray-400 shrink-0">每任务采集:</span>
+              <div class="flex">
+                <UButton
+                  size="xs"
+                  :variant="notesPerTask === 50 ? 'solid' : 'outline'"
+                  class="rounded-r-none"
+                  @click="notesPerTask = 50"
+                >
+                  50 条
+                </UButton>
+                <UButton
+                  size="xs"
+                  :variant="notesPerTask === 100 ? 'solid' : 'outline'"
+                  class="rounded-l-none"
+                  @click="notesPerTask = 100"
+                >
+                  100 条
+                </UButton>
+              </div>
+            </div>
+            <span class="text-gray-400">|</span>
+            <span class="text-gray-600 dark:text-gray-400">
+              预估: {{ estimatedTaskCount }} 个任务 × {{ notesPerTask }} 条 =
+              <span class="font-medium text-gray-900 dark:text-white">{{ estimatedTaskCount * notesPerTask }} 条</span>
+            </span>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <UButton
+              :loading="confirmPlanLoading"
+              icon="i-heroicons-check-circle"
+              @click="handleConfirmPlan"
+            >
+              {{ strategy.suggested_monitor_ids?.length ? '重新创建监测' : '确认并创建监测' }}
+            </UButton>
+            <UButton
+              variant="outline"
+              :loading="consultLoading"
+              icon="i-heroicons-arrow-path"
+              @click="handleConsult"
+            >
+              重新生成方案
+            </UButton>
+          </div>
         </div>
       </UCard>
 
@@ -499,7 +584,7 @@ definePageMeta({ title: '策略详情' })
 // ── 阶段定义 ──────────────────────────────────────────────────────────────────
 
 const STAGES = [
-  { key: 'A', label: '需求对齐' },
+  { key: 'A', label: '监测规划' },
   { key: 'B', label: '数据采集' },
   { key: 'C', label: '数据评估' },
   { key: 'D', label: '策略生成' },
@@ -520,6 +605,18 @@ const STATUS_ORDER: Record<StrategyStatus, number> = {
   slices_ready: 3, phase1_done: 4, phase2_done: 5, completed: 6,
 }
 
+// LLM 输出的平台全拼 → 数据库短码 + 中文名
+// 后端 PLATFORM_NAME_TO_CODE 有同样的映射，这里前端展示用
+const PLATFORM_OPTIONS = [
+  { llmCode: 'douyin', label: '抖音' },
+  { llmCode: 'xiaohongshu', label: '小红书' },
+  { llmCode: 'weibo', label: '微博' },
+  { llmCode: 'bilibili', label: 'B站' },
+  { llmCode: 'kuaishou', label: '快手' },
+  { llmCode: 'zhihu', label: '知乎' },
+  { llmCode: 'tieba', label: '贴吧' },
+] as const
+
 // ── 基础数据 ──────────────────────────────────────────────────────────────────
 
 const route = useRoute()
@@ -527,7 +624,7 @@ const strategiesApi = useStrategies()
 const { apiRequest, useApiData: useApiDataFn } = useApi()
 
 const strategyId = computed(() => Number(route.params.id))
-const { data: strategy, pending, refresh } = strategiesApi.getStrategy(strategyId)
+const { data: strategy, pending } = strategiesApi.getStrategy(strategyId)
 
 // ── 状态计算 ──────────────────────────────────────────────────────────────────
 
@@ -559,25 +656,95 @@ const phase3Data = computed(() => (strategy.value?.phase3_result || null) as Pha
 const latestMonitorSuggestions = computed<MonitorSuggestion[]>(() => {
   const rounds = strategy.value?.consultation_rounds
   if (!rounds?.length) return []
-  return rounds[rounds.length - 1]?.ai_response?.monitor_suggestions ?? []
+  return rounds[0]?.ai_response?.monitor_suggestions ?? []
 })
 
-// ── Panel A: 咨询 ─────────────────────────────────────────────────────────────
+// ── Panel A: 监测规划 ────────────────────────────────────────────────────────
 
 const consultInput = ref('')
 const consultLoading = ref(false)
 const confirmPlanLoading = ref(false)
+const editingPlan = ref(false)
+const editableSuggestions = ref<MonitorSuggestion[]>([])
+const notesPerTask = ref(50)
+
+const estimatedTaskCount = computed(() => {
+  return editableSuggestions.value.reduce((total, s) => {
+    const keywords = s.keywords?.length || 1
+    const platforms = s.platforms?.length || 1
+    return total + keywords * platforms
+  }, 0)
+})
+
+// AI 方案加载后初始化可编辑副本
+watch(latestMonitorSuggestions, (suggestions) => {
+  if (suggestions.length && !editableSuggestions.value.length) {
+    editableSuggestions.value = suggestions.map(s => ({ ...s }))
+  }
+}, { immediate: true })
+
+const updateSuggestion = (index: number, field: string, value: string) => {
+  editableSuggestions.value = editableSuggestions.value.map((s, i) =>
+    i === index ? { ...s, [field]: value } : s,
+  )
+}
+
+const keywordInputRefs = ref<Record<number, HTMLInputElement | null>>({})
+
+const removeKeyword = (suggestionIndex: number, keywordIndex: number) => {
+  editableSuggestions.value = editableSuggestions.value.map((s, i) => {
+    if (i !== suggestionIndex) return s
+    return { ...s, keywords: (s.keywords || []).filter((_, ki) => ki !== keywordIndex) }
+  })
+}
+
+const addKeywordFromInput = (suggestionIndex: number, event: Event) => {
+  const input = keywordInputRefs.value[suggestionIndex]
+  if (!input) return
+  // 阻止逗号字符输入
+  event.preventDefault()
+  const value = input.value.trim().replace(/[,，、]$/, '').trim()
+  if (!value) return
+  editableSuggestions.value = editableSuggestions.value.map((s, i) => {
+    if (i !== suggestionIndex) return s
+    const existing = s.keywords || []
+    if (existing.includes(value)) return s
+    return { ...s, keywords: [...existing, value] }
+  })
+  input.value = ''
+}
+
+const toggleSuggestionPlatform = (index: number, platformCode: string) => {
+  editableSuggestions.value = editableSuggestions.value.map((s, i) => {
+    if (i !== index) return s
+    const current = s.platforms || []
+    const platforms = current.includes(platformCode)
+      ? current.filter(p => p !== platformCode)
+      : [...current, platformCode]
+    return { ...s, platforms }
+  })
+}
+
+const removeSuggestion = (index: number) => {
+  editableSuggestions.value = editableSuggestions.value.filter((_, i) => i !== index)
+}
+
+// 新创建的策略自动生成监测方案
+watch(() => strategy.value, (s) => {
+  if (s && s.status === 'briefing' && !s.consultation_rounds?.length) {
+    handleConsult()
+  }
+}, { once: true })
 
 const handleConsult = async () => {
-  // 第一轮：brand_brief 已包含品牌信息，输入可为空；后续轮次必须有输入
-  const hasRounds = !!strategy.value?.consultation_rounds?.length
-  if (hasRounds && !consultInput.value.trim()) return
   consultLoading.value = true
   try {
-    const input = consultInput.value.trim() || '请根据品牌简报帮我规划监测方案'
-    await strategiesApi.consult(strategyId.value, input)
+    await strategiesApi.consult(strategyId.value, consultInput.value.trim())
     consultInput.value = ''
-    await refresh()
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+    // 重新初始化可编辑副本
+    editableSuggestions.value = latestMonitorSuggestions.value.map(s => ({ ...s }))
+    editingPlan.value = false
   } catch {
     // 错误已由 useApi 处理
   } finally {
@@ -586,11 +753,12 @@ const handleConsult = async () => {
 }
 
 const handleConfirmPlan = async () => {
-  if (!latestMonitorSuggestions.value.length) return
+  if (!editableSuggestions.value.length) return
   confirmPlanLoading.value = true
   try {
-    await strategiesApi.confirmPlan(strategyId.value, latestMonitorSuggestions.value)
-    await refresh()
+    await strategiesApi.confirmPlan(strategyId.value, editableSuggestions.value, notesPerTask.value)
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+    editingPlan.value = false
   } catch {
     // 错误已由 useApi 处理
   } finally {
@@ -655,7 +823,7 @@ const handleAddSlices = async () => {
     await strategiesApi.addSlices(strategyId.value, selectedAddSliceIds.value)
     selectedAddSliceIds.value = []
     showAddSlices.value = false
-    await refresh()
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
   } finally {
@@ -667,7 +835,7 @@ const handleEvaluate = async () => {
   evaluateLoading.value = true
   try {
     await strategiesApi.evaluate(strategyId.value)
-    await refresh()
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
   } finally {
@@ -679,7 +847,7 @@ const handleConfirmReady = async () => {
   confirmReadyLoading.value = true
   try {
     await strategiesApi.confirmReady(strategyId.value)
-    await refresh()
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
   } finally {
@@ -696,7 +864,7 @@ const handleGenerate = async (phase: 1 | 2 | 3) => {
   generatingPhase.value = phase
   try {
     await strategiesApi.generatePhase(strategyId.value, phase)
-    await refresh()
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
   } finally {
@@ -708,7 +876,7 @@ const handleSavePhase = async (phase: 1 | 2 | 3, result: Record<string, unknown>
   savingPhase.value = phase
   try {
     await strategiesApi.editPhase(strategyId.value, phase, result)
-    await refresh()
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
   } finally {
@@ -717,6 +885,11 @@ const handleSavePhase = async (phase: 1 | 2 | 3, result: Record<string, unknown>
 }
 
 // ── 工具函数 ────────────────────────────────────────────────────────────────────
+
+const PLATFORM_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  PLATFORM_OPTIONS.map(p => [p.llmCode, p.label]),
+)
+const platformLabel = (code: string) => PLATFORM_LABEL_MAP[code] || code
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('zh-CN', {

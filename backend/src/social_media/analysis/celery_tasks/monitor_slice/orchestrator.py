@@ -422,7 +422,7 @@ def _run_pipeline_body(
         monitor_id=slice_record.monitor_id,
         task_id=None,
         user_id=slice_record.user_id,
-        analysis_type=AnalysisType.PROJECT_SLICE_SUMMARY.value,
+        analysis_type=AnalysisType.MONITOR_SLICE_SUMMARY.value,
         source_count=1,
         analysis_config={"slice_id": slice_id, "step": "summary"},
         status="processing",

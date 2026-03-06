@@ -171,14 +171,14 @@
         <div class="space-y-3">
           <UTextarea
             v-model="consultInput"
-            placeholder="描述你的分析需求，AI 将帮你规划监测方案..."
+            :placeholder="strategy.consultation_rounds?.length ? '补充说明或回答 AI 的追问...' : '（可选��补充说明分析需求，AI 将结合品牌简报规划监测方案'"
             :rows="3"
             class="w-full"
           />
           <div class="flex items-center gap-3">
             <UButton
               :loading="consultLoading"
-              :disabled="!consultInput.trim()"
+              :disabled="!!strategy?.consultation_rounds?.length && !consultInput.trim()"
               @click="handleConsult"
             >
               {{ strategy.consultation_rounds?.length ? '继续咨询' : '开始咨询' }}
@@ -569,7 +569,9 @@ const consultLoading = ref(false)
 const confirmPlanLoading = ref(false)
 
 const handleConsult = async () => {
-  if (!consultInput.value.trim()) return
+  // 第一轮：brand_brief 已包含品牌信息，输入可为空；后续轮次必须有输入
+  const hasRounds = !!strategy.value?.consultation_rounds?.length
+  if (hasRounds && !consultInput.value.trim()) return
   consultLoading.value = true
   try {
     await strategiesApi.consult(strategyId.value, consultInput.value.trim())

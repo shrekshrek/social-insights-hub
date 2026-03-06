@@ -1,6 +1,7 @@
 """社交媒体模块的业务逻辑层"""
 
 from typing import List, Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
@@ -277,7 +278,6 @@ async def compare_tasks(
     compare_type: str = "posts",
 ) -> dict:
     """对比项目内多个任务的数据重合度"""
-    from sqlalchemy import select
     from sqlalchemy.orm import selectinload
     from src.social_media.tasks.models import DataTask, SocialPost, SocialComment
     from src.social_media.monitors import crud as monitor_crud

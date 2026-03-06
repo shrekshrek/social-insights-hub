@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from src.langchain.chains.strategy_consult_chain import (
     create_strategy_consult_chain,
@@ -418,6 +419,7 @@ async def consult_strategy(
         "ai_response": response.model_dump(),
     })
     strategy.consultation_rounds = rounds
+    flag_modified(strategy, "consultation_rounds")
     if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["consulting"]:
         strategy.status = "consulting"
 
@@ -467,6 +469,7 @@ async def confirm_plan(
     # 追加到 suggested_monitor_ids（不覆盖历史记录）
     existing_ids = list(strategy.suggested_monitor_ids or [])
     strategy.suggested_monitor_ids = existing_ids + created_ids
+    flag_modified(strategy, "suggested_monitor_ids")
     strategy.status = "monitors_created"
 
     await db.commit()

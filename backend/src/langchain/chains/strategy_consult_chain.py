@@ -16,7 +16,7 @@ from src.langchain.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助品牌团队制定���据采集和分析计划。
+SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助品牌团队制定数据采集和分析计划。
 
 ## 你的工作流程
 1. **理解需求**：阅读 Brand Brief（如有）和用户输入，梳理分析目标

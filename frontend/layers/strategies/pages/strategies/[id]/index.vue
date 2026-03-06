@@ -230,7 +230,7 @@
         <template #header>
           <div class="flex items-center gap-2">
             <span class="font-bold text-primary-600">B</span>
-            <h2 class="text-lg font-semibold">��据采集</h2>
+            <h2 class="text-lg font-semibold">数据采集</h2>
           </div>
         </template>
 
@@ -496,7 +496,7 @@ import { UBadge, UButton } from '#components'
 
 definePageMeta({ title: '策略详情' })
 
-// ── 阶段定义 ───────────────────────────────────────────────────────────────��──
+// ── 阶段定义 ──────────────────────────────────────────────────────────────────
 
 const STAGES = [
   { key: 'A', label: '需求对齐' },

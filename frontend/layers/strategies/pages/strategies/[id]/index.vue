@@ -171,7 +171,7 @@
         <div class="space-y-3">
           <UTextarea
             v-model="consultInput"
-            :placeholder="strategy.consultation_rounds?.length ? '补充说明或回答 AI 的追问...' : '（可选��补充说明分析需求，AI 将结合品牌简报规划监测方案'"
+            :placeholder="strategy.consultation_rounds?.length ? '补充说明或回答 AI 的追问...' : '（可选）补充说明分析需求，AI 将结合品牌简报规划监测方案'"
             :rows="3"
             class="w-full"
           />
@@ -574,7 +574,8 @@ const handleConsult = async () => {
   if (hasRounds && !consultInput.value.trim()) return
   consultLoading.value = true
   try {
-    await strategiesApi.consult(strategyId.value, consultInput.value.trim())
+    const input = consultInput.value.trim() || '请根据品牌简报帮我规划监测方案'
+    await strategiesApi.consult(strategyId.value, input)
     consultInput.value = ''
     await refresh()
   } catch {

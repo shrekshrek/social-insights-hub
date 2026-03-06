@@ -535,6 +535,7 @@ async def confirm_plan(
                             keywords=keyword,
                             data_source="remote_crawler",
                             task_params=task_params,
+                            auto_analyze=True,
                         ),
                         current_user_id,
                     )

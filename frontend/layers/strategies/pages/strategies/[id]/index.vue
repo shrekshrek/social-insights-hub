@@ -716,7 +716,7 @@ const handleSavePhase = async (phase: 1 | 2 | 3, result: Record<string, unknown>
   }
 }
 
-// ── 工具函数 ───────���──────────────────────────────────────────────────────────
+// ── 工具函数 ────────────────────────────────────────────────────────────────────
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('zh-CN', {

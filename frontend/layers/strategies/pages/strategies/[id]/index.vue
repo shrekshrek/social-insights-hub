@@ -121,11 +121,62 @@
           v-if="strategy.brand_brief"
           class="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm"
         >
-          <span class="font-medium">{{ strategy.brand_brief.brand_name }}</span>
-          <span class="text-gray-400 mx-1.5">·</span>
-          <span class="text-gray-600 dark:text-gray-400">{{ strategy.brand_brief.analysis_goal }}</span>
-          <div v-if="strategy.brand_brief.constraints" class="text-gray-400 mt-1">
-            {{ strategy.brand_brief.constraints }}
+          <!-- 只读模式 -->
+          <div v-if="!editingBrief">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <span class="font-medium">{{ strategy.brand_brief.brand_name }}</span>
+                <span class="text-gray-400 mx-1.5">·</span>
+                <span class="text-gray-600 dark:text-gray-400">{{ strategy.brand_brief.analysis_goal }}</span>
+              </div>
+              <UButton
+                variant="ghost"
+                size="xs"
+                icon="i-heroicons-pencil-square"
+                class="shrink-0"
+                @click="startEditBrief"
+              />
+            </div>
+            <div v-if="strategy.brand_brief.constraints" class="text-gray-400 mt-1">
+              {{ strategy.brand_brief.constraints }}
+            </div>
+          </div>
+          <!-- 编辑模式 -->
+          <div v-else class="space-y-3">
+            <UInput
+              v-model="editBrief.brand_name"
+              placeholder="品牌名称"
+              size="sm"
+            />
+            <UTextarea
+              v-model="editBrief.analysis_goal"
+              placeholder="分析目标"
+              :rows="2"
+              size="sm"
+            />
+            <UTextarea
+              v-model="editBrief.constraints"
+              placeholder="补充说明（可选）"
+              :rows="2"
+              size="sm"
+            />
+            <div class="flex items-center gap-2">
+              <UButton
+                size="xs"
+                :loading="savingBrief"
+                :disabled="!editBrief.brand_name.trim() || !editBrief.analysis_goal.trim()"
+                @click="handleSaveBrief"
+              >
+                保存
+              </UButton>
+              <UButton
+                size="xs"
+                variant="ghost"
+                @click="editingBrief = false"
+              >
+                取消
+              </UButton>
+            </div>
           </div>
         </div>
 
@@ -150,7 +201,7 @@
         <div v-else>
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">
-              AI 推荐监测（{{ editableSuggestions.length }} 个）
+              AI 推荐方案
             </h3>
             <UButton
               v-if="!editingPlan"
@@ -171,123 +222,34 @@
               完成编辑
             </UButton>
           </div>
-          <div class="space-y-2 mb-4">
-            <div
-              v-for="(s, i) in editableSuggestions"
-              :key="i"
-              class="text-sm p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
-            >
-              <!-- 只读模式 -->
-              <div v-if="!editingPlan" class="flex items-start gap-2">
-                <UIcon name="i-heroicons-chart-bar" class="text-blue-500 mt-0.5 shrink-0" />
-                <div class="flex-1 min-w-0">
-                  <span class="font-medium text-blue-700 dark:text-blue-300">{{ s.name }}</span>
-                  <span v-if="s.rationale" class="text-gray-500 ml-1">— {{ s.rationale }}</span>
-                  <div class="flex flex-wrap gap-x-3 text-xs text-gray-400 mt-0.5">
-                    <span v-if="s.platforms?.length">平台: {{ s.platforms.map(p => platformLabel(p)).join('、') }}</span>
-                    <span v-if="s.keywords?.length">关键词: {{ s.keywords.join('、') }}</span>
-                  </div>
-                </div>
-              </div>
-              <!-- 编辑模式 -->
-              <div v-else class="space-y-3">
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-heroicons-chart-bar" class="text-blue-500 shrink-0" />
-                  <UInput
-                    :model-value="s.name"
-                    size="sm"
-                    class="flex-1"
-                    placeholder="监测名称"
-                    @update:model-value="(v: string) => updateSuggestion(i, 'name', v)"
-                  />
-                  <UButton
-                    variant="ghost"
-                    size="xs"
-                    color="error"
-                    icon="i-heroicons-trash"
-                    @click="removeSuggestion(i)"
-                  />
-                </div>
-                <div>
-                  <label class="text-xs text-gray-500 mb-1 block">关键词（每个关键词独立采集）</label>
-                  <div class="flex flex-wrap items-center gap-1.5 p-1.5 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 min-h-[34px]">
-                    <span
-                      v-for="(kw, ki) in (s.keywords || [])"
-                      :key="ki"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs"
-                    >
-                      {{ kw }}
-                      <button
-                        type="button"
-                        class="hover:text-red-500 transition-colors"
-                        @click="removeKeyword(i, ki)"
-                      >
-                        <UIcon name="i-heroicons-x-mark" class="text-[10px]" />
-                      </button>
-                    </span>
-                    <input
-                      :ref="(el: any) => { keywordInputRefs[i] = el }"
-                      type="text"
-                      class="flex-1 min-w-[80px] text-xs border-none outline-none bg-transparent py-0.5 px-1 text-gray-900 dark:text-white placeholder-gray-400"
-                      placeholder="输入后回车添加"
-                      @keydown.enter.prevent="addKeywordFromInput(i, $event)"
-                      @keydown.,="addKeywordFromInput(i, $event)"
-                    >
-                  </div>
-                </div>
-                <div>
-                  <label class="text-xs text-gray-500 mb-1 block">平台</label>
-                  <div class="flex flex-wrap gap-2">
-                    <label
-                      v-for="p in PLATFORM_OPTIONS"
-                      :key="p.llmCode"
-                      class="flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer transition-colors"
-                      :class="s.platforms?.includes(p.llmCode)
-                        ? 'border-primary-400 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'"
-                    >
-                      <input
-                        type="checkbox"
-                        :checked="s.platforms?.includes(p.llmCode)"
-                        class="sr-only"
-                        @change="toggleSuggestionPlatform(i, p.llmCode)"
-                      >
-                      {{ p.label }}
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
+
+          <!-- AI 需求理解 -->
+          <div
+            v-if="latestUnderstandingSummary"
+            class="mb-3 p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300"
+          >
+            <span class="font-medium">AI 理解：</span>{{ latestUnderstandingSummary }}
           </div>
 
-          <!-- 采集量选择 + 预估 -->
-          <div class="flex items-center gap-4 mb-4 p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
-            <div class="flex items-center gap-2">
-              <span class="text-gray-600 dark:text-gray-400 shrink-0">每任务采集:</span>
-              <div class="flex">
-                <UButton
-                  size="xs"
-                  :variant="notesPerTask === 50 ? 'solid' : 'outline'"
-                  class="rounded-r-none"
-                  @click="notesPerTask = 50"
-                >
-                  50 条
-                </UButton>
-                <UButton
-                  size="xs"
-                  :variant="notesPerTask === 100 ? 'solid' : 'outline'"
-                  class="rounded-l-none"
-                  @click="notesPerTask = 100"
-                >
-                  100 条
-                </UButton>
-              </div>
-            </div>
-            <span class="text-gray-400">|</span>
-            <span class="text-gray-600 dark:text-gray-400">
-              预估: {{ estimatedTaskCount }} 个任务 × {{ notesPerTask }} 条 =
-              <span class="font-medium text-gray-900 dark:text-white">{{ estimatedTaskCount * notesPerTask }} 条</span>
-            </span>
+          <!-- 采集建议 -->
+          <h4 class="text-xs font-medium text-gray-500 mb-2">
+            采集建议（{{ editableSuggestions.length }} 个监测）
+          </h4>
+          <MonitorSuggestionsEditor
+            v-model="editableSuggestions"
+            v-model:notes-per-task="notesPerTask"
+            :editing="editingPlan"
+          />
+
+          <!-- 切片建议 -->
+          <div v-if="editableSlicePlan.length" class="mb-4">
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              切片建议（{{ editableSlicePlan.length }} 个切片）
+            </h4>
+            <SlicePlanEditor
+              v-model="editableSlicePlan"
+              :editing="editingPlan"
+            />
           </div>
 
           <div class="flex items-center gap-3">
@@ -308,46 +270,28 @@
             </UButton>
           </div>
         </div>
-      </UCard>
 
-      <!-- ===== 阶段 B: 数据采集 ===== -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-primary-600">B</span>
-            <h2 class="text-lg font-semibold">数据采集</h2>
-          </div>
-        </template>
-
-        <div class="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        <!-- 监测已创建提示 -->
+        <div
+          v-if="strategy.suggested_monitor_ids?.length"
+          class="mt-4 flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
+        >
           <UIcon name="i-heroicons-information-circle" class="text-blue-500 mt-0.5 shrink-0 text-lg" />
           <div class="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-            <p>前往监测页面，启动数据采集任务，待切片分析完成后回来关联切片。</p>
-            <UButton
-              variant="link"
-              size="xs"
-              to="/social-media/monitors"
-              class="p-0"
-            >
-              前往监测管理
+            <p>已创建 {{ strategy.suggested_monitor_ids.length }} 个监测，采集任务自动进行中。完成后前往监测项目创建切片。</p>
+            <UButton variant="link" size="xs" :to="monitorPageLink" class="p-0">
+              前往监测项目
             </UButton>
           </div>
         </div>
-        <div
-          v-if="strategy.suggested_monitor_ids?.length"
-          class="mt-3 text-sm text-gray-500"
-        >
-          AI 已为本策略推荐创建 {{ strategy.suggested_monitor_ids.length }} 个监测，ID：
-          {{ strategy.suggested_monitor_ids.join(', ') }}
-        </div>
       </UCard>
 
-      <!-- ===== 阶段 C: 数据评估 ===== -->
+      <!-- ===== 阶段 B: 数据评估 ===== -->
       <UCard>
         <template #header>
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="font-bold text-primary-600">C</span>
+              <span class="font-bold text-primary-600">B</span>
               <h2 class="text-lg font-semibold">数据评估</h2>
             </div>
             <span class="text-sm text-gray-500">{{ strategy.slices.length }} 个切片</span>
@@ -363,9 +307,22 @@
               class="flex items-center gap-2 text-sm py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-0"
             >
               <UIcon name="i-heroicons-document-chart-bar" class="text-gray-400 shrink-0" />
-              <span class="text-gray-600 dark:text-gray-400">{{ s.monitor_name }}</span>
-              <span class="text-gray-300">/</span>
-              <span class="font-medium">{{ s.slice_name || `切片 #${s.slice_id}` }}</span>
+              <NuxtLink
+                :to="`/social-media/monitors/${s.monitor_id}/analysis?slice_id=${s.slice_id}`"
+                class="flex items-center gap-1 hover:text-primary-600 transition-colors"
+              >
+                <span class="text-gray-600 dark:text-gray-400">{{ s.monitor_name }}</span>
+                <span class="text-gray-300">/</span>
+                <span class="font-medium">{{ s.slice_name || `切片 #${s.slice_id}` }}</span>
+              </NuxtLink>
+              <div class="flex-1" />
+              <UButton
+                variant="ghost"
+                size="xs"
+                color="error"
+                icon="i-heroicons-x-mark"
+                @click="handleRemoveSlice(s.slice_id)"
+              />
             </div>
           </div>
         </div>
@@ -491,6 +448,115 @@
               · {{ gap.description }}
             </div>
           </div>
+          <!-- 切片建议 -->
+          <div v-if="strategy.evaluation_result.slice_suggestions?.length" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <h4 class="text-xs font-medium text-gray-500 mb-1.5">切片优化建议</h4>
+            <div class="space-y-1.5">
+              <div
+                v-for="(ss, i) in strategy.evaluation_result.slice_suggestions"
+                :key="i"
+                class="text-xs text-gray-600 dark:text-gray-400"
+              >
+                <span class="font-medium">{{ ss.slice_name }}</span>：{{ ss.issue }}
+                <span v-if="ss.suggestion" class="text-gray-500"> → {{ ss.suggestion }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 补充采集: 状态 1 - 评估不足 + 有建议 + 未确认补充 -->
+        <div v-if="showSupplementaryEditor">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">
+              补充采集建议（{{ editableSupplementary.length }} 条）
+            </h3>
+            <UButton
+              v-if="!editingSupplementary"
+              variant="ghost"
+              size="xs"
+              icon="i-heroicons-pencil-square"
+              @click="editingSupplementary = true"
+            >
+              编辑
+            </UButton>
+            <UButton
+              v-else
+              variant="ghost"
+              size="xs"
+              icon="i-heroicons-check"
+              @click="editingSupplementary = false"
+            >
+              完成编辑
+            </UButton>
+          </div>
+
+          <MonitorSuggestionsEditor
+            v-model="editableSupplementary"
+            v-model:notes-per-task="supplementaryNotesPerTask"
+            :editing="editingSupplementary"
+          />
+
+          <!-- 补充切片建议 -->
+          <div v-if="editableSupplementarySlicePlan.length" class="mb-4">
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              切片建议（{{ editableSupplementarySlicePlan.length }} 个切片）
+            </h4>
+            <SlicePlanEditor
+              v-model="editableSupplementarySlicePlan"
+              :editing="editingSupplementary"
+            />
+          </div>
+
+          <div class="flex items-center gap-3">
+            <UButton
+              :loading="confirmSupplementaryLoading"
+              icon="i-heroicons-check-circle"
+              @click="handleConfirmSupplementary"
+            >
+              确认补充采集
+            </UButton>
+          </div>
+        </div>
+
+        <!-- 补充采集: 已确认，显示只读方案 + 前往监测提示 -->
+        <div v-if="showSupplementaryConfirmed">
+          <!-- 已确认的方案（只读） -->
+          <div v-if="confirmedSupplementarySuggestions.length" class="mb-3">
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              已确认的补充采集方案（{{ confirmedSupplementarySuggestions.length }} 条）
+            </h4>
+            <MonitorSuggestionsEditor
+              :model-value="confirmedSupplementarySuggestions"
+              :notes-per-task="supplementaryNotesPerTask"
+              :editing="false"
+            />
+          </div>
+          <div v-if="confirmedSupplementarySlicePlan.length" class="mb-3">
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              切片建议（{{ confirmedSupplementarySlicePlan.length }} 个切片）
+            </h4>
+            <SlicePlanEditor
+              :model-value="confirmedSupplementarySlicePlan"
+              :editing="false"
+            />
+          </div>
+
+          <div class="mb-4 p-3 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <div class="flex items-start gap-2 text-sm">
+              <UIcon name="i-heroicons-information-circle" class="text-blue-500 mt-0.5 shrink-0" />
+              <div class="text-blue-700 dark:text-blue-300 space-y-1">
+                <p>补充采集任务已提交，请前往监测项目查看进度。完成后创建/调整切片，回来关联并重新评估。</p>
+                <UButton
+                  variant="link"
+                  size="xs"
+                  :to="monitorPageLink"
+                  class="p-0"
+                >
+                  前往监测项目
+                </UButton>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 确认就绪 -->
@@ -510,10 +576,10 @@
         </span>
       </UCard>
 
-      <!-- ===== 阶段 D: 策略生成 ===== -->
+      <!-- ===== 阶段 C: 策略生成 ===== -->
       <div class="space-y-4">
         <div class="flex items-center gap-2">
-          <span class="font-bold text-primary-600">D</span>
+          <span class="font-bold text-primary-600">C</span>
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">策略生成</h2>
         </div>
 
@@ -576,6 +642,7 @@ import type {
   Phase2Result,
   Phase3Result,
   MonitorSuggestion,
+  SlicePlanItem,
 } from '../../../types'
 import { UBadge, UButton } from '#components'
 
@@ -585,9 +652,8 @@ definePageMeta({ title: '策略详情' })
 
 const STAGES = [
   { key: 'A', label: '监测规划' },
-  { key: 'B', label: '数据采集' },
-  { key: 'C', label: '数据评估' },
-  { key: 'D', label: '策略生成' },
+  { key: 'B', label: '数据评估' },
+  { key: 'C', label: '策略生成' },
 ] as const
 
 const STATUS_MAP: Record<StrategyStatus, { label: string; color: 'neutral' | 'info' | 'warning' | 'success' }> = {
@@ -605,17 +671,6 @@ const STATUS_ORDER: Record<StrategyStatus, number> = {
   slices_ready: 3, phase1_done: 4, phase2_done: 5, completed: 6,
 }
 
-// LLM 输出的平台全拼 → 数据库短码 + 中文名
-// 后端 PLATFORM_NAME_TO_CODE 有同样的映射，这里前端展示用
-const PLATFORM_OPTIONS = [
-  { llmCode: 'douyin', label: '抖音' },
-  { llmCode: 'xiaohongshu', label: '小红书' },
-  { llmCode: 'weibo', label: '微博' },
-  { llmCode: 'bilibili', label: 'B站' },
-  { llmCode: 'kuaishou', label: '快手' },
-  { llmCode: 'zhihu', label: '知乎' },
-  { llmCode: 'tieba', label: '贴吧' },
-] as const
 
 // ── 基础数据 ──────────────────────────────────────────────────────────────────
 
@@ -640,10 +695,9 @@ const currentStatusOrder = computed(() => {
 
 const currentStageIndex = computed(() => {
   const o = currentStatusOrder.value
-  if (o <= 1) return 0
-  if (o === 2) return 1
-  if (o === 3) return 2
-  return 3
+  if (o <= 2) return 0   // briefing, consulting, monitors_created → A
+  if (o === 3) return 1   // slices_ready → B
+  return 2                 // phase1_done, phase2_done, completed → C
 })
 
 const canGeneratePhase2 = computed(() => currentStatusOrder.value >= STATUS_ORDER.phase1_done)
@@ -659,22 +713,63 @@ const latestMonitorSuggestions = computed<MonitorSuggestion[]>(() => {
   return rounds[0]?.ai_response?.monitor_suggestions ?? []
 })
 
+const latestSlicePlan = computed<SlicePlanItem[]>(() => {
+  const rounds = strategy.value?.consultation_rounds
+  if (!rounds?.length) return []
+  return rounds[0]?.ai_response?.slice_plan ?? []
+})
+
+const latestUnderstandingSummary = computed(() => {
+  const rounds = strategy.value?.consultation_rounds
+  if (!rounds?.length) return ''
+  return rounds[0]?.ai_response?.understanding_summary ?? ''
+})
+
 // ── Panel A: 监测规划 ────────────────────────────────────────────────────────
+
+// Panel A: Brief 编辑
+const editingBrief = ref(false)
+const editBrief = ref({ brand_name: '', analysis_goal: '', constraints: '' })
+const savingBrief = ref(false)
+
+const startEditBrief = () => {
+  const b = strategy.value?.brand_brief
+  editBrief.value = {
+    brand_name: b?.brand_name || '',
+    analysis_goal: b?.analysis_goal || '',
+    constraints: b?.constraints || '',
+  }
+  editingBrief.value = true
+}
+
+const handleSaveBrief = async () => {
+  if (!editBrief.value.brand_name.trim() || !editBrief.value.analysis_goal.trim()) return
+  savingBrief.value = true
+  try {
+    await strategiesApi.updateStrategy(strategyId.value, {
+      brand_brief: {
+        ...strategy.value?.brand_brief,
+        brand_name: editBrief.value.brand_name.trim(),
+        analysis_goal: editBrief.value.analysis_goal.trim(),
+        constraints: editBrief.value.constraints.trim() || undefined,
+      },
+    })
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+    editingBrief.value = false
+  } catch {
+    // 错误已由 useApi 处理
+  } finally {
+    savingBrief.value = false
+  }
+}
 
 const consultInput = ref('')
 const consultLoading = ref(false)
 const confirmPlanLoading = ref(false)
 const editingPlan = ref(false)
 const editableSuggestions = ref<MonitorSuggestion[]>([])
+const editableSlicePlan = ref<SlicePlanItem[]>([])
 const notesPerTask = ref(50)
-
-const estimatedTaskCount = computed(() => {
-  return editableSuggestions.value.reduce((total, s) => {
-    const keywords = s.keywords?.length || 1
-    const platforms = s.platforms?.length || 1
-    return total + keywords * platforms
-  }, 0)
-})
 
 // AI 方案加载后初始化可编辑副本
 watch(latestMonitorSuggestions, (suggestions) => {
@@ -683,51 +778,11 @@ watch(latestMonitorSuggestions, (suggestions) => {
   }
 }, { immediate: true })
 
-const updateSuggestion = (index: number, field: string, value: string) => {
-  editableSuggestions.value = editableSuggestions.value.map((s, i) =>
-    i === index ? { ...s, [field]: value } : s,
-  )
-}
-
-const keywordInputRefs = ref<Record<number, HTMLInputElement | null>>({})
-
-const removeKeyword = (suggestionIndex: number, keywordIndex: number) => {
-  editableSuggestions.value = editableSuggestions.value.map((s, i) => {
-    if (i !== suggestionIndex) return s
-    return { ...s, keywords: (s.keywords || []).filter((_, ki) => ki !== keywordIndex) }
-  })
-}
-
-const addKeywordFromInput = (suggestionIndex: number, event: Event) => {
-  const input = keywordInputRefs.value[suggestionIndex]
-  if (!input) return
-  // 阻止逗号字符输入
-  event.preventDefault()
-  const value = input.value.trim().replace(/[,，、]$/, '').trim()
-  if (!value) return
-  editableSuggestions.value = editableSuggestions.value.map((s, i) => {
-    if (i !== suggestionIndex) return s
-    const existing = s.keywords || []
-    if (existing.includes(value)) return s
-    return { ...s, keywords: [...existing, value] }
-  })
-  input.value = ''
-}
-
-const toggleSuggestionPlatform = (index: number, platformCode: string) => {
-  editableSuggestions.value = editableSuggestions.value.map((s, i) => {
-    if (i !== index) return s
-    const current = s.platforms || []
-    const platforms = current.includes(platformCode)
-      ? current.filter(p => p !== platformCode)
-      : [...current, platformCode]
-    return { ...s, platforms }
-  })
-}
-
-const removeSuggestion = (index: number) => {
-  editableSuggestions.value = editableSuggestions.value.filter((_, i) => i !== index)
-}
+watch(latestSlicePlan, (plan) => {
+  if (plan.length && !editableSlicePlan.value.length) {
+    editableSlicePlan.value = plan.map(p => ({ ...p }))
+  }
+}, { immediate: true })
 
 // 新创建的策略自动生成监测方案
 watch(() => strategy.value, (s) => {
@@ -744,6 +799,7 @@ const handleConsult = async () => {
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
     // 重新初始化可编辑副本
     editableSuggestions.value = latestMonitorSuggestions.value.map(s => ({ ...s }))
+    editableSlicePlan.value = latestSlicePlan.value.map(p => ({ ...p }))
     editingPlan.value = false
   } catch {
     // 错误已由 useApi 处理
@@ -756,7 +812,12 @@ const handleConfirmPlan = async () => {
   if (!editableSuggestions.value.length) return
   confirmPlanLoading.value = true
   try {
-    await strategiesApi.confirmPlan(strategyId.value, editableSuggestions.value, notesPerTask.value)
+    await strategiesApi.confirmPlan(
+      strategyId.value,
+      editableSuggestions.value,
+      notesPerTask.value,
+      editableSlicePlan.value.length ? editableSlicePlan.value : undefined,
+    )
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
     editingPlan.value = false
   } catch {
@@ -766,7 +827,7 @@ const handleConfirmPlan = async () => {
   }
 }
 
-// ── Panel C: 切片 + 评估 ──────────────────────────────────────────────────────
+// ── Panel B: 切片 + 评估 ──────────────────────────────────────────────────────
 
 interface AddMonitorItem { id: number; name: string }
 interface AddSliceItem { id: number; name: string | null; monitor_id: number; created_at: string }
@@ -784,6 +845,15 @@ const { data: addMonitorsData, pending: addMonitorsPending } = useApiDataFn<{
 }>('/social-media/monitors?page_size=100', { key: 'strategy-detail-monitors' })
 
 const addMonitors = computed(() => addMonitorsData.value?.items || [])
+
+const handleRemoveSlice = async (sliceId: number) => {
+  try {
+    await strategiesApi.removeSlice(strategyId.value, sliceId)
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+  } catch {
+    // 错误已由 useApi 处理
+  }
+}
 
 const isSliceAlreadyLinked = (sliceId: number) => {
   return strategy.value?.slices.some(s => s.slice_id === sliceId) ?? false
@@ -855,7 +925,86 @@ const handleConfirmReady = async () => {
   }
 }
 
-// ── Panel D: Phase 生成 ───────────────────────────────────────────────────────
+// ── Panel B: 补充采集 ────────────────────────────────────────────────────────
+
+const editableSupplementary = ref<MonitorSuggestion[]>([])
+const editableSupplementarySlicePlan = ref<SlicePlanItem[]>([])
+const editingSupplementary = ref(false)
+const supplementaryNotesPerTask = ref(50)
+const confirmSupplementaryLoading = ref(false)
+
+const pendingSupplementaryTaskIds = computed(() =>
+  strategy.value?.evaluation_result?.pending_supplementary_task_ids || [],
+)
+
+const hasSupplementarySuggestions = computed(() => {
+  const sug = strategy.value?.evaluation_result?.supplementary_suggestions
+  return Array.isArray(sug) && sug.length > 0
+})
+
+// 已确认的补充方案（只读展示，从 evaluation_result 原始数据读取）
+const confirmedSupplementarySuggestions = computed<MonitorSuggestion[]>(() => {
+  const sug = strategy.value?.evaluation_result?.supplementary_suggestions
+  return Array.isArray(sug) ? sug : []
+})
+
+const confirmedSupplementarySlicePlan = computed<SlicePlanItem[]>(() => {
+  const plan = strategy.value?.evaluation_result?.supplementary_slice_plan
+  return Array.isArray(plan) ? plan : []
+})
+
+const showSupplementaryEditor = computed(() => {
+  if (!strategy.value?.evaluation_result) return false
+  if (!hasSupplementarySuggestions.value) return false
+  if (pendingSupplementaryTaskIds.value.length > 0) return false
+  return true
+})
+
+const showSupplementaryConfirmed = computed(() => {
+  return pendingSupplementaryTaskIds.value.length > 0
+})
+
+const monitorPageLink = computed(() => {
+  const monitorIds = strategy.value?.suggested_monitor_ids || []
+  if (monitorIds.length > 0) {
+    return `/social-media/monitors/${monitorIds[0]}`
+  }
+  return '/social-media/monitors'
+})
+
+// Initialize editable supplementary from evaluation result
+watch(() => strategy.value?.evaluation_result?.supplementary_suggestions, (suggestions) => {
+  if (suggestions?.length && !editableSupplementary.value.length) {
+    editableSupplementary.value = suggestions.map(s => ({ ...s }))
+  }
+}, { immediate: true })
+
+watch(() => strategy.value?.evaluation_result?.supplementary_slice_plan, (plan) => {
+  if (plan?.length && !editableSupplementarySlicePlan.value.length) {
+    editableSupplementarySlicePlan.value = plan.map(p => ({ ...p }))
+  }
+}, { immediate: true })
+
+const handleConfirmSupplementary = async () => {
+  if (!editableSupplementary.value.length) return
+  confirmSupplementaryLoading.value = true
+  try {
+    await strategiesApi.confirmSupplementary(
+      strategyId.value,
+      editableSupplementary.value,
+      supplementaryNotesPerTask.value,
+    )
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+    editableSupplementary.value = []
+    editableSupplementarySlicePlan.value = []
+  } catch {
+    // 错误已由 useApi 处理
+  } finally {
+    confirmSupplementaryLoading.value = false
+  }
+}
+
+// ── Panel C: Phase 生成 ───────────────────────────────────────────────────────
 
 const generatingPhase = ref<1 | 2 | 3 | null>(null)
 const savingPhase = ref<1 | 2 | 3 | null>(null)
@@ -885,11 +1034,6 @@ const handleSavePhase = async (phase: 1 | 2 | 3, result: Record<string, unknown>
 }
 
 // ── 工具函数 ────────────────────────────────────────────────────────────────────
-
-const PLATFORM_LABEL_MAP: Record<string, string> = Object.fromEntries(
-  PLATFORM_OPTIONS.map(p => [p.llmCode, p.label]),
-)
-const platformLabel = (code: string) => PLATFORM_LABEL_MAP[code] || code
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('zh-CN', {

@@ -142,24 +142,42 @@
             </div>
           </div>
           <!-- 编辑模式 -->
-          <div v-else class="space-y-3">
-            <UInput
-              v-model="editBrief.brand_name"
-              placeholder="品牌名称"
-              size="sm"
-            />
-            <UTextarea
-              v-model="editBrief.analysis_goal"
-              placeholder="分析目标"
-              :rows="2"
-              size="sm"
-            />
-            <UTextarea
-              v-model="editBrief.constraints"
-              placeholder="补充说明（可选）"
-              :rows="2"
-              size="sm"
-            />
+          <div v-else class="flex flex-col gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">品牌名称</label>
+              <UInput
+                v-model="editBrief.brand_name"
+                placeholder="输入品牌或产品名称"
+                size="sm"
+                class="w-full"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">分析目标</label>
+              <UTextarea
+                v-model="editBrief.analysis_goal"
+                placeholder="描述分析目标，例如：了解品牌在社交媒体上的口碑和竞争格局"
+                :rows="2"
+                size="sm"
+                class="w-full"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">补充说明（可选）</label>
+              <UTextarea
+                v-model="editBrief.constraints"
+                placeholder="例如：重点关注某些竞品、特定时间段、排除某些话题..."
+                :rows="2"
+                size="sm"
+                class="w-full"
+              />
+            </div>
+            <div
+              v-if="latestMonitorSuggestions.length"
+              class="text-xs text-amber-600 dark:text-amber-400"
+            >
+              保存后将自动重新生成监测方案
+            </div>
             <div class="flex items-center gap-2">
               <UButton
                 size="xs"
@@ -695,9 +713,9 @@ const currentStatusOrder = computed(() => {
 
 const currentStageIndex = computed(() => {
   const o = currentStatusOrder.value
-  if (o <= 2) return 0   // briefing, consulting, monitors_created → A
-  if (o === 3) return 1   // slices_ready → B
-  return 2                 // phase1_done, phase2_done, completed → C
+  if (o <= 1) return 0   // briefing, consulting → A
+  if (o <= 2) return 1   // monitors_created → B
+  return 2               // slices_ready, phase1_done, phase2_done, completed → C
 })
 
 const canGeneratePhase2 = computed(() => currentStatusOrder.value >= STATUS_ORDER.phase1_done)
@@ -756,6 +774,10 @@ const handleSaveBrief = async () => {
     })
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
     editingBrief.value = false
+    // Brief 变更后自动重新生成监测方案
+    if (latestMonitorSuggestions.value.length) {
+      await handleConsult()
+    }
   } catch {
     // 错误已由 useApi 处理
   } finally {

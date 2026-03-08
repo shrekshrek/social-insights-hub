@@ -218,12 +218,12 @@ def format_slice_data_for_phase1(
             if isinstance(g, dict)
         ]
 
+        subject = meta.get("subject") or None
         part: dict[str, Any] = {
             "slice_index": i,
-            "meta": {
-                "subject": meta.get("subject"),
-                "competitors": meta.get("competitors"),
-            },
+            "mode": "品牌聚焦" if subject else "大盘分析",
+            "subject": subject,
+            "competitors": meta.get("competitors"),
             "entities": entity_summaries,
             "topics": topic_summaries,
             "sov_ranking": sov_brief,

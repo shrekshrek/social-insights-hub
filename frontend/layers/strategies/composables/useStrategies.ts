@@ -5,8 +5,11 @@ import type {
   StrategyListResponse,
   ConsultResponse,
   ConfirmPlanResponse,
+  ConfirmSupplementaryResponse,
   EvaluationResult,
   MonitorSuggestion,
+  ParseBriefResponse,
+  SlicePlanItem,
 } from '../types'
 
 export const useStrategies = () => {
@@ -117,10 +120,19 @@ export const useStrategies = () => {
   }
 
   // 确认 AI 建议，一键创建监测
-  const confirmPlan = async (id: number, suggestions: MonitorSuggestion[], notesPerTask: number = 50) => {
+  const confirmPlan = async (
+    id: number,
+    suggestions: MonitorSuggestion[],
+    notesPerTask: number = 50,
+    slicePlan?: SlicePlanItem[],
+  ) => {
     const result = await apiRequest<ConfirmPlanResponse>(`/strategies/${id}/confirm-plan`, {
       method: 'POST',
-      body: { monitor_suggestions: suggestions, notes_per_task: notesPerTask },
+      body: {
+        monitor_suggestions: suggestions,
+        slice_plan: slicePlan || null,
+        notes_per_task: notesPerTask,
+      },
     })
     showSuccess(`已创建 ${result.created_monitor_ids.length} 个监测`)
     return result
@@ -136,12 +148,31 @@ export const useStrategies = () => {
     return result
   }
 
+  // 移除关联切片
+  const removeSlice = async (id: number, sliceId: number) => {
+    const result = await apiRequest<Strategy>(`/strategies/${id}/slices/${sliceId}`, {
+      method: 'DELETE',
+    })
+    showSuccess('已移除切片')
+    return result
+  }
+
   // AI 评估切片充分性
   const evaluate = async (id: number) => {
     const result = await apiRequest<EvaluationResult>(`/strategies/${id}/evaluate`, {
       method: 'POST',
     })
     showSuccess('评估完成')
+    return result
+  }
+
+  // 确认补充采集
+  const confirmSupplementary = async (id: number, suggestions: MonitorSuggestion[], notesPerTask: number = 50) => {
+    const result = await apiRequest<ConfirmSupplementaryResponse>(`/strategies/${id}/confirm-supplementary`, {
+      method: 'POST',
+      body: { monitor_suggestions: suggestions, notes_per_task: notesPerTask },
+    })
+    showSuccess(`已创建 ${result.task_count} 个补充采集任务`)
     return result
   }
 
@@ -152,6 +183,16 @@ export const useStrategies = () => {
     })
     showSuccess('数据已标记就绪')
     return result
+  }
+
+  // 上传 Brief 文档，AI 自动解析填充
+  const parseBrief = async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return await apiRequest<ParseBriefResponse>('/strategies/parse-brief', {
+      method: 'POST',
+      body: formData,
+    })
   }
 
   return {
@@ -167,7 +208,10 @@ export const useStrategies = () => {
     consult,
     confirmPlan,
     addSlices,
+    removeSlice,
     evaluate,
+    confirmSupplementary,
     confirmReady,
+    parseBrief,
   }
 }

@@ -40,9 +40,27 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
 - 竞品监测只放竞品品牌词，不要和自有品牌混在一起
 - 行业监测用品类通用词，不要混入具体品牌名
 
+## 切片分析模式
+
+数据采集后，用户会根据切片建议创建分析切片。切片有两种模式：
+
+1. **品牌聚焦切片**（指定 subject）：
+   - subject 是分析主体（品牌/产品名），如 "大魔王"、"元气森林"
+   - 会生成 SWOT 分析、竞品对比、产品健康度等 Focus 层
+   - 实体按角色分类：Target（本品）、Competitor（竞品）、Context（其他）
+   - 适用于：品牌诊断、竞品分析、产品口碑分析
+
+2. **大盘分析切片**（不指定 subject）：
+   - 没有特定分析主体，不生成 Focus 层
+   - 所有实体均为 Context 角色
+   - 适用于：行业趋势、市场大盘、场景研判、消费者需求洞察
+
+切片建议必须明确标注 subject（品牌聚焦）或留空（大盘分析），帮助用户正确创建切片。
+
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记：
 {{
+  "understanding_summary": "用一句话概括你对分析需求的理解（如：了解XX品牌在XX品类中的竞争格局和消费者认知）",
   "monitor_suggestions": [
     {{
       "name": "监测名称（简洁，如行业大盘-看球零食）",
@@ -55,6 +73,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
   "slice_plan": [
     {{
       "name": "切片名称（如品类热点分析）",
+      "subject": "分析主体品牌/产品名（品牌聚焦切片填写；大盘分析切片留空字符串）",
       "purpose": "分析目的（一句话）",
       "expected_sources": ["监测名称1"]
     }}
@@ -65,9 +84,10 @@ platforms 可选值: douyin / weibo / bilibili / xiaohongshu / kuaishou / zhihu 
 task_type 可选值: posts / comments / both
 
 ## 要求
+- understanding_summary: 必填，一句话概括你理解的核心分析需求
 - monitor_suggestions: 2-3 个
 - 每个监测: keywords 2-3 个, platforms 2-3 个
-- slice_plan: 1-2 个
+- slice_plan: 2-3 个，通常包含 1 个品牌聚焦切片 + 1 个大盘分析切片
 - 关键词要具体、可搜索，避免过于宽泛
 """
 
@@ -95,16 +115,8 @@ def format_consult_inputs(
         lines = ["## Brand Brief"]
         if brief.get("brand_name"):
             lines.append(f"品牌：{brief['brand_name']}")
-        if brief.get("industry"):
-            lines.append(f"行业：{brief['industry']}")
         if brief.get("analysis_goal"):
             lines.append(f"分析目标：{brief['analysis_goal']}")
-        if brief.get("competitors"):
-            lines.append(f"竞品：{', '.join(brief['competitors'])}")
-        if brief.get("focus_areas"):
-            lines.append(f"关注维度：{', '.join(brief['focus_areas'])}")
-        if brief.get("time_range"):
-            lines.append(f"时间范围：{brief['time_range']}")
         if brief.get("constraints"):
             lines.append(f"补充说明：{brief['constraints']}")
         brief_section = "\n".join(lines)
@@ -133,6 +145,7 @@ def parse_consult_response(response_text: str) -> dict[str, Any]:
         logger.error("Consult Chain JSON 解析失败: %s...", text[:200])
         raise ValueError(f"LLM 输出无法解析为 JSON: {e}") from e
 
+    result.setdefault("understanding_summary", "")
     result.setdefault("monitor_suggestions", [])
     result.setdefault("slice_plan", [])
 

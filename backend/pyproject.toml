@@ -34,6 +34,7 @@ dependencies = [
     "pandas>=2.0.0",
     "gevent>=24.2.1",
     "python-docx>=1.1.0",
+    "pdfplumber>=0.11.9",
 ]
 
 [project.optional-dependencies]

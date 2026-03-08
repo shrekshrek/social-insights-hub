@@ -1,10 +1,12 @@
 """策略定义业务逻辑"""
 
+import io
 import logging
 import time
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, func
+from src.utils import run_cpu_bound_task
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
@@ -13,6 +15,12 @@ from src.langchain.chains.strategy_consult_chain import (
     create_strategy_consult_chain,
     format_consult_inputs,
     parse_consult_response,
+)
+from src.langchain.chains.strategy_architect_chain import (
+    create_strategy_architect_chain,
+    format_architect_inputs,
+    parse_architect_response,
+    extract_slice_meta,
 )
 from src.langchain.chains.strategy_evaluate_chain import (
     create_strategy_evaluate_chain,
@@ -34,20 +42,28 @@ from src.langchain.chains.strategy_phase3_chain import (
     format_data_for_phase3,
     parse_phase3_response,
 )
+from src.langchain.chains.strategy_brief_parser_chain import (
+    create_strategy_brief_parser_chain,
+    parse_brief_parser_response,
+)
 from src.social_media.analysis.models import AnalysisSlice
-from src.social_media.monitors.crud import check_monitor_access
+from src.social_media.monitors.crud import check_monitor_access, get_monitors
 from src.social_media.monitors.models import Monitor
 
 from .models import Strategy, StrategySlice
 from .schemas import (
     ConfirmPlanResponse,
+    ConfirmSupplementaryResponse,
     ConsultResponse,
     EvaluationResultResponse,
+    ParseBriefResponse,
     StrategyCreate,
     StrategyUpdate,
     StrategyRead,
     StrategyListItem,
     SliceSummary,
+    StructureAnalysisResult,
+    SupplementaryStatusResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -177,6 +193,22 @@ async def load_slice_data(
     result = await db.execute(query)
     slices = result.scalars().all()
     return [s.result_data for s in slices if s.result_data]
+
+
+async def load_slice_data_with_names(
+    db: AsyncSession, strategy: Strategy
+) -> list[tuple[str | None, dict]]:
+    """读取策略关联的切片 (name, result_data)，用于评估链"""
+    slice_ids = [s.slice_id for s in strategy.slices]
+    if not slice_ids:
+        return []
+
+    query = select(AnalysisSlice).where(
+        AnalysisSlice.id.in_(slice_ids)
+    )
+    result = await db.execute(query)
+    slices = result.scalars().all()
+    return [(s.name, s.result_data) for s in slices if s.result_data]
 
 
 def build_strategy_read(strategy: Strategy) -> StrategyRead:
@@ -412,6 +444,7 @@ async def consult_strategy(
         ) from e
 
     response = ConsultResponse(
+        understanding_summary=parsed.get("understanding_summary", ""),
         monitor_suggestions=parsed["monitor_suggestions"],
         slice_plan=parsed["slice_plan"],
     )
@@ -455,6 +488,7 @@ async def confirm_plan(
     monitor_suggestions: list[dict],
     current_user_id: int,
     *,
+    slice_plan: list[dict] | None = None,
     notes_per_task: int = 50,
 ) -> ConfirmPlanResponse:
     """确认 AI 建议，创建一个监测项目 + 所有数据任务
@@ -543,6 +577,11 @@ async def confirm_plan(
                     logger.error("创建任务「%s-%s」失败: %s", keyword, platform_name, e)
                     partial_errors.append(f"创建任务「{keyword}-{platform_name}」失败: {e}")
 
+    # 保存编辑后的切片规划
+    if slice_plan is not None:
+        strategy.slice_plan = slice_plan
+        flag_modified(strategy, "slice_plan")
+
     # 记录监测 ID（覆盖式，每次确认只保留最新创建的监测）
     strategy.suggested_monitor_ids = [monitor.id]
     flag_modified(strategy, "suggested_monitor_ids")
@@ -587,46 +626,168 @@ async def batch_add_slices(
     return await get_strategy_by_id(db, strategy.id)
 
 
+async def remove_slice(
+    db: AsyncSession,
+    strategy: Strategy,
+    slice_id: int,
+) -> Strategy:
+    """移除策略关联的单个切片"""
+    link = await db.get(StrategySlice, {"strategy_id": strategy.id, "slice_id": slice_id})
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"切片 {slice_id} 未关联到该策略",
+        )
+    await db.delete(link)
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def _load_monitors_for_architect(
+    db: AsyncSession,
+    user_id: int,
+    associated_slice_ids: set[int],
+) -> list[dict]:
+    """加载用户所有可用监测项目及其切片摘要，供 Architect Chain 使用"""
+    monitors, _ = await get_monitors(db, participant_id=user_id, limit=200)
+    if not monitors:
+        return []
+
+    monitor_ids = [m.id for m in monitors]
+    slices_result = await db.execute(
+        select(AnalysisSlice).where(AnalysisSlice.monitor_id.in_(monitor_ids))
+    )
+    all_slices = slices_result.scalars().all()
+
+    slices_by_monitor: dict[int, list[AnalysisSlice]] = {}
+    for s in all_slices:
+        slices_by_monitor.setdefault(s.monitor_id, []).append(s)
+
+    monitors_data = []
+    for monitor in monitors:
+        monitor_slices = slices_by_monitor.get(monitor.id, [])
+        slice_summaries = []
+        for s in monitor_slices:
+            if not s.result_data:
+                continue
+            meta = extract_slice_meta(s.result_data)
+            slice_summaries.append({
+                "slice_id": s.id,
+                "name": s.name or f"切片 #{s.id}",
+                "is_associated": s.id in associated_slice_ids,
+                **meta,
+            })
+        monitors_data.append({
+            "monitor_id": monitor.id,
+            "monitor_name": monitor.name,
+            "slices": slice_summaries,
+        })
+
+    return monitors_data
+
+
 async def evaluate_strategy(
     db: AsyncSession,
     strategy: Strategy,
+    user_id: int,
 ) -> EvaluationResultResponse:
-    """AI 评估切片充分性
+    """AI 评估切片充分性，并顺序执行结构优化分析
 
+    Step 1: Evaluate Chain — 充分性评分 + 缺口识别
+    Step 2: Architect Chain — 结构优化（以 Evaluate 缺口为输入，视野扩展到所有 monitors）
     LLM 解析失败时抛出 HTTPException(500)，strategy.evaluation_result 不更新。
     """
-    slices_data = await load_slice_data(db, strategy)
+    slices_with_names = await load_slice_data_with_names(db, strategy)
 
-    chain = create_strategy_evaluate_chain()
-    inputs = format_evaluate_inputs(
+    # 从最新一轮咨询结果中取需求理解摘要
+    understanding_summary: str | None = None
+    rounds = strategy.consultation_rounds or []
+    if rounds:
+        latest = rounds[-1]
+        understanding_summary = (
+            (latest.get("ai_response") or {}).get("understanding_summary")
+        )
+
+    # ── Step 1: Evaluate Chain ──────────────────────────────────────────────
+    eval_chain = create_strategy_evaluate_chain()
+    eval_inputs = format_evaluate_inputs(
         brief=strategy.brand_brief,
         slice_plan=list(strategy.slice_plan or []),
-        slices_data=slices_data,
+        slices_data=[data for _, data in slices_with_names],
+        slice_names=[name for name, _ in slices_with_names],
+        understanding_summary=understanding_summary,
     )
 
     start = time.time()
-    llm_result = await chain.ainvoke(inputs)
-    duration = time.time() - start
+    eval_llm_result = await eval_chain.ainvoke(eval_inputs)
+    eval_duration = time.time() - start
 
     try:
-        parsed = parse_evaluate_response(llm_result.content)
+        eval_parsed = parse_evaluate_response(eval_llm_result.content)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI 评估解析失败: {e}",
         ) from e
 
-    result = EvaluationResultResponse(
-        overall_score=parsed["overall_score"],
-        is_sufficient=parsed["is_sufficient"],
-        coverage_analysis=parsed["coverage_analysis"],
-        slice_suggestions=parsed["slice_suggestions"],
-        gap_analysis=parsed["gap_analysis"],
-        supplementary_tasks=parsed.get("supplementary_tasks"),
-    )
     logger.info(
         "Strategy %d Evaluate 完成 (%.1fs, score=%.2f, sufficient=%s)",
-        strategy.id, duration, parsed["overall_score"], parsed["is_sufficient"],
+        strategy.id, eval_duration, eval_parsed["overall_score"], eval_parsed["is_sufficient"],
+    )
+
+    # ── Step 2: Architect Chain ─────────────────────────────────────────────
+    associated_slice_ids = {ss.slice_id for ss in strategy.slices}
+    monitors_data = await _load_monitors_for_architect(db, user_id, associated_slice_ids)
+
+    associated_slices_meta = [
+        {
+            "name": name or f"切片 #{i}",
+            **extract_slice_meta(data),
+        }
+        for i, (name, data) in enumerate(slices_with_names)
+        if data
+    ]
+
+    arch_chain = create_strategy_architect_chain()
+    arch_inputs = format_architect_inputs(
+        brief=strategy.brand_brief,
+        gap_analysis=eval_parsed.get("gap_analysis", []),
+        associated_slices=associated_slices_meta,
+        monitors_data=monitors_data,
+        understanding_summary=understanding_summary,
+    )
+
+    arch_start = time.time()
+    arch_llm_result = await arch_chain.ainvoke(arch_inputs)
+    arch_duration = time.time() - arch_start
+
+    try:
+        arch_parsed = parse_architect_response(arch_llm_result.content)
+    except ValueError as e:
+        logger.warning("Strategy %d Architect Chain 解析失败: %s，跳过结构分析", strategy.id, e)
+        arch_parsed = None
+
+    logger.info(
+        "Strategy %d Architect 完成 (%.1fs, issues=%d, opportunities=%d)",
+        strategy.id, arch_duration,
+        len(arch_parsed.get("current_slice_issues", [])) if arch_parsed else 0,
+        len(arch_parsed.get("unused_opportunities", [])) if arch_parsed else 0,
+    )
+
+    # ── 组合结果 ────────────────────────────────────────────────────────────
+    structure_analysis = (
+        StructureAnalysisResult(**arch_parsed) if arch_parsed else None
+    )
+
+    result = EvaluationResultResponse(
+        overall_score=eval_parsed["overall_score"],
+        is_sufficient=eval_parsed["is_sufficient"],
+        coverage_analysis=eval_parsed["coverage_analysis"],
+        slice_suggestions=eval_parsed["slice_suggestions"],
+        gap_analysis=eval_parsed["gap_analysis"],
+        supplementary_suggestions=eval_parsed.get("supplementary_suggestions"),
+        supplementary_slice_plan=eval_parsed.get("supplementary_slice_plan"),
+        structure_analysis=structure_analysis,
     )
 
     strategy.evaluation_result = result.model_dump()
@@ -647,6 +808,140 @@ async def confirm_ready(
     strategy.status = "slices_ready"
     await db.commit()
     return await get_strategy_by_id(db, strategy.id)
+
+
+# ==================== 补充采集 ====================
+
+
+async def confirm_supplementary(
+    db: AsyncSession,
+    strategy: Strategy,
+    monitor_suggestions: list[dict],
+    current_user_id: int,
+    *,
+    notes_per_task: int = 50,
+) -> ConfirmSupplementaryResponse:
+    """确认补充采集建议，在现有 Monitor 中创建新任务
+
+    复用 confirm_plan 的 keyword×platform 任务创建逻辑，
+    但不创建新 Monitor，而是挂到策略关联的现有 Monitor 上。
+    """
+    from src.social_media.monitors.crud import get_platform_by_code
+    from src.social_media.tasks.schemas import DataTaskCreate
+    from src.social_media.tasks.service import create_task
+
+    # 获取策略关联的 Monitor
+    monitor_ids = list(strategy.suggested_monitor_ids or [])
+    if not monitor_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="策略尚未创建监测，请先完成阶段 A",
+        )
+
+    monitor = await db.get(Monitor, monitor_ids[0])
+    if not monitor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"监测 {monitor_ids[0]} 不存在",
+        )
+
+    partial_errors: list[str] = []
+    created_task_ids: list[int] = []
+
+    task_params = {
+        "max_notes_count": notes_per_task,
+        "enable_comments": 1,
+        "per_note_max_comments_count": 20,
+    }
+
+    for suggestion in monitor_suggestions:
+        suggestion_name = suggestion.get("name", "").strip()
+        if not suggestion_name:
+            partial_errors.append("跳过一条空名称的建议")
+            continue
+
+        platforms = suggestion.get("platforms") or []
+        keywords = suggestion.get("keywords") or []
+        if not keywords:
+            keywords = [suggestion_name]
+
+        for keyword in keywords:
+            keyword = keyword.strip()
+            if not keyword:
+                continue
+            for platform_name in platforms:
+                code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
+                try:
+                    platform = await get_platform_by_code(db, code)
+                    if not platform:
+                        partial_errors.append(f"平台「{platform_name}」不存在，跳过")
+                        continue
+                    task = await create_task(
+                        db,
+                        DataTaskCreate(
+                            name=f"{keyword}-{platform.name}",
+                            monitor_id=monitor.id,
+                            platform_id=platform.id,
+                            task_type="search",
+                            keywords=keyword,
+                            data_source="remote_crawler",
+                            task_params=task_params,
+                            auto_analyze=True,
+                        ),
+                        current_user_id,
+                    )
+                    created_task_ids.append(task.id)
+                except Exception as e:
+                    logger.error("补充任务「%s-%s」创建失败: %s", keyword, platform_name, e)
+                    partial_errors.append(f"创建任务「{keyword}-{platform_name}」失败: {e}")
+
+    # 将补充任务 ID 存入 evaluation_result
+    eval_result = dict(strategy.evaluation_result or {})
+    existing_ids = eval_result.get("pending_supplementary_task_ids") or []
+    eval_result["pending_supplementary_task_ids"] = existing_ids + created_task_ids
+    strategy.evaluation_result = eval_result
+    flag_modified(strategy, "evaluation_result")
+
+    await db.commit()
+    updated = await get_strategy_by_id(db, strategy.id)
+    return ConfirmSupplementaryResponse(
+        created_task_ids=created_task_ids,
+        task_count=len(created_task_ids),
+        partial_errors=partial_errors,
+        strategy=build_strategy_read(updated),
+    )
+
+
+async def get_supplementary_status(
+    db: AsyncSession,
+    strategy: Strategy,
+) -> SupplementaryStatusResponse:
+    """查询补充采集任务的完成进度"""
+    from src.social_media.tasks.models import DataTask
+
+    eval_result = strategy.evaluation_result or {}
+    task_ids = eval_result.get("pending_supplementary_task_ids") or []
+
+    if not task_ids:
+        return SupplementaryStatusResponse(
+            total=0, completed=0, pending=0, all_done=True, completed_task_ids=[],
+        )
+
+    query = select(DataTask.id, DataTask.status).where(DataTask.id.in_(task_ids))
+    result = await db.execute(query)
+    rows = result.all()
+
+    completed_ids = [row[0] for row in rows if row[1] == "completed"]
+    total = len(task_ids)
+    completed = len(completed_ids)
+
+    return SupplementaryStatusResponse(
+        total=total,
+        completed=completed,
+        pending=total - completed,
+        all_done=completed >= total,
+        completed_task_ids=completed_ids,
+    )
 
 
 # ==================== 编辑 Phase ====================
@@ -676,3 +971,71 @@ async def edit_phase_result(
 
     await db.commit()
     return await get_strategy_by_id(db, strategy.id)
+
+
+# ==================== Brief 文档解析 ====================
+
+_MAX_BRIEF_TEXT_CHARS = 12000
+
+
+def _extract_text_from_bytes(content: bytes, filename: str) -> str:
+    """从文件字节提取纯文本"""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    if ext == "pdf":
+        import pdfplumber
+
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            pages = [page.extract_text() or "" for page in pdf.pages]
+        return "\n".join(pages)
+
+    if ext == "docx":
+        from docx import Document
+
+        doc = Document(io.BytesIO(content))
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+    # TXT / MD — UTF-8 with fallback to GBK
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content.decode("gbk", errors="replace")
+
+
+async def parse_brief_from_file(content: bytes, filename: str) -> ParseBriefResponse:
+    """从上传文档提取文本并用 LLM 解析为 BrandBrief 字段"""
+    try:
+        raw_text = await run_cpu_bound_task(_extract_text_from_bytes, content, filename)
+    except Exception as exc:
+        logger.error("Brief 文本提取失败 (%s): %s", filename, exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"无法从文档提取文本，请检查文件是否损坏: {exc}",
+        ) from exc
+
+    if not raw_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="文档内容为空，无法解析",
+        )
+
+    document_text = raw_text[:_MAX_BRIEF_TEXT_CHARS]
+
+    chain = create_strategy_brief_parser_chain()
+    try:
+        response = await chain.ainvoke({"document_text": document_text})
+        response_text = response.content if hasattr(response, "content") else str(response)
+        parsed = parse_brief_parser_response(response_text)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Brief 解析 LLM 调用失败: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI 解析失败，请稍后重试",
+        ) from exc
+
+    return ParseBriefResponse(**parsed)

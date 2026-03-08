@@ -2,7 +2,7 @@
 
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,14 +19,18 @@ from .schemas import (
     AddSlicesRequest,
     ConfirmPlanRequest,
     ConfirmPlanResponse,
+    ConfirmSupplementaryRequest,
+    ConfirmSupplementaryResponse,
     ConsultRequest,
     ConsultResponse,
     EvaluationResultResponse,
+    ParseBriefResponse,
     PhaseResultEdit,
     StrategyCreate,
     StrategyListItem,
     StrategyRead,
     StrategyUpdate,
+    SupplementaryStatusResponse,
 )
 
 router = APIRouter(prefix="/strategies", tags=["Strategies"])
@@ -157,6 +161,7 @@ async def confirm_plan(
     """确认 AI 监测建议，一键创建监测+任务，状态推进到 monitors_created"""
     return await service.confirm_plan(
         db, strategy, data.monitor_suggestions, current_user.id,
+        slice_plan=data.slice_plan,
         notes_per_task=data.notes_per_task,
     )
 
@@ -181,6 +186,22 @@ async def add_slices(
     return service.build_strategy_read(updated)
 
 
+@router.delete(
+    "/{strategy_id}/slices/{slice_id}",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="移除关联切片",
+)
+async def remove_slice(
+    slice_id: int,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """移除策略关联的单个切片"""
+    updated = await service.remove_slice(db, strategy, slice_id)
+    return service.build_strategy_read(updated)
+
+
 @router.post(
     "/{strategy_id}/evaluate",
     response_model=EvaluationResultResponse,
@@ -190,9 +211,43 @@ async def add_slices(
 async def evaluate_strategy(
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """AI 评估已关联切片是否满足 Brief 需求，输出充分性评分与缺口分析"""
-    return await service.evaluate_strategy(db, strategy)
+    """AI 评估已关联切片是否满足 Brief 需求，输出充分性评分与结构优化建议"""
+    return await service.evaluate_strategy(db, strategy, current_user.id)
+
+
+@router.post(
+    "/{strategy_id}/confirm-supplementary",
+    response_model=ConfirmSupplementaryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="确认补充采集",
+)
+async def confirm_supplementary(
+    data: ConfirmSupplementaryRequest,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """确认补充采集建议，在现有监测中创建新任务"""
+    return await service.confirm_supplementary(
+        db, strategy, data.monitor_suggestions, current_user.id,
+        notes_per_task=data.notes_per_task,
+    )
+
+
+@router.get(
+    "/{strategy_id}/supplementary-status",
+    response_model=SupplementaryStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="补充采集状态",
+)
+async def get_supplementary_status(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """查询补充采集任务完成进度"""
+    return await service.get_supplementary_status(db, strategy)
 
 
 @router.post(
@@ -337,3 +392,39 @@ async def export_strategy(
             ),
         },
     )
+
+
+# ==================== Brief 文档解析 ====================
+
+_ALLOWED_BRIEF_EXTENSIONS = {"pdf", "docx", "txt", "md"}
+_MAX_BRIEF_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@router.post(
+    "/parse-brief",
+    response_model=ParseBriefResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Strategies"],
+    summary="上传 Brief 文档，AI 自动解析填充表单字段",
+)
+async def parse_brief(
+    file: UploadFile = File(..., description="支持 PDF / DOCX / TXT / MD，最大 10 MB"),
+    current_user: User = Depends(get_current_user),
+):
+    """上传 Brief 文档，AI 提取 brand_name / analysis_goal / constraints 等字段"""
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in _ALLOWED_BRIEF_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"不支持的文件类型 .{ext}，请上传 PDF、DOCX、TXT 或 MD 文件",
+        )
+
+    content = await file.read()
+    if len(content) > _MAX_BRIEF_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="文件大小超过 10 MB 限制",
+        )
+
+    return await service.parse_brief_from_file(content, filename)

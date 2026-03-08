@@ -119,11 +119,17 @@ def format_data_for_phase3(
     # 提取高互动内容分析 + KOL 生态
     supplementary_parts = []
     for i, s in enumerate(slices):
+        meta = s.get("meta") or {}
         layers = s.get("layers") or {}
         landscape = layers.get("landscape") or {}
         foundation = s.get("foundation") or {}
 
-        part: dict[str, Any] = {"slice_index": i}
+        subject = meta.get("subject") or None
+        part: dict[str, Any] = {
+            "slice_index": i,
+            "mode": "品牌聚焦" if subject else "大盘分析",
+            "subject": subject,
+        }
 
         # KOL 声音（在 landscape 层，由切片 Stage 1 合并）
         kol_voices = landscape.get("kol_voices", [])

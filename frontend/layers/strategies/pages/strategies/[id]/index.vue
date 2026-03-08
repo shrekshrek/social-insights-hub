@@ -427,7 +427,7 @@
         </div>
 
         <!-- AI 评估 -->
-        <div class="flex items-center gap-3 mb-4">
+        <div class="mb-4">
           <UButton
             :loading="evaluateLoading"
             variant="outline"
@@ -482,6 +482,111 @@
           </div>
         </div>
 
+        <!-- 结构优化分析 -->
+        <div
+          v-if="strategy.evaluation_result?.structure_analysis"
+          class="mb-4 p-3 rounded-lg border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20"
+        >
+          <div class="flex items-center gap-2 mb-2">
+            <UIcon name="i-heroicons-squares-2x2" class="text-indigo-500 shrink-0" />
+            <span class="font-medium text-sm text-indigo-700 dark:text-indigo-300">切片结构分析</span>
+          </div>
+          <p class="text-xs text-indigo-700 dark:text-indigo-300 mb-3">
+            {{ strategy.evaluation_result.structure_analysis.summary }}
+          </p>
+
+          <!-- 已有切片问题 -->
+          <div
+            v-if="strategy.evaluation_result.structure_analysis.current_slice_issues?.length"
+            class="mb-3"
+          >
+            <h4 class="text-xs font-medium text-gray-500 mb-1.5">切片结构问题</h4>
+            <div class="space-y-1.5">
+              <div
+                v-for="(issue, i) in strategy.evaluation_result.structure_analysis.current_slice_issues"
+                :key="i"
+                class="text-xs text-gray-600 dark:text-gray-400"
+              >
+                <span class="font-medium">{{ issue.slice_name }}</span>：{{ issue.description }}
+                <span class="text-gray-500"> → {{ issue.suggestion }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 未利用的数据机会 -->
+          <div
+            v-if="strategy.evaluation_result.structure_analysis.unused_opportunities?.length"
+            class="mb-3"
+          >
+            <h4 class="text-xs font-medium text-gray-500 mb-1.5">可关联的现有数据</h4>
+            <div class="space-y-1.5">
+              <div
+                v-for="(opp, i) in strategy.evaluation_result.structure_analysis.unused_opportunities"
+                :key="i"
+                class="text-xs text-gray-600 dark:text-gray-400"
+              >
+                <span class="font-medium text-indigo-600 dark:text-indigo-400">
+                  {{ opp.monitor_name }} / {{ opp.slice_name }}
+                </span>
+                <span class="text-gray-400 mx-1">·</span>{{ opp.why_valuable }}
+                <span v-if="opp.gap_addressed" class="text-gray-400 ml-1">（填补：{{ opp.gap_addressed }}）</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 推荐最终结构 -->
+          <div v-if="strategy.evaluation_result.structure_analysis.recommended_structure?.length">
+            <h4 class="text-xs font-medium text-gray-500 mb-1.5">
+              推荐切片组合（{{ strategy.evaluation_result.structure_analysis.recommended_structure.length }} 个）
+            </h4>
+            <div class="space-y-1.5">
+              <div
+                v-for="(rec, i) in strategy.evaluation_result.structure_analysis.recommended_structure"
+                :key="i"
+                class="text-xs"
+              >
+                <div class="flex items-center gap-1.5">
+                  <UBadge
+                    :color="rec.action === 'keep' ? 'success' : rec.action === 'associate' ? 'info' : rec.action === 'adjust' ? 'warning' : 'neutral'"
+                    variant="soft"
+                    size="xs"
+                  >
+                    {{ { keep: '保留', associate: '关联', adjust: '调整', supplement: '待补充' }[rec.action] }}
+                  </UBadge>
+                  <span class="font-medium text-gray-700 dark:text-gray-300">{{ rec.name }}</span>
+                  <span class="text-gray-400">{{ rec.mode }}</span>
+                </div>
+                <p class="text-gray-500 mt-0.5 ml-0.5">{{ rec.purpose }}</p>
+                <p v-if="rec.action_detail" class="text-gray-400 mt-0.5 ml-0.5 italic">
+                  操作：{{ rec.action_detail }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部提示：仍需采集 / 或已有数据够用不必补采 -->
+          <div
+            class="mt-2 pt-2 border-t border-indigo-200 dark:border-indigo-700 text-xs"
+          >
+            <!-- 仍需采集 -->
+            <div
+              v-if="strategy.evaluation_result.structure_analysis.collection_still_needed && strategy.evaluation_result.structure_analysis.collection_note"
+              class="text-indigo-600 dark:text-indigo-400"
+            >
+              <UIcon name="i-heroicons-information-circle" class="inline mr-1" />
+              {{ strategy.evaluation_result.structure_analysis.collection_note }}
+            </div>
+            <!-- 已有数据可覆盖缺口，无需补采 -->
+            <div
+              v-else-if="!strategy.evaluation_result.structure_analysis.collection_still_needed && strategy.evaluation_result.supplementary_suggestions?.length"
+              class="text-green-600 dark:text-green-400"
+            >
+              <UIcon name="i-heroicons-check-circle" class="inline mr-1" />
+              已有数据可覆盖当前缺口，按上方推荐切片组合关联即可，无需补充采集。
+            </div>
+          </div>
+        </div>
+
         <!-- 补充采集: 状态 1 - 评估不足 + 有建议 + 未确认补充 -->
         <div v-if="showSupplementaryEditor">
           <div class="flex items-center justify-between mb-3">
@@ -525,15 +630,13 @@
             />
           </div>
 
-          <div class="flex items-center gap-3">
-            <UButton
-              :loading="confirmSupplementaryLoading"
-              icon="i-heroicons-check-circle"
-              @click="handleConfirmSupplementary"
-            >
-              确认补充采集
-            </UButton>
-          </div>
+          <UButton
+            :loading="confirmSupplementaryLoading"
+            icon="i-heroicons-check-circle"
+            @click="handleConfirmSupplementary"
+          >
+            确认补充采集
+          </UButton>
         </div>
 
         <!-- 补充采集: 已确认，显示只读方案 + 前往监测提示 -->
@@ -578,20 +681,22 @@
         </div>
 
         <!-- 确认就绪 -->
-        <UButton
-          :loading="confirmReadyLoading"
-          icon="i-heroicons-rocket-launch"
-          :disabled="strategy.status === 'completed'"
-          @click="handleConfirmReady"
-        >
-          确认数据就绪，进入策略生成
-        </UButton>
-        <span
-          v-if="['slices_ready', 'phase1_done', 'phase2_done', 'completed'].includes(strategy.status)"
-          class="ml-3 text-sm text-green-600 dark:text-green-400"
-        >
-          已就绪
-        </span>
+        <div class="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3">
+          <UButton
+            :loading="confirmReadyLoading"
+            icon="i-heroicons-rocket-launch"
+            :disabled="strategy.status === 'completed'"
+            @click="handleConfirmReady"
+          >
+            确认数据就绪，进入策略生成
+          </UButton>
+          <span
+            v-if="['slices_ready', 'phase1_done', 'phase2_done', 'completed'].includes(strategy.status)"
+            class="text-sm text-green-600 dark:text-green-400"
+          >
+            已就绪
+          </span>
+        </div>
       </UCard>
 
       <!-- ===== 阶段 C: 策略生成 ===== -->
@@ -925,6 +1030,8 @@ const handleAddSlices = async () => {
 
 const handleEvaluate = async () => {
   evaluateLoading.value = true
+  editableSupplementary.value = []
+  editableSupplementarySlicePlan.value = []
   try {
     await strategiesApi.evaluate(strategyId.value)
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
@@ -979,6 +1086,8 @@ const showSupplementaryEditor = computed(() => {
   if (!strategy.value?.evaluation_result) return false
   if (!hasSupplementarySuggestions.value) return false
   if (pendingSupplementaryTaskIds.value.length > 0) return false
+  // Architect 已找到现有数据可填补缺口，不需要补充采集
+  if (strategy.value.evaluation_result.structure_analysis?.collection_still_needed === false) return false
   return true
 })
 
@@ -995,16 +1104,13 @@ const monitorPageLink = computed(() => {
 })
 
 // Initialize editable supplementary from evaluation result
+// 无条件覆盖：每次评估结果变化（包括重新评估）都刷新编辑器
 watch(() => strategy.value?.evaluation_result?.supplementary_suggestions, (suggestions) => {
-  if (suggestions?.length && !editableSupplementary.value.length) {
-    editableSupplementary.value = suggestions.map(s => ({ ...s }))
-  }
+  editableSupplementary.value = suggestions?.length ? suggestions.map(s => ({ ...s })) : []
 }, { immediate: true })
 
 watch(() => strategy.value?.evaluation_result?.supplementary_slice_plan, (plan) => {
-  if (plan?.length && !editableSupplementarySlicePlan.value.length) {
-    editableSupplementarySlicePlan.value = plan.map(p => ({ ...p }))
-  }
+  editableSupplementarySlicePlan.value = plan?.length ? plan.map(p => ({ ...p })) : []
 }, { immediate: true })
 
 const handleConfirmSupplementary = async () => {

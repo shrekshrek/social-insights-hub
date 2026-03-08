@@ -93,27 +93,34 @@ SYSTEM_TEMPLATE = """你是一位社交媒体研究数据质量评审专家，�
   - 0.75-0.85：基本充分，有小缺口，建议微调
   - 0.5-0.75：明显不足，需要补充采集
   - < 0.5：严重不足，建议回「监测规划」重新调整方案
-- is_sufficient: overall_score >= 0.75 时为 true
 - coverage_analysis: 5 个维度逐一评分（sufficient/partial/insufficient）
 - slice_suggestions: 仅针对**已有切片的元信息**优化（重命名、调整分析目的等）
   - 理解每个切片的 mode（品牌聚焦 vs 大盘分析），在正确定位下给出改进建议
   - 不要建议大盘切片"明确主体"（那就不是大盘分析了），也不要建议品牌切片"扩大视野"
   - **禁止**在此字段放采集建议（如"补充关键词"、"增加平台"），采集相关建议必须放到 supplementary_suggestions
+  - **禁止**在此字段指出结构性问题（冗余/重叠/错位），结构优化由专项分析处理
 - gap_analysis: 从切片组合整体角度指出数据缺口（最多 3 条）
-- supplementary_suggestions: 当存在数据缺口时给出补充采集建议，**无论 score 高低**
+- supplementary_suggestions: 当存在数据缺口时给出补充采集建议
   - **本轮只补最关键的缺口**，用户可多轮评估-补充循环，不必一次补齐所有缺失
   - 最多 2 条建议，每条 1-2 个平台、1-2 个关键词，总任务量（建议数 × 平台数）不超过 4
   - 只补缺失维度，不重复已有数据
-  - 若 overall_score < 0.4（严重不足），不要给大量补充建议，而是在 gap_analysis 中建议用户回「监测规划」阶段重新调整初始采集���案
+  - 若 overall_score < 0.5（严重不足），在 gap_analysis 中建议用户回「监测规划」阶段重新调整初始采集方案（supplementary_suggestions 由系统自动置空，无需输出）
   - 若所有维度均充分覆盖，可为 null
-- supplementary_slice_plan: 与 supplementary_suggestions 配套的切片规划建议
-  - 指导用户在补充数据采集完成后，如何将新数据与已有数据组织成分析切片
+  - **关键词选取原则**：
+    - 补充的是**品牌相关缺口**（品牌声量不足、品牌-场景关联缺失、品牌竞品对比不足）时，关键词必须包含 Brief 中的 `brand_name` 或品牌聚焦切片的 `subject`，**禁止仅使用品类词**（品类词无品牌锚点，采集结果会混入大量竞品和无关内容，无法支撑品牌分析）
+    - 补充的是**市场大盘缺口**（行业趋势、消费场景、用户需求洞察）时，才适合使用品类词或纯场景词
+    - 正例：品牌-场景关联不足 → 关键词用「品牌名 + 场景词」（如"大魔王 世界杯"、"大魔王 看球"）
+    - 反例：同样缺口下用「品类词 + 场景词」（如"素毛肚 世界杯"）— 这无法保证采集到品牌相关数据
+- supplementary_slice_plan: 补充采集完成后如何建切片的简要指引
+  - **仅针对 supplementary_suggestions 中的新采集数据**，说明采集完成后应建什么切片
   - 每条需指定 subject（品牌聚焦）或留空（大盘分析），并说明分析目的
-  - 每条包含切片名称、分析目的、预期数据来源（引用 supplementary_suggestions 的 name 或现有切片名）
+  - **不要**对已有切片的重组/合并/调整提建议——那是结构优化分析的职责
   - 若 supplementary_suggestions 为 null，此字段也为 null
 """
 
 USER_TEMPLATE = """{brief_section}
+
+{understanding_section}
 
 {slice_plan_section}
 
@@ -139,20 +146,24 @@ def _format_brief_section(brief: dict | None) -> str:
         lines.append(f"品牌：{brief['brand_name']}")
     if brief.get("analysis_goal"):
         lines.append(f"分析目标：{brief['analysis_goal']}")
-    if brief.get("competitors"):
-        lines.append(f"竞品：{', '.join(brief['competitors'])}")
-    if brief.get("focus_areas"):
-        lines.append(f"关注维度：{', '.join(brief['focus_areas'])}")
-    if brief.get("time_range"):
-        lines.append(f"时间范围：{brief['time_range']}")
     return "\n".join(lines)
+
+
+def _format_understanding_section(understanding_summary: str | None) -> str:
+    """格式化需求理解摘要段落"""
+    if not understanding_summary:
+        return ""
+    return f"## 需求理解摘要（Consult Chain 输出）\n{understanding_summary}"
 
 
 def _format_slice_plan_section(slice_plan: list[dict]) -> str:
     """格式化切片规划段落"""
     if not slice_plan:
-        return "## 预期切片规划\n用户未填写切片规划。"
-    lines = ["## 预期切片规划"]
+        return "## 初始切片规划（仅供参考）\n用户未填写切片规划。"
+    lines = [
+        "## 初始切片规划（仅供参考）",
+        "注意：此为监测规划阶段的初始设计，用户实际创建的切片可能有所调整，以「已关联切片数据」为准，不因偏离此规划而扣分。",
+    ]
     for item in slice_plan:
         name = item.get("name", "")
         purpose = item.get("purpose", "")
@@ -255,6 +266,7 @@ def format_evaluate_inputs(
     slice_plan: list[dict],
     slices_data: list[dict],
     slice_names: list[str | None] | None = None,
+    understanding_summary: str | None = None,
 ) -> dict[str, Any]:
     """格式化评估链输入
 
@@ -263,6 +275,7 @@ def format_evaluate_inputs(
     不传 heat/sentiment 等分析细节（那是策略生成链的事）。
     """
     brief_section = _format_brief_section(brief)
+    understanding_section = _format_understanding_section(understanding_summary)
     slice_plan_section = _format_slice_plan_section(slice_plan)
 
     names = slice_names or [None] * len(slices_data)
@@ -281,6 +294,7 @@ def format_evaluate_inputs(
 
     return {
         "brief_section": brief_section,
+        "understanding_section": understanding_section,
         "slice_plan_section": slice_plan_section,
         "slice_data_section": slice_data_section,
     }
@@ -302,11 +316,17 @@ def parse_evaluate_response(response_text: str) -> dict[str, Any]:
 
     # 确保必要字段存在
     result.setdefault("overall_score", 0.0)
-    result.setdefault("is_sufficient", False)
     result.setdefault("coverage_analysis", [])
     result.setdefault("slice_suggestions", [])
     result.setdefault("gap_analysis", [])
     result.setdefault("supplementary_suggestions", None)
     result.setdefault("supplementary_slice_plan", None)
+
+    # 确定性规则：由代码保证，不依赖 LLM 输出
+    score: float = result["overall_score"]
+    result["is_sufficient"] = score >= 0.75
+    if score < 0.5:
+        result["supplementary_suggestions"] = None
+        result["supplementary_slice_plan"] = None
 
     return result

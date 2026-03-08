@@ -48,11 +48,13 @@ export interface MonitorSuggestion {
 
 export interface SlicePlanItem {
   name: string
+  subject?: string
   purpose: string
   expected_sources?: string[]
 }
 
 export interface ConsultResponse {
+  understanding_summary: string
   monitor_suggestions: MonitorSuggestion[]
   slice_plan: SlicePlanItem[]
 }
@@ -80,13 +82,65 @@ export interface GapAnalysis {
   priority: string
 }
 
+export interface SupplementarySuggestion {
+  name: string
+  platforms: string[]
+  keywords: string[]
+  rationale: string
+}
+
+export interface StructureSliceIssue {
+  slice_name: string
+  issue_type: 'redundant' | 'misaligned' | 'overlapping' | 'too_granular'
+  description: string
+  suggestion: string
+}
+
+export interface UnusedOpportunity {
+  monitor_name: string
+  slice_name: string
+  gap_addressed: string
+  why_valuable: string
+  recommended_mode: string
+  recommended_subject: string
+}
+
+export interface RecommendedSlice {
+  name: string
+  mode: string
+  subject: string
+  purpose: string
+  action: 'keep' | 'associate' | 'adjust' | 'supplement'
+  source: string
+  action_detail: string | null
+}
+
+export interface StructureAnalysis {
+  summary: string
+  current_slice_issues: StructureSliceIssue[]
+  unused_opportunities: UnusedOpportunity[]
+  recommended_structure: RecommendedSlice[]
+  collection_still_needed: boolean
+  collection_note: string | null
+}
+
 export interface EvaluationResult {
   overall_score: number
   is_sufficient: boolean
   coverage_analysis: CoverageAnalysis[]
   slice_suggestions: Array<{ slice_name: string; issue: string; suggestion: string }>
   gap_analysis: GapAnalysis[]
-  supplementary_tasks?: Array<{ platform: string; keywords: string[]; reason: string }> | null
+  supplementary_suggestions?: SupplementarySuggestion[] | null
+  supplementary_slice_plan?: SlicePlanItem[] | null
+  pending_supplementary_task_ids?: number[] | null
+  structure_analysis?: StructureAnalysis | null
+}
+
+export interface ConfirmSupplementaryResponse {
+  created_task_ids: number[]
+  task_count: number
+  partial_errors: string[]
+  strategy: Strategy
 }
 
 // ==================== 策略 ====================
@@ -200,4 +254,13 @@ export interface ContentStrategy {
 export interface Phase3Result {
   big_idea: BigIdea
   content_strategy: ContentStrategy
+}
+
+// ==================== Brief 文档解析 ====================
+
+export interface ParseBriefResponse {
+  strategy_name: string
+  brand_name: string
+  analysis_goal: string
+  constraints: string
 }

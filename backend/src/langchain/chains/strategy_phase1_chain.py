@@ -28,12 +28,23 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - Brand Opportunity 应结合竞品格局（SOV、四象限）找到空白区
 - 每条结论必须附带数据论据（evidence），标明来源
 
+## 洞察质量标准（重要）
+
+**核心要求：输出不能是"认真浏览一遍内容就能得出"的结论。**
+
+优先挖掘以下类型的洞察：
+1. **反常信号**：热度高但情感负向（争议核心）、热度低但情感极正向（潜在机会）、跨切片同一实体情感截然相反（场景依赖）
+2. **跨切片交叉洞察**：只有对比 ≥2 个切片才能发现的模式，至少 1 条 Tension 必须满足此要求，并在 evidence 中说明单看任一切片无法得出该结论
+3. **常识颠覆**：每条结论须明确说明它如何修正行业通常认知，不接受"用户关注健康"此类任何人都能猜到的结论
+
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记：
 {{
   "social_tensions": [
     {{
       "statement": "一句话描述该矛盾",
+      "conventional_wisdom": "行业从业者通常会认为什么（一句话）",
+      "data_reality": "但数据揭示了什么不同的事实，以及为何反直觉（一句话）",
       "evidence": [
         {{"type": "topic_sentiment", "description": "具体数据发现", "source": "slice数据"}},
         {{"type": "opinion_cluster", "description": "具体数据发现", "source": "slice数据"}}
@@ -44,6 +55,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
   "brand_opportunities": [
     {{
       "statement": "一句话描述品牌机会",
+      "why_non_obvious": "为什么这个机会不是显而易见的，以及竞品为何尚未占据此位置",
       "evidence": [
         {{"type": "sov_gap", "description": "具体数据发现", "source": "slice数据"}}
       ],
@@ -53,11 +65,20 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 }}
 
 ## 要求
-- social_tensions: 1-3 条，按重要性排序
+- social_tensions: 1-3 条，按重要性排序；至少 1 条须引用 ≥2 个切片的交叉数据
 - brand_opportunities: 1-2 条，每条引用相关 tension 的索引
 - evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, time_trend, unmet_need, audience_insight
 - confidence: high(数据充分)/medium(有支撑但需验证)/low(推测性)
 - 如切片数据中包含 audiences（受众画像），需标注哪类人群最受此 Tension 影响，以及哪类人群是品牌机会的主要触达对象
+
+## 切片采样偏置（重要）
+
+每个切片的数据范围由其采集关键词决定，分析时须考虑采样偏置：
+
+- **品牌聚焦切片**（有 subject）：关键词通常含品牌名，该品牌的实体热度必然偏高，**不能直接用于判断市场竞争格局或品牌真实声量占比**
+- **大盘分析切片**（无 subject）：关键词为品类词/场景词，SOV 排名更接近真实市场声量分布，**竞品格局分析以大盘切片的 SOV 为准**
+- 同一品牌在品牌聚焦切片里热度高，在大盘切片里 SOV 不高，属正常现象，不构成矛盾
+- Brand Opportunity 中的竞品空白区判断，优先引用大盘切片的 sov_gap 或 quadrant_position，而非品牌聚焦切片的实体热度排名
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -79,6 +100,83 @@ def create_strategy_phase1_chain() -> Runnable:
         ("user", USER_TEMPLATE),
     ])
     return prompt | llm
+
+
+def _compute_cross_slice_anomalies(slice_parts: list[dict]) -> list[dict]:
+    """跨切片异常信号预计算（纯代码，无 LLM 成本）
+
+    检测两类异常：
+    1. 实体情感落差：同一实体在不同切片中情感差异显著（|delta| >= 0.5）
+    2. 话题覆盖空白：大盘切片中的高热话题在品牌聚焦切片中完全未出现
+    """
+    anomalies: list[dict] = []
+
+    # 按切片分类
+    brand_slices = [s for s in slice_parts if s.get("mode") == "品牌聚焦"]
+    market_slices = [s for s in slice_parts if s.get("mode") == "大盘分析"]
+
+    if len(slice_parts) < 2:
+        return anomalies
+
+    # 1. 实体情感落差：收集所有切片的实体情感，找落差 >= 0.5 的
+    entity_sentiment_map: dict[str, list[dict]] = {}
+    for s in slice_parts:
+        for e in s.get("entities") or []:
+            name = e.get("name")
+            sentiment = e.get("sentiment")
+            if name and sentiment is not None:
+                entity_sentiment_map.setdefault(name, []).append({
+                    "slice_index": s["slice_index"],
+                    "mode": s["mode"],
+                    "sentiment": sentiment,
+                })
+
+    for name, records in entity_sentiment_map.items():
+        if len(records) < 2:
+            continue
+        sentiments = [r["sentiment"] for r in records]
+        delta = max(sentiments) - min(sentiments)
+        if delta >= 0.5:
+            anomalies.append({
+                "type": "entity_sentiment_divergence",
+                "entity": name,
+                "delta": round(delta, 2),
+                "detail": records,
+                "insight_hint": (
+                    f"「{name}」在不同切片中情感落差达 {delta:.2f}，"
+                    "可能反映场景/人群差异，值得深入分析"
+                ),
+            })
+
+    # 2. 话题覆盖空白：大盘切片高热话题（heat 前5）在品牌聚焦切片中未出现
+    if brand_slices and market_slices:
+        brand_topic_names: set[str] = set()
+        for s in brand_slices:
+            for t in s.get("topics") or []:
+                if t.get("name"):
+                    brand_topic_names.add(t["name"])
+
+        for ms in market_slices:
+            market_topics = sorted(
+                [t for t in (ms.get("topics") or []) if t.get("heat")],
+                key=lambda t: t["heat"],
+                reverse=True,
+            )[:5]
+            for t in market_topics:
+                name = t.get("name")
+                if name and name not in brand_topic_names:
+                    anomalies.append({
+                        "type": "topic_coverage_gap",
+                        "topic": name,
+                        "market_heat": t.get("heat"),
+                        "market_slice_index": ms["slice_index"],
+                        "insight_hint": (
+                            f"话题「{name}」在大盘切片（热度 {t.get('heat')}）中显著，"
+                            "但品牌聚焦切片中完全未出现，可能是品牌未覆盖的沟通空白"
+                        ),
+                    })
+
+    return anomalies[:8]  # 最多返回 8 条，控制 token
 
 
 def format_slice_data_for_phase1(
@@ -259,11 +357,20 @@ def format_slice_data_for_phase1(
             part["audiences"] = audiences_brief
         slice_parts.append(part)
 
+    cross_slice_anomalies = _compute_cross_slice_anomalies(slice_parts)
+
+    slice_data = json.dumps(slice_parts, ensure_ascii=False, indent=2)
+    if cross_slice_anomalies:
+        slice_data += (
+            "\n\n## 跨切片异常信号（代码预计算，供交叉洞察参考）\n"
+            + json.dumps(cross_slice_anomalies, ensure_ascii=False, indent=2)
+        )
+
     return {
         "brief_section": brief_section,
         "consult_summary": consult_summary,
         "evaluation_summary": evaluation_summary,
-        "slice_data": json.dumps(slice_parts, ensure_ascii=False, indent=2),
+        "slice_data": slice_data,
     }
 
 

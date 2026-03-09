@@ -56,6 +56,17 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - social_strategy.rhythm 包含具体的传播节奏建议（如"日常种草+事件引爆"）
 - evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, brief_alignment, audience_insight
 - 如切片数据中包含 audiences（受众画像），需在 brand_social_role 和 social_strategy 中明确品牌面向的主要目标受众，而非泛泛而谈
+
+## 反陈词约束（重要）
+
+品类中品牌惯用的"默认角色"（如"陪伴者"、"健康倡导者"、"生活方式品牌"）大同小异，毫无差异化价值。
+
+输出 brand_social_role 之前，先问自己：**"这个品类里其他品牌会不会说同样��话？"** 若答案是"会"，则角色定义不够。
+
+推荐角色必须满足：
+- 以 Phase 1 中最具反直觉性的 Tension 作为切入点，而非最显眼的那条
+- 说明竞品为何无法或不愿占据此角色（结构性原因，不是品牌自夸）
+- elaboration 中明确"我们不是 X（品类惯常角色），我们是 Y（数据揭示的差异化角色）"
 """
 
 USER_TEMPLATE = """{brief_section}

@@ -62,6 +62,14 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - reference_examples 基于切片数据中的高互动内容特征推导
 - evidence 至少 2 条，类型可选: tension_ref, role_alignment, strategy_ref, content_insight, kol_ecosystem, audience_insight
 - 如切片数据中包含 audiences（受众画像），content_strategy 的各支柱需明确面向哪类受众，reference_examples 也要考虑受众匹配度
+
+## 反常规要求（重要）
+
+**Big Idea** 需通过自我检验：先想象这个品类"最平庸的创意概念"是什么，再确认输出与之有本质���异。Big Idea 应该让看到它的人有轻微的"没想到"感，而不是"嗯，对"感。
+
+**Content Strategy** 中的支柱须包含至少 1 个"品类颠覆型支柱"——内容方向挑战该品类的惯常做法，而非在品类既有框架内执行。具体要求：
+- 在该支柱的 description 中注明"品类通常如何做 X，我们反其道而行的逻辑是什么"
+- reference_examples 可以借鉴**其他品类**的内容形式，不限于本品类 KOL
 """
 
 USER_TEMPLATE = """{brief_section}

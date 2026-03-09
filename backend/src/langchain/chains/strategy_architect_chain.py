@@ -1,7 +1,8 @@
 """Strategy Architect Chain — 切片结构优化
 
-在充分性评估（Evaluate Chain）之后运行，基于全部可用监测项目分析切片组合是否
-合理，识别未利用的数据资源，输出推荐的最优切片结构方案。
+在充分性评估（Evaluate Chain）之前运行，基于 Brief 目标与全部可用监测项目，
+独立判断切片组合结构是否合理，识别未利用的已有数据资源，输出推荐切片结构与
+是否仍需补充采集的判断，供 Evaluate Chain 评分时参考。
 """
 
 from __future__ import annotations
@@ -17,14 +18,15 @@ from src.langchain.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """你是一位社交媒体研究数据架构专家，负责优化分析切片的组合结构，确保进入策略生成前数据组织最合理。
+SYSTEM_TEMPLATE = """你是一位社交媒体研究数据架构专家，负责在充分性评估前完成切片结构分析，确保后续评分基于最优数据组织。
 
 ## 你的职责
 
-Evaluate Chain 已完成充分性评估（数据够不够），你专注于**结构质量**（数据组织得好不好）：
-- 诊断已关联切片中的冗余、重叠、错位问题
-- 发现用户已有但尚未关联的监测切片资源
-- 给出最优的切片组合方案，指导用户在确认就绪前完成结构调整
+你先于 Evaluate Chain 运行，从**结构与资源**两个视角独立判断：
+- 诊断已关联切片中的冗余、重叠、错位问题（结构诊断）
+- 对照 Brief 分析目标，发现用户已有但尚未关联的监测切片资源（资源发现）
+- 判断通过关联已有切片是否能覆盖 Brief 所有目标，或仍需补充采集新数据
+- 给出最优的切片组合方案，Evaluate Chain 将基于此方案评估充分性
 
 ## 切片分析模式（与 Evaluate Chain 一致）
 
@@ -40,7 +42,7 @@ Evaluate Chain 已完成充分性评估（数据够不够），你专注于**结
 - **过细**：存在多个仅有细微差异的切片，可合并为一个更聚焦的切片
 
 **未利用资源识别**（针对未关联切片）：
-- 用户已有但尚未关联的切片，其内容能填补 Evaluate 识别的缺口
+- 对照 Brief 分析目标，找出用户已有但尚未关联的切片，其内容能填补 Brief 目标缺口
 - 优先推荐「关联已有切片」而非「补充采集新数据」，降低用户成本
 
 ## 输出格式
@@ -60,7 +62,7 @@ Evaluate Chain 已完成充分性评估（数据够不够），你专注于**结
     {{
       "monitor_name": "监测项目名称",
       "slice_name": "切片名称",
-      "gap_addressed": "能填补 Evaluate 指出的哪个缺口",
+      "gap_addressed": "能填补 Brief 哪个分析目标的缺口",
       "why_valuable": "为什么对这次策略分析有价值",
       "recommended_mode": "品牌聚焦 | 大盘分析",
       "recommended_subject": "若品牌聚焦，建议的分析主体；大盘分析留空字符串"
@@ -78,7 +80,7 @@ Evaluate Chain 已完成充分性评估（数据够不够），你专注于**结
     }}
   ],
   "collection_still_needed": false,
-  "collection_note": "若 true，说明结构优化后仍有哪些数据缺口无法通过已有资源覆盖，需配合 Evaluate 的补充采集建议；若 false 可为 null"
+  "collection_note": "若 true，说明即使关联所有推荐切片后，仍有哪些 Brief 目标无法被已有数据覆盖，需要补充采集；若 false 可为 null"
 }}
 
 ## 评分与行动指南
@@ -87,23 +89,31 @@ Evaluate Chain 已完成充分性评估（数据够不够），你专注于**结
   - `keep`：当前已关联，保持不变
   - `associate`：存在于用户已有切片中，直接在策略页面关联即可
   - `adjust`：当前已关联但需调整 scope/subject，用户去分析层修改切片定义
-  - `supplement`：需要补充采集新数据后创建，配合 Evaluate 的补充建议
+  - `supplement`：需要补充采集新数据后创建，Evaluate Chain 将据此生成具体的采集建议
 
 - `collection_still_needed`：
-  - 若所有缺口都能通过关联已有切片解决 → false（Evaluate 的补充采集建议可暂缓）
-  - 若仍有缺口在已有资源中找不到 → true（仍需执行 Evaluate 的补充建议）
+  - 若所有 Brief 目标都能通过关联已有切片覆盖 → false（Evaluate 无需输出补充采集建议）
+  - 若仍有 Brief 目标在已有资源中找不到对应数据 → true（Evaluate 需输出补充采集建议）
 
 - `current_slice_issues` 最多 3 条，聚焦最影响策略质量的问题
 - `unused_opportunities` 最多 3 条，按填补缺口的价值排序
 - `recommended_structure` 是最终推荐的完整切片组合（2-5 个，以覆盖 Brief 所有分析目标为准，不要凑数），每条有明确行动路径
 - 若当前切片结构已经合理，`current_slice_issues` 为空数组，`summary` 说明结构良好
+
+## 数据能力边界（重要）
+
+社媒帖子文本分析的能力边界——评估缺口时必须在此范围内判断：
+
+**能提供**：消费者行为特征（购买动机、使用场景、痛点）、话题讨论内容、情感倾向、品牌认知、竞品对比、KOL传播模式
+
+**无法提供**：年龄/性别/地域等人口统计学画像、兴趣标签（这些是用户账号 profile 数据，不在帖子内容里）
+
+**不要将人口统计学画像缺失列为可通过补充采集解决的问题**，帖子文本无论采集多少都不包含此类结构化用户属性。
 """
 
 USER_TEMPLATE = """{brief_section}
 
 {understanding_section}
-
-{evaluate_gaps_section}
 
 {associated_slices_section}
 
@@ -131,40 +141,92 @@ def _format_brief_section(brief: dict | None) -> str:
     return "\n".join(lines)
 
 
-def _format_evaluate_gaps_section(gap_analysis: list[dict]) -> str:
-    """格式化 Evaluate Chain 输出的缺口分析"""
-    if not gap_analysis:
-        return "## 充分性评估缺口\n本次评估未识别到明显缺口。"
-    lines = ["## 充分性评估缺口（Evaluate Chain 输出）"]
-    for gap in gap_analysis:
-        priority = gap.get("priority", "")
-        desc = gap.get("description", "")
-        gap_type = gap.get("gap_type", "")
-        line = f"- [{priority.upper()}] {desc}"
-        if gap_type:
-            line += f"（类型：{gap_type}）"
-        lines.append(line)
-    return "\n".join(lines)
-
 
 def extract_slice_meta(result_data: dict | None) -> dict[str, Any]:
-    """从切片 result_data 提取架构分析所需的轻量元信息"""
+    """从切片 result_data 提取架构分析所需的元信息
+
+    包含：配置信息（subject/competitors/keywords/platforms/date_range）+
+    实际数据摘要（entities name+role、topics name+category、帖子量），
+    够 LLM 判断切片间冗余/错位/覆盖缺口。
+    """
     if not result_data:
         return {}
     meta = result_data.get("meta") or {}
     foundation = result_data.get("foundation") or {}
     overview = foundation.get("overview") or {}
+    scope = meta.get("scope") or {}
+
     subject = meta.get("subject") or None
-    keywords = (meta.get("scope") or {}).get("keywords") or []
+    competitors = meta.get("competitors") or []
+    keywords = scope.get("keywords") or []
+    date_from = scope.get("date_from")
+    date_to = scope.get("date_to")
     total_posts = overview.get("total_posts") or overview.get("total_volume")
     platforms = list((overview.get("unique_platform_volume") or {}).keys())
-    return {
+
+    # 实体名单：name + role（判断竞品/主品覆盖）
+    raw_entities = foundation.get("aligned_entities") or []
+    entities = [
+        {"name": e.get("name"), "role": e.get("role")}
+        for e in raw_entities[:8]
+        if e.get("name")
+    ]
+
+    # 话题名单：name + category（判断话题维度覆盖）
+    raw_topics = foundation.get("aligned_topics") or []
+    topics = [
+        {"name": t.get("name"), "category": t.get("category")}
+        for t in raw_topics[:8]
+        if t.get("name")
+    ]
+
+    result: dict[str, Any] = {
         "mode": "品牌聚焦" if subject else "大盘分析",
         "subject": subject,
         "keywords": keywords[:5],
         "total_posts": total_posts,
         "platforms": platforms,
     }
+    if competitors:
+        result["competitors"] = competitors
+    if date_from or date_to:
+        result["date_range"] = f"{date_from or '?'} ~ {date_to or '?'}"
+    if entities:
+        result["entities"] = entities
+    if topics:
+        result["topics"] = topics
+    return result
+
+
+def _format_slice_entry(s: dict[str, Any], prefix: str = "-") -> list[str]:
+    """将单个切片元信息格式化为多行文本（供两个 section 复用）"""
+    lines = [f"{prefix} **{s['name']}**  模式：{s['mode']}"]
+    row2 = []
+    if s.get("subject"):
+        row2.append(f"主体：{s['subject']}")
+    if s.get("total_posts"):
+        row2.append(f"帖子量：{s['total_posts']}")
+    if s.get("platforms"):
+        row2.append(f"平台：{'、'.join(s['platforms'])}")
+    if s.get("date_range"):
+        row2.append(f"时间：{s['date_range']}")
+    if row2:
+        lines.append("  " + "  ".join(row2))
+    if s.get("keywords"):
+        lines.append(f"  关键词：{', '.join(s['keywords'])}")
+    if s.get("competitors"):
+        lines.append(f"  竞品配置：{', '.join(s['competitors'])}")
+    if s.get("entities"):
+        ent_str = "、".join(
+            f"{e['name']}({e['role']})" for e in s["entities"]
+        )
+        lines.append(f"  实体（实际出现）：{ent_str}")
+    if s.get("topics"):
+        top_str = "、".join(
+            f"{t['name']}[{t['category']}]" for t in s["topics"]
+        )
+        lines.append(f"  话题：{top_str}")
+    return lines
 
 
 def _format_associated_slices_section(
@@ -175,26 +237,18 @@ def _format_associated_slices_section(
         return "## 已关联切片\n当前策略未关联任何切片。"
     lines = [f"## 已关联切片（共 {len(associated_slices)} 个）"]
     for s in associated_slices:
-        parts = [f"- **{s['name']}**", f"模式：{s['mode']}"]
-        if s.get("subject"):
-            parts.append(f"主体：{s['subject']}")
-        if s.get("keywords"):
-            parts.append(f"关键词：{', '.join(s['keywords'])}")
-        if s.get("total_posts"):
-            parts.append(f"帖子量：{s['total_posts']}")
-        if s.get("platforms"):
-            parts.append(f"平台：{', '.join(s['platforms'])}")
-        lines.append("  ".join(parts))
+        lines.extend(_format_slice_entry(s, prefix="-"))
+        lines.append("")
     return "\n".join(lines)
 
 
 def _format_all_monitors_section(
     monitors_data: list[dict[str, Any]],
 ) -> str:
-    """格式化所有可用监测项目及其切片"""
+    """格式化策略关联监测项目及其全部切片（含未关联资源）"""
     if not monitors_data:
-        return "## 所有可用监测项目\n用户暂无其他监测数据。"
-    lines = [f"## 所有可用监测项目（共 {len(monitors_data)} 个，含未关联资源）"]
+        return "## 策略关联监测项目\n暂无监测数据。"
+    lines = [f"## 策略关联监测项目（共 {len(monitors_data)} 个，含未关联切片）"]
     for monitor in monitors_data:
         slices = monitor.get("slices") or []
         associated_count = sum(1 for s in slices if s.get("is_associated"))
@@ -207,16 +261,9 @@ def _format_all_monitors_section(
             continue
         for s in slices:
             tag = "✓ 已关联" if s.get("is_associated") else "○ 未关联"
-            parts = [f"  [{tag}] **{s['name']}**", f"模式：{s['mode']}"]
-            if s.get("subject"):
-                parts.append(f"主体：{s['subject']}")
-            if s.get("keywords"):
-                parts.append(f"关键词：{', '.join(s['keywords'])}")
-            if s.get("total_posts"):
-                parts.append(f"帖子量：{s['total_posts']}")
-            if s.get("platforms"):
-                parts.append(f"平台：{', '.join(s['platforms'])}")
-            lines.append("  ".join(parts))
+            entry_lines = _format_slice_entry(s, prefix=f"  [{tag}]")
+            lines.extend(entry_lines)
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -229,7 +276,6 @@ def _format_understanding_section(understanding_summary: str | None) -> str:
 
 def format_architect_inputs(
     brief: dict | None,
-    gap_analysis: list[dict],
     associated_slices: list[dict[str, Any]],
     monitors_data: list[dict[str, Any]],
     understanding_summary: str | None = None,
@@ -238,7 +284,6 @@ def format_architect_inputs(
     return {
         "brief_section": _format_brief_section(brief),
         "understanding_section": _format_understanding_section(understanding_summary),
-        "evaluate_gaps_section": _format_evaluate_gaps_section(gap_analysis),
         "associated_slices_section": _format_associated_slices_section(associated_slices),
         "all_monitors_section": _format_all_monitors_section(monitors_data),
     }

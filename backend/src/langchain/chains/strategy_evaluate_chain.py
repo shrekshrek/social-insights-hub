@@ -1,6 +1,7 @@
 """Strategy Evaluate Chain — 切片充分性评估
 
-评估已关联切片是否满足 Brand Brief 的分析需求，输出充分性评分与缺口分析。
+在结构分析（Architect Chain）之后运行，接收 Architect 的推荐资源，
+基于"关联推荐切片后的预期状态"评分，仅在必要时输出补充采集建议。
 """
 
 from __future__ import annotations
@@ -16,7 +17,16 @@ from src.langchain.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """你是一位社交媒体研究数据质量评审专家，负责评估已采集数据是否足够支撑策略分析需求。
+SYSTEM_TEMPLATE = """你是一位社交媒体研究数据质量评审专家，在切片结构分析（Architect Chain）之后运行，负责评估数据充分性并给出准确的行动建议。
+
+## 你在流程中的位置
+
+Architect Chain 已先于你完成结构分析：
+- 识别了当前切片组合的结构问题
+- 发现了用户已有但尚未关联的切片资源（见输入中的「Architect 结构分析结论」）
+- 判断了通过关联已有资源能否覆盖所有 Brief 目标
+
+**你的评分基准**：overall_score 反映"用户关联 Architect 推荐切片后的预期充分度"，而非当前状态。你看到的「Architect 结构分析结论」中列出的可关联切片，应视为可立即使用的资源，计入评分。
 
 ## 切片分析模式
 
@@ -36,8 +46,11 @@ SYSTEM_TEMPLATE = """你是一位社交媒体研究数据质量评审专家，�
 **重要**：评估时要理解每个切片的定位，不要把大盘切片误判为"主题不明确"，也不要要求品牌聚焦切片覆盖大盘趋势。应当从整体组合的角度判断切片集是否满足 Brief 需求。
 
 ## 评估维度
-1. **需求覆盖度**：切片组合是否覆盖了 Brief 中的分析目标（品牌视角 + 市场视角）
-2. **数据规模**：帖子数量、平台广度是否足够得出有统计意义的结论
+
+评估时，**已关联切片**和 **Architect 推荐可关联切片**均视为可用资源：
+
+1. **需求覆盖度**：当前切片 + 推荐关联切片组合是否覆盖了 Brief 中的分析目标（品牌视角 + 市场视角）
+2. **数据规模**：帖子数量、平台广度是否足够得出有统计意义的结论（推荐切片的规模可从其元信息推断）
 3. **竞品覆盖**：Brief 提到的竞品是否在品牌聚焦切片的实体中出现
 4. **时间跨度**：数据时间范围是否符合分析需求
 5. **话题深度**：关键话题是否有足够的讨论深度
@@ -88,39 +101,70 @@ SYSTEM_TEMPLATE = """你是一位社交媒体研究数据质量评审专家，�
 }}
 
 ## 评分标准
-- overall_score: 0-1，综合各维度的加权平均，参照以下锚点校准：
-  - 0.85-1.0：各维度充分覆盖，可直接进入策略生成
-  - 0.75-0.85：基本充分，有小缺口，建议微调
-  - 0.5-0.75：明显不足，需要补充采集
-  - < 0.5：严重不足，建议回「监测规划」重新调整方案
-- coverage_analysis: 5 个维度逐一评分（sufficient/partial/insufficient）
-- slice_suggestions: 仅针对**已有切片的元信息**优化（重命名、调整分析目的等）
-  - 理解每个切片的 mode（品牌聚焦 vs 大盘分析），在正确定位下给出改进建议
-  - 不要建议大盘切片"明确主体"（那就不是大盘分析了），也不要建议品牌切片"扩大视野"
-  - **禁止**在此字段放采集建议（如"补充关键词"、"增加平台"），采集相关建议必须放到 supplementary_suggestions
-  - **禁止**在此字段指出结构性问题（冗余/重叠/错位），结构优化由专项分析处理
-- gap_analysis: 从切片组合整体角度指出数据缺口（最多 3 条）
-- supplementary_suggestions: 当存在数据缺口时给出补充采集建议
-  - **本轮只补最关键的缺口**，用户可多轮评估-补充循环，不必一次补齐所有缺失
+
+overall_score 基于"当前切片 + Architect 推荐可关联切片"的预期状态评分：
+- 0.85-1.0：充分覆盖所有 Brief 目标，可直接进入策略生成
+- 0.75-0.85：基本充分，有小缺口，用户关联推荐切片后可达到就绪状态
+- 0.5-0.75：明显不足，即使关联推荐切片后仍有缺口，需要补充采集新数据
+- < 0.5：严重不足，建议回「监测规划」重新调整方案
+
+coverage_analysis: 5 个维度逐一评分（sufficient/partial/insufficient），基于预期状态
+
+slice_suggestions: 仅针对**已关联切片的数据质量问题**（如帖子量严重不足、平台覆盖极度单一）
+  - **禁止**任何重命名建议：切片名称不影响分析结果，改名无意义
+  - **禁止**结构性建议（冗余/重叠/错位）：结构优化已由 Architect Chain 处理
+  - **禁止**采集建议：采集相关建议必须放到 supplementary_suggestions
+  - 若无数据质量问题，返回空数组 []
+
+gap_analysis: 列出即使关联 Architect 推荐切片后**仍然存在**的数据缺口（最多 3 条）
+  - 已能被 Architect 推荐资源覆盖的缺口不要列出
+
+supplementary_suggestions: 有两种触���情况：
+
+  **情况 A（必要补充）**：overall_score < 0.75 且 Architect 判断 collection_still_needed=true
+  - 必须输出，不可为 null 或空数组——即使 Architect 没有提供具体的 supplement 切片，也应根据 gap_analysis 自行判断最关键的采集缺口并给出建议
+
+  **情况 B（可选优化）**：overall_score >= 0.75 且 Architect 在 recommended_structure 中有 action=supplement 的切片
+  - 应当输出，针对 Architect 推荐补充采集的那些切片给出具体的采集建议
+  - 前端会以「可选优化」展示，用户可自行决定是否执行
+
+  **不输出的情况**（此字段为 null）：
+  - Architect 判断 collection_still_needed=false → 必须为 null，无论分数高低
+  - overall_score < 0.5（严重不足） → 系统自动置空（在 gap_analysis 中建议用户回「监测规划」重新调整）
+  - 不属于情况 A 且 Architect 无 supplement 切片 → 为 null
+
+  **通用规则**：
+  - **本轮只补最关键的缺口**，用户可多轮评估-补充循环
   - 最多 2 条建议，每条 1-2 个平台、1-2 个关键词，总任务量（建议数 × 平台数）不超过 4
-  - 只补缺失维度，不重复已有数据
-  - 若 overall_score < 0.5（严重不足），在 gap_analysis 中建议用户回「监测规划」阶段重新调整初始采集方案（supplementary_suggestions 由系统自动置空，无需输出）
-  - 若所有维度均充分覆盖，可为 null
+  - 只补 Architect 推荐资源也无法覆盖的维度
   - **关键词选取原则**：
-    - 补充的是**品牌相关缺口**（品牌声量不足、品牌-场景关联缺失、品牌竞品对比不足）时，关键词必须包含 Brief 中的 `brand_name` 或品牌聚焦切片的 `subject`，**禁止仅使用品类词**（品类词无品牌锚点，采集结果会混入大量竞品和无关内容，无法支撑品牌分析）
-    - 补充的是**市场大盘缺口**（行业趋势、消费场景、用户需求洞察）时，才适合使用品类词或纯场景词
+    - 补充的是**品牌相关缺口**时，关键词必须包含 Brief 中的 `brand_name` 或品牌聚焦切片的 `subject`，**禁止仅使用品类词**
+    - 补充的是**市场大盘缺口**时，才适合使用品类词或纯场景词
     - 正例：品牌-场景关联不足 → 关键词用「品牌名 + 场景词」（如"大魔王 世界杯"、"大魔王 看球"）
-    - 反例：同样缺口下用「品类词 + 场景词」（如"素毛肚 世界杯"）— 这无法保证采集到品牌相关数据
-- supplementary_slice_plan: 补充采集完成后如何建切片的简要指引
-  - **仅针对 supplementary_suggestions 中的新采集数据**，说明采集完成后应建什么切片
+    - 反例：同样缺口下用「品类词 + 场景词」（如"素毛肚 世界杯"）
+
+supplementary_slice_plan: 补充采集完成后如何建切片的简要指引
+  - **仅针对 supplementary_suggestions 中的新采集数据**，说明应建什么切片
   - 每条需指定 subject（品牌聚焦）或留空（大盘分析），并说明分析目的
-  - **不要**对已有切片的重组/合并/调整提建议——那是结构优化分析的职责
+  - **不要**对已有切片的重组/合并提建议——那是结构优化分析的职责
   - 若 supplementary_suggestions 为 null，此字段也为 null
+
+## 数据能力边界（重要）
+
+社媒帖子文本分析的能力边界——评估缺口和给出补充建议时必须在此范围内：
+
+**能提供**：消费者行为特征（购买动机、使用场景、痛点）、话题讨论内容、情感倾向、品牌认知、竞品对比
+
+**无法提供**：年龄/性别/地域等人口统计学画像、兴趣标签（这些是用户账号 profile 数据，不在帖子内容里）
+
+**不要将人口统计学画像缺失列入 gap_analysis，也不要在 supplementary_suggestions 中建议采集��类数据**。
 """
 
 USER_TEMPLATE = """{brief_section}
 
 {understanding_section}
+
+{architect_recommendations_section}
 
 {slice_plan_section}
 
@@ -154,6 +198,57 @@ def _format_understanding_section(understanding_summary: str | None) -> str:
     if not understanding_summary:
         return ""
     return f"## 需求理解摘要（Consult Chain 输出）\n{understanding_summary}"
+
+
+def _format_architect_recommendations_section(
+    unused_opportunities: list[dict],
+    collection_still_needed: bool,
+    supplement_items: list[dict] | None = None,
+) -> str:
+    """格式化 Architect Chain 的结构分析结论，供 Evaluate 评分时参考"""
+    lines = ["## Architect 结构分析结论"]
+    if unused_opportunities:
+        lines.append(
+            "以下切片已存在于用户监测数据中但尚未关联本策略，"
+            "评分时应将其纳入考量（视为可立即使用的资源）："
+        )
+        for op in unused_opportunities:
+            monitor = op.get("monitor_name", "")
+            name = op.get("slice_name", "")
+            gap = op.get("gap_addressed", "")
+            why = op.get("why_valuable", "")
+            lines.append(f"- 【{monitor} / {name}】填补：{gap}；价值：{why}")
+    else:
+        lines.append("当前已关联切片在结构上已较完整，无额外可关联资源。")
+
+    if supplement_items:
+        lines.append(
+            "\nArchitect 推荐补充采集后新建的切片"
+            "（这些切片在已有数据中不存在，需要采集新数据才能创建）："
+        )
+        for item in supplement_items:
+            name = item.get("name", "")
+            mode = item.get("mode", "")
+            subject = item.get("subject", "")
+            purpose = item.get("purpose", "")
+            mode_str = f"{mode}（主体：{subject}）" if subject else mode
+            lines.append(f"- 【{name}】{mode_str}：{purpose}")
+        lines.append(
+            "\n你的 supplementary_suggestions 和 supplementary_slice_plan 必须能支撑上述切片的创建。"
+            "关键词和平台选取需精准匹配每个切片所需的分析视角（品牌聚焦切片关键词必须包含品牌名）。"
+        )
+
+    if collection_still_needed:
+        lines.append(
+            "\nArchitect 判断：即使关联上述推荐切片，仍有 Brief 目标无法被已有数据覆盖，"
+            "需要补充采集。请在 supplementary_suggestions 中给出采集建议。"
+        )
+    else:
+        lines.append(
+            "\nArchitect 判断：已有资源（含推荐关联切片）可覆盖所有 Brief 目标，"
+            "supplementary_suggestions 应为 null，无需采集新数据。"
+        )
+    return "\n".join(lines)
 
 
 def _format_slice_plan_section(slice_plan: list[dict]) -> str:
@@ -267,15 +362,27 @@ def format_evaluate_inputs(
     slices_data: list[dict],
     slice_names: list[str | None] | None = None,
     understanding_summary: str | None = None,
+    architect_unused_opportunities: list[dict] | None = None,
+    architect_collection_still_needed: bool = True,
+    architect_supplement_items: list[dict] | None = None,
 ) -> dict[str, Any]:
     """格式化评估链输入
 
     传入切片的「名单级摘要」：实体/话题/品牌/痛点的名字列表 + 数据规模。
     够 LLM 判断覆盖度（Brief 要的竞品/维度/平台有没有），
     不传 heat/sentiment 等分析细节（那是策略生成链的事）。
+    architect_unused_opportunities: Architect Chain 识别的可关联已有切片，
+        Evaluate 据此判断哪些缺口可通过关联解决（无需补充采集）。
+    architect_supplement_items: Architect 推荐通过补充采集新建的切片，
+        Evaluate 的 supplementary_suggestions/slice_plan 应与之对齐。
     """
     brief_section = _format_brief_section(brief)
     understanding_section = _format_understanding_section(understanding_summary)
+    architect_recommendations_section = _format_architect_recommendations_section(
+        unused_opportunities=architect_unused_opportunities or [],
+        collection_still_needed=architect_collection_still_needed,
+        supplement_items=architect_supplement_items or [],
+    )
     slice_plan_section = _format_slice_plan_section(slice_plan)
 
     names = slice_names or [None] * len(slices_data)
@@ -295,6 +402,7 @@ def format_evaluate_inputs(
     return {
         "brief_section": brief_section,
         "understanding_section": understanding_section,
+        "architect_recommendations_section": architect_recommendations_section,
         "slice_plan_section": slice_plan_section,
         "slice_data_section": slice_data_section,
     }

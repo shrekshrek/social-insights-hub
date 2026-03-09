@@ -446,7 +446,7 @@
             ? 'border-green-200 bg-green-50 dark:bg-green-900/20'
             : 'border-amber-200 bg-amber-50 dark:bg-amber-900/20'"
         >
-          <div class="flex items-center gap-2 mb-2">
+          <div class="flex items-center gap-2">
             <UIcon
               :name="strategy.evaluation_result.is_sufficient ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-triangle'"
               :class="strategy.evaluation_result.is_sufficient ? 'text-green-500' : 'text-amber-500'"
@@ -578,7 +578,7 @@
             </div>
             <!-- 已有数据可覆盖缺口，无需补采 -->
             <div
-              v-else-if="!strategy.evaluation_result.structure_analysis.collection_still_needed && strategy.evaluation_result.supplementary_suggestions?.length"
+              v-else-if="!strategy.evaluation_result.structure_analysis.collection_still_needed"
               class="text-green-600 dark:text-green-400"
             >
               <UIcon name="i-heroicons-check-circle" class="inline mr-1" />
@@ -587,12 +587,28 @@
           </div>
         </div>
 
-        <!-- 补充采集: 状态 1 - 评估不足 + 有建议 + 未确认补充 -->
-        <div v-if="showSupplementaryEditor">
+        <!-- 补充采集: 状态 1 - 有建议 + 未确认补充（情况 A 必要 / 情况 B 可选） -->
+        <div
+          v-if="showSupplementaryEditor"
+          class="p-3 rounded-lg border"
+          :class="isOptionalSupplementary
+            ? 'border-blue-200 bg-blue-50 dark:bg-blue-900/20'
+            : 'border-amber-200 bg-amber-50 dark:bg-amber-900/20'"
+        >
           <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">
-              补充采集建议（{{ editableSupplementary.length }} 条）
-            </h3>
+            <div class="flex items-center gap-2">
+              <UIcon
+                :name="isOptionalSupplementary ? 'i-heroicons-light-bulb' : 'i-heroicons-plus-circle'"
+                :class="isOptionalSupplementary ? 'text-blue-500' : 'text-amber-500'"
+              />
+              <span class="text-sm font-medium" :class="isOptionalSupplementary ? 'text-blue-700 dark:text-blue-300' : 'text-amber-700 dark:text-amber-300'">
+                {{ isOptionalSupplementary ? '可选优化' : '补充采集建议' }}
+                （{{ editableSupplementary.length }} 条）
+              </span>
+              <span v-if="isOptionalSupplementary" class="text-xs text-blue-500 dark:text-blue-400">
+                · 数据已充分，可酌情补充以提升分析深度
+              </span>
+            </div>
             <UButton
               v-if="!editingSupplementary"
               variant="ghost"
@@ -632,10 +648,11 @@
 
           <UButton
             :loading="confirmSupplementaryLoading"
+            :color="isOptionalSupplementary ? 'info' : 'primary'"
             icon="i-heroicons-check-circle"
             @click="handleConfirmSupplementary"
           >
-            确认补充采集
+            {{ isOptionalSupplementary ? '确认可选采集' : '确认补充采集' }}
           </UButton>
         </div>
 
@@ -1085,11 +1102,18 @@ const confirmedSupplementarySlicePlan = computed<SlicePlanItem[]>(() => {
 const showSupplementaryEditor = computed(() => {
   if (!strategy.value?.evaluation_result) return false
   if (!hasSupplementarySuggestions.value) return false
+  // 建议已映射为空（LLM 返回空数组），不展示无意义的 0 条界面
+  if (editableSupplementary.value.length === 0) return false
   if (pendingSupplementaryTaskIds.value.length > 0) return false
   // Architect 已找到现有数据可填补缺口，不需要补充采集
   if (strategy.value.evaluation_result.structure_analysis?.collection_still_needed === false) return false
   return true
 })
+
+// 情况 B：数据已充分（is_sufficient=true）但 Architect 仍有 supplement 建议 → 可选优化
+const isOptionalSupplementary = computed(() =>
+  showSupplementaryEditor.value && strategy.value?.evaluation_result?.is_sufficient === true,
+)
 
 const showSupplementaryConfirmed = computed(() => {
   return pendingSupplementaryTaskIds.value.length > 0

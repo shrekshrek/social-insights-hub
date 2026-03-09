@@ -55,8 +55,9 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 ## 要求
 - social_tensions: 1-3 条，按重要性排序
 - brand_opportunities: 1-2 条，每条引用相关 tension 的索引
-- evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, time_trend, unmet_need
+- evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, time_trend, unmet_need, audience_insight
 - confidence: high(数据充分)/medium(有支撑但需验证)/low(推测性)
+- 如切片数据中包含 audiences（受众画像），需标注哪类人群最受此 Tension 影响，以及哪类人群是品牌机会的主要触达对象
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -166,9 +167,23 @@ def format_slice_data_for_phase1(
             for r in sov_ranking
         ]
 
-        # Intent 层 — topic_radar (pains/gains/controversies) + unmet_needs
+        # Intent 层 — topic_radar (pains/gains/controversies) + unmet_needs + audiences
         intent = layers.get("intent") or {}
         unmet_needs = intent.get("unmet_needs")
+
+        # 受众画像（Social Tension 的人群锚点 + Brand Opportunity 的目标受众）
+        context_analysis = intent.get("context_analysis") or {}
+        audiences_raw = context_analysis.get("audiences") or []
+        audiences_brief = [
+            {
+                "label": a.get("label"),
+                "heat": a.get("heat"),
+                "mentions": a.get("mentions"),
+                "preferences": (a.get("preferences") or [])[:3],
+            }
+            for a in audiences_raw[:8]
+            if isinstance(a, dict) and a.get("label")
+        ]
 
         # topic_radar：按情感分桶的话题（Tension 的核心数据源）
         topic_radar = intent.get("topic_radar") or {}
@@ -240,6 +255,8 @@ def format_slice_data_for_phase1(
             part["swot_dimensions"] = swot_brief
         if gap_brief:
             part["competitive_gaps"] = gap_brief
+        if audiences_brief:
+            part["audiences"] = audiences_brief
         slice_parts.append(part)
 
     return {

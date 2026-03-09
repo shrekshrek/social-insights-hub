@@ -645,15 +645,24 @@ async def remove_slice(
 
 async def _load_monitors_for_architect(
     db: AsyncSession,
-    user_id: int,
+    monitor_ids: list[int],
     associated_slice_ids: set[int],
 ) -> list[dict]:
-    """加载用户所有可用监测项目及其切片摘要，供 Architect Chain 使用"""
-    monitors, _ = await get_monitors(db, participant_id=user_id, limit=200)
+    """加载策略关联监测项目及其切片摘要，供 Architect Chain 使用
+
+    只加载与本策略有关的监测项目：
+    - 已关联切片所属的监测
+    - 策略自身创建的监测（suggested_monitor_ids）
+    """
+    if not monitor_ids:
+        return []
+    monitors_result = await db.execute(
+        select(Monitor).where(Monitor.id.in_(monitor_ids))
+    )
+    monitors = monitors_result.scalars().all()
     if not monitors:
         return []
 
-    monitor_ids = [m.id for m in monitors]
     slices_result = await db.execute(
         select(AnalysisSlice).where(AnalysisSlice.monitor_id.in_(monitor_ids))
     )
@@ -686,15 +695,71 @@ async def _load_monitors_for_architect(
     return monitors_data
 
 
+def _validate_architect_references(
+    arch_parsed: dict,
+    monitors_data: list[dict],
+) -> None:
+    """就地过滤 Architect 输出中幻觉引用的切片名称。
+
+    LLM 可能将切片数据中出现的实体名（竞品品牌等）误识别为独立切片，
+    在 unused_opportunities / recommended_structure[action=associate] 中
+    引用根本不存在的切片。本函数将其过滤掉，防止前端展示错误信息。
+    """
+    # 构建真实切片名称集合
+    valid_pairs: set[tuple[str, str]] = set()  # (monitor_name, slice_name)
+    valid_slice_names: set[str] = set()
+    for monitor in monitors_data:
+        m_name = monitor.get("monitor_name", "")
+        for s in monitor.get("slices") or []:
+            s_name = s.get("name", "")
+            if s_name:
+                valid_pairs.add((m_name, s_name))
+                valid_slice_names.add(s_name)
+
+    # 过滤 unused_opportunities（要求 monitor_name+slice_name 同时存在）
+    original_opps = arch_parsed.get("unused_opportunities") or []
+    filtered_opps = [
+        opp for opp in original_opps
+        if (opp.get("monitor_name"), opp.get("slice_name")) in valid_pairs
+    ]
+    if len(filtered_opps) < len(original_opps):
+        removed = len(original_opps) - len(filtered_opps)
+        logger.warning(
+            "Architect 幻觉过滤: 移除 %d 条不存在的 unused_opportunities", removed
+        )
+    arch_parsed["unused_opportunities"] = filtered_opps
+
+    # 过滤 recommended_structure 中 action=associate 引用不存在的切片
+    # 将无效的 associate 改为 supplement，避免用户被指引到不存在的切片
+    _HINT = "如监测项目中已有相关采集任务数据，可直接在监测页面用现有数据新建切片，无需重新采集。"
+    for item in arch_parsed.get("recommended_structure") or []:
+        if item.get("action") == "associate":
+            source = item.get("source", "")
+            if source not in valid_slice_names:
+                logger.warning(
+                    "Architect 幻觉过滤: recommended_structure 中 '%s' 不存在，action 改为 supplement",
+                    source,
+                )
+                item["action"] = "supplement"
+                item["action_detail"] = _HINT
+        elif item.get("action") == "supplement":
+            # 追加提示：用户可先检查是否有现有采集任务数据可直接复用
+            existing = item.get("action_detail") or ""
+            if existing and not existing.endswith(_HINT):
+                item["action_detail"] = f"{existing} {_HINT}"
+            elif not existing:
+                item["action_detail"] = _HINT
+
+
 async def evaluate_strategy(
     db: AsyncSession,
     strategy: Strategy,
     user_id: int,
 ) -> EvaluationResultResponse:
-    """AI 评估切片充分性，并顺序执行结构优化分析
+    """AI 评估切片充分性，先执行结构分析再执行充分性评分
 
-    Step 1: Evaluate Chain — 充分性评分 + 缺口识别
-    Step 2: Architect Chain — 结构优化（以 Evaluate 缺口为输入，视野扩展到所有 monitors）
+    Step 1: Architect Chain — 结构诊断 + 识别可关联的已有资源 + 判断是否需补充采集
+    Step 2: Evaluate Chain — 基于 Architect 推荐资源，评估关联后预期充分性，仅在必要时输出补充采集建议
     LLM 解析失败时抛出 HTTPException(500)，strategy.evaluation_result 不更新。
     """
     slices_with_names = await load_slice_data_with_names(db, strategy)
@@ -708,7 +773,67 @@ async def evaluate_strategy(
             (latest.get("ai_response") or {}).get("understanding_summary")
         )
 
-    # ── Step 1: Evaluate Chain ──────────────────────────────────────────────
+    associated_slice_ids = {ss.slice_id for ss in strategy.slices}
+    associated_slices_meta = [
+        {
+            "name": name or f"切片 #{i}",
+            **extract_slice_meta(data),
+        }
+        for i, (name, data) in enumerate(slices_with_names)
+        if data
+    ]
+
+    # ── Step 1: Architect Chain ─────────────────────────────────────────────
+    # 只加载与本策略有关的监测：已关联切片所属监测 + 策略自身创建的监测
+    slice_ids = list(associated_slice_ids)
+    if slice_ids:
+        slice_monitor_result = await db.execute(
+            select(AnalysisSlice.monitor_id).where(
+                AnalysisSlice.id.in_(slice_ids)
+            ).distinct()
+        )
+        slice_monitor_ids = set(slice_monitor_result.scalars().all())
+    else:
+        slice_monitor_ids = set()
+    architect_monitor_ids = list(
+        slice_monitor_ids | set(strategy.suggested_monitor_ids or [])
+    )
+    monitors_data = await _load_monitors_for_architect(db, architect_monitor_ids, associated_slice_ids)
+
+    arch_chain = create_strategy_architect_chain()
+    arch_inputs = format_architect_inputs(
+        brief=strategy.brand_brief,
+        associated_slices=associated_slices_meta,
+        monitors_data=monitors_data,
+        understanding_summary=understanding_summary,
+    )
+
+    arch_start = time.time()
+    arch_llm_result = await arch_chain.ainvoke(arch_inputs)
+    arch_duration = time.time() - arch_start
+
+    try:
+        arch_parsed = parse_architect_response(arch_llm_result.content)
+        _validate_architect_references(arch_parsed, monitors_data)
+    except ValueError as e:
+        logger.warning("Strategy %d Architect Chain 解析失败: %s，跳过结构分析", strategy.id, e)
+        arch_parsed = None
+
+    logger.info(
+        "Strategy %d Architect 完成 (%.1fs, issues=%d, opportunities=%d, collection_needed=%s)",
+        strategy.id, arch_duration,
+        len(arch_parsed.get("current_slice_issues", [])) if arch_parsed else 0,
+        len(arch_parsed.get("unused_opportunities", [])) if arch_parsed else 0,
+        arch_parsed.get("collection_still_needed") if arch_parsed else "unknown",
+    )
+
+    # ── Step 2: Evaluate Chain ──────────────────────────────────────────────
+    # 提取 Architect 推荐通过补充采集新建的切片，供 Evaluate 生成对齐的采集建议
+    supplement_items = [
+        item for item in (arch_parsed.get("recommended_structure") or [])
+        if item.get("action") == "supplement"
+    ] if arch_parsed else []
+
     eval_chain = create_strategy_evaluate_chain()
     eval_inputs = format_evaluate_inputs(
         brief=strategy.brand_brief,
@@ -716,6 +841,9 @@ async def evaluate_strategy(
         slices_data=[data for _, data in slices_with_names],
         slice_names=[name for name, _ in slices_with_names],
         understanding_summary=understanding_summary,
+        architect_unused_opportunities=arch_parsed.get("unused_opportunities", []) if arch_parsed else [],
+        architect_collection_still_needed=arch_parsed.get("collection_still_needed", True) if arch_parsed else True,
+        architect_supplement_items=supplement_items,
     )
 
     start = time.time()
@@ -730,48 +858,15 @@ async def evaluate_strategy(
             detail=f"AI 评估解析失败: {e}",
         ) from e
 
+    # 确定性规则：Architect 判断 collection_still_needed=false 时强制清空 supplementary
+    # 由代码保障，不依赖 LLM 遵循 prompt 指令
+    if arch_parsed and not arch_parsed.get("collection_still_needed", True):
+        eval_parsed["supplementary_suggestions"] = None
+        eval_parsed["supplementary_slice_plan"] = None
+
     logger.info(
         "Strategy %d Evaluate 完成 (%.1fs, score=%.2f, sufficient=%s)",
         strategy.id, eval_duration, eval_parsed["overall_score"], eval_parsed["is_sufficient"],
-    )
-
-    # ── Step 2: Architect Chain ─────────────────────────────────────────────
-    associated_slice_ids = {ss.slice_id for ss in strategy.slices}
-    monitors_data = await _load_monitors_for_architect(db, user_id, associated_slice_ids)
-
-    associated_slices_meta = [
-        {
-            "name": name or f"切片 #{i}",
-            **extract_slice_meta(data),
-        }
-        for i, (name, data) in enumerate(slices_with_names)
-        if data
-    ]
-
-    arch_chain = create_strategy_architect_chain()
-    arch_inputs = format_architect_inputs(
-        brief=strategy.brand_brief,
-        gap_analysis=eval_parsed.get("gap_analysis", []),
-        associated_slices=associated_slices_meta,
-        monitors_data=monitors_data,
-        understanding_summary=understanding_summary,
-    )
-
-    arch_start = time.time()
-    arch_llm_result = await arch_chain.ainvoke(arch_inputs)
-    arch_duration = time.time() - arch_start
-
-    try:
-        arch_parsed = parse_architect_response(arch_llm_result.content)
-    except ValueError as e:
-        logger.warning("Strategy %d Architect Chain 解析失败: %s，跳过结构分析", strategy.id, e)
-        arch_parsed = None
-
-    logger.info(
-        "Strategy %d Architect 完成 (%.1fs, issues=%d, opportunities=%d)",
-        strategy.id, arch_duration,
-        len(arch_parsed.get("current_slice_issues", [])) if arch_parsed else 0,
-        len(arch_parsed.get("unused_opportunities", [])) if arch_parsed else 0,
     )
 
     # ── 组合结果 ────────────────────────────────────────────────────────────

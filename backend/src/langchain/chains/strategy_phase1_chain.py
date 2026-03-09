@@ -102,7 +102,7 @@ USER_TEMPLATE = """{brief_section}
 
 def create_strategy_phase1_chain() -> Runnable:
     """创建 Phase 1 (洞察层) LLM 链"""
-    llm = get_llm(llm_type="reasoner")
+    llm = get_llm(llm_type="chat")
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_TEMPLATE),
         ("user", USER_TEMPLATE),

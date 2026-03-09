@@ -13,7 +13,7 @@
             :loading="generating"
             :disabled="generating"
             icon="i-heroicons-sparkles"
-            @click="$emit('generate')"
+            @click="handleGenerateClick"
           >
             {{ hasResult ? '重新生成' : '生成' }}
           </UButton>
@@ -85,8 +85,23 @@ const emit = defineEmits<{
   (e: 'save', result: Record<string, unknown>): void
 }>()
 
+const { $confirm } = useNuxtApp()
+
 const editing = ref(false)
 const editFormRef = ref<{ getResult: () => Record<string, unknown> } | null>(null)
+
+const handleGenerateClick = async () => {
+  if (props.hasResult) {
+    const confirmed = await $confirm({
+      title: '确认重新生成',
+      message: `重新生成将覆盖当前 Phase ${props.phase} 的结果，同时清除下游阶段的已生成内容，确定继续？`,
+      confirmText: '确认重新生成',
+      type: 'warning',
+    })
+    if (!confirmed) return
+  }
+  emit('generate')
+}
 
 const phaseColor = computed(() => {
   if (props.phase === 1) return 'info' as const

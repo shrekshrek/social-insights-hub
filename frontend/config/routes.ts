@@ -67,7 +67,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   '/social-media/monitors/[id]': { permission: PERMISSIONS.MONITOR_READ },
   '/social-media/tasks': {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
-    label: '数据任务',
+    label: '数据采集',
     showInNav: true,
     order: 70,
   },

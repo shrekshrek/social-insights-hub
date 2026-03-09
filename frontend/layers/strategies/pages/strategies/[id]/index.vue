@@ -697,22 +697,13 @@
           </div>
         </div>
 
-        <!-- 确认就绪 -->
-        <div class="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3">
-          <UButton
-            :loading="confirmReadyLoading"
-            icon="i-heroicons-rocket-launch"
-            :disabled="strategy.status === 'completed'"
-            @click="handleConfirmReady"
-          >
-            确认数据就绪，进入策略生成
-          </UButton>
-          <span
-            v-if="['slices_ready', 'phase1_done', 'phase2_done', 'completed'].includes(strategy.status)"
-            class="text-sm text-green-600 dark:text-green-400"
-          >
-            已就绪
-          </span>
+        <!-- 就绪状态指示（评估完成后自动推进） -->
+        <div
+          v-if="['slices_ready', 'phase1_done', 'phase2_done', 'completed'].includes(strategy.status)"
+          class="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-2"
+        >
+          <UIcon name="i-heroicons-check-circle" class="text-green-500 size-4" />
+          <span class="text-sm text-green-600 dark:text-green-400">数据已就绪，可进行策略生成</span>
         </div>
       </UCard>
 
@@ -724,6 +715,16 @@
         </div>
 
         <!-- Phase 1: 洞察层 -->
+        <!-- 数据充分性警告 -->
+        <UAlert
+          v-if="strategy.evaluation_result && !strategy.evaluation_result.is_sufficient"
+          color="warning"
+          variant="soft"
+          icon="i-heroicons-exclamation-triangle"
+          title="数据充分性不足"
+          :description="`评估得分 ${((strategy.evaluation_result.overall_score ?? 0) * 100).toFixed(0)}%，建议补充更多切片数据后再生成策略，否则分析质量可能受限。`"
+          class="mb-2"
+        />
         <StrategyPhaseCard
           :phase="1"
           title="洞察层"
@@ -784,7 +785,7 @@ import type {
   MonitorSuggestion,
   SlicePlanItem,
 } from '../../../types'
-import { UBadge, UButton } from '#components'
+import { UAlert, UBadge, UButton } from '#components'
 
 definePageMeta({ title: '策略详情' })
 
@@ -982,7 +983,6 @@ const addMonitorSlicesMap = ref<Record<number, AddSliceItem[]>>({})
 const selectedAddSliceIds = ref<number[]>([])
 const addSlicesLoading = ref(false)
 const evaluateLoading = ref(false)
-const confirmReadyLoading = ref(false)
 
 const { data: addMonitorsData, pending: addMonitorsPending } = useApiDataFn<{
   items: AddMonitorItem[]
@@ -1056,18 +1056,6 @@ const handleEvaluate = async () => {
     // 错误已由 useApi 处理
   } finally {
     evaluateLoading.value = false
-  }
-}
-
-const handleConfirmReady = async () => {
-  confirmReadyLoading.value = true
-  try {
-    await strategiesApi.confirmReady(strategyId.value)
-    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
-  } catch {
-    // 错误已由 useApi 处理
-  } finally {
-    confirmReadyLoading.value = false
   }
 }
 

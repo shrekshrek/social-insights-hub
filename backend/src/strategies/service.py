@@ -482,6 +482,70 @@ PLATFORM_NAME_TO_CODE = {
 }
 
 
+async def _create_keyword_platform_tasks(
+    db: AsyncSession,
+    monitor_id: int,
+    monitor_suggestions: list[dict],
+    current_user_id: int,
+    notes_per_task: int,
+) -> tuple[list[int], list[str]]:
+    """为关键词×平台组合批量创建采集任务，返回 (created_task_ids, partial_errors)"""
+    from src.social_media.monitors.crud import get_platform_by_code
+    from src.social_media.tasks.schemas import DataTaskCreate
+    from src.social_media.tasks.service import create_task
+
+    task_params = {
+        "max_notes_count": notes_per_task,
+        "enable_comments": 1,
+        "per_note_max_comments_count": 20,
+    }
+    created_task_ids: list[int] = []
+    partial_errors: list[str] = []
+
+    for suggestion in monitor_suggestions:
+        suggestion_name = suggestion.get("name", "").strip()
+        if not suggestion_name:
+            partial_errors.append("跳过一条空名称的建议")
+            continue
+
+        platforms = suggestion.get("platforms") or []
+        keywords = suggestion.get("keywords") or []
+        if not keywords:
+            keywords = [suggestion_name]
+
+        for keyword in keywords:
+            keyword = keyword.strip()
+            if not keyword:
+                continue
+            for platform_name in platforms:
+                code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
+                try:
+                    platform = await get_platform_by_code(db, code)
+                    if not platform:
+                        partial_errors.append(f"平台「{platform_name}」不存在，跳过")
+                        continue
+                    task = await create_task(
+                        db,
+                        DataTaskCreate(
+                            name=f"{keyword}-{platform.name}",
+                            monitor_id=monitor_id,
+                            platform_id=platform.id,
+                            task_type="search",
+                            keywords=keyword,
+                            data_source="remote_crawler",
+                            task_params=task_params,
+                            auto_analyze=True,
+                        ),
+                        current_user_id,
+                    )
+                    created_task_ids.append(task.id)
+                except Exception as e:
+                    logger.error("创建任务「%s-%s」失败: %s", keyword, platform_name, e)
+                    partial_errors.append(f"创建任务「{keyword}-{platform_name}」失败: {e}")
+
+    return created_task_ids, partial_errors
+
+
 async def confirm_plan(
     db: AsyncSession,
     strategy: Strategy,
@@ -498,11 +562,7 @@ async def confirm_plan(
     """
     from src.social_media.monitors.schemas import MonitorCreate
     from src.social_media.monitors.service import create_monitor
-    from src.social_media.monitors.crud import get_platform_by_code, get_monitor_by_name
-    from src.social_media.tasks.schemas import DataTaskCreate
-    from src.social_media.tasks.service import create_task
-
-    partial_errors: list[str] = []
+    from src.social_media.monitors.crud import get_monitor_by_name
 
     # 确定不重复的监测名称
     base_name = strategy.name
@@ -529,53 +589,9 @@ async def confirm_plan(
             detail=f"创建监测项目失败: {e.detail}",
         ) from e
 
-    # 爬虫参数：采集量由用户选择
-    task_params = {
-        "max_notes_count": notes_per_task,
-        "enable_comments": 1,
-        "per_note_max_comments_count": 20,
-    }
-
-    # 为每个关键词 x 平台组合创建独立任务
-    for suggestion in monitor_suggestions:
-        suggestion_name = suggestion.get("name", "").strip()
-        if not suggestion_name:
-            partial_errors.append("跳过一条空名称的建议")
-            continue
-
-        platforms = suggestion.get("platforms") or []
-        keywords = suggestion.get("keywords") or []
-        if not keywords:
-            keywords = [suggestion_name]
-
-        for keyword in keywords:
-            keyword = keyword.strip()
-            if not keyword:
-                continue
-            for platform_name in platforms:
-                code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
-                try:
-                    platform = await get_platform_by_code(db, code)
-                    if not platform:
-                        partial_errors.append(f"平台「{platform_name}」不存在，跳过")
-                        continue
-                    await create_task(
-                        db,
-                        DataTaskCreate(
-                            name=f"{keyword}-{platform.name}",
-                            monitor_id=monitor.id,
-                            platform_id=platform.id,
-                            task_type="search",
-                            keywords=keyword,
-                            data_source="remote_crawler",
-                            task_params=task_params,
-                            auto_analyze=True,
-                        ),
-                        current_user_id,
-                    )
-                except Exception as e:
-                    logger.error("创建任务「%s-%s」失败: %s", keyword, platform_name, e)
-                    partial_errors.append(f"创建任务「{keyword}-{platform_name}」失败: {e}")
+    _, partial_errors = await _create_keyword_platform_tasks(
+        db, monitor.id, monitor_suggestions, current_user_id, notes_per_task
+    )
 
     # 保存编辑后的切片规划
     if slice_plan is not None:
@@ -886,6 +902,11 @@ async def evaluate_strategy(
     )
 
     strategy.evaluation_result = result.model_dump()
+
+    # 评估完成后自动推进到 slices_ready（无需用户再点确认就绪）
+    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["slices_ready"]:
+        strategy.status = "slices_ready"
+
     await db.commit()
     return result
 
@@ -918,13 +939,8 @@ async def confirm_supplementary(
 ) -> ConfirmSupplementaryResponse:
     """确认补充采集建议，在现有 Monitor 中创建新任务
 
-    复用 confirm_plan 的 keyword×platform 任务创建逻辑，
-    但不创建新 Monitor，而是挂到策略关联的现有 Monitor 上。
+    不创建新 Monitor，将任务挂到策略关联的现有 Monitor 上。
     """
-    from src.social_media.monitors.crud import get_platform_by_code
-    from src.social_media.tasks.schemas import DataTaskCreate
-    from src.social_media.tasks.service import create_task
-
     # 获取策略关联的 Monitor
     monitor_ids = list(strategy.suggested_monitor_ids or [])
     if not monitor_ids:
@@ -940,55 +956,9 @@ async def confirm_supplementary(
             detail=f"监测 {monitor_ids[0]} 不存在",
         )
 
-    partial_errors: list[str] = []
-    created_task_ids: list[int] = []
-
-    task_params = {
-        "max_notes_count": notes_per_task,
-        "enable_comments": 1,
-        "per_note_max_comments_count": 20,
-    }
-
-    for suggestion in monitor_suggestions:
-        suggestion_name = suggestion.get("name", "").strip()
-        if not suggestion_name:
-            partial_errors.append("跳过一条空名称的建议")
-            continue
-
-        platforms = suggestion.get("platforms") or []
-        keywords = suggestion.get("keywords") or []
-        if not keywords:
-            keywords = [suggestion_name]
-
-        for keyword in keywords:
-            keyword = keyword.strip()
-            if not keyword:
-                continue
-            for platform_name in platforms:
-                code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
-                try:
-                    platform = await get_platform_by_code(db, code)
-                    if not platform:
-                        partial_errors.append(f"平台「{platform_name}」不存在，跳过")
-                        continue
-                    task = await create_task(
-                        db,
-                        DataTaskCreate(
-                            name=f"{keyword}-{platform.name}",
-                            monitor_id=monitor.id,
-                            platform_id=platform.id,
-                            task_type="search",
-                            keywords=keyword,
-                            data_source="remote_crawler",
-                            task_params=task_params,
-                            auto_analyze=True,
-                        ),
-                        current_user_id,
-                    )
-                    created_task_ids.append(task.id)
-                except Exception as e:
-                    logger.error("补充任务「%s-%s」创建失败: %s", keyword, platform_name, e)
-                    partial_errors.append(f"创建任务「{keyword}-{platform_name}」失败: {e}")
+    created_task_ids, partial_errors = await _create_keyword_platform_tasks(
+        db, monitor.id, monitor_suggestions, current_user_id, notes_per_task
+    )
 
     # 将补充任务 ID 存入 evaluation_result
     eval_result = dict(strategy.evaluation_result or {})

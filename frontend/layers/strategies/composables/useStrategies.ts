@@ -176,15 +176,6 @@ export const useStrategies = () => {
     return result
   }
 
-  // 确认数据就绪
-  const confirmReady = async (id: number) => {
-    const result = await apiRequest<Strategy>(`/strategies/${id}/confirm-ready`, {
-      method: 'POST',
-    })
-    showSuccess('数据已标记就绪')
-    return result
-  }
-
   // 上传 Brief 文档，AI 自动解析填充
   const parseBrief = async (file: File) => {
     const formData = new FormData()
@@ -211,7 +202,6 @@ export const useStrategies = () => {
     removeSlice,
     evaluate,
     confirmSupplementary,
-    confirmReady,
     parseBrief,
   }
 }

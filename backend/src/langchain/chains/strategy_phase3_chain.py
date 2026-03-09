@@ -172,12 +172,9 @@ def format_data_for_phase3(
             part["topic_aspects"] = [
                 {
                     "category": ta.get("category"),
-                    "count": ta.get("count"),
-                    "avg_sentiment": ta.get("avg_sentiment"),
-                    "top_topics": [
-                        t.get("name") for t in (ta.get("topics") or [])[:3]
-                        if isinstance(t, dict) and t.get("name")
-                    ],
+                    "mention_count": ta.get("mention_count"),
+                    "sentiment": ta.get("sentiment"),
+                    "representative_topics": (ta.get("representative_topics") or [])[:4],
                 }
                 for ta in topic_aspects[:8]
                 if isinstance(ta, dict)

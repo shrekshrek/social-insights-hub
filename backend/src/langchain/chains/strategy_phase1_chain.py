@@ -67,9 +67,17 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 ## 要求
 - social_tensions: 1-3 条，按重要性排序；至少 1 条须引用 ≥2 个切片的交叉数据
 - brand_opportunities: 1-2 条，每条引用相关 tension 的索引
-- evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, time_trend, unmet_need, audience_insight
+- evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, time_trend, unmet_need, audience_insight, organic_vs_mixed_sentiment, weak_signal, topic_category_pattern
 - confidence: high(数据充分)/medium(有支撑但需验证)/low(推测性)
 - 如切片数据中包含 audiences（受众画像），需标注哪类人群最受此 Tension 影响，以及哪类人群是品牌机会的主要触达对象
+
+## 字段解读
+
+- **organic_sentiment**（实体/话题/pains/gains）：剔除推广内容后的真实用户情感。若与 sentiment 差距 >= 0.2，说明推广内容正在掩盖真实口碑，优先以 organic_sentiment 为准。
+- **sov_ranking[].sentiment**：各品牌声量份额（share）配合情感，可定位四象限：高声量低情感是竞品弱点，低声量高情感是品牌机会入口。
+- **controversies[].controversy_depth**：两极均衡度（0~0.5，越接近 0.5 说明正负意见越均衡、越撕裂）。真正的核心矛盾往往 depth 高但 heat 未必高。
+- **weak_signal_pains**：情感极负但热度低于同切片中位数的话题，代表被大众声音压制的小众真实痛点。
+- **topic_aspects**：按主题类别聚合的宏观分布，用于发现「某一整类话题情感集体偏负」等品类级模式，是单话题视图看不到的。
 
 ## 切片采样偏置（重要）
 
@@ -193,6 +201,13 @@ def format_slice_data_for_phase1(
             lines.append(f"- 数据缺口（{priority}优先级）：{desc}")
         evaluation_summary = "\n".join(lines)
 
+    def _controversy_depth(c: dict) -> float:
+        """两极均衡度：0~0.5，越接近 0.5 说明正负意见越均衡（越撕裂）。"""
+        pos = int(c.get("positive_mentions") or 0)
+        neg = int(c.get("negative_mentions") or 0)
+        total = pos + neg
+        return min(pos, neg) / total if total > 0 else 0.0
+
     slice_parts = []
     for i, s in enumerate(slices):
         meta = s.get("meta") or {}
@@ -200,6 +215,7 @@ def format_slice_data_for_phase1(
         layers = s.get("layers") or {}
 
         # 实体 top 10（精简字段 + issues 用于 Opportunity 推导竞品弱点）
+        # organic_sentiment：剔除推广内容后的真实用户情感，与 sentiment 差距大时说明推广掩盖了真实口碑
         entities = foundation.get("aligned_entities", [])[:10]
         entity_summaries = [
             {
@@ -207,6 +223,7 @@ def format_slice_data_for_phase1(
                 "role": e.get("role"),
                 "heat": e.get("heat"),
                 "sentiment": e.get("sentiment"),
+                "organic_sentiment": e.get("organic_sentiment"),
                 "top_issues": [
                     f.get("text") for f in (e.get("top_issues") or [])[:3]
                     if isinstance(f, dict) and f.get("text")
@@ -216,6 +233,7 @@ def format_slice_data_for_phase1(
         ]
 
         # 话题 top 15（精简字段）
+        # organic_sentiment：有机内容下的话题情感，比混合均值更反映真实用户态度
         topics = foundation.get("aligned_topics", [])[:15]
         topic_summaries = [
             {
@@ -223,15 +241,21 @@ def format_slice_data_for_phase1(
                 "category": t.get("category"),
                 "heat": t.get("heat"),
                 "sentiment": t.get("sentiment"),
+                "organic_sentiment": t.get("organic_sentiment"),
             }
             for t in topics
         ]
 
-        # Landscape 层 — SOV top 10（仅 name+share）
+        # Landscape 层 — SOV top 10（name + share + sentiment，可推导四象限位置）
         landscape = layers.get("landscape") or {}
         sov_ranking = landscape.get("sov_ranking", [])[:10]
         sov_brief = [
-            {"name": r.get("name"), "share": r.get("share")}
+            {
+                "name": r.get("name"),
+                "share": r.get("share"),
+                "sentiment": r.get("sentiment"),
+                "role": r.get("role"),
+            }
             for r in sov_ranking
         ]
 
@@ -254,23 +278,80 @@ def format_slice_data_for_phase1(
         ]
 
         # topic_radar：按情感分桶的话题（Tension 的核心数据源）
+        # pains/gains 加入 organic_sentiment，区分真实痛点与被推广放大的声音
         topic_radar = intent.get("topic_radar") or {}
         pains_brief = [
-            {"name": p.get("name"), "heat": p.get("heat"), "sentiment": p.get("sentiment")}
+            {
+                "name": p.get("name"),
+                "heat": p.get("heat"),
+                "sentiment": p.get("sentiment"),
+                "organic_sentiment": p.get("organic_sentiment"),
+            }
             for p in (topic_radar.get("pains") or [])[:10]
             if isinstance(p, dict)
         ]
+
+        # controversies 按两极均衡度降序排列（min/total 越接近 0.5 越撕裂），而非热度
+        # 这样能找到真正意见分裂的话题，而非仅仅讨论量大的话题
+        controversies_sorted = sorted(
+            [c for c in (topic_radar.get("controversies") or []) if isinstance(c, dict)],
+            key=_controversy_depth,
+            reverse=True,
+        )
         controversies_brief = [
-            {"name": c.get("name"), "heat": c.get("heat"),
-             "positive_mentions": c.get("positive_mentions"),
-             "negative_mentions": c.get("negative_mentions")}
-            for c in (topic_radar.get("controversies") or [])[:5]
-            if isinstance(c, dict)
+            {
+                "name": c.get("name"),
+                "heat": c.get("heat"),
+                "positive_mentions": c.get("positive_mentions"),
+                "negative_mentions": c.get("negative_mentions"),
+                "controversy_depth": round(_controversy_depth(c), 2),
+            }
+            for c in controversies_sorted[:5]
         ]
+
         gains_brief = [
-            {"name": g.get("name"), "heat": g.get("heat"), "sentiment": g.get("sentiment")}
+            {
+                "name": g.get("name"),
+                "heat": g.get("heat"),
+                "sentiment": g.get("sentiment"),
+                "organic_sentiment": g.get("organic_sentiment"),
+            }
             for g in (topic_radar.get("gains") or [])[:5]
             if isinstance(g, dict)
+        ]
+
+        # 弱信号痛点：情感极负但热度低，被主流声量淹没的小众真实需求
+        # 筛选条件：sentiment <= -0.4（极负向）且 heat 低于 pains 中位数
+        all_pains = [p for p in (topic_radar.get("pains") or []) if isinstance(p, dict)]
+        if len(all_pains) >= 4:
+            heats = sorted(float(p.get("heat") or 0.0) for p in all_pains)
+            median_heat = heats[len(heats) // 2]
+            weak_signal_pains = [
+                {
+                    "name": p.get("name"),
+                    "heat": p.get("heat"),
+                    "sentiment": p.get("sentiment"),
+                    "organic_sentiment": p.get("organic_sentiment"),
+                }
+                for p in all_pains
+                if float(p.get("sentiment") or 0.0) <= -0.4
+                and float(p.get("heat") or 0.0) < median_heat
+            ]
+            weak_signal_pains.sort(key=lambda x: float(x.get("sentiment") or 0.0))
+        else:
+            weak_signal_pains = []
+
+        # 主题类别概览：按 category 聚合的宏观分布（热度+情感），补充单话题视图的盲区
+        topic_aspects_brief = [
+            {
+                "category": a.get("category"),
+                "heat": a.get("heat"),
+                "sentiment": a.get("sentiment"),
+                "mention_count": a.get("mention_count"),
+                "representative_topics": (a.get("representative_topics") or [])[:4],
+            }
+            for a in (intent.get("topic_aspects") or [])[:5]
+            if isinstance(a, dict) and a.get("category")
         ]
 
         # Focus 层 — SWOT 维度摘要（含 delta 表示优劣势程度）+ Gap 盲区
@@ -319,6 +400,10 @@ def format_slice_data_for_phase1(
             part["controversies"] = controversies_brief
         if gains_brief:
             part["gains"] = gains_brief
+        if weak_signal_pains:
+            part["weak_signal_pains"] = weak_signal_pains[:5]
+        if topic_aspects_brief:
+            part["topic_aspects"] = topic_aspects_brief
         if swot_brief:
             part["swot_dimensions"] = swot_brief
         if gap_brief:

@@ -54,7 +54,8 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - brand_social_role.statement 简洁有力，一句话定义角色
 - brand_social_role.elaboration 解释为什么是这个角色，如何体现
 - social_strategy.rhythm 包含具体的传播节奏建议（如"日常种草+事件引爆"）
-- evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, brief_alignment
+- evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, brief_alignment, audience_insight
+- 如切片数据中包含 audiences（受众画像），需在 brand_social_role 和 social_strategy 中明确品牌面向的主要目标受众，而非泛泛而谈
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -144,6 +145,23 @@ def format_data_for_phase2(
                 for d in platform_dna[:10]
                 if isinstance(d, dict)
             ]
+
+        # 受众画像（Brand Social Role 的目标人群 + Social Strategy 的触达对象）
+        intent = layers.get("intent") or {}
+        context_analysis = intent.get("context_analysis") or {}
+        audiences_raw = context_analysis.get("audiences") or []
+        audiences_brief = [
+            {
+                "label": a.get("label"),
+                "heat": a.get("heat"),
+                "mentions": a.get("mentions"),
+                "preferences": (a.get("preferences") or [])[:3],
+            }
+            for a in audiences_raw[:8]
+            if isinstance(a, dict) and a.get("label")
+        ]
+        if audiences_brief:
+            part["audiences"] = audiences_brief
 
         supplementary_parts.append(part)
 

@@ -60,7 +60,8 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - big_idea.tension_echo 必须说明创意如何回应核心矛盾
 - content_strategy.pillars 2-4 个，每个含 name + description + reference_examples
 - reference_examples 基于切片数据中的高互动内容特征推导
-- evidence 至少 2 条，类型可选: tension_ref, role_alignment, strategy_ref, content_insight, kol_ecosystem
+- evidence 至少 2 条，类型可选: tension_ref, role_alignment, strategy_ref, content_insight, kol_ecosystem, audience_insight
+- 如切片数据中包含 audiences（受众画像），content_strategy 的各支柱需明确面向哪类受众，reference_examples 也要考虑受众匹配度
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -138,8 +139,26 @@ def format_data_for_phase3(
 
         # 注意：不读取 ipa_analysis — LLM 已有 topic_aspects + top_features + SWOT，可自行推理四象限关系
 
-        # 话题分类维度（Content Strategy 内容支柱的数据源）
+        # Intent 层
         intent = layers.get("intent") or {}
+
+        # 受众画像（内容支柱的受众定向 + reference_examples 匹配度）
+        context_analysis = intent.get("context_analysis") or {}
+        audiences_raw = context_analysis.get("audiences") or []
+        audiences_brief = [
+            {
+                "label": a.get("label"),
+                "heat": a.get("heat"),
+                "mentions": a.get("mentions"),
+                "preferences": (a.get("preferences") or [])[:3],
+            }
+            for a in audiences_raw[:8]
+            if isinstance(a, dict) and a.get("label")
+        ]
+        if audiences_brief:
+            part["audiences"] = audiences_brief
+
+        # 话题分类维度（Content Strategy 内容支柱的数据源）
         topic_aspects = intent.get("topic_aspects")
         if topic_aspects and isinstance(topic_aspects, list):
             part["topic_aspects"] = [

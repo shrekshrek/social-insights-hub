@@ -91,7 +91,8 @@ USER_TEMPLATE = """{brief_section}
 
 def create_strategy_phase3_chain() -> Runnable:
     """创建 Phase 3 (创意层) LLM 链"""
-    llm = get_llm(llm_type="reasoner")
+    # 创意生成任务不需要 CoT 推理，chat 模型 token 预算更稳定
+    llm = get_llm(llm_type="chat")
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_TEMPLATE),
         ("user", USER_TEMPLATE),
@@ -219,7 +220,28 @@ def parse_phase3_response(response_text: str) -> dict[str, Any]:
     try:
         result = json.loads(text.strip())
     except json.JSONDecodeError:
-        logger.error("Phase 3 JSON 解析失败: %s...", text[:200])
+        # 兜底：从响应中找最外层 {...} 块
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                result = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                pass
+            else:
+                logger.warning("Phase 3 JSON 从 {...} 块中提取成功（原响应有额外内容）")
+                # 跳到字段补全逻辑
+                if "big_idea" not in result:
+                    result["big_idea"] = {
+                        "statement": "",
+                        "elaboration": "",
+                        "tension_echo": "",
+                        "evidence": [],
+                    }
+                if "content_strategy" not in result:
+                    result["content_strategy"] = {"pillars": [], "evidence": []}
+                return result
+        logger.error("Phase 3 JSON 解析失败，原始响应前 500 字符: %s", text[:500])
         return {
             "big_idea": {
                 "statement": "",

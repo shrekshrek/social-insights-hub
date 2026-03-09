@@ -105,20 +105,15 @@ def create_strategy_phase1_chain() -> Runnable:
 def _compute_cross_slice_anomalies(slice_parts: list[dict]) -> list[dict]:
     """跨切片异常信号预计算（纯代码，无 LLM 成本）
 
-    检测两类异常：
-    1. 实体情感落差：同一实体在不同切片中情感差异显著（|delta| >= 0.5）
-    2. 话题覆盖空白：大盘切片中的高热话题在品牌聚焦切片中完全未出现
+    检测实体情感落差：同一实体在不同切片中情感差异显著（|delta| >= 0.5），
+    说明该实体的口碑具有场景/人群依赖性，是值得深挖的交叉洞察线索。
+
+    注：话题覆盖空白不在此处计算——话题名称跨切片不保证一致，
+    精确字符串匹配会产生大量误报，由 LLM 凭完整数据自行判断更准确。
     """
-    anomalies: list[dict] = []
-
-    # 按切片分类
-    brand_slices = [s for s in slice_parts if s.get("mode") == "品牌聚焦"]
-    market_slices = [s for s in slice_parts if s.get("mode") == "大盘分析"]
-
     if len(slice_parts) < 2:
-        return anomalies
+        return []
 
-    # 1. 实体情感落差：收集所有切片的实体情感，找落差 >= 0.5 的
     entity_sentiment_map: dict[str, list[dict]] = {}
     for s in slice_parts:
         for e in s.get("entities") or []:
@@ -131,6 +126,7 @@ def _compute_cross_slice_anomalies(slice_parts: list[dict]) -> list[dict]:
                     "sentiment": sentiment,
                 })
 
+    anomalies: list[dict] = []
     for name, records in entity_sentiment_map.items():
         if len(records) < 2:
             continue
@@ -143,40 +139,14 @@ def _compute_cross_slice_anomalies(slice_parts: list[dict]) -> list[dict]:
                 "delta": round(delta, 2),
                 "detail": records,
                 "insight_hint": (
-                    f"「{name}」在不同切片中情感落差达 {delta:.2f}，"
-                    "可能反映场景/人群差异，值得深入分析"
+                    f"「{name}」跨切片情感落差 {delta:.2f}，"
+                    "可能反映场景/人群差异，值得交叉分析"
                 ),
             })
 
-    # 2. 话题覆盖空白：大盘切片高热话题（heat 前5）在品牌聚焦切片中未出现
-    if brand_slices and market_slices:
-        brand_topic_names: set[str] = set()
-        for s in brand_slices:
-            for t in s.get("topics") or []:
-                if t.get("name"):
-                    brand_topic_names.add(t["name"])
-
-        for ms in market_slices:
-            market_topics = sorted(
-                [t for t in (ms.get("topics") or []) if t.get("heat")],
-                key=lambda t: t["heat"],
-                reverse=True,
-            )[:5]
-            for t in market_topics:
-                name = t.get("name")
-                if name and name not in brand_topic_names:
-                    anomalies.append({
-                        "type": "topic_coverage_gap",
-                        "topic": name,
-                        "market_heat": t.get("heat"),
-                        "market_slice_index": ms["slice_index"],
-                        "insight_hint": (
-                            f"话题「{name}」在大盘切片（热度 {t.get('heat')}）中显著，"
-                            "但品牌聚焦切片中完全未出现，可能是品牌未覆盖的沟通空白"
-                        ),
-                    })
-
-    return anomalies[:8]  # 最多返回 8 条，控制 token
+    # 按落差降序，最多返回 5 条
+    anomalies.sort(key=lambda x: x["delta"], reverse=True)
+    return anomalies[:5]
 
 
 def format_slice_data_for_phase1(

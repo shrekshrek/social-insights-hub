@@ -78,7 +78,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 ## 要求
 - brand_social_role.statement 简洁有力，一句话定义角色
 - brand_social_role.elaboration 解释为什么是这个角色，如何体现
-- social_strategy.rhythm 包含具体的传播节奏建议（如"日常种草+事件引爆"）
+- social_strategy.rhythm 基于 KOL 生态风格和平台分布，给出内容节奏方向（如内容类型比例、触发时机类型），不需要预测具体发布频率
 - evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, brief_alignment, audience_insight
 - 如切片数据中包含 audiences（受众画像），需在 brand_social_role 和 social_strategy 中明确品牌面向的主要目标受众，而非泛泛而谈
 
@@ -86,7 +86,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 
 品类中品牌惯用的"默认角色"（如"陪伴者"、"健康倡导者"、"生活方式品牌"）大同小异，毫无差异化价值。
 
-输出 brand_social_role 之前，先问自己：**"这个品类里其他品牌会不会说同样��话？"** 若答案是"会"，则角色定义不够。
+输出 brand_social_role 之前，先问自己：**"这个品类里其他品牌会不会说同样的话？"** 若答案是"会"，则角色定义不够。
 
 推荐角色必须满足：
 - 以 Phase 1 中最具反直觉性的 Tension 作为切入点，而非最显眼的那条

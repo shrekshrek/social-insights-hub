@@ -18,9 +18,9 @@
    - 仅传入 Phase 2 会导致 LLM 产出的 Big Idea 与原始矛盾脱节，只是策略的复述
 
 2. **"反常规要求"约束 Big Idea 和 Content Strategy**
-   - Big Idea: 须先���象"最平庸的创意概念"，再确认与之有本质差异（"没想到"感而非"嗯对"感）
+   - Big Idea: 须先想象"最平庸的创意概念"，再确认与之有本质差异（"没想到"感而非"嗯对"感）
    - Content Strategy: 必须包含 ≥1 个"品类颠覆型支柱"，要求说明品类惯常做法及反向逻辑
-   - reference_examples 可跨品类借鉴，防止 LLM 只在本品类 KOL 案例内���环
+   - reference_examples 可跨品类借鉴，防止 LLM 只在本品类 KOL 案例内循环
 
 3. **topic_aspects 字段的作用**
    - 按主题类别聚合的宏观分布（mention_count / sentiment / representative_topics）
@@ -95,13 +95,13 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - big_idea.statement 简洁、有创意张力，能引起共鸣
 - big_idea.tension_echo 必须说明创意如何回应核心矛盾
 - content_strategy.pillars 2-4 个，每个含 name + description + reference_examples
-- reference_examples 基于切片数据中的高互动内容特征推导
+- reference_examples 基于切片数据中的内容特征（KOL声音风格、实体高频属性）结合品类创意参考推导，可借鉴其他品类形式
 - evidence 至少 2 条，类型可选: tension_ref, role_alignment, strategy_ref, content_insight, kol_ecosystem, audience_insight
 - 如切片数据中包含 audiences（受众画像），content_strategy 的各支柱需明确面向哪类受众，reference_examples 也要考虑受众匹配度
 
 ## 反常规要求（重要）
 
-**Big Idea** 需通过自我检验：先想象这个品类"最平庸的创意概念"是什么，再确认输出与之有本质���异。Big Idea 应该让看到它的人有轻微的"没想到"感，而不是"嗯，对"感。
+**Big Idea** 需通过自我检验：先想象这个品类"最平庸的创意概念"是什么，再确认输出与之有本质差异。Big Idea 应该让看到它的人有轻微的"没想到"感，而不是"嗯，对"感。
 
 **Content Strategy** 中的支柱须包含至少 1 个"品类颠覆型支柱"——内容方向挑战该品类的惯常做法，而非在品类既有框架内执行。具体要求：
 - 在该支柱的 description 中注明"品类通常如何做 X，我们反其道而行的逻辑是什么"

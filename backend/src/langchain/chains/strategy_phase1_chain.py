@@ -18,7 +18,7 @@
    - 预计算结果以自然语言 hint 注入 slice_data，不依赖 LLM 重新发现
 
 2. **Prompt 强制要求"反直觉"洞察，而非通用观察**
-   - 每条 Tension 必须说明 conventional_wisdom（行业常识）与 data_reality（数据��驳）
+   - 每条 Tension 必须说明 conventional_wisdom（行业常识）与 data_reality（数据反驳）
    - 至少 1 条 Tension 须跨 ≥2 个切片，防止单切片视角的幸存者偏差
    - "用户关注健康"类宽泛结论被明确禁止，倒逼 LLM 寻找真正的数据异常
 
@@ -336,7 +336,7 @@ def format_slice_data_for_phase1(
                 "negative_mentions": c.get("negative_mentions"),
                 "controversy_depth": round(_controversy_depth(c), 2),
             }
-            for c in controversies_sorted[:5]
+            for c in controversies_sorted[:8]
         ]
 
         gains_brief = [

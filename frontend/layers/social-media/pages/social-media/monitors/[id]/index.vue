@@ -529,7 +529,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
       cell: ({ row }) => {
         const s = row.original
         const totalVolume = s.result_data?.layers?.landscape?.overview?.total_volume
-        const globalSentiment = s.result_data?.layers?.landscape?.overview?.global_sentiment
+        const globalSentiment = s.result_data?.layers?.landscape?.overview?.global_nsr
         const entityCount = s.result_data?.foundation?.aligned_entities?.length ?? null
         const topicCount = s.result_data?.foundation?.aligned_topics?.length ?? null
         const sentimentText = typeof globalSentiment === 'number' && Number.isFinite(globalSentiment)
@@ -614,6 +614,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'status',
       header: '状态',
+      size: 160,
       cell: ({ row }) => {
         const collectBadge = h(Badge, {
           color: getStatusColor(row.original.status),
@@ -630,7 +631,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           size: 'xs',
         }, () => getAnalysisText(s))
 
-        return h('div', { class: 'flex flex-col gap-1' }, [collectBadge, analysisBadge])
+        return h('div', { class: 'flex items-center gap-1' }, [collectBadge, analysisBadge])
       },
     },
     {

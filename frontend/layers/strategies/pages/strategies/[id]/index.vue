@@ -318,22 +318,20 @@
 
         <!-- 已关联切片列表 -->
         <div v-if="strategy.slices.length" class="mb-4">
-          <div class="space-y-1">
+          <div class="grid grid-cols-3 gap-2">
             <div
               v-for="s in strategy.slices"
               :key="s.slice_id"
-              class="flex items-center gap-2 text-sm py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-0"
+              class="flex items-center gap-2 text-sm p-2 border border-gray-100 dark:border-gray-800 rounded-lg"
             >
               <UIcon name="i-heroicons-document-chart-bar" class="text-gray-400 shrink-0" />
               <NuxtLink
                 :to="`/social-media/monitors/${s.monitor_id}/analysis?slice_id=${s.slice_id}`"
-                class="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                class="flex-1 min-w-0 hover:text-primary-600 transition-colors"
               >
-                <span class="text-gray-600 dark:text-gray-400">{{ s.monitor_name }}</span>
-                <span class="text-gray-300">/</span>
-                <span class="font-medium">{{ s.slice_name || `切片 #${s.slice_id}` }}</span>
+                <div class="text-xs text-gray-400 truncate">{{ s.monitor_name }}</div>
+                <div class="font-medium truncate">{{ s.slice_name || `切片 #${s.slice_id}` }}</div>
               </NuxtLink>
-              <div class="flex-1" />
               <UButton
                 variant="ghost"
                 size="xs"
@@ -350,21 +348,39 @@
 
         <!-- 添加切片 -->
         <div class="mb-4">
-          <UButton
-            variant="outline"
-            size="sm"
-            icon="i-heroicons-plus"
-            @click="showAddSlices = !showAddSlices"
-          >
-            添加切片
-          </UButton>
+          <div class="flex items-center gap-2">
+            <UButton
+              variant="outline"
+              size="sm"
+              icon="i-heroicons-plus"
+              @click="openAddSlicesPanel"
+            >
+              添加切片
+            </UButton>
+            <UButton
+              v-if="showAddSlices"
+              variant="ghost"
+              size="sm"
+              icon="i-heroicons-arrow-path"
+              @click="refreshSliceCache"
+            >
+              刷新切片
+            </UButton>
+          </div>
 
           <div v-if="showAddSlices" class="mt-3 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <UInput
+              v-model="searchMonitor"
+              placeholder="搜索监测项目..."
+              icon="i-heroicons-magnifying-glass"
+              size="sm"
+              class="mb-2"
+            />
             <div v-if="addMonitorsPending" class="text-sm text-gray-400 py-2">加载监测列表...</div>
-            <div v-else-if="addMonitors.length === 0" class="text-sm text-gray-400 py-2">暂无监测</div>
+            <div v-else-if="filteredAddMonitors.length === 0" class="text-sm text-gray-400 py-2">{{ searchMonitor ? '未找到匹配的监测' : '暂无监测' }}</div>
             <div v-else class="space-y-2 max-h-64 overflow-y-auto">
               <div
-                v-for="monitor in addMonitors"
+                v-for="monitor in filteredAddMonitors"
                 :key="monitor.id"
                 class="border border-gray-100 dark:border-gray-700 rounded"
               >
@@ -983,12 +999,31 @@ const addMonitorSlicesMap = ref<Record<number, AddSliceItem[]>>({})
 const selectedAddSliceIds = ref<number[]>([])
 const addSlicesLoading = ref(false)
 const evaluateLoading = ref(false)
+const searchMonitor = ref('')
 
 const { data: addMonitorsData, pending: addMonitorsPending } = useApiDataFn<{
   items: AddMonitorItem[]
 }>('/social-media/monitors?page_size=100', { key: 'strategy-detail-monitors' })
 
 const addMonitors = computed(() => addMonitorsData.value?.items || [])
+
+const filteredAddMonitors = computed(() => {
+  const q = searchMonitor.value.trim().toLowerCase()
+  if (!q) return addMonitors.value
+  return addMonitors.value.filter(m => m.name.toLowerCase().includes(q))
+})
+
+const openAddSlicesPanel = () => {
+  addMonitorSlicesMap.value = {}
+  addExpandedMonitors.value = new Set()
+  searchMonitor.value = ''
+  showAddSlices.value = true
+}
+
+const refreshSliceCache = () => {
+  addMonitorSlicesMap.value = {}
+  addExpandedMonitors.value = new Set()
+}
 
 const handleRemoveSlice = async (sliceId: number) => {
   try {
@@ -1008,15 +1043,14 @@ const toggleAddMonitor = async (monitorId: number) => {
     addExpandedMonitors.value.delete(monitorId)
   } else {
     addExpandedMonitors.value.add(monitorId)
-    if (!addMonitorSlicesMap.value[monitorId]) {
-      try {
-        const result = await apiRequest<{ items: AddSliceItem[] }>(
-          `/social-media/analysis/monitors/${monitorId}/slices`
-        )
-        addMonitorSlicesMap.value = { ...addMonitorSlicesMap.value, [monitorId]: result.items }
-      } catch {
-        addMonitorSlicesMap.value = { ...addMonitorSlicesMap.value, [monitorId]: [] }
-      }
+    // 每次展开都重新请求，避免展示旧数据
+    try {
+      const result = await apiRequest<{ items: AddSliceItem[] }>(
+        `/social-media/analysis/monitors/${monitorId}/slices`
+      )
+      addMonitorSlicesMap.value = { ...addMonitorSlicesMap.value, [monitorId]: result.items }
+    } catch {
+      addMonitorSlicesMap.value = { ...addMonitorSlicesMap.value, [monitorId]: [] }
     }
   }
 }

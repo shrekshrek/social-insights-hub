@@ -191,7 +191,9 @@ export interface IndustryQuadrantPoint {
 export interface LandscapeLayer {
   overview?: {
     total_volume?: number
-    global_sentiment?: number
+    global_nsr?: number
+    organic_nsr?: number | null
+    promo_nsr?: number | null
     platform_volume?: PlatformDistribution
     keyword_volume?: KeywordDistribution
     /** 全量实体的有机热度总和（用于计算全局口径的有机 SOV 份额） */

@@ -200,12 +200,15 @@ export interface PhaseEvidence {
 
 export interface SocialTension {
   statement: string
+  conventional_wisdom?: string
+  data_reality?: string
   confidence?: string
   evidence?: PhaseEvidence[]
 }
 
 export interface BrandOpportunity {
   statement: string
+  why_non_obvious?: string
   related_tensions?: number[]
   evidence?: PhaseEvidence[]
 }

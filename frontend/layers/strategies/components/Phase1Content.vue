@@ -22,6 +22,14 @@
               {{ tension.confidence }}
             </UBadge>
           </div>
+          <div v-if="tension.conventional_wisdom || tension.data_reality" class="mt-2 space-y-1 text-sm">
+            <p v-if="tension.conventional_wisdom" class="text-gray-500 dark:text-gray-400">
+              <span class="font-medium text-gray-600 dark:text-gray-300">行业通常认为：</span>{{ tension.conventional_wisdom }}
+            </p>
+            <p v-if="tension.data_reality" class="text-blue-700 dark:text-blue-300">
+              <span class="font-medium">���据揭示：</span>{{ tension.data_reality }}
+            </p>
+          </div>
           <StrategyEvidenceList :evidence="tension.evidence" />
         </div>
       </div>
@@ -38,6 +46,9 @@
         >
           <p class="font-medium text-gray-900 dark:text-white">
             {{ idx + 1 }}. {{ opp.statement }}
+          </p>
+          <p v-if="opp.why_non_obvious" class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <span class="font-medium text-gray-600 dark:text-gray-300">为何非显而易见：</span>{{ opp.why_non_obvious }}
           </p>
           <p v-if="opp.related_tensions?.length" class="text-xs text-gray-500 mt-1">
             关联 Tension: {{ opp.related_tensions.map(i => `#${(i as number) + 1}`).join(', ') }}

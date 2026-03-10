@@ -97,12 +97,13 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 ## 要求
 - social_tensions: 1-3 条，按重要性排序；至少 1 条须引用 ≥2 个切片的交叉数据
 - brand_opportunities: 1-2 条，每条引用相关 tension 的索引
-- evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, time_trend, unmet_need, audience_insight, organic_vs_mixed_sentiment, weak_signal, topic_category_pattern
+- evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, unmet_need, audience_insight, organic_vs_mixed_sentiment, weak_signal, topic_category_pattern
 - confidence: high(数据充分)/medium(有支撑但需验证)/low(推测性)
 - 如切片数据中包含 audiences（受众画像），需标注哪类人群最受此 Tension 影响，以及哪类人群是品牌机会的主要触达对象
 
 ## 字段解读
 
+- **original_terms**（top 5 实体）：用户提及该实体时的原始表述（最多 3 条），保留真实语言模式，evidence 可直接引用原话以增强说服力。
 - **organic_sentiment**（实体/话题/pains/gains）：剔除推广内容后的真实用户情感。若与 sentiment 差距 >= 0.2，说明推广内容正在掩盖真实口碑，优先以 organic_sentiment 为准。
 - **sov_ranking[].sentiment**：各品牌声量份额（share）配合情感，可定位四象限：高声量低情感是竞品弱点，低声量高情感是品牌机会入口。
 - **controversies[].controversy_depth**：两极均衡度（0~0.5，越接近 0.5 说明正负意见越均衡、越撕裂）。真正的核心矛盾往往 depth 高但 heat 未必高。
@@ -246,9 +247,11 @@ def format_slice_data_for_phase1(
 
         # 实体 top 10（精简字段 + issues 用于 Opportunity 推导竞品弱点）
         # organic_sentiment：剔除推广内容后的真实用户情感，与 sentiment 差距大时说明推广掩盖了真实口碑
+        # original_terms（top 5 实体）：用户原始表述，保留真实语言模式，供 evidence 引用原话
         entities = foundation.get("aligned_entities", [])[:10]
-        entity_summaries = [
-            {
+        entity_summaries = []
+        for idx_e, e in enumerate(entities):
+            entry: dict[str, Any] = {
                 "name": e.get("name"),
                 "role": e.get("role"),
                 "heat": e.get("heat"),
@@ -259,8 +262,17 @@ def format_slice_data_for_phase1(
                     if isinstance(f, dict) and f.get("text")
                 ],
             }
-            for e in entities
-        ]
+            # 仅为 top 5 实体附加原始用语，避免 token 过载
+            if idx_e < 5:
+                raw_terms = e.get("original_terms") or []
+                terms = [
+                    (t if isinstance(t, str) else t.get("text", ""))
+                    for t in raw_terms[:3]
+                    if t
+                ]
+                if terms:
+                    entry["original_terms"] = terms
+            entity_summaries.append(entry)
 
         # 话题 top 15（精简字段）
         # organic_sentiment：有机内容下的话题情感，比混合均值更反映真实用户态度

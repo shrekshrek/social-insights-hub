@@ -27,7 +27,7 @@
               <span class="font-medium text-gray-600 dark:text-gray-300">行业通常认为：</span>{{ tension.conventional_wisdom }}
             </p>
             <p v-if="tension.data_reality" class="text-blue-700 dark:text-blue-300">
-              <span class="font-medium">���据揭示：</span>{{ tension.data_reality }}
+              <span class="font-medium">数据揭示：</span>{{ tension.data_reality }}
             </p>
           </div>
           <StrategyEvidenceList :evidence="tension.evidence" />

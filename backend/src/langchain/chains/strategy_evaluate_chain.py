@@ -119,7 +119,7 @@ slice_suggestions: 仅针对**已关联切片的数据质量问题**（如帖子
 gap_analysis: 列出即使关联 Architect 推荐切片后**仍然存在**的数据缺口（最多 3 条）
   - 已能被 Architect 推荐资源覆盖的缺口不要列出
 
-supplementary_suggestions: 有两种触���情况：
+supplementary_suggestions: 有两种触发情况：
 
   **情况 A（必要补充）**：overall_score < 0.75 且 Architect 判断 collection_still_needed=true
   - 必须输出，不可为 null 或空数组——即使 Architect 没有提供具体的 supplement 切片，也应根据 gap_analysis 自行判断最关键的采集缺口并给出建议
@@ -157,7 +157,7 @@ supplementary_slice_plan: 补充采集完成后如何建切片的简要指引
 
 **无法提供**：年龄/性别/地域等人口统计学画像、兴趣标签（这些是用户账号 profile 数据，不在帖子内容里）
 
-**不要将人口统计学画像缺失列入 gap_analysis，也不要在 supplementary_suggestions 中建议采集��类数据**。
+**不要将人口统计学画像缺失列入 gap_analysis，也不要在 supplementary_suggestions 中建议采集此类数据**。
 """
 
 USER_TEMPLATE = """{brief_section}

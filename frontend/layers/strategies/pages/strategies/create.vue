@@ -25,68 +25,6 @@
       </div>
     </div>
 
-    <!-- Brief 文档上传卡片 -->
-    <UCard>
-      <template #header>
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-base font-semibold">上传 Brief 文档（可选）</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              支持 PDF、DOCX、TXT、MD，AI 将自动提取信息填入下方表单
-            </p>
-          </div>
-        </div>
-      </template>
-
-      <div
-        class="border-2 border-dashed rounded-lg transition-colors"
-        :class="isDragOver
-          ? 'border-primary-400 bg-primary-50 dark:bg-primary-950'
-          : 'border-gray-200 dark:border-gray-700'"
-        @dragover.prevent="isDragOver = true"
-        @dragleave.prevent="isDragOver = false"
-        @drop.prevent="handleFileDrop"
-      >
-        <label class="flex flex-col items-center justify-center gap-3 py-8 cursor-pointer">
-          <input
-            ref="fileInputRef"
-            type="file"
-            accept=".pdf,.docx,.txt,.md"
-            class="sr-only"
-            @change="handleFileChange"
-          >
-
-          <template v-if="!parsing">
-            <UIcon name="i-heroicons-document-arrow-up" class="w-10 h-10 text-gray-400" />
-            <div class="text-center">
-              <p class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                拖拽文件到此处，或
-                <span class="text-primary-600 dark:text-primary-400">点击上传</span>
-              </p>
-              <p class="text-xs text-gray-400 mt-1">PDF · DOCX · TXT · MD，最大 10 MB</p>
-            </div>
-          </template>
-
-          <template v-else>
-            <UIcon name="i-heroicons-arrow-path" class="w-10 h-10 text-primary-500 animate-spin" />
-            <p class="text-sm text-gray-600 dark:text-gray-400">AI 正在解析文档，请稍候…</p>
-          </template>
-        </label>
-      </div>
-
-      <div v-if="parsedFile" class="mt-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-        <UIcon name="i-heroicons-check-circle" class="w-4 h-4 text-success-500" />
-        <span>已解析：{{ parsedFile }}</span>
-        <UButton
-          variant="ghost"
-          size="xs"
-          icon="i-heroicons-x-mark"
-          class="ml-auto"
-          @click="clearParsed"
-        />
-      </div>
-    </UCard>
-
     <!-- 品牌信息表单 -->
     <UCard>
       <template #header>
@@ -140,6 +78,49 @@
 
       <p class="text-xs text-gray-400 mt-4">
         创建后进入 AI 咨询流程，AI 会根据目标规划监测方案，无需提前准备所有信息。
+      </p>
+    </UCard>
+
+    <!-- 上传 Brief 文档 -->
+    <UCard>
+      <template #header>
+        <h2 class="text-base font-semibold">上传 Brief 文档</h2>
+      </template>
+
+      <div
+        class="border-2 border-dashed rounded-lg p-6 text-center transition-colors"
+        :class="isDragOver ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-300 dark:border-gray-700'"
+        @dragover.prevent="isDragOver = true"
+        @dragleave="isDragOver = false"
+        @drop.prevent="handleFileDrop"
+      >
+        <div v-if="parsing" class="space-y-2">
+          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 mx-auto text-primary-500 animate-spin" />
+          <p class="text-sm text-gray-500">正在解析文档...</p>
+        </div>
+        <div v-else-if="parsedFile" class="space-y-2">
+          <UIcon name="i-heroicons-check-circle" class="w-8 h-8 mx-auto text-green-500" />
+          <p class="text-sm text-gray-700 dark:text-gray-300">已解析: {{ parsedFile }}</p>
+          <UButton variant="ghost" size="xs" @click="clearParsed">清除</UButton>
+        </div>
+        <div v-else class="space-y-2">
+          <UIcon name="i-heroicons-document-arrow-up" class="w-8 h-8 mx-auto text-gray-400" />
+          <p class="text-sm text-gray-500">拖拽文件到此处，或</p>
+          <UButton variant="outline" size="sm" @click="fileInputRef?.click()">选择文件</UButton>
+          <p class="text-xs text-gray-400">支持 PDF、DOCX、TXT、MD，最大 10 MB</p>
+        </div>
+      </div>
+
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept=".pdf,.docx,.txt,.md"
+        class="hidden"
+        @change="handleFileChange"
+      >
+
+      <p class="text-xs text-gray-400 mt-3">
+        上传后 AI 将自动提取品牌信息填入上方表单，可手动修改。
       </p>
     </UCard>
   </div>

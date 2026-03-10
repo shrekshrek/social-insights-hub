@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from "@nuxt/ui";
+import { UButton } from "#components";
 
 definePageMeta({
   layout: "default",
@@ -105,7 +106,6 @@ const columns: TableColumn<Monitor>[] = [
     accessorKey: "actions",
     header: "操作",
     cell: ({ row }) => {
-      const UButton = resolveComponent("UButton");
       return h("div", { class: "flex items-center gap-2" }, [
         h(
           UButton,
@@ -124,7 +124,7 @@ const columns: TableColumn<Monitor>[] = [
             size: "xs",
             variant: "ghost",
             icon: "i-heroicons-trash",
-            color: "red",
+            color: "error",
             onClick: () => handleDelete(row.original),
           },
           () => "删除"

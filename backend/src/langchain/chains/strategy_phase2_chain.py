@@ -1,6 +1,31 @@
 """Strategy Phase 2 Chain — 策略层: Brand Social Role + Social Strategy
 
 基于 Phase 1 的洞察结果，推导品牌在社交场域的角色定位和传播策略。
+
+## 输入上下文（USER_TEMPLATE 的三个占位符）
+
+- brief_section  : 品牌 Brief，与 Phase 1 一致
+- consult_summary: 历轮咨询结论摘要
+- phase1_result  : Phase 1 输出的完整 JSON（social_tensions + brand_opportunities），
+                   由调用方从 strategy.phase1_result 序列化后传入
+
+## 关键设计决策
+
+1. **直接传入 Phase 1 JSON，而非摘要**
+   - LLM 可直接引用 opportunity index（如 phase1:opportunity:0）作为 evidence
+   - 保留完整 conventional_wisdom / data_reality，Phase 2 的角色定义需要"反直觉推理链"的原始依据
+
+2. **"反陈词约束"（Anti-Cliché）是核心约束**
+   - 品类默认角色（"陪伴者"、"生活方式品牌"）毫无差异化价值
+   - 要求 LLM 自检："这个品类里其他品牌会不会说同样的话？"——若会，则不合格
+   - elaboration 必须显式声明"我们不是 X，我们是 Y"，强制输出对比而非自描述
+   - 推荐角色须以 Phase 1 中"最具反直觉性的 Tension"（非最显眼的那条）为切入点
+
+3. **KOL 声音风格作为角色验证锚点**
+   - 切片数据中的 KOL 生态信息会经由 slice_data 传递到 Phase 2
+   - 角色定位须与该品类 KOL 生态的实际内容风格可融合，避免策略与执行脱节
+
+4. **模型选用 chat（非 reasoner）**，原因同 Phase 1（token budget 限制）。
 """
 
 from __future__ import annotations

@@ -136,6 +136,45 @@ def create_strategy_phase3_chain() -> Runnable:
     return prompt | llm
 
 
+def _slim_phase1(phase1_result: dict) -> dict:
+    """Phase 1 结论精简：剔除 evidence（Phase 3 只需结论，不需要推理链）"""
+    tensions = [
+        {
+            "statement": t.get("statement"),
+            "conventional_wisdom": t.get("conventional_wisdom"),
+            "data_reality": t.get("data_reality"),
+            "confidence": t.get("confidence"),
+        }
+        for t in (phase1_result.get("social_tensions") or [])
+    ]
+    opportunities = [
+        {
+            "statement": o.get("statement"),
+            "why_non_obvious": o.get("why_non_obvious"),
+            "related_tensions": o.get("related_tensions"),
+        }
+        for o in (phase1_result.get("brand_opportunities") or [])
+    ]
+    return {"social_tensions": tensions, "brand_opportunities": opportunities}
+
+
+def _slim_phase2(phase2_result: dict) -> dict:
+    """Phase 2 结论精简：剔除 evidence"""
+    role = phase2_result.get("brand_social_role") or {}
+    strategy = phase2_result.get("social_strategy") or {}
+    return {
+        "brand_social_role": {
+            "statement": role.get("statement"),
+            "elaboration": role.get("elaboration"),
+        },
+        "social_strategy": {
+            "statement": strategy.get("statement"),
+            "core_message": strategy.get("core_message"),
+            "rhythm": strategy.get("rhythm"),
+        },
+    }
+
+
 def format_data_for_phase3(
     phase1_result: dict,
     phase2_result: dict,
@@ -143,7 +182,11 @@ def format_data_for_phase3(
     brief: dict | None = None,
     consultation_rounds: list[dict] | None = None,
 ) -> dict[str, Any]:
-    """将 Phase 1+2 结果 + 补充数据格式化为 Phase 3 输入"""
+    """将 Phase 1+2 结果 + 补充数据格式化为 Phase 3 输入
+
+    Phase 1/2 只传结论字段，剔除 evidence 数组——Phase 3 只需知道
+    「得出了什么结论」，不需要重新审阅推理链，可节省约 30-50% 输入 token。
+    """
     brief_section = ""
     if brief:
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
@@ -237,8 +280,8 @@ def format_data_for_phase3(
     return {
         "brief_section": brief_section,
         "consult_summary": consult_summary,
-        "phase1_result": json.dumps(phase1_result, ensure_ascii=False, indent=2),
-        "phase2_result": json.dumps(phase2_result, ensure_ascii=False, indent=2),
+        "phase1_result": json.dumps(_slim_phase1(phase1_result), ensure_ascii=False, indent=2),
+        "phase2_result": json.dumps(_slim_phase2(phase2_result), ensure_ascii=False, indent=2),
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
         ),

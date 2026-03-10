@@ -1,6 +1,36 @@
 """Strategy Phase 1 Chain — 洞察层: Social Tension + Brand Opportunity
 
 从切片数据中提取社会矛盾/未满足需求，及品牌可切入的机会。
+
+## 输入上下文（USER_TEMPLATE 的四个占位符）
+
+- brief_section     : 品牌 Brief（目标/竞品/关注维度），来自 strategy.brand_brief
+- consult_summary   : 历轮咨询结论摘要，来自 strategy.consultation_rounds；未咨询时为空
+- evaluation_summary: 充分性评估结论（缺口/建议），来自 strategy.evaluation_result；未评估时为空
+- slice_data        : 所有关联切片的聚合分析数据，由 format_slice_data_for_phase1() 构建
+
+## 关键设计决策
+
+1. **跨切片异常预计算在 Python 层完成（_compute_cross_slice_anomalies）**
+   - 检测同一实体跨切片情感落差（|delta| >= 0.5）
+   - 原因：字符串精确匹配比 LLM 推断更精准，且节省 token；话题名称跨切片不一致，
+     改由 LLM 凭完整数据自行判断话题交叉，避免误报
+   - 预计算结果以自然语言 hint 注入 slice_data，不依赖 LLM 重新发现
+
+2. **Prompt 强制要求"反直觉"洞察，而非通用观察**
+   - 每条 Tension 必须说明 conventional_wisdom（行业常识）与 data_reality（数据��驳）
+   - 至少 1 条 Tension 须跨 ≥2 个切片，防止单切片视角的幸存者偏差
+   - "用户关注健康"类宽泛结论被明确禁止，倒逼 LLM 寻找真正的数据异常
+
+3. **采样偏置提示注入 SYSTEM_TEMPLATE**
+   - 品牌聚焦切片（有 subject）关键词含品牌名，该品牌实体热度必然虚高
+   - 竞品 SOV 判断须以大盘切片（无 subject）为准
+   - 这条规则防止 LLM 误用偏置切片数据得出错误的竞争格局结论
+
+4. **模型选用 chat（非 reasoner）**
+   - DeepSeek R1（reasoner）的思考 token 与输出 token 共享 max_tokens=65536
+   - 多切片数据导致输入大，R1 思考过多后输出截断，JSON 解析失败
+   - chat 模型输出质量在该任务上等同或更优（洞察质量由 prompt 约束而非 CoT 保证）
 """
 
 from __future__ import annotations

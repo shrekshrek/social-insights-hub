@@ -1,6 +1,42 @@
 """Strategy Phase 3 Chain — 创意层: Big Idea + Content Strategy
 
 基于 Phase 1+2 的洞察和策略结果，推导创意概念和内容策略。
+
+## 输入上下文（USER_TEMPLATE 的占位符）
+
+- brief_section  : 品牌 Brief，与前两个 Phase 一致
+- consult_summary: 历轮咨询结论摘要
+- phase1_result  : Phase 1 完整 JSON（social_tensions + brand_opportunities）
+- phase2_result  : Phase 2 完整 JSON（brand_social_role + social_strategy）
+- slice_data     : 切片数据（与 Phase 1 相同来源，但仅提取 Phase 3 所需字段）
+                   包含高互动内容特征、KOL 生态、受众画像、topic_aspects
+
+## 关键设计决策
+
+1. **Phase 1+2 同时传入，而非仅传入 Phase 2**
+   - Big Idea 需直接"回应核心 Social Tension"，evidence 引用 phase1:tension:X
+   - 仅传入 Phase 2 会导致 LLM 产出的 Big Idea 与原始矛盾脱节，只是策略的复述
+
+2. **"反常规要求"约束 Big Idea 和 Content Strategy**
+   - Big Idea: 须先���象"最平庸的创意概念"，再确认与之有本质差异（"没想到"感而非"嗯对"感）
+   - Content Strategy: 必须包含 ≥1 个"品类颠覆型支柱"，要求说明品类惯常做法及反向逻辑
+   - reference_examples 可跨品类借鉴，防止 LLM 只在本品类 KOL 案例内���环
+
+3. **topic_aspects 字段的作用**
+   - 按主题类别聚合的宏观分布（mention_count / sentiment / representative_topics）
+   - 用于发现"某整类话题情感集体偏负"等品类级模式，是单话题视图看不到的维度
+   - 为 Content Strategy 的支柱选题提供分类级依据，而非仅依赖高频话题列表
+
+4. **JSON 解析降级策略（重要）**
+   - chat 模型偶尔在 JSON 前后输出额外说明文字
+   - 解析逻辑：先尝试全文 json.loads，失败后用 text.find("{") / text.rfind("}") 提取块
+   - 两次均失败才返回 fallback（空字符串 / 空列表）并记录 ERROR 日志
+   - 避免因模型格式抖动导致整个 Phase 3 结果清空
+
+5. **模型选用 chat（非 reasoner）**
+   - Phase 3 输入最大（含 Phase 1+2 全量 JSON + 切片数据）
+   - reasoner 在此输入规模下思考 token 消耗殆尽，JSON 输出截断
+   - 早期版本因此出现 Big Idea 只显示"（"的问题（截断后 JSON 解析失败返回空字符串）
 """
 
 from __future__ import annotations

@@ -73,6 +73,7 @@ class DataTaskReadWithRelations(DataTaskRead):
     platform_name: Optional[str] = None
     platform_code: Optional[str] = None
     creator_username: Optional[str] = None
+    aggregation_status: Optional[str] = None
 
 
 class DataTaskListResponse(CustomBaseModel):

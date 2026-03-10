@@ -96,6 +96,25 @@ async def get_tasks(
         current_user_id=current_user.id,
     )
 
+    # 批量查询各任务最新聚合分析状态（一次 IN 查询，避免 N+1）
+    from sqlalchemy import select as sa_select
+    from src.social_media.analysis.models import AnalysisJob
+
+    task_ids = [t.id for t in tasks]
+    agg_status_map: dict[int, str] = {}
+    if task_ids:
+        agg_rows = (await db.execute(
+            sa_select(AnalysisJob.task_id, AnalysisJob.status)
+            .where(
+                AnalysisJob.task_id.in_(task_ids),
+                AnalysisJob.analysis_type == "aggregation",
+            )
+            .order_by(AnalysisJob.created_at.desc())
+        )).all()
+        for row in agg_rows:
+            if row.task_id not in agg_status_map:
+                agg_status_map[int(row.task_id)] = row.status
+
     # 转换为带关联信息的response
     tasks_with_relations = []
     for task in tasks:
@@ -104,6 +123,7 @@ async def get_tasks(
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
         task_dict["creator_username"] = task.creator.username if task.creator else None
+        task_dict["aggregation_status"] = agg_status_map.get(task.id)
         tasks_with_relations.append(schemas.DataTaskReadWithRelations(**task_dict))
 
     return schemas.DataTaskListResponse.create(

@@ -80,6 +80,7 @@ const formatDateTime = (dateStr: string) => {
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
     pending: 'neutral',
+    accepted: 'neutral',
     running: 'info',
     completed: 'success',
     failed: 'error',
@@ -91,9 +92,34 @@ const getStatusColor = (status: string) => {
 const getStatusText = (status: string) => {
   const texts: Record<string, string> = {
     pending: '待处理',
+    accepted: '已接单',
     running: '运行中',
     completed: '已完成',
     failed: '失败',
+  }
+  return texts[status] || status
+}
+
+// 分析状态颜色
+const getAnalysisColor = (status: string | null) => {
+  if (!status) return 'neutral'
+  const colors: Record<string, string> = {
+    pending: 'neutral',
+    processing: 'info',
+    completed: 'success',
+    failed: 'error',
+  }
+  return colors[status] || 'neutral'
+}
+
+// 分析状态文本
+const getAnalysisText = (status: string | null) => {
+  if (!status) return '-'
+  const texts: Record<string, string> = {
+    pending: '待分析',
+    processing: '分析中',
+    completed: '分析完成',
+    failed: '分析失败',
   }
   return texts[status] || status
 }
@@ -102,6 +128,7 @@ const getStatusText = (status: string) => {
 const statusOptions = [
   { label: '全部', value: undefined },
   { label: '待处理', value: 'pending' },
+  { label: '已接单', value: 'accepted' },
   { label: '运行中', value: 'running' },
   { label: '已完成', value: 'completed' },
   { label: '失败', value: 'failed' },
@@ -146,11 +173,24 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'status',
       header: '状态',
-      cell: ({ row }) => h(Badge, {
-        color: getStatusColor(row.original.status),
-        variant: 'solid',
-        size: 'xs'
-      }, () => getStatusText(row.original.status)),
+      cell: ({ row }) => {
+        const collectBadge = h(Badge, {
+          color: getStatusColor(row.original.status),
+          variant: 'solid',
+          size: 'xs',
+        }, () => getStatusText(row.original.status))
+
+        const s = row.original.aggregation_status
+        if (!s) return collectBadge
+
+        const analysisBadge = h(Badge, {
+          color: getAnalysisColor(s),
+          variant: 'subtle',
+          size: 'xs',
+        }, () => getAnalysisText(s))
+
+        return h('div', { class: 'flex flex-col gap-1' }, [collectBadge, analysisBadge])
+      },
     },
     {
       accessorKey: 'stats',

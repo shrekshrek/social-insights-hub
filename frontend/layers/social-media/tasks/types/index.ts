@@ -106,6 +106,7 @@ export interface DataTaskWithRelations extends DataTask {
   platform_name: string | null
   platform_code: string | null
   creator_username: string | null
+  aggregation_status: string | null
 }
 
 export interface DataTaskCreate {

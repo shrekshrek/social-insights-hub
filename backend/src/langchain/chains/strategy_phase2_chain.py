@@ -58,7 +58,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 {{
   "brand_social_role": {{
     "statement": "品牌应扮演的角色（一句话）",
-    "elaboration": "角色阐释（2-3句）",
+    "elaboration": "角色阐释（2-3句），必须包含'我们不是 X（品类惯常角色），我们是 Y（数据揭示的差异化角色）'",
     "evidence": [
       {{"type": "opportunity_ref", "description": "基于哪个机会推导", "source": "phase1:opportunity:0"}},
       {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "slice数据"}}
@@ -67,7 +67,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
   "social_strategy": {{
     "statement": "策略主张（一句话）",
     "core_message": "核心沟通信息",
-    "rhythm": "传播节奏建议",
+    "rhythm": "传播节奏方向（内容类型比例或触发时机类型，不预测具体发布频率）",
     "evidence": [
       {{"type": "platform_insight", "description": "平台特征支撑", "source": "slice数据"}},
       {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "slice数据"}}
@@ -77,7 +77,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 
 ## 要求
 - brand_social_role.statement 简洁有力，一句话定义角色
-- brand_social_role.elaboration 解释为什么是这个角色，如何体现
+- brand_social_role.elaboration 必须包含"我们不是 X（品类惯常角色），我们是 Y（数据揭示的差异化角色）"
 - social_strategy.rhythm 基于 KOL 生态风格和平台分布，给出内容节奏方向（如内容类型比例、触发时机类型），不需要预测具体发布频率
 - evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, brief_alignment, audience_insight
 - 如切片数据中包含 audiences（受众画像），需在 brand_social_role 和 social_strategy 中明确品牌面向的主要目标受众，而非泛泛而谈
@@ -222,34 +222,30 @@ def parse_phase2_response(response_text: str) -> dict[str, Any]:
     try:
         result = json.loads(text.strip())
     except json.JSONDecodeError:
+        # 兜底：从响应中找最外层 {...} 块
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                result = json.loads(text[start: end + 1])
+            except json.JSONDecodeError:
+                pass
+            else:
+                logger.warning("Phase 2 JSON 从 {...} 块中提取成功（原响应有额外内容）")
+                return _ensure_phase2_fields(result)
         logger.error("Phase 2 JSON 解析失败: %s...", text[:200])
         return {
-            "brand_social_role": {
-                "statement": "",
-                "elaboration": "",
-                "evidence": [],
-            },
-            "social_strategy": {
-                "statement": "",
-                "core_message": "",
-                "rhythm": "",
-                "evidence": [],
-            },
+            "brand_social_role": {"statement": "", "elaboration": "", "evidence": []},
+            "social_strategy": {"statement": "", "core_message": "", "rhythm": "", "evidence": []},
         }
 
-    # 确保字段存在
+    return _ensure_phase2_fields(result)
+
+
+def _ensure_phase2_fields(result: dict) -> dict[str, Any]:
+    """确保必要字段存在"""
     if "brand_social_role" not in result:
-        result["brand_social_role"] = {
-            "statement": "",
-            "elaboration": "",
-            "evidence": [],
-        }
+        result["brand_social_role"] = {"statement": "", "elaboration": "", "evidence": []}
     if "social_strategy" not in result:
-        result["social_strategy"] = {
-            "statement": "",
-            "core_message": "",
-            "rhythm": "",
-            "evidence": [],
-        }
-
+        result["social_strategy"] = {"statement": "", "core_message": "", "rhythm": "", "evidence": []}
     return result

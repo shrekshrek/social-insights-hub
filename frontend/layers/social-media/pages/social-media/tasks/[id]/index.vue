@@ -226,6 +226,7 @@ const formatNumber = (num: number) => {
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
     pending: 'neutral',
+    accepted: 'neutral',
     running: 'info',
     completed: 'success',
     failed: 'error',
@@ -236,12 +237,35 @@ const getStatusColor = (status: string) => {
 const getStatusText = (status: string) => {
   const texts: Record<string, string> = {
     pending: "待处理",
+    accepted: "已接单",
     running: "运行中",
     completed: "已完成",
     failed: "失败",
   };
   return texts[status] || status;
 };
+
+const getAnalysisColor = (status: string | null) => {
+  if (!status) return 'neutral'
+  const colors: Record<string, string> = {
+    pending: 'neutral',
+    processing: 'info',
+    completed: 'success',
+    failed: 'error',
+  }
+  return colors[status] || 'neutral'
+}
+
+const getAnalysisText = (status: string | null) => {
+  if (!status) return '-'
+  const texts: Record<string, string> = {
+    pending: '待分析',
+    processing: '分析中',
+    completed: '分析完成',
+    failed: '分析失败',
+  }
+  return texts[status] || status
+}
 
 // 各平台数据支持情况
 const platformsWithShares = ['dy', 'wb', 'xhs']      // 有转发数据：抖音、微博、小红书
@@ -728,13 +752,21 @@ const AnalysisPanel = defineAsyncComponent(() =>
                   <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
                     状态
                   </h3>
-                  <div class="mt-1">
+                  <div class="mt-1 flex items-center gap-2">
                     <UBadge
                       :color="getStatusColor(task.status)"
                       variant="solid"
                       size="sm"
                     >
                       {{ getStatusText(task.status) }}
+                    </UBadge>
+                    <UBadge
+                      v-if="task.aggregation_status"
+                      :color="getAnalysisColor(task.aggregation_status)"
+                      variant="subtle"
+                      size="sm"
+                    >
+                      {{ getAnalysisText(task.aggregation_status) }}
                     </UBadge>
                   </div>
                 </div>

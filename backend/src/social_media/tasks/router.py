@@ -96,24 +96,21 @@ async def get_tasks(
         current_user_id=current_user.id,
     )
 
-    # 批量查询各任务最新聚合分析状态（一次 IN 查询，避免 N+1）
+    # 批量查询各任务最新 LLM 分析 Job 状态（用于判��"分析中"，避免 N+1）
     from sqlalchemy import select as sa_select
     from src.social_media.analysis.models import AnalysisJob
 
     task_ids = [t.id for t in tasks]
-    agg_status_map: dict[int, str] = {}
+    latest_job_map: dict[int, str] = {}
     if task_ids:
-        agg_rows = (await db.execute(
+        job_rows = (await db.execute(
             sa_select(AnalysisJob.task_id, AnalysisJob.status)
-            .where(
-                AnalysisJob.task_id.in_(task_ids),
-                AnalysisJob.analysis_type == "aggregation",
-            )
+            .where(AnalysisJob.task_id.in_(task_ids))
             .order_by(AnalysisJob.created_at.desc())
         )).all()
-        for row in agg_rows:
-            if row.task_id not in agg_status_map:
-                agg_status_map[int(row.task_id)] = row.status
+        for row in job_rows:
+            if row.task_id not in latest_job_map:
+                latest_job_map[int(row.task_id)] = row.status
 
     # 转换为带关联信息的response
     tasks_with_relations = []
@@ -123,7 +120,11 @@ async def get_tasks(
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
         task_dict["creator_username"] = task.creator.username if task.creator else None
-        task_dict["aggregation_status"] = agg_status_map.get(task.id)
+        # analysis_result_at 不为空表示聚合已完成；否则取最新 LLM Job 状态
+        if task.analysis_result_at:
+            task_dict["aggregation_status"] = "completed"
+        else:
+            task_dict["aggregation_status"] = latest_job_map.get(task.id)
         tasks_with_relations.append(schemas.DataTaskReadWithRelations(**task_dict))
 
     return schemas.DataTaskListResponse.create(
@@ -143,18 +144,34 @@ async def get_tasks(
 )
 async def get_task(
     task: DataTask = Depends(validate_task_access),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     获取任务详情。
 
     需要项目访问权限（owner或participant）。
     """
+    # analysis_result_at 不为空表示聚合已完成；否则取最新 LLM Job 状态
+    from sqlalchemy import select as sa_select
+    from src.social_media.analysis.models import AnalysisJob
+
+    if task.analysis_result_at:
+        aggregation_status = "completed"
+    else:
+        aggregation_status = (await db.execute(
+            sa_select(AnalysisJob.status)
+            .where(AnalysisJob.task_id == task.id)
+            .order_by(AnalysisJob.created_at.desc())
+            .limit(1)
+        )).scalar_one_or_none()
+
     # 转换为带关联信息的response
     task_dict = schemas.DataTaskRead.model_validate(task).model_dump()
     task_dict["monitor_name"] = task.monitor.name if task.monitor else None
     task_dict["platform_name"] = task.platform.name if task.platform else None
     task_dict["platform_code"] = task.platform.code if task.platform else None
     task_dict["creator_username"] = task.creator.username if task.creator else None
+    task_dict["aggregation_status"] = aggregation_status
     return schemas.DataTaskReadWithRelations(**task_dict)
 
 

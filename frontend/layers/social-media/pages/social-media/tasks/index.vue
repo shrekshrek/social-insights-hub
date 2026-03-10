@@ -173,6 +173,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'status',
       header: '状态',
+      size: 160,
       cell: ({ row }) => {
         const collectBadge = h(Badge, {
           color: getStatusColor(row.original.status),
@@ -189,7 +190,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           size: 'xs',
         }, () => getAnalysisText(s))
 
-        return h('div', { class: 'flex flex-col gap-1' }, [collectBadge, analysisBadge])
+        return h('div', { class: 'flex items-center gap-1' }, [collectBadge, analysisBadge])
       },
     },
     {

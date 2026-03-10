@@ -67,9 +67,9 @@ interface SliceOverviewData {
   total_heat?: number
   total_organic_heat?: number
   total_promo_heat?: number
-  global_sentiment?: number
-  organic_global_sentiment?: number | null
-  promo_global_sentiment?: number | null
+  global_nsr?: number
+  organic_nsr?: number | null
+  promo_nsr?: number | null
   platform_volume?: Record<string, number>
   keyword_volume?: Record<string, number>
 }
@@ -1444,9 +1444,9 @@ const handleExport = async () => {
               <div class="flex items-center gap-2">
                 <span
                   class="text-2xl font-mono font-semibold"
-                  :class="(overview?.global_sentiment || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  :class="(overview?.global_nsr || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
                 >
-                  {{ typeof overview?.global_sentiment === 'number' ? overview.global_sentiment.toFixed(2) : '-' }}
+                  {{ typeof overview?.global_nsr === 'number' ? overview.global_nsr.toFixed(2) : '-' }}
                 </span>
               </div>
               <div class="text-xs text-gray-400 mt-1">
@@ -1454,11 +1454,11 @@ const handleExport = async () => {
               </div>
               <!-- 有机/推广 NSR 分层 -->
               <div
-                v-if="overview?.organic_global_sentiment != null || overview?.promo_global_sentiment != null"
+                v-if="overview?.organic_nsr != null || overview?.promo_nsr != null"
                 class="flex items-center gap-3 mt-1 text-[11px]"
               >
                 <span
-                  v-if="overview?.organic_global_sentiment != null"
+                  v-if="overview?.organic_nsr != null"
                   class="flex items-center gap-1"
                   title="有机内容 NSR（低推广）"
                 >
@@ -1466,11 +1466,11 @@ const handleExport = async () => {
                   <span class="text-gray-500 dark:text-gray-400">有机</span>
                   <span
                     class="font-mono"
-                    :class="(overview.organic_global_sentiment ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
-                  >{{ (overview.organic_global_sentiment ?? 0) >= 0 ? '+' : '' }}{{ Number(overview.organic_global_sentiment).toFixed(2) }}</span>
+                    :class="(overview.organic_nsr ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  >{{ (overview.organic_nsr ?? 0) >= 0 ? '+' : '' }}{{ Number(overview.organic_nsr).toFixed(2) }}</span>
                 </span>
                 <span
-                  v-if="overview?.promo_global_sentiment != null"
+                  v-if="overview?.promo_nsr != null"
                   class="flex items-center gap-1"
                   title="推广内容 NSR（高推广）"
                 >
@@ -1478,8 +1478,8 @@ const handleExport = async () => {
                   <span class="text-gray-500 dark:text-gray-400">推广</span>
                   <span
                     class="font-mono"
-                    :class="(overview.promo_global_sentiment ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
-                  >{{ (overview.promo_global_sentiment ?? 0) >= 0 ? '+' : '' }}{{ Number(overview.promo_global_sentiment).toFixed(2) }}</span>
+                    :class="(overview.promo_nsr ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                  >{{ (overview.promo_nsr ?? 0) >= 0 ? '+' : '' }}{{ Number(overview.promo_nsr).toFixed(2) }}</span>
                 </span>
               </div>
             </div>

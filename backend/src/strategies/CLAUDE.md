@@ -120,6 +120,7 @@ Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
 4. **评估链传名单而非数值**：只传实体 name/role、话题 name/category 等，够判断覆盖度，不做深度分析
 5. **understanding_summary 贯穿全链**：咨询链输出的需求理解摘要，存入 consultation_rounds，Phase 1/2/3 均可引用
 6. **切片模式贯穿全链**：所有 Chain 传入 `mode`（品牌聚焦/大盘分析）+ `subject`，确保 LLM 正确理解每个切片的定位和数据来源
+7. **polar_total 置信门槛**：`controversy_depth = min(pos, neg) / polar_total`，仅当 `polar_total >= 10` 时样本可信；Phase 1 SYSTEM_TEMPLATE 已注明低 polar_total 时应降低置信度
 
 ### Evaluate Chain 读取的切片字段
 
@@ -139,6 +140,12 @@ Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
 
 Social Tension 来源：`topic_radar.pains` / `controversies` / `unmet_needs` / `aligned_topics`
 Brand Opportunity 来源：`sov_ranking` / `focus.swot`(+delta) / `focus.gap` / `topic_radar.gains` / `entities.top_issues`
+
+**`controversies_brief` 字段**：每个 controversy 传入 `name / heat / polar_total / positive_mentions / negative_mentions / controversy_depth`。`polar_total < 10` 时 `controversy_depth` 置信度低，SYSTEM_TEMPLATE 已注明。
+
+**`pains_brief` 字段**：传入 `organic_sentiment`，用于识别 `organic_sentiment` 明显低于 `sentiment` 的痛点（差值 ≥ 0.2），作为推广掩盖真实口碑的信号（取代已移除的 `weak_signal_pains`）。
+
+**已移除 `weak_signal_pains`**：原基于中位热度的弱信号痛点计算存在设计缺陷（中位阈值恒选约 50% 数据，无区分意义），已从 Phase 1 数据流中删除。
 
 ### Phase 2 读取的切片字段（策略层）
 

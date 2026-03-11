@@ -458,7 +458,10 @@ def _build_intent(
             "source_tasks": t.get("source_tasks") or [],
         }
         polar_total = pos_m + neg_m
-        is_controversial = polar_total >= 6 and min(pos_m, neg_m) / polar_total >= 0.3
+        controversy_depth = round(min(pos_m, neg_m) / polar_total, 3) if polar_total >= 6 else 0.0
+        item["polar_total"] = polar_total
+        item["controversy_depth"] = controversy_depth
+        is_controversial = controversy_depth >= 0.3
         if sent <= -0.2:
             pains.append(item)
         elif sent >= 0.2:

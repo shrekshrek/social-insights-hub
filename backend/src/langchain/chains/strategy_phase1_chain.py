@@ -97,7 +97,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 ## 要求
 - social_tensions: 1-3 条，按重要性排序；至少 1 条须引用 ≥2 个切片的交叉数据
 - brand_opportunities: 1-2 条，每条引用相关 tension 的索引
-- evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, unmet_need, audience_insight, organic_vs_mixed_sentiment, weak_signal, topic_category_pattern
+- evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, unmet_need, audience_insight, organic_vs_mixed_sentiment, topic_category_pattern
 - confidence: high(数据充分)/medium(有支撑但需验证)/low(推测性)
 - 如切片数据中包含 audiences（受众画像），需标注哪类人群最受此 Tension 影响，以及哪类人群是品牌机会的主要触达对象
 
@@ -106,8 +106,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **original_terms**（top 5 实体）：用户提及该实体时的原始表述（最多 3 条），保留真实语言模式，evidence 可直接引用原话以增强说服力。
 - **organic_sentiment**（实体/话题/pains/gains）：剔除推广内容后的真实用户情感。若与 sentiment 差距 >= 0.2，说明推广内容正在掩盖真实口碑，优先以 organic_sentiment 为准。
 - **sov_ranking[].sentiment**：各品牌声量份额（share）配合情感，可定位四象限：高声量低情感是竞品弱点，低声量高情感是品牌机会入口。
-- **controversies[].controversy_depth**：两极均衡度（0~0.5，越接近 0.5 说明正负意见越均衡、越撕裂）。真正的核心矛盾往往 depth 高但 heat 未必高。
-- **weak_signal_pains**：情感极负但热度低于同切片中位数的话题，代表被大众声音压制的小众真实痛点。
+- **controversies[].controversy_depth**：两极均衡度（0~0.5，越接近 0.5 说明正负意见越均衡、越撕裂）。真正的核心矛盾往往 depth 高但 heat 未必高。**仅当 `polar_total >= 10` 时样本可信**，polar_total 过低时应降低置信度。
+- **pains[].organic_sentiment**：关注 `organic_sentiment` 明显低于 `sentiment` 的痛点话题（差值 >= 0.2），说明该话题被推广内容稀释，真实用户体验比数字所呈现的更差，是高价值的隐性痛点信号。
 - **topic_aspects**：按主题类别聚合的宏观分布，用于发现「某一整类话题情感集体偏负」等品类级模式，是单话题视图看不到的。
 
 ## 切片采样偏置（重要）
@@ -344,6 +344,7 @@ def format_slice_data_for_phase1(
             {
                 "name": c.get("name"),
                 "heat": c.get("heat"),
+                "polar_total": int(c.get("polar_total") or 0),
                 "positive_mentions": c.get("positive_mentions"),
                 "negative_mentions": c.get("negative_mentions"),
                 "controversy_depth": round(_controversy_depth(c), 2),
@@ -361,27 +362,6 @@ def format_slice_data_for_phase1(
             for g in (topic_radar.get("gains") or [])[:5]
             if isinstance(g, dict)
         ]
-
-        # 弱信号痛点：情感极负但热度低，被主流声量淹没的小众真实需求
-        # 筛选条件：sentiment <= -0.4（极负向）且 heat 低于 pains 中位数
-        all_pains = [p for p in (topic_radar.get("pains") or []) if isinstance(p, dict)]
-        if len(all_pains) >= 4:
-            heats = sorted(float(p.get("heat") or 0.0) for p in all_pains)
-            median_heat = heats[len(heats) // 2]
-            weak_signal_pains = [
-                {
-                    "name": p.get("name"),
-                    "heat": p.get("heat"),
-                    "sentiment": p.get("sentiment"),
-                    "organic_sentiment": p.get("organic_sentiment"),
-                }
-                for p in all_pains
-                if float(p.get("sentiment") or 0.0) <= -0.4
-                and float(p.get("heat") or 0.0) < median_heat
-            ]
-            weak_signal_pains.sort(key=lambda x: float(x.get("sentiment") or 0.0))
-        else:
-            weak_signal_pains = []
 
         # 主题类别概览：按 category 聚合的宏观分布（热度+情感），补充单话题视图的盲区
         topic_aspects_brief = [
@@ -442,8 +422,6 @@ def format_slice_data_for_phase1(
             part["controversies"] = controversies_brief
         if gains_brief:
             part["gains"] = gains_brief
-        if weak_signal_pains:
-            part["weak_signal_pains"] = weak_signal_pains[:5]
         if topic_aspects_brief:
             part["topic_aspects"] = topic_aspects_brief
         if swot_brief:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -14,6 +15,18 @@ from src.langchain.chains.monitor_slice_reports_chain import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _json_str(obj: Any, max_chars: int) -> str:
+    """将对象序列化为 JSON 字符串后截断。
+
+    比 str()[:N] 更安全：产出合法 UTF-8 文本，不含 Python repr 特殊语法，
+    LLM 能更好地解析截断后的内容。
+    """
+    try:
+        return json.dumps(obj, ensure_ascii=False, default=str)[:max_chars]
+    except Exception:
+        return str(obj)[:max_chars]
 
 
 def _extract_original_terms(items: list[dict[str, Any]], limit: int = 30) -> str:
@@ -107,9 +120,9 @@ def generate_project_reports(
         resp, stats = invoke_chain_with_stats_sync(
             chain,
             {
-                "meta": str(meta)[:4000],
-                "layers": str((layers or {}).get("landscape"))[:9000],
-                "top_entities": str(aligned_entities[:40])[:9000],
+                "meta": _json_str(meta, 4000),
+                "layers": _json_str((layers or {}).get("landscape"), 9000),
+                "top_entities": _json_str(aligned_entities[:40], 9000),
                 "original_terms": landscape_terms[:6000],
             },
             "chat",
@@ -130,9 +143,9 @@ def generate_project_reports(
         resp, stats = invoke_chain_with_stats_sync(
             chain,
             {
-                "meta": str(meta)[:4000],
-                "layers": str(intent_layer)[:9000],
-                "top_topics": str(aligned_topics[:40])[:9000],
+                "meta": _json_str(meta, 4000),
+                "layers": _json_str(intent_layer, 9000),
+                "top_topics": _json_str(aligned_topics[:40], 9000),
                 "pains_original_terms": pains_terms[:4000],
                 "gains_original_terms": gains_terms[:4000],
                 "unmet_original_terms": unmet_terms[:3000],
@@ -159,9 +172,9 @@ def generate_project_reports(
             resp, stats = invoke_chain_with_stats_sync(
                 chain,
                 {
-                    "meta": str(meta)[:4000],
-                    "layers": str((layers or {}).get("focus"))[:9000],
-                    "drivers_matrix": str((drivers_matrix or [])[:20])[:9000],
+                    "meta": _json_str(meta, 4000),
+                    "layers": _json_str((layers or {}).get("focus"), 9000),
+                    "drivers_matrix": _json_str((drivers_matrix or [])[:20], 9000),
                     "target_negative_terms": target_neg[:3000],
                     "competitor_positive_terms": comp_pos[:3000],
                 },

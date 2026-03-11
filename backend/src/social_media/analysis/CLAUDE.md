@@ -62,6 +62,16 @@ sentiment   summary                     metrics/charts/insights
 6. 附加 spam 分布到所有聚合结果
 7. 组装 `TaskAnalysisResultData`
 
+## 切片 topic_radar 关键字段
+
+`insights.py` 在生成切片洞察时，对每个 topic 计算并写入：
+
+- **`polar_total`**：`positive_mentions + negative_mentions`，极化总量
+- **`controversy_depth`**：`min(pos, neg) / polar_total`，范围 0–0.5，衡量正负极性均衡度；仅当 `polar_total >= 6` 时计算，否则为 `0.0`
+- **`organic_sentiment`** / **`promo_sentiment`**：按 spam_group 分层的情感均值，差值 ≥ 0.3 为推广与口碑背离信号
+
+以上字段由切片报告 Chain（TOPIC_SYSTEM）和策略 Phase 1 Chain 使用，作为反直觉信号判断依据。
+
 ## Important Notes
 
 - **双重情感体系**: 宏观指标（NSR/SERP/四象限）用初筛 -2~+2；微观指标（实体/观点）用深度分析 -1~+1

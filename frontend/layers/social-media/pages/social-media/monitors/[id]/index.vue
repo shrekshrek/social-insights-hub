@@ -15,7 +15,7 @@ const route = useRoute()
 const monitorId = computed(() => Number(route.params.id))
 
 const { getMonitor, deleteMonitor, batchCreateTasks } = useMonitors()
-const { getTasks } = useTasks()
+const { getTasks, deleteTask } = useTasks()
 const { createMonitorSlice, deleteMonitorSlice } = useAnalysis()
 const { useApiData } = useApi()
 
@@ -298,6 +298,27 @@ const handleGenerateSlice = async () => {
   }
 }
 
+const deletingTaskId = ref<number | null>(null)
+const handleDeleteTask = async (task: DataTaskWithRelations) => {
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '删除任务',
+    message: `确定要删除任务 "${task.name}" 吗？此操作不可恢复，将同时删除所有相关的原文和评论数据。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'error',
+  })
+  if (!confirmed) return
+
+  deletingTaskId.value = task.id
+  try {
+    await deleteTask(task.id)
+    await refreshTasks()
+  } finally {
+    deletingTaskId.value = null
+  }
+}
+
 const deletingSliceId = ref<number | null>(null)
 const handleDeleteSlice = async (sliceId: number) => {
   const { $confirm } = useNuxtApp()
@@ -550,7 +571,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
       header: '操作',
       cell: ({ row }) => {
         const s = row.original
-        return h('div', { class: 'flex items-center justify-end gap-2' }, [
+        return h('div', { class: 'flex items-center gap-2' }, [
           h(Button, {
             size: 'xs',
             variant: 'ghost',
@@ -579,6 +600,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
   return [
     {
       id: 'select',
+      meta: { class: { th: 'w-8', td: 'w-8' } },
       header: () => h('input', {
         type: 'checkbox',
         checked: allSelected.value,
@@ -593,28 +615,31 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     },
     {
       accessorKey: 'id',
+      meta: { class: { th: 'w-14', td: 'w-14' } },
       header: 'ID',
       cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.id),
     },
     {
       accessorKey: 'name',
       header: '任务名称',
-      cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
+      cell: ({ row }) => h('span', { class: 'font-medium line-clamp-2' }, row.original.name),
     },
     {
       accessorKey: 'platform_name',
+      meta: { class: { th: 'w-20', td: 'w-20' } },
       header: '平台',
       cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
     },
     {
       accessorKey: 'task_type',
+      meta: { class: { th: 'w-20', td: 'w-20' } },
       header: '类型',
       cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.task_type),
     },
     {
       accessorKey: 'status',
+      meta: { class: { th: 'w-[96px]', td: 'w-[96px]' } },
       header: '状态',
-      size: 160,
       cell: ({ row }) => {
         const collectBadge = h(Badge, {
           color: getStatusColor(row.original.status),
@@ -631,11 +656,12 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           size: 'xs',
         }, () => getAnalysisText(s))
 
-        return h('div', { class: 'flex items-center gap-1' }, [collectBadge, analysisBadge])
+        return h('div', { class: 'flex flex-wrap items-center gap-1' }, [collectBadge, analysisBadge])
       },
     },
     {
       accessorKey: 'stats',
+      meta: { class: { th: 'w-[140px]', td: 'w-[140px] overflow-hidden' } },
       header: '数据统计',
       cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
         `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
@@ -643,11 +669,13 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     },
     {
       accessorKey: 'created_at',
+      meta: { class: { th: 'w-[112px]', td: 'w-[112px]' } },
       header: '创建时间',
       cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
     },
     {
       accessorKey: 'actions',
+      meta: { class: { th: 'w-[128px]', td: 'w-[128px]' } },
       header: '操作',
       cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
         h(Button, {
@@ -665,6 +693,14 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               onClick: () => navigateTo(`/social-media/tasks/${row.original.id}/upload`),
             }, () => '上传')
           : null,
+        h(Button, {
+          size: 'xs',
+          variant: 'ghost',
+          color: 'error',
+          icon: 'i-heroicons-trash',
+          loading: deletingTaskId.value === row.original.id,
+          onClick: () => handleDeleteTask(row.original),
+        }, () => '删除'),
       ].filter(Boolean)),
     },
   ]
@@ -868,6 +904,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           :columns="columns"
           :loading="tasksLoading"
           class="w-full"
+          :ui="{ base: 'w-full table-fixed', td: 'whitespace-normal' }"
         />
       </ClientOnly>
     </UCard>

@@ -127,17 +127,17 @@ export const useApi = () => {
 
     // 获取错误信息
     // ofetch 使用 _data，普通 fetch 使用 data
+    type BackendErrorBody = {
+      error?: { code?: string; message?: string }
+      detail?: string | Array<{ msg: string }>
+      // H3 代理嵌套格式：{ statusCode, statusMessage, data: <后端响应体> }
+      data?: BackendErrorBody
+    }
     const errorObj = error as {
       status?: number
       statusCode?: number
-      data?: {
-        error?: { code?: string; message?: string }
-        detail?: string | Array<{ msg: string }>
-      }
-      _data?: {
-        error?: { code?: string; message?: string }
-        detail?: string | Array<{ msg: string }>
-      }
+      data?: BackendErrorBody
+      _data?: BackendErrorBody
     }
     const status = errorObj.status || errorObj.statusCode
     let message = '请求失败'
@@ -146,6 +146,13 @@ export const useApi = () => {
     const responseData = errorObj._data || errorObj.data
 
     // 解析错误消息 - 优先使用后端统一格式
+    // Nuxt 服务端代理会将后端响应体包装到 H3 错误的 data 字段：
+    // { statusCode, statusMessage, data: <后端响应体> }
+    // 需要同时处理直接格式和嵌套格式
+    const nestedData = responseData?.data && typeof responseData.data === 'object'
+      ? responseData.data as Record<string, unknown>
+      : null
+
     if (responseData?.error?.message) {
       // 后端统一错误格式: { error: { code, message } }
       message = responseData.error.message
@@ -155,6 +162,17 @@ export const useApi = () => {
         message = responseData.detail
       } else if (Array.isArray(responseData.detail) && responseData.detail.length > 0) {
         message = responseData.detail[0]?.msg || message
+      }
+    } else if (nestedData) {
+      // H3 代理嵌套格式：后端响应体在 responseData.data 里
+      const nestedError = nestedData.error as { message?: string } | undefined
+      const nestedDetail = nestedData.detail
+      if (nestedError?.message) {
+        message = nestedError.message
+      } else if (typeof nestedDetail === 'string') {
+        message = nestedDetail
+      } else if (Array.isArray(nestedDetail) && nestedDetail.length > 0) {
+        message = (nestedDetail as Array<{ msg: string }>)[0]?.msg || message
       }
     }
     

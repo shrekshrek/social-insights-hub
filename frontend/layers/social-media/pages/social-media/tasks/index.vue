@@ -143,16 +143,19 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'id',
       header: 'ID',
+      meta: { class: { th: 'w-14', td: 'w-14' } },
       cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.id),
     },
     {
       accessorKey: 'name',
       header: '任务名称',
-      cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
+      meta: { class: { th: 'w-[200px]', td: 'w-[200px] whitespace-normal' } },
+      cell: ({ row }) => h('div', { class: 'font-medium leading-snug line-clamp-2', title: row.original.name }, row.original.name),
     },
     {
       accessorKey: 'monitor_name',
       header: '所属项目',
+      meta: { class: { th: 'w-[144px]', td: 'w-[144px] whitespace-normal' } },
       cell: ({ row }) => {
         if (!row.original.monitor_name || !row.original.monitor_id) {
           return h('span', { class: 'text-gray-400' }, '-')
@@ -160,7 +163,8 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         return h(Button, {
           variant: 'link',
           size: 'xs',
-          class: 'p-0 font-normal',
+          class: 'p-0 font-normal w-full text-left whitespace-normal leading-snug line-clamp-2',
+          title: row.original.monitor_name,
           to: `/social-media/monitors/${row.original.monitor_id}`,
         }, () => row.original.monitor_name)
       },
@@ -168,12 +172,13 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'platform_name',
       header: '平台',
+      meta: { class: { th: 'w-[96px]', td: 'w-[96px]' } },
       cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
     },
     {
       accessorKey: 'status',
       header: '状态',
-      size: 160,
+      meta: { class: { th: 'w-[96px]', td: 'w-[96px]' } },
       cell: ({ row }) => {
         const collectBadge = h(Badge, {
           color: getStatusColor(row.original.status),
@@ -190,24 +195,27 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           size: 'xs',
         }, () => getAnalysisText(s))
 
-        return h('div', { class: 'flex items-center gap-1' }, [collectBadge, analysisBadge])
+        return h('div', { class: 'flex flex-wrap items-center gap-1' }, [collectBadge, analysisBadge])
       },
     },
     {
       accessorKey: 'stats',
       header: '数据统计',
-      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
+      meta: { class: { th: 'w-[140px]', td: 'w-[140px] overflow-hidden' } },
+      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap' },
         `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
       ),
     },
     {
       accessorKey: 'created_at',
       header: '创建时间',
-      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
+      meta: { class: { th: 'w-[112px]', td: 'w-[112px]' } },
+      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap' }, formatDateTime(row.original.created_at)),
     },
     {
       accessorKey: 'actions',
       header: '操作',
+      meta: { class: { th: 'w-[128px]', td: 'w-[128px]' } },
       cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
         h(Button, {
           size: 'xs',
@@ -321,6 +329,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           :columns="columns"
           :loading="loading"
           class="w-full"
+          :ui="{ base: 'w-full table-fixed' }"
         />
       </ClientOnly>
 
@@ -345,3 +354,4 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     </UCard>
   </div>
 </template>
+

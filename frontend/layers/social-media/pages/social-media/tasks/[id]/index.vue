@@ -289,7 +289,6 @@ const postsColumns = computed(() => {
       accessorKey: "id",
       header: () =>
         h("span", { style: { whiteSpace: "nowrap" } as const }, "ID"),
-      size: 40,
       cell: ({ row }: { row: { original: SocialPost } }) =>
         h(
           "span",
@@ -301,7 +300,6 @@ const postsColumns = computed(() => {
       accessorKey: "post_id_on_platform",
       header: () =>
         h("span", { style: { whiteSpace: "nowrap" } as const }, "平台ID"),
-      size: 80,
       cell: ({ row }: { row: { original: SocialPost } }) =>
         h(
           "span",
@@ -313,7 +311,6 @@ const postsColumns = computed(() => {
     accessorKey: "author_name",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "作者"),
-    size: 70,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h("span", { class: "text-sm truncate block max-w-[60px]" }, row.original.author_name || "-"),
   },
@@ -321,7 +318,6 @@ const postsColumns = computed(() => {
     accessorKey: "title",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "标题/内容"),
-    size: 150,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(ExpandableText, {
         title: row.original.title || "",
@@ -333,7 +329,6 @@ const postsColumns = computed(() => {
     accessorKey: "likes_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "点赞"),
-    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
@@ -345,7 +340,6 @@ const postsColumns = computed(() => {
     accessorKey: "comments_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论"),
-    size: 70,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h("div", { class: "text-xs text-right" }, [
         h("span", {}, formatNumber(row.original.comments_count)),
@@ -359,7 +353,6 @@ const postsColumns = computed(() => {
     accessorKey: "shares_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "转发"),
-    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
@@ -372,7 +365,6 @@ const postsColumns = computed(() => {
     accessorKey: "collected_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "收藏"),
-    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
@@ -385,7 +377,6 @@ const postsColumns = computed(() => {
     accessorKey: "views_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "浏览"),
-    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
@@ -398,7 +389,6 @@ const postsColumns = computed(() => {
     accessorKey: "danmaku_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "弹幕"),
-    size: 50,
     cell: ({ row }: { row: { original: SocialPost } }) =>
       h(
         "span",
@@ -410,7 +400,6 @@ const postsColumns = computed(() => {
     accessorKey: "published_at",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "发布时间"),
-    size: 90,
     cell: ({ row }: { row: { original: SocialPost } }) => {
       const dt = formatDateTime(row.original.published_at)
       if (!dt) return h("span", { class: "text-xs text-gray-400" }, "-")
@@ -431,7 +420,6 @@ const postsColumns = computed(() => {
         },
         "操作"
       ),
-    size: 80,
     cell: ({ row }: { row: { original: SocialPost } }) => {
       const buttons = [];
 
@@ -467,7 +455,7 @@ const postsColumns = computed(() => {
       }
 
       if (buttons.length > 0) {
-        return h("div", { class: "flex justify-end gap-1" }, buttons);
+        return h("div", { class: "flex items-center gap-1" }, buttons);
       }
       return h("span", { class: "text-xs text-gray-400 block text-right" }, "-");
     },
@@ -482,7 +470,6 @@ const commentsColumns = computed(() => {
     accessorKey: "post_id",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "主贴ID"),
-    size: 50,
     cell: ({ row }: { row: { original: SocialComment } }) =>
       h("span", { class: "text-xs text-gray-500 font-mono" }, row.original.post_id),
   },
@@ -490,7 +477,6 @@ const commentsColumns = computed(() => {
     accessorKey: "post_id_on_platform",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "主贴平台ID"),
-    size: 80,
     cell: ({ row }: { row: { original: SocialComment } }) => {
       const postIdOnPlatform = postIdMap.value.get(row.original.post_id) || "-";
       return h("span", { class: "text-xs font-mono truncate block max-w-[70px]", title: postIdOnPlatform }, postIdOnPlatform);
@@ -500,7 +486,6 @@ const commentsColumns = computed(() => {
     accessorKey: "author_name",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "作者"),
-    size: 70,
     cell: ({ row }: { row: { original: SocialComment } }) =>
       h("span", { class: "text-sm truncate block max-w-[60px]" }, row.original.author_name || "-"),
   },
@@ -508,7 +493,6 @@ const commentsColumns = computed(() => {
     accessorKey: "content",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论内容"),
-    size: 180,
     cell: ({ row }: { row: { original: SocialComment } }) =>
       h(ExpandableText, {
         text: row.original.content || "",
@@ -519,7 +503,6 @@ const commentsColumns = computed(() => {
     accessorKey: "likes_count",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "点赞"),
-    size: 50,
     cell: ({ row }: { row: { original: SocialComment } }) =>
       h(
         "span",
@@ -531,7 +514,6 @@ const commentsColumns = computed(() => {
     accessorKey: "published_at",
     header: () =>
       h("span", { style: { whiteSpace: "nowrap" } as const }, "评论时间"),
-    size: 90,
     cell: ({ row }: { row: { original: SocialComment } }) => {
       const dt = formatDateTime(row.original.published_at)
       if (!dt) return h("span", { class: "text-xs text-gray-400" }, "-")

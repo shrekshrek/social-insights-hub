@@ -119,6 +119,7 @@ def _analyze_batch_posts(
             # 5. 批量保存结果
             analyzed_count = 0
             failed_count = 0
+            processed_post_ids: set[int] = set()
 
             for item in results:
                 post_id = item.get("post_id")
@@ -131,6 +132,7 @@ def _analyze_batch_posts(
                 if not post_id or post_id not in posts:
                     continue
 
+                processed_post_ids.add(post_id)
                 try:
                     # 计算 CII 互动指数
                     post = posts[post_id]
@@ -176,6 +178,15 @@ def _analyze_batch_posts(
                     failed_count += 1
 
             db.commit()
+
+            # 补计 LLM 未覆盖或 post_id 不匹配的帖子，防止幽灵批次导致 finalizer 永久卡住
+            ghost_count = len(post_ids) - analyzed_count - failed_count
+            if ghost_count > 0:
+                missing = [pid for pid in post_ids if pid not in processed_post_ids]
+                logger.warning(
+                    f"批次中 {ghost_count} 个帖子未被LLM覆盖（post_id不匹配或不在DB中），计入失败: {missing}"
+                )
+                failed_count += ghost_count
 
             # 6. 更新进度 - 一次API调用，记录处理了多少条
             progress_mgr = AnalysisProgressManager(result_id)
@@ -282,6 +293,18 @@ def finalize_screening_analysis(result_id: int, total_count: int):
     注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregation)
     """
     import time
+
+    # 防止重复 finalizer：若 job 已不在 processing 状态，直接跳过
+    db_check = SyncSessionLocal()
+    try:
+        job = db_check.execute(
+            select(AnalysisJob).where(AnalysisJob.id == result_id)
+        ).scalar_one_or_none()
+        if job and job.status != "processing":
+            logger.info(f"Job {result_id} 状态已为 {job.status}，跳过重复 finalizer")
+            return {"status": "skipped", "reason": f"job already {job.status}"}
+    finally:
+        db_check.close()
 
     logger.info(f"等待所有 {total_count} 个子任务完成...")
 

@@ -16,17 +16,19 @@ WORKDIR /app
 # Install pnpm
 RUN npm install -g pnpm
 
-# Copy package.json and lockfile (context is repo root)
-COPY frontend/package.json frontend/pnpm-lock.yaml* pnpm-lock.yaml* ./
+# Copy workspace config and lockfile from repo root
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# Copy frontend package.json for dependency resolution
+COPY frontend/package.json ./frontend/
 
-# Install all dependencies (including devDependencies needed for build)
-RUN pnpm install --frozen-lockfile || pnpm install
+# Install all dependencies
+RUN pnpm install --frozen-lockfile
 
 # Copy the frontend application code
-COPY frontend/ .
+COPY frontend/ ./frontend/
 
-# Build the application for production
-RUN pnpm build
+# Build the application (run in frontend workspace)
+RUN pnpm --filter nuxt-app build
 
 # --- Final Stage ---
 # Use a lightweight Node.js image for the final production image
@@ -35,8 +37,8 @@ FROM node:18-alpine AS final-stage
 # Set working directory
 WORKDIR /app
 
-# Copy the built output from the build stage
-COPY --from=build-stage /app/.output ./.output
+# Copy the built output from the build stage (Nuxt outputs to frontend/.output)
+COPY --from=build-stage /app/frontend/.output ./.output
 
 # Nuxt 4 starts its own server, so we only need to copy the output.
 # We don't need the full package.json or node_modules in the final image.

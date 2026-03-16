@@ -21,6 +21,8 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 
 # 6. Copy application code
 COPY ./src ./src
+COPY alembic.ini ./
+COPY alembic ./alembic
 
 # 7. Expose port
 EXPOSE 8000

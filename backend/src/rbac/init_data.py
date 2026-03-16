@@ -405,6 +405,7 @@ async def init_rbac_data(db: AsyncSession) -> None:
                 text("""
                 INSERT INTO permissions (target, action, display_name, description)
                 VALUES (:target, :action, :display_name, :description)
+                ON CONFLICT (target, action) DO NOTHING
             """),
                 perm_data,
             )

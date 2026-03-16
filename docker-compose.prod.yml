@@ -32,8 +32,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         # 将根配置中的 APP_NAME 注入到 Nuxt 构建环境
         APP_NAME: ${APP_NAME}

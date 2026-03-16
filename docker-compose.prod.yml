@@ -20,7 +20,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: prod-backend
-    command: uv run gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 src.main:app
+    command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
     ports:
       - "8000:8000"
     env_file:

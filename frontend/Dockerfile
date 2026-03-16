@@ -1,6 +1,6 @@
 # --- Build Stage ---
 # Use a Node.js version that is compatible with Nuxt 4
-FROM node:18-slim AS build-stage
+FROM node:20-slim AS build-stage
 
 # Build-time args from docker-compose.prod.yml
 ARG APP_NAME
@@ -32,7 +32,7 @@ RUN pnpm --filter nuxt-app build
 
 # --- Final Stage ---
 # Use a lightweight Node.js image for the final production image
-FROM node:18-alpine AS final-stage
+FROM node:20-alpine AS final-stage
 
 # Set working directory
 WORKDIR /app

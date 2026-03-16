@@ -16,14 +16,14 @@ WORKDIR /app
 # Install pnpm
 RUN npm install -g pnpm
 
-# Copy package.json and lockfile
-COPY package.json pnpm-lock.yaml ./
+# Copy package.json and lockfile (context is repo root)
+COPY frontend/package.json frontend/pnpm-lock.yaml* pnpm-lock.yaml* ./
 
 # Install all dependencies (including devDependencies needed for build)
-RUN pnpm install
+RUN pnpm install --frozen-lockfile || pnpm install
 
-# Copy the rest of the frontend application code
-COPY . .
+# Copy the frontend application code
+COPY frontend/ .
 
 # Build the application for production
 RUN pnpm build

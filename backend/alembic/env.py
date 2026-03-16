@@ -32,7 +32,11 @@ else:
 db_url = os.getenv("DATABASE_URL")
 if db_url:
     print("DATABASE_URL found, setting it in Alembic config.")
-    config.set_main_option("sqlalchemy.url", db_url)
+    # Alembic runs synchronously; replace asyncpg driver with psycopg2-compatible sync driver
+    sync_url = db_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
+    # configparser uses % for interpolation, escape it
+    sync_url = sync_url.replace("%", "%%")
+    config.set_main_option("sqlalchemy.url", sync_url)
 else:
     print("Warning: DATABASE_URL not found in environment.")
 # --- end of .env loading ---

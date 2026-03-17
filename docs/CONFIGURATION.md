@@ -12,19 +12,20 @@
 ### 生产（服务器）
 1. `cp .env.production.example .env.production`
 2. 编辑 `.env.production`：替换所有 `CHANGE_THIS...`
-3. `pnpm prod:deploy`（或 `pnpm prod:build && pnpm prod:up`）
+3. （推荐）**本地先验证**：见 [DEPLOYMENT.md - 部署前本地验证](../DEPLOYMENT.md#-部署前本地验证)
+4. `pnpm prod:deploy`（或 `pnpm prod:build && pnpm prod:up`）
 
 ## 🔑 必改项（生产环境）
 
 - `POSTGRES_PASSWORD`：强密码
-- `DATABASE_URL`：保持 `postgresql+psycopg://`，并确保密码与 `POSTGRES_PASSWORD` 一致
+- `DATABASE_URL`：必须使用 `postgresql+psycopg://`，并确保密码与 `POSTGRES_PASSWORD` 一致
 - `SECRET_KEY`：`openssl rand -hex 32`
 - `NUXT_SESSION_PASSWORD`：`openssl rand -base64 32`（至少 32 字符）
 - `BACKEND_CORS_ORIGINS`：填真实域名，支持逗号分隔或 JSON 数组（推荐逗号分隔）
 - `NUXT_PUBLIC_API_BASE`：建议填带协议的完整地址（如 `https://example.com/api/v1`）
 - `APP_NAME`：对外展示名（可选）
 
-> ℹ️ `DATABASE_URL` 推荐使用 `psycopg`：Alembic 迁移走同步驱动；应用运行时会自动转换为 `postgresql+asyncpg://` 用于异步访问。
+> ℹ️ `DATABASE_URL` 必须使用 `postgresql+psycopg://`：`database.py` 的异步引擎会自动将其转换为 `asyncpg` 供 FastAPI 使用，而 Celery 同步引擎直接使用原始 URL（psycopg）。若填入 `asyncpg`，Celery 任务将无法访问数据库。
 
 ## 🧪 验证与自查
 

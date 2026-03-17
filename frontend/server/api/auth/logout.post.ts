@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
       // 开发环境直连，生产环境使用配置
       const backendUrl = import.meta.dev 
         ? 'http://localhost:8000/api/v1'
-        : (config.public.apiBase || '/api/v1')
+        : ((config.apiBaseInternal as string) || config.public.apiBase || '/api/v1')
       
       await $fetch(`${backendUrl}/auth/logout`, {
         method: 'POST',

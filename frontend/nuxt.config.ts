@@ -92,15 +92,25 @@ export default defineNuxtConfig({
   // 运行时配置
   runtimeConfig: {
     // 私有配置（仅服务端可用）
-    // 可以通过环境变量 NUXT_API_SECRET 覆盖
     apiSecret: '',
+    // 服务端内网 API 地址（SSR 请求后端时使用），通过 NUXT_API_BASE_INTERNAL 覆盖
+    // 生产环境示例：NUXT_API_BASE_INTERNAL=http://prod-backend:8000/api/v1
+    apiBaseInternal: '',
+
+    // nuxt-auth-utils session cookie 配置
+    // h3 默认 secure: true，在 HTTP 生产环境下需要显式设为 false
+    // 可通过 NUXT_SESSION_COOKIE_SECURE=false 环境变量在运行时覆盖
+    session: {
+      cookie: {
+        secure: false as boolean,
+      }
+    },
 
     // 公共配置（客户端和服务端都可用）
     public: {
       appName,
       // API基础URL - 客户端使用相对路径通过代理，服务端可覆盖为完整URL
       // 开发环境：使用相对路径 /api/v1（通过 nitro devProxy）
-      // 生产环境：可通过 NUXT_PUBLIC_API_BASE 覆盖
       apiBase: '/api/v1'
     }
   },

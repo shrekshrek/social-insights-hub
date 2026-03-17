@@ -18,14 +18,14 @@
 ## 🔑 必改项（生产环境）
 
 - `POSTGRES_PASSWORD`：强密码
-- `DATABASE_URL`：必须使用 `postgresql+psycopg://`，并确保密码与 `POSTGRES_PASSWORD` 一致
+- `DATABASE_URL`：必须使用 `postgresql+psycopg://`（psycopg **v3**，非 psycopg2），并确保密码与 `POSTGRES_PASSWORD` 一致
 - `SECRET_KEY`：`openssl rand -hex 32`
 - `NUXT_SESSION_PASSWORD`：`openssl rand -base64 32`（至少 32 字符）
 - `BACKEND_CORS_ORIGINS`：填真实域名，支持逗号分隔或 JSON 数组（推荐逗号分隔）
 - `NUXT_PUBLIC_API_BASE`：建议填带协议的完整地址（如 `https://example.com/api/v1`）
 - `APP_NAME`：对外展示名（可选）
 
-> ℹ️ `DATABASE_URL` 必须使用 `postgresql+psycopg://`：`database.py` 的异步引擎会自动将其转换为 `asyncpg` 供 FastAPI 使用，而 Celery 同步引擎直接使用原始 URL（psycopg）。若填入 `asyncpg`，Celery 任务将无法访问数据库。
+> ℹ️ `DATABASE_URL` 必须使用 `postgresql+psycopg://`（psycopg **v3**，非 psycopg2）：psycopg v3 同时支持同步和异步，`database.py` 的异步引擎会自动将其转换为 `asyncpg` 供 FastAPI 使用，而 Celery 同步引擎直接使用原始 URL（psycopg v3 同步模式）。若误用 psycopg2（`psycopg2://`）或直接填 `asyncpg`，Celery 任务将无法访问数据库。
 
 ## 🧪 验证与自查
 

@@ -81,7 +81,7 @@ docker-compose --env-file .env.production.local -f docker-compose.prod.yml down
    # - SECRET_KEY: 使用 openssl rand -hex 32 生成
    # - NUXT_SESSION_PASSWORD: 使用 openssl rand -base64 32 生成
    # - APP_NAME: （可选）应用显示名称（API 文档 title / 网站 title）
-   # - DATABASE_URL: 必须使用 postgresql+psycopg://（代码自动为 FastAPI 转换为 asyncpg，Celery 同步引擎保留 psycopg），并确保密码与 POSTGRES_PASSWORD 一致
+   # - DATABASE_URL: 必须使用 postgresql+psycopg://（psycopg v3，非 psycopg2；代码自动为 FastAPI 转换为 asyncpg，Celery 同步引擎保留 psycopg v3 同步模式），并确保密码与 POSTGRES_PASSWORD 一致
    # - BACKEND_CORS_ORIGINS: 设置为实际域名
    # - NUXT_PUBLIC_API_BASE: 指向后端暴露的完整地址（含协议和 /api/v1），如 https://api.example.com/api/v1
    #   若生产环境通过统一域名或反向代理/CDN 暴露服务，也必须在部署脚本或容器环境变量中显式设置该值

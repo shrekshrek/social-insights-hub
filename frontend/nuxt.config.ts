@@ -98,11 +98,10 @@ export default defineNuxtConfig({
     apiBaseInternal: '',
 
     // nuxt-auth-utils session cookie 配置
-    // h3 默认 secure: true，在 HTTP 生产环境下需要显式设为 false
-    // 可通过 NUXT_SESSION_COOKIE_SECURE=false 环境变量在运行时覆盖
+    // 默认 secure: true（HTTPS）；HTTP 生产环境通过 NUXT_SESSION_COOKIE_SECURE=false 覆盖
     session: {
       cookie: {
-        secure: false as boolean,
+        secure: true as boolean,
       }
     },
 

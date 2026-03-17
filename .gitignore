@@ -4,6 +4,7 @@
 .env.development
 .env.test
 .env.production
+.env.production.local
 backend/.env.production
 frontend/.env.production
 !.env.example

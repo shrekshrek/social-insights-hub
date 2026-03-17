@@ -29,10 +29,10 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   
   // 获取完整的后端URL
-  // 开发环境直连后端，生产环境使用配置
+  // 开发环境直连后端，生产环境优先用私有内网地址，回退到 public.apiBase
   const backendUrl = import.meta.dev 
-    ? 'http://localhost:8000/api/v1'  // 开发环境直连后端
-    : (config.public.apiBase || '/api/v1')  // 生产环境使用配置的路径
+    ? 'http://localhost:8000/api/v1'
+    : ((config.apiBaseInternal as string) || config.public.apiBase || '/api/v1')
   
   const body = await readBody<LoginRequest>(event)
   const { email, password } = body

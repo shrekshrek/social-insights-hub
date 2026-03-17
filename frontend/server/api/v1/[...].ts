@@ -7,13 +7,14 @@ export default defineEventHandler(async (event) => {
   const cleanPath = (path || '').replace(/^\/api\/v1/, '') || ''
   
   // 构建完整的后端URL
-  const apiBase = config.public.apiBase || ''
+  // 优先使用私有的内网地址（NUXT_API_BASE_INTERNAL），回退到 public.apiBase
+  const apiBase = (config.apiBaseInternal as string) || config.public.apiBase || ''
   const isAbsoluteBase = apiBase.startsWith('http://') || apiBase.startsWith('https://')
   if (!isAbsoluteBase) {
     throw createError({
       statusCode: 500,
       statusMessage: 'Invalid apiBase configuration',
-      data: 'config.public.apiBase 必须是包含协议的完整URL，请检查 NUXT_PUBLIC_API_BASE'
+      data: '服务端 API 地址必须是包含协议的完整URL，请设置 NUXT_API_BASE_INTERNAL=http://prod-backend:8000/api/v1'
     })
   }
   const targetUrl = `${apiBase}${cleanPath}${queryString ? `?${queryString}` : ''}`

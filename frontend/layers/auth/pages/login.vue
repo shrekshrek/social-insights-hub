@@ -84,7 +84,8 @@ async function handleLogin(event: FormSubmitEvent<Schema>) {
     });
     
     // 登录成功后跳转到工作台
-    await navigateTo("/dashboard");
+    // 使用完整页面刷新跳转，确保服务端能正确读取新设置的 session cookie
+    await navigateTo("/dashboard", { replace: true });
   } catch (error) {
     // 错误已经由 useAuthApi 处理并显示toast
     console.error("Login error:", error);

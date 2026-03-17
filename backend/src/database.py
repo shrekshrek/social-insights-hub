@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
@@ -66,6 +68,7 @@ async def get_async_db():
 
 
 # Context manager for sync DB session - for Celery tasks
+@contextmanager
 def get_sync_db():
     """
     Context manager that provides a sync SQLAlchemy database session.

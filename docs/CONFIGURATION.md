@@ -12,8 +12,7 @@
 ### 生产（服务器）
 1. `cp .env.production.example .env.production`
 2. 编辑 `.env.production`：替换所有 `CHANGE_THIS...`
-3. `pnpm prod:deploy`（或 `pnpm build && pnpm prod:up`）
-4. 如有新增迁移：`pnpm be:migrate:up`
+3. `pnpm prod:deploy`（或 `pnpm prod:build && pnpm prod:up`）
 
 ## 🔑 必改项（生产环境）
 

@@ -108,7 +108,7 @@
 |------|------|
 | `pnpm setup` | 首次安装所有依赖 |
 | `pnpm dev` | 启动完整开发环境 (自动迁移+初始化) |
-| `pnpm stop` | 停止所有服务 |
+| `pnpm dev:stop` | 停止所有服务 |
 | `pnpm be:lint` | 后端 lint + 格式化 (ruff) |
 | `pnpm be:test` | 后端测试 (pytest) |
 | `pnpm fe:typecheck` | 前端类型检查 |

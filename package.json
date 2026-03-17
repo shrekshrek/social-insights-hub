@@ -17,6 +17,8 @@
     "prod:down": "docker-compose --env-file .env.production -f docker-compose.prod.yml down",
     "prod:logs": "docker-compose --env-file .env.production -f docker-compose.prod.yml logs -f",
     "prod:restart": "docker-compose --env-file .env.production -f docker-compose.prod.yml restart",
+    "prod:local": "docker-compose --env-file .env.production.local -f docker-compose.prod.yml up --build",
+    "prod:local:down": "docker-compose --env-file .env.production.local -f docker-compose.prod.yml down",
     "//--- Infrastructure (Dev) ---": "",
     "compose:up": "docker-compose up",
     "compose:down": "docker-compose down",

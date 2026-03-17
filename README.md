@@ -76,7 +76,7 @@ pnpm dev
 | :--- | :--- |
 | `pnpm setup` | **首次安装**：安装所有依赖并预构建Docker镜像。|
 | `pnpm dev` | **日常开发**：一键启动整个开发环境。 |
-| `pnpm stop` | **停止服务**：停止并移除所有开发容器。 |
+| `pnpm dev:stop` | **停止服务**：停止并移除所有开发容器。 |
 | `pnpm cleanup` | **清理资源**：交互式清理 Docker 容器和数据卷。 |
 
 ### 后端命令 (`be:*`)
@@ -93,13 +93,12 @@ pnpm dev
 
 | 命令 | 描述 |
 | :--- | :--- |
-| `pnpm build` | 构建用于生产环境的前后端 Docker 镜像。 |
+| `pnpm prod:build` | 构建用于生产环境的前后端 Docker 镜像。 |
 | `pnpm prod:deploy`| **(推荐)** 执行部署脚本，在生产服务器上启动应用。|
 | `pnpm prod:up` | 在生产模式下（后台）启动所有服务。 |
 | `pnpm prod:down`| 停止并移除所有生产模式下的服务。 |
 
-> ℹ️ **生产迁移提示**：生产 compose 启动不会自动跑数据库迁移。
-> 如果你新增/修改了模型并生成 Alembic 迁移，部署后请手动执行一次：`pnpm be:migrate:up`。
+> ℹ️ **生产迁移提示**：生产 compose 启动时会自动执行 `alembic upgrade head`，无需手动迁移。
 
 ---
 

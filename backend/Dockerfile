@@ -28,5 +28,4 @@ COPY alembic ./alembic
 EXPOSE 8000
 
 # 8. Command to run the application
-# Use uv to run the application
-CMD ["uv", "run", "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "src.main:app"]
+CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

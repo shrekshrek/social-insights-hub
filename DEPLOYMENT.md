@@ -25,6 +25,45 @@ pnpm dev
 - 🔧 后端API: http://localhost:8000
 - 📖 API文档: http://localhost:8000/docs
 
+## 🧪 部署前本地验证
+
+在正式推送到服务器之前，用 `docker-compose.prod.yml` 在本地跑完整的生产镜像，提前发现构建或运行时问题。
+
+### 1. 准备本地生产配置
+
+```bash
+# 基于 .env.production 复制，覆盖本地需要修改的值
+cp .env.production .env.production.local
+```
+
+编辑 `.env.production.local`，只需改一处：
+```bash
+# CORS 改为 localhost（本地访问）
+BACKEND_CORS_ORIGINS=http://localhost
+```
+
+> 其余配置（密码、密钥、AI Key 等）与 `.env.production` 保持一致，确保测试环境与生产完全一致。
+
+### 2. 本地启动生产栈
+
+```bash
+docker-compose --env-file .env.production.local -f docker-compose.prod.yml up --build
+```
+
+### 3. 验证
+
+- 🌐 前端: http://localhost
+- 🔧 API 文档: http://localhost/docs
+- 登录测试、核心功能流程跑通后，再部署到服务器。
+
+### 4. 清理
+
+```bash
+docker-compose --env-file .env.production.local -f docker-compose.prod.yml down
+```
+
+---
+
 ## 🚀 生产环境
 
 ### 首次部署准备
@@ -42,7 +81,7 @@ pnpm dev
    # - SECRET_KEY: 使用 openssl rand -hex 32 生成
    # - NUXT_SESSION_PASSWORD: 使用 openssl rand -base64 32 生成
    # - APP_NAME: （可选）应用显示名称（API 文档 title / 网站 title）
-   # - DATABASE_URL: 建议使用 postgresql+psycopg://（迁移使用同步驱动；应用运行时会自动转为 asyncpg），并确保密码与 POSTGRES_PASSWORD 一致
+   # - DATABASE_URL: 必须使用 postgresql+psycopg://（代码自动为 FastAPI 转换为 asyncpg，Celery 同步引擎保留 psycopg），并确保密码与 POSTGRES_PASSWORD 一致
    # - BACKEND_CORS_ORIGINS: 设置为实际域名
    # - NUXT_PUBLIC_API_BASE: 指向后端暴露的完整地址（含协议和 /api/v1），如 https://api.example.com/api/v1
    #   若生产环境通过统一域名或反向代理/CDN 暴露服务，也必须在部署脚本或容器环境变量中显式设置该值

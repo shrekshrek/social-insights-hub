@@ -20,14 +20,16 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: prod-backend
-    command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+    command: sh -c "uv run alembic upgrade head && uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4"
     ports:
       - "8000:8000"
     env_file:
       - .env.production  # 使用根目录的统一配置
     depends_on:
-      - postgres_db
-      - redis
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   frontend:
@@ -53,6 +55,11 @@ services:
       - .env.production  # 使用根目录的统一配置
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   redis:

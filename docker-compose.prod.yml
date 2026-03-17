@@ -62,6 +62,21 @@ services:
       retries: 10
     restart: unless-stopped
 
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: prod-celery-worker
+    command: uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=100
+    env_file:
+      - .env.production  # 使用根目录的统一配置
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     container_name: prod-redis

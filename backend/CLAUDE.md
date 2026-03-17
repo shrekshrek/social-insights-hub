@@ -35,7 +35,7 @@ pnpm be:add <pkg>     # uv add
 
 ```bash
 pnpm be:dev           # uvicorn --reload (port 8000)
-pnpm be:worker        # celery worker --pool=gevent --concurrency=100
+# Celery Worker 在 docker-compose up 时自动启动，无需单独命令
 ```
 
 ## 模块结构

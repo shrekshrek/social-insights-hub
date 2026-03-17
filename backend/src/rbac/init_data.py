@@ -349,6 +349,19 @@ async def init_rbac_data(db: AsyncSession) -> None:
     - 删除代码中未定义的权限
     """
 
+    # 多 worker 并发启动时，用 PostgreSQL advisory lock 确保只有一个 worker 执行初始化
+    lock_acquired = (await db.execute(text("SELECT pg_try_advisory_lock(1000000)"))).scalar()
+    if not lock_acquired:
+        logger.info("其他 worker 正在执行 RBAC 初始化，跳过")
+        return
+
+    try:
+        await _do_init_rbac_data(db)
+    finally:
+        await db.execute(text("SELECT pg_advisory_unlock(1000000)"))
+
+
+async def _do_init_rbac_data(db: AsyncSession) -> None:
     # 1. 获取代码中定义的所有权限
     defined_permissions = {f"{p['target']}:{p['action']}": p for p in BASE_PERMISSIONS}
 

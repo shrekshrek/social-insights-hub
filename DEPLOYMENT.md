@@ -1,11 +1,18 @@
 # 🚀 部署指南
 
-本项目支持开发环境和生产环境的分离部署。
+## 三步部署流程
+
+| 步骤 | 命令 | 配置文件 | 说明 |
+|------|------|----------|------|
+| 1. 本地开发 | `pnpm dev` | `.env` | 热重载，后端容器化 |
+| 2. 本地验证生产 | `pnpm prod:local` | `.env.production.local` | 用生产镜像在本地跑 |
+| 3. 服务器部署 | `pnpm prod:build && pnpm prod:up` | `.env.production` | 正式生产环境 |
 
 ## 📁 配置文件
 
 - **开发环境**: `.env`
-- **生产环境**: `.env.production` (所有服务共享)
+- **本地生产验证**: `.env.production.local`
+- **生产环境**: `.env.production`
 - **详细配置说明**: 参见 [配置管理指南](docs/CONFIGURATION.md)
 
 ## 🔧 开发环境
@@ -47,7 +54,7 @@ BACKEND_CORS_ORIGINS=http://localhost
 ### 2. 本地启动生产栈
 
 ```bash
-docker-compose --env-file .env.production.local -f docker-compose.prod.yml up --build
+pnpm prod:local
 ```
 
 ### 3. 验证
@@ -59,7 +66,7 @@ docker-compose --env-file .env.production.local -f docker-compose.prod.yml up --
 ### 4. 清理
 
 ```bash
-docker-compose --env-file .env.production.local -f docker-compose.prod.yml down
+pnpm prod:local:down
 ```
 
 ---
@@ -93,7 +100,7 @@ docker-compose --env-file .env.production.local -f docker-compose.prod.yml down
    pnpm prod:deploy
    
    # 方式2: 手动部署
-   pnpm build && pnpm prod:up
+   pnpm prod:build && pnpm prod:up
    ```
 
 ### 生产环境管理

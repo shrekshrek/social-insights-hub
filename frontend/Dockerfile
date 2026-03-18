@@ -13,8 +13,8 @@ ENV PROJECT_NAME=${PROJECT_NAME}
 # Set working directory
 WORKDIR /app
 
-# Install pnpm (pin to v9 to match local lockfile version)
-RUN npm install -g pnpm@9
+# Install pnpm (pin to v10 to match local lockfile version)
+RUN npm install -g pnpm@10
 
 # Copy workspace config and lockfile from repo root
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./

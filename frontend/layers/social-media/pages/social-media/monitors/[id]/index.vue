@@ -496,6 +496,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'name',
       header: '切片',
+      meta: { class: { th: 'w-[240px]', td: 'w-[240px]' } },
       cell: ({ row }) => {
         const s = row.original
         const subject = s.result_data?.meta?.subject || null

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { h, ref, computed, type Component } from "vue";
 import type { TableColumn } from "@nuxt/ui";
 import { UButton } from "#components";
 
@@ -65,74 +66,83 @@ const formatDate = (dateStr: string) => {
   });
 };
 
-// 表格列定义
-const columns: TableColumn<Monitor>[] = [
-  {
-    accessorKey: "id",
-    header: "ID",
-    cell: ({ row }) => h("span", { class: "text-xs text-gray-500 font-mono" }, row.original.id),
-  },
-  {
-    accessorKey: "name",
-    header: "项目名称",
-    cell: ({ row }) => h("span", { class: "font-medium" }, row.original.name),
-  },
-  {
-    accessorKey: "description",
-    header: "描述",
-    cell: ({ row }) =>
-      h(
-        "span",
-        { class: "text-sm text-gray-600 dark:text-gray-400" },
-        row.original.description || "-"
-      ),
-  },
-  {
-    accessorKey: "owner_username",
-    header: "创建者",
-    cell: ({ row }) => h("span", row.original.owner_username || "-"),
-  },
-  {
-    accessorKey: "created_at",
-    header: "创建时间",
-    cell: ({ row }) =>
-      h(
-        "span",
-        { class: "text-sm text-gray-600 dark:text-gray-400" },
-        formatDate(row.original.created_at)
-      ),
-  },
-  {
-    accessorKey: "actions",
-    header: "操作",
-    cell: ({ row }) => {
-      return h("div", { class: "flex items-center gap-2" }, [
-        h(
-          UButton,
-          {
-            size: "xs",
-            variant: "ghost",
-            icon: "i-heroicons-eye",
-            onClick: () =>
-              navigateTo(`/social-media/monitors/${row.original.id}`),
-          },
-          () => "查看"
-        ),
-        h(
-          UButton,
-          {
-            size: "xs",
-            variant: "ghost",
-            icon: "i-heroicons-trash",
-            color: "error",
-            onClick: () => handleDelete(row.original),
-          },
-          () => "删除"
-        ),
-      ]);
+// 表格列定义 - 使用 computed 以避免 SSR 水合问题
+const columns = computed<TableColumn<Monitor>[]>(() => {
+  const Button = UButton as Component;
+
+  return [
+    {
+      accessorKey: "id",
+      header: "ID",
+      meta: { class: { th: "w-14", td: "w-14" } },
+      cell: ({ row }) => h("span", { class: "text-xs text-gray-500 font-mono" }, row.original.id),
     },
-  },
-];
+    {
+      accessorKey: "name",
+      header: "项目名称",
+      meta: { class: { th: "w-[200px]", td: "w-[200px] whitespace-normal" } },
+      cell: ({ row }) => h("div", { class: "font-medium leading-snug line-clamp-2", title: row.original.name }, row.original.name),
+    },
+    {
+      accessorKey: "description",
+      header: "描述",
+      meta: { class: { th: "w-[240px]", td: "w-[240px] whitespace-normal" } },
+      cell: ({ row }) =>
+        h(
+          "div",
+          { class: "text-sm text-gray-600 dark:text-gray-400 leading-snug line-clamp-2", title: row.original.description || "" },
+          row.original.description || "-"
+        ),
+    },
+    {
+      accessorKey: "owner_username",
+      header: "创建者",
+      meta: { class: { th: "w-[100px]", td: "w-[100px]" } },
+      cell: ({ row }) => h("span", { class: "truncate" }, row.original.owner_username || "-"),
+    },
+    {
+      accessorKey: "created_at",
+      header: "创建时间",
+      meta: { class: { th: "w-[120px]", td: "w-[120px]" } },
+      cell: ({ row }) =>
+        h(
+          "span",
+          { class: "text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap" },
+          formatDate(row.original.created_at)
+        ),
+    },
+    {
+      accessorKey: "actions",
+      header: "操作",
+      meta: { class: { th: "w-[120px]", td: "w-[120px]" } },
+      cell: ({ row }) => {
+        return h("div", { class: "flex items-center gap-2" }, [
+          h(
+            Button,
+            {
+              size: "xs",
+              variant: "ghost",
+              icon: "i-heroicons-eye",
+              to: `/social-media/monitors/${row.original.id}`,
+            },
+            () => "查看"
+          ),
+          h(
+            Button,
+            {
+              size: "xs",
+              variant: "ghost",
+              icon: "i-heroicons-trash",
+              color: "error",
+              onClick: () => handleDelete(row.original),
+            },
+            () => "删除"
+          ),
+        ]);
+      },
+    },
+  ];
+});
 </script>
 
 <template>
@@ -193,6 +203,7 @@ const columns: TableColumn<Monitor>[] = [
           :columns="columns"
           :loading="loading"
           class="w-full"
+          :ui="{ base: 'w-full table-fixed' }"
         />
       </ClientOnly>
 

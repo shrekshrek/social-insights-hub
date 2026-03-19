@@ -576,7 +576,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
             size: 'xs',
             variant: 'ghost',
             icon: 'i-heroicons-eye',
-            onClick: () => navigateTo(`/social-media/monitors/${monitorId.value}/analysis?slice_id=${s.id}`),
+            to: `/social-media/monitors/${monitorId.value}/analysis?slice_id=${s.id}`,
           }, () => '查看'),
           h(Button, {
             size: 'xs',
@@ -622,23 +622,24 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'name',
       header: '任务名称',
-      cell: ({ row }) => h('span', { class: 'font-medium line-clamp-2' }, row.original.name),
+      meta: { class: { th: 'w-[200px]', td: 'w-[200px] whitespace-normal' } },
+      cell: ({ row }) => h('div', { class: 'font-medium leading-snug line-clamp-2', title: row.original.name }, row.original.name),
     },
     {
       accessorKey: 'platform_name',
-      meta: { class: { th: 'w-20', td: 'w-20' } },
+      meta: { class: { th: 'w-20', td: 'w-20 whitespace-nowrap' } },
       header: '平台',
       cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
     },
     {
       accessorKey: 'task_type',
-      meta: { class: { th: 'w-20', td: 'w-20' } },
+      meta: { class: { th: 'w-20', td: 'w-20 whitespace-nowrap' } },
       header: '类型',
       cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.task_type),
     },
     {
       accessorKey: 'status',
-      meta: { class: { th: 'w-[96px]', td: 'w-[96px]' } },
+      meta: { class: { th: 'w-[96px]', td: 'w-[96px] whitespace-nowrap' } },
       header: '状态',
       cell: ({ row }) => {
         const collectBadge = h(Badge, {
@@ -661,7 +662,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     },
     {
       accessorKey: 'stats',
-      meta: { class: { th: 'w-[140px]', td: 'w-[140px] overflow-hidden' } },
+      meta: { class: { th: 'w-[140px]', td: 'w-[140px] whitespace-nowrap overflow-hidden' } },
       header: '数据统计',
       cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
         `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
@@ -669,20 +670,20 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     },
     {
       accessorKey: 'created_at',
-      meta: { class: { th: 'w-[112px]', td: 'w-[112px]' } },
+      meta: { class: { th: 'w-[112px]', td: 'w-[112px] whitespace-nowrap' } },
       header: '创建时间',
       cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
     },
     {
       accessorKey: 'actions',
-      meta: { class: { th: 'w-[128px]', td: 'w-[128px]' } },
+      meta: { class: { th: 'w-[128px]', td: 'w-[128px] whitespace-nowrap' } },
       header: '操作',
       cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
         h(Button, {
           size: 'xs',
           variant: 'ghost',
           icon: 'i-heroicons-eye',
-          onClick: () => navigateTo(`/social-media/tasks/${row.original.id}?from=monitor&monitor_id=${monitorId.value}`),
+          to: `/social-media/tasks/${row.original.id}?from=monitor&monitor_id=${monitorId.value}`,
         }, () => '查看'),
         row.original.status === 'pending' && row.original.data_source === 'local_upload'
           ? h(Button, {
@@ -690,7 +691,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               variant: 'ghost',
               icon: 'i-heroicons-arrow-up-tray',
               color: 'info',
-              onClick: () => navigateTo(`/social-media/tasks/${row.original.id}/upload`),
+              to: `/social-media/tasks/${row.original.id}/upload`,
             }, () => '上传')
           : null,
         h(Button, {
@@ -898,14 +899,15 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           </UButton>
         </div>
 
-        <UTable
-          v-else
-          :data="tasks"
-          :columns="columns"
-          :loading="tasksLoading"
-          class="w-full"
-          :ui="{ base: 'w-full table-fixed', td: 'whitespace-normal' }"
-        />
+        <div v-else class="overflow-x-auto">
+          <UTable
+            :data="tasks"
+            :columns="columns"
+            :loading="tasksLoading"
+            class="w-full"
+            :ui="{ base: 'w-full table-fixed' }"
+          />
+        </div>
       </ClientOnly>
     </UCard>
 

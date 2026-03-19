@@ -496,7 +496,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'name',
       header: '切片',
-      meta: { class: { th: 'min-w-0', td: 'min-w-0' } },
+      meta: { class: { th: 'max-w-xs', td: 'max-w-xs' } },
       cell: ({ row }) => {
         const s = row.original
         const subject = s.result_data?.meta?.subject || null
@@ -574,7 +574,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'actions',
       header: '操作',
-      meta: { class: { th: 'w-[120px]', td: 'w-[120px] whitespace-nowrap' } },
+      meta: { class: { th: 'w-[160px]', td: 'w-[160px] whitespace-nowrap' } },
       cell: ({ row }) => {
         const s = row.original
         return h('div', { class: 'flex items-center gap-2' }, [
@@ -954,14 +954,14 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           暂无切片（可在上方勾选任务后生成）
         </div>
 
-        <UTable
-          v-else
-          :data="slices"
-          :columns="sliceColumns"
-          :loading="slicesLoading"
-          class="w-full"
-          :ui="{ base: 'w-full table-fixed' }"
-        />
+        <div v-else class="overflow-x-auto">
+          <UTable
+            :data="slices"
+            :columns="sliceColumns"
+            :loading="slicesLoading"
+            class="w-full"
+          />
+        </div>
       </ClientOnly>
     </UCard>
 

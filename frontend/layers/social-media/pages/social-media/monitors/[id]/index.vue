@@ -496,6 +496,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'name',
       header: '切片',
+      meta: { class: { th: 'min-w-0', td: 'min-w-0' } },
       cell: ({ row }) => {
         const s = row.original
         const subject = s.result_data?.meta?.subject || null
@@ -518,11 +519,13 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'created_at',
       header: '创建时间',
+      meta: { class: { th: 'w-[140px]', td: 'w-[140px] whitespace-nowrap' } },
       cell: ({ row }) => h('span', { class: 'text-xs text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
     },
     {
       accessorKey: 'included_task_ids',
       header: '任务',
+      meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
       cell: ({ row }) => {
         const ids = row.original.included_task_ids || []
         return h('div', { class: 'text-xs text-gray-600 dark:text-gray-400' }, [
@@ -534,6 +537,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'status',
       header: '进度',
+      meta: { class: { th: 'w-[120px]', td: 'w-[120px] whitespace-nowrap' } },
       cell: ({ row }) => {
         const s = row.original
         const stage2 = s.result_data?.pipeline?.stage2?.status
@@ -547,6 +551,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'metrics',
       header: '关键指标',
+      meta: { class: { th: 'w-[160px]', td: 'w-[160px]' } },
       cell: ({ row }) => {
         const s = row.original
         const totalVolume = s.result_data?.layers?.landscape?.overview?.total_volume
@@ -569,6 +574,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'actions',
       header: '操作',
+      meta: { class: { th: 'w-[120px]', td: 'w-[120px] whitespace-nowrap' } },
       cell: ({ row }) => {
         const s = row.original
         return h('div', { class: 'flex items-center gap-2' }, [
@@ -954,6 +960,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           :columns="sliceColumns"
           :loading="slicesLoading"
           class="w-full"
+          :ui="{ base: 'w-full table-fixed' }"
         />
       </ClientOnly>
     </UCard>

@@ -221,7 +221,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           size: 'xs',
           variant: 'ghost',
           icon: 'i-heroicons-eye',
-          onClick: () => navigateTo(`/social-media/tasks/${row.original.id}`),
+          to: `/social-media/tasks/${row.original.id}`,
         }, () => '查看'),
         row.original.status === 'pending' && row.original.data_source === 'local_upload'
           ? h(Button, {
@@ -229,7 +229,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               variant: 'ghost',
               icon: 'i-heroicons-arrow-up-tray',
               color: 'info',
-              onClick: () => navigateTo(`/social-media/tasks/${row.original.id}/upload`),
+              to: `/social-media/tasks/${row.original.id}/upload`,
             }, () => '上传')
           : null,
         h(Button, {

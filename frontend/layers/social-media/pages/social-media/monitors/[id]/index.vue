@@ -496,21 +496,21 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'name',
       header: '切片',
-      meta: { class: { th: 'w-[240px]', td: 'w-[240px]' } },
+      meta: { class: { th: 'w-[240px]', td: 'w-[240px] whitespace-normal' } },
       cell: ({ row }) => {
         const s = row.original
         const subject = s.result_data?.meta?.subject || null
         const competitors = formatCompetitors(s.result_data?.meta?.competitors)
         const hasFocus = Boolean(subject)
-        return h('div', { class: 'min-w-0' }, [
-          h('div', { class: 'flex items-center gap-2 min-w-0' }, [
-            h('div', { class: 'min-w-0 truncate font-medium text-gray-900 dark:text-white' }, s.name || `切片 ${s.id}`),
+        return h('div', {}, [
+          h('div', { class: 'flex items-start gap-2 flex-wrap' }, [
+            h('div', { class: 'font-medium text-gray-900 dark:text-white' }, s.name || `切片 ${s.id}`),
             h('span', { class: 'shrink-0 text-xs text-gray-400 font-normal' }, `#${s.id}`),
             hasFocus
               ? h(Badge, { size: 'xs', variant: 'subtle', color: 'primary' }, () => 'Focus')
               : h(Badge, { size: 'xs', variant: 'subtle', color: 'neutral' }, () => '无 Focus'),
           ]),
-          h('div', { class: 'mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate' },
+          h('div', { class: 'mt-0.5 text-xs text-gray-500 dark:text-gray-400 whitespace-normal' },
             `主体：${subject ? String(subject) : '-'} · 竞品：${competitors}`
           ),
         ])

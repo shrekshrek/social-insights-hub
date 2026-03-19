@@ -519,25 +519,25 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'created_at',
       header: '创建时间',
-      meta: { class: { th: 'w-[116px]', td: 'w-[116px] whitespace-nowrap' } },
-      cell: ({ row }) => h('span', { class: 'text-xs text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
+      meta: { class: { th: 'w-[90px]', td: 'w-[90px] whitespace-nowrap' } },
+      cell: ({ row }) => h('span', { class: 'text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
     },
     {
       accessorKey: 'included_task_ids',
       header: '任务',
-      meta: { class: { th: 'w-[96px]', td: 'w-[96px]' } },
+      meta: { class: { th: 'w-[100px]', td: 'w-[100px] whitespace-normal' } },
       cell: ({ row }) => {
         const ids = row.original.included_task_ids || []
         return h('div', { class: 'text-xs text-gray-600 dark:text-gray-400' }, [
           h('div', { class: 'font-medium text-gray-900 dark:text-white' }, `${ids.length} 个`),
-          h('div', { class: 'mt-0.5 font-mono truncate' }, formatTaskIdsPreview(ids)),
+          h('div', { class: 'mt-0.5 font-mono whitespace-normal' }, formatTaskIdsPreview(ids)),
         ])
       },
     },
     {
       accessorKey: 'status',
       header: '进度',
-      meta: { class: { th: 'w-[104px]', td: 'w-[104px] whitespace-nowrap' } },
+      meta: { class: { th: 'w-[60px]', td: 'w-[60px] whitespace-nowrap' } },
       cell: ({ row }) => {
         const s = row.original
         const stage2 = s.result_data?.pipeline?.stage2?.status
@@ -551,7 +551,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'metrics',
       header: '关键指标',
-      meta: { class: { th: 'w-[140px]', td: 'w-[140px]' } },
+      meta: { class: { th: 'w-[90px]', td: 'w-[90px]' } },
       cell: ({ row }) => {
         const s = row.original
         const totalVolume = s.result_data?.layers?.landscape?.overview?.total_volume
@@ -574,7 +574,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'actions',
       header: '操作',
-      meta: { class: { th: 'w-[112px]', td: 'w-[112px] whitespace-nowrap' } },
+      meta: { class: { th: 'w-[90px]', td: 'w-[90px] whitespace-nowrap' } },
       cell: ({ row }) => {
         const s = row.original
         return h('div', { class: 'flex items-center gap-2' }, [

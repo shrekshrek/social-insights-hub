@@ -519,13 +519,13 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'created_at',
       header: '创建时间',
-      meta: { class: { th: 'w-[140px]', td: 'w-[140px] whitespace-nowrap' } },
+      meta: { class: { th: 'w-[116px]', td: 'w-[116px] whitespace-nowrap' } },
       cell: ({ row }) => h('span', { class: 'text-xs text-gray-600 dark:text-gray-400' }, formatDateTime(row.original.created_at)),
     },
     {
       accessorKey: 'included_task_ids',
       header: '任务',
-      meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
+      meta: { class: { th: 'w-[96px]', td: 'w-[96px]' } },
       cell: ({ row }) => {
         const ids = row.original.included_task_ids || []
         return h('div', { class: 'text-xs text-gray-600 dark:text-gray-400' }, [
@@ -537,7 +537,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'status',
       header: '进度',
-      meta: { class: { th: 'w-[120px]', td: 'w-[120px] whitespace-nowrap' } },
+      meta: { class: { th: 'w-[104px]', td: 'w-[104px] whitespace-nowrap' } },
       cell: ({ row }) => {
         const s = row.original
         const stage2 = s.result_data?.pipeline?.stage2?.status
@@ -551,7 +551,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'metrics',
       header: '关键指标',
-      meta: { class: { th: 'w-[160px]', td: 'w-[160px]' } },
+      meta: { class: { th: 'w-[140px]', td: 'w-[140px]' } },
       cell: ({ row }) => {
         const s = row.original
         const totalVolume = s.result_data?.layers?.landscape?.overview?.total_volume
@@ -574,7 +574,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
     {
       accessorKey: 'actions',
       header: '操作',
-      meta: { class: { th: 'w-[128px]', td: 'w-[128px] whitespace-nowrap' } },
+      meta: { class: { th: 'w-[112px]', td: 'w-[112px] whitespace-nowrap' } },
       cell: ({ row }) => {
         const s = row.original
         return h('div', { class: 'flex items-center gap-2' }, [

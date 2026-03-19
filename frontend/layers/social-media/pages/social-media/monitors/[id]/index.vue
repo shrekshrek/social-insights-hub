@@ -503,14 +503,14 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
         const competitors = formatCompetitors(s.result_data?.meta?.competitors)
         const hasFocus = Boolean(subject)
         return h('div', {}, [
-          h('div', { class: 'flex items-start gap-2 flex-wrap' }, [
-            h('div', { class: 'font-medium text-gray-900 dark:text-white' }, s.name || `切片 ${s.id}`),
-            h('span', { class: 'shrink-0 text-xs text-gray-400 font-normal' }, `#${s.id}`),
+          h('div', { class: 'flex items-center gap-1.5 flex-wrap' }, [
+            h('span', { class: 'font-medium text-gray-900 dark:text-white leading-snug line-clamp-2' }, s.name || `切片 ${s.id}`),
+            h('span', { class: 'text-xs text-gray-400 font-normal shrink-0' }, `#${s.id}`),
             hasFocus
               ? h(Badge, { size: 'xs', variant: 'subtle', color: 'primary' }, () => 'Focus')
               : h(Badge, { size: 'xs', variant: 'subtle', color: 'neutral' }, () => '无 Focus'),
           ]),
-          h('div', { class: 'mt-0.5 text-xs text-gray-500 dark:text-gray-400 whitespace-normal' },
+          h('div', { class: 'mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate' },
             `主体：${subject ? String(subject) : '-'} · 竞品：${competitors}`
           ),
         ])

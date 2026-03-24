@@ -200,16 +200,17 @@ async def update_monitor(
 async def delete_monitor(db: AsyncSession, monitor: Monitor) -> None:
     """删除项目，并清理策略中的关联引用"""
     monitor_id = monitor.id
-    await crud.delete_monitor(db, monitor)
 
-    # 清理策略表中 monitor_id 外键引用
+    # 先清理策略表中 monitor_id 外键引用，再删除 Monitor
     from src.strategies.models import Strategy
 
     stmt = select(Strategy).where(Strategy.monitor_id == monitor_id)
     result = await db.execute(stmt)
     for strat in result.scalars().all():
         strat.monitor_id = None
-    await db.commit()
+    await db.flush()
+
+    await crud.delete_monitor(db, monitor)
 
 
 # ==================== Monitor-Participant Relations ====================

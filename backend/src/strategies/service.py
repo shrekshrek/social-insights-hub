@@ -561,29 +561,39 @@ async def confirm_research(
     flag_modified(strategy, "research_design")
     strategy.output_type = research_design.get("output_type", "brand_strategy")
 
-    # 创建 Monitor（确保名称不重复）
-    base_name = strategy.name
-    monitor_name = base_name
-    suffix = 1
-    while await get_monitor_by_name(db, monitor_name):
-        suffix += 1
-        monitor_name = f"{base_name}({suffix})"
+    # 复用已有 Monitor 或创建新的
+    if strategy.monitor_id:
+        from src.social_media.monitors.models import Monitor
 
-    try:
-        result = await create_monitor(
-            db,
-            MonitorCreate(
-                name=monitor_name,
-                description=f"策略「{strategy.name}」的研究数据采集",
-            ),
-            current_user_id,
-        )
-        monitor = result["monitor"]
-    except HTTPException as e:
-        raise HTTPException(
-            status_code=e.status_code,
-            detail=f"创建监测项目失败: {e.detail}",
-        ) from e
+        monitor = await db.get(Monitor, strategy.monitor_id)
+        if not monitor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"关联的监测项目 {strategy.monitor_id} 不存在",
+            )
+    else:
+        base_name = strategy.name
+        monitor_name = base_name
+        suffix = 1
+        while await get_monitor_by_name(db, monitor_name):
+            suffix += 1
+            monitor_name = f"{base_name}({suffix})"
+
+        try:
+            result = await create_monitor(
+                db,
+                MonitorCreate(
+                    name=monitor_name,
+                    description=f"策略「{strategy.name}」的研究数据采集",
+                ),
+                current_user_id,
+            )
+            monitor = result["monitor"]
+        except HTTPException as e:
+            raise HTTPException(
+                status_code=e.status_code,
+                detail=f"创建监测项目失败: {e.detail}",
+            ) from e
 
     # 为每个维度×关键词×平台创建独立任务（每个关键词独立，便于探测审查逐词评估）
     created_task_ids: list[int] = []

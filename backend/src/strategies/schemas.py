@@ -46,6 +46,25 @@ class PhaseResultEdit(CustomBaseModel):
 # ==================== 研究设计 Schemas ====================
 
 
+class FeasibilityAssessment(CustomBaseModel):
+    """课题适配度评估"""
+
+    fit_score: float = Field(0.5, ge=0, le=1, description="课题与社媒数据的契合度 (0-1)")
+    recommendation: str = Field(
+        "proceed", description="proceed / adjust_scope / not_recommended"
+    )
+    rationale: str = Field("", description="评估理由")
+    social_can_tell: list[str] = Field(
+        default_factory=list, description="社媒数据能回答的问题"
+    )
+    social_cannot_tell: list[str] = Field(
+        default_factory=list, description="社媒数据无法回答的问题"
+    )
+    complementary_methods: list[str] = Field(
+        default_factory=list, description="建议补充的研究方法"
+    )
+
+
 class DesignResearchRequest(CustomBaseModel):
     """AI 研究设计请求"""
 
@@ -55,6 +74,9 @@ class DesignResearchRequest(CustomBaseModel):
 class DesignResearchResponse(CustomBaseModel):
     """AI 研究设计响应"""
 
+    feasibility: FeasibilityAssessment = Field(
+        default_factory=FeasibilityAssessment, description="课题适配度评估"
+    )
     understanding_summary: str = Field("", description="AI 对分析需求的理解")
     research_questions: list[dict[str, Any]] = Field(default_factory=list)
     data_plan: list[dict[str, Any]] = Field(default_factory=list)

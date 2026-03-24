@@ -50,7 +50,7 @@
 |------|----------|
 | `strategies/types/index.ts` | 重写 |
 | `strategies/composables/useStrategies.ts` | 重写 |
-| `strategies/pages/strategies/index.vue` | 改造：status 显�� |
+| `strategies/pages/strategies/index.vue` | 改造：status 显示 |
 | `strategies/pages/strategies/create.vue` | 改造：Brief 表单 |
 | `strategies/pages/strategies/[id]/index.vue` | 重写：4 阶段面板 |
 | `strategies/components/MonitorSuggestionsEditor.vue` | 改造 → ResearchPlanEditor |
@@ -452,7 +452,7 @@ slices_summary_section: str       # 切片 result_data 摘要
 }
 ```
 
-**���增端点:**
+**新增端点:**
 
 | 方法 | 路径 | 说明 | 状态变化 |
 |------|------|------|----------|
@@ -675,7 +675,7 @@ adjustSlices(id: number, request: AdjustSlicesRequest) → Strategy
 | 探测任务部分失败 | 成功的正常审查，失败的标记在 probe_review_result 中 |
 | 所有探测任务都不合格 | overall_verdict=fail，建议回 ① 重新设计 |
 | 探测轮次达上限 (3轮) | refine_probe → 400，前端提示用户手动确认或回 ① |
-| 全量采集部分任务失败 | 用已完成的任务建切片，覆盖度验证中标���数据缺口 |
+| 全量采集部分任务失败 | 用已完成的任务建切片，覆盖度验证中标注数据缺口 |
 | 自动建切片时 blueprint 引用的维度没有完成的任务 | 跳过该切片，在 coverage_check 中报告未覆盖的问题 |
 | 快速路径（创建时带 slice_ids） | 跳过 ①②③，直接进入 ready 状态 |
 | 用户在任意阶段编辑 Brief | 允许，但不影响已创建的任务（需重新确认计划才会重建） |

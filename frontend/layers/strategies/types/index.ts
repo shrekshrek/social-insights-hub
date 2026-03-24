@@ -35,6 +35,17 @@ export interface SliceSummary {
   monitor_name: string
 }
 
+// ==================== 课题适配度评估 ====================
+
+export interface FeasibilityAssessment {
+  fit_score: number
+  recommendation: 'proceed' | 'adjust_scope' | 'not_recommended'
+  rationale: string
+  social_can_tell: string[]
+  social_cannot_tell: string[]
+  complementary_methods: string[]
+}
+
 // ==================== 研究设计 ====================
 
 export interface ResearchQuestion {
@@ -63,6 +74,7 @@ export interface SliceBlueprintItem {
 }
 
 export interface ResearchDesign {
+  feasibility?: FeasibilityAssessment
   understanding_summary: string
   research_questions: ResearchQuestion[]
   data_plan: DataPlanItem[]

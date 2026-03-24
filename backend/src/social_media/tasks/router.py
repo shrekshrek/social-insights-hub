@@ -96,7 +96,7 @@ async def get_tasks(
         current_user_id=current_user.id,
     )
 
-    # 批量查询各任务最新 LLM 分析 Job 状态（用于判��"分析中"，避免 N+1）
+    # 批量查询各任务最新 LLM 分析 Job 状态（用于判断"分析中"，避免 N+1）
     from sqlalchemy import select as sa_select
     from src.social_media.analysis.models import AnalysisJob
 

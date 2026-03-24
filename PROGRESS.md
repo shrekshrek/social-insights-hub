@@ -55,6 +55,7 @@
 - 测试覆盖率待提升（后端 aggregation 模块无单元测试）
 - 切片页前端可选展示：time_distribution / kol_voices 数据已由后端生成但前端展示优先级低（time_distribution 是采集样本分布非真实趋势、kol_voices 任务级更直观），如需展示仅考虑 kol_voices
 - 策略 Chain 数据精简：Phase 2 已移除 time_distribution（样本分布误导节奏建议）、Phase 3 已移除 ipa_analysis 读取；切片级 ipa_analysis 计算已删除（维度不一致 + 与现有数据冗余），仅保留 kol_voices 作为唯一新增数据源
+- 研究设计链拆分预案：当前 research_design_chain 在单次调用中完成适配度评估 + 研究计划生成，输出质量可控。当系统接入更多数据能力（公众号搜索、网络搜索、行业报告检索）后，需拆为「预检链 → 编排链」两步——预检链评估各能力的适用性并推荐组合，编排链基于推荐结果为每种能力生成具体采集方案。拆分时机：能力清单 > 3 种 或 单次输出 JSON 超过 1500 tokens
 
 ## 下次继续的入口
 

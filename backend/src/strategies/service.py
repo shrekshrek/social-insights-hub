@@ -55,6 +55,7 @@ from .schemas import (
     ConfirmResearchResponse,
     DataOverviewResponse,
     DesignResearchResponse,
+    FeasibilityAssessment,
     ParseBriefResponse,
     ProbeStatusResponse,
     ProbeTaskStatus,
@@ -446,7 +447,9 @@ async def design_research(
             detail=f"AI 研究设计解析失败: {e}",
         ) from e
 
+    feasibility_data = parsed.get("feasibility") or {}
     response = DesignResearchResponse(
+        feasibility=FeasibilityAssessment(**feasibility_data),
         understanding_summary=parsed["understanding_summary"],
         research_questions=parsed["research_questions"],
         data_plan=parsed["data_plan"],
@@ -455,8 +458,10 @@ async def design_research(
         output_type_rationale=parsed.get("output_type_rationale", ""),
     )
     logger.info(
-        "Strategy %d 研究设计完成 (%.1fs, %d 个研究问题, %d 个数据维度)",
+        "Strategy %d 研究设计完成 (%.1fs, fit=%.1f/%s, %d 个研究问题, %d 个数据维度)",
         strategy.id, duration,
+        feasibility_data.get("fit_score", 0.5),
+        feasibility_data.get("recommendation", "proceed"),
         len(parsed["research_questions"]),
         len(parsed["data_plan"]),
     )
@@ -1087,7 +1092,7 @@ async def _run_coverage_check(
     db: AsyncSession,
     strategy: Strategy,
 ) -> dict:
-    """运行覆盖度验证��存储结果"""
+    """运行覆盖度验证并存储结果"""
     research_design = strategy.research_design or {}
     research_questions = research_design.get("research_questions", [])
 

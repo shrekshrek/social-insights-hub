@@ -179,6 +179,7 @@
           </div>
 
           <ResearchPlanEditor
+            :feasibility="researchDesign?.feasibility"
             :understanding-summary="researchDesign?.understanding_summary"
             :research-questions="researchDesign?.research_questions || []"
             :data-plan="editableDataPlan"
@@ -198,7 +199,7 @@
             <UButton
               :loading="confirmResearchLoading"
               icon="i-heroicons-check-circle"
-              :disabled="currentStatusOrder >= STATUS_ORDER.probing"
+              :disabled="currentStatusOrder >= STATUS_ORDER.probing || !editableDataPlan.length"
               @click="handleConfirmResearch"
             >
               确认并开始采集

@@ -15,20 +15,20 @@
     </div>
 
     <!-- 任务状态列表 -->
-    <div v-if="tasks.length" class="space-y-1.5">
+    <div v-if="tasks.length" class="grid grid-cols-3 gap-1.5">
       <div
         v-for="t in tasks"
         :key="t.task_id"
-        class="flex items-center gap-2 text-sm p-2 rounded"
+        class="flex items-center gap-1.5 text-xs p-1.5 rounded"
         :class="t.has_analysis ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
       >
         <UIcon
           :name="t.has_analysis ? 'i-heroicons-check-circle' : 'i-heroicons-clock'"
           :class="t.has_analysis ? 'text-green-500' : 'text-gray-400'"
+          class="shrink-0"
         />
-        <span class="font-medium">{{ t.keyword }}</span>
-        <UBadge variant="soft" size="xs" color="neutral">{{ platformLabel(t.platform) }}</UBadge>
-        <span class="text-xs text-gray-400">{{ t.status }}</span>
+        <span class="font-medium truncate">{{ t.keyword }}</span>
+        <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
       </div>
     </div>
 

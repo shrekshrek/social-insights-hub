@@ -85,6 +85,16 @@ export const useStrategies = () => {
 
   // ==================== ① 研究设计 ====================
 
+  // 重置到研究设计阶段
+  const resetToDesign = async (id: number) => {
+    const result = await apiRequest<Strategy>(
+      `/strategies/${id}/reset-to-design`,
+      { method: 'POST' }
+    )
+    showSuccess('已重置到研究设计阶段')
+    return result
+  }
+
   // AI 生成研究计划
   const designResearch = async (id: number, userInput: string = '') => {
     const result = await apiRequest<ResearchDesign>(
@@ -219,6 +229,7 @@ export const useStrategies = () => {
     createStrategy,
     updateStrategy,
     deleteStrategy,
+    resetToDesign,
     designResearch,
     confirmResearch,
     getProbeStatus,

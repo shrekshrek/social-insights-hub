@@ -147,6 +147,20 @@ async def design_research(
 
 
 @router.post(
+    "/{strategy_id}/reset-to-design",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="重置到研究设计阶段",
+)
+async def reset_to_design(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """从探测/采集阶段回退到研究设计，软删除已创建的任务"""
+    return await service.reset_to_design(db, strategy)
+
+
+@router.post(
     "/{strategy_id}/confirm-research",
     response_model=ConfirmResearchResponse,
     status_code=status.HTTP_200_OK,

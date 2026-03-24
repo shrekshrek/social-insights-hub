@@ -29,14 +29,14 @@ export const useStrategyPolling = (
   })
 
   let probeTimer: ReturnType<typeof setInterval> | null = null
-  let probePolling = false
+  const probePolling = ref(false)
 
   const stopProbePolling = () => {
     if (probeTimer) {
       clearInterval(probeTimer)
       probeTimer = null
     }
-    probePolling = false
+    probePolling.value = false
   }
 
   const pollProbeStatus = async () => {
@@ -74,10 +74,9 @@ export const useStrategyPolling = (
   }
 
   const startProbePolling = () => {
-    if (probePolling) return
-    probePolling = true
+    if (probePolling.value) return
     stopProbePolling()
-    probePolling = true
+    probePolling.value = true
     pollProbeStatus()
     probeTimer = setInterval(pollProbeStatus, 10000)
   }
@@ -93,14 +92,14 @@ export const useStrategyPolling = (
   })
 
   let collectionTimer: ReturnType<typeof setInterval> | null = null
-  let collectionPolling = false
+  const collectionPolling = ref(false)
 
   const stopCollectionPolling = () => {
     if (collectionTimer) {
       clearInterval(collectionTimer)
       collectionTimer = null
     }
-    collectionPolling = false
+    collectionPolling.value = false
   }
 
   const pollCollectionStatus = async () => {
@@ -132,10 +131,9 @@ export const useStrategyPolling = (
   }
 
   const startCollectionPolling = () => {
-    if (collectionPolling) return
-    collectionPolling = true
+    if (collectionPolling.value) return
     stopCollectionPolling()
-    collectionPolling = true
+    collectionPolling.value = true
     pollCollectionStatus()
     collectionTimer = setInterval(pollCollectionStatus, 15000)
   }
@@ -166,9 +164,12 @@ export const useStrategyPolling = (
     stopCollectionPolling()
   })
 
+  const isPollingActive = computed(() => probePolling.value || collectionPolling.value)
+
   return {
     probeData,
     collectionData,
+    isPollingActive,
     startProbePolling,
     stopProbePolling,
     startCollectionPolling,

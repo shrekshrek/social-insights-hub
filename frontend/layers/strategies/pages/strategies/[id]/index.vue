@@ -199,10 +199,10 @@
             <UButton
               :loading="confirmResearchLoading"
               icon="i-heroicons-check-circle"
-              :disabled="currentStatusOrder >= STATUS_ORDER.probing || !editableDataPlan.length"
+              :disabled="!editableDataPlan.length || isPollingActive"
               @click="handleConfirmResearch"
             >
-              确认并开始采集
+              {{ currentStatusOrder >= STATUS_ORDER.probing ? '重新确认并采集' : '确认并开始采集' }}
             </UButton>
             <UButton variant="outline" :loading="designLoading" icon="i-heroicons-arrow-path" @click="handleDesignResearch">
               重新生成计划
@@ -378,8 +378,11 @@ const { data: strategy, pending } = strategiesApi.getStrategy(strategyId)
 const {
   probeData,
   collectionData,
+  isPollingActive,
   startProbePolling,
+  stopProbePolling,
   startCollectionPolling,
+  stopCollectionPolling,
   initPollingFromStatus,
   initFromStrategy,
 } = useStrategyPolling(strategyId, strategy)
@@ -437,7 +440,7 @@ const editingPlan = ref(false)
 const editableDataPlan = ref<DataPlanItem[]>([])
 const editableBlueprint = ref<SliceBlueprintItem[]>([])
 const notesPerTask = ref(50)
-const probeNotes = ref(15)
+const probeNotes = ref(20)
 
 // 深拷贝研究计划（确保嵌套数组不共享引用）
 const deepCopyDataPlan = (items: DataPlanItem[]): DataPlanItem[] =>
@@ -523,8 +526,19 @@ const handleDesignResearch = async () => {
 
 const handleConfirmResearch = async () => {
   if (!editableDataPlan.value.length) return
+  // 如果已有采集任务，需要确认
+  if (currentStatusOrder.value >= STATUS_ORDER.probing) {
+    const { $confirm } = useNuxtApp()
+    const confirmed = await $confirm('将删除已创建的采集任务和切片，重新开始采集。确定继续？')
+    if (!confirmed) return
+  }
   confirmResearchLoading.value = true
   try {
+    if (currentStatusOrder.value >= STATUS_ORDER.probing) {
+      stopProbePolling()
+      stopCollectionPolling()
+      await strategiesApi.resetToDesign(strategyId.value)
+    }
     const rd = researchDesign.value
     await strategiesApi.confirmResearch(strategyId.value, {
       research_design: {

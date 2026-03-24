@@ -277,7 +277,7 @@ import type { DataPlanItem, SliceBlueprintItem, ResearchQuestion, FeasibilityAss
 import { PLATFORM_OPTIONS, platformLabel } from '../composables/useStrategyConstants'
 
 const NOTES_OPTIONS = [50, 100] as const
-const PROBE_OPTIONS = [15, 30] as const
+const PROBE_OPTIONS = [20, 30] as const
 
 const props = defineProps<{
   feasibility?: FeasibilityAssessment
@@ -303,8 +303,9 @@ const keywordInputRefs = ref<Record<number, HTMLInputElement | null>>({})
 
 const estimatedTaskCount = computed(() => {
   return props.dataPlan.reduce((total, dp) => {
+    const keywords = dp.keywords?.length || 1
     const platforms = dp.platforms?.length || 1
-    return total + platforms
+    return total + keywords * platforms
   }, 0)
 })
 

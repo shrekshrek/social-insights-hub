@@ -68,6 +68,7 @@ async def get_pending_tasks(
                 keywords=task.keywords,
                 task_params=task.task_params,
                 created_at=task.created_at,
+                status=task.status,
                 # Task A (pending): preview_count = probe_size
                 # Task B (approved): preview_count = null (全量续采)
                 preview_count=params.get("probe_size") if not is_continuation else None,

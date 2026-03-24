@@ -21,6 +21,10 @@ class AgentTaskInfo(CustomBaseModel):
     keywords: Optional[str] = Field(None, description="搜索关键词")
     task_params: Optional[dict] = Field(None, description="任务参数")
     created_at: datetime = Field(..., description="创建时间")
+    status: str = Field(
+        ...,
+        description="任务状态: pending（新任务，需 accept）/ approved（续采任务，跳过 accept 直接执行）",
+    )
     preview_count: Optional[int] = Field(
         None,
         description="预览采集数量。>0 时 Agent 采集到该数量后保存断点退出；null 则正常全量采集",

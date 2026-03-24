@@ -75,7 +75,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
 每个关键词在每个平台的采集量约 50 条，分析耗时适中。方案必须精简：
 - 每个数据维度选 1-3 个最相关的平台（质量优先于覆盖面，宁精不滥）
 - 总数据维度 2-4 个
-- 初次分析总任务量控制在 4-8 个（维度数 × 平均平台数）
+- 初次分析总任务量控制在 4-10 个（每个关键词×每个平台 = 1 个独立任务）
 - **平台选择必须同时考虑品类特点和关键词适配性**（优先从以下 5 个主力平台中选择）：
   - 知乎：专业讨论、行业分析、深度评价（适合 B2B、技术、专业领域）
   - 微博：新闻热点、品牌公关、大众舆论（适合有公众讨论度的话题）
@@ -147,7 +147,7 @@ output_type 可选值: brand_strategy / insight_report
 - research_questions: 2-4 个，覆盖 Brief 的核心分析目标（adjust_scope 时只包含社媒可回答的）
 - data_plan: 2-4 个维度，每个维度 1-3 个关键词 + 2-3 个平台
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
-- probe_size 统一为 15，full_size 统一为 50（除非用户有特殊需求）
+- probe_size 统一为 20，full_size 统一为 50（除非用户有特殊需求）
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
 """

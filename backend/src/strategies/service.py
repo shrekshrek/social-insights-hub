@@ -477,6 +477,58 @@ async def design_research(
     return response
 
 
+async def reset_to_design(
+    db: AsyncSession,
+    strategy: Strategy,
+) -> StrategyRead:
+    """重置策略到研究设计阶段，软删除已创建的任务
+
+    允许用户从探测/采集阶段回退到 planned，重新编辑研究计划。
+    保留 Monitor（复用），保留 research_design（可重新编辑后确认）。
+    """
+    from src.social_media.tasks import crud as task_crud
+    from src.social_media.tasks.models import DataTask
+
+    if STATUS_ORDER.get(strategy.status, 0) <= STATUS_ORDER["planned"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前状态无需重置",
+        )
+
+    # 软删除所有已创建的任务
+    task_ids = list(strategy.task_ids or [])
+    if task_ids:
+        query = select(DataTask).where(
+            DataTask.id.in_(task_ids), DataTask.is_deleted.is_(False)
+        )
+        result = await db.execute(query)
+        for task in result.scalars().all():
+            await task_crud.delete_task(db, task)
+
+    # 清除探测/采集阶段的数据，回退状态
+    strategy.task_ids = []
+    flag_modified(strategy, "task_ids")
+    strategy.probe_review_result = None
+    flag_modified(strategy, "probe_review_result")
+    strategy.probe_round = 0
+    strategy.coverage_check_result = None
+    flag_modified(strategy, "coverage_check_result")
+    strategy.status = "planned"
+
+    # 清除关联切片（自动创建的）
+    for ss in list(strategy.slices):
+        await db.delete(ss)
+
+    await db.commit()
+
+    updated = await get_strategy_by_id(db, strategy.id)
+    logger.info(
+        "Strategy %d 重置到研究设计阶段 (删除 %d 个任务)",
+        strategy.id, len(task_ids),
+    )
+    return build_strategy_read(updated)
+
+
 async def confirm_research(
     db: AsyncSession,
     strategy: Strategy,
@@ -533,7 +585,7 @@ async def confirm_research(
             detail=f"创建监测项目失败: {e.detail}",
         ) from e
 
-    # 为每个维度×关键词组×平台创建探测任务
+    # 为每个维度×关键词×平台创建独立任务（每个关键词独立，便于探测审查逐词评估）
     created_task_ids: list[int] = []
     task_dimension_map: dict[int, str] = {}  # task_id → dimension_name
     partial_errors: list[str] = []
@@ -547,9 +599,8 @@ async def confirm_research(
             partial_errors.append(f"跳过不完整的数据维度: {dimension_name}")
             continue
 
-        # 关键词 OR 组合为一个搜索词
-        combined_keywords = " ".join(kw.strip() for kw in keywords if kw.strip())
-        if not combined_keywords:
+        clean_keywords = [kw.strip() for kw in keywords if kw.strip()]
+        if not clean_keywords:
             continue
 
         task_params = {
@@ -559,37 +610,38 @@ async def confirm_research(
             "per_note_max_comments_count": 20,
         }
 
-        for platform_name in platforms:
-            code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
-            try:
-                platform = await get_platform_by_code(db, code)
-                if not platform:
-                    partial_errors.append(f"平台「{platform_name}」不存在，跳过")
-                    continue
-                task = await create_task(
-                    db,
-                    DataTaskCreate(
-                        name=f"{dimension_name}-{platform.name}",
-                        monitor_id=monitor.id,
-                        platform_id=platform.id,
-                        task_type="search",
-                        keywords=combined_keywords,
-                        data_source="remote_crawler",
-                        task_params=task_params,
-                        auto_analyze=True,
-                    ),
-                    current_user_id,
-                )
-                created_task_ids.append(task.id)
-                task_dimension_map[task.id] = dimension_name
-            except Exception as e:
-                logger.error(
-                    "创建任务「%s-%s」失败: %s",
-                    dimension_name, platform_name, e,
-                )
-                partial_errors.append(
-                    f"创建任务「{dimension_name}-{platform_name}」失败: {e}"
-                )
+        for keyword in clean_keywords:
+            for platform_name in platforms:
+                code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
+                try:
+                    platform = await get_platform_by_code(db, code)
+                    if not platform:
+                        partial_errors.append(f"平台「{platform_name}」不存在，跳过")
+                        continue
+                    task = await create_task(
+                        db,
+                        DataTaskCreate(
+                            name=f"{keyword}-{platform.name}",
+                            monitor_id=monitor.id,
+                            platform_id=platform.id,
+                            task_type="search",
+                            keywords=keyword,
+                            data_source="remote_crawler",
+                            task_params=task_params,
+                            auto_analyze=True,
+                        ),
+                        current_user_id,
+                    )
+                    created_task_ids.append(task.id)
+                    task_dimension_map[task.id] = dimension_name
+                except Exception as e:
+                    logger.error(
+                        "创建任务「%s-%s-%s」失败: %s",
+                        keyword, platform_name, dimension_name, e,
+                    )
+                    partial_errors.append(
+                        f"创建任务「{keyword}-{platform_name}」失败: {e}"
+                    )
 
     # 记录 task_id → dimension 映射到 research_design 中，供后续自动建切片使用
     research_design["_task_dimension_map"] = {
@@ -692,13 +744,14 @@ async def check_probe_status(
 
     # 如果已有审查结果且状态不是 probing，直接返回
     if strategy.probe_review_result:
+        fresh = await get_strategy_by_id(db, strategy.id)
         return ProbeStatusResponse(
             all_analyzed=all_analyzed,
             tasks=statuses,
             analyzed_count=analyzed,
             total_count=total,
             probe_review_result=strategy.probe_review_result,
-            strategy=build_strategy_read(strategy),
+            strategy=build_strategy_read(fresh),
         )
 
     # 未全部分析完成，返回进度
@@ -728,14 +781,15 @@ async def check_probe_status(
             strategy=build_strategy_read(updated),
         )
 
-    # 需要用户操作
+    # 需要用户操作 �� 重新加载避免过期属性
+    fresh = await get_strategy_by_id(db, strategy.id)
     return ProbeStatusResponse(
         all_analyzed=True,
         tasks=statuses,
         analyzed_count=analyzed,
         total_count=total,
         probe_review_result=review_result,
-        strategy=build_strategy_read(strategy),
+        strategy=build_strategy_read(fresh),
     )
 
 

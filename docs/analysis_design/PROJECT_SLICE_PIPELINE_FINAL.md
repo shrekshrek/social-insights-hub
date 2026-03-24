@@ -62,7 +62,7 @@ graph TD
         *   **截断策略**：为防止内存溢出，每个实体/观点保留 **Top 20** 条最有代表性（长度优先）的 `original_terms`。
     3.  **跨任务去重**：
         *   基于 `(platform, post_id_on_platform)` 进行去重。
-        *   **冲突处理**：取提取结果的**并集 (Union)**，Heat 按去重后帖子累加（反映总体影响力）。
+        *   **冲突处理**：取提取结果的**并集 (Union)**，Heat 按去重后原文累加（反映总体影响力）。
 
 ### Step 1: 加权聚合 (Weighted Aggregation)
 *   **输入**：去重后的原始 Items。

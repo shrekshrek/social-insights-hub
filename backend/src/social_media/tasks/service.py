@@ -253,7 +253,7 @@ async def process_json_upload(
                 # 使用适配器转换并验证
                 transformed = adapter.transform_comment(raw_data)
                 adapter.validate_comment(transformed)
-                # 从适配器获取帖子ID
+                # 从适配器获取原文ID
                 post_id_on_platform = adapter.get_post_id_from_comment(transformed)
             else:
                 # 直接使用原始数据（假设已是统一格式）
@@ -271,7 +271,7 @@ async def process_json_upload(
 
             # 查找对应的 post
             if not post_id_on_platform:
-                # 如果没有帖子ID，尝试从第一个原文推断（简化处理）
+                # 如果没有原文ID，尝试从第一个原文推断（简化处理）
                 if created_posts:
                     post_id = created_posts[0].id
                 else:
@@ -427,7 +427,7 @@ async def query_cross_task_posts(
     monitor_id: Optional[int] = None,
     current_user_id: int = None,
 ) -> List[SocialPost]:
-    """跨任务查询同一帖子的历史数据"""
+    """跨任务查询同一原文的历史数据"""
     # 如果指定了monitor_id，验证访问权限
     if monitor_id is not None and current_user_id is not None:
         from src.social_media.monitors import crud as social_crud
@@ -460,7 +460,7 @@ async def clear_task_data(db: AsyncSession, task: DataTask) -> DataTask:
     from sqlalchemy import delete
     from src.social_media.analysis.models import PostAnalysis
 
-    # 先删除分析结果（因为帖子是软删除，CASCADE 不会触发）
+    # 先删除分析结果（因为原文是软删除，CASCADE 不会触发）
     await db.execute(delete(PostAnalysis).where(PostAnalysis.task_id == task.id))
 
     # 软删除该任务的所有原文

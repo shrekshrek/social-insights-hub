@@ -15,12 +15,12 @@ const props = defineProps<{
   data: TaskAnalysisResultData
 }>()
 
-// 帖子列表弹窗状态
+// 原文列表弹窗状态
 const postListModalOpen = ref(false)
 const postListModalTitle = ref('')
 const postListModalPostIds = ref<number[]>([])
 
-/** 打开帖子列表弹窗 */
+/** 打开原文列表弹窗 */
 const openPostListModal = (title: string, postIds: number[]) => {
   if (!postIds || postIds.length === 0) return
   postListModalTitle.value = title
@@ -218,7 +218,7 @@ const filteredCompetitorRadar = computed((): CompetitorRadar | undefined => {
   return cr[mode]
 })
 
-/** 获取四象限中某个象限的帖子IDs */
+/** 获取四象限中某个象限的原文IDs */
 const getQuadrantPostIds = (quadrant: string): number[] => {
   const items = props.data.charts.quadrant || []
   return items
@@ -309,7 +309,7 @@ const getRiskLabel = (risk: string) => {
 
 /** 获取反差方向标签 */
 const getConflictDirectionLabel = (direction: string) => {
-  if (direction === 'post_positive') return '帖子更正面'
+  if (direction === 'post_positive') return '原文更正面'
   if (direction === 'comment_positive') return '评论更正面'
   return '情感一致'
 }
@@ -331,7 +331,7 @@ const getSpamGroupColor = (group: string | undefined | null) => {
 const hasContextGraph = computed(() => !!props.data.charts.context_graph?.all?.nodes?.length)
 const hasCompetitorRadar = computed(() => !!(props.data.charts.competitor_radar?.all && props.data.charts.competitor_radar.all.mode !== 'none'))
 
-/** 是否有任何 spam 数据（用于帖子列表弹窗显示分组 tab） */
+/** 是否有任何 spam 数据（用于原文列表弹窗显示分组 tab） */
 const hasAnySpamData = computed(() =>
   hasEntitySpamData.value || hasTopicSpamData.value || hasIpaSpamData.value || hasKolSpamData.value,
 )
@@ -502,7 +502,7 @@ const hasAnySpamData = computed(() =>
         <button
           class="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer"
           :disabled="data.charts.quadrant_summary.Q1_danger === 0"
-          @click="openPostListModal('爆雷区帖子', getQuadrantPostIds('Q1_danger'))"
+          @click="openPostListModal('爆雷区原文', getQuadrantPostIds('Q1_danger'))"
         >
           <p class="text-xl font-bold text-red-600 dark:text-red-400">{{ data.charts.quadrant_summary.Q1_danger }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">爆雷区</p>
@@ -521,7 +521,7 @@ const hasAnySpamData = computed(() =>
         <button
           class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors cursor-pointer"
           :disabled="data.charts.quadrant_summary.Q2_brand === 0"
-          @click="openPostListModal('品牌区帖子', getQuadrantPostIds('Q2_brand'))"
+          @click="openPostListModal('品牌区原文', getQuadrantPostIds('Q2_brand'))"
         >
           <p class="text-xl font-bold text-green-600 dark:text-green-400">{{ data.charts.quadrant_summary.Q2_brand }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">品牌区</p>
@@ -540,7 +540,7 @@ const hasAnySpamData = computed(() =>
         <button
           class="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors cursor-pointer"
           :disabled="data.charts.quadrant_summary.Q3_complaint === 0"
-          @click="openPostListModal('吐槽区帖子', getQuadrantPostIds('Q3_complaint'))"
+          @click="openPostListModal('吐槽区原文', getQuadrantPostIds('Q3_complaint'))"
         >
           <p class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ data.charts.quadrant_summary.Q3_complaint }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">吐槽区</p>
@@ -559,7 +559,7 @@ const hasAnySpamData = computed(() =>
         <button
           class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors cursor-pointer"
           :disabled="data.charts.quadrant_summary.Q4_niche === 0"
-          @click="openPostListModal('自嗨区帖子', getQuadrantPostIds('Q4_niche'))"
+          @click="openPostListModal('自嗨区原文', getQuadrantPostIds('Q4_niche'))"
         >
           <p class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ data.charts.quadrant_summary.Q4_niche }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">自嗨区</p>
@@ -578,7 +578,7 @@ const hasAnySpamData = computed(() =>
         <button
           class="text-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors cursor-pointer"
           :disabled="data.charts.quadrant_summary.neutral === 0"
-          @click="openPostListModal('中性区帖子', getQuadrantPostIds('neutral'))"
+          @click="openPostListModal('中性区原文', getQuadrantPostIds('neutral'))"
         >
           <p class="text-xl font-bold text-gray-600 dark:text-gray-300">{{ data.charts.quadrant_summary.neutral }}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">中性区</p>
@@ -911,7 +911,7 @@ const hasAnySpamData = computed(() =>
               <span class="text-xs text-gray-500 dark:text-gray-400">CII: {{ item.cii.toFixed(1) }}</span>
               <button
                 class="inline-flex items-center gap-0.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
-                @click="openPostListModal(`${item.author} 的帖子`, [item.post_id])"
+                @click="openPostListModal(`${item.author} 的原文`, [item.post_id])"
               >
                 <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-3 h-3" />
                 原文
@@ -923,7 +923,7 @@ const hasAnySpamData = computed(() =>
       </div>
     </section>
 
-    <!-- 帖子列表弹窗 -->
+    <!-- 原文列表弹窗 -->
     <PostListModal
       v-model:open="postListModalOpen"
       :task-id="taskId"

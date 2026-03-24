@@ -2,8 +2,8 @@
 
 ## Public Interface
 
-- `POST /analysis/screening` — 帖子初筛（spam/value/relevance/sentiment）
-- `POST /analysis/deep-posts` — 帖子深度分析（实体/观点/摘要提取）
+- `POST /analysis/screening` — 原文初筛（spam/value/relevance/sentiment）
+- `POST /analysis/deep-posts` — 原文深度分析（实体/观点/摘要提取）
 - `POST /analysis/deep-comments` — 评论深度分析（实体/观点 + 来源追踪）
 - `POST /analysis/aggregation` — 任务级聚合（同步执行，返回完整结果）
 - `GET /analysis/task/{task_id}/result` — 获取聚合结果
@@ -12,7 +12,7 @@
 ## Data Flow
 
 ```
-初筛 → 深度分析(帖子) → 深度分析(评论) → 聚合
+初筛 → 深度分析(原文) → 深度分析(评论) → 聚合
   ↓         ↓                ↓              ↓
 spam_score  entities        entities    aggregate_entities()
 value_score opinions        opinions    aggregate_opinions()
@@ -32,8 +32,8 @@ sentiment   summary                     metrics/charts/insights
 ### 3 层预计算
 关联网络 (ContextGraph) 和竞品雷达 (CompetitorRadar) 按维度预计算：
 - `all`: 全部数据
-- `organic`: 仅 low_spam 帖子
-- `promo`: 仅 high_spam 帖子
+- `organic`: 仅 low_spam 原文
+- `promo`: 仅 high_spam 原文
 
 默认 spam 阈值: `6.0`（spam_score >= 6.0 为高广告组）
 
@@ -47,14 +47,14 @@ sentiment   summary                     metrics/charts/insights
 
 ### 项目级切片 organic_heat / promo_heat
 与 `spam_distribution`（仅存 mention 计数）并行的**热度分层**字段，用于前端有机/推广视角的 X 轴和份额计算：
-- 公式：`organic_heat = Σ normalized_heat`（`spam_group == "low"` 的帖子），`promo_heat` 同理
+- 公式：`organic_heat = Σ normalized_heat`（`spam_group == "low"` 的原文），`promo_heat` 同理
 - 生成位置：`project_slice.py` Stage 1，与 `normalized_heat = raw_cii × platform_weight` 同循环内按 `spam_map_by_key[pk]` 分拆
 - 传递路径：Stage 1 → Stage 2 (`entity_aggregation.py`: 直接累加) → Stage 3 (`insights.py`: sov_ranking / group_share 透传)
 - 实体和话题均携带此字段；旧切片（无该字段）前端自动回退到 `spam_distribution.low_spam.total`
 
 ## 聚合流程 (orchestrator.py)
 
-1. 查询所有帖子 + PostAnalysis
+1. 查询所有原文 + PostAnalysis
 2. 计算 CII、NSR、SERP、营销浓度、反差度
 3. 并行执行实体聚合 + 观点聚合（含 LLM 归一化）
 4. 生成四象限、时间分布
@@ -77,5 +77,5 @@ sentiment   summary                     metrics/charts/insights
 - **双重情感体系**: 宏观指标（NSR/SERP/四象限）用初筛 -2~+2；微观指标（实体/观点）用深度分析 -1~+1
 - **实体角色分类**: target（本品）/ competitor（竞品）/ other，基于 task.keywords 匹配
 - **KOL 声音**: 后端返回 top_n=10，前端按 spam_group 筛选（每组约 5 条）
-- **IPA 热度去重**: `post_contribution_map` 防止同一帖子对同一词条重复贡献
+- **IPA 热度去重**: `post_contribution_map` 防止同一原文对同一词条重复贡献
 - **竞品雷达品牌聚合**: 通过 `tags.parent` 将产品归入品牌，展示品牌级对比

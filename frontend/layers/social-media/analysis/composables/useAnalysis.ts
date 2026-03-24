@@ -101,7 +101,7 @@ export const useAnalysis = () => {
   // ==================== 任务级分析操作 ====================
 
   /**
-   * 运行帖子AI初筛分析
+   * 运行原文AI初筛分析
    */
   const runPostScreening = async (taskId: number) => {
     const result = await apiRequest<RunAnalysisResponse>(
@@ -110,12 +110,12 @@ export const useAnalysis = () => {
         method: 'POST',
       }
     )
-    showSuccess('帖子初筛任务已启动')
+    showSuccess('原文初筛任务已启动')
     return result
   }
 
   /**
-   * 运行帖子深度分析
+   * 运行原文深度分析
    */
   const runPostDeepAnalysis = async (
     taskId: number,
@@ -133,7 +133,7 @@ export const useAnalysis = () => {
         method: 'POST',
       }
     )
-    showSuccess('帖子深度分析任务已启动')
+    showSuccess('原文深度分析任务已启动')
     return result
   }
 
@@ -161,7 +161,7 @@ export const useAnalysis = () => {
   }
 
   /**
-   * 获取任务下所有帖子的分析结果
+   * 获取任务下所有原文的分析结果
    */
   const getTaskPostAnalyses = (
     taskId: MaybeRef<number>,

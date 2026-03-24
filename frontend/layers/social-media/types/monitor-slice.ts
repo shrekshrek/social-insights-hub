@@ -19,7 +19,7 @@ export interface SourceTask {
   mentions: number
 }
 
-/** 帖子引用 (用于追溯) */
+/** 原文引用 (用于追溯) */
 export interface PostRef {
   task_id: number
   post_id: number
@@ -55,9 +55,9 @@ export interface AlignedEntity {
   mentions: number
   score: number
   sentiment?: number
-  /** 推广内容情感（spam_score >= 6.0 的帖子） */
+  /** 推广内容情感（spam_score >= 6.0 的原文） */
   promo_sentiment?: number
-  /** 有机内容情感（spam_score < 6.0 的帖子） */
+  /** 有机内容情感（spam_score < 6.0 的原文） */
   organic_sentiment?: number
   sentiment_distribution?: {
     positive: number
@@ -171,13 +171,13 @@ export interface IndustryQuadrantPoint {
   heat: number
   sentiment: number
   mentions: number
-  /** 有机内容情感（spam_score < 6.0 的帖子） */
+  /** 有机内容情感（spam_score < 6.0 的原文） */
   organic_sentiment?: number
-  /** 推广内容情感（spam_score >= 6.0 的帖子） */
+  /** 推广内容情感（spam_score >= 6.0 的原文） */
   promo_sentiment?: number
-  /** 有机内容热度（spam_score < 6.0 的帖子热度总和） */
+  /** 有机内容热度（spam_score < 6.0 的原文热度总和） */
   organic_heat?: number
-  /** 推广内容热度（spam_score >= 6.0 的帖子热度总和） */
+  /** 推广内容热度（spam_score >= 6.0 的原文热度总和） */
   promo_heat?: number
   spam_distribution?: {
     high_spam: { total: number; post: number; comment: number }
@@ -315,9 +315,9 @@ export interface ProductLineHealthItem {
   /** 对 Target 总声量的贡献度 (%) */
   contribution: number
   sentiment: number
-  /** 有机内容情感（spam_score < 6.0 的帖子） */
+  /** 有机内容情感（spam_score < 6.0 的原文） */
   organic_sentiment?: number
-  /** 推广内容情感（spam_score >= 6.0 的帖子） */
+  /** 推广内容情感（spam_score >= 6.0 的原文） */
   promo_sentiment?: number
   /** Top 1 痛点 */
   top_pain?: string

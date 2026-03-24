@@ -62,7 +62,7 @@ export interface GeneralOpinion {
 }
 
 /**
- * 帖子深度分析结果
+ * 原文深度分析结果
  */
 export interface PostDeepResult {
   entities: EntityInfo[]
@@ -71,7 +71,7 @@ export interface PostDeepResult {
 }
 
 /**
- * 评论深度分析结果（按帖子聚合）
+ * 评论深度分析结果（按原文聚合）
  */
 export interface CommentDeepResult {
   entities: EntityInfo[]
@@ -81,11 +81,11 @@ export interface CommentDeepResult {
 // ==================== Post Analysis ====================
 
 /**
- * 帖子AI分析结果（唯一的分析表）
+ * 原文AI分析结果（唯一的分析表）
  *
  * 包含三个层次的分析：
  * 1. 初筛分析：spam_score, value_score, relevance_score, sentiment
- * 2. 帖子深度分析：post_deep_result (实体、观点、摘要)
+ * 2. 原文深度分析：post_deep_result (实体、观点、摘要)
  * 3. 评论深度分析：comment_deep_result (评论的实体和观点聚合)
  */
 export interface PostAnalysis {
@@ -248,9 +248,9 @@ export interface AnalysisProgressResponse {
 // ==================== Post Analysis with Post Info ====================
 
 export interface PostAnalysisWithPostInfo {
-  // 帖子基本信息
+  // 原文基本信息
   post_id: number
-  post_id_on_platform: string | null  // 平台上的帖子ID，用于关联原文数据
+  post_id_on_platform: string | null  // 平台上的原文ID，用于关联原文数据
   title: string | null
   content: string | null
   author_name: string | null
@@ -285,8 +285,8 @@ export type PostAnalysisListResponse = PaginatedResponse<PostAnalysisWithPostInf
 export interface DeepAnalysisPreview {
   total_posts: number
   screened_count: number
-  qualified_count: number // 符合阈值条件的已初筛帖子总数（不管是否已深度分析）
-  matched_count: number // 符合条件且待深度分析的帖子数
+  qualified_count: number // 符合阈值条件的已初筛原文总数（不管是否已深度分析）
+  matched_count: number // 符合条件且待深度分析的原文数
   deep_done: number
   comment_done: number
   deep_candidate_ids: number[]
@@ -476,7 +476,7 @@ export interface TaskAnalysisCharts {
   quadrant: QuadrantItem[]
   quadrant_summary: QuadrantSummary
   time_distribution: TimeDistributionItem[]
-  time_distribution_skipped?: number  // 无发布时间的帖子数
+  time_distribution_skipped?: number  // 无发布时间的原文数
   ipa_analysis?: IpaAnalysis
   context_graph?: ContextGraphWithDimensions
   competitor_radar?: CompetitorRadarWithDimensions
@@ -519,15 +519,15 @@ export interface EntityStat {
   mentions: number
   score: number  // 综合评分
   sentiment: number  // 派生情感值 [-1, 1]，CII 加权（混合全部数据）
-  promo_sentiment: number  // 促销情感（仅 spam_score >= 6.0 的帖子）
-  organic_sentiment: number  // 有机情感（仅 spam_score < 6.0 的帖子）
+  promo_sentiment: number  // 促销情感（仅 spam_score >= 6.0 的原文）
+  organic_sentiment: number  // 有机情感（仅 spam_score < 6.0 的原文）
   sentiment_distribution: SentimentDistribution  // 情感分布
   source_distribution: SourceDistribution
   // 详细项（包含 original_terms，用于 UI 溯源展示）
   top_features: EntityAttrItem[]
   top_issues: EntityAttrItem[]
   top_expectations: EntityAttrItem[]
-  post_ids: number[]  // 关联帖子ID，用于反向追溯
+  post_ids: number[]  // 关联原文ID，用于反向追溯
   post_source_ids?: number[]
   comment_source_ids?: number[]
   spam_distribution?: SpamDistribution
@@ -552,7 +552,7 @@ export interface OpinionStat {
   score: number  // 综合评分
   sentiment: number
   source_distribution?: SourceDistribution  // 来源分布
-  post_ids: number[]  // 关联帖子ID，用于反向追溯
+  post_ids: number[]  // 关联原文ID，用于反向追溯
   post_source_ids?: number[]
   comment_source_ids?: number[]
   spam_distribution?: SpamDistribution

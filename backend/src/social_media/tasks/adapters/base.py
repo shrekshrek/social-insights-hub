@@ -16,7 +16,7 @@ class PlatformAdapter(ABC):
 
     @abstractmethod
     def transform_post(self, raw_data: dict[str, Any]) -> dict[str, Any]:
-        """转换帖子/内容数据
+        """转换原文/内容数据
 
         Args:
             raw_data: 平台原始数据
@@ -66,13 +66,13 @@ class PlatformAdapter(ABC):
 
     @abstractmethod
     def get_post_id_from_comment(self, comment_data: dict[str, Any]) -> str | None:
-        """从评论数据中获取关联的帖子ID
+        """从评论数据中获取关联的原文ID
 
         Args:
             comment_data: 评论的原始数据或转换后的数据
 
         Returns:
-            帖子在平台上的ID
+            原文在平台上的ID
         """
         pass
 
@@ -218,7 +218,7 @@ class PlatformAdapter(ABC):
         return transformed
 
     def validate_post(self, transformed: dict[str, Any]) -> None:
-        """验证转换后的帖子数据
+        """验证转换后的原文数据
 
         Raises:
             ValueError: 如果必填字段缺失

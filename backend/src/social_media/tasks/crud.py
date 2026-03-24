@@ -161,7 +161,7 @@ async def delete_task(db: AsyncSession, task: DataTask) -> None:
 
 
 async def delete_task_posts_and_comments(db: AsyncSession, task_id: int) -> dict:
-    """删除任务的所有帖子和评论（硬删除，用于重新上传数据）
+    """删除任务的所有原文和评论（硬删除，用于重新上传数据）
 
     Args:
         db: 数据库会话
@@ -178,13 +178,13 @@ async def delete_task_posts_and_comments(db: AsyncSession, task_id: int) -> dict
     )
     comments_deleted = comments_result.rowcount
 
-    # 再删除帖子
+    # 再删除原文
     posts_result = await db.execute(
         delete(SocialPost).where(SocialPost.task_id == task_id)
     )
     posts_deleted = posts_result.rowcount
 
-    # 同时删除帖子分析结果
+    # 同时删除原文分析结果
     from src.social_media.analysis.models import PostAnalysis
 
     await db.execute(delete(PostAnalysis).where(PostAnalysis.task_id == task_id))
@@ -229,7 +229,7 @@ async def get_posts_by_task(
         post_id: 可选，按原文ID精确筛选
 
     Returns:
-        tuple: (帖子数据列表（包含 crawled_comments_count）, 总数)
+        tuple: (原文数据列表（包含 crawled_comments_count）, 总数)
     """
     # 基础筛选条件
     base_conditions = [SocialPost.task_id == task_id, SocialPost.is_deleted.is_(False)]
@@ -243,7 +243,7 @@ async def get_posts_by_task(
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
-    # 子查询：每个帖子的已爬取评论数
+    # 子查询：每个原文的已爬取评论数
     crawled_count_subquery = (
         select(func.count(SocialComment.id))
         .where(
@@ -305,7 +305,7 @@ async def get_posts_by_platform_post_id(
     post_id_on_platform: str,
     monitor_id: Optional[int] = None,
 ) -> List[SocialPost]:
-    """跨任务查询同一帖子（按发布时间倒序）"""
+    """跨任务查询同一原文（按发布时间倒序）"""
     conditions = [
         SocialPost.platform_id == platform_id,
         SocialPost.post_id_on_platform == post_id_on_platform,
@@ -374,7 +374,7 @@ async def get_comment_by_id(
 async def get_comments_by_post(
     db: AsyncSession, post_id: int, skip: int = 0, limit: int = 50
 ) -> tuple[List[SocialComment], int]:
-    """获取帖子的评论列表"""
+    """获取原文的评论列表"""
     # 统计总数
     count_query = (
         select(func.count())

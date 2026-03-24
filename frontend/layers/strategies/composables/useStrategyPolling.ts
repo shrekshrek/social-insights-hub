@@ -148,8 +148,13 @@ export const useStrategyPolling = (
     }
   }
 
-  // 初始化切片/覆盖度数据（从已加载的策略对象）
+  // 从已加载的策略对象初始化数据（避免等待第一次轮询的空白期）
   const initFromStrategy = (s: Strategy) => {
+    // 探测数据
+    if (s.probe_review_result && !probeData.probeReview) {
+      probeData.probeReview = s.probe_review_result
+    }
+    // 采集数据
     if (s.slices?.length && !collectionData.slices.length) {
       collectionData.slices = s.slices
     }

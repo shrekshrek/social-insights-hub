@@ -97,7 +97,7 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 | rbac | 角色权限 CRUD, 代码驱动同步 | `roles`, `permissions`, 关联表 | `require_permission()`, `create_module_permissions()` | `/api/v1/rbac` | auth |
 | users | 用户 CRUD, 角色分配 | — (操作 auth.users) | — | `/api/v1/users` | auth, rbac |
 | projects | 项目管理, 平台初始化 | `social_projects`, `platforms` | `check_project_access()`, 模型 | `/api/v1/social-media/projects` | auth, rbac |
-| tasks | 任务管理, 多平台适配器, 帖子/评论存储 | `data_tasks`, `social_posts`, `social_comments` | 模型, `task_crud`, `adapters` | `/api/v1/social-media/tasks` | auth, rbac, projects |
+| tasks | 任务管理, 多平台适配器, 原文/评论存储 | `data_tasks`, `social_posts`, `social_comments` | 模型, `task_crud`, `adapters` | `/api/v1/social-media/tasks` | auth, rbac, projects |
 | analysis | LLM 分析编排, 批处理, 成本追踪 | `post_analyses`, `analysis_jobs`, `project_analysis_slices` | — (终端模块) | `/api/v1/social-media/analysis` | auth, rbac, projects, tasks, langchain |
 | langchain | DeepSeek LLM 实例, 分析链 | — (纯计算) | `get_deepseek_chat()`, 各 chain | — (无 API) | 基础设施 (config) |
 | agent | 爬虫代理 API, 数据上传 | — (操作 tasks 数据) | — (面向爬虫) | `/api/v1/agent` | tasks |
@@ -106,8 +106,8 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 
 | 链 | 输入 | 输出 | 调用方 |
 |----|------|------|--------|
-| screening_chain | 帖子内容+关键词 | spam/value/relevance/sentiment 分数 | screening_tasks |
-| post_extraction_chain | 帖子内容+关键词 | 实体+观点+摘要 | deep_analysis_tasks |
+| screening_chain | 原文内容+关键词 | spam/value/relevance/sentiment 分数 | screening_tasks |
+| post_extraction_chain | 原文内容+关键词 | 实体+观点+摘要 | deep_analysis_tasks |
 | comment_extraction_chain | 评论内容+关键词 | 评论实体+观点 | deep_analysis_tasks |
 | entity_normalization_chain | 实体列表 | 去重+归一化实体 | aggregation/entity |
 | opinion_normalization_chain | 观点列表 | 去重+归一化观点 | aggregation/opinion |
@@ -184,8 +184,8 @@ SocialProject ──1:N──▶ ProjectAnalysisSlice
 | platforms | projects | 社交平台定义 (7 个平台) |
 | social_projects, social_project_participants | projects | 监控项目 |
 | data_tasks | tasks | 数据采集任务 |
-| social_posts, social_comments | tasks | 帖子/评论数据 |
-| post_analyses | analysis | 帖子分析结果 (1:1 SocialPost) |
+| social_posts, social_comments | tasks | 原文/评论数据 |
+| post_analyses | analysis | 原文分析结果 (1:1 SocialPost) |
 | analysis_jobs | analysis | 分析任务状态+成本记录 |
 | project_analysis_slices | analysis | 项目级分析切片 (不可变) |
 
@@ -202,7 +202,7 @@ Stage 1: 初筛 (screening_tasks)        ← LLM: deepseek-chat
          spam/value/relevance/sentiment
       ▼
 Stage 2: 深度分析 (deep_analysis_tasks)  ← LLM: deepseek-chat/reasoner
-         帖子实体+观点, 评论实体+观点
+         原文实体+观点, 评论实体+观点
       ▼
 Stage 3: 聚合 (aggregation_tasks)       ← LLM: 归一化
          实体/观点归一化, NSR, SERP, 四象限, IPA, 竞品, 时间分布

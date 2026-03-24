@@ -143,7 +143,7 @@ def _collect_raw_entities_full(
         - post_id -> impact_score 的映射，用于合并时正确计算 total_impact
     """
     raw_entity_data: dict[str, dict] = {}
-    post_impact_map: dict[int, float] = {}  # 记录每个帖子的 Impact Score
+    post_impact_map: dict[int, float] = {}  # 记录每个原文的 Impact Score
 
     def get_or_create_entity(name: str, entity_type: str) -> dict:
         """获取或创建实体数据结构"""
@@ -152,7 +152,7 @@ def _collect_raw_entities_full(
                 "name": name,
                 "type": entity_type,
                 "total_impact": 0.0,  # 累加的 Impact Score
-                "impact_added_posts": set(),  # 去重：确保同一帖子的 Impact 只计算一次
+                "impact_added_posts": set(),  # 去重：确保同一原文的 Impact 只计算一次
                 "post_sentiments": {},  # {post_id: sentiment} 用于合并时正确计算
                 "positive_count": 0,
                 "negative_count": 0,
@@ -182,7 +182,7 @@ def _collect_raw_entities_full(
 
         Args:
             entity: 实体数据
-            post_id: 帖子ID
+            post_id: 原文ID
             entity_weight: 实体权重（原文使用 post_impact，评论使用 support_score 权重）
             source: 来源类型 ("post" 或 "comment")
         """
@@ -241,7 +241,7 @@ def _collect_raw_entities_full(
                     data["competitors"][comp].add(post_id)
                     data["competitor_stats"][comp] += 1
 
-    # 遍历所有帖子（只遍历一次！）
+    # 遍历所有原文（只遍历一次！）
     for post in posts_data:
         post_id = post.get("post_id")
         cii = post.get("cii", 1.0)
@@ -250,7 +250,7 @@ def _collect_raw_entities_full(
         # 计算单帖影响力分数 (Impact Score)
         post_impact = calculate_impact_score(cii, value_score)
 
-        # 记录每个帖子的 Impact Score（用于后续合并时的情感计算）
+        # 记录每个原文的 Impact Score（用于后续合并时的情感计算）
         if post_id:
             post_impact_map[post_id] = post_impact
 
@@ -341,7 +341,7 @@ def _merge_entity_data(
         raw_entity_data: 原始实体数据 {original_name: entity_dict}
         name_mapping: 名称映射 {original_name: canonical_name}
         tags_mapping: 标签映射 {canonical_name: tags_dict} (可选)
-        post_impact_map: 帖子 Impact Score 映射 {post_id: impact} (可选)
+        post_impact_map: 原文 Impact Score 映射 {post_id: impact} (可选)
         spam_map: Spam 分组映射 {post_id: "high" | "low"} (可选)
 
     Returns:
@@ -369,7 +369,7 @@ def _merge_entity_data(
                 "neutral_count": 0,
                 "total_impact": 0.0,  # Total Impact (原始热度)
                 "total_weight": 0.0,  # 用于情感计算的平滑权重和
-                "impact_added_posts": set(),  # 去重：确保同一帖子的 Impact 只计算一次
+                "impact_added_posts": set(),  # 去重：确保同一原文的 Impact 只计算一次
                 "post_sources": set(),
                 "comment_sources": set(),
                 "post_ids": set(),
@@ -414,7 +414,7 @@ def _merge_entity_data(
         merged["negative_count"] += raw_data["negative_count"]
         merged["neutral_count"] += raw_data["neutral_count"]
 
-        # 合并 Impact 和 sentiment_weighted_sum（同一个帖子只算一次）
+        # 合并 Impact 和 sentiment_weighted_sum（同一个原文只算一次）
         post_sentiments = raw_data.get("post_sentiments", {})
         if post_impact_map:
             for post_id in raw_data["impact_added_posts"]:
@@ -431,7 +431,7 @@ def _merge_entity_data(
                     smoothed_weight = math.log10(max(impact, 1)) + 1
                     merged["total_weight"] += smoothed_weight
 
-                    # 使用该帖子的 sentiment 正确计算加权和
+                    # 使用该原文的 sentiment 正确计算加权和
                     sentiment = post_sentiments.get(post_id, 0)
                     merged["sentiment_weighted_sum"] += sentiment * smoothed_weight
 
@@ -848,7 +848,7 @@ def aggregate_entities(
     # ========================================
 
     def get_item_count(item):
-        """获取属性项的帖子数"""
+        """获取属性项的原文数"""
         if isinstance(item, dict) and "post_ids" in item:
             return len(item["post_ids"])
         return len(item)

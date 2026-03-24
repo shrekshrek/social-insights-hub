@@ -63,7 +63,7 @@ def aggregate_opinions(
     """聚合任务内的通用观点，生成标准化观点结果
 
     Args:
-        posts_data: 帖子数据列表 (需包含 general_opinions)
+        posts_data: 原文数据列表 (需包含 general_opinions)
         top_k_opinions: 每个分组截取最高频的前 K 个观点进行清洗
 
     Returns:
@@ -167,7 +167,7 @@ def aggregate_opinions(
         lambda: defaultdict(lambda: {"post": set(), "comment": set()})
     )
 
-    # 记录每个帖子已经贡献过的 term (避免重复计算热度)
+    # 记录每个原文已经贡献过的 term (避免重复计算热度)
     # post_id -> set(term_key)
     post_contribution_map = defaultdict(set)
 
@@ -240,7 +240,7 @@ def aggregate_opinions(
             valid_posts_count += 1
 
     logger.info(
-        f"[观点聚合] 从 {valid_posts_count}/{total_posts} 个帖子中收集到 {len(grouped_raw_opinions)} 个分组"
+        f"[观点聚合] 从 {valid_posts_count}/{total_posts} 个原文中收集到 {len(grouped_raw_opinions)} 个分组"
     )
 
     if not grouped_raw_opinions:

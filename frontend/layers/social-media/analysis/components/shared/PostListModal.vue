@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * 帖子列表弹窗组件
+ * 原文列表弹窗组件
  *
- * 用于显示指定帖子ID列表对应的帖子详情，使用表格格式展示
+ * 用于显示指定原文ID列表对应的原文详情，使用表格格式展示
  * 使用共用的 usePostAnalysisColumns composable 和 DeepResultModal 组件
  */
 import { usePostAnalysisColumns } from '../../composables/usePostAnalysisColumns'
@@ -137,14 +137,14 @@ const handleClose = () => {
 <template>
   <UModal
     :open="open"
-    :title="title || `相关帖子（样本）(${postIdsRef.length})`"
+    :title="title || `相关原文（样本）(${postIdsRef.length})`"
     :ui="{ content: 'w-[calc(100vw-2rem)] max-w-6xl rounded-lg shadow-lg ring ring-default', footer: 'justify-end' }"
     @update:open="handleClose"
   >
     <template #body>
-      <!-- 副标题：帖子数 + 推广/有机分组切换 -->
+      <!-- 副标题：原文数 + 推广/有机分组切换 -->
       <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
-        <span>共 {{ total }} 条帖子</span>
+        <span>共 {{ total }} 条原文</span>
         <div v-if="hasSpamData" class="flex items-center gap-1 text-[11px]">
           <button
             v-for="tab in spamTabs"
@@ -180,7 +180,7 @@ const handleClose = () => {
 
       <div v-else-if="posts.length === 0" class="text-center py-12 text-gray-500">
         <UIcon name="i-heroicons-inbox" class="w-10 h-10 mx-auto mb-2 opacity-60" />
-        <p class="text-sm">暂无帖子数据</p>
+        <p class="text-sm">暂无原文数据</p>
       </div>
 
       <div v-else>

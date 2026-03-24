@@ -191,8 +191,8 @@ const formatPercent = (val: number) => {
             </table>
           </div>
           <p class="mt-2 text-xs text-gray-500">
-            * 表格展示了基准任务（行）与对比任务（列）之间的重合帖子数量。
-            <br>例如：行#1 与 列#2 的交叉点数字表示这两个任务共有多少篇相同的帖子。
+            * 表格展示了基准任务（行）与对比任务（列）之间的重合原文数量。
+            <br>例如：行#1 与 列#2 的交叉点数字表示这两个任务共有多少篇相同的原文。
           </p>
         </section>
 
@@ -201,7 +201,7 @@ const formatPercent = (val: number) => {
           <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             评论互补性分析
             <UBadge size="xs" color="primary" variant="subtle">
-              针对重合帖子
+              针对重合原文
             </UBadge>
           </h4>
 
@@ -209,7 +209,7 @@ const formatPercent = (val: number) => {
             v-if="result.comment_analysis.posts_involved === 0"
             class="text-sm text-gray-500 text-center py-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
           >
-            未发现重合帖子，无法进行评论互补分析。
+            未发现重合原文，无法进行评论互补分析。
           </div>
 
           <div
@@ -219,7 +219,7 @@ const formatPercent = (val: number) => {
             <div class="flex items-start gap-4 mb-6">
               <div class="flex-1">
                 <div class="text-sm text-gray-900 dark:text-white mb-1">
-                  在 {{ result.comment_analysis.posts_involved }} 篇重合帖子中：
+                  在 {{ result.comment_analysis.posts_involved }} 篇重合原文中：
                 </div>
                 <ul class="list-disc list-inside text-xs text-gray-600 dark:text-gray-400 space-y-1 ml-1">
                   <li>各任务采集评论总和：{{ result.comment_analysis.total_comments_raw }} 条</li>

@@ -103,7 +103,7 @@ class SocialPostBase(CustomBaseModel):
     """原文基础模型"""
 
     post_id_on_platform: str = Field(
-        ..., min_length=1, max_length=255, description="平台上的帖子ID"
+        ..., min_length=1, max_length=255, description="平台上的原文ID"
     )
     post_type: Optional[str] = Field(None, max_length=50)
     title: Optional[str] = None
@@ -222,7 +222,7 @@ class SocialCommentListResponse(CustomBaseModel):
 
 
 class RawPostData(CustomBaseModel):
-    """原始帖子数据（宽松验证，由适配器负责转换）
+    """原始原文数据（宽松验证，由适配器负责转换）
 
     支持各平台原始字段名，如：
     - 抖音: aweme_id, liked_count, comment_count, ...
@@ -304,7 +304,7 @@ class CrawlerTaskStatus(CustomBaseModel):
 
 
 class CrossTaskPostQuery(CustomBaseModel):
-    """跨任务查询同一帖子"""
+    """跨任务查询同一原文"""
 
     platform_id: int
     post_id_on_platform: str
@@ -312,7 +312,7 @@ class CrossTaskPostQuery(CustomBaseModel):
 
 
 class PostQueryResponse(CustomBaseModel):
-    """帖子查询响应"""
+    """原文查询响应"""
 
     posts: List[SocialPostRead]
     total_tasks: int

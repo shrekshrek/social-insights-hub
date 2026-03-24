@@ -1,7 +1,7 @@
 """Analysis module shared constants."""
 
-# spam_score >= SPAM_HIGH_THRESHOLD 的帖子归入高广告（推广）组，否则归入低广告（有机）组。
-# 适用于：任务级聚合、项目级切片、帖子筛选查询。
+# spam_score >= SPAM_HIGH_THRESHOLD 的原文归入高广告（推广）组，否则归入低广告（有机）组。
+# 适用于：任务级聚合、项目级切片、原文筛选查询。
 SPAM_HIGH_THRESHOLD: float = 6.0
 
 # 发送给 LLM 做聚类/归纳的术语（原话、特征词）条数上限。

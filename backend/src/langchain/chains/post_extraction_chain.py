@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""帖子信息提取的LangChain处理链
+"""原文信息提取的LangChain处理链
 
-提供帖子内容的信息提取功能，包括实体识别、观点提取和内容总结
+提供原文内容的信息提取功能，包括实体识别、观点提取和内容总结
 """
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -73,10 +73,10 @@ POST_EXTRACTION_USER_TEMPLATE = """请提取以下文本的品牌/产品信息�
 
 
 def create_post_extraction_chain() -> Runnable:
-    """创建帖子信息提取的LangChain链
+    """创建原文信息提取的LangChain链
 
     Returns:
-        Runnable: 用于帖子信息提取的LangChain可执行链
+        Runnable: 用于原文信息提取的LangChain可执行链
     """
     llm = get_llm(llm_type="chat")
 

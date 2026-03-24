@@ -38,9 +38,9 @@ interface SliceTopicOrEntity {
   name: string
   category?: string
   sentiment?: number
-  /** 有机内容情感（spam_score < 6.0 的帖子） */
+  /** 有机内容情感（spam_score < 6.0 的原文） */
   organic_sentiment?: number
-  /** 推广内容情感（spam_score >= 6.0 的帖子） */
+  /** 推广内容情感（spam_score >= 6.0 的原文） */
   promo_sentiment?: number
   organic_heat?: number
   promo_heat?: number
@@ -632,8 +632,8 @@ const openLandscapePostList = (item: { name?: string; post_ids_sample?: PostRef[
   const groups = decorateGroups(groupPostIdsByTask(item.post_ids_sample))
   if (!groups.length) {
     toast.add({
-      title: '暂无可追溯帖子',
-      description: name ? `${name} 未提供帖子样本` : '未提供帖子样本',
+      title: '暂无可追溯原文',
+      description: name ? `${name} 未提供原文样本` : '未提供原文样本',
       color: 'warning',
     })
     return
@@ -649,8 +649,8 @@ const openTopicPostList = (item: { name?: string; post_ids_sample?: PostRef[] } 
   const groups = decorateGroups(groupPostIdsByTask(item.post_ids_sample))
   if (!groups.length) {
     toast.add({
-      title: '暂无可追溯帖子',
-      description: name ? `${name} 未提供帖子样本` : '未提供帖子样本',
+      title: '暂无可追溯原文',
+      description: name ? `${name} 未提供原文样本` : '未提供原文样本',
       color: 'warning',
     })
     return
@@ -667,8 +667,8 @@ const openFocusPostList = (item: { name?: string; post_ids_sample?: PostRef[] } 
   const groups = decorateGroups(groupPostIdsByTask(item.post_ids_sample))
   if (!groups.length) {
     toast.add({
-      title: '暂无可追溯帖子',
-      description: name ? `${name} 未提供帖子样本（当前为样本口径）` : '未提供帖子样本（当前为样本口径）',
+      title: '暂无可追溯原文',
+      description: name ? `${name} 未提供原文样本（当前为样本口径）` : '未提供原文样本（当前为样本口径）',
       color: 'warning',
     })
     return

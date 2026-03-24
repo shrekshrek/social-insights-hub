@@ -415,12 +415,15 @@ const phase2Data = computed(() => (strategy.value?.phase2_result || null) as Pha
 const phase3Data = computed(() => (strategy.value?.phase3_result || null) as Phase3Result | null)
 
 // 初始化轮询（页面加载时策略已处于 probing/collecting 状态）
+// immediate: true 确保 SSR payload 已有数据时也能触发
+let pollingInitialized = false
 watch(() => strategy.value, (s) => {
-  if (s) {
+  if (s && !pollingInitialized) {
+    pollingInitialized = true
     initFromStrategy(s)
     initPollingFromStatus(s.status)
   }
-}, { once: true })
+}, { immediate: true })
 
 // ── ① 研究设计 ────────────────────────────────────────────────────────────────
 
@@ -580,6 +583,14 @@ const handleApproveProbe = async () => {
 const handleRefineProbe = async () => {
   const suggestions = probeData.probeReview?.refinement_suggestions
   if (!suggestions?.length) return
+
+  const detail = suggestions
+    .map(s => `${s.original_keyword} → ${s.suggested_keyword}`)
+    .join('、')
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm(`将替换 ${suggestions.length} 个关键词：${detail}，确定继续？`)
+  if (!confirmed) return
+
   refineProbeLoading.value = true
   try {
     const result = await strategiesApi.refineProbe(strategyId.value, {

@@ -25,7 +25,7 @@ const isDraggingComments = ref(false)
 const contentsStats = ref<{ total: number; unique: number; duplicates: number }>({ total: 0, unique: 0, duplicates: 0 })
 const commentsStats = ref<{ total: number; unique: number; duplicates: number }>({ total: 0, unique: 0, duplicates: 0 })
 
-// 获取帖子数据的唯一标识符（支持多平台）
+// 获取原文数据的唯一标识符（支持多平台）
 const getPostUniqueKey = (item: Record<string, unknown>): string => {
   // 尝试多种平台的ID字段
   const idFields = [
@@ -390,7 +390,7 @@ const totalCommentsSize = computed(() =>
         <!-- Contents 文件上传区域 -->
         <div>
           <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-            1. 上传 Contents 文件 (帖子数据) 
+            1. 上传 Contents 文件 (原文数据) 
             <span class="text-gray-400 font-normal">- 支持多文件，自动去重</span>
           </h3>
           
@@ -465,7 +465,7 @@ const totalCommentsSize = computed(() =>
                   去重: <strong>{{ contentsStats.duplicates }}</strong> 条
                 </span>
                 <span class="text-green-600 dark:text-green-400">
-                  有效: <strong>{{ contentsStats.unique }}</strong> 个帖子
+                  有效: <strong>{{ contentsStats.unique }}</strong> 个原文
                 </span>
               </div>
             </div>
@@ -569,7 +569,7 @@ const totalCommentsSize = computed(() =>
               <div class="space-y-1">
                 <p>数据格式正确，准备上传</p>
                 <p class="text-sm">
-                  共 <strong>{{ validationResult.data.contents.length }}</strong> 个帖子
+                  共 <strong>{{ validationResult.data.contents.length }}</strong> 个原文
                   和 <strong>{{ validationResult.data.comments.length }}</strong> 条评论
                   <span v-if="contentsStats.duplicates > 0 || commentsStats.duplicates > 0" class="text-orange-600">
                     （已自动去除 {{ contentsStats.duplicates + commentsStats.duplicates }} 条重复数据）

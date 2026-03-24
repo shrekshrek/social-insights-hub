@@ -112,8 +112,8 @@ def _add_overview_section(doc: Document, overview: dict) -> None:
     doc.add_heading("概览摘要", level=1)
 
     metrics = [
-        ("帖子总量", overview.get("total_volume", "-")),
-        ("去重帖子数", overview.get("unique_posts", "-")),
+        ("原文总量", overview.get("total_volume", "-")),
+        ("去重原文数", overview.get("unique_posts", "-")),
         ("总热度", overview.get("total_heat", "-")),
         ("全局 NSR", overview.get("global_nsr", "-")),
         ("有机 NSR", overview.get("organic_nsr", "-")),

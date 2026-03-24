@@ -5,11 +5,11 @@ API 结构：
 - /jobs/{id}                     分析任务详情/删除
 - /jobs/{id}/progress            进度查询
 - /jobs/{id}/cancel              取消任务
-- /tasks/{task_id}/screening     运行帖子初筛
-- /tasks/{task_id}/deep-posts    运行帖子深度分析
+- /tasks/{task_id}/screening     运行原文初筛
+- /tasks/{task_id}/deep-posts    运行原文深度分析
 - /tasks/{task_id}/deep-comments 运行评论深度分析
 - /tasks/{task_id}/aggregation   POST运行聚合分析 / GET获取聚合结果
-- /tasks/{task_id}/posts         帖子分析结果列表
+- /tasks/{task_id}/posts         原文分析结果列表
 - /tasks/{task_id}/preview       深度分析预览
 - /monitors/{monitor_id}/slices  项目级切片 CRUD
 - /stats                         全局统计
@@ -190,7 +190,7 @@ async def delete_analysis_job(
     "/tasks/{task_id}/screening",
     response_model=RunAnalysisResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="运行帖子AI初筛分析",
+    summary="运行原文AI初筛分析",
 )
 async def run_post_screening(
     task_id: int,
@@ -198,10 +198,10 @@ async def run_post_screening(
     current_user: User = Depends(get_current_user),
 ):
     """
-    运行帖子AI初筛分析
+    运行原文AI初筛分析
 
-    - 评估帖子的垃圾分、价值分、相关度和情感倾向
-    - 分析该任务下所有未分析的帖子
+    - 评估原文的垃圾分、价值分、相关度和情感倾向
+    - 分析该任务下所有未分析的原文
     - 异步任务处理，返回任务ID用于查询进度
     """
     request = RunScreeningRequest(task_id=task_id, analyze_all=True)
@@ -212,7 +212,7 @@ async def run_post_screening(
     "/tasks/{task_id}/deep-posts",
     response_model=RunAnalysisResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="运行帖子深度分析",
+    summary="运行原文深度分析",
 )
 async def run_post_deep_analysis(
     task_id: int,
@@ -223,9 +223,9 @@ async def run_post_deep_analysis(
     current_user: User = Depends(get_current_user),
 ):
     """
-    运行帖子深度分析
+    运行原文深度分析
 
-    - 提取帖子的实体信息（品牌/商品/服务）
+    - 提取原文的实体信息（品牌/商品/服务）
     - 提取通用观点
     - 生成内容总结
     - 支持阈值筛选
@@ -258,8 +258,8 @@ async def run_comment_deep_analysis(
     """
     运行评论深度分析
 
-    - 以帖子为单位，批量分析该帖子下的评论
-    - 结合帖子的AI总结作为上下文
+    - 以原文为单位，批量分析该原文下的评论
+    - 结合原文的AI总结作为上下文
     - 提取评论中的实体信息和通用观点
     - 支持阈值筛选
     """
@@ -277,27 +277,27 @@ async def run_comment_deep_analysis(
 @router.get(
     "/tasks/{task_id}/posts",
     response_model=PostAnalysisListResponse,
-    summary="获取任务下帖子分析结果列表",
+    summary="获取任务下原文分析结果列表",
 )
 async def get_task_post_analyses(
     task_id: int,
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    filter_analyzed: bool = Query(True, description="是否只返回已分析的帖子"),
+    filter_analyzed: bool = Query(True, description="是否只返回已分析的原文"),
     search_query: str | None = Query(None, description="关键词搜索（搜索标题和内容）"),
-    search_id: int | None = Query(None, description="按帖子ID精确搜索（对应表格ID列）"),
-    post_ids: str | None = Query(None, description="按帖子ID列表筛选（逗号分隔）"),
+    search_id: int | None = Query(None, description="按原文ID精确搜索（对应表格ID列）"),
+    post_ids: str | None = Query(None, description="按原文ID列表筛选（逗号分隔）"),
     spam_group: str | None = Query(None, description="按垃圾分组筛选（high=推广/low=有机）"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    获取任务下所有帖子的分析结果
+    获取任务下所有原文的分析结果
 
-    - 返回该任务下已分析的帖子列表
-    - 包含帖子基本信息和分析结果
+    - 返回该任务下已分析的原文列表
+    - 包含原文基本信息和分析结果
     - 支持分页查询和搜索
-    - 支持按帖子ID列表筛选（post_ids参数，逗号分隔）
+    - 支持按原文ID列表筛选（post_ids参数，逗号分隔）
     - 支持按垃圾分组筛选（spam_group=high/low）
     """
     # 解析 post_ids 参数
@@ -398,7 +398,7 @@ async def preview_deep_analysis(
     current_user: User = Depends(get_current_user),
 ):
     """
-    基于初筛分阈值，预览可进行深度分析的帖子统计
+    基于初筛分阈值，预览可进行深度分析的原文统计
     """
     preview = await service.preview_deep_analysis_candidates(
         db=db,
@@ -422,10 +422,10 @@ async def delete_task_analyses(
     current_user: User = Depends(get_current_user),
 ):
     """
-    删除任务下所有帖子的分析结果，方便重新分析
+    删除任务下所有原文的分析结果，方便重新分析
 
     - 会删除初筛结果（spam_score, value_score, relevance_score, sentiment）
-    - 会删除帖子深度分析结果（post_deep_result）
+    - 会删除原文深度分析结果（post_deep_result）
     - 会删除评论深度分析结果（comment_deep_result）
     - 删除后可重新运行各类分析
     """

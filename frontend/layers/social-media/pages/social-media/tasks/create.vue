@@ -197,9 +197,9 @@ const platformOptions = computed(() => {
 
 // 任务类型选项
 const taskTypeOptions = [
-  { label: '搜索任务', value: 'search', description: '通过关键词搜索帖子' },
-  { label: '详情任务', value: 'detail', description: '获取特定帖子的详细信息' },
-  { label: '作者任务', value: 'creator', description: '获取特定作者的帖子列表' },
+  { label: '搜索任务', value: 'search', description: '通过关键词搜索原文' },
+  { label: '详情任务', value: 'detail', description: '获取特定原文的详细信息' },
+  { label: '作者任务', value: 'creator', description: '获取特定作者的原文列表' },
   { label: '首页动态', value: 'homefeed', description: '获取首页推荐动态' },
 ]
 
@@ -291,9 +291,9 @@ const idListConfig = computed(() => {
         help: '从微博链接中获取数字ID',
       },
       'tieba': {
-        label: '帖子ID列表',
-        placeholder: '请输入贴吧帖子ID，每行一个\n例如：9815127841',
-        help: '从帖子链接中获取ID',
+        label: '原文ID列表',
+        placeholder: '请输入贴吧原文ID，每行一个\n例如：9815127841',
+        help: '从原文链接中获取ID',
       },
       'zhihu': {
         label: '内容URL列表',
@@ -713,7 +713,7 @@ const handleSubmit = async () => {
                 <!-- 爬取评论 -->
                 <UFormField
                   label="爬取评论"
-                  help="是否爬取帖子的评论"
+                  help="是否爬取原文的评论"
                 >
                   <USwitch v-model="state.enable_comments" />
                 </UFormField>
@@ -722,7 +722,7 @@ const handleSubmit = async () => {
                 <UFormField
                   v-if="state.enable_comments"
                   label="单帖最大评论数"
-                  help="每个帖子爬取的最大评论数，0表示不限"
+                  help="每个原文爬取的最大评论数，0表示不限"
                 >
                   <UInput
                     v-model.number="state.per_note_max_comments_count"

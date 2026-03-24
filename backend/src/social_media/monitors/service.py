@@ -316,7 +316,7 @@ async def compare_tasks(
             detail="Cannot compare tasks from different platforms. Please select tasks from the same platform.",
         )
 
-    # 3. 获取所有任务的帖子ID (task_id, post_id_on_platform)
+    # 3. 获取所有任务的原文ID (task_id, post_id_on_platform)
     posts_stmt = (
         select(SocialPost.task_id, SocialPost.post_id_on_platform)
         .where(SocialPost.task_id.in_(task_ids))
@@ -326,7 +326,7 @@ async def compare_tasks(
     # 内存结构：task_id -> set(post_ids)
     task_posts: dict[int, set[str]] = {tid: set() for tid in task_ids}
     all_posts: set[str] = set()
-    # 记录每个帖子出现在哪些任务中，用于评论分析
+    # 记录每个原文出现在哪些任务中，用于评论分析
     post_in_tasks: dict[str, set[int]] = {}
 
     for tid, pid in posts_result.all():
@@ -343,7 +343,7 @@ async def compare_tasks(
     for tid_main in task_ids:
         main_set = task_posts[tid_main]
         overlaps = []
-        # 计算该任务的独有帖子（不与其他任何选定任务重合）
+        # 计算该任务的独有原文（不与其他任何选定任务重合）
         # unique = main - union(others)
         others_union = set()
         for tid_other in task_ids:
@@ -374,12 +374,12 @@ async def compare_tasks(
     # 5. 概览统计
     total_posts_raw = sum(len(s) for s in task_posts.values())
     unique_posts_count = len(all_posts)
-    # 重合帖子：出现在 >= 2 个任务中的帖子
+    # 重合原文：出现在 >= 2 个任务中的原文
     overlap_posts_set = {pid for pid, tids in post_in_tasks.items() if len(tids) >= 2}
     overlap_count = len(overlap_posts_set)
     overlap_rate = overlap_count / unique_posts_count if unique_posts_count > 0 else 0.0
 
-    # 6. 评论互补分析（仅针对重合帖子）
+    # 6. 评论互补分析（仅针对重合原文）
     comment_analysis = {
         "posts_involved": overlap_count,
         "total_comments_raw": 0,
@@ -389,8 +389,8 @@ async def compare_tasks(
     }
 
     if overlap_count > 0:
-        # 查出这些重合帖子在各任务中的评论 ID
-        # 仅查询涉及重合帖子的评论
+        # 查出这些重合原文在各任务中的评论 ID
+        # 仅查询涉及重合原文的评论
         comments_stmt = (
             select(
                 SocialComment.task_id,
@@ -406,7 +406,7 @@ async def compare_tasks(
         comments_result = await db.execute(comments_stmt)
 
         # 统计
-        # task_id -> set(comment_id) (仅限重合帖子)
+        # task_id -> set(comment_id) (仅限重合原文)
         task_comments: dict[int, set[str]] = {tid: set() for tid in task_ids}
         all_comments: set[str] = set()
 

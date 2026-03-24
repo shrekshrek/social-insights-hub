@@ -35,7 +35,7 @@ from .constants import SPAM_HIGH_THRESHOLD
 async def run_post_screening(
     db: AsyncSession, request: RunScreeningRequest, current_user_id: int
 ) -> RunAnalysisResponse:
-    """运行帖子AI初筛分析"""
+    """运行原文AI初筛分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.monitors import crud as monitor_crud
     from .celery_tasks.screening_tasks import run_screening_task
@@ -58,11 +58,11 @@ async def run_post_screening(
             detail="You don't have access to this task",
         )
 
-    # 获取要分析的帖子ID列表
+    # 获取要分析的原文ID列表
     post_ids = request.post_ids or []
 
     if request.analyze_all or not post_ids:
-        # 获取任务下所有帖子ID（排除已有初筛结果的）
+        # 获取任务下所有原文ID（排除已有初筛结果的）
         from src.social_media.tasks.models import SocialPost
 
         stmt = (
@@ -78,7 +78,7 @@ async def run_post_screening(
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="没有需要初筛的帖子（所有帖子已完成初筛）",
+            detail="没有需要初筛的原文（所有原文已完成初筛）",
         )
 
     # 创建分析任务记录
@@ -110,7 +110,7 @@ async def run_post_screening(
         celery_task_id=celery_result.id,
         job_id=analysis_job.id,
         status="pending",
-        message=f"帖子初筛任务已启动，共{len(post_ids)}条数据",
+        message=f"原文初筛任务已启动，共{len(post_ids)}条数据",
     )
 
 
@@ -122,7 +122,7 @@ async def run_post_deep_analysis(
     value_min: float | None = None,
     relevance_min: float | None = None,
 ) -> RunAnalysisResponse:
-    """运行帖子深度分析"""
+    """运行原文深度分析"""
     from src.social_media.tasks import crud as task_crud
     from src.social_media.monitors import crud as monitor_crud
     from .celery_tasks.deep_analysis_tasks import run_post_deep_task
@@ -144,11 +144,11 @@ async def run_post_deep_analysis(
             detail="You don't have access to this task",
         )
 
-    # 获取要分析的帖子ID列表
+    # 获取要分析的原文ID列表
     post_ids = request.post_ids or []
 
     if not post_ids:
-        # 基于阈值筛选候选帖子
+        # 基于阈值筛选候选原文
         preview = await preview_deep_analysis_candidates(
             db,
             request.task_id,
@@ -162,7 +162,7 @@ async def run_post_deep_analysis(
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="没有符合条件的帖子需要原文深度分析（请先完成初筛或调整阈值）",
+            detail="没有符合条件的原文需要原文深度分析（请先完成初筛或调整阈值）",
         )
 
     # 创建分析任务记录
@@ -198,7 +198,7 @@ async def run_post_deep_analysis(
         celery_task_id=celery_result.id,
         job_id=analysis_job.id,
         status="pending",
-        message=f"帖子深度分析任务已启动，共{len(post_ids)}条数据",
+        message=f"原文深度分析任务已启动，共{len(post_ids)}条数据",
     )
 
 
@@ -298,7 +298,7 @@ async def create_monitor_slice(
             },
         )
 
-    # Step0 辅助：为项目级去重/权重/新鲜度准备帖子映射（platform+post_id_on_platform）
+    # Step0 辅助：为项目级去重/权重/新鲜度准备原文映射（platform+post_id_on_platform）
     # 说明：项目级聚合的“去重口径”基于 SocialPost 的平台帖ID，而不是任务内自增ID
     from src.social_media.tasks.models import SocialPost
     from src.social_media.monitors.models import Platform
@@ -436,11 +436,11 @@ async def run_comment_deep_analysis(
             detail="You don't have access to this task",
         )
 
-    # 获取要分析的帖子ID列表（因为评论分析是基于帖子的）
+    # 获取要分析的原文ID列表（因为评论分析是基于原文的）
     post_ids = request.post_ids or []
 
     if not post_ids:
-        # 基于阈值筛选候选帖子
+        # 基于阈值筛选候选原文
         preview = await preview_deep_analysis_candidates(
             db,
             request.task_id,
@@ -454,7 +454,7 @@ async def run_comment_deep_analysis(
     if not post_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="没有符合条件的帖子需要评论深度分析（需先完成原文深度分析且有评论）",
+            detail="没有符合条件的原文需要评论深度分析（需先完成原文深度分析且有评论）",
         )
 
     # 创建分析任务记录
@@ -490,7 +490,7 @@ async def run_comment_deep_analysis(
         celery_task_id=celery_result.id,
         job_id=analysis_job.id,
         status="pending",
-        message=f"评论深度分析任务已启动，将分析{len(post_ids)}个帖子的评论",
+        message=f"评论深度分析任务已启动，将分析{len(post_ids)}个原文的评论",
     )
 
 
@@ -509,22 +509,22 @@ async def get_task_post_analyses(
     post_ids: list[int] | None = None,
     spam_group: str | None = None,
 ) -> tuple[List[Dict[str, Any]], int]:
-    """获取任务下所有帖子的分析结果（带分页和搜索）
+    """获取任务下所有原文的分析结果（带分页和搜索）
 
     Args:
         task_id: 任务ID
         current_user_id: 当前用户ID
         page: 页码
         page_size: 每页数量
-        filter_analyzed: 是否只返回已分析的帖子（默认True）
+        filter_analyzed: 是否只返回已分析的原文（默认True）
         search_query: 关键词搜索（搜索标题和内容）
-        search_id: 按帖子ID精确搜索
-        post_ids: 按帖子ID列表筛选
+        search_id: 按原文ID精确搜索
+        post_ids: 按原文ID列表筛选
         spam_group: 按垃圾分组筛选（high=推广/low=有机，阈值6.0）
 
     Returns:
-        (帖子分析列表, 总数)，每个帖子包含：
-        - 帖子基本信息（id, title, content, author_name, published_at等）
+        (原文分析列表, 总数)，每个原文包含：
+        - 原文基本信息（id, title, content, author_name, published_at等）
         - 分析结果（spam_score, value_score, relevance_score, sentiment）
         - 深度分析结果（post_deep_result, comment_deep_result）
     """
@@ -595,10 +595,10 @@ async def get_task_post_analyses(
 
     # 搜索条件
     if post_ids:
-        # 按帖子ID列表筛选（优先级最高）
+        # 按原文ID列表筛选（优先级最高）
         stmt = stmt.where(SocialPost.id.in_(post_ids))
     elif search_id is not None:
-        # 按帖子ID精确搜索（对应表格中显示的 ID 列）
+        # 按原文ID精确搜索（对应表格中显示的 ID 列）
         stmt = stmt.where(SocialPost.id == search_id)
     elif search_query:
         search_pattern = f"%{search_query}%"
@@ -663,7 +663,7 @@ async def preview_deep_analysis_candidates(
     relevance_min: float | None = None,
 ) -> dict[str, Any]:
     """
-    基于初筛分阈值计算可进行原文/评论深度分析的帖子列表
+    基于初筛分阈值计算可进行原文/评论深度分析的原文列表
 
     Returns:
         dict 包含总帖数、已初筛数、符合阈值数、已完成深度/评论分析数、候选ID列表
@@ -687,7 +687,7 @@ async def preview_deep_analysis_candidates(
             detail="You don't have access to this task",
         )
 
-    # 查询所有帖子与分析结果
+    # 查询所有原文与分析结果
     stmt = (
         select(
             SocialPost.id,
@@ -707,8 +707,8 @@ async def preview_deep_analysis_candidates(
 
     total_posts = len(rows)
     screened_count = 0
-    qualified_count = 0  # 符合阈值条件的已初筛帖子总数（不管是否已深度分析）
-    matched_ids: list[int] = []  # 符合条件且待深度分析的帖子
+    qualified_count = 0  # 符合阈值条件的已初筛原文总数（不管是否已深度分析）
+    matched_ids: list[int] = []  # 符合条件且待深度分析的原文
     deep_done = 0
     comment_done = 0
     comment_candidate_ids: list[int] = []
@@ -774,7 +774,7 @@ async def delete_task_analyses(
     task_id: int,
     current_user_id: int,
 ) -> dict[str, Any]:
-    """删除任务下所有帖子的分析结果，方便重新分析
+    """删除任务下所有原文的分析结果，方便重新分析
 
     Args:
         task_id: 任务ID
@@ -916,7 +916,7 @@ async def run_task_aggregation(
             detail="You don't have access to this task",
         )
 
-    # 检查是否有已分析的帖子
+    # 检查是否有已分析的原文
     stmt = (
         select(func.count())
         .where(PostAnalysis.task_id == task_id)
@@ -928,7 +928,7 @@ async def run_task_aggregation(
     if analyzed_count == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="没有已分析的帖子，请先运行初筛或深度分析",
+            detail="没有已分析的原文，请先运行初筛或深度分析",
         )
 
     # 预先创建实体归一化和观点归一化的 AnalysisJob（状态为 pending）

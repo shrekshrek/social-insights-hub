@@ -73,7 +73,7 @@ def build_drivers_from_entities(
                         "promo_neg": 0,
                         "platform_dist": {},
                         "keyword_dist": {},
-                        # 证据：聚合 term 对应的帖子样本与用户原话（用于 Focus/SWOT/Gap 下钻）
+                        # 证据：聚合 term 对应的原文样本与用户原话（用于 Focus/SWOT/Gap 下钻）
                         "_post_ids_set": set(),
                         "post_ids_sample": [],
                         "original_terms_counts": {},
@@ -125,7 +125,7 @@ def build_drivers_from_entities(
                                 int(rec["keyword_dist"].get(k, 0)) + vv
                             )
 
-                # 证据：帖子样本（去重+截断）
+                # 证据：原文样本（去重+截断）
                 post_ids = it.get("post_ids_sample") or []
                 if isinstance(post_ids, list) and post_ids:
                     for ref in post_ids:

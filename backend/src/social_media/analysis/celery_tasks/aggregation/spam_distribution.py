@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _build_spam_map(
     posts_data: list[dict], threshold: float
 ) -> dict[int, str]:
-    """构建 post_id → spam 分组映射，仅处理 spam_score 非 None 的帖子。"""
+    """构建 post_id → spam 分组映射，仅处理 spam_score 非 None 的原文。"""
     spam_map: dict[int, str] = {}
     for post in posts_data:
         score = post.get("spam_score")

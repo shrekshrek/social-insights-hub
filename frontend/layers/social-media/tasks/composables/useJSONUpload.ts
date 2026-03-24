@@ -10,7 +10,7 @@ export const useJSONUpload = () => {
         method: 'POST',
         body: data,
       })
-      showSuccess(`数据上传成功！导入了 ${result.posts_imported} 个帖子和 ${result.comments_imported} 条评论`)
+      showSuccess(`数据上传成功！导入了 ${result.posts_imported} 个原文和 ${result.comments_imported} 条评论`)
       return result
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '数据上传失败'

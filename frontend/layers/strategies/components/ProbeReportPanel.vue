@@ -14,6 +14,12 @@
       </span>
     </div>
 
+    <!-- 等待采集提示 -->
+    <div v-if="!tasks.length && !allAnalyzed" class="text-center py-4">
+      <UIcon name="i-heroicons-arrow-path" class="animate-spin text-lg text-primary-400 mb-1" />
+      <p class="text-sm text-gray-400">新的探测任务已创建，等待爬虫采集...</p>
+    </div>
+
     <!-- 任务状态列表 -->
     <div v-if="tasks.length" class="grid grid-cols-3 gap-1.5">
       <div
@@ -77,13 +83,15 @@
         <div
           v-for="(s, i) in probeReview.refinement_suggestions"
           :key="i"
-          class="flex items-center gap-2 text-sm p-2 bg-amber-50 dark:bg-amber-900/20 rounded"
+          class="text-sm p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded"
         >
-          <span class="text-gray-500">{{ s.original_keyword }}</span>
-          <UIcon name="i-heroicons-arrow-right" class="text-gray-400 text-xs" />
-          <span class="font-medium text-amber-700 dark:text-amber-300">{{ s.suggested_keyword }}</span>
-          <UBadge variant="soft" size="xs" color="neutral">{{ platformLabel(s.platform) }}</UBadge>
-          <span v-if="s.reason" class="text-xs text-gray-400 ml-auto">{{ s.reason }}</span>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500 line-through">{{ s.original_keyword }}</span>
+            <UIcon name="i-heroicons-arrow-right" class="text-gray-400 text-xs shrink-0" />
+            <span class="font-medium text-amber-700 dark:text-amber-300">{{ s.suggested_keyword }}</span>
+            <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(s.platform) }}</UBadge>
+          </div>
+          <p v-if="s.reason" class="text-xs text-gray-500 mt-1">{{ s.reason }}</p>
         </div>
       </div>
     </div>

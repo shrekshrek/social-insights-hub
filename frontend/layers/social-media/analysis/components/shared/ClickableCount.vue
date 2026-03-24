@@ -2,7 +2,7 @@
 /**
  * 可点击的次数组件
  *
- * 用于显示提及次数，如果有关联帖子则可点击查看
+ * 用于显示提及次数，如果有关联原文则可点击查看
  */
 const props = withDefaults(defineProps<{
   count: number
@@ -23,7 +23,7 @@ const hasPostIds = computed(() => props.postIds && props.postIds.length > 0)
 
 const handleClick = () => {
   if (hasPostIds.value) {
-    const title = props.label ? `${props.label} 相关帖子` : '相关帖子'
+    const title = props.label ? `${props.label} 相关原文` : '相关原文'
     emit('click', title, props.postIds)
   }
 }

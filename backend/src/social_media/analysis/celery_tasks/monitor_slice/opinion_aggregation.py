@@ -424,7 +424,7 @@ def build_topics_aligned(
             if isinstance(ls, dict):
                 b["_spam_low_post"] += int(ls.get("post") or 0)
                 b["_spam_low_comment"] += int(ls.get("comment") or 0)
-        # 帖子样本合并（去重 + 限制数量）
+        # 原文样本合并（去重 + 限制数量）
         for ref in t.get("post_ids_sample") or []:
             if len(b["post_ids_sample"]) >= max_post_ids_sample:
                 break

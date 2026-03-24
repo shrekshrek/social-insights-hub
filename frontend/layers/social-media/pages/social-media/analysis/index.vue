@@ -88,8 +88,8 @@ const handleRefresh = async () => {
 // 分析类型选项
 const typeOptions = [
   { label: '全部类型', value: undefined },
-  { label: '帖子初筛', value: 'screening_posts' },
-  { label: '帖子深度', value: 'deep_posts' },
+  { label: '原文初筛', value: 'screening_posts' },
+  { label: '原文深度', value: 'deep_posts' },
   { label: '评论深度', value: 'deep_comments' },
   { label: '实体归一化', value: 'entity_normalization' },
   { label: '观点归一化', value: 'opinion_normalization' },
@@ -138,8 +138,8 @@ const formatDuration = (seconds?: number | null) => {
 
 const getAnalysisTypeLabel = (type: string) => {
   const labels: Record<string, string> = {
-    screening_posts: '帖子初筛',
-    deep_posts: '帖子深度',
+    screening_posts: '原文初筛',
+    deep_posts: '原文深度',
     deep_comments: '评论深度',
     entity_normalization: '实体归一化',
     opinion_normalization: '观点归一化',

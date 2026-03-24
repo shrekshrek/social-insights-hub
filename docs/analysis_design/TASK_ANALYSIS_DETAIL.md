@@ -8,7 +8,7 @@
 graph TD
     Raw[原始采集数据 Top 50-100] --> A[数据清洗与初筛]
     A --> |有效样本| B{分析深度?}
-    B --> |Light| B_Light[仅分析 Top 5 帖子]
+    B --> |Light| B_Light[仅分析 Top 5 原文]
     B --> |Deep| B_Deep[全量深度分析]
     B_Light & B_Deep --> C[指标计算与加权 (Aggregator)]
     C --> D[核心洞察生成]
@@ -41,7 +41,7 @@ graph TD
 spam_score >= 6.0  →  high_spam（推广内容）
 spam_score <  6.0  →  low_spam （有机内容）
 
-× 来源维度：post（帖子原文） / comment（评论区）
+× 来源维度：post（原文原文） / comment（评论区）
 
 = 4 个维度：高广告·原文 / 高广告·评论 / 有机·原文 / 有机·评论
 ```
@@ -61,12 +61,12 @@ SpamDistribution = {
 |------|------------|
 | 实体/话题 | `spam_distribution` 内联展示组成；`promo_sentiment`/`organic_sentiment` 分组情感 |
 | 核心指标 | `nsr_by_spam` 分组净情感率 |
-| 四象限 | 每个帖子携带 `spam_group`，聚合时统计推/机分布 |
+| 四象限 | 每个原文携带 `spam_group`，聚合时统计推/机分布 |
 | 时间分布 | 每日数据携带 `spam_breakdown: {high, low}` |
 | IPA | 每个气泡点携带 `spam_distribution`，前端编码为实心/空心/半实心 |
 | 关联网络/竞品雷达 | 预计算三层：`all` / `organic` / `promo`，前端 TabSwitch 切换 |
 | KOL 声音 | 每条携带 `spam_group`，前端可按推广/有机筛选 |
-| 帖子溯源弹窗 | API 支持 `spam_group=high/low` 过滤参数，前端 3 个 tab：全部/推广/有机 |
+| 原文溯源弹窗 | API 支持 `spam_group=high/low` 过滤参数，前端 3 个 tab：全部/推广/有机 |
 
 ---
 
@@ -116,8 +116,8 @@ SpamDistribution = {
 
 *   **输入**：经过清洗且 **按 CII 倒序排列** 的 `valid_posts`（优先分析高影响力内容）。
 *   **执行逻辑**：
-    *   对每一篇帖子调用 `post_extraction_chain`。
-    *   对高价值帖子的评论调用 `comment_extraction_chain`。
+    *   对每一篇原文调用 `post_extraction_chain`。
+    *   对高价值原文的评论调用 `comment_extraction_chain`。
 *   **核心产出**：
     *   `entities`: 实体列表，每个实体包含：
         *   `name`: 实体名称
@@ -159,7 +159,7 @@ SpamDistribution = {
 本步骤在 LLM 提取完成后，执行最终的统计聚合。由于 CII 等基础指标已在 Step 1 完成，此处主要处理**加权聚合**。
 
 ### 4.1 基础指标聚合
-*   **营销浓度**：统计 `spam_score >= 4` 的帖子占比。
+*   **营销浓度**：统计 `spam_score >= 4` 的原文占比。
 *   **平均 CII**：计算 `valid_posts` 的 CII 均值。
 *   **舆论反差度 (Sentiment Conflict)**：计算 `Post_Sentiment` 与 `Comment_Sentiment` 的平均偏差。若偏差过大，提示“翻车”风险。
 
@@ -179,7 +179,7 @@ SpamDistribution = {
 def calculate_score(heat: float, mentions: int) -> float:
     return math.log(heat + 1) * math.log(mentions + 1)
 
-# 帖子影响力计算
+# 原文影响力计算
 def calculate_impact_score(cii: float, value_score: float | None) -> float:
     quality_factor = 0.5 + (value_score or 5.0) / 10.0
     return cii * quality_factor
@@ -245,11 +245,11 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "positive_count": int,   # 正面提及次数
         "negative_count": int,   # 负面提及次数
         "neutral_count": int,    # 中性提及次数
-        "impact_added_posts": set,  # 已贡献权重的帖子ID（避免重复累加）
-        "post_sources": set,     # 从帖子原文提取的帖子ID
-        "comment_sources": set,  # 从评论提取的帖子ID
-        "post_ids": set,         # 所有涉及的帖子ID
-        # 实体维度信息（完整聚合，带帖子追溯）
+        "impact_added_posts": set,  # 已贡献权重的原文ID（避免重复累加）
+        "post_sources": set,     # 从原文原文提取的原文ID
+        "comment_sources": set,  # 从评论提取的原文ID
+        "post_ids": set,         # 所有涉及的原文ID
+        # 实体维度信息（完整聚合，带原文追溯）
         "features": dict,      # 特性/功能/优点 {label: set(post_ids)} - 天然正面
         "issues": dict,        # 问题/缺点/不满 {label: set(post_ids)} - 天然负面
         "expectations": dict,  # 改进期望/建议 {label: set(post_ids)}
@@ -263,7 +263,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     **权重计算逻辑**：
     - **原文实体**：`entity_weight = calculate_impact_score(cii, value_score)`
     - **评论实体**：`entity_weight = calculate_comment_weight(support_score, post_impact)`
-    - **情感计算**：使用对数平滑权重 `log10(max(impact, 1)) + 1` 避免超高热度帖子主导情感
+    - **情感计算**：使用对数平滑权重 `log10(max(impact, 1)) + 1` 避免超高热度原文主导情感
 
 *   **聚合逻辑（纯代码实现）**：
     1.  **实体归一化 (Normalization)**：
@@ -273,19 +273,19 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         *   记录 `positive_count`, `negative_count`, `neutral_count` 用于展示情感分布。
         *   累加 `sentiment_weighted_sum = Σ(sentiment * cii)` 用于计算加权情感。
     3.  **来源标记**：
-        *   `post_sources`: 从帖子原文提取该实体的帖子ID集合。
-        *   `comment_sources`: 从评论提取该实体的帖子ID集合。
+        *   `post_sources`: 从原文原文提取该实体的原文ID集合。
+        *   `comment_sources`: 从评论提取该实体的原文ID集合。
         *   用于分析"博主观点"与"大众观点"的差异。
     4.  **三重指标与综合评分**：
         *   **Heat (热度)**：$\sum CII_p$（每帖只贡献一次，避免重复累加）。
-        *   **Mentions (频次)**：$Count(Unique\_Posts)$（唯一帖子数）。
+        *   **Mentions (频次)**：$Count(Unique\_Posts)$（唯一原文数）。
         *   **Score (综合评分)**：$Heat \times \log(Mentions + 1)$
         *   *策略*：排序统一使用 `Score`，综合考虑影响力（Heat）和讨论广泛性（Mentions）。
         *   *设计意图*：避免"偶然爆款"（高 Heat 低 Mentions）压过"普遍共识"（中 Heat 高 Mentions）。
     5.  **维度聚合**：
-        *   对 `features`, `issues`, `expectations`, `audience`, `scenarios`, `market_factors`, `competitors` 七个维度分别记录来源帖子ID。
-        *   每个维度项记录包含该信息的帖子ID集合，支持追溯。
-        *   输出时按帖子数排序，取 Top 5 高频项展示。
+        *   对 `features`, `issues`, `expectations`, `audience`, `scenarios`, `market_factors`, `competitors` 七个维度分别记录来源原文ID。
+        *   每个维度项记录包含该信息的原文ID集合，支持追溯。
+        *   输出时按原文数排序，取 Top 5 高频项展示。
     6.  **派生情感计算**：
         *   `sentiment = sentiment_weighted_sum / total_cii`（CII 加权）。
         *   范围 [-1, 1]，正值偏正面，负值偏负面。
@@ -320,10 +320,10 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "category": str,           # 话题类别
         "sentiment": int,          # 情感值 (-1, 0, 1)
         "total_impact": float,     # 权重累加（区分原文/评论权重）
-        "impact_added_posts": set, # 已贡献权重的帖子ID
-        "post_sources": set,       # 从帖子原文提取的帖子ID
-        "comment_sources": set,    # 从评论提取的帖子ID
-        "post_ids": set,           # 所有涉及的帖子ID
+        "impact_added_posts": set, # 已贡献权重的原文ID
+        "post_sources": set,       # 从原文原文提取的原文ID
+        "comment_sources": set,    # 从评论提取的原文ID
+        "post_ids": set,           # 所有涉及的原文ID
         "opinions": dict,          # 具体观点 {text: set(post_ids)}
     }
     ```
@@ -334,8 +334,8 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         - **原文观点**：使用 `post_impact = calculate_impact_score(cii, value_score)`
         - **评论观点**：使用 `comment_weight = calculate_comment_weight(support_score, post_impact)`
     3.  **热度累加**：每帖只贡献一次权重（通过 `impact_added_posts` 去重）
-    4.  **来源标记**：区分帖子原文 vs 评论来源
-    5.  **观点收集**：记录具体观点文本及其来源帖子
+    4.  **来源标记**：区分原文原文 vs 评论来源
+    5.  **观点收集**：记录具体观点文本及其来源原文
 
 *   **输出结构**：
     ```python
@@ -351,15 +351,15 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "name": str,                     # 观点名称
         "category": str,                 # 话题类别
         "heat": float,                   # 热度（CII累加）
-        "mentions": int,                 # 唯一帖子数
+        "mentions": int,                 # 唯一原文数
         "score": float,                  # 综合评分 = heat × log(mentions + 1)
         "sentiment": int,                # 情感值 (-1, 0, 1)
         "source_distribution": {         # 来源分布
-            "post": float,               # 帖子来源占比
+            "post": float,               # 原文来源占比
             "comment": float             # 评论来源占比
         },
-        "post_ids": [int, ...],          # 帖子ID列表（用于追溯）
-        "post_source_count": int,        # 帖子来源数量
+        "post_ids": [int, ...],          # 原文ID列表（用于追溯）
+        "post_source_count": int,        # 原文来源数量
         "comment_source_count": int,     # 评论来源数量
     }
     ```
@@ -480,21 +480,21 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 以下分析直接从 `posts_data` 聚合，不依赖派生层：
 
 1.  **情感-互动四象限 (Quadrant)**
-    *   **数据源**：`posts_data`（每篇帖子的 sentiment 和 CII）
-    *   **X轴**：帖子情感分 ($Sentiment$)
-    *   **Y轴**：帖子互动指数 ($CII$)
+    *   **数据源**：`posts_data`（每篇原文的 sentiment 和 CII）
+    *   **X轴**：原文情感分 ($Sentiment$)
+    *   **Y轴**：原文互动指数 ($CII$)
     *   **象限划分**：Q1爆雷区、Q2品牌区、Q3吐槽区、Q4小众区
 
 2.  **KOL 声音提取**
-    *   **数据源**：`posts_data`（高 CII 帖子）
-    *   **逻辑**：选取 CII Top 5 的帖子作为 KOL 声音
+    *   **数据源**：`posts_data`（高 CII 原文）
+    *   **逻辑**：选取 CII Top 5 的原文作为 KOL 声音
 
 3.  **时间分布与新鲜度**
     *   **数据源**：`posts_data`（published_at 字段）
-    *   **输出**：时间分布图、最近7/30天帖子数、平均发布天数
+    *   **输出**：时间分布图、最近7/30天原文数、平均发布天数
 
 ### 4.8 营销渗透率 (Marketing Penetration)
-*   **自来水占比**：`spam_score < 4` 的帖子占比。
+*   **自来水占比**：`spam_score < 4` 的原文占比。
 
 ---
 
@@ -511,10 +511,10 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     "analyzed_at": "2023-10-27T10:00:00Z",
     "keywords": ["iPhone", "苹果手机"],
     "data_volume": {
-      "total": 100,              // 总帖子数
+      "total": 100,              // 总原文数
       "screened": 85,            // 已初筛数量
-      "deep_analyzed": 50,       // 已深度分析帖子数
-      "comment_analyzed": 30     // 已分析评论的帖子数
+      "deep_analyzed": 50,       // 已深度分析原文数
+      "comment_analyzed": 30     // 已分析评论的原文数
     },
     "spam_config": {
       "threshold": 6.0           // 推广/有机判断阈值（spam_score >= 阈值为推广）
@@ -537,7 +537,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     "sentiment_conflict": {
       "avg_conflict": 0.35,     // 平均舆论反差度
       "conflict_direction": "comment_positive", // 反差方向
-      "high_conflict_count": 5, // 高反差帖子数
+      "high_conflict_count": 5, // 高反差原文数
       "risk_level": "medium"    // 风险等级 (low/medium/high)
     }
   },
@@ -559,7 +559,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
       {"date": "2023-10-01", "count": 5, "spam_breakdown": {"high": 2, "low": 3}, "post_ids": [101, 102]},
       {"date": "2023-10-02", "count": 12, "spam_breakdown": {"high": 3, "low": 9}, "post_ids": [103, 104]}
     ],
-    "time_distribution_skipped": 3, // 无发布时间的帖子数
+    "time_distribution_skipped": 3, // 无发布时间的原文数
     // IPA 产品诊断：气泡图数据，按象限分组
     "ipa_analysis": {
       "quadrants": {
@@ -572,8 +572,8 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     // 关联网络：预计算三层，前端 TabSwitch 切换
     "context_graph": {
       "all":     {"nodes": [...], "links": [...]},
-      "organic": {"nodes": [...], "links": [...]}, // 仅 low_spam 帖子
-      "promo":   {"nodes": [...], "links": [...]}  // 仅 high_spam 帖子
+      "organic": {"nodes": [...], "links": [...]}, // 仅 low_spam 原文
+      "promo":   {"nodes": [...], "links": [...]}  // 仅 high_spam 原文
     },
     // 竞品雷达：预计算三层
     "competitor_radar": {
@@ -583,8 +583,8 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
     }
   },
   "freshness": {
-    "last_7_days": 25,   // 最近7天的帖子数
-    "last_30_days": 65,  // 最近30天的帖子数
+    "last_7_days": 25,   // 最近7天的原文数
+    "last_30_days": 65,  // 最近30天的原文数
     "avg_age_days": 15.5 // 平均发布天数
   },
   "insights": {
@@ -595,17 +595,17 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "type": "产品",
         "role": "target",           // target / competitor / other
         "heat": 4500,               // Σ CII (去重后)
-        "mentions": 15,             // 唯一帖子数
+        "mentions": 15,             // 唯一原文数
         "score": 12532.5,           // 综合评分 = heat × log(mentions + 1)
         "sentiment": 0.35,          // 派生情感值 [-1, 1]，CII 加权（混合全部数据）
-        "promo_sentiment": 0.65,    // 促销情感（仅 spam_score >= 6.0 的帖子）
-        "organic_sentiment": 0.18,  // 有机情感（仅 spam_score < 6.0 的帖子）
+        "promo_sentiment": 0.65,    // 促销情感（仅 spam_score >= 6.0 的原文）
+        "organic_sentiment": 0.18,  // 有机情感（仅 spam_score < 6.0 的原文）
         "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
         "source_distribution": {"post": 0.3, "comment": 0.7},
         "top_features": ["外观好看", "拍照清晰", "续航持久"],
         "top_issues": ["发热严重", "价格高"],
         "top_expectations": ["降价", "改善散热"],
-        "post_ids": [101, 102, 103, 105, 108],  // 帖子ID列表（用于追溯）
+        "post_ids": [101, 102, 103, 105, 108],  // 原文ID列表（用于追溯）
         // 4D spam 分布（可选，有 spam 数据时存在）
         "spam_distribution": {
           "high_spam": {"total": 8, "post": 5, "comment": 3},
@@ -626,7 +626,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
         "mentions": 15,
         "score": 12532.5,           // 综合评分 = heat × log(mentions + 1)
         "source_distribution": {"post": 0.2, "comment": 0.8}, // 80% 来自评论，说明是用户痛点而非博主痛点
-        "post_ids": [101, 102, 105, 108],  // 帖子ID列表（用于追溯）
+        "post_ids": [101, 102, 105, 108],  // 原文ID列表（用于追溯）
         "post_source_count": 3,
         "comment_source_count": 12,
         // 4D spam 分布（可选）
@@ -723,8 +723,8 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
       "parent": "智能手机",         // 归属父类
       "type": "产品",
       "sentiment": 0.35,           // 派生情感值 [-1, 1]，CII 加权（混合全部数据）
-      "promo_sentiment": 0.65,     // 促销情感（仅 spam_score >= 6.0 的帖子）
-      "organic_sentiment": 0.18,   // 有机情感（仅 spam_score < 6.0 的帖子）
+      "promo_sentiment": 0.65,     // 促销情感（仅 spam_score >= 6.0 的原文）
+      "organic_sentiment": 0.18,   // 有机情感（仅 spam_score < 6.0 的原文）
       "sentiment_distribution": {"positive": 10, "negative": 3, "neutral": 2}, // 情感分布
       "heat": 4500,
       "mentions": 15,
@@ -739,7 +739,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
          {"text": "苹果16", "count": 5}
       ],
 
-      // 实体维度信息（带帖子追溯，用于项目级再融合）
+      // 实体维度信息（带原文追溯，用于项目级再融合）
       // 清洗策略：Top 3 实体全量清洗，Top 4-10 核心字段清洗，其余保留 Raw Top 20
       "features": [  // 天然正面
         {"text": "外观好看", "count": 3, "post_ids": [101, 102, 105]},
@@ -820,8 +820,8 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 | 热门实体 | SpamRatioBar + 情感对比 | TabSwitch 排序；点击数量→弹窗 |
 | KOL 声音 | 每条 badge 标注 | TabSwitch 过滤 |
 
-**帖子溯源弹窗（PostListModal）**：
-- 所有"查看帖子"入口共用同一弹窗
+**原文溯源弹窗（PostListModal）**：
+- 所有"查看原文"入口共用同一弹窗
 - 有 spam 数据时显示三个 tab：**全部 / 推广 / 有机**
 - 对应后端 API `GET /tasks/{task_id}/posts?spam_group=high|low`，服务端按 `spam_score` 阈值过滤，分页正确
 
@@ -833,7 +833,7 @@ def build_similarity_mapping(items: list[dict], threshold: float = 0.8) -> dict[
 2.  **时间筛选**：在 `Coordinator` 分发子任务时，根据 `time_range` 过滤 `post_ids`。
 3.  **Aggregator 扩充**：
     *   **实现主体过滤**：确保 NSR 和 IPA 分析只针对本品，隔离竞品数据。
-    *   **实现 SERP 计算**：计算 Top 20 帖子的加权情感。
+    *   **实现 SERP 计算**：计算 Top 20 原文的加权情感。
     *   实现共现矩阵 (Scenario-Context)。
     *   实现营销渗透率计算。
 4.  **Prompt 优化**：修改评论提取 Prompt，支持传入 `summary` 而非 `full_text`。

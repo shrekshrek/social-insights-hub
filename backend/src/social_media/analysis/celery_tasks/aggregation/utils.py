@@ -231,7 +231,7 @@ def calculate_comment_weight(
 
     Args:
         support_score: 支持度分数（来源评论点赞数之和）
-        post_impact: 帖子的 Impact Score
+        post_impact: 原文的 Impact Score
 
     Returns:
         float: 评论观点/实体的权重
@@ -244,7 +244,7 @@ def calculate_comment_weight(
     log_factor = math.log10(support_score + 1)
 
     weight = post_impact * COMMENT_WEIGHT_BASE_FACTOR * log_factor
-    # 安全上限：评论信号不应超过原文帖子本身的影响力
+    # 安全上限：评论信号不应超过原文原文本身的影响力
     if post_impact > 0:
         weight = min(weight, post_impact)
     return weight
@@ -258,7 +258,7 @@ def calculate_score(heat: float, mentions: int) -> float:
 
     Args:
         heat: 累加影响力 (Total Impact) = Sum(CII * Quality_Factor)
-        mentions: 提及次数（唯一帖子数）
+        mentions: 提及次数（唯一原文数）
 
     Returns:
         float: 综合评分

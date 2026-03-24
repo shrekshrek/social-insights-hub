@@ -40,7 +40,7 @@ def calculate_cii(
 
 
 def calculate_cii_for_post(post: SocialPost) -> float:
-    """从帖子模型计算 CII"""
+    """从原文模型计算 CII"""
     return calculate_cii(
         likes=post.likes_count or 0,
         comments=post.comments_count or 0,
@@ -144,9 +144,9 @@ def calculate_marketing_density(
 
 
 def calculate_sentiment_conflict(posts_data: list[dict[str, Any]]) -> dict[str, Any]:
-    """计算舆论反差度 (帖子情感 vs 评论情感)
+    """计算舆论反差度 (原文情感 vs 评论情感)
 
-    帖子情感来自初筛 sentiment [-2, +2]。
+    原文情感来自初筛 sentiment [-2, +2]。
     评论情感从 comment_deep_result.general_opinions 的 sentiment 字段（-1/0/1）平均得到。
     """
     conflicts = []
@@ -217,9 +217,9 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
         }
 
     now = datetime.now(timezone.utc)
-    date_posts: dict[str, list[int]] = {}  # 日期 -> 帖子ID列表
+    date_posts: dict[str, list[int]] = {}  # 日期 -> 原文ID列表
     ages_days = []
-    skipped_count = 0  # 跳过的帖子数（无发布时间）
+    skipped_count = 0  # 跳过的原文数（无发布时间）
 
     for post in posts_data:
         published_at = post.get("published_at")
@@ -269,5 +269,5 @@ def calculate_time_distribution(posts_data: list[dict[str, Any]]) -> dict[str, A
             "last_30_days": round(sum(1 for age in ages_days if age <= 30) / total, 3),
             "avg_age_days": round(sum(ages_days) / total, 1),
         },
-        "skipped_count": skipped_count,  # 跳过的帖子数（无发布时间）
+        "skipped_count": skipped_count,  # 跳过的原文数（无发布时间）
     }

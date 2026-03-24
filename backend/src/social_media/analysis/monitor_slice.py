@@ -199,7 +199,7 @@ def _merge_entity_attr_items(
             if pk not in pk_to_pid:
                 pk_to_pid[pk] = pid_int
 
-        # mentions_weight：用去重后的唯一帖子数口径（避免跨任务重复贴放大）
+        # mentions_weight：用去重后的唯一原文数口径（避免跨任务重复贴放大）
         mentions_weight = len(pk_to_pid)
         if mentions_weight <= 0:
             continue
@@ -233,7 +233,7 @@ def _compute_time_distribution(
     post_info_by_key: dict[str, dict[str, Any]],
     spam_map_by_key: dict[str, str],
 ) -> dict[str, Any]:
-    """从去重后的帖子信息计算时间分布。
+    """从去重后的原文信息计算时间分布。
 
     Returns:
         {distribution, organic_distribution, promo_distribution, skipped_count}
@@ -459,7 +459,7 @@ def build_monitor_slice_result(
     }
 
     # 用“首见原则”填充 primary_keyword_by_key / primary_task_by_key（保证去重后关键词分布总和可控）
-    # 说明：同一平台同一帖子可能出现在多个任务（不同关键词），此处选第一条作为主归属。
+    # 说明：同一平台同一原文可能出现在多个任务（不同关键词），此处选第一条作为主归属。
     for t in task_data_list:
         tid = t.get("task_id")
         ctx = task_context_map.get(tid, {})
@@ -519,7 +519,7 @@ def build_monitor_slice_result(
         "dedup_key": "platform:post_id_on_platform",
     }
 
-    # Step1 新鲜度统计（基于去重后的帖子集合）
+    # Step1 新鲜度统计（基于去重后的原文集合）
     now = datetime.now(timezone.utc)
     last_7_days_count = 0
     last_30_days_count = 0
@@ -568,7 +568,7 @@ def build_monitor_slice_result(
         # 2. Global Sentiment (from metrics.nsr)
         metrics = result.get("metrics") or {}
         nsr = metrics.get("nsr", 0.0)
-        # 简单加权：假设NSR代表该任务所有帖子的平均情感
+        # 简单加权：假设NSR代表该任务所有原文的平均情感
         global_sentiment_sum += nsr * count
         global_sentiment_count += count
         # 有机/推广情感（来自 metrics.nsr_by_spam，按任务量加权）
@@ -1000,7 +1000,7 @@ def build_monitor_slice_result(
                     bucket["organic_heat"] += h
                 elif spam_group_t == "high":
                     bucket["promo_heat"] += h
-                # sentiment：按 mentions（去重后帖子数）加权
+                # sentiment：按 mentions（去重后原文数）加权
                 bucket["sentiment_sum"] += float(sentiment) * 1.0
                 bucket["sentiment_weight"] += 1.0
                 # 正/负极性计数（用于争议性检测）
@@ -1285,7 +1285,7 @@ def build_monitor_slice_result(
         else None
     )
 
-    # 去重后各平台帖子量（unique post_key 口径，与 unique_posts 总量一致）
+    # 去重后各平台原文量（unique post_key 口径，与 unique_posts 总量一致）
     unique_platform_volume: dict[str, int] = defaultdict(int)
     for _pk, _info in post_info_by_key.items():
         _plat = str(_info.get("platform") or "unknown")
@@ -1294,7 +1294,7 @@ def build_monitor_slice_result(
     overview = {
         # 任务级总量（不去重，与 platform_volume / keyword_volume 口径一致）
         "total_volume": total_volume,
-        # 项目级去重后帖子量（基于 platform+post_id_on_platform）
+        # 项目级去重后原文量（基于 platform+post_id_on_platform）
         "unique_posts": unique_posts,
         "total_heat": round(total_heat, 2),
         # NSR 口径（-2~+2），与实体/话题 sentiment（-1~+1）量纲不同

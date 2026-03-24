@@ -44,7 +44,7 @@ const postParams = computed(() => {
     page: postPage.value,
     page_size: postPageSize.value,
   };
-  // 如果选中了特定帖子，添加 post_id 参数
+  // 如果选中了特定原文，添加 post_id 参数
   if (selectedPostDbIdForPosts.value) {
     params.post_id = selectedPostDbIdForPosts.value;
   }
@@ -75,7 +75,7 @@ const commentParams = computed(() => {
     page: commentPage.value,
     page_size: commentPageSize.value,
   };
-  // 如果选中了特定帖子，添加 post_id 参数
+  // 如果选中了特定原文，添加 post_id 参数
   if (selectedPostDbId.value) {
     params.post_id = selectedPostDbId.value;
   }
@@ -228,6 +228,8 @@ const getStatusColor = (status: string) => {
     pending: 'neutral',
     accepted: 'neutral',
     running: 'info',
+    probe_ready: 'warning',
+    approved: 'info',
     completed: 'success',
     failed: 'error',
   };
@@ -239,6 +241,8 @@ const getStatusText = (status: string) => {
     pending: "待处理",
     accepted: "已接单",
     running: "运行中",
+    probe_ready: "探测完成",
+    approved: "待续采",
     completed: "已完成",
     failed: "失败",
   };
@@ -941,7 +945,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
 
                 <div v-else class="text-center py-8">
                   <p class="text-gray-600 dark:text-gray-400">
-                    {{ selectedPostDbId ? "该帖子暂无评论" : "暂无评论数据" }}
+                    {{ selectedPostDbId ? "该原文暂无评论" : "暂无评论数据" }}
                   </p>
                 </div>
               </ClientOnly>

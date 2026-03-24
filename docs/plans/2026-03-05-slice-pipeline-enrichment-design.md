@@ -20,7 +20,7 @@
 
 ```
 Stage 1（同步，service.py + project_slice.py）
-  ├─ 查询所有帖子 → post_info_by_key（CII/published_at/spam_score）
+  ├─ 查询所有原文 → post_info_by_key（CII/published_at/spam_score）
   ├─ 跨任务合并实体 → foundation.aligned_entities
   └─ 跨任务合并观点 → foundation.aligned_topics
 
@@ -65,7 +65,7 @@ Stage 3（异步 Celery）
 
 ### 2. KOL 声音 — Stage 1 从任务级结果合并
 
-**原因**：KOL 声音需要帖子的 author/title/content/summary 等字段，`post_info_by_key` 中没有这些信息。直接在切片中从头计算 KOL 需要大量数据库查询，不值得。更合理的方式是从各任务的 `result_data.insights.kol_voices` 中合并去重。
+**原因**：KOL 声音需要原文的 author/title/content/summary 等字段，`post_info_by_key` 中没有这些信息。直接在切片中从头计算 KOL 需要大量数据库查询，不值得。更合理的方式是从各任务的 `result_data.insights.kol_voices` 中合并去重。
 
 **改动文件**：`backend/src/social_media/analysis/project_slice.py`
 
@@ -74,7 +74,7 @@ Stage 3（异步 Celery）
 ```python
 # 输入：每个任务的 result_data.insights.kol_voices（最多 10 条/任务）
 # 合并逻辑：
-#   1. 按 (platform, post_id) 去重（同一帖子可能出现在多个任务中）
+#   1. 按 (platform, post_id) 去重（同一原文可能出现在多个任务中）
 #   2. 为每条 KOL 补充 spam_group（通过 post_key → spam_map_by_key）
 #   3. 重新按 impact_score = CII × quality_factor 排序
 #   4. 取 top 10
@@ -96,7 +96,7 @@ Stage 3（异步 Celery）
 ```
 
 **合并去重策略**：
-- 任务级 `kol_voices` 的 `post_id` 是 `SocialPost.id`，同一帖子在不同任务中 ID 不同
+- 任务级 `kol_voices` 的 `post_id` 是 `SocialPost.id`，同一原文在不同任务中 ID 不同
 - 通过 `post_key_by_id[post_id]` 转为 `platform:post_id_on_platform` 进行去重
 - 保留 impact_score 最高的那条记录
 
@@ -151,7 +151,7 @@ def _build_ipa(
 
 ```
 Stage 1（同步）
-  ├─ [现有] 查询帖子 → post_info_by_key
+  ├─ [现有] 查询原文 → post_info_by_key
   ├─ [现有] 合并实体/观点 → foundation
   ├─ [新增] 从 post_info_by_key 计算 time_distribution → layers.landscape.time_distribution
   └─ [新增] 从各任务 kol_voices 合并去重 → layers.landscape.kol_voices
@@ -211,7 +211,7 @@ layers:
 
 | 场景 | 验证点 |
 |------|--------|
-| time_distribution 计算 | 跨任务去重帖子的时间分布正确、organic/promo 拆分正确 |
+| time_distribution 计算 | 跨任务去重原文的时间分布正确、organic/promo 拆分正确 |
 | kol_voices 合并 | 跨任务 post_key 去重、impact_score 排序、spam_group 标记 |
 | IPA 四象限 | 阈值计算正确、features/issues 正确映射、空数据兜底 |
 | 旧切片兼容 | 无新字段时前端不报错、策略 Chain 拿到空值不崩溃 |

@@ -2,7 +2,7 @@
 /**
  * 深度分析结果弹窗组件（共用）
  *
- * 用于展示帖子原文深度分析或评论深度分析结果
+ * 用于展示原文原文深度分析或评论深度分析结果
  */
 import type { PostAnalysisWithPostInfo } from '../../types'
 import PostDeepAnalysisResult from './PostDeepAnalysisResult.vue'
@@ -37,7 +37,7 @@ const handleClose = () => {
   >
     <template #body>
       <div v-if="postData" class="space-y-4">
-        <!-- 帖子标题 -->
+        <!-- 原文标题 -->
         <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
           <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
             {{ postData.title || '无标题' }}

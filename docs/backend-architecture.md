@@ -162,19 +162,19 @@ backend/
 ---
 
 ### 3.5 数据采集任务模块 (social_media/tasks/)
-**职责**: 数据采集任务管理、多平台帖子/评论存储、平台适配器
+**职责**: 数据采集任务管理、多平台原文/评论存储、平台适配器
 
 **主要组件**:
 - `models.py`: `DataTask`, `SocialPost`, `SocialComment` 数据模型
 - `adapters/`: 各平台适配器，将平台特定数据格式转换为统一内部格式
-- `router.py`: 任务 CRUD、帖子/评论查询 API 端点
+- `router.py`: 任务 CRUD、原文/评论查询 API 端点
 - `service.py`: 任务状态管理、批量数据写入、CII 预计算
 
 **支持平台**: 抖音、小红书、微博、B站、快手、知乎、贴吧（7 个）
 
 **核心功能**:
 - 任务生命周期管理（pending / processing / completed / failed）
-- 多平台帖子/评论数据统一存储
+- 多平台原文/评论数据统一存储
 - CII 互动指数（点赞×1 + 评论×2 + 分享×5 + 收藏×3 的对数归一化）预计算
 
 ---
@@ -216,8 +216,8 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 
 | 链 | 输入 | 输出 |
 |----|------|------|
-| `screening_chain` | 帖子内容+关键词 | spam/value/relevance/sentiment 分数 |
-| `post_extraction_chain` | 帖子内容 | 实体+观点+摘要 |
+| `screening_chain` | 原文内容+关键词 | spam/value/relevance/sentiment 分数 |
+| `post_extraction_chain` | 原文内容 | 实体+观点+摘要 |
 | `comment_extraction_chain` | 评论内容 | 评论实体+观点 |
 | `entity_normalization_chain` | 实体列表 | 去重归一化实体 |
 | `opinion_normalization_chain` | 观点列表 | 去重归一化观点 |
@@ -236,7 +236,7 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 **认证方式**: API Key（Header `X-API-Key`），区别于业务端的 JWT 认证
 
 **核心功能**:
-- 接收外部爬虫推送的原始帖子/评论数据
+- 接收外部爬虫推送的原始原文/评论数据
 - 通过 `tasks/adapters` 转换后写入数据库
 - 支持 `auto_analyze=True` 参数自动触发完整分析管线
 
@@ -272,11 +272,11 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 - `social_projects`: 监控项目
 - `social_project_participants`: 项目参与者关联表
 - `data_tasks`: 数据采集任务
-- `social_posts`: 帖子数据
+- `social_posts`: 原文数据
 - `social_comments`: 评论数据
 
 **分析模块**:
-- `post_analyses`: 帖子分析结果（1:1 对应 SocialPost）
+- `post_analyses`: 原文分析结果（1:1 对应 SocialPost）
 - `analysis_jobs`: 分析任务状态 + LLM 成本记录
 - `project_analysis_slices`: 项目级分析切片（不可变快照）
 
@@ -385,13 +385,13 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 **任务** (`/tasks`):
 - `GET /`: 任务列表
 - `POST /`: 创建任务
-- `GET /{id}`: 任务详情（含帖子统计）
-- `GET /{id}/posts`: 帖子列表
+- `GET /{id}`: 任务详情（含原文统计）
+- `GET /{id}/posts`: 原文列表
 - `POST /{id}/upload-json`: 上传 JSON 数据
 
 **分析** (`/analysis`):
 - `POST /screening`: 启动初筛分析
-- `POST /deep-posts`: 启动帖子深度分析
+- `POST /deep-posts`: 启动原文深度分析
 - `POST /deep-comments`: 启动评论深度分析
 - `POST /aggregation`: 执行聚合（同步返回结果）
 - `GET /task/{task_id}/result`: 获取任务分析结果

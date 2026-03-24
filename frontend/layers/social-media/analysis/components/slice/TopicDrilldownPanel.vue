@@ -245,14 +245,14 @@ const getSentimentColor = (s?: number) => {
           </div>
         </div>
 
-        <!-- 帖子样本入口（统一交互：先看原话，再按需打开样本帖） -->
+        <!-- 原文样本入口（统一交互：先看原话，再按需打开样本帖） -->
         <div class="flex items-center justify-end">
           <UButton
             size="xs"
             color="neutral"
             variant="outline"
             :disabled="!item.post_ids_sample?.length"
-            :label="item.post_ids_sample?.length ? `查看帖子样本（${item.post_ids_sample.length}）` : '暂无帖子样本'"
+            :label="item.post_ids_sample?.length ? `查看原文样本（${item.post_ids_sample.length}）` : '暂无原文样本'"
             @click="handleOpenPosts"
           />
         </div>

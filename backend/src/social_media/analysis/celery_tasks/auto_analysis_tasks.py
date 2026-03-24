@@ -108,7 +108,7 @@ def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | N
             logger.error(f"Task {task_id} not found")
             return None
 
-        # 获取任务下所有帖子ID（排除已有初筛结果的），与手动初筛逻辑保持一致
+        # 获取任务下所有原文ID（排除已有初筛结果的），与手动初筛逻辑保持一致
         post_ids = [
             row[0]
             for row in (
@@ -173,7 +173,7 @@ def _run_deep_posts(
         if not task:
             return None
 
-        # 筛选符合阈值的帖子（已初筛但未深度分析）
+        # 筛选符合阈值的原文（已初筛但未深度分析）
         post_ids = [
             row[0]
             for row in (
@@ -234,7 +234,7 @@ def _run_deep_comments(
 ) -> int | None:
     """执行评论深度分析
 
-    与手动候选筛选保持一致：post_deep_result 已有 + comment_deep_result 为空 + 帖子有评论
+    与手动候选筛选保持一致：post_deep_result 已有 + comment_deep_result 为空 + 原文有评论
     （不额外按阈值过滤，避免与现有 preview 逻辑产生分歧）
     """
     from src.social_media.analysis.models import PostAnalysis
@@ -311,7 +311,7 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         if not task:
             return None
 
-        # 检查是否有已分析的帖子
+        # 检查是否有已分析的原文
         analyzed_count = (
             db.query(func.count())
             .filter(

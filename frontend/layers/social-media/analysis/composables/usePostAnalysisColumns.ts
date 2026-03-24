@@ -1,5 +1,5 @@
 /**
- * 帖子分析表格列定义 composable
+ * 原文分析表格列定义 composable
  *
  * 提供统一的表格列定义，可在 AnalysisPanel 和 PostListModal 中共用
  */
@@ -46,7 +46,7 @@ const formatDateTime = (value?: string | null): { date: string; time: string } |
 }
 
 /**
- * 获取帖子分析表格列定义
+ * 获取原文分析表格列定义
  */
 export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {}) {
   const {

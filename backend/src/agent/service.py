@@ -36,13 +36,13 @@ async def get_pending_tasks(
     Returns:
         list[AgentTaskInfo]: 任务列表
     """
-    # 返回 pending（新任务）和 approved（探测通过待续采）的任务
+    # 只返回 pending 任务（approved 任务由爬虫通过 GET /tasks/{id} 轮询发现）
     stmt = (
         select(DataTask)
         .where(
             and_(
                 DataTask.data_source == "remote_crawler",
-                DataTask.status.in_(("pending", "approved")),
+                DataTask.status == "pending",
                 DataTask.is_deleted.is_(False),
             )
         )
@@ -53,30 +53,20 @@ async def get_pending_tasks(
     result = await db.execute(stmt)
     tasks = result.scalars().all()
 
-    items = []
-    for task in tasks:
-        params = task.task_params or {}
-        is_continuation = task.status == "approved"
-
-        items.append(
-            AgentTaskInfo(
-                task_id=task.id,
-                task_name=task.name,
-                platform=task.platform.code if task.platform else "unknown",
-                task_type=task.task_type,
-                priority=task.priority,
-                keywords=task.keywords,
-                task_params=task.task_params,
-                created_at=task.created_at,
-                status=task.status,
-                # Task A (pending): preview_count = probe_size
-                # Task B (approved): preview_count = null (全量续采)
-                preview_count=params.get("probe_size") if not is_continuation else None,
-                # Task B (approved): 传回上次保存的断点
-                checkpoint_id=params.get("checkpoint_id") if is_continuation else None,
-            )
+    return [
+        AgentTaskInfo(
+            task_id=task.id,
+            task_name=task.name,
+            platform=task.platform.code if task.platform else "unknown",
+            task_type=task.task_type,
+            priority=task.priority,
+            keywords=task.keywords,
+            task_params=task.task_params,
+            created_at=task.created_at,
+            status=task.status,
         )
-    return items
+        for task in tasks
+    ]
 
 
 async def get_task_status(
@@ -219,7 +209,7 @@ async def _clear_analysis_results(
     task_id: int,
     task: DataTask,
 ) -> None:
-    """清空任务的分析结果（保留帖子/评论数据），用于追加上传前重置"""
+    """清空任务的分析结果（保留原文/评论数据），用于追加上传前重置"""
     # 清理自动分析幂等锁
     try:
         import redis.asyncio as redis
@@ -323,7 +313,7 @@ async def upload_result(
     is_reupload = task.status == "completed"
     is_append = task.status == "approved"
 
-    # approved 追加上传：清空分析结果（全量重新分析），保留已有帖子数据
+    # approved 追加上传：清空分析结果（全量重新分析），保留已有原文数据
     if is_append:
         logger.info(f"Task {task_id}: Append upload (approved → completed)")
         await _clear_analysis_results(db, task_id, task)
@@ -371,7 +361,7 @@ async def upload_result(
             task.started_at = datetime.now(timezone.utc)
         await db.flush()
 
-        # 追加模式：加载已有帖子的 post_id_on_platform → DB id 映射
+        # 追加模式：加载已有原文的 post_id_on_platform → DB id 映射
         existing_post_mapping: dict[str, int] = {}
         if is_append:
             from src.social_media.tasks.models import SocialPost
@@ -398,7 +388,7 @@ async def upload_result(
             platform_id = transformed.get("post_id_on_platform")
             if not platform_id:
                 continue
-            # 跳过已存在的帖子（追加模式去重）
+            # 跳过已存在的原文（追加模式去重）
             if platform_id in existing_post_mapping:
                 continue
             if platform_id not in posts_data_dict:
@@ -423,7 +413,7 @@ async def upload_result(
             transformed = adapter.transform_comment(item)
             adapter.validate_comment(transformed)
 
-            # 从适配器获取帖子ID
+            # 从适配器获取原文ID
             post_id_on_platform = adapter.get_post_id_from_comment(transformed)
 
             if not post_id_on_platform:

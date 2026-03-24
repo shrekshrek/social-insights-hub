@@ -12,7 +12,7 @@
 | users/前端 | 已完成 | 用户管理界面 |
 | social_media/projects/后端 | 已完成 | 项目管理、平台初始化、参与者管理、批量创建任务 API |
 | social_media/projects/前端 | 已完成 | 项目列表、创建、详情、切片洞察、批量创建任务弹窗、QuickTaskForm 组件提取 |
-| social_media/tasks/后端 | 已完成 | 任务管理、多平台适配器、帖子/评论存储 |
+| social_media/tasks/后端 | 已完成 | 任务管理、多平台适配器、原文/评论存储 |
 | social_media/tasks/前端 | 已完成 | 任务列表、创建、详情、数据上传 |
 | social_media/analysis/后端 | 已完成 | LLM 分析编排、批处理、成本追踪、报告聚合 |
 | social_media/analysis/前端 | 已完成 | 分析报告展示、图表可视化、成本面板、切片重命名 |

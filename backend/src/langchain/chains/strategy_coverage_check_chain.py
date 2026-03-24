@@ -113,7 +113,7 @@ def format_coverage_check_inputs(
     for name, data in slices_data:
         slice_lines.append(f"\n### {name}")
         overview = data.get("overview", {})
-        slice_lines.append(f"帖子数: {overview.get('total_posts', 0)}")
+        slice_lines.append(f"原文数: {overview.get('total_posts', 0)}")
 
         # 实体
         entities = data.get("aligned_entities", [])[:10]

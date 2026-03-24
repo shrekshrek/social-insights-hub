@@ -75,7 +75,7 @@ class GeneralOpinion(CustomBaseModel):
 
 
 class PostDeepResult(CustomBaseModel):
-    """帖子深度分析结果"""
+    """原文深度分析结果"""
 
     entities: list[EntityInfo] = Field(default_factory=list, description="识别的实体")
     general_opinions: list[GeneralOpinion] = Field(
@@ -127,7 +127,7 @@ class CommentGeneralOpinion(CustomBaseModel):
 
 
 class CommentDeepResult(CustomBaseModel):
-    """评论深度分析结果（按帖子聚合，带来源追踪）"""
+    """评论深度分析结果（按原文聚合，带来源追踪）"""
 
     entities: list[CommentEntityInfo] = Field(
         default_factory=list, description="识别的实体（带来源追踪）"
@@ -141,10 +141,10 @@ class CommentDeepResult(CustomBaseModel):
 
 
 class PostAnalysisCreate(CustomBaseModel):
-    """创建帖子分析"""
+    """创建原文分析"""
 
     task_id: int = Field(..., gt=0, description="任务ID")
-    post_id: int = Field(..., gt=0, description="帖子ID")
+    post_id: int = Field(..., gt=0, description="原文ID")
     spam_score: float | None = Field(None, ge=0, le=10)
     value_score: float | None = Field(None, ge=0, le=10)
     relevance_score: float | None = Field(None, ge=0, le=10)
@@ -156,7 +156,7 @@ class PostAnalysisCreate(CustomBaseModel):
 
 
 class PostAnalysisUpdate(CustomBaseModel):
-    """更新帖子分析"""
+    """更新原文分析"""
 
     spam_score: float | None = Field(None, ge=0, le=10)
     value_score: float | None = Field(None, ge=0, le=10)
@@ -172,7 +172,7 @@ class PostAnalysisUpdate(CustomBaseModel):
 
 
 class PostAnalysisResponse(CustomBaseModel):
-    """帖子分析完整响应"""
+    """原文分析完整响应"""
 
     id: int
     task_id: int
@@ -294,8 +294,8 @@ class DeepAnalysisPreviewResponse(CustomBaseModel):
 
     total_posts: int
     screened_count: int
-    qualified_count: int  # 符合阈值条件的已初筛帖子总数（不管是否已深度分析）
-    matched_count: int  # 符合条件且待深度分析的帖子数
+    qualified_count: int  # 符合阈值条件的已初筛原文总数（不管是否已深度分析）
+    matched_count: int  # 符合条件且待深度分析的原文数
     deep_done: int
     comment_done: int
     deep_candidate_ids: list[int]
@@ -306,13 +306,13 @@ class DeepAnalysisPreviewResponse(CustomBaseModel):
 
 
 class RunScreeningRequest(CustomBaseModel):
-    """运行帖子初筛请求"""
+    """运行原文初筛请求"""
 
     task_id: int = Field(..., gt=0, description="任务ID")
     post_ids: list[int] | None = Field(
-        None, description="指定的帖子ID列表，为空则分析所有"
+        None, description="指定的原文ID列表，为空则分析所有"
     )
-    analyze_all: bool = Field(False, description="是否分析所有帖子")
+    analyze_all: bool = Field(False, description="是否分析所有原文")
 
 
 class RunDeepAnalysisRequest(CustomBaseModel):
@@ -320,7 +320,7 @@ class RunDeepAnalysisRequest(CustomBaseModel):
 
     task_id: int = Field(..., gt=0, description="任务ID")
     post_ids: list[int] | None = Field(
-        None, description="指定的帖子ID列表，为空则分析所有"
+        None, description="指定的原文ID列表，为空则分析所有"
     )
     analysis_focus: list[str] | None = Field(None, description="分析重点（预留扩展）")
 
@@ -416,7 +416,7 @@ class AnalysisStatsResponse(CustomBaseModel):
 class TaskAnalysisDataVolume(CustomBaseModel):
     """数据量统计"""
 
-    total: int = Field(0, description="总帖子数")
+    total: int = Field(0, description="总原文数")
     screened: int = Field(0, description="已初筛数")
     deep_analyzed: int = Field(0, description="已深度分析数")
     comment_analyzed: int = Field(0, description="已评论分析数")
@@ -427,8 +427,8 @@ class MarketingAnalysis(CustomBaseModel):
 
     promotion_ratio: float = Field(0.0, description="营销内容占比 (0-1)")
     organic_ratio: float = Field(1.0, description="自然内容占比 (0-1)")
-    promotion_count: int = Field(0, description="营销帖子数")
-    organic_count: int = Field(0, description="自然帖子数")
+    promotion_count: int = Field(0, description="营销原文数")
+    organic_count: int = Field(0, description="自然原文数")
 
 
 class SentimentConflict(CustomBaseModel):
@@ -437,9 +437,9 @@ class SentimentConflict(CustomBaseModel):
     avg_conflict: float = Field(0.0, description="平均反差度 (绝对值)")
     conflict_direction: str = Field(
         "aligned",
-        description="反差方向: post_positive(帖子更正面)/comment_positive(评论更正面)/aligned(一致)",
+        description="反差方向: post_positive(原文更正面)/comment_positive(评论更正面)/aligned(一致)",
     )
-    high_conflict_count: int = Field(0, description="高反差帖子数 (|差值| > 1)")
+    high_conflict_count: int = Field(0, description="高反差原文数 (|差值| > 1)")
     risk_level: str = Field("low", description="风险等级: low/medium/high")
 
 
@@ -526,9 +526,9 @@ class TimeDistributionItem(CustomBaseModel):
     """时间分布数据项"""
 
     date: str = Field(..., description="日期 (YYYY-MM-DD)")
-    count: int = Field(0, description="帖子数量")
+    count: int = Field(0, description="原文数量")
     post_ids: list[int] = Field(
-        default_factory=list, description="该日期对应的帖子ID列表，用于反向追溯"
+        default_factory=list, description="该日期对应的原文ID列表，用于反向追溯"
     )
     spam_breakdown: SpamCountBreakdown | None = None
 
@@ -536,8 +536,8 @@ class TimeDistributionItem(CustomBaseModel):
 class Freshness(CustomBaseModel):
     """数据新鲜度"""
 
-    last_7_days: float = Field(0.0, description="最近7天帖子占比 (0-1)")
-    last_30_days: float = Field(0.0, description="最近30天帖子占比 (0-1)")
+    last_7_days: float = Field(0.0, description="最近7天原文占比 (0-1)")
+    last_30_days: float = Field(0.0, description="最近30天原文占比 (0-1)")
     avg_age_days: float = Field(0.0, description="平均发布天数")
 
 
@@ -671,7 +671,7 @@ class TaskAnalysisCharts(CustomBaseModel):
         default_factory=list, description="时间分布"
     )
     time_distribution_skipped: int = Field(
-        0, description="无发布时间的帖子数量"
+        0, description="无发布时间的原文数量"
     )
     # 新增图表字段
     ipa_analysis: IpaAnalysis | None = None
@@ -680,9 +680,9 @@ class TaskAnalysisCharts(CustomBaseModel):
 
 
 class SourceDistribution(CustomBaseModel):
-    """来源分布（帖子 vs 评论）"""
+    """来源分布（原文 vs 评论）"""
 
-    post: float = Field(0.0, description="来自帖子的占比 (0-1)")
+    post: float = Field(0.0, description="来自原文的占比 (0-1)")
     comment: float = Field(0.0, description="来自评论的占比 (0-1)")
 
 
@@ -713,7 +713,7 @@ class EntityStat(CustomBaseModel):
         description="主体角色: target(本品)/competitor(竞品)/other(其他有价值实体)",
     )
     heat: float = Field(0, description="热度（CII加权）")
-    mentions: int = Field(0, description="唯一帖子提及数")
+    mentions: int = Field(0, description="唯一原文提及数")
     score: float = Field(0, description="综合评分")
     sentiment: float = Field(0, description="派生情感值 [-1, 1]，CII加权")
     sentiment_distribution: SentimentDistribution = Field(
@@ -733,13 +733,13 @@ class EntityStat(CustomBaseModel):
         default_factory=list, description="主要期望（详细项，含原始词条）"
     )
     post_ids: list[int] = Field(
-        default_factory=list, description="关联帖子ID，用于反向追溯"
+        default_factory=list, description="关联原文ID，用于反向追溯"
     )
     post_source_ids: list[int] = Field(
-        default_factory=list, description="来自原文的帖子ID列表"
+        default_factory=list, description="来自原文的原文ID列表"
     )
     comment_source_ids: list[int] = Field(
-        default_factory=list, description="来自评论的帖子ID列表"
+        default_factory=list, description="来自评论的原文ID列表"
     )
     spam_distribution: SpamDistribution | None = None
     tags: EntityTags | None = None  # 多维标签
@@ -753,20 +753,20 @@ class OpinionStat(CustomBaseModel):
     name: str = Field(..., description="观点名称")
     category: str | None = None
     heat: float = Field(0, description="热度")
-    mentions: int = Field(0, description="唯一帖子提及数")
+    mentions: int = Field(0, description="唯一原文提及数")
     score: float = Field(0, description="综合评分")
     sentiment: float = Field(0, description="情感倾向")
     source_distribution: SourceDistribution = Field(
         default_factory=SourceDistribution, description="来源分布"
     )
     post_ids: list[int] = Field(
-        default_factory=list, description="关联帖子ID，用于反向追溯"
+        default_factory=list, description="关联原文ID，用于反向追溯"
     )
     post_source_ids: list[int] = Field(
-        default_factory=list, description="来自原文的帖子ID列表"
+        default_factory=list, description="来自原文的原文ID列表"
     )
     comment_source_ids: list[int] = Field(
-        default_factory=list, description="来自评论的帖子ID列表"
+        default_factory=list, description="来自评论的原文ID列表"
     )
     spam_distribution: SpamDistribution | None = None
     original_terms: list[dict] | None = None  # 原始词条（仅在合并时存在）
@@ -786,7 +786,7 @@ class ScenarioStat(CustomBaseModel):
     associated_issues: list[str] = Field(default_factory=list, description="关联问题")
     associated_features: list[str] = Field(default_factory=list, description="关联特性")
     post_ids: list[int] = Field(
-        default_factory=list, description="关联帖子ID，用于反向追溯"
+        default_factory=list, description="关联原文ID，用于反向追溯"
     )
 
 
@@ -798,7 +798,7 @@ class AudienceStat(CustomBaseModel):
     mentions: int = Field(0, description="提及数")
     preferences: list[str] = Field(default_factory=list, description="偏好")
     post_ids: list[int] = Field(
-        default_factory=list, description="关联帖子ID，用于反向追溯"
+        default_factory=list, description="关联原文ID，用于反向追溯"
     )
 
 
@@ -822,7 +822,7 @@ class CompetitorDetail(CustomBaseModel):
     )
     heat: float = Field(0, description="热度")
     mentions: int = Field(0, description="提及数")
-    post_ids: list[int] = Field(default_factory=list, description="关联帖子ID")
+    post_ids: list[int] = Field(default_factory=list, description="关联原文ID")
     top_features: list[str] = Field(default_factory=list, description="主要特性")
     top_issues: list[str] = Field(default_factory=list, description="主要问题")
 
@@ -846,10 +846,10 @@ class KolVoice(CustomBaseModel):
     """KOL 声音"""
 
     author: str = Field(..., description="作者名称")
-    title: str = Field("", description="帖子标题")
+    title: str = Field("", description="原文标题")
     sentiment: float = Field(0, description="情感倾向")
     summary: str = Field("", description="观点摘要")
-    post_id: int = Field(..., description="帖子ID")
+    post_id: int = Field(..., description="原文ID")
     cii: float = Field(0, description="互动指数")
     platform: str = Field("", description="平台来源")
     spam_group: str | None = None
@@ -911,15 +911,15 @@ class RunAggregationResponse(CustomBaseModel):
     result: TaskAnalysisResultData = Field(..., description="聚合分析结果")
 
 
-# ==================== 帖子分析列表 Schema ====================
+# ==================== 原文分析列表 Schema ====================
 
 
 class PostAnalysisWithPostInfo(CustomBaseModel):
-    """带帖子信息的分析结果"""
+    """带原文信息的分析结果"""
 
-    # 帖子基本信息
+    # 原文基本信息
     post_id: int
-    post_id_on_platform: str | None = None  # 平台上的帖子ID，用于关联原文数据
+    post_id_on_platform: str | None = None  # 平台上的原文ID，用于关联原文数据
     title: str | None = None
     content: str | None = None
     author_name: str | None = None
@@ -951,7 +951,7 @@ class PostAnalysisWithPostInfo(CustomBaseModel):
 
 
 class PostAnalysisListResponse(CustomBaseModel):
-    """帖子分析列表响应"""
+    """原文分析列表响应"""
 
     items: list[PostAnalysisWithPostInfo]
     total: int

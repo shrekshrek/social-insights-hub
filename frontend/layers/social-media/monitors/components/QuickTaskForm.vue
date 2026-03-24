@@ -249,7 +249,7 @@ const taskSummary = computed(() => {
 
             <UFormField
               label="爬取评论"
-              help="是否爬取帖子的评论"
+              help="是否爬取原文的评论"
             >
               <USwitch v-model="state.enable_comments" :disabled="disabled" />
             </UFormField>
@@ -257,7 +257,7 @@ const taskSummary = computed(() => {
             <UFormField
               v-if="state.enable_comments"
               label="单帖最大评论数"
-              help="每个帖子爬取的最大评论数，0表示不限"
+              help="每个原文爬取的最大评论数，0表示不限"
             >
               <UInput
                 v-model.number="state.per_note_max_comments_count"

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""帖子初筛的LangChain处理链
+"""原文初筛的LangChain处理链
 
-提供帖子批量初筛评分功能，包括广告分、价值分、相关度分和情感倾向
-支持批量处理多个帖子，减少API调用次数
+提供原文批量初筛评分功能，包括广告分、价值分、相关度分和情感倾向
+支持批量处理多个原文，减少API调用次数
 """
 
 from typing import List, Dict, Any
@@ -40,27 +40,27 @@ SCREENING_SYSTEM_TEMPLATE = """你是舆情分析专家，负责对社交媒体�
    - 2：强烈正面（热爱、强烈推荐）
 
 ## 输出格式：
-返回JSON数组，每个帖子一个对象：
-[{{"post_id": 帖子ID, "spam_score": 分数, "value_score": 分数, "relevance_score": 分数, "sentiment": 情感值}}, ...]
+返回JSON数组，每个原文一个对象：
+[{{"post_id": 原文ID, "spam_score": 分数, "value_score": 分数, "relevance_score": 分数, "sentiment": 情感值}}, ...]
 
 只输出JSON，无额外文本。
 """
 
-SCREENING_USER_TEMPLATE = """请对以下社交媒体帖子进行批量初筛评分：
+SCREENING_USER_TEMPLATE = """请对以下社交媒体原文进行批量初筛评分：
 
 项目关键词：{monitor_keywords}
 
 {posts_content}
 
-请以JSON数组格式返回结果（按帖子顺序），每个帖子包含post_id、spam_score、value_score、relevance_score、sentiment字段。
+请以JSON数组格式返回结果（按原文顺序），每个原文包含post_id、spam_score、value_score、relevance_score、sentiment字段。
 """
 
 
 def create_screening_chain() -> Runnable:
-    """创建帖子初筛的LangChain链
+    """创建原文初筛的LangChain链
 
     Returns:
-        Runnable: 用于帖子批量初筛的LangChain可执行链
+        Runnable: 用于原文批量初筛的LangChain可执行链
     """
     llm = get_llm(llm_type="chat")
 
@@ -75,13 +75,13 @@ def create_screening_chain() -> Runnable:
 
 
 def format_posts_for_screening(posts: List[Dict[str, Any]]) -> str:
-    """格式化帖子内容用于初筛
+    """格式化原文内容用于初筛
 
     Args:
-        posts: 帖子列表，每个帖子包含 id, title, content 字段
+        posts: 原文列表，每个原文包含 id, title, content 字段
 
     Returns:
-        str: 格式化后的帖子内容字符串
+        str: 格式化后的原文内容字符串
     """
     posts_content = []
     for i, post in enumerate(posts, 1):
@@ -90,7 +90,7 @@ def format_posts_for_screening(posts: List[Dict[str, Any]]) -> str:
         content = post.get("content") or ""
 
         posts_content.append(f"""
-帖子{i}（ID:{post_id}）：
+原文{i}（ID:{post_id}）：
 标题：{title}
 正文：{content}
 """)

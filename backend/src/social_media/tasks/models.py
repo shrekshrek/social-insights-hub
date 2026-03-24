@@ -158,7 +158,7 @@ class SocialPost(Base):
     """社交媒体原文数据模型
 
     存储从各平台采集的原文数据，每条记录强关联到task_id。
-    通过post_id_on_platform字段支持跨任务查询同一帖子。
+    通过post_id_on_platform字段支持跨任务查询同一原文。
     """
 
     __tablename__ = "social_posts"
@@ -177,10 +177,10 @@ class SocialPost(Base):
 
     # 平台数据
     post_id_on_platform: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True, comment="平台上的帖子ID"
+        String(255), nullable=False, index=True, comment="平台上的原文ID"
     )
     post_type: Mapped[str | None] = mapped_column(
-        String(50), nullable=True, comment="帖子类型"
+        String(50), nullable=True, comment="原文类型"
     )
 
     # 内容数据
@@ -213,7 +213,7 @@ class SocialPost(Base):
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    url: Mapped[str | None] = mapped_column(Text, nullable=True, comment="帖子URL")
+    url: Mapped[str | None] = mapped_column(Text, nullable=True, comment="原文URL")
 
     # 原始数据
     raw_data: Mapped[dict | None] = mapped_column(
@@ -252,7 +252,7 @@ class SocialPost(Base):
         lazy="selectin",
     )
 
-    # 索引：支持跨任务查询同一帖子
+    # 索引：支持跨任务查询同一原文
     __table_args__ = (
         Index("ix_post_platform_postid", "platform_id", "post_id_on_platform"),
     )
@@ -264,7 +264,7 @@ class SocialPost(Base):
 class SocialComment(Base):
     """社交媒体评论数据模型
 
-    存储帖子的评论数据，强关联到task_id和post_id。
+    存储原文的评论数据，强关联到task_id和post_id。
     通过comment_id_on_platform支持评论去重显示。
     """
 
@@ -272,7 +272,7 @@ class SocialComment(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # 任务和帖子关联（强关联）
+    # 任务和原文关联（强关联）
     task_id: Mapped[int] = mapped_column(
         ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
         nullable=False,

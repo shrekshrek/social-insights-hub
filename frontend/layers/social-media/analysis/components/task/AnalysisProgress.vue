@@ -288,9 +288,9 @@ const progressColor = computed(() => {
 
 const analysisTypeLabel = computed(() => {
   const labels: Record<string, string> = {
-    screening_posts: '帖子初筛',
+    screening_posts: '原文初筛',
     screening_comments: '评论初筛',
-    deep_posts: '帖子深度分析',
+    deep_posts: '原文深度分析',
     deep_comments: '评论深度分析',
     monitor_slice_summary: '监测切片总分析',
   }

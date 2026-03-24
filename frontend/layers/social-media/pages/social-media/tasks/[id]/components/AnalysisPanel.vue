@@ -42,7 +42,7 @@ const {
   refresh: refreshHistory,
 } = getAnalysisJobs(analysisJobsParams)
 
-/** 统一的帖子分析列表 */
+/** 统一的原文分析列表 */
 const page = ref(1)
 const pageSize = ref(20)
 const filterAnalyzed = ref(false)
@@ -207,13 +207,13 @@ const hasAggregationRunning = computed(() =>
 const hasScreeningResult = computed(() => (preview.value?.screened_count ?? 0) > 0)
 // 依赖状态：是否有原文深度结果
 const hasDeepResult = computed(() => (preview.value?.deep_done ?? 0) > 0)
-// 依赖状态：未初筛的帖子数量
+// 依赖状态：未初筛的原文数量
 const unscreenedCount = computed(() => {
   const total = preview.value?.total_posts ?? 0
   const screened = preview.value?.screened_count ?? 0
   return total - screened
 })
-// 依赖状态：是否所有帖子都已初筛
+// 依赖状态：是否所有原文都已初筛
 const allPostsScreened = computed(() => {
   const total = preview.value?.total_posts ?? 0
   return total > 0 && unscreenedCount.value === 0
@@ -462,7 +462,7 @@ const handleDeep = async () => {
   if (!ensureNotRunning()) return
   if (deepCandidateIds.value.length === 0) {
     toast.add({
-      title: '没有符合条件的帖子',
+      title: '没有符合条件的原文',
       description: '请先完成初筛，或调整阈值后再试',
       color: 'warning',
     })
@@ -630,7 +630,7 @@ defineExpose({
       <!-- 左侧：操作按钮 -->
       <div class="flex items-center gap-2 flex-wrap">
         <UTooltip
-          :text="allPostsScreened ? '所有帖子已完成初筛' : totalPostsCount === 0 ? '没有帖子数据' : ''"
+          :text="allPostsScreened ? '所有原文已完成初筛' : totalPostsCount === 0 ? '没有原文数据' : ''"
           :disabled="!allPostsScreened && totalPostsCount > 0"
         >
           <UButton
@@ -689,10 +689,10 @@ defineExpose({
         <UBadge color="success" variant="subtle" size="xs" title="相关分下限（≥）">
           相关≥{{ thresholds.relevanceMin }}
         </UBadge>
-        <span class="text-primary-600 dark:text-primary-400 font-medium" title="符合阈值条件的帖子数 / 已完成初筛的帖子数">
+        <span class="text-primary-600 dark:text-primary-400 font-medium" title="符合阈值条件的原文数 / 已完成初筛的原文数">
           符合: {{ qualifiedCount }}/{{ screenedCount }}
         </span>
-        <span v-if="matchedCount > 0" class="text-warning-600 dark:text-warning-400" title="符合条件且尚未深度分析的帖子数">
+        <span v-if="matchedCount > 0" class="text-warning-600 dark:text-warning-400" title="符合条件且尚未深度分析的原文数">
           待分析: {{ matchedCount }}
         </span>
       </div>
@@ -826,7 +826,7 @@ defineExpose({
   <UModal
     v-model:open="deepDialogOpen"
     title="设置原文深度分析阈值"
-    description="配置筛选条件以确定哪些帖子需要进行深度分析"
+    description="配置筛选条件以确定哪些原文需要进行深度分析"
     :ui="{ width: 'sm:max-w-xl', footer: 'justify-end' }"
   >
     <template #body>
@@ -896,7 +896,7 @@ defineExpose({
             其中 <strong>{{ dialogPreview.matched_count }}</strong> 条待深度分析
           </p>
           <p v-else-if="dialogPreview.qualified_count > 0" class="text-sm text-success-600 dark:text-success-400 mt-1">
-            符合条件的帖子已全部完成深度分析
+            符合条件的原文已全部完成深度分析
           </p>
         </div>
       </div>
@@ -923,13 +923,13 @@ defineExpose({
   <UModal
     v-model:open="commentDialogOpen"
     title="评论深度分析预览"
-    description="预览评论深度分析的候选帖子数量"
+    description="预览评论深度分析的候选原文数量"
     :ui="{ width: 'sm:max-w-xl', footer: 'justify-end' }"
   >
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          评论深度分析将对已完成原文深度分析且有评论的帖子进行评论内容分析，提取评论中的实体和观点。
+          评论深度分析将对已完成原文深度分析且有评论的原文进行评论内容分析，提取评论中的实体和观点。
         </p>
 
         <!-- 加载状态 -->
@@ -941,7 +941,7 @@ defineExpose({
         <!-- 预览信息 -->
         <div v-else-if="commentDialogPreview" class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-2">
           <div class="flex justify-between text-sm">
-            <span class="text-gray-500">已初筛帖子</span>
+            <span class="text-gray-500">已初筛原文</span>
             <span class="font-medium">{{ commentDialogPreview.screened_count }} 条</span>
           </div>
           <div class="flex justify-between text-sm">
@@ -954,11 +954,11 @@ defineExpose({
           </div>
           <hr class="border-gray-200 dark:border-gray-700">
           <div class="flex justify-between text-sm">
-            <span class="text-gray-700 dark:text-gray-300 font-medium">待分析评论的帖子</span>
+            <span class="text-gray-700 dark:text-gray-300 font-medium">待分析评论的原文</span>
             <span class="text-lg font-bold text-warning">{{ commentDialogPreview.comment_candidate_ids?.length || 0 }} 条</span>
           </div>
           <p class="text-xs text-gray-500 mt-2">
-            仅分析已完成原文深度分析且有评论的帖子
+            仅分析已完成原文深度分析且有评论的原文
           </p>
         </div>
       </div>
@@ -1006,7 +1006,7 @@ defineExpose({
         </div>
 
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          将删除此任务下所有帖子的分析结果，包括：
+          将删除此任务下所有原文的分析结果，包括：
         </p>
         <ul class="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1">
           <li>初筛评分（广告分、价值分、相关度、情感）</li>

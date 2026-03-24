@@ -41,7 +41,7 @@ export const usePosts = () => {
     })
   }
 
-  // 跨任务查询同一帖子
+  // 跨任务查询同一原文
   const queryCrossTaskPosts = (
     platformId: number,
     postIdOnPlatform: string,

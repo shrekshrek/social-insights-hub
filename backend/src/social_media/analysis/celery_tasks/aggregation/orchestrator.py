@@ -1,6 +1,6 @@
 """任务级分析聚合编排器 (Task Analysis Aggregator Orchestrator)
 
-在 Finalizer 中调用，对任务下的所有帖子分析结果进行聚合计算。
+在 Finalizer 中调用，对任务下的所有原文分析结果进行聚合计算。
 
 注意：本项目采用双重情感评分体系（详见设计文档 §1.1）
 - 宏观指标 (NSR, SERP, 四象限): 基于初筛情感 (-2 ~ +2)
@@ -78,7 +78,7 @@ def generate_quadrant_data(
     - Q4 自嗨区 (低互动/正面)：Sentiment > 0.5, CII < Avg(CII)
 
     Args:
-        posts_data: 帖子数据列表
+        posts_data: 原文数据列表
 
     Returns:
         list: 四象限数据点列表
@@ -134,7 +134,7 @@ def generate_quadrant_data(
 
 
 def get_quadrant_summary(quadrant_data: list[dict[str, Any]]) -> dict[str, int]:
-    """统计各象限的帖子数量"""
+    """统计各象限的原文数量"""
     summary = {
         "Q1_danger": 0,
         "Q2_brand": 0,
@@ -193,7 +193,7 @@ def aggregate_task_analysis(
         task_keywords = [k.strip() for k in task.keywords.split(",") if k.strip()]
         logger.info(f"任务 {task_id} 关键词: {task_keywords}")
 
-    # 1. 查询所有帖子及其分析结果
+    # 1. 查询所有原文及其分析结果
     stmt = (
         select(SocialPost, PostAnalysis)
         .outerjoin(PostAnalysis, PostAnalysis.post_id == SocialPost.id)
@@ -204,7 +204,7 @@ def aggregate_task_analysis(
     rows = result.all()
 
     if not rows:
-        logger.warning(f"任务 {task_id} 没有帖子数据")
+        logger.warning(f"任务 {task_id} 没有原文数据")
         return _empty_result()
 
     # 2. 准备聚合数据
@@ -498,13 +498,13 @@ def aggregate_task_analysis(
             "nsr_by_spam": nsr_by_spam,
         },
         "charts": {
-            # 保留完整象限列表以便前端反向追溯帖子 (宏观概览)
+            # 保留完整象限列表以便前端反向追溯原文 (宏观概览)
             "quadrant": quadrant_data,
             "quadrant_summary": quadrant_summary,
             "time_distribution": time_dist_list,
             "time_distribution_skipped": time_distribution.get(
                 "skipped_count", 0
-            ),  # 无发布时间的帖子数
+            ),  # 无发布时间的原文数
             # 新增图表
             "ipa_analysis": ipa_result,
             "competitor_radar": competitor_radar,

@@ -343,7 +343,7 @@ data_plan → task 映射:
 
 输入：
 - research_questions
-- 已创建切片的 result_data 摘要（实体、话题、帖子量、平台覆盖）
+- 已创建切片的 result_data 摘要（实体、话题、原文量、平台覆盖）
 - Brief
 
 输出：
@@ -367,7 +367,7 @@ data_plan → task 映射:
   ],
   "overall_ready": true,
   "data_highlights": [
-    "品牌声量数据充足（200+帖子），情感倾向以正面为主",
+    "品牌声量数据充足（200+原文），情感倾向以正面为主",
     "发现未预期的高频实体「海底捞」，可能代表跨界竞争视角"
   ],
   "slice_adjustments": []

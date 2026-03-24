@@ -1,7 +1,7 @@
 """add_cii_to_post_analysis
 
 为 post_analysis 表添加 cii（内容互动指数）字段，
-用于存储每条帖子的 Content Interaction Index。
+用于存储每条原文的 Content Interaction Index。
 
 CII 公式：
 RawScore = (Likes × 1) + (Comments × 2) + (Shares × 5) + (Collected × 3)

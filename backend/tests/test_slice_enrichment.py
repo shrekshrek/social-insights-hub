@@ -23,7 +23,7 @@ class TestComputeTimeDistribution:
         )
 
     def test_normal_multiple_dates(self):
-        """3 条帖子 2 个日期 → distribution 有 2 项，count 之和 = 3"""
+        """3 条原文 2 个日期 → distribution 有 2 项，count 之和 = 3"""
         info = {
             "xhs:001": {"published_at": "2025-12-01T10:00:00Z"},
             "xhs:002": {"published_at": "2025-12-01T14:00:00Z"},
@@ -64,7 +64,7 @@ class TestComputeTimeDistribution:
         assert result["distribution"][0]["count"] == 1
 
     def test_organic_promo_split(self):
-        """含 spam 高分帖子 → promo_distribution 有条目"""
+        """含 spam 高分原文 → promo_distribution 有条目"""
         info = {
             "xhs:001": {"published_at": "2025-12-01T10:00:00Z"},
             "xhs:002": {"published_at": "2025-12-01T14:00:00Z"},
@@ -126,7 +126,7 @@ class TestMergeKolVoices:
         }
 
     def test_cross_task_dedup(self):
-        """同一帖子在 2 个任务中 → 去重后仅保留 CII 最高的"""
+        """同一原文在 2 个任务中 → 去重后仅保留 CII 最高的"""
         task1 = self._make_task(1, [
             {"post_id": 100, "author": "A", "title": "t", "cii": 5.0,
              "sentiment": 0.5, "summary": "s", "platform": "xhs"},

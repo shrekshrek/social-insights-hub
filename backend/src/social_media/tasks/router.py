@@ -415,7 +415,7 @@ async def get_post_with_comments(
     response_model=schemas.PostQueryResponse,
     status_code=status.HTTP_200_OK,
     summary="Query post across tasks",
-    description="跨任务查询同一帖子的历史数据",
+    description="跨任务查询同一原文的历史数据",
 )
 async def query_cross_task_posts(
     platform_id: int,
@@ -425,13 +425,13 @@ async def query_cross_task_posts(
     monitor_id: Optional[int] = Query(None, description="限定项目范围"),
 ):
     """
-    跨任务查询同一帖子在不同任务中的数据。
+    跨任务查询同一原文在不同任务中的数据。
 
-    用途：查看同一帖子在不同时间点的数据变化（赞评转数等）
+    用途：查看同一原文在不同时间点的数据变化（赞评转数等）
 
     参数：
     - platform_id: 平台ID
-    - post_id_on_platform: 平台上的帖子ID
+    - post_id_on_platform: 平台上的原文ID
     - monitor_id: 可选，限定在某个项目范围内查询
 
     返回按采集时间倒序排列的所有记录。

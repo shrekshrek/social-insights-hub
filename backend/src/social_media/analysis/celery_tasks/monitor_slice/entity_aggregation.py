@@ -541,7 +541,7 @@ def build_entities_aligned(
                     b["promo_sent_weight"] += high_total
                 except Exception:
                     pass
-        # 帖子样本合并（去重 + 限制数量）
+        # 原文样本合并（去重 + 限制数量）
         for ref in e.get("post_ids_sample") or []:
             if len(b["post_ids_sample"]) >= max_post_ids_sample:
                 break

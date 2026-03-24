@@ -82,6 +82,8 @@ const getStatusColor = (status: string) => {
     pending: 'neutral',
     accepted: 'neutral',
     running: 'info',
+    probe_ready: 'warning',
+    approved: 'info',
     completed: 'success',
     failed: 'error',
   }
@@ -94,6 +96,8 @@ const getStatusText = (status: string) => {
     pending: '待处理',
     accepted: '已接单',
     running: '运行中',
+    probe_ready: '探测完成',
+    approved: '待续采',
     completed: '已完成',
     failed: '失败',
   }
@@ -172,13 +176,13 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'platform_name',
       header: '平台',
-      meta: { class: { th: 'w-[96px]', td: 'w-[96px]' } },
+      meta: { class: { th: 'w-[72px]', td: 'w-[72px]' } },
       cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
     },
     {
       accessorKey: 'status',
       header: '状态',
-      meta: { class: { th: 'w-[96px]', td: 'w-[96px]' } },
+      meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
       cell: ({ row }) => {
         const collectBadge = h(Badge, {
           color: getStatusColor(row.original.status),

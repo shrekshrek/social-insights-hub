@@ -28,7 +28,7 @@ def upgrade() -> None:
         "post_analysis",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("task_id", sa.Integer(), nullable=False, comment="关联的数据任务ID"),
-        sa.Column("post_id", sa.Integer(), nullable=False, comment="关联的帖子ID"),
+        sa.Column("post_id", sa.Integer(), nullable=False, comment="关联的原文ID"),
         sa.Column(
             "spam_score",
             sa.Float(),

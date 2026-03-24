@@ -678,7 +678,7 @@ def analyze_competitor_radar(
         aggregated_entities: 聚合后的所有实体
         max_competitors: 最多显示的竞品数量
         spam_map: post_id -> spam 分组映射 (可选)
-        posts_data: 原始帖子数据列表 (可选)
+        posts_data: 原始原文数据列表 (可选)
 
     Returns:
         若 spam_map 为 None: { "mode": str, "series": list, ... }
@@ -721,7 +721,7 @@ def analyze_competitor_radar(
             if _match_dimension(pid, dimension)
         ]
 
-        # 2. 从 posts_data 中提取对应帖子的统计数据
+        # 2. 从 posts_data 中提取对应原文的统计数据
         mentions = len(post_src) + len(comment_src)
 
         # 3. 计算 heat (从 posts_data 中取 cii 求和)

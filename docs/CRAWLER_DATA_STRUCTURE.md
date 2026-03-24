@@ -93,7 +93,7 @@ JSON 文件：
 
 每个平台爬取后会生成以下三种数据文件：
 
-1. **contents** - 内容数据（视频、笔记、帖子、回答等）
+1. **contents** - 内容数据（视频、笔记、原文、回答等）
 2. **comments** - 评论数据
 3. **creators** - 创作者数据
 
@@ -117,7 +117,7 @@ JSON 文件：
 | `START_PAGE` | int | ❌ | 起始页码（仅search模式） | `1`（默认值） |
 | `ENABLE_GET_COMMENTS` | bool | ❌ | 是否爬取评论 | `true`（默认值） |
 | `ENABLE_GET_SUB_COMMENTS` | bool | ❌ | 是否爬取二级评论 | `false`（默认值） |
-| `PER_NOTE_MAX_COMMENTS_COUNT` | int | ❌ | 每个帖子最大评论数 | `20`（默认值，0表示不限制） |
+| `PER_NOTE_MAX_COMMENTS_COUNT` | int | ❌ | 每个原文最大评论数 | `20`（默认值，0表示不限制） |
 | `ENABLE_CHECKPOINT` | bool | ❌ | 是否启用断点续爬 | `true`（默认值） |
 | `SPECIFIED_CHECKPOINT_ID` | string | ❌ | 指定检查点ID | `""`（空字符串表示加载最新检查点） |
 | `CHECKPOINT_STORAGE_TYPE` | string | ❌ | 检查点存储类型 | `file`（可选: `file`, `redis`） |
@@ -187,7 +187,7 @@ JSON 文件：
 **贴吧 (tieba)**:
 | 参数名 | 类型 | 必填 | 说明 | 示例值 |
 |--------|------|------|------|--------|
-| `TIEBA_SPECIFIED_ID_LIST` | list[string] | ✅ | 帖子ID列表 | `["9815127841"]` |
+| `TIEBA_SPECIFIED_ID_LIST` | list[string] | ✅ | 原文ID列表 | `["9815127841"]` |
 
 **B站 (bili)**:
 | 参数名 | 类型 | 必填 | 说明 | 示例值 |
@@ -605,22 +605,22 @@ https://www.xiaohongshu.com/explore/68f20ba9000000000401619f?xsec_token=ABFNeBpL
 
 | 类型 | 说明 |
 |------|------|
-| `search` | 搜索帖子并获取评论信息 |
-| `detail` | 获取指定帖子的详细信息和评论 |
-| `creator` | 获取创作者信息及其发布的帖子和评论 |
+| `search` | 搜索原文并获取评论信息 |
+| `detail` | 获取指定原文的详细信息和评论 |
+| `creator` | 获取创作者信息及其发布的原文和评论 |
 
 ### 数据模型
 
-#### TiebaNote（帖子内容）
+#### TiebaNote（原文内容）
 
 **文件名模式**: `*_contents_*.{csv|json}`
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
-| note_id | str | 帖子ID（必填） |
-| title | str | 帖子标题（必填） |
-| desc | str | 帖子描述 |
-| note_url | str | 帖子链接（必填） |
+| note_id | str | 原文ID（必填） |
+| title | str | 原文标题（必填） |
+| desc | str | 原文描述 |
+| note_url | str | 原文链接（必填） |
 | publish_time | str | 发布时间 |
 | user_link | str | 用户主页链接 |
 | user_nickname | str | 用户昵称 |
@@ -647,8 +647,8 @@ https://www.xiaohongshu.com/explore/68f20ba9000000000401619f?xsec_token=ABFNeBpL
 | publish_time | str | 发布时间 |
 | ip_location | str | IP地理位置 |
 | sub_comment_count | int | 子评论数 |
-| note_id | str | 帖子ID（必填） |
-| note_url | str | 帖子链接（必填） |
+| note_id | str | 原文ID（必填） |
+| note_url | str | 原文链接（必填） |
 | tieba_id | str | 所属的贴吧ID（必填） |
 | tieba_name | str | 所属的贴吧名称（必填） |
 | tieba_link | str | 贴吧链接（必填） |

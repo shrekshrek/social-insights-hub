@@ -104,7 +104,7 @@ pending → accepted → running → probe_ready → approved → completed
 - 下发 Task A: `preview_count=probe_size, checkpoint_id=null`
 - 上报探测结果: 携带 `checkpoint_id`，存入 `task_params`
 - 下发 Task B: `preview_count=null, checkpoint_id=<stored>`
-- 上报全量结果: 追加模式（保留旧帖子 + 清空分析 + 重新分析）
+- 上报全量结果: 追加模式（保留旧原文 + 清空分析 + 重新分析）
 
 ## Important Notes
 

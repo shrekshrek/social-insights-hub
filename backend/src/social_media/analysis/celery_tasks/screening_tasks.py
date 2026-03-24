@@ -1,8 +1,8 @@
 """AI初筛任务 - 批量API调用模式（同步DB + gevent协程）
 
 优化后的架构：
-1. 协调器：将帖子分批（每批5个），分发批次任务
-2. 子任务：批量分析一批帖子（一次LLM调用处理5个帖子）
+1. 协调器：将原文分批（每批5个），分发批次任务
+2. 子任务：批量分析一批原文（一次LLM调用处理5个原文）
 3. Worker Pool：gevent协程池自动调度，完成一批取下一批
 
 技术栈：
@@ -12,7 +12,7 @@
 - 批量API调用：减少80%的API请求次数
 
 优化效果：
-- 500个帖子：从500次API调用 → 100次API调用
+- 500个原文：从500次API调用 → 100次API调用
 - 降低成本：减少80%的LLM API调用费用
 - 提升速度：减少网络往返次数
 """
@@ -53,12 +53,12 @@ def _analyze_batch_posts(
     post_ids: list[int],
     monitor_keywords: str,
 ) -> Dict[str, Any]:
-    """批量分析多个帖子（同步实现，减少API调用次数）
+    """批量分析多个原文（同步实现，减少API调用次数）
 
     Args:
         result_id: 分析结果ID
         task_id: 任务ID
-        post_ids: 要分析的帖子ID列表（通常5个一批）
+        post_ids: 要分析的原文ID列表（通常5个一批）
         monitor_keywords: 项目关键词
 
     Returns:
@@ -68,16 +68,16 @@ def _analyze_batch_posts(
         db = SyncSessionLocal()
 
         try:
-            # 1. 批量获取帖子数据
+            # 1. 批量获取原文数据
             stmt = select(SocialPost).where(SocialPost.id.in_(post_ids))
             result = db.execute(stmt)
             posts = {post.id: post for post in result.scalars().all()}
 
             if not posts:
-                logger.warning(f"批次帖子均不存在: {post_ids}")
+                logger.warning(f"批次原文均不存在: {post_ids}")
                 return {"success": False, "analyzed": 0, "failed": len(post_ids)}
 
-            # 2. 构建帖子内容列表
+            # 2. 构建原文内容列表
             posts_list = [
                 {
                     "id": post_id,
@@ -89,7 +89,7 @@ def _analyze_batch_posts(
             ]
             posts_content = format_posts_for_screening(posts_list)
 
-            # 3. 创建链并调用LLM（一次调用分析多个帖子）
+            # 3. 创建链并调用LLM（一次调用分析多个原文）
             chain = create_screening_chain()
             response, token_stats = invoke_chain_with_stats_sync(
                 chain=chain,
@@ -174,17 +174,17 @@ def _analyze_batch_posts(
                     analyzed_count += 1
 
                 except Exception as e:
-                    logger.error(f"保存帖子 {post_id} 分析结果失败: {e}")
+                    logger.error(f"保存原文 {post_id} 分析结果失败: {e}")
                     failed_count += 1
 
             db.commit()
 
-            # 补计 LLM 未覆盖或 post_id 不匹配的帖子，防止幽灵批次导致 finalizer 永久卡住
+            # 补计 LLM 未覆盖或 post_id 不匹配的原文，防止幽灵批次导致 finalizer 永久卡住
             ghost_count = len(post_ids) - analyzed_count - failed_count
             if ghost_count > 0:
                 missing = [pid for pid in post_ids if pid not in processed_post_ids]
                 logger.warning(
-                    f"批次中 {ghost_count} 个帖子未被LLM覆盖（post_id不匹配或不在DB中），计入失败: {missing}"
+                    f"批次中 {ghost_count} 个原文未被LLM覆盖（post_id不匹配或不在DB中），计入失败: {missing}"
                 )
                 failed_count += ghost_count
 
@@ -260,15 +260,15 @@ def analyze_batch_posts_screening(
     post_ids: list[int],
     monitor_keywords: str,
 ) -> Dict[str, Any]:
-    """批量分析帖子的初筛任务（子任务）
+    """批量分析原文的初筛任务（子任务）
 
-    每个子任务处理一批帖子（通常5个），在gevent协程池中执行
-    使用同步DB避免事件循环冲突，一次LLM调用处理多个帖子
+    每个子任务处理一批原文（通常5个），在gevent协程池中执行
+    使用同步DB避免事件循环冲突，一次LLM调用处理多个原文
 
     Args:
         result_id: 分析结果ID
         task_id: 任务ID
-        post_ids: 要分析的帖子ID列表（通常5个一批）
+        post_ids: 要分析的原文ID列表（通常5个一批）
         monitor_keywords: 项目关键词
 
     Returns:
@@ -352,21 +352,21 @@ def run_screening_task(
     post_ids: list[int],
     monitor_keywords: str,
 ) -> Dict[str, Any]:
-    """帖子初筛分析协调器（批量模式）
+    """原文初筛分析协调器（批量模式）
 
     职责：
-    1. 将帖子分批（每批5个）
+    1. 将原文分批（每批5个）
     2. 为每批创建一个子任务（减少API调用次数）
     3. 启动监控任务等待完成并执行最终同步
 
     优化效果：
-    - 500个帖子：从500次API调用 → 100次API调用（减少80%）
+    - 500个原文：从500次API调用 → 100次API调用（减少80%）
     """
     try:
         # 更新状态为处理中
         _update_task_status(result_id, status="processing")
 
-        # 将帖子分批（批次大小从配置读取）
+        # 将原文分批（批次大小从配置读取）
         from celery import group, chain
 
         batch_size = settings.CELERY_AI_POSTS_BATCH_SIZE
@@ -386,14 +386,14 @@ def run_screening_task(
         )
 
         # 链接最终化任务：所有子任务完成 → 执行最终同步
-        # 注意：finalizer需要知道总帖子数（不是批次数）
+        # 注意：finalizer需要知道总原文数（不是批次数）
         workflow = chain(job, finalize_screening_analysis.si(result_id, len(post_ids)))
 
         # 异步执行工作流
         workflow.apply_async()
 
         logger.info(
-            f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个帖子，"
+            f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个原文，"
             f"每批 {batch_size} 个）到队列，启动监控任务"
         )
 
@@ -402,7 +402,7 @@ def run_screening_task(
             "subtasks_count": len(batches),
             "total_posts": len(post_ids),
             "batch_size": batch_size,
-            "message": f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个帖子）到队列",
+            "message": f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个原文）到队列",
         }
 
     except Exception as e:

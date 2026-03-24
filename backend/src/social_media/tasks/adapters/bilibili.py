@@ -60,7 +60,7 @@ class BilibiliAdapter(PlatformAdapter):
 
     def transform_comment(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """转换B站评论数据"""
-        # 保存帖子ID到 raw_data 中供后续关联使用
+        # 保存原文ID到 raw_data 中供后续关联使用
         # B站评论中 video_id 是关联字段
         video_id = self.safe_str(raw_data.get("video_id"))
         raw_data_with_post_id = {
@@ -83,7 +83,7 @@ class BilibiliAdapter(PlatformAdapter):
         }
 
     def get_post_id_from_comment(self, comment_data: dict[str, Any]) -> str | None:
-        """从评论数据中获取关联的帖子ID"""
+        """从评论数据中获取关联的原文ID"""
         raw_data = comment_data.get("raw_data", {})
         post_id = raw_data.get("post_id_on_platform") or raw_data.get("video_id")
         if post_id:

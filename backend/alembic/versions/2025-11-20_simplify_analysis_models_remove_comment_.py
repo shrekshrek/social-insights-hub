@@ -28,7 +28,7 @@ def upgrade() -> None:
             "post_deep_result",
             sa.JSON(),
             nullable=True,
-            comment="帖子深度分析结果：实体、观点、摘要",
+            comment="原文深度分析结果：实体、观点、摘要",
         ),
     )
     op.add_column(

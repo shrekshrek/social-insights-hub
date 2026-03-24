@@ -314,7 +314,7 @@ async def get_task_status(task_id: int, db = Depends(get_async_db)):
 **关键断言:**
 - 有 probe_size 的任务首次上传 → status = probe_ready（不是 completed）
 - 无 probe_size 的任务首次上传 → status = completed（现有行为不变）
-- status = approved 时上传 → 追加数据，不清空帖子，清空分析结果
+- status = approved 时上传 → 追加数据，不清空原文，清空分析结果
 - GET /agent/tasks/{id} 返回正确 status
 - 探测上传后自动触发分析（复用现有 auto_analyze 逻辑）
 

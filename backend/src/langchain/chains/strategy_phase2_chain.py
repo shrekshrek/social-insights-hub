@@ -153,7 +153,7 @@ def format_data_for_phase2(
 
         # 注意：不读取 time_distribution — 采集样本的时间分布可能误导 LLM 的节奏建议
 
-        # 平台分布（overview 中的去重平台帖子量）
+        # 平台分布（overview 中的去重平台原文量）
         overview = landscape.get("overview") or {}
         platform_vol = overview.get("unique_platform_volume")
         if platform_vol:

@@ -25,14 +25,6 @@ class AgentTaskInfo(CustomBaseModel):
         ...,
         description="任务状态: pending（新任务，需 accept）/ approved（续采任务，跳过 accept 直接执行）",
     )
-    preview_count: Optional[int] = Field(
-        None,
-        description="预览采集数量。>0 时 Agent 采集到该数量后保存断点退出；null 则正常全量采集",
-    )
-    checkpoint_id: Optional[str] = Field(
-        None,
-        description="断点 ID。非空时 Agent 从该断点继续采集；null 则从头开始",
-    )
 
 
 class PendingTasksResponse(CustomBaseModel):

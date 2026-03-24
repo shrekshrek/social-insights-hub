@@ -406,6 +406,8 @@ const getStatusColor = (status: string) => {
     pending: 'neutral',
     accepted: 'neutral',
     running: 'info',
+    probe_ready: 'warning',
+    approved: 'info',
     completed: 'success',
     failed: 'error',
   }
@@ -418,6 +420,8 @@ const getStatusText = (status: string) => {
     pending: '待处理',
     accepted: '已接单',
     running: '运行中',
+    probe_ready: '探测完成',
+    approved: '待续采',
     completed: '已完成',
     failed: '失败',
   }

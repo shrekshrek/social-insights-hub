@@ -2,7 +2,7 @@
 
 简化设计：
 - AnalysisJob: 统一的AI分析任务记录（合并原 TaskAnalysisResult 和 ProjectAnalysisResult）
-- PostAnalysis: 帖子级分析结果，包含初筛 + 帖子深度 + 评论深度
+- PostAnalysis: 原文级分析结果，包含初筛 + 原文深度 + 评论深度
 """
 
 from datetime import datetime
@@ -29,8 +29,8 @@ class AnalysisType(str, Enum):
     """
 
     # 任务级分析（需要 task_id）
-    SCREENING_POSTS = "screening_posts"  # 帖子初筛
-    DEEP_POSTS = "deep_posts"  # 帖子深度分析
+    SCREENING_POSTS = "screening_posts"  # 原文初筛
+    DEEP_POSTS = "deep_posts"  # 原文深度分析
     DEEP_COMMENTS = "deep_comments"  # 评论深度分析
     ENTITY_NORMALIZATION = "entity_normalization"  # 实体归一化
     OPINION_NORMALIZATION = "opinion_normalization"  # 观点归一化
@@ -51,12 +51,12 @@ class AnalysisStatus(str, Enum):
 
 
 class PostAnalysis(Base):
-    """帖子AI分析结果
+    """原文AI分析结果
 
     功能：
     1. 初筛分析：spam_score, value_score, relevance_score, sentiment
     2. 互动指数：cii (Content Interaction Index)
-    3. 帖子深度分析：post_deep_result (实体、观点、摘要)
+    3. 原文深度分析：post_deep_result (实体、观点、摘要)
     4. 评论深度分析：comment_deep_result (评论的实体和观点聚合)
     """
 
@@ -74,9 +74,9 @@ class PostAnalysis(Base):
     post_id: Mapped[int] = mapped_column(
         ForeignKey("social_posts.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,  # 一个帖子只有一条分析记录
+        unique=True,  # 一个原文只有一条分析记录
         index=True,
-        comment="关联的帖子ID",
+        comment="关联的原文ID",
     )
 
     # ===== 初筛分析 (0-10分) =====
@@ -104,7 +104,7 @@ class PostAnalysis(Base):
 
     # ===== 深度分析 (JSON格式) =====
     post_deep_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="帖子深度分析结果：实体、观点、摘要"
+        JSON, nullable=True, comment="原文深度分析结果：实体、观点、摘要"
     )
     comment_deep_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="评论深度分析聚合结果：从评论中提取的实体和观点"

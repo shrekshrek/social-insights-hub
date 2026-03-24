@@ -127,9 +127,9 @@ def upgrade() -> None:
             "post_id_on_platform",
             sa.String(length=255),
             nullable=False,
-            comment="平台上的帖子ID",
+            comment="平台上的原文ID",
         ),
-        sa.Column("post_type", sa.String(length=50), nullable=True, comment="帖子类型"),
+        sa.Column("post_type", sa.String(length=50), nullable=True, comment="原文类型"),
         sa.Column("title", sa.Text(), nullable=True),
         sa.Column("content", sa.Text(), nullable=True),
         sa.Column("author_id", sa.String(length=255), nullable=True, comment="作者ID"),
@@ -151,7 +151,7 @@ def upgrade() -> None:
             comment="视频URL列表",
         ),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("url", sa.Text(), nullable=True, comment="帖子URL"),
+        sa.Column("url", sa.Text(), nullable=True, comment="原文URL"),
         sa.Column(
             "raw_data",
             postgresql.JSON(astext_type=sa.Text()),
@@ -190,7 +190,7 @@ def upgrade() -> None:
         "ix_social_posts_post_id_on_platform", "social_posts", ["post_id_on_platform"]
     )
     op.create_index("ix_social_posts_is_deleted", "social_posts", ["is_deleted"])
-    # 复合索引：支持跨任务查询同一帖子
+    # 复合索引：支持跨任务查询同一原文
     op.create_index(
         "ix_post_platform_postid",
         "social_posts",

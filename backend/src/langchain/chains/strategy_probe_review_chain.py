@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 SYSTEM_TEMPLATE = """你是一位数据质量审查专家，负责评估社交媒体探测采集数据是否满足研究需求。
 
 ## 任务
-根据探测采集（每个搜索任务约 15 条帖子）的分析摘要，判断关键词质量并给出优化建议。
+根据探测采集（每个搜索任务约 15 条原文）的分析摘要，判断关键词质量并给出优化建议。
 
 ## 评估维度
 1. **相关性** (relevance): 采集到的内容是否与研究目标相关
@@ -130,7 +130,7 @@ def format_probe_review_inputs(
         task_lines.append(f"\n### 任务 #{task_info['task_id']}")
         task_lines.append(f"关键词: {task_info.get('keyword', '')}")
         task_lines.append(f"平台: {task_info.get('platform', '')}")
-        task_lines.append(f"采集帖子数: {task_info.get('posts_count', 0)}")
+        task_lines.append(f"采集原文数: {task_info.get('posts_count', 0)}")
 
         if task_info.get("top_entities"):
             entities_str = ", ".join(task_info["top_entities"][:10])

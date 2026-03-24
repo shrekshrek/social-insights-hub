@@ -210,8 +210,8 @@ class TaskComparisonItem(CustomBaseModel):
 class CommentAnalysis(CustomBaseModel):
     """评论对比分析"""
 
-    posts_involved: int = Field(..., description="涉及到的重合帖子数")
-    total_comments_raw: int = Field(..., description="这些帖子在各任务中的评论总和")
+    posts_involved: int = Field(..., description="涉及到的重合原文数")
+    total_comments_raw: int = Field(..., description="这些原文在各任务中的评论总和")
     unique_comments: int = Field(..., description="按 comment_id 去重后的评论数")
     overlap_rate: float = Field(..., description="评论重复率")
     complementary_rate: float = Field(..., description="评论互补率")

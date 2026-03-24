@@ -152,9 +152,9 @@ async def get_strategy_by_id(db: AsyncSession, strategy_id: int) -> Strategy | N
         .where(Strategy.id == strategy_id)
         .options(
             selectinload(Strategy.creator),
-            selectinload(Strategy.slices).selectinload(
-                StrategySlice.slice
-            ).selectinload(AnalysisSlice.monitor),
+            selectinload(Strategy.slices)
+            .selectinload(StrategySlice.slice)
+            .selectinload(AnalysisSlice.monitor),
         )
     )
     result = await db.execute(query)
@@ -180,17 +180,13 @@ async def delete_strategy(db: AsyncSession, strategy: Strategy) -> None:
     await db.commit()
 
 
-async def load_slice_data(
-    db: AsyncSession, strategy: Strategy
-) -> list[dict]:
+async def load_slice_data(db: AsyncSession, strategy: Strategy) -> list[dict]:
     """读取策略关联的切片 result_data"""
     slice_ids = [s.slice_id for s in strategy.slices]
     if not slice_ids:
         return []
 
-    query = select(AnalysisSlice).where(
-        AnalysisSlice.id.in_(slice_ids)
-    )
+    query = select(AnalysisSlice).where(AnalysisSlice.id.in_(slice_ids))
     result = await db.execute(query)
     slices = result.scalars().all()
     return [s.result_data for s in slices if s.result_data]
@@ -204,9 +200,7 @@ async def load_slice_data_with_names(
     if not slice_ids:
         return []
 
-    query = select(AnalysisSlice).where(
-        AnalysisSlice.id.in_(slice_ids)
-    )
+    query = select(AnalysisSlice).where(AnalysisSlice.id.in_(slice_ids))
     result = await db.execute(query)
     slices = result.scalars().all()
     return [(s.name, s.result_data) for s in slices if s.result_data]
@@ -223,9 +217,7 @@ def build_strategy_read(strategy: Strategy) -> StrategyRead:
                 slice_name=slice_obj.name if slice_obj else None,
                 monitor_id=slice_obj.monitor_id if slice_obj else 0,
                 monitor_name=(
-                    slice_obj.monitor.name
-                    if slice_obj and slice_obj.monitor
-                    else ""
+                    slice_obj.monitor.name if slice_obj and slice_obj.monitor else ""
                 ),
             )
         )
@@ -319,9 +311,7 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     duration = time.time() - start
 
     result = parse_phase1_response(response.content)
-    logger.info(
-        "Strategy %d Phase 1 生成完成 (%.1fs)", strategy.id, duration
-    )
+    logger.info("Strategy %d Phase 1 生成完成 (%.1fs)", strategy.id, duration)
 
     strategy.phase1_result = result
     strategy.phase2_result = None
@@ -356,9 +346,7 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
     duration = time.time() - start
 
     result = parse_phase2_response(response.content)
-    logger.info(
-        "Strategy %d Phase 2 生成完成 (%.1fs)", strategy.id, duration
-    )
+    logger.info("Strategy %d Phase 2 生成完成 (%.1fs)", strategy.id, duration)
 
     strategy.phase2_result = result
     strategy.phase3_result = None
@@ -393,9 +381,7 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
     duration = time.time() - start
 
     result = parse_phase3_response(response.content)
-    logger.info(
-        "Strategy %d Phase 3 生成完成 (%.1fs)", strategy.id, duration
-    )
+    logger.info("Strategy %d Phase 3 生成完成 (%.1fs)", strategy.id, duration)
 
     strategy.phase3_result = result
     strategy.status = "completed"
@@ -459,7 +445,8 @@ async def design_research(
     )
     logger.info(
         "Strategy %d 研究设计完成 (%.1fs, fit=%.1f/%s, %d 个研究问题, %d 个数据维度)",
-        strategy.id, duration,
+        strategy.id,
+        duration,
         feasibility_data.get("fit_score", 0.5),
         feasibility_data.get("recommendation", "proceed"),
         len(parsed["research_questions"]),
@@ -524,7 +511,8 @@ async def reset_to_design(
     updated = await get_strategy_by_id(db, strategy.id)
     logger.info(
         "Strategy %d 重置到研究设计阶段 (删除 %d 个任务)",
-        strategy.id, len(task_ids),
+        strategy.id,
+        len(task_ids),
     )
     return build_strategy_read(updated)
 
@@ -536,7 +524,7 @@ async def confirm_research(
     current_user_id: int,
     *,
     notes_per_task: int = 50,
-    probe_notes: int = 15,
+    probe_notes: int = 20,
 ) -> ConfirmResearchResponse:
     """确认研究计划，创建一个 Monitor + 探测任务
 
@@ -647,7 +635,10 @@ async def confirm_research(
                 except Exception as e:
                     logger.error(
                         "创建任务「%s-%s-%s」失败: %s",
-                        keyword, platform_name, dimension_name, e,
+                        keyword,
+                        platform_name,
+                        dimension_name,
+                        e,
                     )
                     partial_errors.append(
                         f"创建任务「{keyword}-{platform_name}」失败: {e}"
@@ -702,13 +693,15 @@ async def _build_probe_task_summaries(
 
     for task in tasks:
         has_analysis = task.analysis_result is not None
-        statuses.append(ProbeTaskStatus(
-            task_id=task.id,
-            keyword=task.keywords or "",
-            platform=task.platform.code if task.platform else "",
-            status=task.status,
-            has_analysis=has_analysis,
-        ))
+        statuses.append(
+            ProbeTaskStatus(
+                task_id=task.id,
+                keyword=task.keywords or "",
+                platform=task.platform.code if task.platform else "",
+                status=task.status,
+                has_analysis=has_analysis,
+            )
+        )
 
         if has_analysis:
             # 从 analysis_result 提取摘要供 LLM 审查
@@ -719,12 +712,10 @@ async def _build_probe_task_summaries(
                 "platform": task.platform.code if task.platform else "",
                 "posts_count": task.posts_count,
                 "top_entities": [
-                    e.get("name", "")
-                    for e in (ar.get("aligned_entities") or [])[:10]
+                    e.get("name", "") for e in (ar.get("aligned_entities") or [])[:10]
                 ],
                 "top_topics": [
-                    t.get("name", "")
-                    for t in (ar.get("aligned_topics") or [])[:10]
+                    t.get("name", "") for t in (ar.get("aligned_topics") or [])[:10]
                 ],
                 "sentiment_summary": ar.get("overview", {}).get("sentiment_label", ""),
                 "analysis_summary": ar.get("overview", {}).get("summary", ""),
@@ -832,7 +823,9 @@ async def _run_probe_review(
 
     logger.info(
         "Strategy %d probe review 完成 (%.1fs, verdict=%s)",
-        strategy.id, duration, parsed.get("overall_verdict"),
+        strategy.id,
+        duration,
+        parsed.get("overall_verdict"),
     )
 
     strategy.probe_review_result = parsed
@@ -846,7 +839,11 @@ async def _approve_all_probe_tasks(
     db: AsyncSession,
     task_ids: list[int],
 ) -> int:
-    """将所有 probe_ready 任务标记为 approved"""
+    """将所有 probe_ready 任务标记为 approved
+
+    爬虫端通过 status 字段区分探测(pending)和续采(approved)模式，
+    不再依赖 probe_size 是否存在来判断。task_params 保持不变。
+    """
     from sqlalchemy import update as sa_update
     from src.social_media.tasks.models import DataTask
 
@@ -1019,11 +1016,13 @@ async def check_collection_status(
             completed_count += 1
         if has_analysis:
             analyzed_count += 1
-        statuses.append(CollectionTaskStatus(
-            task_id=t.id,
-            status=t.status,
-            has_analysis=has_analysis,
-        ))
+        statuses.append(
+            CollectionTaskStatus(
+                task_id=t.id,
+                status=t.status,
+                has_analysis=has_analysis,
+            )
+        )
 
     total = len(statuses)
     all_completed = completed_count == total and total > 0
@@ -1091,7 +1090,9 @@ async def _create_auto_slices(
     task_dim_map = research_design.get("_task_dimension_map", {})
 
     if not blueprint or not strategy.monitor_id:
-        logger.warning("Strategy %d: 无法自动建切片（无 blueprint 或 monitor_id）", strategy.id)
+        logger.warning(
+            "Strategy %d: 无法自动建切片（无 blueprint 或 monitor_id）", strategy.id
+        )
         return
 
     # 建立 dimension_name → task_ids 映射
@@ -1119,7 +1120,8 @@ async def _create_auto_slices(
         if not task_ids_for_slice:
             logger.warning(
                 "Strategy %d: 切片 '%s' 无对应任务，跳过",
-                strategy.id, slice_spec.get("name", ""),
+                strategy.id,
+                slice_spec.get("name", ""),
             )
             continue
 
@@ -1144,7 +1146,9 @@ async def _create_auto_slices(
         except Exception as e:
             logger.error(
                 "Strategy %d: 自动建切片 '%s' 失败: %s",
-                strategy.id, slice_spec.get("name", ""), e,
+                strategy.id,
+                slice_spec.get("name", ""),
+                e,
             )
 
     if created_count > 0:
@@ -1188,7 +1192,9 @@ async def _run_coverage_check(
 
     logger.info(
         "Strategy %d coverage check 完成 (%.1fs, ready=%s)",
-        strategy.id, duration, parsed.get("overall_ready"),
+        strategy.id,
+        duration,
+        parsed.get("overall_ready"),
     )
 
     strategy.coverage_check_result = parsed
@@ -1210,9 +1216,7 @@ async def get_data_overview(
                 slice_name=ss.slice.name if ss.slice else None,
                 monitor_id=ss.slice.monitor_id if ss.slice else 0,
                 monitor_name=(
-                    ss.slice.monitor.name
-                    if ss.slice and ss.slice.monitor
-                    else ""
+                    ss.slice.monitor.name if ss.slice and ss.slice.monitor else ""
                 ),
             )
             for ss in strategy.slices
@@ -1358,7 +1362,9 @@ async def parse_brief_from_file(content: bytes, filename: str) -> ParseBriefResp
     chain = create_strategy_brief_parser_chain()
     try:
         response = await chain.ainvoke({"document_text": document_text})
-        response_text = response.content if hasattr(response, "content") else str(response)
+        response_text = (
+            response.content if hasattr(response, "content") else str(response)
+        )
         parsed = parse_brief_parser_response(response_text)
     except ValueError as exc:
         raise HTTPException(

@@ -95,7 +95,7 @@ class ConfirmResearchRequest(CustomBaseModel):
         50, ge=10, le=100, description="每个任务的全量采集数量"
     )
     probe_notes: int = Field(
-        20, ge=10, le=50, description="每个任务的探测采集数量"
+        20, ge=20, le=20, description="每个任务的探测采集数量（固定 20 条）"
     )
 
 

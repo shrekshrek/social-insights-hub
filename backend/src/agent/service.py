@@ -17,7 +17,6 @@ from .schemas import (
     ProgressUpdateRequest,
     UploadResultRequest,
     StoredCounts,
-    TaskStatusResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,13 +35,13 @@ async def get_pending_tasks(
     Returns:
         list[AgentTaskInfo]: 任务列表
     """
-    # 只返回 pending 任务（approved 任务由爬虫通过 GET /tasks/{id} 轮询发现）
+    # 返回 pending（新任务）和 approved（续采任务）
     stmt = (
         select(DataTask)
         .where(
             and_(
                 DataTask.data_source == "remote_crawler",
-                DataTask.status == "pending",
+                DataTask.status.in_(("pending", "approved")),
                 DataTask.is_deleted.is_(False),
             )
         )
@@ -69,22 +68,32 @@ async def get_pending_tasks(
     ]
 
 
-async def get_task_status(
+async def get_task_detail(
     db: AsyncSession,
     task_id: int,
-) -> TaskStatusResponse:
-    """查询任务当前状态（供爬虫轮询）"""
-    stmt = select(DataTask.id, DataTask.status).where(
+) -> AgentTaskInfo:
+    """查询任务详情（供爬虫轮询状态和获取续采参数）"""
+    stmt = select(DataTask).where(
         and_(DataTask.id == task_id, DataTask.is_deleted.is_(False))
     )
     result = await db.execute(stmt)
-    row = result.one_or_none()
-    if not row:
+    task = result.scalar_one_or_none()
+    if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         )
-    return TaskStatusResponse(task_id=row[0], status=row[1])
+    return AgentTaskInfo(
+        task_id=task.id,
+        task_name=task.name,
+        platform=task.platform.code if task.platform else "unknown",
+        task_type=task.task_type,
+        priority=task.priority,
+        keywords=task.keywords,
+        task_params=task.task_params,
+        created_at=task.created_at,
+        status=task.status,
+    )
 
 
 async def accept_task(
@@ -184,7 +193,9 @@ async def update_progress(
         )
 
     # 更新状态
-    if request.status:
+    # approved 任务正在执行 Task B（续采），不能被 running 进度覆盖——
+    # upload_result 依赖 status == "approved" 来判断追加模式(is_append)
+    if request.status and not (task.status == "approved" and request.status == "running"):
         task.status = request.status
         if request.status == "running" and not task.started_at:
             task.started_at = datetime.now(timezone.utc)
@@ -366,9 +377,9 @@ async def upload_result(
         if is_append:
             from src.social_media.tasks.models import SocialPost
 
-            existing_stmt = select(
-                SocialPost.post_id_on_platform, SocialPost.id
-            ).where(SocialPost.task_id == task.id)
+            existing_stmt = select(SocialPost.post_id_on_platform, SocialPost.id).where(
+                SocialPost.task_id == task.id
+            )
             existing_result = await db.execute(existing_stmt)
             existing_post_mapping = {row[0]: row[1] for row in existing_result.all()}
 
@@ -454,21 +465,34 @@ async def upload_result(
 
         # 保存爬虫返回的断点 ID（探测上传后，供续采时回传）
         if request.checkpoint_id:
-            task.task_params = {**(task.task_params or {}), "checkpoint_id": request.checkpoint_id}
+            task.task_params = {
+                **(task.task_params or {}),
+                "checkpoint_id": request.checkpoint_id,
+            }
             flag_modified(task, "task_params")
         elif is_append and task.task_params and "checkpoint_id" in task.task_params:
             # 续采完成，清除断点
-            task.task_params = {k: v for k, v in task.task_params.items() if k != "checkpoint_id"}
+            task.task_params = {
+                k: v for k, v in task.task_params.items() if k != "checkpoint_id"
+            }
             flag_modified(task, "task_params")
 
-        # 决定最终状态：有 probe_size 的首次上传 → probe_ready，否则 completed
-        probe_size = (task.task_params or {}).get("probe_size")
-        if probe_size and not is_reupload and not is_append:
-            final_status = "probe_ready"
+        # 决定最终状态
+        if request.error_message:
+            # 任务执行失败：保留已采集数据，但标记为 failed
+            final_status = "failed"
         else:
-            final_status = "completed"
+            # 有 probe_size 的首次上传 → probe_ready（待审批续采），否则 completed
+            probe_size = (task.task_params or {}).get("probe_size")
+            if probe_size and not is_reupload and not is_append:
+                final_status = "probe_ready"
+            else:
+                final_status = "completed"
 
-        await task_crud.update_task_status(db, task, final_status)
+        await task_crud.update_task_status(
+            db, task, final_status,
+            error_message=request.error_message if request.error_message else None,
+        )
 
         await db.commit()
 
@@ -479,7 +503,9 @@ async def upload_result(
 
         # 如果启用了自动分析，触发分析任务链（probe_ready 也需要分析以供审查）
         new_posts_count = len(created_posts)
-        if task.auto_analyze and (new_posts_count > 0 or (is_append and posts_count > 0)):
+        if task.auto_analyze and (
+            new_posts_count > 0 or (is_append and posts_count > 0)
+        ):
             from src.social_media.analysis.celery_tasks.auto_analysis_tasks import (
                 run_auto_analysis,
             )

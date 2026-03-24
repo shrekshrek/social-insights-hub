@@ -5,6 +5,7 @@ import type {
   CoverageCheckResult,
   Strategy,
 } from '../types'
+import { STATUS_ORDER } from './useStrategyConstants'
 
 /**
  * 策略详情页轮询逻辑：探测状态 + 采集状态
@@ -153,6 +154,11 @@ export const useStrategyPolling = (
     // 探测数据
     if (s.probe_review_result && !probeData.probeReview) {
       probeData.probeReview = s.probe_review_result
+      // 状态已过 probing 阶段时，标记探测已完成（此时不再轮询 probe-status）
+      const order = STATUS_ORDER[s.status as keyof typeof STATUS_ORDER] ?? 0
+      if (order >= STATUS_ORDER.collecting) {
+        probeData.allAnalyzed = true
+      }
     }
     // 采集数据
     if (s.slices?.length && !collectionData.slices.length) {

@@ -85,18 +85,18 @@ AGENT_API_KEY=sk-your-secret-key-here
 
 ## 通信流程
 
+### 普通任务（单阶段）
+
 ```
 爬虫客户端                                      云端平台
   │                                               │
   │  GET /api/v1/agent/tasks/pending              │
   │ ─────────────────────────────────────────────>│
-  │                                               │
-  │  { tasks: [...] }                             │
+  │  { tasks: [{ status:"pending", ... }] }       │
   │ <─────────────────────────────────────────────│
   │                                               │
   │  POST /api/v1/agent/tasks/{task_id}/accept    │
   │ ─────────────────────────────────────────────>│
-  │                                               │
   │  { ok: true }                                 │
   │ <─────────────────────────────────────────────│
   │                                               │
@@ -107,11 +107,62 @@ AGENT_API_KEY=sk-your-secret-key-here
   │                                               │
   │  POST /api/v1/agent/tasks/{task_id}/result    │
   │ ─────────────────────────────────────────────>│
-  │                                               │
   │  { ok: true, stored: {...} }                  │
   │ <─────────────────────────────────────────────│
-  │                                               │
 ```
+
+### 两阶段采集（含 probe_size 的策略任务）
+
+Task A（探测）：先采少量数据，验证关键词质量，并保存断点。
+Task B（续采）：从断点恢复，采集全量数据（含评论）。
+
+```
+爬虫客户端                                      云端平台
+  │                                               │
+  │  ─── Task A（探测阶段）────────────────────── │
+  │                                               │
+  │  GET /api/v1/agent/tasks/pending              │
+  │ ─────────────────────────────────────────────>│
+  │  { tasks: [{ status:"pending",                │
+  │              task_params: { probe_size:15,    │
+  │                             max_notes_count:50 } }] }
+  │ <─────────────────────────────────────────────│
+  │                                               │
+  │  POST /api/v1/agent/tasks/{task_id}/accept    │
+  │ ─────────────────────────────────────────────>│
+  │                                               │
+  │  [执行探测：采 probe_size 条，保存断点退出]       │
+  │                                               │
+  │  POST /api/v1/agent/tasks/{task_id}/result    │
+  │  { ..., "checkpoint_id": "cursor:page3:..." } │
+  │ ─────────────────────────────────────────────>│
+  │  { ok: true }  ← 云端存入 task_params         │
+  │ <─────────────────────────────────────────────│
+  │       [云端审查数据质量，approve_probe]         │
+  │       status: probe_ready → approved           │
+  │                                               │
+  │  ─── Task B（续采阶段）────────────────────── │
+  │                                               │
+  │  GET /api/v1/agent/tasks/pending              │
+  │ ─────────────────────────────────────────────>│
+  │  { tasks: [{ status:"approved",               │
+  │              task_params: { probe_size:15,    │
+  │                             max_notes_count:50,│
+  │                             checkpoint_id:"cursor:page3:..." } }] }
+  │ <─────────────────────────────────────────────│
+  │                                               │
+  │  [续采：从断点继续，采全量数据（含评论），追加模式]  │
+  │                                               │
+  │  POST /api/v1/agent/tasks/{task_id}/result    │
+  │ ─────────────────────────────────────────────>│
+  │  { ok: true }                                 │
+  │ <─────────────────────────────────────────────│
+```
+
+**关键规则**：
+- `status = "pending"` + `probe_size > 0` → **探测模式**：跳过评论，采满 probe_size 条后保存断点退出
+- `status = "approved"` → **续采模式**：恢复评论采集，不限数量，从 `checkpoint_id` 断点继续
+- `approved` 任务**不需要** accept，直接执行（防止多客户端竞争）
 
 ---
 
@@ -165,6 +216,7 @@ Authorization: Bearer {api_key}
 | `task_id` | int | ✅ | 任务唯一标识（平台 DataTask.id） |
 | `platform` | string | ✅ | 平台代码：`xhs/dy/bili/ks/wb/tieba/zhihu` |
 | `task_type` | string | ✅ | 类型：`search/detail/creator/homefeed` |
+| `status` | string | ✅ | `pending`（新任务，需 accept）或 `approved`（续采任务，跳过 accept） |
 | `priority` | int | ❌ | 优先级，数值越大越优先（默认 0） |
 | `keywords` | string | ❌ | 搜索关键词（search 类型） |
 | `task_params` | object | ❌ | 任务参数，详见下表 |
@@ -175,15 +227,17 @@ Authorization: Bearer {api_key}
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `specified_ids` | string | - | 指定 ID 列表，逗号分隔（detail 类型） |
-| `max_notes_count` | int | 50 | 最大采集数量 |
-| `enable_comments` | bool | true | 是否采集评论 |
-| `enable_sub_comments` | bool | false | 是否采集子评论 |
+| `max_notes_count` | int | 50 | 最大采集数量（Task B 全量目标） |
+| `enable_comments` | bool | true | 是否采集评论（Task A 探测阶段自动跳过） |
+| `enable_sub_comments` | bool | false | 是否采集子评论（Task A 探测阶段自动跳过） |
 | `per_note_max_comments_count` | int | 20 | 每条内容最大评论数 |
 | `crawler_time_sleep` | float | 2.0 | 爬取间隔（秒） |
 | `start_page` | int | 1 | 起始页码 |
 | `publish_time_type` | int | 0 | 发布时间筛选（0=全部,1=一天内,2=一周内,3=半年内） |
 | `sort_type` | string | popularity_descending | 排序（popularity_descending/time_descending） |
 | `enable_proxy` | bool | false | 是否启用代理 |
+| `probe_size` | int | - | 探测采集数量（仅 Task A 有效，Task B 忽略）。`status=pending` 且此值 > 0 时触发探测模式 |
+| `checkpoint_id` | string | - | 断点续传 ID（仅 Task B 携带）。爬虫从此位置���续采集，格式由爬虫自定义 |
 
 ---
 
@@ -300,9 +354,12 @@ Content-Encoding: gzip
   "data": {
     "contents": [...],
     "comments": [...]
-  }
+  },
+  "checkpoint_id": "cursor:page3:abc123"
 }
 ```
+
+> 💡 **`checkpoint_id`**：Task A（探测）完成后必须携带此字段。云端收到后存入 `task_params`，下发 Task B 时原样返回给爬虫。Task B 无需再次上传（或传 `null`）。
 
 **响应 200**
 
@@ -427,7 +484,8 @@ GET /api/v1/agent/health
 ### 平台侧
 
 1. **任务筛选**
-   - `/tasks/pending` 返回 `data_source=remote_crawler` 且 `status=pending` 的任务
+   - `/tasks/pending` 返回 `data_source=remote_crawler` 且 `status in (pending, approved)` 的任务
+   - `pending` = 新任务（需 accept），`approved` = 续采任务（跳过 accept 直接执行）
    - 按 `priority` 降序、`created_at` 升序排列
 
 2. **幂等性**

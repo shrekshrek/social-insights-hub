@@ -92,6 +92,11 @@ class UploadResultRequest(CustomBaseModel):
         None,
         description="断点 ID。预览采集完成后携带，云端持久化后下发续采时回传",
     )
+    error_message: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="任务失败原因。携带时保存已采集数据并将任务状态置为 failed",
+    )
 
 
 class StoredCounts(CustomBaseModel):

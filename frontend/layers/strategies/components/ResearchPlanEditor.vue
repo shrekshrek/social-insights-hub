@@ -249,21 +249,7 @@
           </UButton>
         </div>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="text-gray-600 dark:text-gray-400 shrink-0">探测:</span>
-        <div class="flex">
-          <UButton
-            v-for="(opt, oi) in PROBE_OPTIONS"
-            :key="opt"
-            size="xs"
-            :variant="probeNotes === opt ? 'solid' : 'outline'"
-            :class="oi === 0 ? 'rounded-r-none' : 'rounded-l-none'"
-            @click="$emit('update:probeNotes', opt)"
-          >
-            {{ opt }} 条
-          </UButton>
-        </div>
-      </div>
+      <span class="text-gray-600 dark:text-gray-400">探测: 20 条（固定）</span>
       <span class="text-gray-400">|</span>
       <span class="text-gray-600 dark:text-gray-400">
         预估: {{ estimatedTaskCount }} 个任务
@@ -277,7 +263,6 @@ import type { DataPlanItem, SliceBlueprintItem, ResearchQuestion, FeasibilityAss
 import { PLATFORM_OPTIONS, platformLabel } from '../composables/useStrategyConstants'
 
 const NOTES_OPTIONS = [50, 100] as const
-const PROBE_OPTIONS = [20, 30] as const
 
 const props = defineProps<{
   feasibility?: FeasibilityAssessment
@@ -289,14 +274,12 @@ const props = defineProps<{
   outputTypeRationale?: string
   editing: boolean
   notesPerTask: number
-  probeNotes: number
 }>()
 
 const emit = defineEmits<{
   'update:dataPlan': [value: DataPlanItem[]]
   'update:sliceBlueprint': [value: SliceBlueprintItem[]]
   'update:notesPerTask': [value: number]
-  'update:probeNotes': [value: number]
 }>()
 
 const keywordInputRefs = ref<Record<number, HTMLInputElement | null>>({})

@@ -13,11 +13,14 @@ from src.strategies.service import (
 
 
 class TestStatusOrder:
-    def test_briefing_is_lowest(self):
-        assert STATUS_ORDER["briefing"] == 0
+    def test_draft_is_lowest(self):
+        assert STATUS_ORDER["draft"] == 0
 
-    def test_consulting_after_briefing(self):
-        assert STATUS_ORDER["consulting"] > STATUS_ORDER["briefing"]
+    def test_planned_after_draft(self):
+        assert STATUS_ORDER["planned"] > STATUS_ORDER["draft"]
+
+    def test_probing_after_planned(self):
+        assert STATUS_ORDER["probing"] > STATUS_ORDER["planned"]
 
     def test_phase1_done_before_phase2_done(self):
         assert STATUS_ORDER["phase1_done"] < STATUS_ORDER["phase2_done"]
@@ -25,13 +28,16 @@ class TestStatusOrder:
     def test_completed_is_highest(self):
         assert STATUS_ORDER["completed"] == max(STATUS_ORDER.values())
 
+    def test_all_8_statuses(self):
+        assert len(STATUS_ORDER) == 8
+
 
 class TestGeneratePhase2Precondition:
     @pytest.mark.asyncio
-    async def test_rejects_briefing_status(self):
-        """generate_phase2 在 status=briefing 时 → 409"""
+    async def test_rejects_draft_status(self):
+        """generate_phase2 在 status=draft 时 → 409"""
         strategy = MagicMock()
-        strategy.status = "briefing"
+        strategy.status = "draft"
         db = AsyncMock()
 
         from fastapi import HTTPException
@@ -56,10 +62,10 @@ class TestGeneratePhase3Precondition:
         assert exc_info.value.status_code == 409
 
     @pytest.mark.asyncio
-    async def test_rejects_briefing(self):
-        """generate_phase3 在 status=briefing 时 → 409"""
+    async def test_rejects_draft(self):
+        """generate_phase3 在 status=draft 时 → 409"""
         strategy = MagicMock()
-        strategy.status = "briefing"
+        strategy.status = "draft"
         db = AsyncMock()
 
         from fastapi import HTTPException
@@ -116,7 +122,6 @@ class TestEditPhaseResult:
         await edit_phase_result(db, strategy, phase=3, result=result)
 
         assert strategy.phase3_result == result
-        # status 不变（保持原有值）
 
     @pytest.mark.asyncio
     async def test_invalid_phase(self):

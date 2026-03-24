@@ -1,7 +1,4 @@
-"""策略路由集成测试 — Step 1 + Step 2 新增行为"""
-
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+"""策略路由集成测试 — Strategy Research Engine 端点"""
 
 import pytest
 import pytest_asyncio
@@ -12,15 +9,6 @@ from src.auth.models import User
 from src.auth.security import create_access_token, pwd_context
 
 pytestmark = pytest.mark.asyncio
-
-_MOCK_EVAL_OUTPUT = json.dumps({
-    "overall_score": 0.3,
-    "is_sufficient": False,
-    "coverage_analysis": [],
-    "slice_suggestions": [],
-    "gap_analysis": [],
-    "supplementary_tasks": None,
-})
 
 BASE = "/api/v1"
 
@@ -54,7 +42,7 @@ async def auth_headers(strategy_user: tuple[User, str]) -> dict:
 async def test_create_strategy_without_slice_ids(
     async_client: AsyncClient, auth_headers: dict
 ):
-    """创建策略时 slice_ids 可为空 — 引导路径，新行为"""
+    """创建策略时 slice_ids 可为空 — 默认 status=draft"""
     resp = await async_client.post(
         f"{BASE}/strategies",
         json={"name": "无切片策略"},
@@ -64,7 +52,7 @@ async def test_create_strategy_without_slice_ids(
     data = resp.json()
     assert data["name"] == "无切片策略"
     assert data["slices"] == []
-    assert data["status"] == "briefing"
+    assert data["status"] == "draft"
 
 
 async def test_create_strategy_with_brand_brief(
@@ -78,7 +66,6 @@ async def test_create_strategy_with_brand_brief(
             "brand_brief": {
                 "brand_name": "测试品牌",
                 "analysis_goal": "提升品牌认知",
-                "industry": "消费电子",
             },
         },
         headers=auth_headers,
@@ -112,101 +99,56 @@ async def test_generate_phase1_without_slices_returns_400(
     assert "切片" in resp.json()["detail"]
 
 
-# ── 新增端点冒烟测试 ─────────────────────────────────────────────────────────
+# ── 旧端点已移除确认 ─────────────────────────────────────────────────────────
 
 
-_MOCK_CONSULT_OUTPUT = json.dumps({
-    "understanding_summary": "用户想监测竞品表现",
-    "clarification_questions": [],
-    "monitor_suggestions": [
-        {
-            "name": "竞品声量监测",
-            "platforms": ["xiaohongshu"],
-            "keywords": ["竞品A"],
-            "task_type": "posts",
-            "rationale": "了解竞品曝光",
-        }
-    ],
-    "slice_plan": [{"name": "竞品对比", "purpose": "对比", "expected_sources": ["竞品声量监测"]}],
-    "confidence": 0.8,
-})
-
-
-@patch("src.strategies.service.create_strategy_consult_chain")
-async def test_consult_strategy_returns_consult_response(
-    mock_chain_factory, async_client: AsyncClient, auth_headers: dict
+async def test_old_consult_endpoint_removed(
+    async_client: AsyncClient, auth_headers: dict
 ):
-    """/consult 返回 ConsultResponse 并推进状态到 consulting（mock LLM）"""
-    mock_chain = AsyncMock()
-    mock_chain.ainvoke.return_value = MagicMock(content=_MOCK_CONSULT_OUTPUT)
-    mock_chain_factory.return_value = mock_chain
-
+    """/consult 端点已被 /design-research 替代 → 405 或 404"""
     create_resp = await async_client.post(
         f"{BASE}/strategies",
-        json={"name": "咨询测试策略"},
+        json={"name": "旧端点测试"},
         headers=auth_headers,
     )
     strategy_id = create_resp.json()["id"]
-
     resp = await async_client.post(
         f"{BASE}/strategies/{strategy_id}/consult",
-        json={"user_input": "我想分析竞品表现"},
+        json={"user_input": "test"},
         headers=auth_headers,
     )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["round_number"] == 1
-    assert data["understanding_summary"] == "用户想监测竞品表现"
-    assert len(data["monitor_suggestions"]) == 1
-    assert "slice_plan" in data
-
-    detail = await async_client.get(
-        f"{BASE}/strategies/{strategy_id}", headers=auth_headers
-    )
-    assert detail.json()["status"] == "consulting"
+    assert resp.status_code in (404, 405)
 
 
-@patch("src.strategies.service.create_strategy_evaluate_chain")
-async def test_evaluate_strategy_stub_response(
-    mock_chain_factory, async_client: AsyncClient, auth_headers: dict
+async def test_old_evaluate_endpoint_removed(
+    async_client: AsyncClient, auth_headers: dict
 ):
-    """/evaluate 返回 EvaluationResultResponse 结构（mock LLM）"""
-    mock_chain = AsyncMock()
-    mock_chain.ainvoke.return_value = MagicMock(content=_MOCK_EVAL_OUTPUT)
-    mock_chain_factory.return_value = mock_chain
-
+    """/evaluate 端点已移除 → 405 或 404"""
     create_resp = await async_client.post(
         f"{BASE}/strategies",
-        json={"name": "评估测试策略"},
+        json={"name": "旧端点测试2"},
         headers=auth_headers,
     )
     strategy_id = create_resp.json()["id"]
-
     resp = await async_client.post(
         f"{BASE}/strategies/{strategy_id}/evaluate",
         headers=auth_headers,
     )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "overall_score" in data
-    assert "is_sufficient" in data
-    assert "gap_analysis" in data
+    assert resp.status_code in (404, 405)
 
 
-async def test_confirm_ready_advances_status(
+async def test_old_confirm_ready_endpoint_removed(
     async_client: AsyncClient, auth_headers: dict
 ):
-    """/confirm-ready 将状态推进到 slices_ready"""
+    """/confirm-ready 端点已移除 → 405 或 404"""
     create_resp = await async_client.post(
         f"{BASE}/strategies",
-        json={"name": "就绪确认测试"},
+        json={"name": "旧端点测试3"},
         headers=auth_headers,
     )
     strategy_id = create_resp.json()["id"]
-
     resp = await async_client.post(
         f"{BASE}/strategies/{strategy_id}/confirm-ready",
         headers=auth_headers,
     )
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "slices_ready"
+    assert resp.status_code in (404, 405)

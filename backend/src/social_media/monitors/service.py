@@ -202,17 +202,13 @@ async def delete_monitor(db: AsyncSession, monitor: Monitor) -> None:
     monitor_id = monitor.id
     await crud.delete_monitor(db, monitor)
 
-    # 清理策略表中 suggested_monitor_ids 里对该监测的引用
+    # 清理策略表中 monitor_id 外键引用
     from src.strategies.models import Strategy
-    from sqlalchemy.orm.attributes import flag_modified
 
-    stmt = select(Strategy).where(Strategy.suggested_monitor_ids.isnot(None))
+    stmt = select(Strategy).where(Strategy.monitor_id == monitor_id)
     result = await db.execute(stmt)
     for strat in result.scalars().all():
-        ids = list(strat.suggested_monitor_ids or [])
-        if monitor_id in ids:
-            strat.suggested_monitor_ids = [mid for mid in ids if mid != monitor_id]
-            flag_modified(strat, "suggested_monitor_ids")
+        strat.monitor_id = None
     await db.commit()
 
 

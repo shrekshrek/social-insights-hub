@@ -5,8 +5,7 @@
 ## 输入上下文（USER_TEMPLATE 的四个占位符）
 
 - brief_section     : 品牌 Brief（目标/竞品/关注维度），来自 strategy.brand_brief
-- consult_summary   : 历轮咨询结论摘要，来自 strategy.consultation_rounds；未咨询时为空
-- evaluation_summary: 充分性评估结论（缺口/建议），来自 strategy.evaluation_result；未评估时为空
+- research_context_section: 研究问题 + 需求理解摘要，来自 strategy.research_design
 - slice_data        : 所有关联切片的聚合分析数据，由 format_slice_data_for_phase1() 构建
 
 ## 关键设计决策
@@ -122,9 +121,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 
 USER_TEMPLATE = """{brief_section}
 
-{consult_summary}
+{research_context_section}
 
-{evaluation_summary}
 
 ## 切片数据
 
@@ -188,11 +186,29 @@ def _compute_cross_slice_anomalies(slice_parts: list[dict]) -> list[dict]:
     return anomalies[:5]
 
 
+def _build_research_context_section(
+    research_design: dict | None = None,
+) -> str:
+    """构建研究上下文摘要（研究问题 + 需求理解）"""
+    if not research_design:
+        return ""
+
+    lines = ["## 研究问题（本次分析要回答的核心问题）"]
+    for rq in research_design.get("research_questions", []):
+        lines.append(
+            f"- [{rq.get('id')}] {rq.get('question')} "
+            f"(维度: {rq.get('dimension')}, 优先级: {rq.get('priority', 'medium')})"
+        )
+    summary = research_design.get("understanding_summary", "")
+    if summary:
+        lines.append(f"\n## 需求理解摘要\n{summary}")
+    return "\n".join(lines)
+
+
 def format_slice_data_for_phase1(
     slices: list[dict],
     brief: dict | None = None,
-    consultation_rounds: list[dict] | None = None,
-    evaluation_result: dict | None = None,
+    research_design: dict | None = None,
 ) -> dict[str, Any]:
     """将切片 result_data 格式化为 Phase 1 输入
 
@@ -203,34 +219,7 @@ def format_slice_data_for_phase1(
     if brief:
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
 
-    # 咨询摘要：取最新一轮的需求理解 + 切片规划
-    consult_summary = ""
-    if consultation_rounds:
-        latest = consultation_rounds[-1]
-        ai_resp = latest.get("ai_response") or {}
-        lines = ["## AI 咨询摘要"]
-        if ai_resp.get("understanding_summary"):
-            lines.append(f"需求理解：{ai_resp['understanding_summary']}")
-        slice_plan = ai_resp.get("slice_plan") or []
-        if slice_plan:
-            lines.append("预期分析切片：")
-            for item in slice_plan:
-                lines.append(f"- {item.get('name', '')}：{item.get('purpose', '')}")
-        consult_summary = "\n".join(lines)
-
-    # 评估摘要：数据缺口提示 LLM 注意数据局限性
-    evaluation_summary = ""
-    if evaluation_result:
-        score = evaluation_result.get("overall_score", 0)
-        is_sufficient = evaluation_result.get("is_sufficient", False)
-        lines = [
-            f"## 数据充分性评估（评分 {score:.0%}，{'数据充分' if is_sufficient else '数据待补充'}）"
-        ]
-        for gap in (evaluation_result.get("gap_analysis") or []):
-            priority = gap.get("priority", "")
-            desc = gap.get("description", "")
-            lines.append(f"- 数据缺口（{priority}优先级）：{desc}")
-        evaluation_summary = "\n".join(lines)
+    research_context_section = _build_research_context_section(research_design)
 
     def _controversy_depth(c: dict) -> float:
         """两极均衡度：0~0.5，越接近 0.5 说明正负意见越均衡（越撕裂）。"""
@@ -443,8 +432,7 @@ def format_slice_data_for_phase1(
 
     return {
         "brief_section": brief_section,
-        "consult_summary": consult_summary,
-        "evaluation_summary": evaluation_summary,
+        "research_context_section": research_context_section,
         "slice_data": slice_data,
     }
 

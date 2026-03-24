@@ -21,6 +21,14 @@ class AgentTaskInfo(CustomBaseModel):
     keywords: Optional[str] = Field(None, description="搜索关键词")
     task_params: Optional[dict] = Field(None, description="任务参数")
     created_at: datetime = Field(..., description="创建时间")
+    preview_count: Optional[int] = Field(
+        None,
+        description="预览采集数量。>0 时 Agent 采集到该数量后保存断点退出；null 则正常全量采集",
+    )
+    checkpoint_id: Optional[str] = Field(
+        None,
+        description="断点 ID。非空时 Agent 从该断点继续采集；null 则从头开始",
+    )
 
 
 class PendingTasksResponse(CustomBaseModel):
@@ -84,6 +92,10 @@ class UploadResultRequest(CustomBaseModel):
     platform: str = Field(..., description="平台代码")
     stats: Optional[ResultStats] = Field(None, description="统计信息")
     data: dict[str, Any] = Field(..., description="采集数据")
+    checkpoint_id: Optional[str] = Field(
+        None,
+        description="断点 ID。预览采集完成后携带，云端持久化后下发续采时回传",
+    )
 
 
 class StoredCounts(CustomBaseModel):
@@ -99,6 +111,16 @@ class UploadResultResponse(CustomBaseModel):
     ok: bool = Field(..., description="是否成功")
     stored: Optional[StoredCounts] = Field(None, description="已存储数量")
     message: Optional[str] = Field(None, description="消息")
+
+
+# ==================== Task Status Schemas ====================
+
+
+class TaskStatusResponse(CustomBaseModel):
+    """任务状态查询响应（供爬虫轮询）"""
+
+    task_id: int = Field(..., description="任务ID")
+    status: str = Field(..., description="任务状态")
 
 
 # ==================== Health Schemas ====================

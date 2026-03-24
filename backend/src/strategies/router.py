@@ -16,21 +16,23 @@ from . import service
 from .dependencies import is_admin_or_super_admin, validate_strategy_owner
 from .models import Strategy
 from .schemas import (
-    AddSlicesRequest,
-    ConfirmPlanRequest,
-    ConfirmPlanResponse,
-    ConfirmSupplementaryRequest,
-    ConfirmSupplementaryResponse,
-    ConsultRequest,
-    ConsultResponse,
-    EvaluationResultResponse,
+    AdjustSlicesRequest,
+    ApproveProbeResponse,
+    CollectionStatusResponse,
+    ConfirmResearchRequest,
+    ConfirmResearchResponse,
+    DataOverviewResponse,
+    DesignResearchRequest,
+    DesignResearchResponse,
     ParseBriefResponse,
     PhaseResultEdit,
+    ProbeStatusResponse,
+    RefineProbeRequest,
+    RefineProbeResponse,
     StrategyCreate,
     StrategyListItem,
     StrategyRead,
     StrategyUpdate,
-    SupplementaryStatusResponse,
 )
 
 router = APIRouter(prefix="/strategies", tags=["Strategies"])
@@ -126,143 +128,151 @@ async def delete_strategy(
     return MessageResponse(message="策略已删除")
 
 
-# ==================== 阶段 A: 咨询流程 ====================
+# ==================== ① 研究设计 ====================
 
 
 @router.post(
-    "/{strategy_id}/consult",
-    response_model=ConsultResponse,
+    "/{strategy_id}/design-research",
+    response_model=DesignResearchResponse,
     status_code=status.HTTP_200_OK,
-    summary="AI 生成监测方案",
+    summary="AI 生成研究计划",
 )
-async def consult_strategy(
-    data: ConsultRequest,
+async def design_research(
+    data: DesignResearchRequest,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """基于 Brand Brief 直接输出监测方案（每次覆盖上次结果）"""
-    return await service.consult_strategy(
-        db, strategy, data.user_input
-    )
+    """基于 Brief 生成研究计划（研究问题+数据方案+切片蓝图+产出类型）"""
+    return await service.design_research(db, strategy, data.user_input)
 
 
 @router.post(
-    "/{strategy_id}/confirm-plan",
-    response_model=ConfirmPlanResponse,
+    "/{strategy_id}/confirm-research",
+    response_model=ConfirmResearchResponse,
     status_code=status.HTTP_200_OK,
-    summary="确认 AI 建议，一键创建监测",
+    summary="确认研究计划，创建 Monitor + 探测任务",
 )
-async def confirm_plan(
-    data: ConfirmPlanRequest,
+async def confirm_research(
+    data: ConfirmResearchRequest,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """确认 AI 监测建议，一键创建监测+任务，状态推进到 monitors_created"""
-    return await service.confirm_plan(
-        db, strategy, data.monitor_suggestions, current_user.id,
-        slice_plan=data.slice_plan,
+    """确认研究计划，一键创建 Monitor 和探测任务，状态推进到 probing"""
+    return await service.confirm_research(
+        db, strategy, data.research_design, current_user.id,
         notes_per_task=data.notes_per_task,
+        probe_notes=data.probe_notes,
     )
 
 
-# ==================== 阶段 C: 数据评估 ====================
-
-
-@router.post(
-    "/{strategy_id}/slices",
-    response_model=StrategyRead,
-    status_code=status.HTTP_200_OK,
-    summary="批量关联切片",
-)
-async def add_slices(
-    data: AddSlicesRequest,
-    strategy: Strategy = Depends(validate_strategy_owner),
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """批量关联切片到策略（支持重复调用，自动 upsert）"""
-    updated = await service.batch_add_slices(db, strategy, data.slice_ids, current_user.id)
-    return service.build_strategy_read(updated)
-
-
-@router.delete(
-    "/{strategy_id}/slices/{slice_id}",
-    response_model=StrategyRead,
-    status_code=status.HTTP_200_OK,
-    summary="移除关联切片",
-)
-async def remove_slice(
-    slice_id: int,
-    strategy: Strategy = Depends(validate_strategy_owner),
-    db: AsyncSession = Depends(get_async_db),
-):
-    """移除策略关联的单个切片"""
-    updated = await service.remove_slice(db, strategy, slice_id)
-    return service.build_strategy_read(updated)
-
-
-@router.post(
-    "/{strategy_id}/evaluate",
-    response_model=EvaluationResultResponse,
-    status_code=status.HTTP_200_OK,
-    summary="AI 评估切片充分性",
-)
-async def evaluate_strategy(
-    strategy: Strategy = Depends(validate_strategy_owner),
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """AI 评估已关联切片是否满足 Brief 需求，输出充分性评分与结构优化建议"""
-    return await service.evaluate_strategy(db, strategy, current_user.id)
-
-
-@router.post(
-    "/{strategy_id}/confirm-supplementary",
-    response_model=ConfirmSupplementaryResponse,
-    status_code=status.HTTP_200_OK,
-    summary="确认补充采集",
-)
-async def confirm_supplementary(
-    data: ConfirmSupplementaryRequest,
-    strategy: Strategy = Depends(validate_strategy_owner),
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """确认补充采集建议，在现有监测中创建新任务"""
-    return await service.confirm_supplementary(
-        db, strategy, data.monitor_suggestions, current_user.id,
-        notes_per_task=data.notes_per_task,
-    )
+# ==================== ② 探测验证 ====================
 
 
 @router.get(
-    "/{strategy_id}/supplementary-status",
-    response_model=SupplementaryStatusResponse,
+    "/{strategy_id}/probe-status",
+    response_model=ProbeStatusResponse,
     status_code=status.HTTP_200_OK,
-    summary="补充采集状态",
+    summary="探测进度 + 自动审查",
+    tags=["Strategies"],
 )
-async def get_supplementary_status(
+async def get_probe_status(
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """查询补充采集任务完成进度"""
-    return await service.get_supplementary_status(db, strategy)
+    """查询探测任务进度，全部分析完成后自动运行审查"""
+    return await service.check_probe_status(db, strategy)
 
 
 @router.post(
-    "/{strategy_id}/confirm-ready",
-    response_model=StrategyRead,
+    "/{strategy_id}/approve-probe",
+    response_model=ApproveProbeResponse,
     status_code=status.HTTP_200_OK,
-    summary="确认数据就绪",
+    summary="手动确认探测通过",
+    tags=["Strategies"],
 )
-async def confirm_ready(
+async def approve_probe(
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """用户确认数据就绪，状态推进到 slices_ready，解锁 Phase 1 生成"""
-    updated = await service.confirm_ready(db, strategy)
-    return service.build_strategy_read(updated)
+    """手动确认探测通过，所有 probe_ready 任务标记为 approved，状态 → collecting"""
+    return await service.approve_probe(db, strategy)
+
+
+@router.post(
+    "/{strategy_id}/refine-probe",
+    response_model=RefineProbeResponse,
+    status_code=status.HTTP_200_OK,
+    summary="调整关键词，创建新探测任务",
+    tags=["Strategies"],
+)
+async def refine_probe(
+    data: RefineProbeRequest,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """调整不合格的关键词，创建新探测任务，probe_round++"""
+    return await service.refine_probe(
+        db, strategy,
+        [item.model_dump() for item in data.refinements],
+        current_user.id,
+    )
+
+
+# ==================== ③ 数据就绪 ====================
+
+
+@router.get(
+    "/{strategy_id}/collection-status",
+    response_model=CollectionStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="全量采集进度 + 自动建切片",
+    tags=["Strategies"],
+)
+async def get_collection_status(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """查询全量采集进度，全部完成后自动建切片并验证覆盖度"""
+    return await service.check_collection_status(db, strategy, current_user.id)
+
+
+@router.get(
+    "/{strategy_id}/data-overview",
+    response_model=DataOverviewResponse,
+    status_code=status.HTTP_200_OK,
+    summary="数据全景",
+    tags=["Strategies"],
+)
+async def get_data_overview(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """数据全景：切片列表 + 覆盖度结果"""
+    return await service.get_data_overview(db, strategy)
+
+
+@router.post(
+    "/{strategy_id}/adjust-slices",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="微调切片配置",
+    tags=["Strategies"],
+)
+async def adjust_slices(
+    data: AdjustSlicesRequest,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """微调切片配置（名称/主体/竞品），自动重新验证覆盖度"""
+    return await service.adjust_slices(
+        db, strategy,
+        [item.model_dump() for item in data.adjustments],
+        current_user.id,
+    )
 
 
 # ==================== 生成端点 ====================

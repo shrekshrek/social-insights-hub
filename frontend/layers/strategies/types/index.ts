@@ -1,5 +1,7 @@
 /**
  * 策略模块 - TypeScript 类型定义
+ *
+ * 对齐后端 strategies/schemas.py (Strategy Research Engine)
  */
 
 import type { PaginatedResponse } from '~/types/common'
@@ -7,13 +9,22 @@ import type { PaginatedResponse } from '~/types/common'
 // ==================== 策略状态 ====================
 
 export type StrategyStatus =
-  | 'briefing'
-  | 'consulting'
-  | 'monitors_created'
-  | 'slices_ready'
+  | 'draft'
+  | 'planned'
+  | 'probing'
+  | 'collecting'
+  | 'ready'
   | 'phase1_done'
   | 'phase2_done'
   | 'completed'
+
+// ==================== Brand Brief ====================
+
+export interface BrandBrief {
+  brand_name: string
+  analysis_goal: string
+  constraints?: string | null
+}
 
 // ==================== 切片摘要 ====================
 
@@ -24,122 +35,130 @@ export interface SliceSummary {
   monitor_name: string
 }
 
-// ==================== Brand Brief ====================
+// ==================== 研究设计 ====================
 
-export interface BrandBrief {
-  brand_name: string
-  industry?: string
-  analysis_goal: string
-  competitors?: string[]
-  focus_areas?: string[]
-  time_range?: string
-  constraints?: string
-}
-
-// ==================== 咨询相关 ====================
-
-export interface MonitorSuggestion {
-  name: string
-  platforms?: string[]
-  keywords?: string[]
-  task_type?: string
-  rationale?: string
-}
-
-export interface SlicePlanItem {
-  name: string
-  subject?: string
-  purpose: string
-  expected_sources?: string[]
-}
-
-export interface ConsultResponse {
-  understanding_summary: string
-  monitor_suggestions: MonitorSuggestion[]
-  slice_plan: SlicePlanItem[]
-}
-
-// ==================== 确认计划 ====================
-
-export interface ConfirmPlanResponse {
-  created_monitor_ids: number[]
-  partial_errors: string[]
-  strategy: Strategy
-}
-
-// ==================== 评估相关 ====================
-
-export interface CoverageAnalysis {
+export interface ResearchQuestion {
+  id: string
+  question: string
   dimension: string
-  score: number
-  status: string
-  note: string
-}
-
-export interface GapAnalysis {
-  gap_type: string
-  description: string
   priority: string
 }
 
-export interface SupplementarySuggestion {
-  name: string
-  platforms: string[]
+export interface DataPlanItem {
+  dimension_name: string
   keywords: string[]
-  rationale: string
+  platforms: string[]
+  probe_size?: number
+  full_size?: number
+  rationale?: string
 }
 
-export interface StructureSliceIssue {
+export interface SliceBlueprintItem {
+  name: string
+  mode?: string
+  subject?: string
+  competitors?: string[]
+  source_dimensions: string[]
+  serves_questions?: string[]
+}
+
+export interface ResearchDesign {
+  understanding_summary: string
+  research_questions: ResearchQuestion[]
+  data_plan: DataPlanItem[]
+  slice_blueprint: SliceBlueprintItem[]
+  output_type: string
+  output_type_rationale: string
+}
+
+// ==================== 探测验证 ====================
+
+export interface ProbeTaskStatus {
+  task_id: number
+  keyword: string
+  platform: string
+  status: string
+  has_analysis: boolean
+}
+
+export interface ProbeAssessment {
+  task_id: number
+  keyword: string
+  platform: string
+  quality: string
+  relevance_rate: number
+  entity_match: string
+  topic_relevance: string
+  verdict: string
+  note: string
+}
+
+export interface RefinementSuggestion {
+  task_id: number
+  original_keyword: string
+  suggested_keyword: string
+  platform: string
+  reason: string
+}
+
+export interface ProbeReviewResult {
+  assessments: ProbeAssessment[]
+  overall_verdict: 'all_pass' | 'partial_pass' | 'fail'
+  refinement_suggestions: RefinementSuggestion[]
+}
+
+export interface ProbeStatusResponse {
+  all_analyzed: boolean
+  tasks: ProbeTaskStatus[]
+  analyzed_count: number
+  total_count: number
+  probe_review_result: ProbeReviewResult | null
+  strategy: Strategy | null
+}
+
+// ==================== 数据就绪 ====================
+
+export interface CollectionTaskStatus {
+  task_id: number
+  status: string
+  has_analysis: boolean
+}
+
+export interface QuestionCoverage {
+  question_id: string
+  question: string
+  covered: boolean
+  covered_by: string
+  note: string
+}
+
+export interface SliceAdjustmentSuggestion {
   slice_name: string
-  issue_type: 'redundant' | 'misaligned' | 'overlapping' | 'too_granular'
-  description: string
+  issue: string
   suggestion: string
 }
 
-export interface UnusedOpportunity {
-  monitor_name: string
-  slice_name: string
-  gap_addressed: string
-  why_valuable: string
-  recommended_mode: string
-  recommended_subject: string
+export interface CoverageCheckResult {
+  question_coverage: QuestionCoverage[]
+  overall_ready: boolean
+  data_highlights: string[]
+  slice_adjustments: SliceAdjustmentSuggestion[]
 }
 
-export interface RecommendedSlice {
-  name: string
-  mode: string
-  subject: string
-  purpose: string
-  action: 'keep' | 'associate' | 'adjust' | 'supplement'
-  source: string
-  action_detail: string | null
+export interface CollectionStatusResponse {
+  all_completed: boolean
+  all_analyzed: boolean
+  slices_created: boolean
+  tasks: CollectionTaskStatus[]
+  completed_count: number
+  total_count: number
+  coverage_check_result: CoverageCheckResult | null
+  strategy: Strategy | null
 }
 
-export interface StructureAnalysis {
-  summary: string
-  current_slice_issues: StructureSliceIssue[]
-  unused_opportunities: UnusedOpportunity[]
-  recommended_structure: RecommendedSlice[]
-  collection_still_needed: boolean
-  collection_note: string | null
-}
-
-export interface EvaluationResult {
-  overall_score: number
-  is_sufficient: boolean
-  coverage_analysis: CoverageAnalysis[]
-  slice_suggestions: Array<{ slice_name: string; issue: string; suggestion: string }>
-  gap_analysis: GapAnalysis[]
-  supplementary_suggestions?: SupplementarySuggestion[] | null
-  supplementary_slice_plan?: SlicePlanItem[] | null
-  pending_supplementary_task_ids?: number[] | null
-  structure_analysis?: StructureAnalysis | null
-}
-
-export interface ConfirmSupplementaryResponse {
-  created_task_ids: number[]
-  task_count: number
-  partial_errors: string[]
+export interface DataOverviewResponse {
+  slices: SliceSummary[]
+  coverage_check_result: CoverageCheckResult | null
   strategy: Strategy
 }
 
@@ -150,14 +169,29 @@ export interface Strategy {
   name: string
   status: StrategyStatus
   brand_brief: BrandBrief | null
-  consultation_rounds: Array<{ user_input: string; ai_response: ConsultResponse }>
-  suggested_monitor_ids: number[]
-  slice_plan: SlicePlanItem[]
-  evaluation_result: EvaluationResult | null
+
+  // ① 研究设计
+  research_design: ResearchDesign | null
+
+  // ② 探测验证
+  probe_review_result: ProbeReviewResult | null
+  probe_round: number
+
+  // ③ 数据就绪
+  coverage_check_result: CoverageCheckResult | null
+
+  // ④ 产出生成
+  output_type: string | null
   phase1_result: Record<string, unknown> | null
   phase2_result: Record<string, unknown> | null
   phase3_result: Record<string, unknown> | null
+
+  // 关联
+  monitor_id: number | null
+  task_ids: number[]
   slices: SliceSummary[]
+
+  // 元信息
   created_by: number
   creator_name: string
   created_at: string
@@ -187,7 +221,53 @@ export interface StrategyCreate {
 
 export interface StrategyUpdate {
   name?: string
-  brand_brief?: Record<string, unknown> | null
+  brand_brief?: BrandBrief | null
+}
+
+export interface ConfirmResearchRequest {
+  research_design: Record<string, unknown>
+  notes_per_task?: number
+  probe_notes?: number
+}
+
+export interface ConfirmResearchResponse {
+  created_monitor_id: number
+  created_task_count: number
+  partial_errors: string[]
+  strategy: Strategy
+}
+
+export interface RefinementItem {
+  task_id: number
+  new_keyword: string
+  platform: string
+}
+
+export interface RefineProbeRequest {
+  refinements: RefinementItem[]
+}
+
+export interface RefineProbeResponse {
+  removed_task_ids: number[]
+  created_task_ids: number[]
+  probe_round: number
+  strategy: Strategy
+}
+
+export interface ApproveProbeResponse {
+  approved_task_count: number
+  strategy: Strategy
+}
+
+export interface AdjustSliceItem {
+  slice_id: number
+  name?: string | null
+  subject?: string | null
+  competitors?: string[] | null
+}
+
+export interface AdjustSlicesRequest {
+  adjustments: AdjustSliceItem[]
 }
 
 // ==================== Phase 结果类型 ====================

@@ -67,7 +67,7 @@ class DataTask(Base):
         nullable=False,
         default="pending",
         index=True,
-        comment="任务状态: pending/accepted/running/completed/failed",
+        comment="任务状态: pending/accepted/running/probe_ready/approved/completed/failed",
     )
 
     # 爬虫任务优先级和进度

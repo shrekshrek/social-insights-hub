@@ -188,11 +188,9 @@
             :output-type-rationale="researchDesign?.output_type_rationale"
             :editing="editingPlan"
             :notes-per-task="notesPerTask"
-            :probe-notes="probeNotes"
             @update:data-plan="editableDataPlan = $event"
             @update:slice-blueprint="editableBlueprint = $event"
             @update:notes-per-task="notesPerTask = $event"
-            @update:probe-notes="probeNotes = $event"
           />
 
           <div class="flex items-center gap-3 mt-4">
@@ -443,7 +441,6 @@ const editingPlan = ref(false)
 const editableDataPlan = ref<DataPlanItem[]>([])
 const editableBlueprint = ref<SliceBlueprintItem[]>([])
 const notesPerTask = ref(50)
-const probeNotes = ref(20)
 
 // 深拷贝研究计划（确保嵌套数组不共享引用）
 const deepCopyDataPlan = (items: DataPlanItem[]): DataPlanItem[] =>
@@ -550,7 +547,7 @@ const handleConfirmResearch = async () => {
         slice_blueprint: editableBlueprint.value,
       },
       notes_per_task: notesPerTask.value,
-      probe_notes: probeNotes.value,
+      probe_notes: 20,
     })
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
     editingPlan.value = false

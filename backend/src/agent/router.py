@@ -19,6 +19,7 @@ from .schemas import (
     ProgressUpdateResponse,
     UploadResultRequest,
     UploadResultResponse,
+    TaskStatusResponse,
     HealthResponse,
 )
 
@@ -64,6 +65,23 @@ async def get_pending_tasks(
     """
     tasks = await service.get_pending_tasks(db, limit=limit)
     return PendingTasksResponse(tasks=tasks)
+
+
+@router.get(
+    "/tasks/{task_id}",
+    response_model=TaskStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get task status",
+    description="查询任务当前状态（供爬虫轮询）",
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def get_task_status(
+    task_id: int,
+    db: AsyncSession = Depends(get_async_db),
+):
+    """查询指定任务的当前状态。"""
+    task = await service.get_task_status(db, task_id)
+    return task
 
 
 @router.post(

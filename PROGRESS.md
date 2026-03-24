@@ -35,8 +35,7 @@
 | strategies/后端 | 已完成 | 策略定义模块：3 阶段 AI 生成（洞察→策略→创意），Phase 1/2/3 Chain + CRUD API + Word 导出 |
 | strategies/前端 | 已完成 | 策略列表/创建/详情页，3 阶段结果展示与编辑，跨项目切片选择器 |
 | analysis/slice_enrichment/后端 | 已完成 | 切片流水线数据补全：time_distribution(Stage1) + kol_voices(Stage1) + ipa_analysis(Stage2) |
-| strategies/重构/后端 | 方案已确认 | 增加阶段 A（AI 咨询+创建监测）+ 阶段 C（切片评估），Steps 1-6，参考 docs/plan.md |
-| strategies/重构/前端 | 方案已确认 | 阶段指示器 + 4 面板重构，类型扩展，5 个新 composable 方法，参考 docs/plan.md |
+| strategy-research-engine/全栈 | 已完成 | 策略模块重构为智能研究编排者：4 阶段自动化（研究设计→探测验证→数据就绪→产出生成）+ 增量采集协议 + 6 条 LLM Chain + 前端 4 阶段面板 |
 
 ## 已完成的里程碑
 
@@ -49,6 +48,7 @@
 - v1.x: 项目详情页批量创建任务 + 切片重命名功能
 - v2.0: Strategy Define 全栈实现（3 阶段 AI 策略生成 + 数据依赖精选 + Word 导出）
 - v2.1: 切片流水线数据补全（time_distribution + kol_voices + ipa_analysis，策略 Phase 2/3 数据质量提升）
+- v3.0: Strategy Research Engine 全栈实现（4 阶段自动编排 + 探测验证 + 增量采集协议 + 前端 4 阶段面板）
 
 ## 待改进项
 
@@ -58,9 +58,7 @@
 
 ## 下次继续的入口
 
-Strategy 模块重构 Step 1 实现：
-- 参考 `docs/plan.md`
-- 从 `backend/src/strategies/models.py` 开始，新增 4 个 JSONB 字段 + 扩展 status 枚举约束
-- 接着创建 Alembic 迁移（`pnpm be:migrate:make "strategy new fields"`）
-- 然后更新 `schemas.py`（BrandBrief 结构化 + StrategyCreate.slice_ids 可选）
-- 最后更新 `service.py`（STATUS_ORDER 扩展 + phase1 前置改为切片非空检查）和 `router.py`（新增5个占位端点）
+Strategy Research Engine v3.0 全栈交付完成。可选后续方向：
+- 端到端验收测试：以真实 Brief 走完 4 阶段流程，验证爬虫增量采集 + 自动建切片 + Phase 生成全链路
+- 测试覆盖补全：为 `strategies/service.py` 新增方法（design_research / check_probe_status / check_collection_status）添加 mock LLM 单元测试
+- 前端交互优化：探测/采集轮询增加超时提示、研究计划编辑增加拖拽排序

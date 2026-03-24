@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 from datetime import datetime
 from sqlalchemy import (
+    Integer,
     String,
     DateTime,
     ForeignKey,
@@ -18,13 +19,14 @@ from src.database import Base
 if TYPE_CHECKING:
     from src.auth.models import User
     from src.social_media.analysis.models import AnalysisSlice
+    from src.social_media.monitors.models import Monitor
 
 
 class Strategy(Base):
-    """策略定义
+    """策略研究引擎
 
-    基于切片数据的 AI 策略草案生成器。
-    3 阶段分步生成: 洞察层 → 策略层 → 创意层。
+    智能研究编排者：研究设计 → 探测验证 → 全量采集 → 自动建切片 → 产出生成。
+    用户全程留在策略页面，系统自动完成 Monitor 创建、任务管理、切片创建。
     """
 
     __tablename__ = "strategies"
@@ -39,23 +41,36 @@ class Strategy(Base):
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        server_default="briefing",
-        comment="状态: briefing / consulting / monitors_created / slices_ready / phase1_done / phase2_done / completed",
+        server_default="draft",
+        comment="状态: draft / planned / probing / collecting / ready / phase1_done / phase2_done / completed",
     )
     brand_brief: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="结构化 Brand Brief"
     )
-    consultation_rounds: Mapped[list] = mapped_column(
-        JSON, nullable=False, server_default="[]", comment="AI 咨询轮次记录"
+
+    # ① 研究设计
+    research_design: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="研究设计（research_design_chain 输出）"
     )
-    suggested_monitor_ids: Mapped[list] = mapped_column(
-        JSON, nullable=False, server_default="[]", comment="AI 建议并已创建的监测 ID"
+
+    # ② 探测验证
+    probe_review_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="探测审查结果（probe_review_chain 输出）"
     )
-    slice_plan: Mapped[list] = mapped_column(
-        JSON, nullable=False, server_default="[]", comment="切片规划草案（咨询产出）"
+    probe_round: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0",
+        comment="当前探测轮次（最多 3）",
     )
-    evaluation_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="AI 充分性评估结果"
+
+    # ③ 数据就绪
+    coverage_check_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="覆盖度验证结果（coverage_check_chain 输出）"
+    )
+
+    # ④ 产出生成
+    output_type: Mapped[str | None] = mapped_column(
+        String(30), nullable=True,
+        comment="产出类型: brand_strategy / insight_report",
     )
     phase1_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="Phase 1: Tension + Opportunity"
@@ -66,6 +81,18 @@ class Strategy(Base):
     phase3_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="Phase 3: Big Idea + Content Strategy"
     )
+
+    # 关联
+    monitor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("monitors.id"), nullable=True,
+        comment="策略创建的 Monitor ID",
+    )
+    task_ids: Mapped[list] = mapped_column(
+        JSON, nullable=False, server_default="[]",
+        comment="策略创建的所有 DataTask ID",
+    )
+
+    # 时间戳
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -79,6 +106,11 @@ class Strategy(Base):
         foreign_keys=[created_by],
         lazy="selectin",
     )
+    monitor: Mapped["Monitor | None"] = relationship(
+        "src.social_media.monitors.models.Monitor",
+        foreign_keys=[monitor_id],
+        lazy="selectin",
+    )
     slices: Mapped[list["StrategySlice"]] = relationship(
         back_populates="strategy",
         cascade="all, delete-orphan",
@@ -87,7 +119,7 @@ class Strategy(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('briefing', 'consulting', 'monitors_created', 'slices_ready', "
+            "status IN ('draft', 'planned', 'probing', 'collecting', 'ready', "
             "'phase1_done', 'phase2_done', 'completed')",
             name="valid_status",
         ),

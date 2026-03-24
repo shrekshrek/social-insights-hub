@@ -11,7 +11,7 @@
         />
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">新建策略</h1>
-          <p class="text-gray-600 dark:text-gray-400 mt-1">填写品牌基本信息，AI 将在下一步协助规划监测方案</p>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">填写品牌基本信息，AI 将协助设计研究计划并自动采集数据</p>
         </div>
       </div>
 
@@ -77,7 +77,7 @@
       </UForm>
 
       <p class="text-xs text-gray-400 mt-4">
-        创建后进入 AI 咨询流程，AI 会根据目标规划监测方案，无需提前准备所有信息。
+        创建后进入 AI 研究设计流程，系统将自动规划采集方案、创建监测和切片。
       </p>
     </UCard>
 

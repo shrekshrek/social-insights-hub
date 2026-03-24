@@ -74,14 +74,15 @@ class TestFormatPhase1:
                 "reports": {"landscape_report": "报告内容"},
             }
         ]
-        result = format_slice_data_for_phase1(slices, brief={"brand": "test"})
+        result = format_slice_data_for_phase1(slices, brief={"brand": "test"}, research_design=None)
         assert "Brand Brief" in result["brief_section"]
         data = json.loads(result["slice_data"])
         assert len(data) == 1
-        assert data[0]["meta"]["subject"] == "测试"
+        assert data[0]["subject"] == "测试"
+        assert data[0]["mode"] == "品牌聚焦"
 
     def test_no_brief(self):
-        result = format_slice_data_for_phase1([{"meta": {}}])
+        result = format_slice_data_for_phase1([{"meta": {}}], research_design=None)
         assert result["brief_section"] == ""
 
 

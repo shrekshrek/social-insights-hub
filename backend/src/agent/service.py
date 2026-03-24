@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 from fastapi import HTTPException, status
 
 from src.social_media.tasks.models import DataTask
@@ -16,6 +17,7 @@ from .schemas import (
     ProgressUpdateRequest,
     UploadResultRequest,
     StoredCounts,
+    TaskStatusResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,12 +36,13 @@ async def get_pending_tasks(
     Returns:
         list[AgentTaskInfo]: 任务列表
     """
+    # 返回 pending（新任务）和 approved（探测通过待续采）的任务
     stmt = (
         select(DataTask)
         .where(
             and_(
                 DataTask.data_source == "remote_crawler",
-                DataTask.status == "pending",
+                DataTask.status.in_(("pending", "approved")),
                 DataTask.is_deleted.is_(False),
             )
         )
@@ -50,19 +53,47 @@ async def get_pending_tasks(
     result = await db.execute(stmt)
     tasks = result.scalars().all()
 
-    return [
-        AgentTaskInfo(
-            task_id=task.id,
-            task_name=task.name,
-            platform=task.platform.code if task.platform else "unknown",
-            task_type=task.task_type,
-            priority=task.priority,
-            keywords=task.keywords,
-            task_params=task.task_params,
-            created_at=task.created_at,
+    items = []
+    for task in tasks:
+        params = task.task_params or {}
+        is_continuation = task.status == "approved"
+
+        items.append(
+            AgentTaskInfo(
+                task_id=task.id,
+                task_name=task.name,
+                platform=task.platform.code if task.platform else "unknown",
+                task_type=task.task_type,
+                priority=task.priority,
+                keywords=task.keywords,
+                task_params=task.task_params,
+                created_at=task.created_at,
+                # Task A (pending): preview_count = probe_size
+                # Task B (approved): preview_count = null (全量续采)
+                preview_count=params.get("probe_size") if not is_continuation else None,
+                # Task B (approved): 传回上次保存的断点
+                checkpoint_id=params.get("checkpoint_id") if is_continuation else None,
+            )
         )
-        for task in tasks
-    ]
+    return items
+
+
+async def get_task_status(
+    db: AsyncSession,
+    task_id: int,
+) -> TaskStatusResponse:
+    """查询任务当前状态（供爬虫轮询）"""
+    stmt = select(DataTask.id, DataTask.status).where(
+        and_(DataTask.id == task_id, DataTask.is_deleted.is_(False))
+    )
+    result = await db.execute(stmt)
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    return TaskStatusResponse(task_id=row[0], status=row[1])
 
 
 async def accept_task(
@@ -182,6 +213,65 @@ async def update_progress(
     )
 
 
+async def _clear_analysis_results(
+    db: AsyncSession,
+    task_id: int,
+    task: DataTask,
+) -> None:
+    """清空任务的分析结果（保留帖子/评论数据），用于追加上传前重置"""
+    # 清理自动分析幂等锁
+    try:
+        import redis.asyncio as redis
+        from src.redis_client import redis_pool
+
+        async with redis.Redis(connection_pool=redis_pool) as redis_client:
+            await redis_client.delete(f"analysis:auto:{task_id}:triggered")
+            await redis_client.delete(f"analysis:auto:{task_id}:running")
+    except Exception as e:
+        logger.warning(
+            f"Task {task_id}: Failed to clear auto analysis lock: {e}",
+            exc_info=True,
+        )
+
+    # 撤销/终止旧的分析 Celery 任务
+    try:
+        from celery import current_app as celery_app  # type: ignore[import-not-found]
+        from src.social_media.analysis.models import AnalysisJob
+
+        jobs_stmt = select(AnalysisJob.celery_task_id).where(
+            and_(
+                AnalysisJob.task_id == task_id,
+                AnalysisJob.status.in_(("pending", "processing")),
+            )
+        )
+        jobs_result = await db.execute(jobs_stmt)
+        celery_task_ids = [row[0] for row in jobs_result.all() if row and row[0]]
+        for celery_task_id in celery_task_ids:
+            celery_app.control.revoke(celery_task_id, terminate=True)
+        if celery_task_ids:
+            logger.info(
+                f"Task {task_id}: Revoked {len(celery_task_ids)} analysis celery tasks"
+            )
+    except Exception as e:
+        logger.warning(
+            f"Task {task_id}: Failed to revoke previous analysis celery tasks: {e}",
+            exc_info=True,
+        )
+
+    # 清空聚合分析报告
+    task.analysis_result = None
+    task.analysis_result_at = None
+
+    # 清空分析任务记录 + PostAnalysis
+    from sqlalchemy import delete as sa_delete
+    from src.social_media.analysis.models import AnalysisJob, PostAnalysis
+
+    await db.execute(sa_delete(PostAnalysis).where(PostAnalysis.task_id == task_id))
+    await db.execute(sa_delete(AnalysisJob).where(AnalysisJob.task_id == task_id))
+    await db.flush()
+    logger.info(f"Task {task_id}: Analysis results cleared (posts/comments preserved)")
+
+
 async def upload_result(
     db: AsyncSession,
     task_id: int,
@@ -216,76 +306,39 @@ async def upload_result(
         )
 
     # 验证状态
-    if task.status not in ("accepted", "running", "completed"):
+    if task.status not in ("accepted", "running", "completed", "approved"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "ok": False,
                 "error_code": "INVALID_TASK_STATUS",
-                "message": f"Task status is {task.status}, expected accepted, running or completed",
+                "message": (
+                    f"Task status is {task.status}, "
+                    "expected accepted, running, completed or approved"
+                ),
             },
         )
 
-    # 如果是已完成的任务，先清空现有数据（覆盖模式）
     is_reupload = task.status == "completed"
+    is_append = task.status == "approved"
+
+    # approved 追加上传：清空分析结果（全量重新分析），保留已有帖子数据
+    if is_append:
+        logger.info(f"Task {task_id}: Append upload (approved → completed)")
+        await _clear_analysis_results(db, task_id, task)
+
+    # 如果是已完成的任务，先清空现有数据（覆盖模式）
     if is_reupload:
         logger.info(f"Task {task_id}: Re-uploading data, clearing existing data...")
-        # 清理自动分析幂等锁（避免锁残留阻断后续自动分析）
-        try:
-            import redis.asyncio as redis
-            from src.redis_client import redis_pool
-
-            async with redis.Redis(connection_pool=redis_pool) as redis_client:
-                await redis_client.delete(f"analysis:auto:{task_id}:triggered")
-                await redis_client.delete(f"analysis:auto:{task_id}:running")
-        except Exception as e:
-            logger.warning(
-                f"Task {task_id}: Failed to clear auto analysis lock: {e}",
-                exc_info=True,
-            )
-
-        # 先撤销/终止旧的分析 Celery 任务，避免重传过程中旧任务继续写入
-        try:
-            from celery import current_app as celery_app  # type: ignore[import-not-found]
-            from src.social_media.analysis.models import AnalysisJob
-
-            jobs_stmt = select(AnalysisJob.celery_task_id).where(
-                and_(
-                    AnalysisJob.task_id == task_id,
-                    AnalysisJob.status.in_(("pending", "processing")),
-                )
-            )
-            jobs_result = await db.execute(jobs_stmt)
-            celery_task_ids = [row[0] for row in jobs_result.all() if row and row[0]]
-            for celery_task_id in celery_task_ids:
-                celery_app.control.revoke(celery_task_id, terminate=True)
-            if celery_task_ids:
-                logger.info(
-                    f"Task {task_id}: Revoked {len(celery_task_ids)} analysis celery tasks"
-                )
-        except Exception as e:
-            # 撤销失败不应阻断重传；记录日志用于排查
-            logger.warning(
-                f"Task {task_id}: Failed to revoke previous analysis celery tasks: {e}",
-                exc_info=True,
-            )
-
+        await _clear_analysis_results(db, task_id, task)
         await task_crud.delete_task_posts_and_comments(db, task_id)
-        # 重置任务统计与时间字段，避免沿用旧的 started_at / completed_at / counts
+        # 重置任务统计与时间字段
         task.posts_count = 0
         task.comments_count = 0
         task.crawled_count = 0
         task.started_at = None
         task.completed_at = None
         task.error_message = None
-        # 清空聚合分析报告
-        task.analysis_result = None
-        task.analysis_result_at = None
-        # 清空分析任务记录
-        from sqlalchemy import delete
-        from src.social_media.analysis.models import AnalysisJob
-
-        await db.execute(delete(AnalysisJob).where(AnalysisJob.task_id == task_id))
         await db.flush()
         logger.info(f"Task {task_id}: Existing data cleared")
 
@@ -317,6 +370,17 @@ async def upload_result(
             task.started_at = datetime.now(timezone.utc)
         await db.flush()
 
+        # 追加模式：加载已有帖子的 post_id_on_platform → DB id 映射
+        existing_post_mapping: dict[str, int] = {}
+        if is_append:
+            from src.social_media.tasks.models import SocialPost
+
+            existing_stmt = select(
+                SocialPost.post_id_on_platform, SocialPost.id
+            ).where(SocialPost.task_id == task.id)
+            existing_result = await db.execute(existing_stmt)
+            existing_post_mapping = {row[0]: row[1] for row in existing_result.all()}
+
         # 转换并导入原文数据（按 post_id_on_platform 去重）
         contents = request.data.get("contents", [])
         posts_data_dict: dict[str, dict] = {}
@@ -331,7 +395,12 @@ async def upload_result(
                 continue
 
             platform_id = transformed.get("post_id_on_platform")
-            if platform_id and platform_id not in posts_data_dict:
+            if not platform_id:
+                continue
+            # 跳过已存在的帖子（追加模式去重）
+            if platform_id in existing_post_mapping:
+                continue
+            if platform_id not in posts_data_dict:
                 posts_data_dict[platform_id] = transformed
 
         posts_data = list(posts_data_dict.values())
@@ -340,8 +409,10 @@ async def upload_result(
             db, task_id=task.id, platform_id=task.platform_id, posts_data=posts_data
         )
 
-        # 创建 post_id 映射（平台ID -> 数据库ID）
-        post_id_mapping = {post.post_id_on_platform: post.id for post in created_posts}
+        # 创建 post_id 映射（平台ID -> 数据库ID），合并已有映射
+        post_id_mapping = {**existing_post_mapping}
+        for post in created_posts:
+            post_id_mapping[post.post_id_on_platform] = post.id
 
         # 转换并导入评论数据（按 comment_id_on_platform 去重）
         comments_raw = request.data.get("comments", [])
@@ -381,19 +452,43 @@ async def upload_result(
         posts_count = len(created_posts)
         comments_count = len(created_comments)
 
+        # 追加模式：累加计数
+        if is_append:
+            posts_count += task.posts_count or 0
+            comments_count += task.comments_count or 0
+
         await task_crud.update_task_counts(
             db, task, posts_count=posts_count, comments_count=comments_count
         )
-        await task_crud.update_task_status(db, task, "completed")
+
+        # 保存爬虫返回的断点 ID（探测上传后，供续采时回传）
+        if request.checkpoint_id:
+            task.task_params = {**(task.task_params or {}), "checkpoint_id": request.checkpoint_id}
+            flag_modified(task, "task_params")
+        elif is_append and task.task_params and "checkpoint_id" in task.task_params:
+            # 续采完成，清除断点
+            task.task_params = {k: v for k, v in task.task_params.items() if k != "checkpoint_id"}
+            flag_modified(task, "task_params")
+
+        # 决定最终状态：有 probe_size 的首次上传 → probe_ready，否则 completed
+        probe_size = (task.task_params or {}).get("probe_size")
+        if probe_size and not is_reupload and not is_append:
+            final_status = "probe_ready"
+        else:
+            final_status = "completed"
+
+        await task_crud.update_task_status(db, task, final_status)
 
         await db.commit()
 
         logger.info(
-            f"Task {task_id} result uploaded: posts={posts_count}, comments={comments_count}"
+            f"Task {task_id} result uploaded: "
+            f"posts={posts_count}, comments={comments_count}, status={final_status}"
         )
 
-        # 如果启用了自动分析，触发分析任务链
-        if task.auto_analyze and posts_count > 0:
+        # 如果启用了自动分析，触发分析任务链（probe_ready 也需要分析以供审查）
+        new_posts_count = len(created_posts)
+        if task.auto_analyze and (new_posts_count > 0 or (is_append and posts_count > 0)):
             from src.social_media.analysis.celery_tasks.auto_analysis_tasks import (
                 run_auto_analysis,
             )

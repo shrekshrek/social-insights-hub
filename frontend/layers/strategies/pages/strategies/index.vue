@@ -91,6 +91,7 @@ import { h, ref, computed, watch, type Component } from 'vue'
 import type { StrategyListItem, StrategyStatus } from '../../types'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
+import { STATUS_MAP, formatDate } from '../../composables/useStrategyConstants'
 
 definePageMeta({
   title: '策略管理',
@@ -149,25 +150,6 @@ const handleRefresh = async () => {
   }
 }
 
-const STATUS_MAP: Record<StrategyStatus, { label: string; color: 'neutral' | 'info' | 'warning' | 'success' }> = {
-  briefing: { label: '需求阶段', color: 'neutral' },
-  consulting: { label: '咨询中', color: 'info' },
-  monitors_created: { label: '监测已创建', color: 'info' },
-  slices_ready: { label: '数据就绪', color: 'warning' },
-  phase1_done: { label: '洞察完成', color: 'warning' },
-  phase2_done: { label: '策略完成', color: 'warning' },
-  completed: { label: '已完成', color: 'success' },
-}
-
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 const columns: TableColumn<StrategyListItem>[] = [
   {

@@ -43,33 +43,155 @@ class PhaseResultEdit(CustomBaseModel):
     result: dict = Field(..., description="阶段结果 JSON")
 
 
-# ==================== 新增请求 Schemas ====================
+# ==================== 研究设计 Schemas ====================
 
 
-class ConsultRequest(CustomBaseModel):
-    """AI 监测方案生成请求"""
+class DesignResearchRequest(CustomBaseModel):
+    """AI 研究设计请求"""
 
-    user_input: str = Field("", description="用户补充说明（可为空，AI 将基于 Brand Brief 直接规划）")
+    user_input: str = Field("", description="用户补充说明（可为空，AI 将基于 Brief 直接设计）")
 
 
-class ConfirmPlanRequest(CustomBaseModel):
-    """确认 AI 建议并一键创建监测"""
+class DesignResearchResponse(CustomBaseModel):
+    """AI 研究设计响应"""
 
-    monitor_suggestions: list[dict[str, Any]] = Field(
-        ..., min_length=1, description="用户确认（可修改）后的监测建议列表"
-    )
-    slice_plan: list[dict[str, Any]] | None = Field(
-        None, description="用户确认（可修改）后的切片规划"
+    understanding_summary: str = Field("", description="AI 对分析需求的理解")
+    research_questions: list[dict[str, Any]] = Field(default_factory=list)
+    data_plan: list[dict[str, Any]] = Field(default_factory=list)
+    slice_blueprint: list[dict[str, Any]] = Field(default_factory=list)
+    output_type: str = Field("brand_strategy")
+    output_type_rationale: str = Field("")
+
+
+class ConfirmResearchRequest(CustomBaseModel):
+    """确认研究计划，创建 Monitor + 探测任务"""
+
+    research_design: dict[str, Any] = Field(
+        ..., description="用户编辑后的研究计划（完整 JSON）"
     )
     notes_per_task: int = Field(
-        50, ge=50, le=100, description="每个任务的采集数量（50 或 100）"
+        50, ge=10, le=100, description="每个任务的全量采集数量"
+    )
+    probe_notes: int = Field(
+        15, ge=5, le=30, description="每个任务的探测采集数量"
     )
 
 
-class AddSlicesRequest(CustomBaseModel):
-    """批量关联切片"""
+class ConfirmResearchResponse(CustomBaseModel):
+    """确认研究计划响应"""
 
-    slice_ids: list[int] = Field(..., min_length=1, description="切片ID列表")
+    created_monitor_id: int
+    created_task_count: int
+    partial_errors: list[str] = Field(default_factory=list)
+    strategy: "StrategyRead"
+
+
+# ==================== 探测验证 Schemas ====================
+
+
+class ProbeTaskStatus(CustomBaseModel):
+    """单个探测任务状态"""
+
+    task_id: int
+    keyword: str = ""
+    platform: str = ""
+    status: str = Field(..., description="任务状态")
+    has_analysis: bool = Field(False, description="是否已有分析结果")
+
+
+class ProbeStatusResponse(CustomBaseModel):
+    """探测进度响应"""
+
+    all_analyzed: bool = Field(False, description="所有探测任务是否都已完成分析")
+    tasks: list[ProbeTaskStatus] = Field(default_factory=list)
+    analyzed_count: int = 0
+    total_count: int = 0
+    probe_review_result: dict | None = Field(None, description="审查结果（全部分析完成后自动填充）")
+    strategy: "StrategyRead | None" = None
+
+
+class ApproveProbeResponse(CustomBaseModel):
+    """手动确认探测通过响应"""
+
+    approved_task_count: int
+    strategy: "StrategyRead"
+
+
+class RefinementItem(CustomBaseModel):
+    """关键词调整项"""
+
+    task_id: int = Field(..., description="要替换的旧任务 ID")
+    new_keyword: str = Field(..., min_length=1, description="新关键词")
+    platform: str = Field(..., description="平台代码")
+
+
+class RefineProbeRequest(CustomBaseModel):
+    """调整关键词请求"""
+
+    refinements: list[RefinementItem] = Field(
+        ..., min_length=1, description="关键词调整列表"
+    )
+
+
+class RefineProbeResponse(CustomBaseModel):
+    """调整关键词响应"""
+
+    removed_task_ids: list[int] = Field(default_factory=list)
+    created_task_ids: list[int] = Field(default_factory=list)
+    probe_round: int
+    strategy: "StrategyRead"
+
+
+# ==================== 数据就绪 Schemas ====================
+
+
+class CollectionTaskStatus(CustomBaseModel):
+    """单个采集任务状态"""
+
+    task_id: int
+    status: str
+    has_analysis: bool = False
+
+
+class CollectionStatusResponse(CustomBaseModel):
+    """全量采集进度响应"""
+
+    all_completed: bool = False
+    all_analyzed: bool = False
+    slices_created: bool = False
+    tasks: list[CollectionTaskStatus] = Field(default_factory=list)
+    completed_count: int = 0
+    total_count: int = 0
+    coverage_check_result: dict | None = None
+    strategy: "StrategyRead | None" = None
+
+
+class DataOverviewResponse(CustomBaseModel):
+    """数据全景响应"""
+
+    slices: list["SliceSummary"] = Field(default_factory=list)
+    coverage_check_result: dict | None = None
+    strategy: "StrategyRead"
+
+
+class AdjustSliceItem(CustomBaseModel):
+    """切片调整项"""
+
+    slice_id: int = Field(..., description="要调整的切片 ID")
+    name: str | None = Field(None, description="新名称")
+    subject: str | None = Field(None, description="新主体品牌")
+    competitors: list[str] | None = Field(None, description="新竞品列表")
+
+
+class AdjustSlicesRequest(CustomBaseModel):
+    """切片微调请求"""
+
+    adjustments: list[AdjustSliceItem] = Field(
+        ..., min_length=1, description="切片调整列表"
+    )
+
+
+# ==================== 旧 Schemas（待 Step 7 移除）====================
 
 
 # ==================== Response Schemas ====================
@@ -104,92 +226,33 @@ class StrategyRead(CustomBaseModel):
     name: str
     status: str
     brand_brief: BrandBrief | None = None
-    consultation_rounds: list[dict] = Field(default_factory=list)
-    suggested_monitor_ids: list[int] = Field(default_factory=list)
-    slice_plan: list[dict] = Field(default_factory=list)
-    evaluation_result: dict | None = None
+
+    # ① 研究设计
+    research_design: dict | None = None
+
+    # ② 探测验证
+    probe_review_result: dict | None = None
+    probe_round: int = 0
+
+    # ③ 数据就绪
+    coverage_check_result: dict | None = None
+
+    # ④ 产出生成
+    output_type: str | None = None
     phase1_result: dict | None = None
     phase2_result: dict | None = None
     phase3_result: dict | None = None
+
+    # 关联
+    monitor_id: int | None = None
+    task_ids: list[int] = Field(default_factory=list)
     slices: list[SliceSummary] = Field(default_factory=list)
+
+    # 元信息
     created_by: int
     creator_name: str
     created_at: datetime
     updated_at: datetime
-
-
-# ==================== 新增响应 Schemas ====================
-
-
-class ConsultResponse(CustomBaseModel):
-    """AI 监测方案响应"""
-
-    understanding_summary: str = Field("", description="AI 对分析需求的一句话理解")
-    monitor_suggestions: list[dict[str, Any]] = Field(default_factory=list)
-    slice_plan: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class ConfirmPlanResponse(CustomBaseModel):
-    """确认计划响应"""
-
-    created_monitor_ids: list[int]
-    partial_errors: list[str] = Field(default_factory=list)
-    strategy: StrategyRead
-
-
-class StructureAnalysisResult(CustomBaseModel):
-    """切片结构优化分析结果（Architect Chain 输出）"""
-
-    summary: str = ""
-    current_slice_issues: list[dict[str, Any]] = Field(default_factory=list)
-    unused_opportunities: list[dict[str, Any]] = Field(default_factory=list)
-    recommended_structure: list[dict[str, Any]] = Field(default_factory=list)
-    collection_still_needed: bool = False
-    collection_note: str | None = None
-
-
-class EvaluationResultResponse(CustomBaseModel):
-    """充分性评估响应（含结构优化分析）"""
-
-    overall_score: float
-    is_sufficient: bool
-    coverage_analysis: list[dict[str, Any]] = Field(default_factory=list)
-    slice_suggestions: list[dict[str, Any]] = Field(default_factory=list)
-    gap_analysis: list[dict[str, Any]] = Field(default_factory=list)
-    supplementary_suggestions: list[dict[str, Any]] | None = None
-    supplementary_slice_plan: list[dict[str, Any]] | None = None
-    pending_supplementary_task_ids: list[int] | None = None
-    structure_analysis: StructureAnalysisResult | None = None
-
-
-class ConfirmSupplementaryRequest(CustomBaseModel):
-    """确认补充采集请求"""
-
-    monitor_suggestions: list[dict[str, Any]] = Field(
-        ..., min_length=1, description="补充采集建议列表"
-    )
-    notes_per_task: int = Field(
-        50, ge=50, le=100, description="每个任务的采集数量（50 或 100）"
-    )
-
-
-class ConfirmSupplementaryResponse(CustomBaseModel):
-    """确认补充采集响应"""
-
-    created_task_ids: list[int]
-    task_count: int
-    partial_errors: list[str] = Field(default_factory=list)
-    strategy: StrategyRead
-
-
-class SupplementaryStatusResponse(CustomBaseModel):
-    """补充采集状态"""
-
-    total: int
-    completed: int
-    pending: int
-    all_done: bool
-    completed_task_ids: list[int] = Field(default_factory=list)
 
 
 StrategyListResponse = PaginatedResponse[StrategyListItem]

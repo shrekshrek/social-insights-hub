@@ -38,6 +38,12 @@
       </div>
     </div>
 
+    <!-- AI 验证中提示 -->
+    <div v-if="allAnalyzed && !probeReview" class="flex items-center gap-2 text-sm text-gray-500">
+      <UIcon name="i-heroicons-arrow-path" class="animate-spin text-primary-400 shrink-0" />
+      <span>AI 正在验证数据质量，请稍候...</span>
+    </div>
+
     <!-- 审查结果 -->
     <div v-if="probeReview" class="space-y-3">
       <!-- 总体判定 -->

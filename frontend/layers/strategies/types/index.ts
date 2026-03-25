@@ -97,12 +97,11 @@ export interface ProbeAssessment {
   task_id: number
   keyword: string
   platform: string
-  quality: string
-  relevance_rate: number
-  entity_match: string
-  topic_relevance: string
-  verdict: string
+  verdict: 'pass' | 'fail'
   note: string
+  suggested_keyword?: string | null
+  suggestion_reason?: string | null
+  entity_match?: boolean
 }
 
 export interface RefinementSuggestion {

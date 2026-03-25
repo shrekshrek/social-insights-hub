@@ -1,11 +1,11 @@
 """Strategy Probe Review Chain — 探测数据质量审查
 
-基于探测采集（≈15 条）的分析结果，评估每个任务的关键词质量：
-- 实体命中率（采集数据是否包含目标品牌/竞品）
-- 话题相关性（内容是否围绕目标话题）
-- 数据质量（是否有足够有意义的内容）
+基于探测采集（≈20 条）的分析结果，评估每个关键词×平台任务的话题相关性：
+- 客观规则（代码层）：数量、广告占比 → 明确 pass/fail（由调用方处理）
+- 语义判断（LLM 层）：话题是否对应研究维度的研究问题（模糊案例）
+- 优化建议（LLM 层）：为 fail 任务推荐更合适的关键词（基于实际话题内容）
 
-输出每个任务的 pass/fail 判定和优化建议。
+输出每个任务的 pass/fail 判定、判定依据和（fail 时）关键词建议。
 """
 
 from __future__ import annotations
@@ -21,63 +21,50 @@ from src.langchain.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """你是一位数据质量审查专家，负责评估社交媒体探测采集数据是否满足研究需求。
+SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估社交媒体探测采集数据能否支撑研究目标。
 
-## 任务
-根据探测采集（每个搜索任务约 15 条原文）的分析摘要，判断关键词质量并给出优化建议。
+## 字段说明
 
-## 评估维度
-1. **相关性** (relevance): 采集到的内容是否与研究目标相关
-2. **实体命中** (entity_match): 分析结果中是否出现目标品牌/竞品实体
-3. **数据质量** (quality): 内容是否有意义（非纯广告/spam/无关内容）
+- **主要话题**：从深度分析帖子中聚合出的核心话题，括号内为提及次数，代表该平台用户真实在讨论的内容
+- **entity_match**：目标品牌或竞品实体是否在采集内容中出现（true=有出现，false=未出现）
+- **广告占比**：被判定为推广/软文的帖子比例
 
-## 判定标准
-- **pass**: 相关性高、实体命中符合预期、数据质量可接受
-- **adjust**: 数据有一定价值但关键词需要微调（如太宽泛或太狭窄）
-- **fail**: 数据几乎不相关，关键词需要大幅调整
+## 判定规则
 
-## 输出格式
-只输出 JSON，不要额外文字或 markdown 代码块标记：
+**核心问题**：话题内容能否支撑该任务所属维度对应的研究问题？
+
+每个任务已标注维度，请只对照该维度下的研究问题进行判断，不要参考其他维度的研究问题。
+
+- **pass**：话题与该维度研究问题的核心关注点有明显关联
+- **fail**：话题与该维度研究问题明显无关（收集到的内容完全答不上研究问题）
+
+**保守偏置**：存疑时判 pass——全量采集后分析结果会暴露真正的问题，误判 fail 会浪费关键词调整机会。
+
+## 关键词建议（仅 fail 时填写）
+
+好的替换关键词应满足：在该平台搜索时，能召回与研究问题核心关注点直接相关的内容。
+结合「已采集到的话题（知道现在收到了什么）」与「研究问题（知道需要什么）」之间的差距来推导建议词。
+
+## 输出格式（只输出 JSON，不含 markdown）
+
 {{
   "assessments": [
     {{
       "task_id": 123,
-      "keyword": "原始搜索关键词",
-      "platform": "平台名称",
-      "relevance_rate": 0.8,
-      "entity_match": true,
-      "topic_relevance": "high",
-      "quality": "good",
+      "keyword": "关键词",
+      "platform": "平台",
       "verdict": "pass",
-      "note": "一句话评价"
-    }}
-  ],
-  "overall_verdict": "all_pass",
-  "refinement_suggestions": [
-    {{
-      "task_id": 456,
-      "original_keyword": "原关键词",
-      "suggested_keyword": "建议新关键词",
-      "platform": "平台名称",
-      "reason": "调整原因"
+      "note": "一句话判定依据（说明话题与研究问题的关联或差距）",
+      "suggested_keyword": null,
+      "suggestion_reason": null
     }}
   ]
 }}
 
-relevance_rate: 0.0-1.0 之间的相关性评分
-topic_relevance: high / medium / low
-quality: good / acceptable / poor
-verdict: pass / adjust / fail
-overall_verdict:
-- all_pass: 所有任务都通过
-- partial_pass: 部分通过，部分需要调整
-- fail: 大部分不通过
-
-## 要求
-- assessments 必须覆盖每个探测任务
-- 只有 verdict 为 adjust 或 fail 的任务才需要 refinement_suggestions
-- 如果全部 pass，refinement_suggestions 为空数组
-- 判定要务实，探测数据量小（≈15条），不要因为数据量少就判 fail
+**规则：**
+- 每个任务均需给出 assessment
+- verdict 只能是 pass 或 fail
+- verdict=fail 时：suggested_keyword 给出替换关键词，suggestion_reason 说明「当前收到了什么 vs 需要什么 → 为何推荐这个词」；pass 时均为 null
 """
 
 USER_TEMPLATE = """{research_design_section}
@@ -97,54 +84,60 @@ def create_probe_review_chain() -> Runnable:
 
 def format_probe_review_inputs(
     research_design: dict,
-    probe_tasks: list[dict],
+    tasks: list[dict],
 ) -> dict[str, Any]:
     """格式化探测审查链输入
 
     Args:
         research_design: 研究计划 JSON
-        probe_tasks: 每个任务的探测分析摘要列表，每个包含:
-            task_id, keyword, platform, posts_count,
-            top_entities, top_topics, sentiment_summary
+        tasks: 需要 LLM 判定 verdict 的任务（已通过客观规则预筛选，排除明确 pass/fail）
     """
-    # 研究计划摘要
-    lines = ["## 研究计划"]
+    task_dim_map = research_design.get("_task_dimension_map") or {}
+
+    # 研究背景
+    lines = ["## 研究背景"]
     understanding = research_design.get("understanding_summary", "")
     if understanding:
         lines.append(f"需求理解：{understanding}")
 
+    lines.append("\n### 研究问题（含维度标注）")
     for rq in research_design.get("research_questions", []):
-        lines.append(f"- [{rq.get('id')}] {rq.get('question')} (维度: {rq.get('dimension')})")
-
-    lines.append("\n## 数据采集方案")
-    for dp in research_design.get("data_plan", []):
-        keywords = ", ".join(dp.get("keywords", []))
-        platforms = ", ".join(dp.get("platforms", []))
-        lines.append(f"- {dp.get('dimension_name')}: 关键词=[{keywords}], 平台=[{platforms}]")
+        lines.append(f"- [{rq.get('id')}] {rq.get('question')}（维度：{rq.get('dimension')}）")
 
     research_design_section = "\n".join(lines)
 
-    # 探测任务摘要
-    task_lines = ["## 探测采集结果"]
-    for task_info in probe_tasks:
-        task_lines.append(f"\n### 任务 #{task_info['task_id']}")
-        task_lines.append(f"关键词: {task_info.get('keyword', '')}")
-        task_lines.append(f"平台: {task_info.get('platform', '')}")
-        task_lines.append(f"采集原文数: {task_info.get('posts_count', 0)}")
+    # 待判定任务列表
+    task_lines = ["## 待判定任务"]
+    for t in tasks:
+        dim_name = task_dim_map.get(str(t["task_id"]), "")
+        task_lines.append(f"\n### 任务 #{t['task_id']}")
+        task_lines.append(
+            f"关键词: {t.get('keyword', '')} | 平台: {t.get('platform', '')}"
+            + (f" | 维度: {dim_name}" if dim_name else "")
+        )
+        entity_match = t.get("entity_match", False)
+        task_lines.append(f"entity_match: {entity_match}（{'品牌/竞品实体在内容中有出现' if entity_match else '��牌/竞品实体未在内容中出现'}）")
+        task_lines.append(
+            f"采集: {t.get('posts_count', 0)} 条"
+            f"（深度分析 {t.get('deep_analyzed', 0)} 条）"
+        )
 
-        if task_info.get("top_entities"):
-            entities_str = ", ".join(task_info["top_entities"][:10])
-            task_lines.append(f"主要实体: {entities_str}")
+        top_topics = t.get("top_topics") or []
+        if top_topics:
+            topic_parts = []
+            for topic in top_topics[:8]:
+                if isinstance(topic, dict):
+                    name = topic.get("name", "")
+                    mentions = topic.get("mentions")
+                    topic_parts.append(f"{name}（{mentions}次）" if mentions else name)
+                else:
+                    topic_parts.append(str(topic))
+            task_lines.append(f"主要话题: {', '.join(topic_parts)}")
+        else:
+            task_lines.append("主要话题: （暂无，深度分析样本不足）")
 
-        if task_info.get("top_topics"):
-            topics_str = ", ".join(task_info["top_topics"][:10])
-            task_lines.append(f"主要话题: {topics_str}")
-
-        if task_info.get("sentiment_summary"):
-            task_lines.append(f"情感摘要: {task_info['sentiment_summary']}")
-
-        if task_info.get("analysis_summary"):
-            task_lines.append(f"分析摘要: {task_info['analysis_summary']}")
+        if t.get("promotion_ratio") is not None:
+            task_lines.append(f"广告占比: {t['promotion_ratio']:.0%}（推广/软文帖子比例）")
 
     probe_tasks_section = "\n".join(task_lines)
 
@@ -155,7 +148,11 @@ def format_probe_review_inputs(
 
 
 def parse_probe_review_response(response_text: str) -> dict[str, Any]:
-    """解析探测审查 Chain 输出，失败时抛出 ValueError"""
+    """解析探测审查 Chain 输出，失败时抛出 ValueError
+
+    返回 {"assessments": [...]}，每个 assessment 含：
+    task_id, keyword, platform, verdict, note, suggested_keyword, suggestion_reason
+    """
     text = response_text.strip()
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0]
@@ -165,11 +162,8 @@ def parse_probe_review_response(response_text: str) -> dict[str, Any]:
     try:
         result = json.loads(text.strip())
     except json.JSONDecodeError as e:
-        logger.error("Probe Review Chain JSON 解析失败: %s...", text[:200])
+        logger.error("Probe Review Chain JSON 解析���败: %s...", text[:200])
         raise ValueError(f"LLM 输出无法解析为 JSON: {e}") from e
 
     result.setdefault("assessments", [])
-    result.setdefault("overall_verdict", "fail")
-    result.setdefault("refinement_suggestions", [])
-
     return result

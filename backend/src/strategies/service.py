@@ -1,5 +1,6 @@
 """策略定义业务逻辑"""
 
+import asyncio
 import io
 import logging
 import time
@@ -45,6 +46,7 @@ from src.langchain.chains.strategy_brief_parser_chain import (
     create_strategy_brief_parser_chain,
     parse_brief_parser_response,
 )
+from src.database import AsyncSessionLocal
 from src.social_media.analysis.models import AnalysisSlice
 from src.social_media.monitors.crud import check_monitor_access
 from .models import Strategy, StrategySlice
@@ -668,6 +670,9 @@ async def confirm_research(
 
 # ==================== ② 探测验证 ====================
 
+# 防止多个并发请求同时触发同一策略的 LLM 审查
+_probe_review_in_progress: set[int] = set()
+
 
 async def _build_probe_task_summaries(
     db: AsyncSession,
@@ -677,7 +682,7 @@ async def _build_probe_task_summaries(
 
     Returns:
         (task_statuses, analyzed_summaries)
-        analyzed_summaries 只包含已有分析结果的任务摘要，供 LLM 审查使用
+        analyzed_summaries 只包含已有分析结果的任务摘要，供审查使用
     """
     from src.social_media.tasks.models import DataTask
 
@@ -704,135 +709,220 @@ async def _build_probe_task_summaries(
         )
 
         if has_analysis:
-            # 从 analysis_result 提取摘要供 LLM 审查
             ar = task.analysis_result or {}
+            insights = ar.get("insights") or {}
+            metrics = ar.get("metrics") or {}
+            marketing = metrics.get("marketing_analysis") or {}
+            data_volume = (ar.get("meta") or {}).get("data_volume") or {}
+
+            # entity_match: 从已分类的实体列表计算，不依赖 LLM 解析
+            target_entities = insights.get("target_entities") or []
+            competitor_entities = insights.get("competitor_entities") or []
+            entity_match = bool(target_entities or competitor_entities)
+
+            top_topics_raw = insights.get("top_topics") or []
+            top_topics = [
+                {"name": t.get("name", ""), "mentions": t.get("mentions", 0)}
+                for t in top_topics_raw[:10]
+            ]
+
             summary = {
                 "task_id": task.id,
                 "keyword": task.keywords or "",
                 "platform": task.platform.code if task.platform else "",
                 "posts_count": task.posts_count,
-                "top_entities": [
-                    e.get("name", "") for e in (ar.get("aligned_entities") or [])[:10]
-                ],
-                "top_topics": [
-                    t.get("name", "") for t in (ar.get("aligned_topics") or [])[:10]
-                ],
-                "sentiment_summary": ar.get("overview", {}).get("sentiment_label", ""),
-                "analysis_summary": ar.get("overview", {}).get("summary", ""),
+                "deep_analyzed": data_volume.get("deep_analyzed", 0),
+                "entity_match": entity_match,               # 代码预计算，可靠
+                "top_topics": top_topics,
+                "promotion_ratio": marketing.get("promotion_ratio"),  # 广告占比（客观）
             }
             analyzed_summaries.append(summary)
 
     return statuses, analyzed_summaries
 
 
-async def check_probe_status(
-    db: AsyncSession,
-    strategy: Strategy,
-) -> ProbeStatusResponse:
-    """查询探测进度，全部分析完成后自动运行审查
+def _auto_verdict_probe_task(summary: dict) -> tuple[str, str] | None:
+    """客观规则层：根据量化指标直接判定，返回 (verdict, note) 或 None（交 LLM 判断）
 
-    当所有探测任务的分析结果都就绪时：
-    - 运行 probe_review_chain
-    - 如果 overall_verdict = all_pass → 自动 approve 所有任务，状态 → collecting
-    - 否则 → 存储审查结果，等待用户操作
+    Hard FAIL：内容极少 / 广告占比极高
+    数据门槛：深度分析样本不足，默认 pass 待全量后验证
+    None：交 LLM 判断话题与研究问题的相关性
     """
-    task_ids = list(strategy.task_ids or [])
-    statuses, analyzed_summaries = await _build_probe_task_summaries(db, task_ids)
+    posts = summary.get("posts_count") or 0
+    promo = summary.get("promotion_ratio")
+    deep_analyzed = summary.get("deep_analyzed") or 0
 
-    total = len(statuses)
-    analyzed = sum(1 for s in statuses if s.has_analysis)
-    all_analyzed = total > 0 and analyzed == total
+    # Hard FAIL
+    if posts < 5:
+        return "fail", f"平台内容极少（仅 {posts} 条），关键词在此平台可能无效"
+    if promo is not None and promo > 0.85:
+        return "fail", f"广告内容占比 {promo:.0%}，自然讨论极少"
 
-    # 如果已有审查结果且状态不是 probing，直接返回
-    if strategy.probe_review_result:
-        fresh = await get_strategy_by_id(db, strategy.id)
-        return ProbeStatusResponse(
-            all_analyzed=all_analyzed,
-            tasks=statuses,
-            analyzed_count=analyzed,
-            total_count=total,
-            probe_review_result=strategy.probe_review_result,
-            strategy=build_strategy_read(fresh),
+    # 数据门槛：深度分析样本不足，无法判断话题相关性，默认通过待全量后验证
+    if deep_analyzed < 5:
+        return "pass", f"深度分析样本较少（{deep_analyzed} 条），待全量采集后验证话题相关性"
+
+    return None  # 交 LLM 判断话题相关性
+
+
+async def _run_probe_review_bg_task(
+    strategy_id: int,
+    analyzed_summaries: list[dict],
+) -> None:
+    """后台任务：运行探测审查，结果写入 DB（不阻塞 HTTP 响应）
+
+    全量评估所有任务（不区分新旧轮次）：
+    1. 客观规则层（_auto_verdict_probe_task）处理明确案例
+    2. LLM 层处理模糊案例（话题相关性判断）
+    temperature=0 保证相同数据重评结果不变。
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            strategy = await get_strategy_by_id(db, strategy_id)
+            if strategy is None or strategy.probe_review_result:
+                return  # 策略不存在或已有结果（并发任务已完成）
+
+            # 客观规则层：分流（全量评估所有任务，temperature=0 保证相同数据相同结果）
+            auto_assessments: list[dict] = []
+            rule_suggestions: list[dict] = []  # auto-fail 任务的规则建议（无需 LLM）
+            ambiguous_summaries: list[dict] = []
+
+            for summary in analyzed_summaries:
+                result = _auto_verdict_probe_task(summary)
+                if result is not None:
+                    verdict, note = result
+                    auto_assessments.append({
+                        "task_id": summary["task_id"],
+                        "keyword": summary["keyword"],
+                        "platform": summary["platform"],
+                        "entity_match": summary.get("entity_match", False),
+                        "verdict": verdict,
+                        "note": note,
+                    })
+                    if verdict == "fail":
+                        # 规则 fail：内容极少或几乎全是广告，LLM 无法从中获取有效话题
+                        # 给出通用建议，具体关键词由用户根据研究方向决定
+                        rule_suggestions.append({
+                            "task_id": summary["task_id"],
+                            "original_keyword": summary["keyword"],
+                            "suggested_keyword": None,
+                            "platform": summary["platform"],
+                            "reason": note,
+                        })
+                else:
+                    ambiguous_summaries.append(summary)
+
+            # LLM 层：处理模糊案例（话题相关性判断）
+            review_result = await _run_probe_review(
+                db,
+                strategy,
+                ambiguous_summaries=ambiguous_summaries,
+                auto_assessments=auto_assessments,
+                rule_suggestions=rule_suggestions,
+            )
+
+            if review_result.get("overall_verdict") == "all_pass":
+                await _approve_all_probe_tasks(db, list(strategy.task_ids or []))
+                strategy.status = "collecting"
+                await db.commit()
+    except Exception as e:
+        logger.error(
+            "Strategy %d probe review background task failed: %s", strategy_id, e, exc_info=True
         )
-
-    # 未全部分析完成，返回进度
-    if not all_analyzed:
-        return ProbeStatusResponse(
-            all_analyzed=False,
-            tasks=statuses,
-            analyzed_count=analyzed,
-            total_count=total,
-        )
-
-    # 全部分析完成 → 自动运行审查
-    review_result = await _run_probe_review(db, strategy, analyzed_summaries)
-
-    # all_pass → 自动 approve
-    if review_result.get("overall_verdict") == "all_pass":
-        await _approve_all_probe_tasks(db, task_ids)
-        strategy.status = "collecting"
-        await db.commit()
-        updated = await get_strategy_by_id(db, strategy.id)
-        return ProbeStatusResponse(
-            all_analyzed=True,
-            tasks=statuses,
-            analyzed_count=analyzed,
-            total_count=total,
-            probe_review_result=review_result,
-            strategy=build_strategy_read(updated),
-        )
-
-    # 需要用户操作 �� 重新加载避免过期属性
-    fresh = await get_strategy_by_id(db, strategy.id)
-    return ProbeStatusResponse(
-        all_analyzed=True,
-        tasks=statuses,
-        analyzed_count=analyzed,
-        total_count=total,
-        probe_review_result=review_result,
-        strategy=build_strategy_read(fresh),
-    )
+    finally:
+        _probe_review_in_progress.discard(strategy_id)
 
 
 async def _run_probe_review(
     db: AsyncSession,
     strategy: Strategy,
-    analyzed_summaries: list[dict],
+    ambiguous_summaries: list[dict],
+    auto_assessments: list[dict] | None = None,
+    rule_suggestions: list[dict] | None = None,
 ) -> dict:
-    """运行 probe_review_chain 并存储结果"""
-    chain = create_probe_review_chain()
-    inputs = format_probe_review_inputs(
-        research_design=strategy.research_design or {},
-        probe_tasks=analyzed_summaries,
-    )
+    """运行 probe_review_chain 并存储结果
 
-    start = time.time()
-    llm_result = await chain.ainvoke(inputs)
-    duration = time.time() - start
+    Args:
+        ambiguous_summaries: 需要 LLM 判定 verdict 的任务（客观指标无法确定）
+        auto_assessments: 已通过客观规则判定的评估结果（直接合并，不送 LLM）
+        rule_suggestions: auto-fail 任务的规则建议（不送 LLM，直接合并）
+    """
+    llm_assessments: list[dict] = []
+    parse_error: str | None = None
 
-    try:
-        parsed = parse_probe_review_response(llm_result.content)
-    except ValueError as e:
-        logger.warning("Strategy %d probe review 解析失败: %s", strategy.id, e)
-        parsed = {
-            "assessments": [],
-            "overall_verdict": "fail",
-            "refinement_suggestions": [],
-            "_parse_error": str(e),
-        }
+    # 仅在有模糊案例时调用 LLM（auto-fail 任务不送 LLM，已有规则建议）
+    if ambiguous_summaries:
+        chain = create_probe_review_chain()
+        inputs = format_probe_review_inputs(
+            research_design=strategy.research_design or {},
+            tasks=ambiguous_summaries,
+        )
+
+        start = time.time()
+        llm_result = await chain.ainvoke(inputs)
+        duration = time.time() - start
+
+        try:
+            parsed = parse_probe_review_response(llm_result.content)
+            llm_assessments = parsed.get("assessments", [])
+        except ValueError as e:
+            logger.warning("Strategy %d probe review 解析失败: %s", strategy.id, e)
+            parse_error = str(e)
+
+        logger.info(
+            "Strategy %d probe review LLM 完成 (%.1fs, 模糊=%d)",
+            strategy.id, duration, len(ambiguous_summaries),
+        )
+    else:
+        logger.info("Strategy %d probe review 全部自动判定，跳过 LLM", strategy.id)
+
+    # 合并所有评估结果
+    all_assessments = (auto_assessments or []) + llm_assessments
+
+    # 从合并后的 assessments 确定性计算 overall_verdict
+    verdicts = [a.get("verdict", "fail") for a in all_assessments]
+    fail_count = sum(1 for v in verdicts if v == "fail")
+    if not verdicts:
+        overall = "fail"
+    elif fail_count == 0:
+        overall = "all_pass"
+    elif fail_count == len(verdicts):
+        overall = "fail"
+    else:
+        overall = "partial_pass"
+
+    # 合并建议：rule_suggestions（auto-fail） + LLM-fail assessments 中的 suggested_keyword
+    all_suggestions: list[dict] = list(rule_suggestions or [])
+    for a in llm_assessments:
+        if a.get("verdict") == "fail" and a.get("suggested_keyword"):
+            all_suggestions.append({
+                "task_id": a["task_id"],
+                "original_keyword": a.get("keyword", ""),
+                "suggested_keyword": a["suggested_keyword"],
+                "platform": a.get("platform", ""),
+                "reason": a.get("suggestion_reason", ""),
+            })
 
     logger.info(
-        "Strategy %d probe review 完成 (%.1fs, verdict=%s)",
-        strategy.id,
-        duration,
-        parsed.get("overall_verdict"),
+        "Strategy %d probe review 完成 (verdict=%s, 规则自动=%d, LLM=%d)",
+        strategy.id, overall,
+        len(auto_assessments or []), len(llm_assessments),
     )
 
-    strategy.probe_review_result = parsed
+    result: dict = {
+        "assessments": all_assessments,
+        "overall_verdict": overall,
+        "refinement_suggestions": all_suggestions,
+    }
+    if parse_error:
+        result["_parse_error"] = parse_error
+
+    strategy.probe_review_result = result
     flag_modified(strategy, "probe_review_result")
     await db.commit()
 
-    return parsed
+    return result
+
 
 
 async def _approve_all_probe_tasks(
@@ -853,6 +943,64 @@ async def _approve_all_probe_tasks(
         .values(status="approved")
     )
     return result.rowcount or 0
+
+
+async def check_probe_status(
+    db: AsyncSession,
+    strategy: Strategy,
+) -> ProbeStatusResponse:
+    """查询探测进度，全部分析完成后自动触发审查（后台非阻塞）
+
+    轮询语义：
+    - 未全部分析完成 → 返回进度，all_analyzed=False
+    - 全部完成 + 无审查结果 → 触发后台审查任务（首次），或等待进行中的任务完成
+    - 审查结果已就绪 → 返回结果（含 strategy 快照）
+    - all_pass → 后台任务已自动 approve + 状态推进到 collecting
+    """
+    task_ids = list(strategy.task_ids or [])
+    statuses, analyzed_summaries = await _build_probe_task_summaries(db, task_ids)
+
+    total = len(statuses)
+    analyzed = sum(1 for s in statuses if s.has_analysis)
+    all_analyzed = total > 0 and analyzed == total
+
+    # 已有审查结果 → 直接返回缓存
+    if strategy.probe_review_result:
+        fresh = await get_strategy_by_id(db, strategy.id)
+        return ProbeStatusResponse(
+            all_analyzed=all_analyzed,
+            tasks=statuses,
+            analyzed_count=analyzed,
+            total_count=total,
+            probe_review_result=strategy.probe_review_result,
+            strategy=build_strategy_read(fresh),
+        )
+
+    # 未全部分析完成 → 返回进度
+    if not all_analyzed:
+        return ProbeStatusResponse(
+            all_analyzed=False,
+            tasks=statuses,
+            analyzed_count=analyzed,
+            total_count=total,
+        )
+
+    # 全部分析完成 + 无审查结果 → 触发后台任务（防重复启动）
+    if strategy.id not in _probe_review_in_progress:
+        _probe_review_in_progress.add(strategy.id)
+        asyncio.create_task(
+            _run_probe_review_bg_task(strategy.id, analyzed_summaries)
+        )
+        logger.info("Strategy %d 探测审查后台任务已触发", strategy.id)
+
+    # 审查进行中，客户端继续轮询
+    return ProbeStatusResponse(
+        all_analyzed=True,
+        tasks=statuses,
+        analyzed_count=analyzed,
+        total_count=total,
+        probe_review_result=None,
+    )
 
 
 async def approve_probe(
@@ -906,16 +1054,17 @@ async def refine_probe(
     # 获取原 task 的 probe_size / notes_per_task
     research_design = strategy.research_design or {}
     data_plan = research_design.get("data_plan", [])
-    # 从第一个 data_plan 条目取 probe_size，默认 15
-    default_probe_size = 15
+    # 从第一个 data_plan 条目取 probe_size，默认 20（与 confirm_research 保持一致）
+    default_probe_size = 20
     default_full_size = 50
     if data_plan:
-        default_probe_size = data_plan[0].get("probe_size", 15)
+        default_probe_size = data_plan[0].get("probe_size", 20)
         default_full_size = data_plan[0].get("full_size", 50)
 
     removed_task_ids = []
     created_task_ids = []
     current_task_ids = list(strategy.task_ids or [])
+    old_to_new_task_ids: dict[int, int] = {}  # 追踪旧→新 task ID 映射，用于继承维度
 
     for item in refinements:
         old_task_id = item["task_id"]
@@ -961,6 +1110,7 @@ async def refine_probe(
         )
         created_task_ids.append(new_task.id)
         current_task_ids.append(new_task.id)
+        old_to_new_task_ids[old_task_id] = new_task.id
 
     # 更新策略
     strategy.task_ids = current_task_ids
@@ -968,6 +1118,17 @@ async def refine_probe(
     strategy.probe_round = (strategy.probe_round or 0) + 1
     strategy.probe_review_result = None  # 清除旧审查结果
     flag_modified(strategy, "probe_review_result")
+
+    # 更新 research_design：新任务继承被替换任务的维度 + 记录本轮新任务 IDs
+    rd = strategy.research_design or {}
+    dim_map = dict(rd.get("_task_dimension_map") or {})
+    for old_id, new_id in old_to_new_task_ids.items():
+        old_dim = dim_map.get(str(old_id), "")
+        if old_dim:
+            dim_map[str(new_id)] = old_dim
+    rd["_task_dimension_map"] = dim_map
+    strategy.research_design = rd
+    flag_modified(strategy, "research_design")
 
     await db.commit()
     updated = await get_strategy_by_id(db, strategy.id)

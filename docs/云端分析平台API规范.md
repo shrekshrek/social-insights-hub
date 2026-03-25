@@ -12,7 +12,8 @@
   - [确认接收任务](#2-确认接收任务)
   - [上报任务进度](#3-上报任务进度)
   - [上传任务结果](#4-上传任务结果)
-  - [健康检查](#5-健康检查)
+  - [查询任务详情](#5-查询任务详情)
+  - [健康检查](#6-健康检查)
 - [数据结构](#数据结构)
 - [错误码](#错误码)
 - [实现建议](#实现建议)
@@ -124,7 +125,7 @@ Task B（续采）：从断点恢复，采集全量数据（含评论）。
   │  GET /api/v1/agent/tasks/pending              │
   │ ─────────────────────────────────────────────>│
   │  { tasks: [{ status:"pending",                │
-  │              task_params: { probe_size:15,    │
+  │              task_params: { probe_size:20,    │
   │                             max_notes_count:50 } }] }
   │ <─────────────────────────────────────────────│
   │                                               │
@@ -143,10 +144,10 @@ Task B（续采）：从断点恢复，采集全量数据（含评论）。
   │                                               │
   │  ─── Task B（续采阶段）────────────────────── │
   │                                               │
-  │  GET /api/v1/agent/tasks/pending              │
+  │  GET /api/v1/agent/tasks/pending              │  ← 同一接口，approved 任务也在此返回
   │ ─────────────────────────────────────────────>│
   │  { tasks: [{ status:"approved",               │
-  │              task_params: { probe_size:15,    │
+  │              task_params: { probe_size:20,    │
   │                             max_notes_count:50,│
   │                             checkpoint_id:"cursor:page3:..." } }] }
   │ <─────────────────────────────────────────────│
@@ -160,9 +161,10 @@ Task B（续采）：从断点恢复，采集全量数据（含评论）。
 ```
 
 **关键规则**：
-- `status = "pending"` + `probe_size > 0` → **探测模式**：跳过评论，采满 probe_size 条后保存断点退出
+- `status = "pending"` + `probe_size > 0` → **探测模式**：跳过评论，采满 probe_size 条（固定 20）后保存断点退出
 - `status = "approved"` → **续采模式**：恢复评论采集，不限数量，从 `checkpoint_id` 断点继续
 - `approved` 任务**不需要** accept，直接执行（防止多客户端竞争）
+- `/tasks/pending` 同时返回 `pending` 和 `approved` 任务，爬虫使用单一轮询接口即可处理两阶段
 
 ---
 
@@ -190,10 +192,12 @@ Authorization: Bearer {api_key}
   "tasks": [
     {
       "task_id": 123,
+      "task_name": "小红书-AI关键词搜索",
       "platform": "xhs",
       "task_type": "search",
+      "status": "pending",
       "priority": 1,
-        "keywords": "人工智能",
+      "keywords": "人工智能",
       "task_params": {
         "max_notes_count": 50,
         "enable_comments": true,
@@ -214,6 +218,7 @@ Authorization: Bearer {api_key}
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `task_id` | int | ✅ | 任务唯一标识（平台 DataTask.id） |
+| `task_name` | string | ✅ | 任务名称（用于展示） |
 | `platform` | string | ✅ | 平台代码：`xhs/dy/bili/ks/wb/tieba/zhihu` |
 | `task_type` | string | ✅ | 类型：`search/detail/creator/homefeed` |
 | `status` | string | ✅ | `pending`（新任务，需 accept）或 `approved`（续采任务，跳过 accept） |
@@ -236,8 +241,8 @@ Authorization: Bearer {api_key}
 | `publish_time_type` | int | 0 | 发布时间筛选（0=全部,1=一天内,2=一周内,3=半年内） |
 | `sort_type` | string | popularity_descending | 排序（popularity_descending/time_descending） |
 | `enable_proxy` | bool | false | 是否启用代理 |
-| `probe_size` | int | - | 探测采集数量（仅 Task A 有效，Task B 忽略）。`status=pending` 且此值 > 0 时触发探测模式 |
-| `checkpoint_id` | string | - | 断点续传 ID（仅 Task B 携带）。爬虫从此位置���续采集，格式由爬虫自定义 |
+| `probe_size` | int | - | 探测采集数量（固定 20，仅 Task A 有效，Task B 忽略）。`status=pending` 且此值 > 0 时触发探测模式 |
+| `checkpoint_id` | string | - | 断点续传 ID（仅 Task B 携带）。爬虫从此位置继续采集，格式由爬虫自定义 |
 
 ---
 
@@ -355,11 +360,17 @@ Content-Encoding: gzip
     "contents": [...],
     "comments": [...]
   },
-  "checkpoint_id": "cursor:page3:abc123"
+  "checkpoint_id": "cursor:page3:abc123",
+  "error_message": null
 }
 ```
 
-> 💡 **`checkpoint_id`**：Task A（探测）完成后必须携带此字段。云端收到后存入 `task_params`，下发 Task B 时原样返回给爬虫。Task B 无需再次上传（或传 `null`）。
+**字段说明**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `checkpoint_id` | string | Task A（探测）完成后必须携带。云端存入 `task_params`，下发 Task B 时原样回传。Task B 无需再次上传 |
+| `error_message` | string | 任务失败原因。携带时云端保留已采集数据并将任务置为 `failed`（而非 `completed`）。正常完成时不携带或传 `null` |
 
 **响应 200**
 
@@ -389,13 +400,33 @@ Content-Encoding: gzip
 | 验证项 | 失败响应 |
 |-------|---------|
 | 任务存在 | 404 TASK_NOT_FOUND |
-| 状态为 accepted/running | 409 INVALID_TASK_STATUS |
+| 状态为 accepted/running/completed/approved | 409 INVALID_TASK_STATUS |
 | platform 与任务配置一致 | 400 PLATFORM_MISMATCH |
-| 未重复上传 | 409 DUPLICATE_UPLOAD（或返回成功，幂等） |
+
+> 💡 `completed` 状态允许重新上传（覆盖模式）；`approved` 状态为追加模式（Task B）。
 
 ---
 
-### 5. 健康检查
+### 5. 查询任务详情
+
+查询指定任务的完整信息，包含 `task_params`（含 `checkpoint_id`）。
+
+**请求**
+
+```http
+GET /api/v1/agent/tasks/{task_id}
+Authorization: Bearer {api_key}
+```
+
+**响应 200**：返回与 `/tasks/pending` 列表中相同结构的单条 `AgentTaskInfo`。
+
+**响应 404**：任务不存在或已删除。
+
+> 💡 此接口供按需查询使用，正常流程中爬虫通过 `/tasks/pending` 轮询即可获取完整任务信息，无需额外调用此接口。
+
+---
+
+### 6. 健康检查
 
 检测平台服务是否可用（无需认证）。
 
@@ -493,8 +524,8 @@ GET /api/v1/agent/health
    - `result` 接口幂等，根据 task_id 判断重复上传
 
 3. **超时处理**
-   - 定时任务检测：`accepted` 超过 2 小时未完成 → 重置为 `pending`
-   - 可选：记录超时次数，超过阈值标记为 `failed`
+   - FastAPI 后台任务（每 5 分钟）：`accepted` 超过 2 小时未完成 → 重置为 `pending`，清空 `accepted_at`/`accepted_by`
+   - 处理爬虫 accept 后崩溃/重启导致任务丢失的场景
 
 4. **数据入库**
    - 复用现有 `adapters/` 进行数据格式转换

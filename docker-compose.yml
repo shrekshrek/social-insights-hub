@@ -71,24 +71,6 @@ services:
       - postgres_db
       - redis
 
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    volumes:
-      - ./backend:/app
-      - /app/.venv
-    command: sh -c "uv run celery -A src.celery_app beat --loglevel=info"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
-    env_file:
-      - .env
-    depends_on:
-      - postgres_db
-      - redis
-
 
 volumes:
   # 数据卷会自动使用项目名前缀: {PROJECT_NAME}_postgres_data

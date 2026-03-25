@@ -32,7 +32,6 @@ celery_app = Celery(
         "src.social_media.analysis.celery_tasks.aggregation_tasks",
         "src.social_media.analysis.celery_tasks.monitor_slice_tasks",
         "src.social_media.analysis.celery_tasks.auto_analysis_tasks",
-        "src.agent.tasks",
         # Future task modules:
         # "src.social_media.analysis.celery_tasks.clustering_tasks",
         # "src.social_media.analysis.celery_tasks.competitive_tasks",
@@ -84,14 +83,6 @@ celery_app.conf.update(
     # worker_pool 通过命令行参数指定
     # worker_concurrency 通过命令行参数指定
 )
-
-# ========== Beat 定时任务 ==========
-celery_app.conf.beat_schedule = {
-    "reset-timed-out-agent-tasks": {
-        "task": "agent.reset_timed_out_tasks",
-        "schedule": 300,  # 每 5 分钟检查一次
-    },
-}
 
 logger.info("✅ Celery应用配置完成")
 logger.info(f"   Broker: {settings.CELERY_BROKER_URL}")

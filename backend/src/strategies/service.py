@@ -539,6 +539,12 @@ async def confirm_research(
     from src.social_media.tasks.schemas import DataTaskCreate
     from src.social_media.tasks.service import create_task
 
+    if STATUS_ORDER.get(strategy.status, 0) > STATUS_ORDER["planned"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="策略已进入探测/采集阶段，如需重新确认请先重置到研究设计阶段",
+        )
+
     data_plan = research_design.get("data_plan") or []
     if not data_plan:
         raise HTTPException(
@@ -689,7 +695,9 @@ async def _build_probe_task_summaries(
     if not task_ids:
         return [], []
 
-    query = select(DataTask).where(DataTask.id.in_(task_ids))
+    query = select(DataTask).where(
+        DataTask.id.in_(task_ids), DataTask.is_deleted.is_(False)
+    )
     result = await db.execute(query)
     tasks = result.scalars().all()
 
@@ -698,13 +706,16 @@ async def _build_probe_task_summaries(
 
     for task in tasks:
         has_analysis = task.analysis_result is not None
+        no_data = (task.posts_count or 0) == 0
+
+        # 0 条数据：不会触发分析流程，但无需 LLM 判断，直接视为已处理（客观规则层会自动 fail）
         statuses.append(
             ProbeTaskStatus(
                 task_id=task.id,
                 keyword=task.keywords or "",
                 platform=task.platform.code if task.platform else "",
                 status=task.status,
-                has_analysis=has_analysis,
+                has_analysis=has_analysis or no_data,
             )
         )
 
@@ -732,11 +743,23 @@ async def _build_probe_task_summaries(
                 "platform": task.platform.code if task.platform else "",
                 "posts_count": task.posts_count,
                 "deep_analyzed": data_volume.get("deep_analyzed", 0),
-                "entity_match": entity_match,               # 代码预计算，可靠
+                "entity_match": entity_match,
                 "top_topics": top_topics,
-                "promotion_ratio": marketing.get("promotion_ratio"),  # 广告占比（客观）
+                "promotion_ratio": marketing.get("promotion_ratio"),
             }
             analyzed_summaries.append(summary)
+        elif no_data:
+            # 0 条帖子：加入 summaries 供客观规则层直接 fail，不送 LLM
+            analyzed_summaries.append({
+                "task_id": task.id,
+                "keyword": task.keywords or "",
+                "platform": task.platform.code if task.platform else "",
+                "posts_count": 0,
+                "deep_analyzed": 0,
+                "entity_match": False,
+                "top_topics": [],
+                "promotion_ratio": None,
+            })
 
     return statuses, analyzed_summaries
 
@@ -848,6 +871,7 @@ async def _run_probe_review(
         rule_suggestions: auto-fail 任务的规则建议（不送 LLM，直接合并）
     """
     llm_assessments: list[dict] = []
+    llm_add_suggestions: list[dict] = []
     parse_error: str | None = None
 
     # 仅在有模糊案例时调用 LLM（auto-fail 任务不送 LLM，已有规则建议）
@@ -856,6 +880,7 @@ async def _run_probe_review(
         inputs = format_probe_review_inputs(
             research_design=strategy.research_design or {},
             tasks=ambiguous_summaries,
+            brief=strategy.brand_brief,
         )
 
         start = time.time()
@@ -865,6 +890,7 @@ async def _run_probe_review(
         try:
             parsed = parse_probe_review_response(llm_result.content)
             llm_assessments = parsed.get("assessments", [])
+            llm_add_suggestions = parsed.get("add_suggestions", [])
         except ValueError as e:
             logger.warning("Strategy %d probe review 解析失败: %s", strategy.id, e)
             parse_error = str(e)
@@ -913,6 +939,7 @@ async def _run_probe_review(
         "assessments": all_assessments,
         "overall_verdict": overall,
         "refinement_suggestions": all_suggestions,
+        "add_suggestions": llm_add_suggestions,
     }
     if parse_error:
         result["_parse_error"] = parse_error
@@ -1008,6 +1035,11 @@ async def approve_probe(
     strategy: Strategy,
 ) -> ApproveProbeResponse:
     """手动确认探测通过，状态 → collecting"""
+    if strategy.status != "probing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="当前状态不在探测验证阶段",
+        )
     task_ids = list(strategy.task_ids or [])
     approved_count = await _approve_all_probe_tasks(db, task_ids)
 
@@ -1039,6 +1071,15 @@ async def refine_probe(
     from src.social_media.tasks.service import create_task
     from src.social_media.tasks import crud as task_crud
 
+    _PROBE_MIN_TASKS = 3
+    _PROBE_MAX_TASKS = 20
+
+    if strategy.status != "probing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="当前状态不在探测验证阶段",
+        )
+
     if strategy.probe_round >= 3:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1049,6 +1090,26 @@ async def refine_probe(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="策略尚未创建监测",
+        )
+
+    # 预检：验证调整后总任务数在合理范围内
+    current_total = len(list(strategy.task_ids or []))
+    net_change = sum(
+        1 if item.get("task_id") is None          # 纯新增
+        else (-1 if not item.get("new_keyword")   # 纯移除
+              else 0)                              # 替换（±0）
+        for item in refinements
+    )
+    projected_total = current_total + net_change
+    if projected_total < _PROBE_MIN_TASKS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"调整后任务数（{projected_total}）低于最小值 {_PROBE_MIN_TASKS}，请保留足够的探测任务",
+        )
+    if projected_total > _PROBE_MAX_TASKS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"调整后任务数（{projected_total}）超过最大值 {_PROBE_MAX_TASKS}，请减少新增数量",
         )
 
     # 获取原 task 的 probe_size / notes_per_task
@@ -1066,14 +1127,46 @@ async def refine_probe(
     current_task_ids = list(strategy.task_ids or [])
     old_to_new_task_ids: dict[int, int] = {}  # 追踪旧→新 task ID 映射，用于继承维度
 
+    from src.social_media.tasks.models import DataTask
+
+    new_task_dim_map: dict[int, str] = {}  # 新建 task_id → dimension，用于更新 dim_map
+
     for item in refinements:
-        old_task_id = item["task_id"]
-        new_keyword = item["new_keyword"]
-        platform_code = item["platform"]
+        old_task_id = item.get("task_id")
+        new_keyword = item.get("new_keyword")
+        platform_code = item.get("platform", "")
 
-        # 软删除旧任务
-        from src.social_media.tasks.models import DataTask
+        # ── 纯新增（task_id=None）──
+        if old_task_id is None:
+            platform = await get_platform_by_code(db, platform_code)
+            if not platform:
+                logger.warning("refine_probe: 平台 %s 不存在，跳过新增", platform_code)
+                continue
+            new_task = await create_task(
+                db,
+                DataTaskCreate(
+                    name=f"{new_keyword}-{platform.name}",
+                    monitor_id=strategy.monitor_id,
+                    platform_id=platform.id,
+                    task_type="search",
+                    keywords=new_keyword,
+                    data_source="remote_crawler",
+                    task_params={
+                        "max_notes_count": default_full_size,
+                        "probe_size": default_probe_size,
+                        "enable_comments": 1,
+                        "per_note_max_comments_count": 20,
+                    },
+                    auto_analyze=True,
+                ),
+                current_user_id,
+            )
+            created_task_ids.append(new_task.id)
+            current_task_ids.append(new_task.id)
+            new_task_dim_map[new_task.id] = item.get("dimension") or ""
+            continue
 
+        # ── 软删除旧任务（替换 or 移除）──
         old_task = await db.get(DataTask, old_task_id)
         if old_task and not old_task.is_deleted:
             await task_crud.delete_task(db, old_task)
@@ -1081,18 +1174,15 @@ async def refine_probe(
             if old_task_id in current_task_ids:
                 current_task_ids.remove(old_task_id)
 
-        # 创建新探测任务
-        platform = await get_platform_by_code(db, platform_code)
-        if not platform:
-            logger.warning("refine_probe: 平台 %s 不存在，跳过", platform_code)
+        # new_keyword 为空：仅移除，不创建替换任务
+        if not new_keyword:
             continue
 
-        task_params = {
-            "max_notes_count": default_full_size,
-            "probe_size": default_probe_size,
-            "enable_comments": 1,
-            "per_note_max_comments_count": 20,
-        }
+        # ── 创建替换任务 ──
+        platform = await get_platform_by_code(db, platform_code)
+        if not platform:
+            logger.warning("refine_probe: 平台 %s 不存在，跳过替换", platform_code)
+            continue
 
         new_task = await create_task(
             db,
@@ -1103,7 +1193,12 @@ async def refine_probe(
                 task_type="search",
                 keywords=new_keyword,
                 data_source="remote_crawler",
-                task_params=task_params,
+                task_params={
+                    "max_notes_count": default_full_size,
+                    "probe_size": default_probe_size,
+                    "enable_comments": 1,
+                    "per_note_max_comments_count": 20,
+                },
                 auto_analyze=True,
             ),
             current_user_id,
@@ -1119,13 +1214,15 @@ async def refine_probe(
     strategy.probe_review_result = None  # 清除旧审查结果
     flag_modified(strategy, "probe_review_result")
 
-    # 更新 research_design：新任务继承被替换任务的维度 + 记录本轮新任务 IDs
+    # 更新 research_design：继承替换任务的维度 + 写入新增任务的维度
     rd = strategy.research_design or {}
     dim_map = dict(rd.get("_task_dimension_map") or {})
     for old_id, new_id in old_to_new_task_ids.items():
         old_dim = dim_map.get(str(old_id), "")
         if old_dim:
             dim_map[str(new_id)] = old_dim
+    for new_id, dim in new_task_dim_map.items():
+        dim_map[str(new_id)] = dim
     rd["_task_dimension_map"] = dim_map
     strategy.research_design = rd
     flag_modified(strategy, "research_design")
@@ -1163,7 +1260,9 @@ async def check_collection_status(
     if not task_ids:
         return CollectionStatusResponse(total_count=0)
 
-    query = select(DataTask).where(DataTask.id.in_(task_ids))
+    query = select(DataTask).where(
+        DataTask.id.in_(task_ids), DataTask.is_deleted.is_(False)
+    )
     result = await db.execute(query)
     tasks = result.scalars().all()
 

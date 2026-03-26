@@ -40,6 +40,13 @@ class AnalysisType(str, Enum):
     COMPETITIVE_ANALYSIS = "competitive"  # 竞品分析
     MONITOR_SLICE_SUMMARY = "monitor_slice_summary"  # 监测切片整体总结（Stage3）
 
+    # 策略链（task_id 为空，关联 strategy.monitor_id）
+    STRATEGY_PROBE_REVIEW = "strategy_probe_review"  # 探测审查
+    STRATEGY_COVERAGE_CHECK = "strategy_coverage_check"  # 覆盖度验证
+    STRATEGY_PHASE1 = "strategy_phase1"  # Phase 1 洞察层
+    STRATEGY_PHASE2 = "strategy_phase2"  # Phase 2 策略层
+    STRATEGY_PHASE3 = "strategy_phase3"  # Phase 3 创意层
+
 
 class AnalysisStatus(str, Enum):
     """分析状态枚举"""

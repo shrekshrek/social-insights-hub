@@ -38,16 +38,16 @@ class TestStrategyCreate:
         assert data.slice_ids == []
 
     def test_with_brand_brief(self):
-        brief = BrandBrief(brand_name="test", analysis_goal="awareness")
+        brief = BrandBrief(subject="test", analysis_goal="awareness")
         data = StrategyCreate(name="策略", slice_ids=[1], brand_brief=brief)
-        assert data.brand_brief.brand_name == "test"
+        assert data.brand_brief.subject == "test"
         assert data.brand_brief.analysis_goal == "awareness"
 
     def test_with_brand_brief_dict(self):
         """brand_brief 支持 dict 形式传入（Pydantic 自动转换）"""
-        brief = {"brand_name": "test", "analysis_goal": "awareness"}
+        brief = {"subject": "test", "analysis_goal": "awareness"}
         data = StrategyCreate(name="策略", slice_ids=[1], brand_brief=brief)
-        assert data.brand_brief.brand_name == "test"
+        assert data.brand_brief.subject == "test"
 
 
 class TestStrategyUpdate:

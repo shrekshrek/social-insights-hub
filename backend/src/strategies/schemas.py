@@ -11,12 +11,23 @@ from src.schemas import CustomBaseModel, PaginatedResponse
 # ==================== Brand Brief ====================
 
 
+class ChannelPlanItem(CustomBaseModel):
+    """渠道分发条目"""
+
+    type: str = Field(description="渠道类型: social_media / ecommerce / news_media / industry_data / knowledge_base")
+    available: bool = Field(description="当前是否可用")
+    solvable: list[str] = Field(default_factory=list, description="该渠道能解决的研究问题")
+    unsolvable: list[str] = Field(default_factory=list, description="该渠道的局限")
+    channel_brief: str = Field("", description="针对该渠道的定制化研究描述，作为该渠道 research_design 的输入")
+
+
 class BrandBrief(CustomBaseModel):
     """结构化品牌简报"""
 
-    brand_name: str = Field(..., min_length=1, description="品牌/产品名")
+    subject: str = Field(..., min_length=1, description="研究主体（品牌/产品/品类）")
     analysis_goal: str = Field(..., min_length=1, description="分析目标")
     constraints: str | None = Field(None, description="其他约束/备注")
+    channel_plan: list[ChannelPlanItem] | None = Field(None, description="渠道分发建议")
 
 
 # ==================== Request Schemas ====================
@@ -46,25 +57,6 @@ class PhaseResultEdit(CustomBaseModel):
 # ==================== 研究设计 Schemas ====================
 
 
-class FeasibilityAssessment(CustomBaseModel):
-    """课题适配度评估"""
-
-    fit_score: float = Field(0.5, ge=0, le=1, description="课题与社媒数据的契合度 (0-1)")
-    recommendation: str = Field(
-        "proceed", description="proceed / adjust_scope / not_recommended"
-    )
-    rationale: str = Field("", description="评估理由")
-    social_can_tell: list[str] = Field(
-        default_factory=list, description="社媒数据能回答的问题"
-    )
-    social_cannot_tell: list[str] = Field(
-        default_factory=list, description="社媒数据无法回答的问题"
-    )
-    complementary_methods: list[str] = Field(
-        default_factory=list, description="建议补充的研究方法"
-    )
-
-
 class DesignResearchRequest(CustomBaseModel):
     """AI 研究设计请求"""
 
@@ -74,9 +66,6 @@ class DesignResearchRequest(CustomBaseModel):
 class DesignResearchResponse(CustomBaseModel):
     """AI 研究设计响应"""
 
-    feasibility: FeasibilityAssessment = Field(
-        default_factory=FeasibilityAssessment, description="课题适配度评估"
-    )
     understanding_summary: str = Field("", description="AI 对分析需求的理解")
     research_questions: list[dict[str, Any]] = Field(default_factory=list)
     data_plan: list[dict[str, Any]] = Field(default_factory=list)
@@ -301,6 +290,11 @@ class ParseBriefResponse(CustomBaseModel):
     """从上传文档解析出的 Brief 预填字段"""
 
     strategy_name: str = Field("", description="建议策略名称")
-    brand_name: str = Field("", description="品牌/产品名")
+    subject: str = Field("", description="研究主体（品牌/产品/品类）")
     analysis_goal: str = Field("", description="分析目标")
     constraints: str = Field("", description="补充说明")
+    platform_verdict: str = Field("partial", description="当前平台支持度: sufficient / partial / insufficient")
+    platform_note: str = Field("", description="支持度说明（1-2句）")
+    channel_plan: list[ChannelPlanItem] = Field(
+        default_factory=list, description="渠道分发建议"
+    )

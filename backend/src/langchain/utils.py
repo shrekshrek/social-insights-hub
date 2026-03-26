@@ -18,63 +18,90 @@ from langchain_core.messages import BaseMessage
 logger = logging.getLogger(__name__)
 
 
-def extract_token_usage(response: Any) -> Dict[str, int]:
+def extract_token_usage(
+    response: Any,
+    duration_seconds: float = 0.0,
+    llm_type: str = "chat",
+) -> Dict[str, Any]:
     """
-    从LLM响应中提取token使用信息（LangChain 1.0规范）
-
-    LangChain 1.0中，token使用信息存储在response_metadata中的usage字段。
-    此函数兼容多种响应格式，并提供标准化的输出。
+    从LLM响应中提取token使用信息，返回符合 TokenUsageStats schema 的结构。
 
     Args:
-        response: LLM响应对象，可以是：
-            - AIMessage（LangChain 1.0标准）
-            - BaseMessage的子类
-            - 其他包含usage信息的对象
+        response: LLM响应对象
+        duration_seconds: 调用耗时（秒），由调用方传入
+        llm_type: LLM类型 ("chat" 或 "reasoner")，用于成本计算
 
     Returns:
-        Dict: 包含以下字段的字典：
-            - input_tokens: 输入token数量
-            - output_tokens: 输出token数量
-            - total_tokens: 总token数量
-
-    Examples:
-        >>> llm = get_deepseek_chat()
-        >>> response = await llm.ainvoke("你好")
-        >>> usage = extract_token_usage(response)
-        >>> print(usage)
-        {'input_tokens': 2, 'output_tokens': 5, 'total_tokens': 7}
+        Dict: 符合 TokenUsageStats schema 的字典 {summary, call_details}
     """
+    input_tokens = 0
+    output_tokens = 0
+    total_tokens = 0
+
     try:
-        # LangChain 1.0：从response_metadata中提取usage
-        if isinstance(response, BaseMessage):
+        # 优先从 usage_metadata 提取（LangChain 标准化字段，DeepSeek 使用此字段）
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            usage = response.usage_metadata
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            total_tokens = usage.get("total_tokens", 0)
+
+        # 兜底：从 response_metadata["usage"] 提取（部分旧版 LangChain 格式）
+        elif isinstance(response, BaseMessage):
             metadata = response.response_metadata
             if "usage" in metadata:
                 usage = metadata["usage"]
-                return {
-                    "input_tokens": usage.get("prompt_tokens", 0),
-                    "output_tokens": usage.get("completion_tokens", 0),
-                    "total_tokens": usage.get("total_tokens", 0),
-                }
+                input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+                output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
+                total_tokens = usage.get("total_tokens", 0)
+            else:
+                logger.warning("无法从响应中提取token使用信息")
 
-        # 兼容旧版API：直接从usage_metadata字段提取
-        if hasattr(response, "usage_metadata"):
-            usage_metadata = response.usage_metadata
-            if usage_metadata:
-                return {
-                    "input_tokens": usage_metadata.get("input_tokens", 0),
-                    "output_tokens": usage_metadata.get("output_tokens", 0),
-                    "total_tokens": usage_metadata.get("total_tokens", 0),
-                }
-
-        logger.warning("无法从响应中提取token使用信息")
+        else:
+            logger.warning("无法从响应中提取token使用信息")
 
     except Exception as e:
         logger.error(f"提取token使用信息时出错: {e}", exc_info=True)
 
+    # 计算成本（与 llm_utils.invoke_chain_with_stats_sync 保持一致）
+    cost_cny = 0.0
+    try:
+        from src.config import get_settings
+        settings = get_settings()
+        if llm_type == "reasoner":
+            cost_cny = (
+                input_tokens * settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION / 1_000_000
+                + output_tokens * settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION / 1_000_000
+            )
+        else:
+            cost_cny = (
+                input_tokens * settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION / 1_000_000
+                + output_tokens * settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION / 1_000_000
+            )
+    except Exception as e:
+        logger.warning(f"成本计算失败: {e}")
+
     return {
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "total_tokens": 0,
+        "summary": {
+            "total_calls": 1,
+            "total_input_tokens": input_tokens,
+            "total_output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+            "total_cost_cny": round(cost_cny, 6),
+            "total_duration_seconds": round(duration_seconds, 2),
+            "avg_tokens_per_call": float(total_tokens),
+            "avg_cost_per_call": round(cost_cny, 6),
+        },
+        "call_details": [
+            {
+                "call_index": 0,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "cost_cny": round(cost_cny, 6),
+                "duration_seconds": round(duration_seconds, 2),
+            }
+        ],
     }
 
 

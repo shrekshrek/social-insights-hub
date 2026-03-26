@@ -39,6 +39,14 @@ const PLATFORM_LABEL_MAP: Record<string, string> = {
 
 export const platformLabel = (code: string): string => PLATFORM_LABEL_MAP[code] || code
 
+export const CHANNEL_LABELS: Record<string, string> = {
+  social_media: '社交媒体',
+  ecommerce: '电商平台',
+  news_media: '新闻媒体',
+  industry_data: '行业研报',
+  knowledge_base: '本地知识库',
+}
+
 export const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString('zh-CN', {
     year: 'numeric',

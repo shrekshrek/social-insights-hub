@@ -90,8 +90,8 @@ def format_coverage_check_inputs(
     # Brief
     if brief:
         lines = ["## Brand Brief"]
-        if brief.get("brand_name"):
-            lines.append(f"品牌：{brief['brand_name']}")
+        if brief.get("subject"):
+            lines.append(f"研究主体：{brief['subject']}")
         if brief.get("analysis_goal"):
             lines.append(f"分析目标：{brief['analysis_goal']}")
         brief_section = "\n".join(lines)

@@ -4,6 +4,7 @@ import asyncio
 import io
 import logging
 import time
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, func
@@ -47,6 +48,9 @@ from src.langchain.chains.strategy_brief_parser_chain import (
     parse_brief_parser_response,
 )
 from src.database import AsyncSessionLocal
+from src.langchain import extract_token_usage
+from src.social_media.analysis.jobs.factory import create_analysis_job_async
+from src.social_media.analysis.models import AnalysisType
 from src.social_media.analysis.models import AnalysisSlice
 from src.social_media.monitors.crud import check_monitor_access
 from .models import Strategy, StrategySlice
@@ -57,7 +61,6 @@ from .schemas import (
     ConfirmResearchResponse,
     DataOverviewResponse,
     DesignResearchResponse,
-    FeasibilityAssessment,
     ParseBriefResponse,
     ProbeStatusResponse,
     ProbeTaskStatus,
@@ -182,8 +185,12 @@ async def delete_strategy(db: AsyncSession, strategy: Strategy) -> None:
     await db.commit()
 
 
-async def load_slice_data(db: AsyncSession, strategy: Strategy) -> list[dict]:
-    """读取策略关联的切片 result_data"""
+async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dict]:
+    """加载策略输入数据，屏蔽数据来源差异
+
+    当前支持：社媒切片（AnalysisSlice.result_data）。
+    未来扩展点：知识库摘要、网络搜索摘要通��此函数统一接入。
+    """
     slice_ids = [s.slice_id for s in strategy.slices]
     if not slice_ids:
         return []
@@ -194,10 +201,10 @@ async def load_slice_data(db: AsyncSession, strategy: Strategy) -> list[dict]:
     return [s.result_data for s in slices if s.result_data]
 
 
-async def load_slice_data_with_names(
+async def load_strategy_inputs_with_names(
     db: AsyncSession, strategy: Strategy
 ) -> list[tuple[str | None, dict]]:
-    """读取策略关联的切片 (name, result_data)，用于评估链"""
+    """加载策略输入数据（含切片名），用于覆盖度验证链"""
     slice_ids = [s.slice_id for s in strategy.slices]
     if not slice_ids:
         return []
@@ -206,6 +213,8 @@ async def load_slice_data_with_names(
     result = await db.execute(query)
     slices = result.scalars().all()
     return [(s.name, s.result_data) for s in slices if s.result_data]
+
+
 
 
 def build_strategy_read(strategy: Strategy) -> StrategyRead:
@@ -298,7 +307,7 @@ def _validate_slices_have_data(slices_data: list[dict], strategy: Strategy) -> N
 async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     """生成 Phase 1 (洞察层): Social Tension + Brand Opportunity"""
     _validate_has_slices(strategy)
-    slices_data = await load_slice_data(db, strategy)
+    slices_data = await load_strategy_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy)
 
     chain = create_strategy_phase1_chain()
@@ -308,12 +317,31 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
         research_design=strategy.research_design,
     )
 
+    job = await create_analysis_job_async(
+        db,
+        monitor_id=strategy.monitor_id,
+        task_id=None,
+        user_id=strategy.created_by,
+        analysis_type=AnalysisType.STRATEGY_PHASE1.value,
+        source_count=len(slices_data),
+        status="processing",
+        analysis_config={"strategy_id": strategy.id},
+    ) if strategy.monitor_id else None
+
     start = time.time()
     response = await chain.ainvoke(inputs)
     duration = time.time() - start
 
     result = parse_phase1_response(response.content)
     logger.info("Strategy %d Phase 1 生成完成 (%.1fs)", strategy.id, duration)
+
+    if job:
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
     strategy.phase1_result = result
     strategy.phase2_result = None
@@ -332,7 +360,7 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
             detail="请先完成并确认 Phase 1",
         )
 
-    slices_data = await load_slice_data(db, strategy)
+    slices_data = await load_strategy_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy)
 
     chain = create_strategy_phase2_chain()
@@ -343,12 +371,31 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
         research_design=strategy.research_design,
     )
 
+    job = await create_analysis_job_async(
+        db,
+        monitor_id=strategy.monitor_id,
+        task_id=None,
+        user_id=strategy.created_by,
+        analysis_type=AnalysisType.STRATEGY_PHASE2.value,
+        source_count=len(slices_data),
+        status="processing",
+        analysis_config={"strategy_id": strategy.id},
+    ) if strategy.monitor_id else None
+
     start = time.time()
     response = await chain.ainvoke(inputs)
     duration = time.time() - start
 
     result = parse_phase2_response(response.content)
     logger.info("Strategy %d Phase 2 生成完成 (%.1fs)", strategy.id, duration)
+
+    if job:
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
     strategy.phase2_result = result
     strategy.phase3_result = None
@@ -366,7 +413,7 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
             detail="请先完成并确认 Phase 2",
         )
 
-    slices_data = await load_slice_data(db, strategy)
+    slices_data = await load_strategy_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy)
 
     chain = create_strategy_phase3_chain()
@@ -378,12 +425,31 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
         research_design=strategy.research_design,
     )
 
+    job = await create_analysis_job_async(
+        db,
+        monitor_id=strategy.monitor_id,
+        task_id=None,
+        user_id=strategy.created_by,
+        analysis_type=AnalysisType.STRATEGY_PHASE3.value,
+        source_count=len(slices_data),
+        status="processing",
+        analysis_config={"strategy_id": strategy.id},
+    ) if strategy.monitor_id else None
+
     start = time.time()
     response = await chain.ainvoke(inputs)
     duration = time.time() - start
 
     result = parse_phase3_response(response.content)
     logger.info("Strategy %d Phase 3 生成完成 (%.1fs)", strategy.id, duration)
+
+    if job:
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
     strategy.phase3_result = result
     strategy.status = "completed"
@@ -406,21 +472,45 @@ PLATFORM_NAME_TO_CODE = {
 # ==================== ① 研究设计 ====================
 
 
+def _extract_social_media_channel_brief(brand_brief: dict | None) -> str:
+    """从 brand_brief 中提取社媒渠道专属描述，兼容旧格式（无 channel_plan 的记录）"""
+    if not brand_brief:
+        return ""
+    channel_plan = brand_brief.get("channel_plan") or []
+    for item in channel_plan:
+        if item.get("type") == "social_media":
+            brief = item.get("channel_brief", "")
+            if brief:
+                return brief
+    # 兜底：从 brief 字段构建描述（旧格式或 channel_brief 为空时）
+    parts = []
+    if subject := brand_brief.get("subject"):
+        parts.append(f"研究主体：{subject}")
+    if goal := brand_brief.get("analysis_goal"):
+        parts.append(f"分析目标：{goal}")
+    if constraints := brand_brief.get("constraints"):
+        parts.append(f"补充说明：{constraints}")
+    return "\n".join(parts)
+
+
 async def design_research(
     db: AsyncSession,
     strategy: Strategy,
     user_input: str,
 ) -> DesignResearchResponse:
-    """AI 研究设计：基于 Brief 生成结构化研究计划
+    """AI 研究设计：基于社媒 channel_brief 生成结构化研究计划
 
     输出研究问题、数据采集方案、切片蓝图、产出类型建议。
     每次调用覆盖上一次结果。
     LLM 解析失败时抛出 HTTPException(500)，strategy 不更新。
     """
     chain = create_research_design_chain()
+    brand_brief = strategy.brand_brief or {}
     inputs = format_research_design_inputs(
         user_input=user_input,
-        brief=strategy.brand_brief,
+        channel_brief=_extract_social_media_channel_brief(brand_brief),
+        subject=brand_brief.get("subject", ""),
+        constraints=brand_brief.get("constraints") or "",
     )
 
     start = time.time()
@@ -435,9 +525,7 @@ async def design_research(
             detail=f"AI 研究设计解析失败: {e}",
         ) from e
 
-    feasibility_data = parsed.get("feasibility") or {}
     response = DesignResearchResponse(
-        feasibility=FeasibilityAssessment(**feasibility_data),
         understanding_summary=parsed["understanding_summary"],
         research_questions=parsed["research_questions"],
         data_plan=parsed["data_plan"],
@@ -446,11 +534,9 @@ async def design_research(
         output_type_rationale=parsed.get("output_type_rationale", ""),
     )
     logger.info(
-        "Strategy %d 研究设计完成 (%.1fs, fit=%.1f/%s, %d 个研究问题, %d 个数据维度)",
+        "Strategy %d 研究设计完成 (%.1fs, %d 个研究问题, %d 个数据维度)",
         strategy.id,
         duration,
-        feasibility_data.get("fit_score", 0.5),
-        feasibility_data.get("recommendation", "proceed"),
         len(parsed["research_questions"]),
         len(parsed["data_plan"]),
     )
@@ -539,11 +625,32 @@ async def confirm_research(
     from src.social_media.tasks.schemas import DataTaskCreate
     from src.social_media.tasks.service import create_task
 
-    if STATUS_ORDER.get(strategy.status, 0) > STATUS_ORDER["planned"]:
+    if STATUS_ORDER.get(strategy.status, 0) > STATUS_ORDER["probing"]:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="策略已进入探测/采集阶段，如需重新确认请先重置到研究设计阶段",
+            detail="全量采集已启动，无法重新确认研究计划",
         )
+
+    # 从 probing 状态重新确认：清理旧探测数据，重新创建任务
+    if strategy.status == "probing":
+        from src.social_media.tasks import crud as task_crud
+        from src.social_media.tasks.models import DataTask as _DataTask
+
+        old_task_ids = list(strategy.task_ids or [])
+        if old_task_ids:
+            _q = select(_DataTask).where(
+                _DataTask.id.in_(old_task_ids), _DataTask.is_deleted.is_(False)
+            )
+            _result = await db.execute(_q)
+            for _task in _result.scalars().all():
+                await task_crud.delete_task(db, _task)
+
+        strategy.task_ids = []
+        flag_modified(strategy, "task_ids")
+        strategy.probe_review_result = None
+        flag_modified(strategy, "probe_review_result")
+        strategy.probe_round = 0
+        _probe_review_in_progress.discard(strategy.id)
 
     data_plan = research_design.get("data_plan") or []
     if not data_plan:
@@ -712,14 +819,18 @@ async def _build_probe_task_summaries(
     result = await db.execute(query)
     tasks = result.scalars().all()
 
+    # 爬虫已完成（含 0 结果）的终态
+    _PROBE_TERMINAL_STATUSES = {"probe_ready", "approved", "completed", "failed"}
+
     statuses = []
     analyzed_summaries = []
 
     for task in tasks:
         has_analysis = task.analysis_result is not None
-        no_data = (task.posts_count or 0) == 0
+        # 只有进入终态（爬虫已结束）且 0 条时才视为已处理，避免把仍在运行的任务提前计入
+        no_data = (task.posts_count or 0) == 0 and task.status in _PROBE_TERMINAL_STATUSES
 
-        # 0 条数据：不会触发分析流程，但无需 LLM 判断，直接视为已处理（客观规则层会自动 fail）
+        # 0 条数据：爬虫已完成但无结果，无需 LLM 判断，直接视为已处理（客观规则层会自动 fail）
         statuses.append(
             ProbeTaskStatus(
                 task_id=task.id,
@@ -894,6 +1005,17 @@ async def _run_probe_review(
             brief=strategy.brand_brief,
         )
 
+        job = await create_analysis_job_async(
+            db,
+            monitor_id=strategy.monitor_id,
+            task_id=None,
+            user_id=strategy.created_by,
+            analysis_type=AnalysisType.STRATEGY_PROBE_REVIEW.value,
+            source_count=len(ambiguous_summaries),
+            status="processing",
+            analysis_config={"strategy_id": strategy.id},
+        ) if strategy.monitor_id else None
+
         start = time.time()
         llm_result = await chain.ainvoke(inputs)
         duration = time.time() - start
@@ -905,6 +1027,16 @@ async def _run_probe_review(
         except ValueError as e:
             logger.warning("Strategy %d probe review 解析失败: %s", strategy.id, e)
             parse_error = str(e)
+
+        if job:
+            now = datetime.now(timezone.utc)
+            job.status = "completed" if not parse_error else "failed"
+            job.completed_at = now
+            job.analyzed_count = len(llm_assessments)
+            job.processing_time = int(duration)
+            job.token_usage = extract_token_usage(llm_result, duration_seconds=duration)
+            if parse_error:
+                job.error_message = parse_error
 
         logger.info(
             "Strategy %d probe review LLM 完成 (%.1fs, 模糊=%d)",
@@ -1436,7 +1568,7 @@ async def _run_coverage_check(
     research_questions = research_design.get("research_questions", [])
 
     # 加载切片数据
-    slices_data = await load_slice_data_with_names(db, strategy)
+    slices_data = await load_strategy_inputs_with_names(db, strategy)
 
     chain = create_coverage_check_chain()
     inputs = format_coverage_check_inputs(
@@ -1445,21 +1577,44 @@ async def _run_coverage_check(
         slices_data=slices_data,
     )
 
+    job = await create_analysis_job_async(
+        db,
+        monitor_id=strategy.monitor_id,
+        task_id=None,
+        user_id=strategy.created_by,
+        analysis_type=AnalysisType.STRATEGY_COVERAGE_CHECK.value,
+        source_count=len(slices_data),
+        status="processing",
+        analysis_config={"strategy_id": strategy.id},
+    ) if strategy.monitor_id else None
+
     start = time.time()
     llm_result = await chain.ainvoke(inputs)
     duration = time.time() - start
 
+    parse_error: str | None = None
     try:
         parsed = parse_coverage_check_response(llm_result.content)
     except ValueError as e:
         logger.warning("Strategy %d coverage check 解析失败: %s", strategy.id, e)
+        parse_error = str(e)
         parsed = {
             "question_coverage": [],
             "overall_ready": True,  # 解析失败时默认就绪，不阻塞用户
             "data_highlights": [],
             "slice_adjustments": [],
-            "_parse_error": str(e),
+            "_parse_error": parse_error,
         }
+
+    if job:
+        now = datetime.now(timezone.utc)
+        job.status = "completed" if not parse_error else "failed"
+        job.completed_at = now
+        job.analyzed_count = len(parsed.get("question_coverage", []))
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(llm_result, duration_seconds=duration)
+        if parse_error:
+            job.error_message = parse_error
 
     logger.info(
         "Strategy %d coverage check 完成 (%.1fs, ready=%s)",
@@ -1609,6 +1764,31 @@ def _extract_text_from_bytes(content: bytes, filename: str) -> str:
         return content.decode("utf-8")
     except UnicodeDecodeError:
         return content.decode("gbk", errors="replace")
+
+
+async def parse_brief_from_text(text: str) -> ParseBriefResponse:
+    """从纯文本 Brief 用 LLM 解析为 BrandBrief 字段"""
+    document_text = text[:_MAX_BRIEF_TEXT_CHARS]
+    chain = create_strategy_brief_parser_chain()
+    try:
+        response = await chain.ainvoke({"document_text": document_text})
+        response_text = (
+            response.content if hasattr(response, "content") else str(response)
+        )
+        parsed = parse_brief_parser_response(response_text)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Brief 解析 LLM 调用失败: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI 解析失败，请稍后重试",
+        ) from exc
+
+    return ParseBriefResponse(**parsed)
 
 
 async def parse_brief_from_file(content: bytes, filename: str) -> ParseBriefResponse:

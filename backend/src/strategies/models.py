@@ -47,7 +47,6 @@ class Strategy(Base):
     brand_brief: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="结构化 Brand Brief"
     )
-
     # ① 研究设计
     research_design: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="研究设计（research_design_chain 输出）"

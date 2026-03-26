@@ -1,47 +1,5 @@
 <template>
   <div class="space-y-4">
-    <!-- 课题适配度评估 -->
-    <div
-      v-if="feasibility && feasibility.recommendation !== 'proceed'"
-      class="p-3 rounded-lg border"
-      :class="feasibility.recommendation === 'not_recommended'
-        ? 'border-red-200 bg-red-50 dark:bg-red-900/20'
-        : 'border-amber-200 bg-amber-50 dark:bg-amber-900/20'"
-    >
-      <div class="flex items-center gap-2 mb-2">
-        <UIcon
-          :name="feasibility.recommendation === 'not_recommended' ? 'i-heroicons-x-circle' : 'i-heroicons-exclamation-triangle'"
-          :class="feasibility.recommendation === 'not_recommended' ? 'text-red-500' : 'text-amber-500'"
-        />
-        <span
-          class="font-medium text-sm"
-          :class="feasibility.recommendation === 'not_recommended' ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'"
-        >
-          {{ feasibility.recommendation === 'not_recommended' ? '该课题不适合社媒数据调研' : '研究范围已收窄' }}
-          <span class="text-xs font-normal opacity-70 ml-1">适配度 {{ Math.round(feasibility.fit_score * 100) }}%</span>
-        </span>
-      </div>
-      <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">{{ feasibility.rationale }}</p>
-      <div class="grid grid-cols-2 gap-3 text-xs">
-        <div v-if="feasibility.social_can_tell?.length">
-          <span class="font-medium text-green-600 dark:text-green-400">社媒数据能回答：</span>
-          <ul class="mt-1 space-y-0.5 text-gray-600 dark:text-gray-400">
-            <li v-for="(item, i) in feasibility.social_can_tell" :key="i">· {{ item }}</li>
-          </ul>
-        </div>
-        <div v-if="feasibility.social_cannot_tell?.length">
-          <span class="font-medium text-red-600 dark:text-red-400">社媒数据无法回答：</span>
-          <ul class="mt-1 space-y-0.5 text-gray-600 dark:text-gray-400">
-            <li v-for="(item, i) in feasibility.social_cannot_tell" :key="i">· {{ item }}</li>
-          </ul>
-        </div>
-      </div>
-      <div v-if="feasibility.complementary_methods?.length" class="mt-2 text-xs">
-        <span class="font-medium text-gray-500">建议补充方法：</span>
-        <span class="text-gray-600 dark:text-gray-400">{{ feasibility.complementary_methods.join('、') }}</span>
-      </div>
-    </div>
-
     <!-- AI 需求理解 -->
     <div
       v-if="understandingSummary"
@@ -259,13 +217,12 @@
 </template>
 
 <script setup lang="ts">
-import type { DataPlanItem, SliceBlueprintItem, ResearchQuestion, FeasibilityAssessment } from '../types'
+import type { DataPlanItem, SliceBlueprintItem, ResearchQuestion } from '../types'
 import { PLATFORM_OPTIONS, platformLabel } from '../composables/useStrategyConstants'
 
 const NOTES_OPTIONS = [50, 100] as const
 
 const props = defineProps<{
-  feasibility?: FeasibilityAssessment
   understandingSummary?: string
   researchQuestions: ResearchQuestion[]
   dataPlan: DataPlanItem[]

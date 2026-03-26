@@ -1,6 +1,7 @@
-"""Strategy Research Design Chain — 研究设计
+"""Strategy Research Design Chain — 社媒研究设计
 
-基于 Brand Brief 将分析需求分解为结构化的研究计划：
+接收社媒渠道专属的 channel_brief（由 strategy_brief_parser_chain 生成），
+将研究方向分解为结构化的社媒研究计划：
 研究问题 → 数据采集方案 → 切片蓝图 → 产出类型建议。
 替代原有 strategy_consult_chain。
 """
@@ -21,37 +22,9 @@ logger = logging.getLogger(__name__)
 SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助品牌团队设计数据驱动的研究计划。
 
 ## 任务
-根据品牌信息和分析目标，**先评估课题适配度，再输出结构化研究计划**。不需要追问，用你的专业判断补全细节。
+根据社媒渠道研究方向，输出结构化的社媒研究计划：研究问题 → 数据采集方案 → 切片蓝图 → 产出类型建议。不需要追问，用你的专业判断补全细节。
 
-## 第零步：课题适配度评估
-
-在设计研究计划之前，先评估该课题是否适合当前系统能力。
-
-当前系统能力：
-- 7 个中国社交媒体平台的关键词搜索采集（抖音 / 小红书 / 微博 / B站 / 快手 / 知乎 / 贴吧）
-- 每平台每关键词 50-100 条原文 + 评论
-- LLM 分析：实体提取、情感分析、话题聚类、KOL 识别、竞品对比
-
-当前系统**不具备**的能力：
-- 微信公众号 / 微信群搜索
-- 通用网页 / 新闻搜索
-- 行业数据库 / 报告检索
-- 线下访谈 / 问卷调研
-
-评估维度：
-1. 目标人群是否活跃在上述 7 个平台上？（B2C 消费者 vs B2B 决策者）
-2. 相关讨论是否发生在公开社媒上？（vs 微信群、行业会议、内部渠道等封闭场景）
-3. 社媒数据能回答 Brief 中多大比例的核心问题？
-
-根据评估结果决定 recommendation：
-- "proceed": 课题与社媒数据高度契合（fit_score >= 0.7），正常输出完整方案
-- "adjust_scope": 社媒能回答部分问题（0.3 <= fit_score < 0.7），收窄研究范围到社媒可回答的部分，明确指出盲区
-- "not_recommended": 社媒数据基本无法回答核心问题（fit_score < 0.3），给出替代建议，data_plan 和 slice_blueprint 可为空
-
-当 recommendation = "adjust_scope" 时：
-- research_questions 只包含社媒数据能回答的问题
-- understanding_summary 中注明研究范围已收窄及原因
-- social_can_tell / social_cannot_tell 帮助用户理解边界
+输入的“社媒渠道研究方向”已由上游渠道分发层筛选确认适合社媒研究，无需重新评估适配度。
 
 ## 研究设计原则
 
@@ -82,7 +55,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
 - 总数据维度 2-4 个
 - 每个维度 **1-2 个关键词**，最多 3 个（超过 2 个需有充分理由）
 - 每个维度选 **1-2 个平台**，最多 3 个（质量优先，宁精不滥）
-- **总任务数 = Σ(各维度关键词数 × 平台数)，必须控制在 6-10 个；生成后自行验算，超过则删减**
+- **总任务数 = Σ(各维度关键词数 × 平台数)，目标 8-12 个；生成后自行验算，超过则删减关键词或平台**
 - **平台选择必须同时考虑品类特点和关键词适配性**（优先从以下 5 个主力平台中选择）：
   - 知乎：专业讨论、行业分析、深度评价（适合 B2B、技术、专业领域）
   - 微博：新闻热点、品牌公关、大众舆论（适合有公众讨论度的话题）
@@ -95,20 +68,12 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
 - **品牌聚焦**（指定 subject）：含 SWOT、竞品对比，实体分 Target/Competitor/Context
 - **大盘分析**（不指定 subject）：无特定主体，适用于行业趋势/消费场景
 通常包含 1 个品牌聚焦切片 + 1 个大盘分析切片。
-- 品牌聚焦切片的 subject 必须是 Brief 中**用户最关心的分析主体**（通常是 brand_name 或其核心竞品），而非随意选择数据中出现的某个实体
+- 品牌聚焦切片的 subject 必须是 Brief 中**用户最关心的分析主体**（通常是 subject 或其核心竞品），而非随意选择数据中出现的某个实体
 - 如果 Brief 涉及多个赛道，每个赛道需要独立切片（不同赛道的实体不应混在同一个切片中进行对比）
 
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记：
 {{
-  "feasibility": {{
-    "fit_score": 0.8,
-    "recommendation": "proceed",
-    "rationale": "一句话说明评估理由",
-    "social_can_tell": ["社媒数据能回答的问题1", "..."],
-    "social_cannot_tell": ["社媒数据无法回答的问题1", "..."],
-    "complementary_methods": ["建议补充的研究方法1", "..."]
-  }},
   "understanding_summary": "一句话概括你对分析需求的理解（如 adjust_scope 则注明范围收窄）",
   "research_questions": [
     {{
@@ -150,10 +115,9 @@ mode 可选值: 品牌聚焦 / 大盘分析
 output_type 可选值: brand_strategy / insight_report
 
 ## 要求
-- feasibility: 必填，先评估再规划
 - understanding_summary: 必填
-- research_questions: 2-4 个，覆盖 Brief 的核心分析目标（adjust_scope 时只包含社媒可回答的）
-- data_plan: 2-4 个维度，每个维度 1-2 个关键词（最多 3 个）+ 1-2 个平台（最多 3 个），总任务数不超过 10 个
+- research_questions: 2-4 个，覆盖社媒渠道研究方向中的核心分析目标
+- data_plan: 2-4 个维度，每个维度 1-2 个关键词（最多 3 个）+ 1-2 个平台（最多 3 个），总任务数目标 8-12 个
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
 - probe_size 统一为 20，full_size 统一为 50（除非用户有特殊需求）
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
@@ -178,25 +142,31 @@ def create_research_design_chain() -> Runnable:
 
 def format_research_design_inputs(
     user_input: str,
-    brief: dict | None,
+    channel_brief: str,
+    subject: str = "",
+    constraints: str = "",
 ) -> dict[str, Any]:
-    """格式化研究设计链输入"""
-    if brief:
-        lines = ["## Brand Brief"]
-        if brief.get("brand_name"):
-            lines.append(f"品牌：{brief['brand_name']}")
-        if brief.get("analysis_goal"):
-            lines.append(f"分析目标：{brief['analysis_goal']}")
-        if brief.get("constraints"):
-            lines.append(f"补充说明：{brief['constraints']}")
-        brief_section = "\n".join(lines)
+    """格式化研究设计链输入
+
+    channel_brief 是社媒渠道专属描述（1-2句），提供研究方向。
+    subject / constraints 作为补充上下文，帮助链生成精确的关键词和平台选择。
+    """
+    if channel_brief:
+        lines = [f"## 社媒渠道研究方向\n{channel_brief}"]
     else:
-        brief_section = "## Brand Brief\n用户未提供 Brief，请根据补充说明推断需求。"
+        lines = ["## 社媒渠道研究方向\n用户未提供渠道描述，请根据背景信息推断研究方向。"]
+
+    if subject or constraints:
+        lines.append("\n## 研究背景（供参考）")
+        if subject:
+            lines.append(f"研究主体：{subject}")
+        if constraints:
+            lines.append(f"补充说明：{constraints}")
 
     extra_input = f"## 用户补充\n{user_input}" if user_input.strip() else ""
 
     return {
-        "brief_section": brief_section,
+        "brief_section": "\n".join(lines),
         "extra_input": extra_input,
     }
 
@@ -221,24 +191,5 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
     result.setdefault("slice_blueprint", [])
     result.setdefault("output_type", "brand_strategy")
     result.setdefault("output_type_rationale", "")
-
-    # feasibility 兜底
-    feasibility = result.get("feasibility")
-    if not isinstance(feasibility, dict):
-        result["feasibility"] = {
-            "fit_score": 0.5,
-            "recommendation": "proceed",
-            "rationale": "",
-            "social_can_tell": [],
-            "social_cannot_tell": [],
-            "complementary_methods": [],
-        }
-    else:
-        feasibility.setdefault("fit_score", 0.5)
-        feasibility.setdefault("recommendation", "proceed")
-        feasibility.setdefault("rationale", "")
-        feasibility.setdefault("social_can_tell", [])
-        feasibility.setdefault("social_cannot_tell", [])
-        feasibility.setdefault("complementary_methods", [])
 
     return result

@@ -20,10 +20,19 @@ export type StrategyStatus =
 
 // ==================== Brand Brief ====================
 
+export interface ChannelPlanItem {
+  type: string
+  available: boolean
+  solvable: string[]
+  unsolvable: string[]
+  channel_brief: string
+}
+
 export interface BrandBrief {
-  brand_name: string
+  subject: string
   analysis_goal: string
   constraints?: string | null
+  channel_plan?: ChannelPlanItem[] | null
 }
 
 // ==================== 切片摘要 ====================
@@ -33,17 +42,6 @@ export interface SliceSummary {
   slice_name: string | null
   monitor_id: number
   monitor_name: string
-}
-
-// ==================== 课题适配度评估 ====================
-
-export interface FeasibilityAssessment {
-  fit_score: number
-  recommendation: 'proceed' | 'adjust_scope' | 'not_recommended'
-  rationale: string
-  social_can_tell: string[]
-  social_cannot_tell: string[]
-  complementary_methods: string[]
 }
 
 // ==================== 研究设计 ====================
@@ -74,7 +72,6 @@ export interface SliceBlueprintItem {
 }
 
 export interface ResearchDesign {
-  feasibility?: FeasibilityAssessment
   understanding_summary: string
   research_questions: ResearchQuestion[]
   data_plan: DataPlanItem[]
@@ -354,7 +351,10 @@ export interface Phase3Result {
 
 export interface ParseBriefResponse {
   strategy_name: string
-  brand_name: string
+  subject: string
   analysis_goal: string
   constraints: string
+  platform_verdict: 'sufficient' | 'partial' | 'insufficient'
+  platform_note: string
+  channel_plan: ChannelPlanItem[]
 }

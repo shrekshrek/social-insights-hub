@@ -222,6 +222,14 @@ export const useStrategies = () => {
     })
   }
 
+  // 输入 Brief 文本，AI 自动解析填充
+  const parseBriefText = async (text: string) => {
+    return await apiRequest<ParseBriefResponse>('/strategies/parse-brief-text', {
+      method: 'POST',
+      body: { text },
+    })
+  }
+
   return {
     getStrategies,
     getStrategy,
@@ -242,5 +250,6 @@ export const useStrategies = () => {
     editPhase,
     exportStrategy,
     parseBrief,
+    parseBriefText,
   }
 }

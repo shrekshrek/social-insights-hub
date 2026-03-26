@@ -42,7 +42,7 @@ class TokenUsageSummary(CustomBaseModel):
 class TokenUsageStats(CustomBaseModel):
     """Token使用统计"""
 
-    summary: TokenUsageSummary
+    summary: TokenUsageSummary = Field(default_factory=TokenUsageSummary)
     call_details: list[CallDetail] = []
 
 

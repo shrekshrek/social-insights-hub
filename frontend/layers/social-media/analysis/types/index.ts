@@ -130,6 +130,11 @@ export type AnalysisType =
   | 'entity_normalization'
   | 'opinion_normalization'
   | 'monitor_slice_summary'
+  | 'strategy_probe_review'
+  | 'strategy_coverage_check'
+  | 'strategy_phase1'
+  | 'strategy_phase2'
+  | 'strategy_phase3'
 
 export type AnalysisStatus = 'pending' | 'processing' | 'completed' | 'failed'
 

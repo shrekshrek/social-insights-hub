@@ -3,6 +3,7 @@
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import Field
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +11,7 @@ from src.auth.dependencies import get_current_user
 from src.auth.models import User
 from src.database import get_async_db
 from src.pagination import get_pagination_params, PaginationParams
-from src.schemas import MessageResponse, PaginatedResponse
+from src.schemas import CustomBaseModel, MessageResponse, PaginatedResponse
 
 from . import service
 from .dependencies import is_admin_or_super_admin, validate_strategy_owner
@@ -435,7 +436,7 @@ async def parse_brief(
     file: UploadFile = File(..., description="支持 PDF / DOCX / TXT / MD，最大 10 MB"),
     current_user: User = Depends(get_current_user),
 ):
-    """上传 Brief 文档，AI 提取 brand_name / analysis_goal / constraints 等字段"""
+    """上传 Brief 文档，AI 提取 subject / analysis_goal / constraints 等字段"""
     filename = file.filename or ""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in _ALLOWED_BRIEF_EXTENSIONS:
@@ -452,3 +453,22 @@ async def parse_brief(
         )
 
     return await service.parse_brief_from_file(content, filename)
+
+
+class ParseBriefTextRequest(CustomBaseModel):
+    text: str = Field(..., min_length=10, description="Brief 原文（自然语言）")
+
+
+@router.post(
+    "/parse-brief-text",
+    response_model=ParseBriefResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Strategies"],
+    summary="输入 Brief 文本，AI 自动解析填充表单字段",
+)
+async def parse_brief_text(
+    body: ParseBriefTextRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """接受纯文本 Brief，AI 提取结构化字段（无需上传文件）"""
+    return await service.parse_brief_from_text(body.text)

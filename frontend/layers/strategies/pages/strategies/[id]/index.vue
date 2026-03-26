@@ -113,7 +113,7 @@
           <div v-if="!editingBrief">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <span class="font-medium">{{ strategy.brand_brief.brand_name }}</span>
+                <span class="font-medium">{{ strategy.brand_brief.subject }}</span>
                 <span class="text-gray-400 mx-1.5">·</span>
                 <span class="text-gray-600 dark:text-gray-400">{{ strategy.brand_brief.analysis_goal }}</span>
               </div>
@@ -122,11 +122,39 @@
             <div v-if="strategy.brand_brief.constraints" class="text-gray-400 mt-1">
               {{ strategy.brand_brief.constraints }}
             </div>
+            <div
+              v-if="strategy.brand_brief.channel_plan?.length"
+              class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1.5"
+            >
+              <div
+                v-for="item in strategy.brand_brief.channel_plan"
+                :key="item.type"
+                class="flex items-start gap-1.5 text-xs"
+              >
+                <UIcon
+                  :name="item.available ? 'i-heroicons-check-circle' : 'i-heroicons-lock-closed'"
+                  class="w-3.5 h-3.5 mt-0.5 flex-shrink-0"
+                  :class="item.available ? 'text-primary-500' : 'text-gray-400'"
+                />
+                <div class="min-w-0 flex items-center gap-1.5 flex-wrap">
+                  <span :class="item.available ? 'font-medium text-gray-700 dark:text-gray-300' : 'text-gray-400'">
+                    {{ CHANNEL_LABELS[item.type] ?? item.type }}
+                  </span>
+                  <span
+                    v-if="item.solvable.length > 0"
+                    class="text-gray-400"
+                  >{{ item.solvable.length }} 项</span>
+                  <span v-if="item.solvable.length" class="text-gray-400">
+                    · {{ item.solvable.join(' · ') }}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
           <div v-else class="flex flex-col gap-3">
             <div>
-              <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">品牌名称</label>
-              <UInput v-model="editBrief.brand_name" placeholder="输入品牌或产品名称" size="sm" class="w-full" />
+              <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">研究主体</label>
+              <UInput v-model="editBrief.subject" placeholder="输入品牌或产品名称" size="sm" class="w-full" />
             </div>
             <div>
               <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">分析目标</label>
@@ -137,7 +165,7 @@
               <UTextarea v-model="editBrief.constraints" placeholder="例如：重点关注某些竞品..." :rows="2" size="sm" class="w-full" />
             </div>
             <div class="flex items-center gap-2">
-              <UButton size="xs" :loading="savingBrief" :disabled="!editBrief.brand_name.trim() || !editBrief.analysis_goal.trim()" @click="handleSaveBrief">
+              <UButton size="xs" :loading="savingBrief" :disabled="!editBrief.subject.trim() || !editBrief.analysis_goal.trim()" @click="handleSaveBrief">
                 保存
               </UButton>
               <UButton size="xs" variant="ghost" @click="editingBrief = false">取消</UButton>
@@ -179,7 +207,6 @@
           </div>
 
           <ResearchPlanEditor
-            :feasibility="researchDesign?.feasibility"
             :understanding-summary="researchDesign?.understanding_summary"
             :research-questions="researchDesign?.research_questions || []"
             :data-plan="editableDataPlan"
@@ -351,7 +378,7 @@ import type {
   SliceBlueprintItem,
   AdjustSliceItem,
 } from '../../../types'
-import { STATUS_MAP, STATUS_ORDER, formatDate } from '../../../composables/useStrategyConstants'
+import { STATUS_MAP, STATUS_ORDER, formatDate, CHANNEL_LABELS } from '../../../composables/useStrategyConstants'
 import { useStrategyPolling } from '../../../composables/useStrategyPolling'
 
 definePageMeta({ title: '策略详情' })
@@ -432,7 +459,7 @@ const hasResearchDesign = computed(() => {
 })
 
 const editingBrief = ref(false)
-const editBrief = ref({ brand_name: '', analysis_goal: '', constraints: '' })
+const editBrief = ref({ subject: '', analysis_goal: '', constraints: '' })
 const savingBrief = ref(false)
 const designInput = ref('')
 const designLoading = ref(false)
@@ -475,7 +502,7 @@ watch(() => strategy.value, (s) => {
 const startEditBrief = () => {
   const b = strategy.value?.brand_brief
   editBrief.value = {
-    brand_name: b?.brand_name || '',
+    subject: b?.subject || '',
     analysis_goal: b?.analysis_goal || '',
     constraints: b?.constraints || '',
   }
@@ -483,14 +510,15 @@ const startEditBrief = () => {
 }
 
 const handleSaveBrief = async () => {
-  if (!editBrief.value.brand_name.trim() || !editBrief.value.analysis_goal.trim()) return
+  if (!editBrief.value.subject.trim() || !editBrief.value.analysis_goal.trim()) return
   savingBrief.value = true
   try {
     await strategiesApi.updateStrategy(strategyId.value, {
       brand_brief: {
-        brand_name: editBrief.value.brand_name.trim(),
+        subject: editBrief.value.subject.trim(),
         analysis_goal: editBrief.value.analysis_goal.trim(),
         constraints: editBrief.value.constraints.trim() || undefined,
+        channel_plan: strategy.value?.brand_brief?.channel_plan ?? undefined,
       },
     })
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
@@ -551,6 +579,12 @@ const handleConfirmResearch = async () => {
     })
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
     editingPlan.value = false
+    // 重置探测数据，避免旧结果残留
+    probeData.tasks = []
+    probeData.analyzedCount = 0
+    probeData.totalCount = 0
+    probeData.allAnalyzed = false
+    probeData.probeReview = null
     startProbePolling()
   } catch {
     // 错误已由 useApi 处理

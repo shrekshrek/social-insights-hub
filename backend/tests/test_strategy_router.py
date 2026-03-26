@@ -64,7 +64,7 @@ async def test_create_strategy_with_brand_brief(
         json={
             "name": "有 Brief 策略",
             "brand_brief": {
-                "brand_name": "测试品牌",
+                "subject": "测试品牌",
                 "analysis_goal": "提升品牌认知",
             },
         },
@@ -72,7 +72,7 @@ async def test_create_strategy_with_brand_brief(
     )
     assert resp.status_code == 201
     data = resp.json()
-    assert data["brand_brief"]["brand_name"] == "测试品牌"
+    assert data["brand_brief"]["subject"] == "测试品牌"
     assert data["brand_brief"]["analysis_goal"] == "提升品牌认知"
 
 

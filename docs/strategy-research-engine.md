@@ -77,7 +77,7 @@
 
 替代现有 consult_chain。
 
-输入：Brief（brand_name + analysis_goal + constraints）+ 用户补充说明
+输入：Brief（subject + analysis_goal + constraints）+ 用户补充说明
 
 输出：
 ```json
@@ -604,7 +604,8 @@ class Strategy(Base):
 | POST | `/strategies/{id}/generate/phase{1,2,3}` | 生成对应阶段 |
 | PUT | `/strategies/{id}/phase{1,2,3}` | 编辑阶段结果 |
 | GET | `/strategies/{id}/export` | 导出 Word |
-| POST | `/strategies/{id}/parse-brief` | 上传 Brief 文档解析 |
+| POST | `/strategies/parse-brief` | 上传 Brief 文档解析 |
+| POST | `/strategies/parse-brief-text` | 纯文本 Brief 解析 |
 
 ### 移除
 

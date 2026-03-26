@@ -1,5 +1,12 @@
 # Strategy 模块重构计划
 
+> ⚠️ **此文档为历史规划，已完全实施。当前设计请参考：**
+> - **`docs/strategy-research-engine.md`** — 最终设计方案
+> - **`docs/plan.md`** — 实施步骤（Steps 1-8，已全部完成）
+> - **`docs/strategy-multi-source-architecture.md`** — 多数据源架构
+
+---
+
 > 将策略从"末端消费者"重构为"流程发起者与编排者"
 > 包含前置工作：Project → Monitor 全局改名
 
@@ -54,13 +61,11 @@
 ## 总体流程
 
 ```
-Strategy 状态流转:
-
+⚠️ 旧状态流（已废弃）:
   briefing → consulting → monitors_created → slices_ready → phase1_done → phase2_done → completed
-     │           │              │                 │              │            │            │
-  填写 Brief   多轮咨询      一键创建           充分性评估    洞察层生成   策略层生成    创意层生成
-              (可跳过)      监测+任务         + 切片建议
-                                            (可多次执行)
+
+✅ 当前状态流:
+  draft → planned → probing → collecting → ready → phase1_done → phase2_done → completed
 ```
 
 ### 阶段 A: 需求对齐（新增）
@@ -162,14 +167,12 @@ Strategy 状态流转:
 ### Brand Brief（结构化）
 
 ```python
+# ⚠️ 已更新 — 见 src/strategies/schemas.py BrandBrief
 class BrandBrief(CustomBaseModel):
-    brand_name: str              # 品牌/产品名
-    industry: str | None         # 行业
+    subject: str                 # 研究主体（品牌/产品/品类）
     analysis_goal: str           # 分析目标（自由文本）
-    competitors: list[str]       # 关注的竞品
-    focus_areas: list[str]       # 关注维度（口碑/竞品/趋势/...）
-    time_range: str | None       # 期望的数据时间范围
-    constraints: str | None      # 其他约束/备注
+    constraints: str | None      # 补充说明/约束
+    source_plan: list | None     # AI 建议数据源（存于 brand_brief JSON，非独立列）
 ```
 
 ### Consultation Round

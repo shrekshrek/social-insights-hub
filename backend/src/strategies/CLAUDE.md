@@ -79,11 +79,12 @@ Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
 
 ## LLM Chain
 
-6 条 Chain 位于 `langchain/chains/strategy_*_chain.py`。
+7 条 Chain 位于 `langchain/chains/strategy_*_chain.py`。
 
-| Chain | 角色 | 阶段 |
-|-------|------|------|
-| research_design_chain | 研究规划师 | ① |
+| Chain | 角色 | 触发时机 |
+|-------|------|---------|
+| brief_parser_chain | Brief 摄入 + 渠道分发判断 | 新建策略时（`parse-brief` 端点） |
+| research_design_chain | 研究规划师（接收社媒 channel_brief） | ① |
 | probe_review_chain | 数据质检员 | ② |
 | coverage_check_chain | 覆盖度验证 | ③ |
 | phase1_chain | 洞察分析师 | ④ |

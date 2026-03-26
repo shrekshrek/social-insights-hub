@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from src.schemas import CustomBaseModel, PaginatedResponse
 
@@ -140,11 +140,25 @@ class ApproveProbeResponse(CustomBaseModel):
 
 
 class RefinementItem(CustomBaseModel):
-    """关键词调整项"""
+    """关键词调整项，支持三种操作：
+    - 替换：task_id + new_keyword
+    - 移除：task_id + new_keyword=None
+    - 新增：task_id=None + new_keyword + dimension
+    """
 
-    task_id: int = Field(..., description="要替换的旧任务 ID")
-    new_keyword: str = Field(..., min_length=1, description="新关键词")
+    task_id: int | None = Field(None, description="要操作的任务 ID；为 None 时表示新增任务")
+    new_keyword: str | None = Field(None, description="新关键词；为 None 时仅移除旧任务")
     platform: str = Field(..., description="平台代码")
+    dimension: str | None = Field(None, description="新增任务所属维度（task_id=None 时必填）")
+
+    @model_validator(mode="after")
+    def validate_operation(self) -> "RefinementItem":
+        if self.task_id is None:
+            if not self.new_keyword:
+                raise ValueError("新增任务时 new_keyword 不能为空")
+            if not self.dimension:
+                raise ValueError("新增任务时 dimension 不能为空")
+        return self
 
 
 class RefineProbeRequest(CustomBaseModel):

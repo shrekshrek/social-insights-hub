@@ -552,6 +552,17 @@ async def confirm_research(
             detail="研究计划中无数据采集方案",
         )
 
+    # 预估总任务数，超过 20 个视为异常（提示用户精简，而非静默创建大量任务）
+    estimated_tasks = sum(
+        len(dp.get("keywords") or []) * len(dp.get("platforms") or [])
+        for dp in data_plan
+    )
+    if estimated_tasks > 20:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"研究计划预估任务数（{estimated_tasks}）过多，请精简关键词或平台（建议 6-10 个任务）",
+        )
+
     # 保存用户编辑后的研究计划
     strategy.research_design = research_design
     flag_modified(strategy, "research_design")

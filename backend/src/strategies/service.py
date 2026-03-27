@@ -19,9 +19,9 @@ from src.langchain.chains.strategy_research_design_chain import (
     parse_research_design_response,
 )
 from src.langchain.chains.strategy_probe_review_chain import (
-    create_probe_review_chain,
-    format_probe_review_inputs,
-    parse_probe_review_response,
+    create_single_task_probe_review_chain,
+    format_single_task_probe_review_inputs,
+    parse_single_task_probe_review_response,
 )
 from src.langchain.chains.strategy_coverage_check_chain import (
     create_coverage_check_chain,
@@ -996,14 +996,11 @@ async def _run_probe_review(
     llm_add_suggestions: list[dict] = []
     parse_error: str | None = None
 
-    # 仅在有模糊案例时调用 LLM（auto-fail 任务不送 LLM，已有规则建议）
+    # 仅在有模糊案例时调用 LLM（每个任务独立并行评估，消除批量上下文干扰）
     if ambiguous_summaries:
-        chain = create_probe_review_chain()
-        inputs = format_probe_review_inputs(
-            research_design=strategy.research_design or {},
-            tasks=ambiguous_summaries,
-            brief=strategy.brand_brief,
-        )
+        chain = create_single_task_probe_review_chain()
+        research_design = strategy.research_design or {}
+        brief = strategy.brand_brief
 
         job = await create_analysis_job_async(
             db,
@@ -1016,17 +1013,69 @@ async def _run_probe_review(
             analysis_config={"strategy_id": strategy.id},
         ) if strategy.monitor_id else None
 
-        start = time.time()
-        llm_result = await chain.ainvoke(inputs)
-        duration = time.time() - start
+        async def _evaluate_one(task_summary: dict) -> tuple[dict | None, dict | None, float]:
+            """评估单个任务，返回 (assessment, token_usage, duration)"""
+            inputs = format_single_task_probe_review_inputs(
+                research_design=research_design,
+                task=task_summary,
+                brief=brief,
+            )
+            t0 = time.time()
+            try:
+                resp = await chain.ainvoke(inputs)
+                dur = time.time() - t0
+                assessment = parse_single_task_probe_review_response(resp.content)
+                usage = extract_token_usage(resp, duration_seconds=dur)
+                return assessment, usage, dur
+            except Exception as exc:
+                logger.warning(
+                    "Strategy %d task #%s probe review 失败: %s",
+                    strategy.id, task_summary.get("task_id"), exc,
+                )
+                return None, None, time.time() - t0
 
-        try:
-            parsed = parse_probe_review_response(llm_result.content)
-            llm_assessments = parsed.get("assessments", [])
-            llm_add_suggestions = parsed.get("add_suggestions", [])
-        except ValueError as e:
-            logger.warning("Strategy %d probe review 解析失败: %s", strategy.id, e)
-            parse_error = str(e)
+        start = time.time()
+        call_results = await asyncio.gather(
+            *[_evaluate_one(t) for t in ambiguous_summaries]
+        )
+        duration = time.time() - start  # 并行总耗时
+
+        # 合并结果和 token 统计
+        total_input = total_output = total_tokens = 0
+        total_cost = 0.0
+        call_details = []
+        failed_parses = 0
+
+        for idx, (assessment, usage, dur) in enumerate(call_results):
+            if assessment is None:
+                failed_parses += 1
+                continue
+            llm_assessments.append(assessment)
+            if usage:
+                s = usage.get("summary", {})
+                total_input += s.get("total_input_tokens", 0)
+                total_output += s.get("total_output_tokens", 0)
+                total_tokens += s.get("total_tokens", 0)
+                total_cost += s.get("total_cost_cny", 0.0)
+                for detail in usage.get("call_details", []):
+                    call_details.append({**detail, "call_index": idx})
+
+        if failed_parses:
+            parse_error = f"{failed_parses} 个任务解析失败"
+
+        merged_token_usage = {
+            "summary": {
+                "total_calls": len(ambiguous_summaries),
+                "total_input_tokens": total_input,
+                "total_output_tokens": total_output,
+                "total_tokens": total_tokens,
+                "total_cost_cny": round(total_cost, 6),
+                "total_duration_seconds": round(duration, 2),
+                "avg_tokens_per_call": float(total_tokens) / len(ambiguous_summaries) if ambiguous_summaries else 0.0,
+                "avg_cost_per_call": round(total_cost / len(ambiguous_summaries), 6) if ambiguous_summaries else 0.0,
+            },
+            "call_details": call_details,
+        }
 
         if job:
             now = datetime.now(timezone.utc)
@@ -1034,13 +1083,13 @@ async def _run_probe_review(
             job.completed_at = now
             job.analyzed_count = len(llm_assessments)
             job.processing_time = int(duration)
-            job.token_usage = extract_token_usage(llm_result, duration_seconds=duration)
+            job.token_usage = merged_token_usage
             if parse_error:
                 job.error_message = parse_error
 
         logger.info(
-            "Strategy %d probe review LLM 完成 (%.1fs, 模糊=%d)",
-            strategy.id, duration, len(ambiguous_summaries),
+            "Strategy %d probe review 并行 LLM 完成 (%.1fs, 模糊=%d, 成功=%d)",
+            strategy.id, duration, len(ambiguous_summaries), len(llm_assessments),
         )
     else:
         logger.info("Strategy %d probe review 全部自动判定，跳过 LLM", strategy.id)

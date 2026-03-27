@@ -38,10 +38,10 @@
 
       <ClientOnly>
         <div v-if="strategy" class="flex items-center gap-2">
-          <UButton variant="outline" icon="i-heroicons-arrow-down-tray" size="sm" @click="handleExport">
+          <UButton variant="outline" icon="i-heroicons-arrow-down-tray" @click="handleExport">
             导出 Word
           </UButton>
-          <UButton variant="outline" color="error" icon="i-heroicons-trash" size="sm" @click="handleDelete">
+          <UButton variant="outline" color="error" icon="i-heroicons-trash" @click="handleDelete">
             删除
           </UButton>
         </div>
@@ -175,12 +175,6 @@
 
         <!-- 未生成研究计划 -->
         <div v-if="!hasResearchDesign">
-          <UTextarea
-            v-model="designInput"
-            placeholder="（可选）补充说明，例如: 重点看抖音和小红书、关注某个竞品..."
-            :rows="2"
-            class="w-full mb-3"
-          />
           <UButton :loading="designLoading" icon="i-heroicons-sparkles" @click="handleDesignResearch">
             生成研究计划
           </UButton>
@@ -220,7 +214,7 @@
             @update:notes-per-task="notesPerTask = $event"
           />
 
-          <div class="flex items-center gap-3 mt-4">
+          <div class="mt-4 flex items-center gap-3">
             <UButton
               :loading="confirmResearchLoading"
               icon="i-heroicons-check-circle"
@@ -263,6 +257,8 @@
           :total-count="probeData.totalCount"
           :all-analyzed="probeData.allAnalyzed"
           :probe-review="probeData.probeReview"
+          :task-dimension-map="taskDimensionMap"
+          :dimension-names="dimensionNames"
         />
 
         <div v-if="probeData.probeReview && strategy.status === 'probing'" class="flex items-center gap-3 mt-4">
@@ -435,6 +431,14 @@ const currentStageIndex = computed(() => {
 const canGeneratePhase2 = computed(() => currentStatusOrder.value >= STATUS_ORDER.phase1_done)
 const canGeneratePhase3 = computed(() => currentStatusOrder.value >= STATUS_ORDER.phase2_done)
 
+const taskDimensionMap = computed(() => {
+  const rd = strategy.value?.research_design as Record<string, unknown> | null | undefined
+  return (rd?._task_dimension_map as Record<string, string> | undefined) ?? {}
+})
+const dimensionNames = computed(() =>
+  strategy.value?.research_design?.data_plan?.map(d => d.dimension_name) ?? []
+)
+
 const phase1Data = computed(() => (strategy.value?.phase1_result || null) as Phase1Result | null)
 const phase2Data = computed(() => (strategy.value?.phase2_result || null) as Phase2Result | null)
 const phase3Data = computed(() => (strategy.value?.phase3_result || null) as Phase3Result | null)
@@ -461,7 +465,6 @@ const hasResearchDesign = computed(() => {
 const editingBrief = ref(false)
 const editBrief = ref({ subject: '', analysis_goal: '', constraints: '' })
 const savingBrief = ref(false)
-const designInput = ref('')
 const designLoading = ref(false)
 const confirmResearchLoading = ref(false)
 const editingPlan = ref(false)
@@ -536,8 +539,7 @@ const handleSaveBrief = async () => {
 const handleDesignResearch = async () => {
   designLoading.value = true
   try {
-    await strategiesApi.designResearch(strategyId.value, designInput.value.trim())
-    designInput.value = ''
+    await strategiesApi.designResearch(strategyId.value, '')
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
     const rd = strategy.value?.research_design
     if (rd) {

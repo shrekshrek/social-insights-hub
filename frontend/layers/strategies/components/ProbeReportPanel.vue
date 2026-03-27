@@ -20,21 +20,52 @@
       <p class="text-sm text-gray-400">新的探测任务已创建，等待爬虫采集...</p>
     </div>
 
-    <!-- 任务状态列表 -->
-    <div v-if="tasks.length" class="grid grid-cols-3 gap-1.5">
-      <div
-        v-for="t in tasks"
-        :key="t.task_id"
-        class="flex items-center gap-1.5 text-xs p-1.5 rounded"
-        :class="t.has_analysis ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
-      >
-        <UIcon
-          :name="t.has_analysis ? 'i-heroicons-check-circle' : 'i-heroicons-clock'"
-          :class="t.has_analysis ? 'text-green-500' : 'text-gray-400'"
-          class="shrink-0"
-        />
-        <span class="font-medium truncate">{{ t.keyword }}</span>
-        <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
+    <!-- 任务状态：按维度分组 -->
+    <div v-if="tasks.length">
+      <!-- 有维度映射：分组展示 -->
+      <div v-if="dimensionGroups" class="space-y-3">
+        <div v-for="(group, dimName) in dimensionGroups" :key="dimName" class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-gray-500">{{ dimName }}</span>
+            <span class="text-xs text-gray-400">
+              {{ group.filter(t => t.has_analysis).length }}/{{ group.length }} 已分析
+            </span>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5">
+            <div
+              v-for="t in group"
+              :key="t.task_id"
+              class="flex items-center gap-1.5 text-xs p-1.5 rounded"
+              :class="t.has_analysis ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
+            >
+              <UIcon
+                :name="t.has_analysis ? 'i-heroicons-check-circle' : 'i-heroicons-clock'"
+                :class="t.has_analysis ? 'text-green-500' : 'text-gray-400'"
+                class="shrink-0"
+              />
+              <span class="font-medium truncate">{{ t.keyword }}</span>
+              <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 无维度映射：平铺展示（兜底） -->
+      <div v-else class="grid grid-cols-3 gap-1.5">
+        <div
+          v-for="t in tasks"
+          :key="t.task_id"
+          class="flex items-center gap-1.5 text-xs p-1.5 rounded"
+          :class="t.has_analysis ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
+        >
+          <UIcon
+            :name="t.has_analysis ? 'i-heroicons-check-circle' : 'i-heroicons-clock'"
+            :class="t.has_analysis ? 'text-green-500' : 'text-gray-400'"
+            class="shrink-0"
+          />
+          <span class="font-medium truncate">{{ t.keyword }}</span>
+          <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
+        </div>
       </div>
     </div>
 
@@ -57,30 +88,78 @@
         </div>
       </div>
 
-      <!-- 逐任务评估 -->
-      <div v-if="probeReview.assessments?.length" class="space-y-1.5">
-        <h4 class="text-xs font-medium text-gray-500">逐任务评估</h4>
-        <div
-          v-for="a in probeReview.assessments"
-          :key="a.task_id"
-          class="text-sm p-2 rounded border"
-          :class="a.verdict === 'pass'
-            ? 'border-green-200 bg-green-50 dark:bg-green-900/10'
-            : 'border-amber-200 bg-amber-50 dark:bg-amber-900/10'"
-        >
-          <div class="flex items-center gap-2">
-            <UBadge
-              :color="a.verdict === 'pass' ? 'success' : 'warning'"
-              variant="soft"
-              size="xs"
-            >
-              {{ a.verdict === 'pass' ? '通过' : '待调整' }}
-            </UBadge>
-            <span class="font-medium">{{ a.keyword }}</span>
-            <span class="text-xs text-gray-400">{{ platformLabel(a.platform) }}</span>
+      <!-- 逐维度评估 -->
+      <div v-if="probeReview.assessments?.length" class="space-y-3">
+        <!-- 按维度分组 -->
+        <template v-if="assessmentDimensionGroups">
+          <div
+            v-for="(group, dimName) in assessmentDimensionGroups"
+            :key="dimName"
+            class="space-y-1.5"
+          >
+            <!-- 维度标题 + 通过率 -->
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-medium text-gray-500">{{ dimName }}</span>
+              <span
+                class="text-xs"
+                :class="group.failCount > 0 ? 'text-amber-500' : 'text-green-500'"
+              >
+                {{ group.assessments.length - group.failCount }}/{{ group.assessments.length }} 通过
+              </span>
+            </div>
+            <div class="space-y-1">
+              <div
+                v-for="a in group.assessments"
+                :key="a.task_id"
+                class="text-sm p-2 rounded border"
+                :class="a.verdict === 'pass'
+                  ? 'border-green-200 bg-green-50 dark:bg-green-900/10'
+                  : 'border-amber-200 bg-amber-50 dark:bg-amber-900/10'"
+              >
+                <div class="flex items-center gap-2">
+                  <UBadge
+                    :color="a.verdict === 'pass' ? 'success' : 'warning'"
+                    variant="soft"
+                    size="xs"
+                  >
+                    {{ a.verdict === 'pass' ? '通过' : '待调整' }}
+                  </UBadge>
+                  <span class="font-medium">{{ a.keyword }}</span>
+                  <span class="text-xs text-gray-400">{{ platformLabel(a.platform) }}</span>
+                </div>
+                <p v-if="a.note" class="text-xs text-gray-500 mt-1">{{ a.note }}</p>
+              </div>
+            </div>
           </div>
-          <p v-if="a.note" class="text-xs text-gray-500 mt-1">{{ a.note }}</p>
-        </div>
+        </template>
+
+        <!-- 兜底：无维度映射时平铺 -->
+        <template v-else>
+          <h4 class="text-xs font-medium text-gray-500">逐任务评估</h4>
+          <div class="space-y-1.5">
+            <div
+              v-for="a in probeReview.assessments"
+              :key="a.task_id"
+              class="text-sm p-2 rounded border"
+              :class="a.verdict === 'pass'
+                ? 'border-green-200 bg-green-50 dark:bg-green-900/10'
+                : 'border-amber-200 bg-amber-50 dark:bg-amber-900/10'"
+            >
+              <div class="flex items-center gap-2">
+                <UBadge
+                  :color="a.verdict === 'pass' ? 'success' : 'warning'"
+                  variant="soft"
+                  size="xs"
+                >
+                  {{ a.verdict === 'pass' ? '通过' : '待调整' }}
+                </UBadge>
+                <span class="font-medium">{{ a.keyword }}</span>
+                <span class="text-xs text-gray-400">{{ platformLabel(a.platform) }}</span>
+              </div>
+              <p v-if="a.note" class="text-xs text-gray-500 mt-1">{{ a.note }}</p>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- 调整建议 -->
@@ -105,7 +184,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ProbeTaskStatus, ProbeReviewResult } from '../types'
+import type { ProbeTaskStatus, ProbeReviewResult, ProbeAssessment } from '../types'
 import { platformLabel } from '../composables/useStrategyConstants'
 
 const VERDICT_MAP = {
@@ -135,6 +214,10 @@ const props = defineProps<{
   totalCount: number
   allAnalyzed: boolean
   probeReview: ProbeReviewResult | null
+  /** task_id(string) → dimension_name 映射，用于按维度分组展示 */
+  taskDimensionMap?: Record<string, string>
+  /** data_plan 维度名称有序列表，决定分组顺序 */
+  dimensionNames?: string[]
 }>()
 
 const progressPercent = computed(() => {
@@ -145,5 +228,42 @@ const progressPercent = computed(() => {
 const verdictInfo = computed(() => {
   const v = props.probeReview?.overall_verdict
   return VERDICT_MAP[v || 'fail'] || VERDICT_MAP.fail
+})
+
+/** 按维度分组的任务状态（用于采集进度展示） */
+const dimensionGroups = computed((): Record<string, ProbeTaskStatus[]> | null => {
+  if (!props.taskDimensionMap || !props.dimensionNames?.length || !props.tasks.length) return null
+
+  const groups: Record<string, ProbeTaskStatus[]> = {}
+  // 按 data_plan 顺序初始化
+  for (const dim of props.dimensionNames) groups[dim] = []
+
+  for (const task of props.tasks) {
+    const dim = props.taskDimensionMap[String(task.task_id)]
+    if (dim) {
+      if (!groups[dim]) groups[dim] = []
+      groups[dim].push(task)
+    }
+  }
+
+  // 过滤掉空维度
+  return Object.fromEntries(Object.entries(groups).filter(([, tasks]) => tasks.length > 0))
+})
+
+/** 按维度分组的审查结果（用于 probeReview 展示） */
+const assessmentDimensionGroups = computed((): Record<string, { assessments: ProbeAssessment[], failCount: number }> | null => {
+  if (!props.taskDimensionMap || !props.dimensionNames?.length || !props.probeReview?.assessments?.length) return null
+
+  const groups: Record<string, { assessments: ProbeAssessment[], failCount: number }> = {}
+  for (const dim of props.dimensionNames) groups[dim] = { assessments: [], failCount: 0 }
+
+  for (const a of props.probeReview.assessments) {
+    const dim = props.taskDimensionMap[String(a.task_id)] || '其他'
+    if (!groups[dim]) groups[dim] = { assessments: [], failCount: 0 }
+    groups[dim].assessments.push(a)
+    if (a.verdict === 'fail') groups[dim].failCount++
+  }
+
+  return Object.fromEntries(Object.entries(groups).filter(([, g]) => g.assessments.length > 0))
 })
 </script>

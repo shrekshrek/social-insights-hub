@@ -55,14 +55,12 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
 
 针对每种数据渠道，评估本 brief 的适合度。各渠道特性：
 - **social_media**（社交媒体，当前**可用**）：仅限以下平台：小红书、抖音、微博、知乎、B站、快手、贴吧（不含脉脉、LinkedIn、Twitter 等平台，这些平台当前不可采集）；适合消费者情感/口碑/行为观察、品牌认知研究、趋势话题分析
-- **ecommerce**（电商平台，当前**不可用**）：淘宝、京东等平台的商品评论、问大家、销量数据；适合购买行为分析、真实使用反馈、产品竞品对比
+- **knowledge_base**（市场知识库，当前**可用**）：平台内置公共数据（CNNIC报告、国家统计局指标、政策文件）+ 用户上传的内部文档（研报、历史资料）；适合需要市场数据背景、行业趋势参考、内部资料佐证的场景
 - **news_media**（新闻媒体，当前**不可用**）：公开新闻、媒体报道、公关稿；适合品牌舆情监控、PR 效果评估、重大事件传播分析
-- **industry_data**（行业研报，当前**不可用**）：行业数据库、研报平台（如 CBNData、魔镜市场）；适合市场规模、竞品财报、行业趋势的结构化权威数据
-- **knowledge_base**（本地知识库，当前**不可用**）：客户上传的内部文档、历史报告；适合有内部资料佐证、需要结合历史数据的场景
 
 每个渠道条目包含：
 - `type`: 渠道类型
-- `available`: 是否当前可用（social_media=true，其余=false）
+- `available`: 是否当前可用（social_media=true，knowledge_base=true，其余=false）
 - `solvable`: 该渠道能解决 brief 中的哪些问题（1-3条，简短描述）
 - `unsolvable`: 该渠道对本 brief 有哪些明显局限（0-2条；若无明显局限则为空数组）
 - `channel_brief`: 针对该渠道的定制化研究描述（1-2句；聚焦该渠道能做的部分，是该渠道 research_design 的输入）
@@ -98,11 +96,18 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
       "channel_brief": "聚焦[subject]在社媒平台的用户讨论，分析消费者情感倾向与核心话题..."
     }},
     {{
-      "type": "ecommerce",
+      "type": "knowledge_base",
+      "available": true,
+      "solvable": ["行业市场数据背景", "政策趋势参考"],
+      "unsolvable": ["实时用户互动数据"],
+      "channel_brief": "检索知识库中与[subject]相关的行业报告和市场数据，补充宏观背景..."
+    }},
+    {{
+      "type": "news_media",
       "available": false,
-      "solvable": ["真实购买评价", "产品竞品对比"],
+      "solvable": ["品牌舆情动态", "重大事件传播"],
       "unsolvable": [],
-      "channel_brief": "采集[subject]在淘宝/京东的用户评论与问答，分析购买行为与产品反馈..."
+      "channel_brief": "监测[subject]相关的新闻报道，分析媒体舆论与品牌公关效果..."
     }}
   ]
 }}

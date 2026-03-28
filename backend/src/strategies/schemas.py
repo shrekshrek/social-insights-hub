@@ -14,7 +14,7 @@ from src.schemas import CustomBaseModel, PaginatedResponse
 class ChannelPlanItem(CustomBaseModel):
     """渠道分发条目"""
 
-    type: str = Field(description="渠道类型: social_media / ecommerce / news_media / industry_data / knowledge_base")
+    type: str = Field(description="渠道类型: social_media / knowledge_base / news_media")
     available: bool = Field(description="当前是否可用")
     solvable: list[str] = Field(default_factory=list, description="该渠道能解决的研究问题")
     unsolvable: list[str] = Field(default_factory=list, description="该渠道的局限")

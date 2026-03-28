@@ -48,6 +48,12 @@ export const PERMISSIONS = {
   STRATEGY_READ: {target: 'strategy', action: 'read'},
   STRATEGY_WRITE: {target: 'strategy', action: 'write'},
   STRATEGY_DELETE: {target: 'strategy', action: 'delete'},
+
+  // 知识库
+  KB_ACCESS: {target: 'knowledge_base', action: 'access'},
+  KB_READ: {target: 'knowledge_base', action: 'read'},
+  KB_WRITE: {target: 'knowledge_base', action: 'write'},
+  KB_DELETE: {target: 'knowledge_base', action: 'delete'},
 } as const satisfies Record<string, Permission>
 
 // ============================================================================

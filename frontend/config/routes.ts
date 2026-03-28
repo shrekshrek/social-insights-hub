@@ -91,6 +91,13 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   },
   '/strategies/create': { permission: PERMISSIONS.STRATEGY_WRITE },
   '/strategies/[id]': { permission: PERMISSIONS.STRATEGY_READ },
+  // 知识库模块
+  '/knowledge-base': {
+    permission: PERMISSIONS.KB_ACCESS,
+    label: '市场知识库',
+    showInNav: true,
+    order: 95,
+  },
 }
 
 /**

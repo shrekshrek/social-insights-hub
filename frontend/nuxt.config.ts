@@ -127,6 +127,7 @@ export default defineNuxtConfig({
     './layers/rbac',
     './layers/social-media',
     './layers/strategies',
+    './layers/knowledge-base',
   ],
   components: [
     // 只注册根目录的全局组件和ui-kit组件为全局

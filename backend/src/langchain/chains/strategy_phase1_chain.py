@@ -123,6 +123,7 @@ USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
+{market_context}
 
 ## 切片数据
 
@@ -209,6 +210,7 @@ def format_slice_data_for_phase1(
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
+    market_context: str = "",
 ) -> dict[str, Any]:
     """将切片 result_data 格式化为 Phase 1 输入
 
@@ -434,6 +436,7 @@ def format_slice_data_for_phase1(
         "brief_section": brief_section,
         "research_context_section": research_context_section,
         "slice_data": slice_data,
+        "market_context": market_context,
     }
 
 

@@ -53,6 +53,7 @@ import src.social_media.monitors.models  # noqa: E402, F401
 import src.social_media.tasks.models  # noqa: E402, F401
 import src.social_media.analysis.models  # noqa: E402, F401
 import src.strategies.models  # noqa: E402, F401
+import src.knowledge_base.models  # noqa: E402, F401
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

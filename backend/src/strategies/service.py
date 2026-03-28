@@ -310,11 +310,27 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     slices_data = await load_strategy_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy)
 
+    # RAG 注入（有 brief 时执行，无数据时优雅降级为 ""）
+    market_context = ""
+    if strategy.brand_brief:
+        try:
+            from src.knowledge_base.service import retrieve_market_context
+
+            brief = strategy.brand_brief
+            query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
+            if query:
+                market_context = await retrieve_market_context(
+                    db, query, user_id=strategy.created_by, top_k=6
+                )
+        except Exception as e:
+            logger.warning("Phase1 RAG 检索失败，降级为空: %s", e)
+
     chain = create_strategy_phase1_chain()
     inputs = format_slice_data_for_phase1(
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
+        market_context=market_context,
     )
 
     job = await create_analysis_job_async(
@@ -363,12 +379,28 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
     slices_data = await load_strategy_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy)
 
+    # RAG 注入（有 brief 时执行，无数据时优雅降级为 ""）
+    market_context = ""
+    if strategy.brand_brief:
+        try:
+            from src.knowledge_base.service import retrieve_market_context
+
+            brief = strategy.brand_brief
+            query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
+            if query:
+                market_context = await retrieve_market_context(
+                    db, query, user_id=strategy.created_by, top_k=6
+                )
+        except Exception as e:
+            logger.warning("Phase2 RAG 检索失败，降级为空: %s", e)
+
     chain = create_strategy_phase2_chain()
     inputs = format_data_for_phase2(
         strategy.phase1_result,
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
+        market_context=market_context,
     )
 
     job = await create_analysis_job_async(

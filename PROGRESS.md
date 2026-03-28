@@ -49,6 +49,7 @@
 - v2.0: Strategy Define 全栈实现（3 阶段 AI 策略生成 + 数据依赖精选 + Word 导出）
 - v2.1: 切片流水线数据补全（time_distribution + kol_voices + ipa_analysis，策略 Phase 2/3 数据质量提升）
 - v3.0: Strategy Research Engine 全栈实现（4 阶段自动编排 + 探测验证 + 增量采集协议 + 前端 4 阶段面板）
+- v3.1: 市场知识库全栈实现（pgvector RAG + BAAI/bge-large-zh + 策略 Phase1/2 市场背景注入 + 渠道架构简化）
 
 ## 待改进项
 
@@ -57,9 +58,11 @@
 - 策略 Chain 数据精简：Phase 2 已移除 time_distribution（样本分布误导节奏建议）、Phase 3 已移除 ipa_analysis 读取；切片级 ipa_analysis 计算已删除（维度不一致 + 与现有数据冗余），仅保留 kol_voices 作为唯一新增数据源
 - 研究设计链拆分预案：当前 research_design_chain 在单次调用中完成适配度评估 + 研究计划生成，输出质量可控。当系统接入更多数据能力（公众号搜索、网络搜索、行业报告检索）后，需拆为「预检链 → 编排链」两步——预检链评估各能力的适用性并推荐组合，编排链基于推荐结果为每种能力生成具体采集方案。拆分时机：能力清单 > 3 种 或 单次输出 JSON 超过 1500 tokens
 
+| knowledge_base/全栈 | 已完成 | 市场知识库：文档上传/解析/向量化/RAG 检索；策略 Phase1/2 注入 market_context；渠道架构同步（合并 industry_data、删除 ecommerce）；postgres 迁移至 pgvector/pgvector:pg16 |
+
 ## 下次继续的入口
 
-Strategy Research Engine v3.0 全栈交付完成。可选后续方向：
-- 端到端验收测试：以真实 Brief 走完 4 阶段流程，验证爬虫增量采集 + 自动建切片 + Phase 生成全链路
-- 测试覆盖补全：为 `strategies/service.py` 新增方法（design_research / check_probe_status / check_collection_status）添加 mock LLM 单元测试
-- 前端交互优化：探测/采集轮询增加超时提示、研究计划编辑增加拖拽排序
+下一步根据需求确定。可选方向：
+- 策略模块 Word 导出质量优化（使用 market_context 后报告结构变化）
+- 知识库内置公共文档导入（CNNIC 报告等平台级内容）
+- 前端策略编辑器增强（Phase 1/2/3 编辑体验）

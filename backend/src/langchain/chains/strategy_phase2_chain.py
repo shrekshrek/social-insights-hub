@@ -98,6 +98,8 @@ USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
+{market_context}
+
 ## Phase 1 洞察结果
 
 {phase1_result}
@@ -122,6 +124,7 @@ def format_data_for_phase2(
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
+    market_context: str = "",
 ) -> dict[str, Any]:
     """将 Phase 1 结果 + 补充数据格式化为 Phase 2 输入"""
     from src.langchain.chains.strategy_phase1_chain import _build_research_context_section
@@ -198,6 +201,7 @@ def format_data_for_phase2(
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
+        "market_context": market_context,
     }
 
 

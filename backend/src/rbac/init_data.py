@@ -200,6 +200,22 @@ BUSINESS_PERMISSIONS = [
             "delete": "允许删除策略",
         },
     ),
+    *create_module_permissions(
+        "knowledge_base",
+        ["access", "read", "write", "delete"],
+        display_names={
+            "access": "访问知识库",
+            "read": "查看文档",
+            "write": "上传文档",
+            "delete": "删除文档",
+        },
+        descriptions={
+            "access": "允许访问市场知识库页面",
+            "read": "允许查看和检索知识库文档",
+            "write": "允许上传文档到知识库",
+            "delete": "允许删除知识库文档",
+        },
+    ),
 ]
 
 # 合并所有权限

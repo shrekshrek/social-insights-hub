@@ -35,6 +35,8 @@ dependencies = [
     "gevent>=24.2.1",
     "python-docx>=1.1.0",
     "pdfplumber>=0.11.9",
+    "pgvector>=0.3.0",
+    "sentence-transformers>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -59,4 +61,9 @@ pythonpath = [
   "src",
 ]
 asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.12",
+]
 

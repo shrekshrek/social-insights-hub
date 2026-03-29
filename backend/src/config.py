@@ -163,6 +163,19 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 60
 
+    # Embedding API Configuration (OpenAI-compatible, e.g. SiliconFlow)
+    EMBEDDING_API_KEY: str | None = Field(
+        default=None, description="Embedding API Key (OpenAI-compatible)"
+    )
+    EMBEDDING_BASE_URL: str = Field(
+        default="https://api.siliconflow.cn/v1",
+        description="Embedding API Base URL",
+    )
+    EMBEDDING_MODEL: str = Field(
+        default="BAAI/bge-large-zh-v1.5",
+        description="Embedding model name (1024-dim output)",
+    )
+
     # ========== Agent API Configuration ==========
     AGENT_API_KEY: str | None = Field(
         default=None, description="API Key for crawler agent authentication"

@@ -7,6 +7,30 @@ from pydantic import Field
 from src.schemas import CustomBaseModel
 
 
+class CrawlerStatusItem(CustomBaseModel):
+    """单个来源的爬取状态统计"""
+
+    source_type: str
+    total_docs: int
+    ready_docs: int
+    failed_docs: int
+    last_crawled_at: datetime | None
+
+
+class CrawlerStatusResponse(CustomBaseModel):
+    """爬虫状态汇总响应"""
+
+    items: list[CrawlerStatusItem]
+
+
+class CrawlerRunResponse(CustomBaseModel):
+    """手动触发爬取响应"""
+
+    source_type: str
+    task_id: str
+    message: str
+
+
 class DocumentRead(CustomBaseModel):
     """文档详情响应"""
 

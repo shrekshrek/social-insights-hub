@@ -90,8 +90,6 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
       "dimension_name": "品牌声量",
       "keywords": ["关键词1", "关键词2"],
       "platforms": ["xiaohongshu", "douyin"],
-      "probe_size": 15,
-      "full_size": 50,
       "rationale": "设置理由（一句话）",
       "question_ids": ["rq1"]
     }}
@@ -121,7 +119,6 @@ output_type 可选值: brand_strategy / insight_report
 - research_questions: 2-4 个，覆盖社媒渠道研究方向中的核心分析目标
 - data_plan: 2-4 个维度，每个维度 1-2 个关键词（最多 3 个）+ 1-2 个平台（最多 3 个），总任务数目标 8-12 个
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
-- probe_size 统一为 20，full_size 统一为 50（除非用户有特殊需求）
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
 - 每个 data_plan 条目的 question_ids 必须引用 research_questions 中存在的 id（该维度的数据采集服务哪些研究问题）

@@ -26,3 +26,46 @@ def process_document_task(document_id: int) -> None:
         asyncio.run(_run())
     except Exception as e:
         logger.error("知识库文档 %d 处理任务异常: %s", document_id, e, exc_info=True)
+
+
+def _run_crawler(source_type: str) -> dict:
+    """公共爬取执行逻辑，返回 {source_type, new_docs, error}"""
+    from src.database import AsyncSessionLocal
+    from src.knowledge_base.crawlers.registry import CRAWLER_REGISTRY
+
+    crawler_cls = CRAWLER_REGISTRY.get(source_type)
+    if crawler_cls is None:
+        return {"source_type": source_type, "new_docs": 0, "error": f"未知来源: {source_type}"}
+
+    async def _run() -> int:
+        async with AsyncSessionLocal() as db:
+            return await crawler_cls().run(db)
+
+    try:
+        new_docs = asyncio.run(_run())
+        logger.info("[%s] 爬取任务完成，新入库 %d 篇", source_type, new_docs)
+        return {"source_type": source_type, "new_docs": new_docs, "error": None}
+    except Exception as e:
+        logger.error("[%s] 爬取任务异常: %s", source_type, e, exc_info=True)
+        return {"source_type": source_type, "new_docs": 0, "error": str(e)}
+
+
+@celery_app.task(name="knowledge_base.crawl_source")
+def crawl_source_task(source_type: str) -> dict:
+    """触发指定来源爬取，返回 {source_type, new_docs, error}"""
+    return _run_crawler(source_type)
+
+
+@celery_app.task(name="knowledge_base.crawl_cnnic")
+def crawl_cnnic_task() -> None:
+    _run_crawler("cnnic")
+
+
+@celery_app.task(name="knowledge_base.crawl_nbs")
+def crawl_nbs_task() -> None:
+    _run_crawler("nbs")
+
+
+@celery_app.task(name="knowledge_base.crawl_govsite")
+def crawl_govsite_task() -> None:
+    _run_crawler("govsite")

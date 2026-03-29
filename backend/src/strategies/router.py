@@ -209,9 +209,10 @@ async def get_probe_status(
 async def approve_probe(
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """手动确认探测通过，所有 probe_ready 任务标记为 approved，状态 → collecting"""
-    return await service.approve_probe(db, strategy)
+    """手动确认探测通过，为每个探测任务创建独立全量采集任务，状态 → collecting"""
+    return await service.approve_probe(db, strategy, current_user_id=current_user.id)
 
 
 @router.post(

@@ -56,19 +56,19 @@ draft → planned → probing → collecting → ready → phase1_done → phase
 
 1. `design-research`: research_design_chain 基于 Brief 生成研究问题 + 数据采集方案 + 切片蓝图 + 产出类型
 2. 用户可编辑 data_plan（关键词/平台）和 slice_blueprint（切片名/主体）
-3. `confirm-research`: 创建一个 Monitor + 所有 keyword×platform 任务（含 `probe_size` 参数），状态 → probing
+3. `confirm-research`: 创建一个 Monitor + 所有 keyword×platform 的 phase="probe" 任务（设置 max_pages 限制翻页），状态 → probing
 
 ### ② 探测验证 (probing → collecting)
 
-1. 前端轮询 `probe-status`，爬虫先采 `probe_size` 条数据上传（status → probe_ready）
+1. 前端轮询 `probe-status`，爬虫采集约 20 条（受 max_pages 限制），跳过评论
 2. 所有任务分析完成后自动运行 probe_review_chain
-3. `all_pass` → 自动 approve 所有任务（status → approved），策略 → collecting
-4. `partial_pass/fail` → 用户可 `approve-probe`（忽略继续）或 `refine-probe`（替换关键词，probe_round++，最多 3 轮）
+3. `all_pass` → 自动调用 approve_probe，为每个探测任务创建 phase="collect" 全量任务，策略 → collecting
+4. `partial_pass/fail` → 用户可 `approve-probe`（跳过审查直接全量）或 `refine-probe`（替换关键词，probe_round++，最多 3 轮）
 
 ### ③ 数据就绪 (collecting → ready)
 
-1. 前端轮询 `collection-status`，爬虫从断点续采全量数据
-2. 所有任务分析完成后自动按 slice_blueprint 创建切片
+1. 前端轮询 `collection-status`，爬虫采集全量数据（50 条 + 评论）
+2. 所有全量任务分析完成后自动按 slice_blueprint 创建切片
 3. 切片就绪后自动运行 coverage_check_chain 验证覆盖度
 4. `overall_ready=true` → 状态 → ready
 5. 用户可 `adjust-slices` 微调切片配置（触发重新验证）
@@ -93,19 +93,20 @@ Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
 
 Phase 1/2/3 Chain 均注入 `research_design` 中的 research_questions 作为分析上下文。
 
-## Agent 增量采集协议
+## Agent 协议
 
-策略创建的任务含 `task_params.probe_size`，触发两阶段采集：
+云端通过 Agent API 向爬虫下发任务，爬虫轮询获取并执行：
 
 ```
-pending → accepted → running → probe_ready → approved → completed
-                                ↑ 探测上传     ↑ 策略自动/手动确认
+爬虫轮询 → GET /api/v1/agent/tasks/pending
+         → 返回 status="pending" 的任务
+         → 接受任务 → 采集 → 上传结果 → status="completed"
 ```
 
-- 下发 Task A: `preview_count=probe_size, checkpoint_id=null`
-- 上报探测结果: 携带 `checkpoint_id`，存入 `task_params`
-- 下发 Task B: `preview_count=null, checkpoint_id=<stored>`
-- 上报全量结果: 追加模式（保留旧原文 + 清空分析 + 重新分析）
+任务类型：
+- **探测任务**（phase="probe"）：max_pages 限制翻页，跳过评论，约 20 条
+- **全量任务**（phase="collect"）：采集完整数据（50 条 + 评论）
+- **普通任务**：一次性采集到 max_notes_count 指定数量
 
 ## Important Notes
 

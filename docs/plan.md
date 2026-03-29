@@ -1,596 +1,741 @@
-# 实施方案：knowledge_base 模块 — 市场知识库
+# 实施方案：knowledge-base/前端 — 知识库管理界面
 
-> 规划日期：2026-03-28
-> 参考文档：`docs/channel-architecture-plan.md`
+> 规划日期：2026-03-29
+> 上游模块：knowledge_base/后端（已完成）
+> 参考文档：`docs/architecture.md`
 
 ## 模块职责
 
-"参考数据层"：管理文档的上传、解析、分块、向量化全生命周期；在策略生成（Phase 1/2）前通过 RAG 检索注入 `market_context`，为 LLM 提供市场背景。
+完善知识库管理界面：文档列表/上传/删除、RAG 检索测试、爬虫状态管理。
 
----
+## 架构决策
 
-## 数据模型
+**爬虫功能边界**：爬虫作为知识库的数据来源管理，暂不独立为单独模块。未来以下条件满足 2-3 个时再考虑拆分：
+- 数据源 > 5-6 个（目前 3 个）
+- 需要调度 UI（查看下次执行时间、修改 cron、暂停/恢复）
+- 爬取内容不仅入 KB，还流向其他模块
+- 出现独立的"数据管理员"角色
 
-### `knowledge_documents` 表
-
-| 列 | 类型 | 说明 |
-|----|------|------|
-| id | SERIAL PK | |
-| workspace_id | INTEGER NULL | NULL=平台公共；user_id=用户私有上传 |
-| title | VARCHAR(500) NOT NULL | |
-| source_type | VARCHAR(50) DEFAULT 'upload' | upload / cnnic / nbs / govsite / cninfo |
-| source_url | TEXT NULL | 公共数据来源链接 |
-| source_meta | JSONB NULL | 年份、报告类型等元信息 |
-| file_name | TEXT NULL | 原始文件名 |
-| industry_tags | TEXT[] DEFAULT '{}' | 行业标签，用于检索过滤 |
-| chunk_count | INTEGER DEFAULT 0 | 处理后分块数 |
-| processing_status | VARCHAR(20) DEFAULT 'pending' | pending / processing / ready / failed |
-| error_message | TEXT NULL | |
-| created_at | TIMESTAMPTZ | |
-| updated_at | TIMESTAMPTZ | |
-
-### `knowledge_chunks` 表
-
-| 列 | 类型 | 说明 |
-|----|------|------|
-| id | BIGSERIAL PK | |
-| document_id | INTEGER NOT NULL FK → knowledge_documents.id CASCADE DELETE | |
-| content | TEXT NOT NULL | 原文分块 |
-| embedding | vector(1024) NOT NULL | BAAI/bge-large-zh 输出维度 |
-| chunk_index | INTEGER NOT NULL | 块序号 |
-| metadata | JSONB NULL | 页码、章节等 |
-| created_at | TIMESTAMPTZ | |
-
-**ORM 关系**：
-- `KnowledgeDocument.chunks`: `relationship("KnowledgeChunk", back_populates="document", cascade="all, delete-orphan")`
-- `KnowledgeChunk.document`: `relationship("KnowledgeDocument", back_populates="chunks")`
-
-**索引**：
-- `knowledge_chunks(document_id)`
-- `knowledge_chunks` USING ivfflat(embedding vector_cosine_ops) WITH (lists=100) — 手写，autogenerate 不支持
-- `knowledge_documents(workspace_id)` WHERE NOT NULL
-- `knowledge_documents(source_type)`
-
----
-
-## API / 接口设计
-
-Router prefix: `/api/v1/knowledge-base`
-
-| 方法 | 路径 | 权限 | 说明 |
-|------|------|------|------|
-| POST | `/documents/upload` | `knowledge_base:write` | 上传文件（multipart），触发 Celery 处理 |
-| GET | `/documents` | `knowledge_base:read` | 文档列表（分页 + source_type/status 过滤） |
-| GET | `/documents/{id}` | `knowledge_base:read` | 文档详情 + 状态 |
-| DELETE | `/documents/{id}` | `knowledge_base:delete` | 删除文档及所有分块 |
-| POST | `/search` | `knowledge_base:read` | 测试 RAG 检索 |
-
-**关键 Schemas（均继承 `CustomBaseModel`）**：
-
-```python
-class DocumentRead(CustomBaseModel):
-    id: int
-    title: str
-    source_type: str
-    source_url: str | None
-    file_name: str | None
-    industry_tags: list[str]
-    chunk_count: int
-    processing_status: str  # pending/processing/ready/failed
-    error_message: str | None
-    created_at: datetime
-    updated_at: datetime
-
-class SearchRequest(CustomBaseModel):
-    query: str
-    top_k: int = Field(6, ge=1, le=20)
-
-class ChunkResult(CustomBaseModel):
-    document_id: int
-    document_title: str
-    content: str
-    score: float
-    chunk_index: int
-```
-
-**RAG 检索服���接口**：
-
-```python
-async def retrieve_market_context(
-    db: AsyncSession,
-    query: str,
-    user_id: int | None = None,
-    top_k: int = 6,
-) -> str:
-    """
-    检索相关分块，返回格式化的市场背景段落。
-    - workspace_id IS NULL（平台公共）OR workspace_id = user_id（用户私有）
-    - 无匹配结果时返回 ""，不阻塞策略生成主流程
-    """
-```
+**当前设计**：
+- 爬虫状态面板：内嵌在 `index.vue` 底部折叠区块
+- 搜索功能：独立页面 `/knowledge-base/search`
 
 ---
 
 ## 实施步骤
 
-### Step 1：依赖 + pgvector 迁移
-**文件**：`backend/pyproject.toml`（改），新 Alembic migration 文件
+### Step 1：修复数据类型定义（types/index.ts）
+**文件**：`frontend/layers/knowledge-base/types/index.ts`（修改）
 
-**操作**：
-```bash
-pnpm be:add sentence-transformers pgvector
-pnpm be:migrate:make "add_knowledge_base_pgvector"
+修正 `KnowledgeDocument` 接口对齐后端 `DocumentRead` schema：
+
+```typescript
+interface KnowledgeDocument {
+  id: number
+  workspace_id: number | null        // null = 平台公共
+  title: string
+  source_type: string                // 'upload' | 'cnnic' | 'nbs' | 'govsite'
+  source_url: string | null          // 新增，爬取来源 URL
+  file_name: string | null           // 改名（原 filename）
+  industry_tags: string[]
+  chunk_count: number
+  processing_status: 'pending' | 'processing' | 'ready' | 'failed'
+  error_message: string | null        // 新增，处理失败原因
+  created_at: string
+  updated_at: string
+}
+
+// 修正后的 DocumentUploadResponse
+interface DocumentUploadResponse {
+  id: number
+  title: string
+  processing_status: string
+  message: string
+}
+
+// 新增爬虫相关类型
+interface CrawlerStatusItem {
+  source_type: string
+  total_docs: number
+  ready_docs: number
+  failed_docs: number
+  last_crawled_at: string | null
+}
+
+interface CrawlerStatusResponse {
+  items: CrawlerStatusItem[]
+}
+
+interface CrawlerRunResponse {
+  source_type: string
+  task_id: string
+  message: string
+}
 ```
 
-**迁移内容**（需手写，autogenerate 无法生成）：
-```python
-def upgrade():
-    # 1. 启用 pgvector 扩展
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-    # 2. 创建 knowledge_documents 表
-    op.create_table("knowledge_documents", ...)
-    # 3. 创建 knowledge_chunks 表（含 vector 列）
-    op.create_table("knowledge_chunks", ...)
-    # 4. 手写 IVFFlat 索引（autogenerate 不支持）
-    op.execute(
-        "CREATE INDEX ON knowledge_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
-```
-
-**验证**：`pnpm be:migrate:up` 无报错；`\dx` 确认 vector 扩展已启用
-
-**依赖**：无
+**验证**：`pnpm fe:typecheck`
 
 ---
 
-### Step 2：`backend/src/knowledge_base/models.py`（新建）
-**接口**：
-```python
-class KnowledgeDocument(Base):
-    __tablename__ = "knowledge_documents"
-    id, workspace_id, title, source_type, source_url, source_meta,
-    file_name, industry_tags, chunk_count, processing_status, error_message,
-    created_at, updated_at
-    # 关系
-    chunks: Mapped[list["KnowledgeChunk"]] = relationship(
-        "KnowledgeChunk", back_populates="document", cascade="all, delete-orphan"
-    )
+### Step 2：扩展 Composable（useKnowledgeBase.ts）
+**文件**：`frontend/layers/knowledge-base/composables/useKnowledgeBase.ts`（修改）
 
-class KnowledgeChunk(Base):
-    __tablename__ = "knowledge_chunks"
-    id, document_id, content, embedding (Vector(1024)), chunk_index, metadata, created_at
-    # 关系
-    document: Mapped["KnowledgeDocument"] = relationship(
-        "KnowledgeDocument", back_populates="chunks"
-    )
+修正 API 调用参数对齐，新增搜索/爬虫功能：
+
+```typescript
+export function useKnowledgeBase() {
+  const { apiRequest } = useApi()
+
+  // 修正：listDocuments 改用 source_type 过滤（对应后端参数）
+  async function listDocuments(params?: { page?: number; page_size?: number; source_type?: string }): Promise<DocumentListResponse> {
+    const query = new URLSearchParams()
+    if (params?.page) query.set('page', String(params.page))
+    if (params?.page_size) query.set('page_size', String(params.page_size))
+    if (params?.source_type) query.set('source_type', params.source_type)  // 新增
+
+    return apiRequest<DocumentListResponse>(`/knowledge-base/documents${query.toString()}`)
+  }
+
+  // 修正：uploadDocument 移除 industry_tags / isPublic（后端不支持）
+  async function uploadDocument(file: File, title?: string): Promise<DocumentUploadResponse> {
+    const form = new FormData()
+    form.append('file', file)
+    if (title) form.append('title', title)
+
+    return apiRequest<DocumentUploadResponse>('/knowledge-base/documents/upload', {
+      method: 'POST',
+      body: form,
+    })
+  }
+
+  // 新增：搜索文档（RAG 检索）
+  async function searchDocuments(query: string, topK = 6): Promise<SearchResponse> {
+    return apiRequest<SearchResponse>('/knowledge-base/search', {
+      method: 'POST',
+      body: { query, top_k: topK },
+    })
+  }
+
+  // 新增：获取爬虫状态
+  async function getCrawlerStatus(): Promise<CrawlerStatusResponse> {
+    return apiRequest<CrawlerStatusResponse>('/knowledge-base/crawlers/status')
+  }
+
+  // 新增：手动触发爬虫
+  async function runCrawler(sourceType: string): Promise<CrawlerRunResponse> {
+    return apiRequest<CrawlerRunResponse>(`/knowledge-base/crawlers/${sourceType}/run`, {
+      method: 'POST',
+    })
+  }
+
+  // 新增：来源类型标签辅助
+  function sourceTypeLabel(sourceType: string): string {
+    const labels: Record<string, string> = {
+      'cnnic': 'CNNIC 统计报告',
+      'nbs': 'NBS 月报',
+      'govsite': 'gov.cn 政策',
+    }
+    return labels[sourceType] ?? sourceType
+  }
+
+  return {
+    listDocuments,
+    uploadDocument,
+    searchDocuments,
+    getCrawlerStatus,
+    runCrawler,
+    deleteDocument,  // 保持现有
+    statusLabel,       // 保持现有
+    statusColor,       // 保持现有
+    formatFileSize,     // 保持现有
+  }
+}
 ```
 
-**关键断言**：`embedding` 列类型为 `Vector(1024)`（从 `pgvector.sqlalchemy` 导入）
-
-**验证**：`pnpm be:lint` 无报错
+**验证**：`pnpm fe:typecheck`
 
 **依赖**：Step 1
 
 ---
 
-### Step 3：`backend/src/knowledge_base/schemas.py`（新建）
-**接口**：`DocumentRead`, `DocumentUploadResponse`, `SearchRequest`, `SearchResponse`, `ChunkResult`
-
-**关键断言**：所有 Pydantic 模型继承 `src.schemas.CustomBaseModel`（不得直接继承 `pydantic.BaseModel`）
-
-**依赖**：Step 2
-
----
-
-### Step 4：`backend/src/knowledge_base/embedding.py`（新建）
-**接口**：
-```python
-class EmbeddingService:
-    """BAAI/bge-large-zh 懒加载单例"""
-    _model = None  # 首次调用时加载，~10s
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        """CPU 密集型 → 必须用 run_cpu_bound_task"""
-        from src.utils import run_cpu_bound_task
-        return await run_cpu_bound_task(self._encode, texts)
-
-    def _encode(self, texts: list[str]) -> list[list[float]]:
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer("BAAI/bge-large-zh")
-        return self._model.encode(texts, normalize_embeddings=True).tolist()
-
-def get_embedding_service() -> EmbeddingService: ...  # 模块级单例
-```
-
-**关键断言**：
-- 输出维度 == 1024（bge-large-zh）
-- `normalize_embeddings=True`（余弦相似度要求单位向量）
-- 严禁在 `async def` 中直接调用 `_encode`，必须通过 `run_cpu_bound_task`
-
-**依赖**：Step 1（sentence-transformers 已安装）
-
----
-
-### Step 5：`backend/src/knowledge_base/service.py`（新建）
-**接口**：
-```python
-def parse_text(file_bytes: bytes, filename: str) -> str:
-    """从文件字节提取纯文本（复用 strategies/service.py 的 _extract_text_from_bytes 逻辑）
-    支持：PDF（pdfplumber）/ DOCX（python-docx）/ TXT / MD
-    文件大小上限：50MB（router 层校验）"""
-
-def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100) -> list[str]:
-    """按字符分块，中文友好（不在单词中间截断）"""
-
-async def process_document(db: AsyncSession, doc_id: int) -> None:
-    """解析 → 分块 → 向量化 → 批量写入 knowledge_chunks → 更新 status=ready
-    异常时 status=failed + error_message，不抛出（Celery 任务不重试）"""
-
-async def retrieve_market_context(
-    db: AsyncSession, query: str,
-    user_id: int | None = None, top_k: int = 6,
-) -> str:
-    """pgvector 余弦相似度检索
-    WHERE workspace_id IS NULL OR workspace_id = user_id
-    ORDER BY embedding <=> query_vec LIMIT top_k
-    返回格式化段落或 "" （无结果时）"""
-
-async def list_documents(db, workspace_id, source_type, status, skip, limit) -> tuple[list, int]: ...
-async def get_document(db, doc_id) -> KnowledgeDocument | None: ...
-async def delete_document(db, doc) -> None: ...
-```
-
-**关键断言**：
-- `process_document` 失败不抛出，仅写 `status='failed'`
-- `retrieve_market_context` 无匹配时返回 `""`
-
-**验证**：单元测试（mock DB + mock embedding）
-
-**依赖**：Step 2, 3, 4
-
----
-
-### Step 6：`backend/src/knowledge_base/tasks.py`（新建）
-**接口**：
-```python
-@celery_app.task(name="knowledge_base.process_document")
-def process_document_task(document_id: int) -> None:
-    """同步 Celery 任务包装器，内部通过 asyncio.run 调用 service.process_document"""
-```
-
-**依赖**：Step 5
-
----
-
-### Step 7：`backend/src/knowledge_base/router.py`（新建）
-**接口**：5 个端点，含 `response_model`, `status_code`, `tags`, `summary`
-- 上传：接收 `UploadFile`，校验 size ≤ 50MB，创建 `KnowledgeDocument`，派发 `process_document_task.delay(doc.id)`
-- 所有 I/O 用 `async def`
-- 权限通过 FastAPI Depends 注入（参考 strategies/router.py 模式）
-
-**依赖**：Step 5, 6
-
----
-
-### Step 8：权限注册 + 路由注册
-**文件**：`backend/src/rbac/init_data.py`（改），`backend/src/main.py`（改）
-
-**init_data.py** — 在 BUSINESS_PERMISSIONS 尾部追加：
-```python
-*create_module_permissions(
-    "knowledge_base",
-    ["access", "read", "write", "delete"],
-    display_names={
-        "access": "访问知识库",
-        "read": "查看文档",
-        "write": "上传文档",
-        "delete": "删除文档",
-    },
-    descriptions={
-        "access": "允许访问市场知识库页面",
-        "read": "允许查看和检索知识库文档",
-        "write": "允许上传文档到知识库",
-        "delete": "允许删除知识库文档",
-    },
-),
-```
-
-**main.py**：
-```python
-from src.knowledge_base.router import router as knowledge_base_router
-app.include_router(knowledge_base_router, prefix=settings.API_PREFIX)
-```
-
-**验证**：重启服务后 `pnpm be:lint`；GET `/api/v1/knowledge-base/documents` 返回 200
-
-**依赖**：Step 7
-
----
-
-### Step 9：`backend/src/celery_app.py`（改）
-**操作**：在 `include` 列表中加入 `"src.knowledge_base.tasks"`
-
-**依赖**：Step 6
-
----
-
-### Step 10：`strategy_phase1_chain.py` Phase1 Chain 注入（改）
-**文件**：`backend/src/langchain/chains/strategy_phase1_chain.py`
-
-**USER_TEMPLATE 改动**（在 brief_section 之后、切片数据之前插入）：
-```python
-USER_TEMPLATE = """{brief_section}
-
-{research_context_section}
-
-{market_context}
-
-## 切片数据
-
-{slice_data}"""
-```
-
-**`format_slice_data_for_phase1()` 改动**：
-```python
-def format_slice_data_for_phase1(
-    slices, brief=None, research_design=None,
-    market_context: str = "",   # 新增参数
-) -> dict[str, Any]:
-    ...
-    return {
-        "brief_section": brief_section,
-        "research_context_section": research_context_section,
-        "slice_data": slice_data,
-        "market_context": market_context,   # 新增
-    }
-```
-
-**关键断言**：`market_context=""` 时链调用不报错，LLM 输出结构不变
-
-**依赖**：Step 8
-
----
-
-### Step 11：`strategy_phase2_chain.py` Phase2 Chain 注入（改）
-**文件**：`backend/src/langchain/chains/strategy_phase2_chain.py`
-
-**USER_TEMPLATE 改动**（在 brief_section 之后插入）：
-```python
-USER_TEMPLATE = """{brief_section}
-
-{research_context_section}
-
-{market_context}
-
-## Phase 1 洞察结果
-
-{phase1_result}
-
-## 补充数据
-
-{supplementary_data}"""
-```
-
-**`format_data_for_phase2()` 改动**：加 `market_context: str = ""` 参数，写入返回 dict
-
-**依赖**：Step 8
-
----
-
-### Step 12：`strategies/service.py` RAG 注入（改）
-**文件**：`backend/src/strategies/service.py`
-
-**改动**：
-```python
-from src.knowledge_base.service import retrieve_market_context
-
-async def generate_phase1(db, strategy):
-    ...
-    # RAG 注入（有 brief 时执行，无数据时优雅降级为 ""）
-    market_context = ""
-    if strategy.brand_brief:
-        brief = strategy.brand_brief
-        query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
-        if query:
-            market_context = await retrieve_market_context(
-                db, query, user_id=strategy.created_by, top_k=6
-            )
-
-    inputs = format_slice_data_for_phase1(
-        slices_data, strategy.brand_brief,
-        research_design=strategy.research_design,
-        market_context=market_context,   # 注入
-    )
-    ...
-
-# generate_phase2() 同样处理，使用相同的 market_context 逻辑
-```
-
-**关键断言**：
-- `brand_brief` 为 None 时跳过 RAG，`market_context=""`
-- RAG 异常不应中断策略生成（`try/except`，降级为 `""`）
-
-**依赖**：Step 10, 11
-
----
-
-### Step 13：`strategy_brief_parser_chain.py` 渠道更新（改）
-**文件**：`backend/src/langchain/chains/strategy_brief_parser_chain.py`
-
-**SYSTEM_TEMPLATE 改动**：
-- 删除 `ecommerce` 渠道条目（淘宝/京东）
-- 删除 `industry_data` 条目（行业研报，已合并）
-- `knowledge_base` 改为 `available=true`，说明扩展：
-  ```
-  **knowledge_base**（市场知识库，当前**可用**）：平台内置公共数据（CNNIC报告、国家统计局指标、政策文件）+ 用户上传的内部文档（研报、历史资料）；适合需要市场数据背景、行业趋势参考、内部资料佐证的场景
-  ```
-- 更新示例 JSON，`available` 字段为 `true`
-
-**依赖**：Step 8
-
----
-
-### Step 14：`strategies/schemas.py`（改）
-**文件**：`backend/src/strategies/schemas.py`
-
-**改动**：`ChannelPlanItem.type` Field description 更新：
-```python
-type: str = Field(description="渠道类型: social_media / knowledge_base / news_media")
-```
-
-**依赖**：Step 13
-
----
-
-### Step 15：`frontend/config/permissions.ts`（改）
-**改动**：在 PERMISSIONS 末尾追加：
-```typescript
-// 知识库
-KB_ACCESS: { target: 'knowledge_base', action: 'access' },
-KB_READ: { target: 'knowledge_base', action: 'read' },
-KB_WRITE: { target: 'knowledge_base', action: 'write' },
-KB_DELETE: { target: 'knowledge_base', action: 'delete' },
-```
-
-**依赖**：Step 8（后端权限注册）
-
----
-
-### Step 16：`frontend/config/routes.ts`（改）
-**改动**：在策略路由之后追加：
-```typescript
-// 知识库模块
-'/knowledge-base': {
-  permission: PERMISSIONS.KB_ACCESS,
-  label: '市场知识库',
-  showInNav: true,
-  order: 95,
-},
-'/knowledge-base/[id]': { permission: PERMISSIONS.KB_READ },
-```
-
-**依赖**：Step 15
-
----
-
-### Step 17：`frontend/nuxt.config.ts`（改）
-**改动**：`extends` 数组末尾追加 `'./layers/knowledge-base'`
-
-**依赖**：Step 16
-
----
-
-### Step 18：`frontend/layers/knowledge-base/`（新建）
-
-**文件结构**：
-```
-frontend/layers/knowledge-base/
-├── nuxt.config.ts
-├── pages/knowledge-base/index.vue
-├── composables/useKnowledgeBase.ts
-└── types/index.ts
-```
-
-**`nuxt.config.ts`**：仿 rbac layer，声明 imports + components
-
-**`types/index.ts`**：
-```typescript
-export interface KnowledgeDocument {
-  id: number
-  title: string
-  source_type: string
-  source_url: string | null
-  file_name: string | null
-  industry_tags: string[]
-  chunk_count: number
-  processing_status: 'pending' | 'processing' | 'ready' | 'failed'
-  error_message: string | null
-  created_at: string
-  updated_at: string
+### Step 3：修正主页面（pages/knowledge-base/index.vue）
+**文件**：`frontend/layers/knowledge-base/pages/knowledge-base/index.vue`（修改）
+
+修正字段引用、调整过滤器、新增爬虫状态面板区块：
+
+```vue
+<template>
+  <div class="space-y-6">
+    <!-- 页面标题 -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+          市场知识库
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-1">
+          上传研报、行业资料，AI 策略生成时自动引用
+        </p>
+      </div>
+      <UButton icon="i-heroicons-arrow-up-tray" @click="showUploadModal = true">
+        上传文档
+      </UButton>
+    </div>
+
+    <!-- 文档列表 -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">文档列表</h2>
+          <div class="flex items-center gap-2">
+            <!-- 过滤器从 workspace 改为 source_type -->
+            <USelect v-model="sourceTypeFilter" :items="sourceTypeOptions" class="w-40" />
+            <UButton
+              variant="outline"
+              icon="i-heroicons-arrow-path"
+              :loading="loading"
+              @click="refresh"
+            >
+              刷新
+            </UButton>
+          </div>
+        </div>
+      </template>
+
+      <ClientOnly>
+        <template #fallback>
+          <div class="text-center py-8 text-gray-500">加载文档列表中...</div>
+        </template>
+
+        <div v-if="loading" class="text-center py-8 text-gray-500">
+          加载中...
+        </div>
+
+        <div v-else-if="!documents.length" class="text-center py-12">
+          <UIcon name="i-heroicons-document-text" class="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p class="text-gray-500">暂无文档，点击上方按钮上传</p>
+        </div>
+
+        <div v-else class="divide-y divide-gray-100 dark:divide-gray-800">
+          <div
+            v-for="doc in documents"
+            :key="doc.id"
+            class="flex items-center justify-between py-4 px-2"
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <UIcon name="i-heroicons-document-text" class="w-5 h-5 text-gray-400 shrink-0" />
+              <div class="min-w-0">
+                <p class="font-medium text-gray-900 dark:text-white truncate">{{ doc.title }}</p>
+                <p class="text-sm text-gray-500">
+                  {{ doc.file_name }} · {{ formatFileSize(doc.chunk_count * 500) }}  <!-- 估算 -->
+                  <span v-if="doc.chunk_count > 0"> · {{ doc.chunk_count }} 段</span>
+                  <span v-if="doc.source_type !== 'upload'" class="ml-1">
+                    · {{ doc.source_type.toUpperCase() }}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3 shrink-0">
+              <UBadge :color="statusColor(doc.processing_status)" variant="subtle">
+                {{ statusLabel(doc.processing_status) }}
+              </UBadge>
+              <!-- 仅上传者可删除，或 workspace_id 不为 null（平台文档）不显示删除 -->
+              <UButton
+                v-if="doc.workspace_id !== null"
+                variant="ghost"
+                color="error"
+                icon="i-heroicons-trash"
+                size="sm"
+                :loading="deletingId === doc.id"
+                @click="handleDelete(doc)"
+              />
+            </div>
+          </div>
+        </div>
+      </ClientOnly>
+    </UCard>
+
+    <!-- 爬虫状态面板（新增折叠区块） -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between cursor-pointer" @click="showCrawlerPanel = !showCrawlerPanel">
+          <h2 class="text-lg font-semibold flex items-center gap-2">
+            <UIcon name="i-heroicons-cloud-arrow-down" class="w-4 h-4" />
+            数据源状态
+          </h2>
+          <UButton variant="ghost" size="sm" icon="i-heroicons-arrow-path" />
+        </div>
+      </template>
+
+      <div v-if="showCrawlerPanel">
+        <ClientOnly>
+          <template #fallback>
+            <div class="text-center py-4 text-gray-500">加载状态中...</div>
+          </template>
+
+          <div v-if="loadingCrawler" class="text-center py-4 text-gray-500">
+            加载中...
+          </div>
+
+          <table v-else class="w-full">
+            <thead class="text-xs text-gray-500 bg-gray-50 dark:bg-gray-900">
+              <tr>
+                <th class="text-left py-2 px-4">数据源</th>
+                <th class="text-right py-2 px-4">总数</th>
+                <th class="text-right py-2 px-4">就绪</th>
+                <th class="text-right py-2 px-4">失败</th>
+                <th class="text-right py-2 px-4">最后更新</th>
+                <th class="text-center py-2 px-4">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in crawlerStatus.items" :key="item.source_type" class="border-b border-gray-200 dark:border-gray-800">
+                <td class="py-3 px-4">
+                  <span class="font-medium">{{ sourceTypeLabel(item.source_type) }}</span>
+                </td>
+                <td class="text-right py-3 px-4">{{ item.total_docs }}</td>
+                <td class="text-right py-3 px-4 text-green-600">{{ item.ready_docs }}</td>
+                <td class="text-right py-3 px-4 text-red-600">{{ item.failed_docs }}</td>
+                <td class="text-right py-3 px-4">
+                  {{ item.last_crawled_at ? formatDate(item.last_crawled_at) : '-' }}
+                </td>
+                <td class="text-center py-3 px-4">
+                  <UButton
+                    variant="ghost"
+                    size="xs"
+                    :loading="runningCrawler === item.source_type"
+                    @click="handleRunCrawler(item.source_type)"
+                  >
+                    触发
+                  </UButton>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </ClientOnly>
+      </div>
+    </UCard>
+
+    <!-- 上传弹窗（移除可见范围选项） -->
+    <UModal v-model:open="showUploadModal" title="上传文档">
+      <template #body>
+        <div class="space-y-4">
+          <UFormField label="文档标题（可选）">
+            <UInput v-model="uploadForm.title" placeholder="留空则使用文件名" />
+          </UFormField>
+
+          <UFormField label="选择文件">
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept=".pdf,.docx,.txt,.md"
+              class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+              @change="handleFileChange"
+            >
+            <p class="text-xs text-gray-400 mt-1">支持 PDF、DOCX、TXT、MD，最大 50 MB</p>
+          </UFormField>
+        </div>
+      </template>
+
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <UButton variant="outline" @click="showUploadModal = false">取消</UButton>
+          <UButton
+            :loading="uploading"
+            :disabled="!uploadForm.file"
+            @click="handleUpload"
+          >
+            上传
+          </UButton>
+        </div>
+      </template>
+    </UModal>
+
+    <!-- 删除确认弹窗 -->
+    <UModal v-model:open="showDeleteModal" title="确认删除">
+      <template #body>
+        <p class="text-gray-700 dark:text-gray-300">
+          确定要删除文档「{{ deletingDoc?.title }}」吗？此操作不可撤销。
+        </p>
+      </template>
+
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <UButton variant="outline" @click="showDeleteModal = false">取消</UButton>
+          <UButton color="error" :loading="!!deletingId" @click="confirmDelete">删除</UButton>
+        </div>
+      </template>
+    </UModal>
+  </div>
+</template>
+
+<script setup lang="ts">
+import type { KnowledgeDocument } from '../../types'
+import type { CrawlerStatusItem } from '../../types'
+
+definePageMeta({ layout: 'default' })
+useHead({ title: '市场知识库' })
+
+const { listDocuments, uploadDocument, deleteDocument, searchDocuments, getCrawlerStatus, runCrawler, sourceTypeLabel } = useKnowledgeBase()
+const toast = useToast()
+const { hasPermission } = usePermissions()
+
+// 列表状态
+const documents = ref<KnowledgeDocument[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = 20
+const loading = ref(false)
+const sourceTypeFilter = ref<'all' | 'upload' | 'cnnic' | 'nbs' | 'govsite'>('all')
+
+const sourceTypeOptions = [
+  { label: '全部', value: 'all' },
+  { label: '上传', value: 'upload' },
+  { label: 'CNNIC', value: 'cnnic' },
+  { label: 'NBS', value: 'nbs' },
+  { label: 'gov.cn', value: 'govsite' },
+]
+
+// 爬虫状态面板
+const showCrawlerPanel = ref(false)
+const crawlerStatus = ref<CrawlerStatusItem[]>([])
+const loadingCrawler = ref(false)
+const runningCrawler = ref<string | null>(null)
+
+// 上传
+const showUploadModal = ref(false)
+const uploading = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const uploadForm = reactive<{ title: string; file: File | null }>({
+  title: '',
+  file: null,
+})
+
+// 删除
+const showDeleteModal = ref(false)
+const deletingDoc = ref<KnowledgeDocument | null>(null)
+const deletingId = ref<number | null>(null)
+
+// 检查删除权限
+const canDelete = (doc: KnowledgeDocument) => {
+  // 上传者可删除
+  return doc.workspace_id !== null && hasPermission('KB_DELETE')
 }
+
+async function refresh() {
+  loading.value = true
+  try {
+    const params: { page?: number; page_size?: number; source_type?: string } = {
+      page: page.value,
+      page_size: pageSize,
+    }
+    if (sourceTypeFilter.value !== 'all') params.source_type = sourceTypeFilter.value
+    const res = await listDocuments(params)
+    documents.value = res.items
+    total.value = res.total
+  } catch {
+    toast.add({ title: '加载失败', color: 'error' })
+  } finally {
+    loading.value = false
+  }
+}
+
+watch([page, sourceTypeFilter], refresh)
+onMounted(refresh)
+
+// 上传
+function handleFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  uploadForm.file = input.files?.[0] ?? null
+}
+
+async function handleUpload() {
+  if (!uploadForm.file) return
+  uploading.value = true
+  try {
+    await uploadDocument(uploadForm.file, uploadForm.title || undefined)
+    toast.add({ title: '上传成功，后台处理中', color: 'success' })
+    showUploadModal.value = false
+    uploadForm.title = ''
+    uploadForm.file = null
+    if (fileInputRef.value) fileInputRef.value.value = ''
+    await refresh()
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '上传失败'
+    toast.add({ title: msg, color: 'error' })
+  } finally {
+    uploading.value = false
+  }
+}
+
+// 删除
+function handleDelete(doc: KnowledgeDocument) {
+  deletingDoc.value = doc
+  showDeleteModal.value = true
+}
+
+async function confirmDelete() {
+  if (!deletingDoc.value) return
+  deletingId.value = deletingDoc.value.id
+  try {
+    await deleteDocument(deletingDoc.value.id)
+    toast.add({ title: '删除成功', color: 'success' })
+    showDeleteModal.value = false
+    deletingDoc.value = null
+    await refresh()
+  } catch {
+    toast.add({ title: '删除失败', color: 'error' })
+  } finally {
+    deletingId.value = null
+  }
+}
+
+// 爬虫状态
+async function refreshCrawlerStatus() {
+  loadingCrawler.value = true
+  try {
+    const res = await getCrawlerStatus()
+    crawlerStatus.value = res.items
+  } catch {
+    toast.add({ title: '加载状态失败', color: 'error' })
+  } finally {
+    loadingCrawler.value = false
+  }
+}
+
+async function handleRunCrawler(sourceType: string) {
+  if (!hasPermission('KB_WRITE')) {
+    toast.add({ title: '无操作权限', color: 'error' })
+    return
+  }
+  runningCrawler.value = sourceType
+  try {
+    const res = await runCrawler(sourceType)
+    toast.add({ title: res.message || '已派发爬取任务', color: 'success' })
+  } catch {
+    toast.add({ title: '触发失败', color: 'error' })
+  } finally {
+    runningCrawler.value = null
+  }
+}
+
+// 格式化日期
+function formatDate(dateStr: string): string {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// 页面展开时刷新爬虫状态
+watch(showCrawlerPanel, (val) => {
+  if (val) refreshCrawlerStatus()
+})
+</script>
 ```
 
-**`composables/useKnowledgeBase.ts`**：
-```typescript
-export const useKnowledgeBase = () => {
-  const { apiRequest, useApiData } = useApi()
+**关键断言**：
+- 过滤器从 `workspace` 改为 `source_type`，下拉选项为全部/上传/CNNIC/NBS/govsite
+- 文档卡片移除 `doc.file_size` 显示（后端不返回）
+- 平台文档（`workspace_id = null`）不显示删除按钮
+- 爬虫面板折叠/展开时自动刷新状态
+- 触发按钮有独立 loading 状态，防止重复点击
 
-  // 文档列表（SSR 友好）
-  const useDocuments = (params: Ref<{ source_type?: string; page?: number }>) =>
-    useApiData<PaginatedResponse<KnowledgeDocument>>('/knowledge-base/documents', { query: params })
+**验证**：`pnpm fe:typecheck`
 
-  // 上传（复用 strategies 的 FormData 模式）
-  const uploadDocument = async (file: File, title?: string) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    if (title) formData.append('title', title)
-    return await apiRequest<KnowledgeDocument>('/knowledge-base/documents/upload', {
-      method: 'POST',
-      body: formData,
-    })
+**依赖**：Step 1, Step 2
+
+---
+
+### Step 4：创建搜索页面（pages/knowledge-base/search.vue）
+**文件**：`frontend/layers/knowledge-base/pages/knowledge-base/search.vue`（新建）
+
+独立的 RAG 检索测试页面：
+
+```vue
+<template>
+  <div class="max-w-4xl mx-auto space-y-6">
+    <!-- 搜索输入区域 -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center gap-4">
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+            RAG 检索测试
+          </h1>
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            测试向量检索功能，输入查询词获取最相关的文档分块
+          </p>
+        </div>
+      </template>
+
+      <template #body>
+        <div class="space-y-4">
+          <UFormField label="查询词">
+            <UInput
+              v-model="query"
+              placeholder="例如：小米SU7 品牌口碑、社交媒体平台趋势..."
+              @keyup.enter="handleSearch"
+            />
+          </UFormField>
+
+          <UFormField label="返回结果数">
+            <div class="flex items-center gap-4">
+              <UInput v-model.number="topK" type="number" min="1" max="20" />
+              <UButton @click="handleSearch" :loading="loading" class="shrink-0">
+                检索
+              </UButton>
+            </div>
+          </UFormField>
+
+          <UFormField label="上次查询：{{ lastQuery || '-' }}"></UFormField>
+        </div>
+      </template>
+    </UCard>
+
+    <!-- 搜索结果 -->
+    <UCard v-if="results.length > 0">
+      <template #header>
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">
+            检索结果（共 {{ total }} 条）
+          </h2>
+        </div>
+      </template>
+
+      <ClientOnly>
+        <template #fallback>
+          <div class="text-center py-4 text-gray-500">加载结果中...</div>
+        </template>
+
+        <div class="divide-y divide-gray-100 dark:divide-gray-800">
+          <div
+            v-for="(result, idx) in results"
+            :key="result.chunk_id"
+            class="p-4 border-b border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            <div class="space-y-2">
+              <!-- 相关度 -->
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-sparkles" class="w-4 h-4 text-yellow-500" />
+                <div class="min-w-0">
+                  <p class="text-sm text-gray-600 dark:text-gray-400">
+                    文档：<span class="font-medium text-gray-900 dark:text-white">{{ result.document_title }}</span>
+                  </p>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">
+                    相关度：{{ (result.score * 100).toFixed(1) }}%
+                  </p>
+                </div>
+                <UBadge variant="subtle" class="shrink-0">分块 #{{ idx + 1 }}</UBadge>
+              </div>
+
+              <!-- 分块内容 -->
+              <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 text-sm">
+                <p class="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
+                  {{ result.content }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </ClientOnly>
+
+      <template #footer>
+        <div class="text-center py-2">
+          <p class="text-sm text-gray-500">
+            显示前 {{ results.length }} 条结果（按相关度排序）
+          </p>
+        </div>
+      </template>
+    </UCard>
+
+    <!-- 无结果提示 -->
+    <UCard v-else-if="query && !loading && results.length === 0">
+      <div class="text-center py-12">
+        <UIcon name="i-heroicons-magnifying-glass" class="w-12 h-12 text-gray-300 mx-auto mb-3" />
+        <p class="text-gray-500">未找到相关文档分块</p>
+        <p class="text-sm text-gray-400 mt-2">尝试调整查询词或上传更多相关文档</p>
+      </div>
+    </UCard>
+  </div>
+</template>
+
+<script setup lang="ts">
+import type { ChunkResult, SearchResponse } from '../../types'
+
+definePageMeta({ layout: 'default' })
+useHead({ title: 'RAG 检索测试' })
+
+const { searchDocuments } = useKnowledgeBase()
+const toast = useToast()
+
+const query = ref('')
+const topK = ref(6)
+const loading = ref(false)
+const results = ref<ChunkResult[]>([])
+const total = ref(0)
+const lastQuery = ref('')
+
+async function handleSearch() {
+  if (!query.value.trim()) {
+    toast.add({ title: '请输入查询词', color: 'warning' })
+    return
   }
 
-  const deleteDocument = async (id: number) =>
-    await apiRequest(`/knowledge-base/documents/${id}`, { method: 'DELETE' })
-
-  return { useDocuments, uploadDocument, deleteDocument }
+  loading.value = true
+  try {
+    const res = await searchDocuments(query.value, topK.value)
+    results.value = res.results
+    total.value = res.total
+    lastQuery.value = query.value
+  } catch {
+    toast.add({ title: '检索失败', color: 'error' })
+  } finally {
+    loading.value = false
+  }
 }
+
+// 允许 Enter 键触发
+function handleSearch() {
+  void handleSearch()
+}
+</script>
 ```
 
-**`pages/knowledge-base/index.vue`** 关键约定：
-- 文档列表用 `useApiData()`（SSR 友好）
-- 文件上传组件和列表 wrap 在 `<ClientOnly>` 中（浏览器 API）
-  ```vue
-  <ClientOnly>
-    <KbUploadForm @uploaded="refresh()" />
-    <template #fallback><USkeleton class="h-32" /></template>
-  </ClientOnly>
-  ```
+**关键断言**：
+- 输入框支持 Enter 键提交
+- 结果按相关度排序（后端已处理）
+- 显示分块编号、文档标题、相关度
+- 空结果提示调整查询词
+- 动态内容用 `<ClientOnly>` 包装并提供 fallback
 
-**依赖**：Step 15, 16, 17
+**验证**：`pnpm fe:typecheck`
 
----
-
-### Step 19：`frontend/layers/strategies/composables/useStrategyConstants.ts`（改）
-**改动**：更新 `CHANNEL_LABELS`：
-```typescript
-export const CHANNEL_LABELS: Record<string, string> = {
-  social_media: '社交媒体',
-  knowledge_base: '市场知识库',
-  news_media: '新闻媒体',
-}
-```
-
-删除 `ecommerce` 和 `industry_data` 条目。
-
-**依赖**：Step 13
+**依赖**：Step 1, Step 2
 
 ---
 
 ## 边界情况 & 错误处理
 
-| 场景 | 处理方式 |
-|------|---------|
-| KB 无文档时生成策略 | `retrieve_market_context` 返回 `""`，Phase1/2 正常执行 |
-| RAG 检索异常（DB 超时等） | `try/except` 捕获，降级返回 `""`，记录 logger.warning |
-| 文档解析失败（损坏 PDF） | `process_document` 设 `status='failed'` + `error_message`，不重试 |
-| 上传文件 > 50MB | Router 层 size ���验，返回 HTTP 413 |
-| `brand_brief` 为 None 时 generate | 跳过 RAG 调用，`market_context=""` |
-| Embedding 模型首次加载 (~10s) | Celery worker 懒加载，首个任务慢，后续正常 |
-| pgvector 扩展未启用 | 迁移时保证；连接时失败报错明确 |
+| 场景 | 处理 |
+|------|------|
+| 后端返回错误消息 | 显示 `error_message` badge（红色） |
+| 爬虫触发无权限 | 检查 `KB_WRITE` 权限，toast 提示 |
+| 文件过大 | 后端 413 → 前端已限制文件选择（accept 属性） |
+| RAG 检索无结果 | 显示友好提示，建议调整查询词 |
+| 爬虫状态加载失败 | 显示 error toast，折叠面板保持折叠 |
 
 ---
 
 ## 测试策略
 
-| 层级 | 测试点 | 工具 |
-|------|--------|------|
-| Unit | `chunk_text()` 边界情况（空文本、超长文本、中文截断） | pytest |
-| Unit | `retrieve_market_context()` mock DB — 无结果返回 `""` | pytest + mock |
-| Unit | `format_slice_data_for_phase1()` 带 market_context 参数 | pytest |
-| Integration | 上传 → Celery 处理 → status=ready → `/search` 返回结果 | pytest + httpx |
-| Integration | `generate_phase1()` mock `retrieve_market_context` → inputs 含 market_context key | pytest |
+| 类型 | 测试点 |
+|------|--------|
+| Unit | `useKnowledgeBase` 函数调用正确性（通过集成测试间接验证） |
+| Integration | 文档列表 CRUD 流程、上传/删除 API 调用 |
+| E2E | 爬虫状态面板折叠/展开、搜索页面完整流程 |
 
 ---
 
@@ -598,11 +743,8 @@ export const CHANNEL_LABELS: Record<string, string> = {
 
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
-| Embedding 模型 | BAAI/bge-large-zh (sentence-transformers) | 中文最优开源，离线，按规划 |
-| workspace_id P0 | workspace_id=NULL 平台公共；user_id 用于用户上传隔离 | 最小多租户，schema 留扩展点 |
-| market_context 降级 | 无文档/无 brief/异常时传 `""`，不阻塞生成 | 知识库是增强非必需 |
-| CPU-bound 执行 | `run_cpu_bound_task`（非 raw executor） | 符合项目约定 |
-| 分块策略 | 800 char / 100 overlap | 中文文档经验值，易调整 |
-| IVFFlat 索引 | lists=100，数据量 <10K 时适合 | pgvector 文档推荐 |
-| ecommerce 渠道 | 完全删除（非延期） | 法律风险（蝉妈妈诉讼案例）+ 技术复杂度 |
-| industry_data 渠道 | 合并入 knowledge_base | 数据可公开爬取，定位一致 |
+| 爬虫状态面板位置 | 内嵌在 index.vue 底部 | 当前功能较小，内嵌简化导航；未来独立时可搬走 |
+| 搜索页面 | 独立页面 `/knowledge-base/search` | 搜索是独立交互流程，不适合嵌入列表页 |
+| source_type 过滤 | 替换 workspace 过滤器 | 对齐后端 API，支持爬虫来源过滤 |
+| 移除 isPublic 参数 | 不发送 | 后端不支持，始终上传为私有 |
+| 文件大小估算 | 用 `chunk_count * 500` 估算 | 后端不返回 `file_size`，提供粗略估算 |

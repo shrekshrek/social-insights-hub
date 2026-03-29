@@ -57,8 +57,6 @@ export interface DataPlanItem {
   dimension_name: string
   keywords: string[]
   platforms: string[]
-  probe_size?: number
-  full_size?: number
   rationale?: string
 }
 
@@ -235,7 +233,6 @@ export interface StrategyUpdate {
 export interface ConfirmResearchRequest {
   research_design: Record<string, unknown>
   notes_per_task?: number
-  probe_notes?: number
 }
 
 export interface ConfirmResearchResponse {

@@ -104,16 +104,12 @@
       "dimension_name": "品牌声量",
       "keywords": ["大魔王", "大魔王素毛肚"],
       "platforms": ["xiaohongshu", "douyin"],
-      "probe_size": 15,
-      "full_size": 50,
       "rationale": "零食品类在小红书和抖音讨论最活跃"
     },
     {
       "dimension_name": "品类大盘",
       "keywords": ["魔芋爽零食"],
       "platforms": ["xiaohongshu", "douyin"],
-      "probe_size": 15,
-      "full_size": 50,
       "rationale": "了解品类整体热度和消费趋势"
     }
   ],
@@ -145,16 +141,16 @@
 与现有 consult_chain 的区别：
 - 多了**研究问题层**（关键词选择有可追溯的理由）
 - 切片蓝图带 `serves_questions` 映射（后续验证可按问题检查覆盖度）
-- 带 `probe_size` / `full_size` 指导增量采集
 - 带产出类型预判
 
 #### 系统行为
 
 用户确认后（confirm_research）：
 1. 创建一个 Monitor（名称 = 策略名称）
-2. 为 data_plan 中每个关键词组×平台创建 DataTask：
-   - `task_params.probe_size = 15`
-   - `task_params.max_notes_count = 50`（full_size）
+2. 为 data_plan 中每个关键词组×平台创建 phase="probe" 的 DataTask：
+   - `task_params.max_notes_count = 20`（探测目标量）
+   - `task_params.max_pages = 1`（20条/页平台）或 `2`（微博/贴吧10条/页）
+   - `task_params.enable_comments = 0`（探测阶段跳过评论）
    - `auto_analyze = true`
 3. 记录 monitor_id 和所有 task_id 到策略
 4. 策略状态 → `probing`
@@ -171,12 +167,12 @@
 
 #### 为什么需要探测
 
-采集是整个流程中最耗时的环节（含视频转写）。50 条 vs 15 条差异显著。先验证方向再全量采集，避免浪费。
+采集是整个流程中最耗时的环节（含视频转写）。50 条 vs 20 条差异显著。先验证方向再全量采集，避免浪费。
 
 #### 系统行为
 
-1. 爬虫看到 `task_params.probe_size = 15`，先采 15 条（含转写）
-2. 上传 15 条 → 后端存入，任务状态 → `probe_ready`
+1. 爬虫看到 `phase="probe"` + `max_pages` 限制，采集约 20 条（微博/贴吧约 20 条，其他平台约 20 条），跳过评论
+2. 上传数据 → 后端存入，任务状态 → `completed`
 3. 自动触发完整分析管线（screening → deep → aggregation）
 4. 分析完成后，任务的 `analysis_result` 就绪
 
@@ -227,7 +223,7 @@
 
 #### 自动化逻辑
 
-- `all_pass`（所有 verdict = proceed）→ **自动**标记所有任务 approved，爬虫继续采集。策略状态 → `collecting`。用户无需操作。
+- `all_pass`（所有 verdict = proceed）→ **自动**调用 approve_probe，为每个探测任务创建对应的 phase="collect" 全量任务。策略状态 → `collecting`。用户无需操作。
 - `partial_pass` / `fail` → 通知用户。策略页面显示探测报告。
 
 #### 用户操作（仅在有问题时）
@@ -251,8 +247,8 @@
 ```
 
 选择：
-- **接受建议并重新探测**：取消不合格任务，用新关键词创建新探测任务 → 回到 probing
-- **忽略问题继续采集**：标记 approved，爬虫继续
+- **接受建议并重新探测**：调用 refine_probe，取消不合格任务，用新关键词创建新探测任务 → 回到 probing
+- **忽略问题继续采集**：调用 approve_probe，为该探测任务创建全量任务
 - **放弃该维度**：取消任务，从切片蓝图中移除该数据来源
 
 #### 循环限制
@@ -266,54 +262,34 @@
 
 **目的**：全量数据采集分析完成后，自动组织切片，让用户确认。
 
-#### 增量采集协议（方案 B）
+#### 探测/全量任务分离设计
 
-爬虫侧支持同一 DataTask 分两次上传：
-
-```
-爬虫端                              后端
-  │                                  │
-  │  采集 15 条 → 上传 (首次)         │
-  │                → 存入 DB          │
-  │                → status=probe_ready│
-  │                → 触发完整分析      │
-  │                                  │
-  │  轮询任务状态                      │
-  │  (等待 approved / rejected)       │
-  │                                  │
-  │  status=approved → 继续采集 35 条  │
-  │  → 追加上传 (第二次)              │
-  │                → 追加到现有数据     │
-  │                → 清空旧分析结果     │
-  │                → 用全部 50 条重跑分析│
-  │                → status=completed  │
-```
-
-upload_result 行为矩阵：
-
-| 当前 status | 上传行为 | 新 status |
-|-------------|----------|-----------|
-| accepted / running | 首次存入。有 probe_size → 不标记完成 | probe_ready |
-| accepted / running | 首次存入。无 probe_size → 正常完成 | completed |
-| approved | 追加数据（不清空），重跑分析 | completed |
-| completed | 覆盖（现有 re-upload 逻辑） | completed |
-
-Agent API 新增：
-
-| 端点 | 说明 |
-|------|------|
-| `GET /agent/tasks/{id}` | 返回任务当前 status，供爬虫轮询 |
-
-DataTask.status 扩展：
+探测任务和全量任务是两个独立的 DataTask，通过 `phase` 字段区分：
 
 ```
-现有:  pending → accepted → running → completed / failed
-新增:  ... → running → probe_ready → approved → completed / failed
+探测任务 (phase="probe"):
+  - max_notes_count = 20（小量采样）
+  - max_pages = 1（20条/页平台）或 2（微博/贴吧10条/页）
+  - enable_comments = 0（跳过评论，加快速度）
+  - 分析完成后触发 probe_review_chain
+
+全量任务 (phase="collect"):
+  - max_notes_count = 50（完整采集）
+  - max_pages = 0 或不设置（按 max_notes_count 采集）
+  - enable_comments = 1（包含评论）
+  - 分析完成后触发自动建切片
 ```
+
+approve_probe 行为：
+
+1. 获取所有探测任务的 task_id（从 strategy.task_ids）
+2. 为每个探测任务创建对应的全量任务
+3. 更新 strategy.task_ids 为全量任务 ID 列表
+4. 策略状态 → `collecting`
 
 #### 自动建切片
 
-当策略关联的所有正式任务（status=completed）分析完成后，系统自动：
+当策略关联的所有全量任务（phase="collect", status=completed）分析完成后，系统自动：
 
 1. 读取切片蓝图（slice_blueprint）
 2. 将 data_plan 中的 dimension_name 映射到实际创建的 task_id
@@ -483,8 +459,8 @@ draft ──[design_research]──→ planned ──[confirm]──→ probing
 | 触发条件 | 自动行为 |
 |----------|----------|
 | 策略所有探测任务分析完成 | 运行 probe_review_chain |
-| probe_review 全部 proceed | 标记所有任务 approved，策略状态 → collecting |
-| 策略所有正式任务分析完成 | 按 slice_blueprint 创建 AnalysisSlice |
+| probe_review 全部 proceed | 调用 approve_probe，创建全量任务，策略状态 → collecting |
+| 策略所有全量任务分析完成 | 按 slice_blueprint 创建 AnalysisSlice |
 | 切片分析完成 | 运行 coverage_check_chain，策略状态 → ready |
 | Phase 3 生成完成 | 策略状态 → completed |
 
@@ -648,8 +624,10 @@ class Strategy(Base):
 
 | 组件 | 变更 |
 |------|------|
-| upload_result (agent service) | 支持 probe_ready + approved 追加模式 |
-| confirm_plan → confirm_research | 增加 probe_size 参数 |
+| confirm_research | 创建 phase="probe" 任务，设置 max_pages |
+| approve_probe | 为探测任务创建 phase="collect" 全量任务 |
+| refine_probe | 替换不合格的探测任务 |
+| check_collection_status | 检查全量任务完成状态，触发自动建切片 |
 | 自动分析触发 | 探测完成后触发 probe_review；全量完成后触发自动建切片 |
 
 ### 移除

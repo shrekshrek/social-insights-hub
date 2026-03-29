@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.attributes import flag_modified
 from fastapi import HTTPException, status
 
 from src.social_media.tasks.models import DataTask
@@ -35,13 +34,13 @@ async def get_pending_tasks(
     Returns:
         list[AgentTaskInfo]: 任务列表
     """
-    # 返回 pending（新任务）和 approved（续采任务）
+    # 返回 pending 任务（探测任务和全量采集任务均通过 pending 状态下发）
     stmt = (
         select(DataTask)
         .where(
             and_(
                 DataTask.data_source == "remote_crawler",
-                DataTask.status.in_(("pending", "approved")),
+                DataTask.status == "pending",
                 DataTask.is_deleted.is_(False),
             )
         )
@@ -193,9 +192,7 @@ async def update_progress(
         )
 
     # 更新状态
-    # approved 任务正在执行 Task B（续采），不能被 running 进度覆盖——
-    # upload_result 依赖 status == "approved" 来判断追加模式(is_append)
-    if request.status and not (task.status == "approved" and request.status == "running"):
+    if request.status:
         task.status = request.status
         if request.status == "running" and not task.started_at:
             task.started_at = datetime.now(timezone.utc)
@@ -308,7 +305,7 @@ async def upload_result(
         )
 
     # 验证状态
-    if task.status not in ("accepted", "running", "completed", "approved"):
+    if task.status not in ("accepted", "running", "completed"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -316,18 +313,12 @@ async def upload_result(
                 "error_code": "INVALID_TASK_STATUS",
                 "message": (
                     f"Task status is {task.status}, "
-                    "expected accepted, running, completed or approved"
+                    "expected accepted, running or completed"
                 ),
             },
         )
 
     is_reupload = task.status == "completed"
-    is_append = task.status == "approved"
-
-    # approved 追加上传：清空分析结果（全量重新分析），保留已有原文数据
-    if is_append:
-        logger.info(f"Task {task_id}: Append upload (approved → completed)")
-        await _clear_analysis_results(db, task_id, task)
 
     # 如果是已完成的任务，先清空现有数据（覆盖模式）
     if is_reupload:
@@ -372,18 +363,8 @@ async def upload_result(
             task.started_at = datetime.now(timezone.utc)
         await db.flush()
 
-        # 追加模式：加载已有原文的 post_id_on_platform → DB id 映射
-        existing_post_mapping: dict[str, int] = {}
-        if is_append:
-            from src.social_media.tasks.models import SocialPost
-
-            existing_stmt = select(SocialPost.post_id_on_platform, SocialPost.id).where(
-                SocialPost.task_id == task.id
-            )
-            existing_result = await db.execute(existing_stmt)
-            existing_post_mapping = {row[0]: row[1] for row in existing_result.all()}
-
         # 转换并导入原文数据（按 post_id_on_platform 去重）
+        existing_post_mapping: dict[str, int] = {}
         contents = request.data.get("contents", [])
         posts_data_dict: dict[str, dict] = {}
 
@@ -454,40 +435,19 @@ async def upload_result(
         posts_count = len(created_posts)
         comments_count = len(created_comments)
 
-        # 追加模式：累加计数
-        if is_append:
-            posts_count += task.posts_count or 0
-            comments_count += task.comments_count or 0
-
         await task_crud.update_task_counts(
             db, task, posts_count=posts_count, comments_count=comments_count
         )
-
-        # 保存爬虫返回的断点 ID（探测上传后，供续采时回传）
-        if request.checkpoint_id:
-            task.task_params = {
-                **(task.task_params or {}),
-                "checkpoint_id": request.checkpoint_id,
-            }
-            flag_modified(task, "task_params")
-        elif is_append and task.task_params and "checkpoint_id" in task.task_params:
-            # 续采完成，清除断点
-            task.task_params = {
-                k: v for k, v in task.task_params.items() if k != "checkpoint_id"
-            }
-            flag_modified(task, "task_params")
 
         # 决定最终状态
         if request.error_message:
             # 任务执行失败：保留已采集数据，但标记为 failed
             final_status = "failed"
+        elif task.phase == "probe" and not is_reupload:
+            # 探测任务：上传完成后进入 probe_ready，等待策略审查
+            final_status = "probe_ready"
         else:
-            # 有 probe_size 的首次上传 → probe_ready（待审批续采），否则 completed
-            probe_size = (task.task_params or {}).get("probe_size")
-            if probe_size and not is_reupload and not is_append:
-                final_status = "probe_ready"
-            else:
-                final_status = "completed"
+            final_status = "completed"
 
         await task_crud.update_task_status(
             db, task, final_status,
@@ -503,9 +463,7 @@ async def upload_result(
 
         # 如果启用了自动分析，触发分析任务链（probe_ready 也需要分析以供审查）
         new_posts_count = len(created_posts)
-        if task.auto_analyze and (
-            new_posts_count > 0 or (is_append and posts_count > 0)
-        ):
+        if task.auto_analyze and new_posts_count > 0:
             from src.social_media.analysis.celery_tasks.auto_analysis_tasks import (
                 run_auto_analysis,
             )

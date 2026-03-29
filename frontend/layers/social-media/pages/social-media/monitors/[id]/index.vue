@@ -22,11 +22,20 @@ const { useApiData } = useApi()
 // 获取项目详情（使用顶层 await）
 const { data: monitor, pending: _monitorLoading, refresh: refreshMonitor } = await getMonitor(monitorId.value)
 
+// phase 筛选：全部 / 探测 / 全量
+const phaseFilter = ref<'all' | 'probe' | 'collect'>('all')
+const phaseItems = [
+  { label: '全部', value: 'all' },
+  { label: '探测', value: 'probe' },
+  { label: '全量', value: 'collect' },
+]
+
 // 获取项目下的任务列表
 const taskParams = computed(() => ({
   monitor_id: monitorId.value,
   page: 1,
   page_size: 100,
+  ...(phaseFilter.value !== 'all' ? { phase: phaseFilter.value } : {}),
 }))
 
 const { data: tasksData, pending: tasksLoading, refresh: refreshTasks } = await getTasks(taskParams)
@@ -407,7 +416,6 @@ const getStatusColor = (status: string) => {
     accepted: 'neutral',
     running: 'info',
     probe_ready: 'warning',
-    approved: 'info',
     completed: 'success',
     failed: 'error',
   }
@@ -421,7 +429,6 @@ const getStatusText = (status: string) => {
     accepted: '已接单',
     running: '运行中',
     probe_ready: '探测完成',
-    approved: '待续采',
     completed: '已完成',
     failed: '失败',
   }
@@ -648,6 +655,20 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.task_type),
     },
     {
+      accessorKey: 'phase',
+      meta: { class: { th: 'w-16', td: 'w-16 whitespace-nowrap' } },
+      header: '阶段',
+      cell: ({ row }) => {
+        const phase = row.original.phase
+        if (!phase) return h('span', { class: 'text-xs text-gray-400' }, '-')
+        return h(Badge, {
+          size: 'xs',
+          variant: 'subtle',
+          color: phase === 'probe' ? 'warning' : 'primary',
+        }, () => phase === 'probe' ? '探测' : '全量')
+      },
+    },
+    {
       accessorKey: 'status',
       meta: { class: { th: 'w-[96px]', td: 'w-[96px] whitespace-nowrap' } },
       header: '状态',
@@ -856,9 +877,26 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">
-            任务列表 ({{ tasks.length }})
-          </h2>
+          <div class="flex items-center gap-3">
+            <h2 class="text-lg font-semibold">
+              任务列表 ({{ tasks.length }})
+            </h2>
+            <ClientOnly>
+              <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                <button
+                  v-for="item in phaseItems"
+                  :key="item.value"
+                  class="px-2.5 py-1 text-xs rounded-md transition-colors"
+                  :class="phaseFilter === item.value
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm font-medium'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+                  @click="phaseFilter = item.value as 'all' | 'probe' | 'collect'"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            </ClientOnly>
+          </div>
           <ClientOnly>
             <div class="flex items-center gap-2">
               <div class="text-xs text-gray-500 dark:text-gray-400">

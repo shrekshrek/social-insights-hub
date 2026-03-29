@@ -67,6 +67,7 @@ async def get_tasks(
     data_source: Optional[str] = Query(None, description="按数据源过滤"),
     creator_id: Optional[int] = Query(None, description="按创建者过滤"),
     search: Optional[str] = Query(None, description="搜索关键词"),
+    phase: Optional[str] = Query(None, description="按采集阶段过滤: probe / collect"),
 ):
     """
     获取任务列表。
@@ -94,6 +95,7 @@ async def get_tasks(
         creator_id=creator_id,
         search=search,
         current_user_id=current_user.id,
+        phase=phase,
     )
 
     # 批量查询各任务最新 LLM 分析 Job 状态（用于判断"分析中"，避免 N+1）

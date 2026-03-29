@@ -1,23 +1,38 @@
-import type { KnowledgeDocument, DocumentListResponse, DocumentUploadResponse } from '../types'
+import type {
+  DocumentListResponse,
+  DocumentUploadResponse,
+  CrawlerStatusResponse,
+  CrawlerRunResponse,
+  SearchResponse,
+  KnowledgeDocument,
+} from '../types'
 
 export function useKnowledgeBase() {
-  const { apiRequest } = useApi()
+  const { apiRequest, useApiData } = useApi()
 
-  async function listDocuments(params?: { page?: number; page_size?: number; workspace?: 'public' | 'private' }): Promise<DocumentListResponse> {
-    const query = new URLSearchParams()
-    if (params?.page) query.set('page', String(params.page))
-    if (params?.page_size) query.set('page_size', String(params.page_size))
-    if (params?.workspace) query.set('workspace', params.workspace)
-    const qs = query.toString()
-    return apiRequest<DocumentListResponse>(`/knowledge-base/documents${qs ? `?${qs}` : ''}`)
+  // 获取文档列表（使用 useApiData 模式）
+  const getDocuments = (params?: MaybeRef<Record<string, unknown>>) => {
+    return useApiData<DocumentListResponse>('/knowledge-base/documents', {
+      query: params,
+      key: computed(() => {
+        const p = unref(params)
+        return `documents-list-${p?.page || 1}-${p?.page_size || 20}-${p?.source_type || 'all'}`
+      }),
+    })
   }
 
-  async function uploadDocument(file: File, title?: string, industryTags?: string[], isPublic?: boolean): Promise<DocumentUploadResponse> {
+  // 获取单个文档
+  const getDocument = (id: number) => {
+    return useApiData<KnowledgeDocument>(`/knowledge-base/documents/${id}`, {
+      key: `document-${id}`,
+    })
+  }
+
+  // 上传文档（保持 apiRequest 用于写操作）
+  async function uploadDocument(file: File, title?: string): Promise<DocumentUploadResponse> {
     const form = new FormData()
     form.append('file', file)
     if (title) form.append('title', title)
-    if (industryTags?.length) form.append('industry_tags', JSON.stringify(industryTags))
-    if (isPublic !== undefined) form.append('is_public', String(isPublic))
 
     return apiRequest<DocumentUploadResponse>('/knowledge-base/documents/upload', {
       method: 'POST',
@@ -25,40 +40,86 @@ export function useKnowledgeBase() {
     })
   }
 
-  async function deleteDocument(docId: number): Promise<void> {
-    await apiRequest(`/knowledge-base/documents/${docId}`, { method: 'DELETE' })
+  // 搜索文档（RAG 检索）- 保持 apiRequest 用于写操作
+  async function searchDocuments(query: string, topK = 6): Promise<SearchResponse> {
+    return apiRequest<SearchResponse>('/knowledge-base/search', {
+      method: 'POST',
+      body: { query, top_k: topK },
+    })
   }
 
-  function statusLabel(status: KnowledgeDocument['processing_status']): string {
-    const map: Record<KnowledgeDocument['processing_status'], string> = {
-      pending: '等待处理',
-      processing: '处理中',
-      ready: '已就绪',
-      failed: '处理失败',
+  // 获取爬虫状态（使用 useApiData 模式）
+  const getCrawlerStatus = () => {
+    return useApiData<CrawlerStatusResponse>('/knowledge-base/crawlers/status', {
+      key: 'crawler-status',
+    })
+  }
+
+  // 手动触发爬虫（保持 apiRequest 用于写操作）
+  async function runCrawler(sourceType: string): Promise<CrawlerRunResponse> {
+    return apiRequest<CrawlerRunResponse>(`/knowledge-base/crawlers/${sourceType}/run`, {
+      method: 'POST',
+    })
+  }
+
+  // 删除文档（保持 apiRequest 用于写操作）
+  async function deleteDocument(id: number) {
+    return apiRequest(`/knowledge-base/documents/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
+  // 来源类型标签辅助
+  function sourceTypeLabel(sourceType: string): string {
+    const labels: Record<string, string> = {
+      'cnnic': 'CNNIC 统计报告',
+      'nbs': 'NBS 月报',
+      'govsite': 'gov.cn 政策',
+      'upload': '用户上传',
     }
-    return map[status] ?? status
+    return labels[sourceType] ?? sourceType
   }
 
-  function statusColor(status: KnowledgeDocument['processing_status']): 'neutral' | 'info' | 'success' | 'error' {
-    const map: Record<KnowledgeDocument['processing_status'], 'neutral' | 'info' | 'success' | 'error'> = {
-      pending: 'neutral',
-      processing: 'info',
-      ready: 'success',
-      failed: 'error',
+  // 状态标签
+  function statusLabel(status: string): string {
+    const labels: Record<string, string> = {
+      'pending': '等待处理',
+      'processing': '处理中',
+      'ready': '就绪',
+      'failed': '失败',
     }
-    return map[status] ?? 'neutral'
+    return labels[status] ?? status
   }
 
+  // 状态颜色
+  function statusColor(status: string): string {
+    const colors: Record<string, string> = {
+      'pending': 'neutral',
+      'processing': 'blue',
+      'ready': 'green',
+      'failed': 'red',
+    }
+    return colors[status] ?? 'neutral'
+  }
+
+  // 文件大小格式化
   function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
   }
 
   return {
-    listDocuments,
+    getDocuments,
+    getDocument,
     uploadDocument,
+    searchDocuments,
+    getCrawlerStatus,
+    runCrawler,
     deleteDocument,
+    sourceTypeLabel,
     statusLabel,
     statusColor,
     formatFileSize,

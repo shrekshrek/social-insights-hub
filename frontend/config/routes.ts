@@ -1,5 +1,5 @@
 /**
- * 统一路由配置：集中管理权限与导航元数据
+ * 路由由配置：集中管理权限与导航元数据
  */
 
 import { PERMISSIONS } from './permissions'
@@ -38,7 +38,12 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   '/users/[id]': { permission: PERMISSIONS.USER_READ },
   '/users/[id]/edit': { permission: PERMISSIONS.USER_WRITE },
   '/users/[id]/roles': { permission: PERMISSIONS.USER_WRITE },
-  '/rbac': { permission: PERMISSIONS.ROLE_MGMT_ACCESS },
+  '/rbac': {
+    permission: PERMISSIONS.ROLE_MGMT_ACCESS,
+    label: '角色管理',
+    showInNav: true,
+    order: 40,
+  },
   '/rbac/roles': {
     permission: PERMISSIONS.ROLE_MGMT_ACCESS,
     label: '角色管理',
@@ -98,6 +103,14 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     showInNav: true,
     order: 95,
   },
+  '/knowledge-base/upload': {
+    permission: PERMISSIONS.KB_WRITE,
+    label: '上传文档',
+  },
+  '/knowledge-base/search': {
+    permission: PERMISSIONS.KB_READ,
+    label: 'RAG 检索测试',
+  },
 }
 
 /**
@@ -109,6 +122,7 @@ export function getRoutePermissions(path: string): Permission | Permission[] | n
 }
 
 function getRouteConfig(path: string): RouteConfig | undefined {
+  // 精确匹配
   if (ROUTE_CONFIG[path]) {
     return ROUTE_CONFIG[path]
   }
@@ -125,10 +139,10 @@ function getRouteConfig(path: string): RouteConfig | undefined {
     }
   }
 
+  // 模块前缀匹配
   const parts = path.split('/')
   if (parts.length >= 2) {
     const prefix = `/${parts[1]}`
-    // 兜底返回模块前缀的权限
     if (ROUTE_CONFIG[prefix]) {
       return ROUTE_CONFIG[prefix]
     }

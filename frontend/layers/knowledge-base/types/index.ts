@@ -1,31 +1,38 @@
 export interface KnowledgeDocument {
   id: number
-  title: string
-  filename: string
-  file_type: string
-  file_size: number
-  industry_tags: string[]
-  processing_status: 'pending' | 'processing' | 'ready' | 'failed'
-  chunk_count: number
   workspace_id: number | null
-  uploaded_by: number
-  source_meta: Record<string, unknown>
+  title: string
+  source_type: string
+  source_url: string | null
+  file_name: string | null
+  industry_tags: string[]
+  chunk_count: number
+  processing_status: 'pending' | 'processing' | 'ready' | 'failed'
+  error_message: string | null
   created_at: string
   updated_at: string
 }
 
 export interface DocumentUploadResponse {
-  document_id: number
+  id: number
   title: string
-  status: string
+  processing_status: string
+  message: string
 }
 
 export interface ChunkResult {
-  chunk_id: number
   document_id: number
   document_title: string
   content: string
   score: number
+  chunk_index: number
+}
+
+export interface DocumentListResponse {
+  items: KnowledgeDocument[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface SearchResponse {
@@ -34,9 +41,20 @@ export interface SearchResponse {
   total: number
 }
 
-export interface DocumentListResponse {
-  items: KnowledgeDocument[]
-  total: number
-  page: number
-  page_size: number
+export interface CrawlerStatusItem {
+  source_type: string
+  total_docs: number
+  ready_docs: number
+  failed_docs: number
+  last_crawled_at: string | null
+}
+
+export interface CrawlerStatusResponse {
+  items: CrawlerStatusItem[]
+}
+
+export interface CrawlerRunResponse {
+  source_type: string
+  task_id: string
+  message: string
 }

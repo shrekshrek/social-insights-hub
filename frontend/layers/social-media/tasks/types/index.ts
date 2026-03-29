@@ -91,6 +91,7 @@ export interface DataTask {
   task_params: Record<string, unknown> | null
   data_source: DataSource
   status: TaskStatus
+  phase: 'probe' | 'collect' | null
   posts_count: number
   comments_count: number
   started_at: string | null

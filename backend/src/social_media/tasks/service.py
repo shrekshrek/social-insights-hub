@@ -94,6 +94,7 @@ async def get_tasks_list(
     creator_id: Optional[int] = None,
     search: Optional[str] = None,
     current_user_id: Optional[int] = None,
+    phase: Optional[str] = None,
 ) -> tuple[List[DataTask], int]:
     """获取任务列表（带过滤和分页）"""
     # 如果指定了monitor_id，验证访问权限
@@ -121,6 +122,7 @@ async def get_tasks_list(
         data_source=data_source,
         creator_id=creator_id,
         search=search,
+        phase=phase,
     )
 
 

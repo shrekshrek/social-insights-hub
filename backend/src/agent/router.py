@@ -74,14 +74,14 @@ async def get_pending_tasks(
     response_model=AgentTaskInfo,
     status_code=status.HTTP_200_OK,
     summary="Get task detail",
-    description="查询任务详情（状态、参数、断点等），供爬虫轮询审批状态和获取续采参数",
+    description="查询任务详情（状态、参数），供爬虫轮询执行状态",
     dependencies=[Depends(verify_agent_api_key)],
 )
 async def get_task_detail(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
 ):
-    """查询指定任务的详细信息，包含 task_params（checkpoint_id 等）。"""
+    """查询指定任务的详细信息，包含 task_params。"""
     return await service.get_task_detail(db, task_id)
 
 

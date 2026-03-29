@@ -112,17 +112,20 @@ def format_coverage_check_inputs(
     slice_lines = ["## 切片分析摘要"]
     for name, data in slices_data:
         slice_lines.append(f"\n### {name}")
-        overview = data.get("overview", {})
+        # result_data 结构: {meta, foundation, layers, reports, pipeline}
+        foundation = data.get("foundation") or {}
+        landscape = (data.get("layers") or {}).get("landscape") or {}
+        overview = landscape.get("overview") or {}
         slice_lines.append(f"原文数: {overview.get('total_posts', 0)}")
 
-        # 实体
-        entities = data.get("aligned_entities", [])[:10]
+        # 实体（在 foundation.aligned_entities）
+        entities = (foundation.get("aligned_entities") or [])[:10]
         if entities:
             entity_names = [f"{e.get('name', '')}({e.get('role', '')})" for e in entities]
             slice_lines.append(f"主要实体: {', '.join(entity_names)}")
 
-        # 话题
-        topics = data.get("aligned_topics", [])[:10]
+        # 话题（在 foundation.aligned_topics）
+        topics = (foundation.get("aligned_topics") or [])[:10]
         if topics:
             topic_names = [t.get("name", "") for t in topics]
             slice_lines.append(f"主要话题: {', '.join(topic_names)}")
@@ -132,8 +135,8 @@ def format_coverage_check_inputs(
         if sentiment:
             slice_lines.append(f"整体情感: {sentiment}")
 
-        # SOV
-        sov = data.get("sov_ranking", [])[:5]
+        # SOV（在 layers.landscape.sov_ranking）
+        sov = (landscape.get("sov_ranking") or [])[:5]
         if sov:
             sov_names = [s.get("name", "") for s in sov]
             slice_lines.append(f"声量排名: {', '.join(sov_names)}")

@@ -36,33 +36,11 @@
 | strategies/前端 | 已完成 | 策略列表/创建/详情页，3 阶段结果展示与编辑，跨项目切片选择器 |
 | analysis/slice_enrichment/后端 | 已完成 | 切片流水线数据补全：time_distribution(Stage1) + kol_voices(Stage1) + ipa_analysis(Stage2) |
 | strategy-research-engine/全栈 | 已完成 | 策略模块重构为智能研究编排者：4 阶段自动化（研究设计→探测验证→数据就绪→产出生成）+ 增量采集协议 + 6 条 LLM Chain + 前端 4 阶段面板 |
-
-## 已完成的里程碑
-
-- v1.0: 全栈基础框架 (auth + rbac + users)
-- v1.x: 社交媒体数据采集与分析功能 (projects + tasks + analysis + langchain + agent)
-- v1.x: 数据任务分析 spam 维度功能完成 (4D 分布 + 维度排序 + 图表预计算 + 全栈类型一致性)
-- v1.x: 项目级切片 spam 维度增强 (实体/话题 4D 分布 + SpamRatioBar 展示)
-- v1.x: 任务级分析指标 QA 与修复 (舆论反差度/营销浓度阈值/NSR+KOL 情感标签归一化)
-- v1.x: 全栈代码命名统一 (snapshot → slice) + 架构文档补全
-- v1.x: 项目详情页批量创建任务 + 切片重命名功能
-- v2.0: Strategy Define 全栈实现（3 阶段 AI 策略生成 + 数据依赖精选 + Word 导出）
-- v2.1: 切片流水线数据补全（time_distribution + kol_voices + ipa_analysis，策略 Phase 2/3 数据质量提升）
-- v3.0: Strategy Research Engine 全栈实现（4 阶段自动编排 + 探测验证 + 增量采集协议 + 前端 4 阶段面板）
-- v3.1: 市场知识库全栈实现（pgvector RAG + BAAI/bge-large-zh + 策略 Phase1/2 市场背景注入 + 渠道架构简化）
-
-## 待改进项
-
-- 测试覆盖率待提升（后端 aggregation 模块无单元测试）
-- 切片页前端可选展示：time_distribution / kol_voices 数据已由后端生成但前端展示优先级低（time_distribution 是采集样本分布非真实趋势、kol_voices 任务级更直观），如需展示仅考虑 kol_voices
-- 策略 Chain 数据精简：Phase 2 已移除 time_distribution（样本分布误导节奏建议）、Phase 3 已移除 ipa_analysis 读取；切片级 ipa_analysis 计算已删除（维度不一致 + 与现有数据冗余），仅保留 kol_voices 作为唯一新增数据源
-- 研究设计链拆分预案：当前 research_design_chain 在单次调用中完成适配度评估 + 研究计划生成，输出质量可控。当系统接入更多数据能力（公众号搜索、网络搜索、行业报告检索）后，需拆为「预检链 → 编排链」两步——预检链评估各能力的适用性并推荐组合，编排链基于推荐结果为每种能力生成具体采集方案。拆分时机：能力清单 > 3 种 或 单次输出 JSON 超过 1500 tokens
-
 | knowledge_base/全栈 | 已完成 | 市场知识库：文档上传/解析/向量化/RAG 检索；策略 Phase1/2 注入 market_context；渠道架构同步（合并 industry_data、删除 ecommerce）；postgres 迁移至 pgvector/pgvector:pg16 |
+| knowledge_base/crawlers/全栈 | 已完成 | Crawl4AI + Celery Beat 定时爬取 CNNIC/NBS/gov.cn；admin GET /crawlers/status + POST /crawlers/{source_type}/run；Embedding API 迁移至 SiliconFlow |
+| knowledge_base/前端 | 已完成 | 文档列表/上传/删除、RAG 检索测试、爬虫状态管理 |## 下次继续的入口
+知识库前端模块已完成。根据项目当前状态，下一步建议：
+- 验收：运行完整的测试，确保所有功能正常工作
+- 文档：更新或完善模块 CLAUDE.md（如需）
+- 部署：准备生产环境部署配置检查
 
-## 下次继续的入口
-
-下一步根据需求确定。可选方向：
-- 策略模块 Word 导出质量优化（使用 market_context 后报告结构变化）
-- 知识库内置公共文档导入（CNNIC 报告等平台级内容）
-- 前端策略编辑器增强（Phase 1/2/3 编辑体验）

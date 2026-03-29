@@ -88,10 +88,6 @@ class UploadResultRequest(CustomBaseModel):
     platform: str = Field(..., description="平台代码")
     stats: Optional[ResultStats] = Field(None, description="统计信息")
     data: dict[str, Any] = Field(..., description="采集数据")
-    checkpoint_id: Optional[str] = Field(
-        None,
-        description="断点 ID。预览采集完成后携带，云端持久化后下发续采时回传",
-    )
     error_message: Optional[str] = Field(
         None,
         max_length=500,

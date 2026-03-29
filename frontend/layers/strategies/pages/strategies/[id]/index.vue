@@ -577,7 +577,6 @@ const handleConfirmResearch = async () => {
         slice_blueprint: editableBlueprint.value,
       },
       notes_per_task: notesPerTask.value,
-      probe_notes: 20,
     })
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
     editingPlan.value = false

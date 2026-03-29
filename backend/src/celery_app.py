@@ -18,6 +18,7 @@
 
 import logging
 from celery import Celery
+from celery.schedules import crontab
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -85,11 +86,25 @@ celery_app.conf.update(
     # worker_concurrency 通过命令行参数指定
 )
 
+celery_app.conf.beat_schedule = {
+    # NBS 月度数据：每月 1 日 03:00
+    "crawl-nbs-monthly": {
+        "task": "knowledge_base.crawl_nbs",
+        "schedule": crontab(day_of_month=1, hour=3, minute=0),
+    },
+    # CNNIC 报告：每月 15 日 03:00（新报告通常月中发布）
+    "crawl-cnnic-monthly": {
+        "task": "knowledge_base.crawl_cnnic",
+        "schedule": crontab(day_of_month=15, hour=3, minute=0),
+    },
+    # gov.cn 政策文件：每周一 04:00
+    "crawl-govsite-weekly": {
+        "task": "knowledge_base.crawl_govsite",
+        "schedule": crontab(day_of_week=1, hour=4, minute=0),
+    },
+}
+
 logger.info("✅ Celery应用配置完成")
 logger.info(f"   Broker: {settings.CELERY_BROKER_URL}")
 logger.info(f"   Backend: {settings.CELERY_RESULT_BACKEND}")
 logger.info("   Task Timeout: 7200s (2 hours)")
-
-# Task modules will be imported here when they are created
-# Example:
-# from src.worker import screening_tasks, analysis_tasks

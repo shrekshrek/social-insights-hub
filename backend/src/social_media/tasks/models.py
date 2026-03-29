@@ -61,6 +61,14 @@ class DataTask(Base):
         comment="数据源: remote_crawler/local_upload",
     )
 
+    # 采集阶段（策略流程专用）
+    phase: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        index=True,
+        comment="采集阶段: probe（探测）/ collect（全量）",
+    )
+
     # 任务状态
     status: Mapped[str] = mapped_column(
         String(50),

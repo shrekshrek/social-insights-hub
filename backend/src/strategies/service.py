@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete as sa_delete
 from src.utils import run_cpu_bound_task
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -64,6 +64,7 @@ from .schemas import (
     ParseBriefResponse,
     ProbeStatusResponse,
     ProbeTaskStatus,
+    RefineProbeRequest,
     RefineProbeResponse,
     StrategyCreate,
     StrategyUpdate,
@@ -649,7 +650,7 @@ async def confirm_research(
     """确认研究计划，创建一个 Monitor + 探测任务
 
     遍历 data_plan 中每个维度的关键词×平台组合创建 DataTask，
-    task_params 包含 probe_size 用于增量采集协议。
+    task_params 包含 max_pages 用于控制翻页数量（探测任务：1页或2页）。
     """
     from src.social_media.monitors.crud import get_monitor_by_name, get_platform_by_code
     from src.social_media.monitors.schemas import MonitorCreate
@@ -759,11 +760,11 @@ async def confirm_research(
         if not clean_keywords:
             continue
 
-        task_params = {
-            "max_notes_count": notes_per_task,
-            "probe_size": probe_notes,
-            "enable_comments": 1,
-            "per_note_max_comments_count": 20,
+        # 探测任务：仅采 probe_notes 条，跳过评论（加快速度），下发给��虫时直接用 max_notes_count
+        probe_task_params = {
+            "max_notes_count": probe_notes,
+            "enable_comments": 0,
+            "per_note_max_comments_count": 0,
         }
 
         for keyword in clean_keywords:
@@ -774,6 +775,13 @@ async def confirm_research(
                     if not platform:
                         partial_errors.append(f"平台「{platform_name}」不存在，跳过")
                         continue
+
+                    # max_pages 用于控制翻页数量：微博/贴吧 10 条/页限 2 页，其他平台 20 条/页限 1 页
+                    max_pages = 2 if code in ("wb", "tieba") else 1
+
+                    # 为每个平台单独设置 max_pages
+                    probe_task_params["max_pages"] = max_pages
+
                     task = await create_task(
                         db,
                         DataTaskCreate(
@@ -783,8 +791,9 @@ async def confirm_research(
                             task_type="search",
                             keywords=keyword,
                             data_source="remote_crawler",
-                            task_params=task_params,
+                            task_params=probe_task_params,
                             auto_analyze=True,
+                            phase="probe",
                         ),
                         current_user_id,
                     )
@@ -999,9 +1008,7 @@ async def _run_probe_review_bg_task(
             )
 
             if review_result.get("overall_verdict") == "all_pass":
-                await _approve_all_probe_tasks(db, list(strategy.task_ids or []))
-                strategy.status = "collecting"
-                await db.commit()
+                await approve_probe(db, strategy)
     except Exception as e:
         logger.error(
             "Strategy %d probe review background task failed: %s", strategy_id, e, exc_info=True
@@ -1176,702 +1183,6 @@ async def _run_probe_review(
 
 
 
-async def _approve_all_probe_tasks(
-    db: AsyncSession,
-    task_ids: list[int],
-) -> int:
-    """将所有 probe_ready 任务标记为 approved
-
-    爬虫端通过 status 字段区分探测(pending)和续采(approved)模式，
-    不再依赖 probe_size 是否存在来判断。task_params 保持不变。
-    """
-    from sqlalchemy import update as sa_update
-    from src.social_media.tasks.models import DataTask
-
-    result = await db.execute(
-        sa_update(DataTask)
-        .where(DataTask.id.in_(task_ids), DataTask.status == "probe_ready")
-        .values(status="approved")
-    )
-    return result.rowcount or 0
-
-
-async def check_probe_status(
-    db: AsyncSession,
-    strategy: Strategy,
-) -> ProbeStatusResponse:
-    """查询探测进度，全部分析完成后自动触发审查（后台非阻塞）
-
-    轮询语义：
-    - 未全部分析完成 → 返回进度，all_analyzed=False
-    - 全部完成 + 无审查结果 → 触发后台审查任务（首次），或等待进行中的任务完成
-    - 审查结果已就绪 → 返回结果（含 strategy 快照）
-    - all_pass → 后台任务已自动 approve + 状态推进到 collecting
-    """
-    task_ids = list(strategy.task_ids or [])
-    statuses, analyzed_summaries = await _build_probe_task_summaries(db, task_ids)
-
-    total = len(statuses)
-    analyzed = sum(1 for s in statuses if s.has_analysis)
-    all_analyzed = total > 0 and analyzed == total
-
-    # 已有审查结果 → 直接返回缓存
-    if strategy.probe_review_result:
-        fresh = await get_strategy_by_id(db, strategy.id)
-        return ProbeStatusResponse(
-            all_analyzed=all_analyzed,
-            tasks=statuses,
-            analyzed_count=analyzed,
-            total_count=total,
-            probe_review_result=strategy.probe_review_result,
-            strategy=build_strategy_read(fresh),
-        )
-
-    # 未全部分析完成 → 返回进度
-    if not all_analyzed:
-        return ProbeStatusResponse(
-            all_analyzed=False,
-            tasks=statuses,
-            analyzed_count=analyzed,
-            total_count=total,
-        )
-
-    # 全部分析完成 + 无审查结果 → 触发后台任务（防重复启动）
-    if strategy.id not in _probe_review_in_progress:
-        _probe_review_in_progress.add(strategy.id)
-        asyncio.create_task(
-            _run_probe_review_bg_task(strategy.id, analyzed_summaries)
-        )
-        logger.info("Strategy %d 探测审查后台任务已触发", strategy.id)
-
-    # 审查进行中，客户端继续轮询
-    return ProbeStatusResponse(
-        all_analyzed=True,
-        tasks=statuses,
-        analyzed_count=analyzed,
-        total_count=total,
-        probe_review_result=None,
-    )
-
-
-async def approve_probe(
-    db: AsyncSession,
-    strategy: Strategy,
-) -> ApproveProbeResponse:
-    """手动确认探测通过，状态 → collecting"""
-    if strategy.status != "probing":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="当前状态不在探测验证阶段",
-        )
-    task_ids = list(strategy.task_ids or [])
-    approved_count = await _approve_all_probe_tasks(db, task_ids)
-
-    strategy.status = "collecting"
-    await db.commit()
-    updated = await get_strategy_by_id(db, strategy.id)
-
-    return ApproveProbeResponse(
-        approved_task_count=approved_count,
-        strategy=build_strategy_read(updated),
-    )
-
-
-async def refine_probe(
-    db: AsyncSession,
-    strategy: Strategy,
-    refinements: list[dict],
-    current_user_id: int,
-) -> RefineProbeResponse:
-    """调整关键词，创建新探测任务
-
-    1. 检查 probe_round < 3
-    2. 软删除不合格的旧任务
-    3. 用新关键词创建新探测任务
-    4. 更新 strategy.task_ids + probe_round
-    """
-    from src.social_media.monitors.crud import get_platform_by_code
-    from src.social_media.tasks.schemas import DataTaskCreate
-    from src.social_media.tasks.service import create_task
-    from src.social_media.tasks import crud as task_crud
-
-    _PROBE_MIN_TASKS = 3
-    _PROBE_MAX_TASKS = 20
-
-    if strategy.status != "probing":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="当前状态不在探测验证阶段",
-        )
-
-    if strategy.probe_round >= 3:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="已达最大探测轮次（3 轮），请手动确认或回到研究设计阶段",
-        )
-
-    if not strategy.monitor_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="策略尚未创建监测",
-        )
-
-    # 预检：验证调整后总任务数在合理范围内
-    current_total = len(list(strategy.task_ids or []))
-    net_change = sum(
-        1 if item.get("task_id") is None          # 纯新增
-        else (-1 if not item.get("new_keyword")   # 纯移除
-              else 0)                              # 替换（±0）
-        for item in refinements
-    )
-    projected_total = current_total + net_change
-    if projected_total < _PROBE_MIN_TASKS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"调整后任务数（{projected_total}）低于最小值 {_PROBE_MIN_TASKS}，请保留足够的探测任务",
-        )
-    if projected_total > _PROBE_MAX_TASKS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"调整后任务数（{projected_total}）超过最大值 {_PROBE_MAX_TASKS}，请减少新增数量",
-        )
-
-    # 获取原 task 的 probe_size / notes_per_task
-    research_design = strategy.research_design or {}
-    data_plan = research_design.get("data_plan", [])
-    # 从第一个 data_plan 条目取 probe_size，默认 20（与 confirm_research 保持一致）
-    default_probe_size = 20
-    default_full_size = 50
-    if data_plan:
-        default_probe_size = data_plan[0].get("probe_size", 20)
-        default_full_size = data_plan[0].get("full_size", 50)
-
-    removed_task_ids = []
-    created_task_ids = []
-    current_task_ids = list(strategy.task_ids or [])
-    old_to_new_task_ids: dict[int, int] = {}  # 追踪旧→新 task ID 映射，用于继承维度
-
-    from src.social_media.tasks.models import DataTask
-
-    new_task_dim_map: dict[int, str] = {}  # 新建 task_id → dimension，用于更新 dim_map
-
-    for item in refinements:
-        old_task_id = item.get("task_id")
-        new_keyword = item.get("new_keyword")
-        platform_code = item.get("platform", "")
-
-        # ── 纯新增（task_id=None）──
-        if old_task_id is None:
-            platform = await get_platform_by_code(db, platform_code)
-            if not platform:
-                logger.warning("refine_probe: 平台 %s 不存在，跳过新增", platform_code)
-                continue
-            new_task = await create_task(
-                db,
-                DataTaskCreate(
-                    name=f"{new_keyword}-{platform.name}",
-                    monitor_id=strategy.monitor_id,
-                    platform_id=platform.id,
-                    task_type="search",
-                    keywords=new_keyword,
-                    data_source="remote_crawler",
-                    task_params={
-                        "max_notes_count": default_full_size,
-                        "probe_size": default_probe_size,
-                        "enable_comments": 1,
-                        "per_note_max_comments_count": 20,
-                    },
-                    auto_analyze=True,
-                ),
-                current_user_id,
-            )
-            created_task_ids.append(new_task.id)
-            current_task_ids.append(new_task.id)
-            new_task_dim_map[new_task.id] = item.get("dimension") or ""
-            continue
-
-        # ── 软删除旧任务（替换 or 移除）──
-        old_task = await db.get(DataTask, old_task_id)
-        if old_task and not old_task.is_deleted:
-            await task_crud.delete_task(db, old_task)
-            removed_task_ids.append(old_task_id)
-            if old_task_id in current_task_ids:
-                current_task_ids.remove(old_task_id)
-
-        # new_keyword 为空：仅移除，不创建替换任务
-        if not new_keyword:
-            continue
-
-        # ── 创建替换任务 ──
-        platform = await get_platform_by_code(db, platform_code)
-        if not platform:
-            logger.warning("refine_probe: 平台 %s 不存在，跳过替换", platform_code)
-            continue
-
-        new_task = await create_task(
-            db,
-            DataTaskCreate(
-                name=f"{new_keyword}-{platform.name}",
-                monitor_id=strategy.monitor_id,
-                platform_id=platform.id,
-                task_type="search",
-                keywords=new_keyword,
-                data_source="remote_crawler",
-                task_params={
-                    "max_notes_count": default_full_size,
-                    "probe_size": default_probe_size,
-                    "enable_comments": 1,
-                    "per_note_max_comments_count": 20,
-                },
-                auto_analyze=True,
-            ),
-            current_user_id,
-        )
-        created_task_ids.append(new_task.id)
-        current_task_ids.append(new_task.id)
-        old_to_new_task_ids[old_task_id] = new_task.id
-
-    # 更新策略
-    strategy.task_ids = current_task_ids
-    flag_modified(strategy, "task_ids")
-    strategy.probe_round = (strategy.probe_round or 0) + 1
-    strategy.probe_review_result = None  # 清除旧审查结果
-    flag_modified(strategy, "probe_review_result")
-
-    # 更新 research_design：继承替换任务的维度 + 写入新增任务的维度
-    rd = strategy.research_design or {}
-    dim_map = dict(rd.get("_task_dimension_map") or {})
-    for old_id, new_id in old_to_new_task_ids.items():
-        old_dim = dim_map.get(str(old_id), "")
-        if old_dim:
-            dim_map[str(new_id)] = old_dim
-    for new_id, dim in new_task_dim_map.items():
-        dim_map[str(new_id)] = dim
-    rd["_task_dimension_map"] = dim_map
-    strategy.research_design = rd
-    flag_modified(strategy, "research_design")
-
-    await db.commit()
-    updated = await get_strategy_by_id(db, strategy.id)
-
-    return RefineProbeResponse(
-        removed_task_ids=removed_task_ids,
-        created_task_ids=created_task_ids,
-        probe_round=strategy.probe_round,
-        strategy=build_strategy_read(updated),
-    )
-
-
-# ==================== ③ 数据就绪 ====================
-
-
-async def check_collection_status(
-    db: AsyncSession,
-    strategy: Strategy,
-    current_user_id: int,
-) -> CollectionStatusResponse:
-    """查询全量采集进度，全部完成后自动建切片 + 覆盖度验证
-
-    自动化链：
-    1. 检查所有 task_ids 完成情况
-    2. 全部完成且有分析结果 → 自动建切片（如果尚未创建）
-    3. 切片就绪 → 运行 coverage_check_chain
-    4. overall_ready → 状态 → ready
-    """
-    from src.social_media.tasks.models import DataTask
-
-    task_ids = list(strategy.task_ids or [])
-    if not task_ids:
-        return CollectionStatusResponse(total_count=0)
-
-    query = select(DataTask).where(
-        DataTask.id.in_(task_ids), DataTask.is_deleted.is_(False)
-    )
-    result = await db.execute(query)
-    tasks = result.scalars().all()
-
-    statuses = []
-    completed_count = 0
-    analyzed_count = 0
-    for t in tasks:
-        is_completed = t.status == "completed"
-        has_analysis = t.analysis_result is not None
-        if is_completed:
-            completed_count += 1
-        if has_analysis:
-            analyzed_count += 1
-        statuses.append(
-            CollectionTaskStatus(
-                task_id=t.id,
-                status=t.status,
-                has_analysis=has_analysis,
-            )
-        )
-
-    total = len(statuses)
-    all_completed = completed_count == total and total > 0
-    all_analyzed = analyzed_count == total and total > 0
-
-    # 尚未全部完成分析 → 返回进度
-    if not all_analyzed:
-        return CollectionStatusResponse(
-            all_completed=all_completed,
-            all_analyzed=False,
-            tasks=statuses,
-            completed_count=completed_count,
-            total_count=total,
-        )
-
-    # 检查是否已建切片
-    has_slices = len(strategy.slices) > 0
-
-    # 全部分析完成但尚未建切片 → 自动建切片
-    if not has_slices:
-        await _create_auto_slices(db, strategy, current_user_id)
-        # 重新加载策略
-        strategy = await get_strategy_by_id(db, strategy.id)
-
-    has_slices = len(strategy.slices) > 0
-
-    # 切片已就绪 → 运行覆盖度验证（如果尚未运行）
-    if has_slices and not strategy.coverage_check_result:
-        await _run_coverage_check(db, strategy)
-        strategy = await get_strategy_by_id(db, strategy.id)
-
-    # 自动判定 ready
-    if (
-        strategy.coverage_check_result
-        and strategy.coverage_check_result.get("overall_ready")
-        and STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["ready"]
-    ):
-        strategy.status = "ready"
-        await db.commit()
-        strategy = await get_strategy_by_id(db, strategy.id)
-
-    return CollectionStatusResponse(
-        all_completed=True,
-        all_analyzed=True,
-        slices_created=has_slices,
-        tasks=statuses,
-        completed_count=completed_count,
-        total_count=total,
-        coverage_check_result=strategy.coverage_check_result,
-        strategy=build_strategy_read(strategy),
-    )
-
-
-async def _create_auto_slices(
-    db: AsyncSession,
-    strategy: Strategy,
-    current_user_id: int,
-) -> None:
-    """按 slice_blueprint 自动创建切片并关联到策略"""
-    from src.social_media.analysis.service import create_monitor_slice
-
-    research_design = strategy.research_design or {}
-    blueprint = research_design.get("slice_blueprint", [])
-    data_plan = research_design.get("data_plan", [])
-    task_dim_map = research_design.get("_task_dimension_map", {})
-
-    if not blueprint or not strategy.monitor_id:
-        logger.warning(
-            "Strategy %d: 无法自动建切片（无 blueprint 或 monitor_id）", strategy.id
-        )
-        return
-
-    # 建立 dimension_name → task_ids 映射
-    dim_to_tasks: dict[str, list[int]] = {}
-    for task_id_str, dim_name in task_dim_map.items():
-        dim_to_tasks.setdefault(dim_name, []).append(int(task_id_str))
-
-    # 如果 _task_dimension_map 为空，按 data_plan 顺序分配
-    if not dim_to_tasks and data_plan:
-        all_task_ids = list(strategy.task_ids or [])
-        # 简单均分
-        for i, dp in enumerate(data_plan):
-            dim_name = dp.get("dimension_name", f"dim_{i}")
-            dim_to_tasks[dim_name] = all_task_ids
-
-    created_count = 0
-    for slice_spec in blueprint:
-        source_dims = slice_spec.get("source_dimensions", [])
-        task_ids_for_slice = []
-        for dim in source_dims:
-            task_ids_for_slice.extend(dim_to_tasks.get(dim, []))
-
-        # 去重
-        task_ids_for_slice = list(dict.fromkeys(task_ids_for_slice))
-        if not task_ids_for_slice:
-            logger.warning(
-                "Strategy %d: 切片 '%s' 无对应任务，跳过",
-                strategy.id,
-                slice_spec.get("name", ""),
-            )
-            continue
-
-        try:
-            slice_obj = await create_monitor_slice(
-                db,
-                monitor_id=strategy.monitor_id,
-                task_ids=task_ids_for_slice,
-                current_user_id=current_user_id,
-                name=slice_spec.get("name"),
-                subject=slice_spec.get("subject") or None,
-                competitors=slice_spec.get("competitors"),
-            )
-            # 关联到策略
-            existing = await db.get(
-                StrategySlice,
-                {"strategy_id": strategy.id, "slice_id": slice_obj.id},
-            )
-            if not existing:
-                db.add(StrategySlice(strategy_id=strategy.id, slice_id=slice_obj.id))
-            created_count += 1
-        except Exception as e:
-            logger.error(
-                "Strategy %d: 自动建切片 '%s' 失败: %s",
-                strategy.id,
-                slice_spec.get("name", ""),
-                e,
-            )
-
-    if created_count > 0:
-        await db.commit()
-        logger.info("Strategy %d: 自动创建 %d 个切片", strategy.id, created_count)
-
-
-async def _run_coverage_check(
-    db: AsyncSession,
-    strategy: Strategy,
-) -> dict:
-    """运行覆盖度验证并存储结果"""
-    research_design = strategy.research_design or {}
-    research_questions = research_design.get("research_questions", [])
-
-    # 加载切片数据
-    slices_data = await load_strategy_inputs_with_names(db, strategy)
-
-    chain = create_coverage_check_chain()
-    inputs = format_coverage_check_inputs(
-        brief=strategy.brand_brief,
-        research_questions=research_questions,
-        slices_data=slices_data,
-    )
-
-    job = await create_analysis_job_async(
-        db,
-        monitor_id=strategy.monitor_id,
-        task_id=None,
-        user_id=strategy.created_by,
-        analysis_type=AnalysisType.STRATEGY_COVERAGE_CHECK.value,
-        source_count=len(slices_data),
-        status="processing",
-        analysis_config={"strategy_id": strategy.id},
-    ) if strategy.monitor_id else None
-
-    start = time.time()
-    llm_result = await chain.ainvoke(inputs)
-    duration = time.time() - start
-
-    parse_error: str | None = None
-    try:
-        parsed = parse_coverage_check_response(llm_result.content)
-    except ValueError as e:
-        logger.warning("Strategy %d coverage check 解析失败: %s", strategy.id, e)
-        parse_error = str(e)
-        parsed = {
-            "question_coverage": [],
-            "overall_ready": True,  # 解析失败时默认就绪，不阻塞用户
-            "data_highlights": [],
-            "slice_adjustments": [],
-            "_parse_error": parse_error,
-        }
-
-    if job:
-        now = datetime.now(timezone.utc)
-        job.status = "completed" if not parse_error else "failed"
-        job.completed_at = now
-        job.analyzed_count = len(parsed.get("question_coverage", []))
-        job.processing_time = int(duration)
-        job.token_usage = extract_token_usage(llm_result, duration_seconds=duration)
-        if parse_error:
-            job.error_message = parse_error
-
-    logger.info(
-        "Strategy %d coverage check 完成 (%.1fs, ready=%s)",
-        strategy.id,
-        duration,
-        parsed.get("overall_ready"),
-    )
-
-    strategy.coverage_check_result = parsed
-    flag_modified(strategy, "coverage_check_result")
-    await db.commit()
-
-    return parsed
-
-
-async def get_data_overview(
-    db: AsyncSession,
-    strategy: Strategy,
-) -> DataOverviewResponse:
-    """数据全景：切片列表 + 覆盖度结果"""
-    return DataOverviewResponse(
-        slices=[
-            SliceSummary(
-                slice_id=ss.slice_id,
-                slice_name=ss.slice.name if ss.slice else None,
-                monitor_id=ss.slice.monitor_id if ss.slice else 0,
-                monitor_name=(
-                    ss.slice.monitor.name if ss.slice and ss.slice.monitor else ""
-                ),
-            )
-            for ss in strategy.slices
-        ],
-        coverage_check_result=strategy.coverage_check_result,
-        strategy=build_strategy_read(strategy),
-    )
-
-
-async def adjust_slices(
-    db: AsyncSession,
-    strategy: Strategy,
-    adjustments: list[dict],
-    current_user_id: int,
-) -> StrategyRead:
-    """微调切片配置（重命名/调整主体/竞品），然后重新验证覆盖度"""
-    for adj in adjustments:
-        slice_id = adj["slice_id"]
-        slice_obj = await db.get(AnalysisSlice, slice_id)
-        if not slice_obj:
-            continue
-
-        if adj.get("name") is not None:
-            slice_obj.name = adj["name"]
-
-        # subject/competitors 变更需要重建切片 result_data
-        need_rebuild = False
-        if adj.get("subject") is not None or adj.get("competitors") is not None:
-            need_rebuild = True
-
-        if need_rebuild:
-            from src.social_media.analysis.service import create_monitor_slice
-
-            # 删除旧的 StrategySlice 关联
-            old_link = await db.get(
-                StrategySlice,
-                {"strategy_id": strategy.id, "slice_id": slice_id},
-            )
-            if old_link:
-                await db.delete(old_link)
-
-            # 重建切片
-            try:
-                new_slice = await create_monitor_slice(
-                    db,
-                    monitor_id=slice_obj.monitor_id,
-                    task_ids=slice_obj.included_task_ids,
-                    current_user_id=current_user_id,
-                    name=adj.get("name") or slice_obj.name,
-                    subject=adj.get("subject"),
-                    competitors=adj.get("competitors"),
-                )
-                db.add(StrategySlice(strategy_id=strategy.id, slice_id=new_slice.id))
-            except Exception as e:
-                logger.error("adjust_slices: 重建切片 %d 失败: %s", slice_id, e)
-
-    # 清除旧覆盖度结果，触发重新验证
-    strategy.coverage_check_result = None
-    flag_modified(strategy, "coverage_check_result")
-    await db.commit()
-
-    updated = await get_strategy_by_id(db, strategy.id)
-    return build_strategy_read(updated)
-
-
-# ==================== 编辑 Phase ====================
-
-
-async def edit_phase_result(
-    db: AsyncSession, strategy: Strategy, phase: int, result: dict
-) -> Strategy:
-    """编辑阶段结果，自动清除下游"""
-    if phase == 1:
-        strategy.phase1_result = result
-        strategy.phase2_result = None
-        strategy.phase3_result = None
-        strategy.status = "phase1_done"
-    elif phase == 2:
-        strategy.phase2_result = result
-        strategy.phase3_result = None
-        strategy.status = "phase2_done"
-    elif phase == 3:
-        strategy.phase3_result = result
-        # 保持 status="completed"
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的阶段: {phase}",
-        )
-
-    await db.commit()
-    return await get_strategy_by_id(db, strategy.id)
-
-
-# ==================== Brief 文档解析 ====================
-
-_MAX_BRIEF_TEXT_CHARS = 12000
-
-
-def _extract_text_from_bytes(content: bytes, filename: str) -> str:
-    """从文件字节提取纯文本"""
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-
-    if ext == "pdf":
-        import pdfplumber
-
-        with pdfplumber.open(io.BytesIO(content)) as pdf:
-            pages = [page.extract_text() or "" for page in pdf.pages]
-        return "\n".join(pages)
-
-    if ext == "docx":
-        from docx import Document
-
-        doc = Document(io.BytesIO(content))
-        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-
-    # TXT / MD — UTF-8 with fallback to GBK
-    try:
-        return content.decode("utf-8")
-    except UnicodeDecodeError:
-        return content.decode("gbk", errors="replace")
-
-
-async def parse_brief_from_text(text: str) -> ParseBriefResponse:
-    """从纯文本 Brief 用 LLM 解析为 BrandBrief 字段"""
-    document_text = text[:_MAX_BRIEF_TEXT_CHARS]
-    chain = create_strategy_brief_parser_chain()
-    try:
-        response = await chain.ainvoke({"document_text": document_text})
-        response_text = (
-            response.content if hasattr(response, "content") else str(response)
-        )
-        parsed = parse_brief_parser_response(response_text)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        logger.error("Brief 解析 LLM 调用失败: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI 解析失败，请稍后重试",
-        ) from exc
-
-    return ParseBriefResponse(**parsed)
-
-
 async def parse_brief_from_file(content: bytes, filename: str) -> ParseBriefResponse:
     """从上传文档提取文本并用 LLM 解析为 BrandBrief 字段"""
     try:
@@ -1911,3 +1222,301 @@ async def parse_brief_from_file(content: bytes, filename: str) -> ParseBriefResp
         ) from exc
 
     return ParseBriefResponse(**parsed)
+
+# ==================== 探测任务审批和调整 ====================
+
+async def approve_probe(
+    db: AsyncSession,
+    strategy: Strategy,
+    current_user_id: int,
+) -> ApproveProbeResponse:
+    """手动确认探测，为每个探测任务创建独立的全量采集任务（phase="collect"）"""
+    from src.social_media.tasks.schemas import DataTaskCreate
+    from src.social_media.tasks.service import create_task
+
+    # 获取当前所有 probe 任务
+    probe_task_ids = list(strategy.task_ids or [])
+    if not probe_task_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前没有探测任务，无法确认",
+        )
+
+    # 查询 probe 任务
+    stmt = select(Strategy).where(Strategy.id == strategy.id)
+    stmt = stmt.options(selectinload(Strategy.task_ids))
+    result = await db.execute(stmt)
+    strategy_result = result.scalar_one_or_none()
+    if not strategy_result:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="策略不存在")
+
+    strategy_obj = strategy_result
+    from sqlalchemy import or_
+
+    # 批量加载 probe 任务（避免 N+1 查询）
+    probe_tasks_stmt = select(DataTask).where(
+        and_(
+            DataTask.id.in_(probe_task_ids),
+            DataTask.phase == "probe",
+            DataTask.is_deleted.is_(False),
+        )
+    )
+    probe_tasks_result = await db.execute(probe_tasks_stmt)
+    probe_tasks = list(probe_tasks_result.scalars().all())
+
+    # 创建全量采集任务
+    collect_task_ids = []
+    for pt in probe_tasks:
+        # 构造任务参数
+        collect_task_params = {
+            "max_notes_count": 50,  # 全量采集默认 50 条
+            "enable_comments": 1,  # 启用评论
+            "per_note_max_comments_count": 20,  # 每帖最多 20 条评论
+            # max_pages: 不设置，表示不限制翻页
+        }
+
+        collect_task = await create_task(
+            db,
+            DataTaskCreate(
+                name=f"{pt.keywords}-{pt.platform.name}",
+                monitor_id=strategy.monitor_id,
+                platform_id=pt.platform_id,
+                task_type="search",
+                keywords=pt.keywords,
+                data_source="remote_crawler",
+                task_params=collect_task_params,
+                auto_analyze=True,
+                phase="collect",  # 标记为全量采集任务
+            ),
+            current_user_id,
+        )
+        collect_task_ids.append(collect_task.id)
+
+    # 更新策略
+    strategy_obj.task_ids = collect_task_ids
+    strategy_obj.status = "collecting"
+    flag_modified(strategy_obj, "task_ids")
+    flag_modified(strategy_obj, "status")
+
+    await db.commit()
+
+    return ApproveProbeResponse(
+        approved_task_count=len(collect_task_ids),
+        strategy=strategy_obj,
+    )
+
+async def refine_probe(
+    db: AsyncSession,
+    strategy: Strategy,
+    data: RefineProbeRequest,
+    current_user_id: int,
+) -> RefineProbeResponse:
+    """调整探测任务关键词，创建新的探测任务（phase="probe"），probe_round++"""
+    from src.social_media.tasks.schemas import DataTaskCreate
+    from src.social_media.tasks.service import create_task
+    from src.social_media.monitors.crud import get_platform_by_code
+
+    if STATUS_ORDER.get(strategy.status, 0) > STATUS_ORDER["probing"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="全量采集已启动，无法调整探测任务",
+        )
+
+    # 获取当前所有 probe 任务
+    probe_task_ids = list(strategy.task_ids or [])
+    if not probe_task_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前没有探测任务，无法调整",
+        )
+
+    # 软删除旧探测任务
+    from sqlalchemy import select, and_, delete as sa_delete
+    from src.social_media.tasks.models import DataTask
+
+    old_tasks_stmt = select(DataTask).where(
+        and_(
+            DataTask.id.in_(probe_task_ids),
+            DataTask.phase == "probe",
+            DataTask.is_deleted.is_(False),
+        )
+    )
+    old_tasks_result = await db.execute(old_tasks_stmt)
+    
+    # 构造新任务
+    new_task_ids = []
+    for item in data.refinements:
+        if item.task_id is None and item.new_keyword is None:
+            raise ValueError("新增任务时 new_keyword 不能为空")
+        
+        if item.task_id is not None and item.new_keyword is not None:
+            raise ValueError("task_id 和 new_keyword 不能同时指定")
+        
+        if item.task_id is not None and not item.dimension:
+            raise ValueError("新增任务时 dimension 不能为空")
+
+        # 软删除旧任务
+        await db.execute(
+            sa_delete(DataTask).where(DataTask.id == item.task_id)
+        )
+        
+        # 为每个平台创建新任务
+        for platform_name in item.platform:
+            code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
+            platform = await get_platform_by_code(db, code)
+            if not platform:
+                continue
+            
+            # 设置 max_pages 根据平台（同 confirm_research 逻辑）
+            max_pages = 2 if code in ("wb", "tieba") else 1
+            
+            new_task = await create_task(
+                db,
+                DataTaskCreate(
+                    name=f"{item.new_keyword}-{platform.name}",
+                    monitor_id=strategy.monitor_id,
+                    platform_id=platform.id,
+                    task_type="search",
+                    keywords=item.new_keyword,
+                    data_source="remote_crawler",
+                    task_params={
+                        "max_notes_count": 20,  # 探测任务默认 20 条
+                        "enable_comments": 0,
+                        "per_note_max_comments_count": 0,
+                        "max_pages": max_pages,
+                    },
+                    auto_analyze=True,
+                    phase="probe",
+                ),
+                current_user_id,
+            )
+            new_task_ids.append(new_task.id)
+    
+    # 更新 strategy
+    strategy.task_ids = new_task_ids
+    strategy.probe_round = strategy.probe_round + 1 if strategy.probe_round else 1
+    flag_modified(strategy, "task_ids")
+    flag_modified(strategy, "probe_round")
+    
+    await db.commit()
+
+    return RefineProbeResponse(
+        removed_task_ids=list(strategy.task_ids),
+        created_task_ids=new_task_ids,
+        probe_round=strategy.probe_round,
+        strategy=strategy,
+    )
+
+async def check_collection_status(
+    db: AsyncSession,
+    strategy: Strategy,
+    current_user_id: int,
+) -> CollectionStatusResponse:
+    """查询全量采集任务的完成状态，全部完成后自动建切片"""
+    """查询全量采集进度，全部完成后自动建切片并验证覆盖度"""
+    from src.social_media.tasks.models import DataTask
+    from src.langchain.chains.strategy_coverage_check_chain import (
+        create_coverage_check_chain,
+        format_coverage_inputs,
+        parse_coverage_check_response,
+    )
+
+    # 获取当前 collect 任务（task_ids 现在存的是 collect 任务）
+    task_ids = list(strategy.task_ids or [])
+    if not task_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前没有任务，无法查询进度",
+        )
+
+    # 查询 collect 任务
+    stmt = select(DataTask).where(
+        and_(
+            DataTask.id.in_(task_ids),
+            DataTask.phase == "collect",
+            DataTask.is_deleted.is_(False),
+        )
+    )
+    result = await db.execute(stmt)
+    tasks = list(result.scalars().all())
+
+    if not tasks:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未找到采集任务",
+        )
+
+    # 检查任务完成状态
+    all_completed = all(task.status == "completed" for task in tasks)
+    all_analyzed = all(task.analysis_result is not None for task in tasks)
+
+    # 构造任务摘要
+    task_statuses = [
+        CollectionTaskStatus(
+            task_id=task.id,
+            keyword=task.keywords or "",
+            platform=task.platform.code if task.platform else "",
+            status=task.status,
+            posts_count=task.posts_count,
+            has_analysis=task.analysis_result is not None,
+        )
+        for task in tasks
+    ]
+
+    # 如果全部完成且全部已分析，触发覆盖度检查
+    if all_completed and all_analyzed:
+        # 检查是否已经创建过切片
+        from src.social_media.analysis.crud import check_slice_exists
+        from src.langchain.chains.strategy_coverage_check_chain import run_coverage_check_chain_async
+        
+        has_slices = await check_slice_exists(db, strategy.monitor_id)
+        
+        if not has_slices:
+            # 触发覆盖度检查
+            logger.info(
+                f"Strategy {strategy.id}: 所有任务完成且已分析，触发覆盖度检查"
+            )
+            
+            try:
+                # 准备输入
+                monitor_name = strategy.monitor.name if strategy.monitor else ""
+                
+                inputs = format_coverage_inputs(
+                    task_statuses=task_statuses,
+                    monitor_name=monitor_name,
+                )
+                
+                # 创建分析任务
+                from src.social_media.analysis.jobs.factory import create_analysis_job_async
+                from src.social_media.analysis.models import AnalysisType
+                
+                job = await create_analysis_job_async(
+                    db,
+                    monitor_id=strategy.monitor_id,
+                    task_id=None,
+                    user_id=strategy.created_by,
+                    analysis_type=AnalysisType.STRATEGY_COVERAGE_CHECK.value,
+                    source_count=len(task_statuses),
+                    status="processing",
+                    analysis_config={"strategy_id": strategy.id},
+                )
+                
+                logger.info(
+                    f"Strategy {strategy.id}: 覆盖度检查任务已创建，job_id={job.id}"
+                )
+                
+            except Exception as e:
+                logger.error(
+                    f"Strategy {strategy.id}: 触发覆盖度检查失败: {e}",
+                    exc_info=True,
+                )
+                # 不阻塞主流程，让用户可以手动触发
+    elif all_completed:
+        logger.info(f"Strategy {strategy.id}: 所有任务已完成，等待分析")
+    
+    return CollectionStatusResponse(
+        tasks=task_statuses,
+        all_completed=all_completed,
+        all_analyzed=all_analyzed,
+        strategy=strategy,
+    )

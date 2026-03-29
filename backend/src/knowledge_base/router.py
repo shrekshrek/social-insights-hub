@@ -3,7 +3,8 @@
 import base64
 import logging
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, UploadFile, status
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
@@ -15,13 +16,16 @@ from src.schemas import MessageResponse, PaginatedResponse
 from . import service
 from .models import KnowledgeDocument
 from .schemas import (
+    ChunkResult,
+    CrawlerRunResponse,
+    CrawlerStatusItem,
+    CrawlerStatusResponse,
     DocumentRead,
     DocumentUploadResponse,
     SearchRequest,
     SearchResponse,
-    ChunkResult,
 )
-from .tasks import process_document_task
+from .tasks import crawl_source_task, process_document_task
 
 logger = logging.getLogger(__name__)
 
@@ -235,4 +239,70 @@ async def search_documents(
         query=request.query,
         results=chunk_results,
         total=len(chunk_results),
+    )
+
+
+_CRAWLER_SOURCE_TYPES = {"cnnic", "nbs", "govsite"}
+
+
+@router.get(
+    "/crawlers/status",
+    response_model=CrawlerStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="爬虫数据源状态统计",
+)
+async def get_crawler_status(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """查询各公开数据来源的文档数量和处理状态统计"""
+    items = []
+    for source_type in sorted(_CRAWLER_SOURCE_TYPES):
+        result = await db.execute(
+            select(
+                func.count(KnowledgeDocument.id).label("total"),
+                func.count(
+                    case((KnowledgeDocument.processing_status == "ready", 1))
+                ).label("ready"),
+                func.count(
+                    case((KnowledgeDocument.processing_status == "failed", 1))
+                ).label("failed"),
+                func.max(KnowledgeDocument.updated_at).label("last_at"),
+            ).where(KnowledgeDocument.source_type == source_type)
+        )
+        row = result.one()
+        items.append(
+            CrawlerStatusItem(
+                source_type=source_type,
+                total_docs=row.total or 0,
+                ready_docs=row.ready or 0,
+                failed_docs=row.failed or 0,
+                last_crawled_at=row.last_at,
+            )
+        )
+    return CrawlerStatusResponse(items=items)
+
+
+@router.post(
+    "/crawlers/{source_type}/run",
+    response_model=CrawlerRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="手动触发指定来源爬取",
+)
+async def run_crawler(
+    source_type: str = Path(..., description="数据来源类型：cnnic / nbs / govsite"),
+    current_user: User = Depends(get_current_user),
+):
+    """手动触发指定公开数据来源的爬取任务，异步执行"""
+    if source_type not in _CRAWLER_SOURCE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"不支持的来源类型 '{source_type}'，支持：{', '.join(sorted(_CRAWLER_SOURCE_TYPES))}",
+        )
+    task = crawl_source_task.delay(source_type)
+    logger.info("手动触发爬取 source_type=%s task_id=%s user=%d", source_type, task.id, current_user.id)
+    return CrawlerRunResponse(
+        source_type=source_type,
+        task_id=task.id,
+        message=f"已派发 {source_type} 爬取任务",
     )

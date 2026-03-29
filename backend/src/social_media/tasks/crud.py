@@ -41,6 +41,7 @@ async def get_tasks(
     data_source: Optional[str] = None,
     creator_id: Optional[int] = None,
     search: Optional[str] = None,
+    phase: Optional[str] = None,
 ) -> tuple[List[DataTask], int]:
     """获取任务列表（带过滤和分页）"""
     # 构建查询条件
@@ -63,6 +64,9 @@ async def get_tasks(
 
     if creator_id is not None:
         conditions.append(DataTask.creator_id == creator_id)
+
+    if phase:
+        conditions.append(DataTask.phase == phase)
 
     if search:
         search_pattern = f"%{search}%"

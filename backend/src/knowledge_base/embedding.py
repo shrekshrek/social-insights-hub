@@ -1,57 +1,50 @@
 """知识库向量嵌入服务
 
-BAAI/bge-large-zh 懒加载单例，输出维度 1024，余弦相似度所需单位向量。
-CPU 密集型操作通过 run_cpu_bound_task 在线程池中执行。
+通过 OpenAI-compatible Embedding API（默认：SiliconFlow BAAI/bge-large-zh-v1.5）
+将文本向量化，输出维度 1024，适用于余弦相似度检索。
 """
 
 import logging
+from functools import lru_cache
 
-from src.utils import run_cpu_bound_task
+from openai import AsyncOpenAI
+
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
-    """BAAI/bge-large-zh 懒加载单例
+    """OpenAI-compatible Embedding API 客户端
 
-    首次调用 embed() 时加载模型（约 10s），后续调用直接使用。
-    模型加载为 CPU 密集型，通过 run_cpu_bound_task 在线程池中执行。
+    使用 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL 配置。
+    默认指向 SiliconFlow 的 BAAI/bge-large-zh-v1.5（1024 维）。
     """
 
-    _model = None  # 首次调用时加载
+    def __init__(self) -> None:
+        self._client = AsyncOpenAI(
+            api_key=settings.EMBEDDING_API_KEY or "placeholder",
+            base_url=settings.EMBEDDING_BASE_URL,
+        )
+        self._model = settings.EMBEDDING_MODEL
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """将文本列表转为向量嵌入列表
-
-        CPU 密集型操作 → 必须通过 run_cpu_bound_task 执行。
 
         Args:
             texts: 待嵌入的文本列表
 
         Returns:
-            1024 维单位向量列表（normalize_embeddings=True）
+            1024 维浮点向量列表（余弦归一化由 API 保证，normalize_embeddings=True 等效）
         """
-        return await run_cpu_bound_task(self._encode, texts)
-
-    def _encode(self, texts: list[str]) -> list[list[float]]:
-        """同步编码（在线程池中运行）"""
-        if self._model is None:
-            logger.info("首次加载 BAAI/bge-large-zh 模型...")
-            from sentence_transformers import SentenceTransformer
-
-            self._model = SentenceTransformer("BAAI/bge-large-zh")
-            logger.info("BAAI/bge-large-zh 模型加载完成")
-
-        return self._model.encode(texts, normalize_embeddings=True).tolist()
+        response = await self._client.embeddings.create(
+            input=texts,
+            model=self._model,
+        )
+        return [item.embedding for item in response.data]
 
 
-# 模块级单例
-_embedding_service: EmbeddingService | None = None
-
-
+@lru_cache(maxsize=1)
 def get_embedding_service() -> EmbeddingService:
     """获取 EmbeddingService 单例"""
-    global _embedding_service
-    if _embedding_service is None:
-        _embedding_service = EmbeddingService()
-    return _embedding_service
+    return EmbeddingService()

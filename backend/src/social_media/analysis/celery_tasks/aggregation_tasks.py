@@ -50,7 +50,7 @@ def run_aggregation_task(
     Returns:
         聚合分析结果
     """
-    logger.info(f"开始聚合分析: task_id={task_id}")
+    logger.info("开始聚合分析: task_id=%s", task_id)
 
     db = SyncSessionLocal()
     try:
@@ -102,7 +102,7 @@ def run_aggregation_task(
 
         db.commit()
 
-        logger.info(f"聚合分析完成: task_id={task_id}")
+        logger.info("聚合分析完成: task_id=%s", task_id)
 
         return {
             "status": "completed",
@@ -112,7 +112,7 @@ def run_aggregation_task(
 
     except Exception as e:
         db.rollback()
-        logger.error(f"聚合分析失败: task_id={task_id}, error={str(e)}", exc_info=True)
+        logger.error("聚合分析失败: task_id=%s, error=%s", task_id, str(e), exc_info=True)
 
         # 重试或抛出异常
         raise self.retry(exc=e)

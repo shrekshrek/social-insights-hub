@@ -75,28 +75,6 @@ services:
       - postgres_db
       - redis
 
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    volumes:
-      - ./backend:/app
-      - /app/.venv
-    command: sh -c "uv run celery -A src.celery_app beat --loglevel=info"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
-      - UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple/
-      - UV_HTTP_TIMEOUT=120
-    env_file:
-      - .env
-    dns:
-      - 8.8.8.8
-    depends_on:
-      - postgres_db
-      - redis
-
   crawl4ai:
     image: unclecode/crawl4ai:latest
     ports:

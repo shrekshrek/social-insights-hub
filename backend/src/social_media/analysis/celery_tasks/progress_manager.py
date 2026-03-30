@@ -74,13 +74,15 @@ class AnalysisProgressManager:
                     analysis_job.started_at = datetime.now(timezone.utc)
                     db.commit()
                     logger.info(
-                        f"初始化分析进度: result_id={self.result_id}, total_count={total_count}, started_at已设置"
+                        "初始化分析进度: result_id=%s, total_count=%s, started_at已设置",
+                        self.result_id,
+                        total_count,
                     )
             finally:
                 db.close()
 
         except Exception as e:
-            logger.error(f"初始化Redis进度失败: {e}")
+            logger.error("初始化Redis进度失败: %s", e)
 
     def increment_analyzed(self, token_stats: Dict[str, Any]) -> int:
         """
@@ -149,13 +151,13 @@ class AnalysisProgressManager:
 
             # 4. 检查是否需要批量同步到DB
             if current_count % self.batch_threshold == 0:
-                logger.info(f"达到批量同步阈值 ({current_count})，同步到数据库...")
+                logger.info("达到批量同步阈值 (%s)，同步到数据库...", current_count)
                 self._sync_to_db()
 
             return current_count
 
         except Exception as e:
-            logger.error(f"Redis操作失败，降级到直接DB操作: {e}")
+            logger.error("Redis操作失败，降级到直接DB操作: %s", e)
             # 降级：直接写入数据库
             return self._fallback_increment_analyzed_batch(count, token_stats)
 
@@ -171,7 +173,7 @@ class AnalysisProgressManager:
             return current_count
 
         except Exception as e:
-            logger.error(f"Redis操作失败: {e}")
+            logger.error("Redis操作失败: %s", e)
             return self._fallback_increment_failed()
 
     def get_progress(self) -> Dict[str, Any]:
@@ -199,7 +201,7 @@ class AnalysisProgressManager:
             }
 
         except Exception as e:
-            logger.error(f"获取Redis进度失败: {e}")
+            logger.error("获取Redis进度失败: %s", e)
             return {"analyzed_count": 0, "failed_count": 0, "token_usage": {}}
 
     def _sync_to_db(self):
@@ -262,12 +264,14 @@ class AnalysisProgressManager:
                 )
 
                 logger.info(
-                    f"✅ 批量同步完成: analyzed={analyzed_count}, "
-                    f"failed={failed_count}, calls={len(call_details)}"
+                    "批量同步完成: analyzed=%s, failed=%s, calls=%s",
+                    analyzed_count,
+                    failed_count,
+                    len(call_details),
                 )
 
         except Exception as e:
-            logger.error(f"同步到数据库失败: {e}", exc_info=True)
+            logger.error("同步到数据库失败: %s", e, exc_info=True)
             db.rollback()
         finally:
             db.close()
@@ -309,7 +313,7 @@ class AnalysisProgressManager:
                         analysis_job.processing_time = int(
                             (completed_at - started_at).total_seconds()
                         )
-                        logger.info(f"任务完成，耗时: {analysis_job.processing_time}秒")
+                        logger.info("任务完成，耗时: %s秒", analysis_job.processing_time)
 
                     db.commit()
 
@@ -325,10 +329,10 @@ class AnalysisProgressManager:
             self.redis_client.expire(self.key_call_details, expire_seconds)
             self.redis_client.expire(self.key_last_sync, expire_seconds)
 
-            logger.info("✅ 任务完成，Redis缓存将在24小时后过期")
+            logger.info("任务完成，Redis缓存将在24小时后过期")
 
         except Exception as e:
-            logger.error(f"最终同步失败: {e}", exc_info=True)
+            logger.error("最终同步失败: %s", e, exc_info=True)
 
     def _fallback_increment_analyzed(self, token_stats: Dict[str, Any]) -> int:
         """降级方案：直接写入数据库（Redis不可用时）- 单条版本"""

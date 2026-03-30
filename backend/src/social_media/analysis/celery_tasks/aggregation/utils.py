@@ -88,7 +88,7 @@ def run_parallel_normalization(
                 "success": True,
             }
         except Exception as e:
-            logger.error(f"[并行归一化] 任务 '{task_id}' 失败: {e}", exc_info=True)
+            logger.error("[并行归一化] 任务 '%s' 失败: %s", task_id, e, exc_info=True)
             return {"task": task_input, "error": str(e), "success": False}
 
     # 并行执行
@@ -130,7 +130,7 @@ def run_parallel_normalization(
                     combined_stats["call_details"].extend(stats.get("call_details", []))
 
             except Exception as e:
-                logger.error(f"[并行归一化] 线程执行异常: {e}", exc_info=True)
+                logger.error("[并行归一化] 线程执行异常: %s", e, exc_info=True)
 
     # 重新计算平均值
     total_calls = combined_stats["summary"]["total_calls"]

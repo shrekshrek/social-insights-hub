@@ -132,7 +132,7 @@ def generate_project_reports(
         token_parts.append(stats or {})
         llm_used = True
     except Exception as e:
-        logger.error(f"[Slice Reports] Landscape report failed: {e}", exc_info=True)
+        logger.error("[Slice Reports] Landscape report failed: %s", e, exc_info=True)
 
     try:
         # Topic: 注入 痛点/爽点/未满足需求 的 original_terms
@@ -157,7 +157,7 @@ def generate_project_reports(
         token_parts.append(stats or {})
         llm_used = True
     except Exception as e:
-        logger.error(f"[Slice Reports] Topic report failed: {e}", exc_info=True)
+        logger.error("[Slice Reports] Topic report failed: %s", e, exc_info=True)
 
     if subject:
         try:
@@ -185,7 +185,7 @@ def generate_project_reports(
             token_parts.append(stats or {})
             llm_used = True
         except Exception as e:
-            logger.error(f"[Slice Reports] Focus report failed: {e}", exc_info=True)
+            logger.error("[Slice Reports] Focus report failed: %s", e, exc_info=True)
 
     # token stats 合并（复用既有工具结构）
     token_usage = {

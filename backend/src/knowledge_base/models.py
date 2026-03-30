@@ -47,7 +47,7 @@ class KnowledgeDocument(Base):
         Text(), nullable=True, comment="公共数据来源链接"
     )
     source_meta: Mapped[dict | None] = mapped_column(
-        JSONB(), nullable=True, comment="年份���报告类型等元信息"
+        JSONB(), nullable=True, comment="年份、报告类型等元信息"
     )
     file_name: Mapped[str | None] = mapped_column(
         Text(), nullable=True, comment="原始文件名"

@@ -391,7 +391,10 @@ async def _do_init_rbac_data(db: AsyncSession) -> None:
     to_update = set(defined_permissions.keys()) & db_permissions
 
     logger.info(
-        f"权限同步分析: 新增={len(to_add)}, 删除={len(to_delete)}, 更新={len(to_update)}"
+        "权限同步分析: 新增=%s, 删除=%s, 更新=%s",
+        len(to_add),
+        len(to_delete),
+        len(to_update),
     )
 
     # 4. 删除未定义的权限
@@ -411,8 +414,10 @@ async def _do_init_rbac_data(db: AsyncSession) -> None:
         for row in affected:
             if row.role_count > 0:
                 logger.warning(
-                    f"删除权限 {row.target}:{row.action}，"
-                    f"将移除 {row.role_count} 个角色分配"
+                    "删除权限 %s:%s，将移除 %s 个角色分配",
+                    row.target,
+                    row.action,
+                    row.role_count,
                 )
 
         # 执行删除（外键级联会自动删除 role_permissions）
@@ -424,7 +429,7 @@ async def _do_init_rbac_data(db: AsyncSession) -> None:
             {"perms": list(to_delete)},
         )
 
-        logger.info(f"✅ 删除权限: {sorted(to_delete)}")
+        logger.info("删除权限: %s", sorted(to_delete))
 
     # 5. 添加新权限
     if to_add:
@@ -439,7 +444,7 @@ async def _do_init_rbac_data(db: AsyncSession) -> None:
                 perm_data,
             )
 
-        logger.info(f"✅ 添加权限: {sorted(to_add)}")
+        logger.info("添加权限: %s", sorted(to_add))
 
     # 6. 更新已有权限
     if to_update:
@@ -455,7 +460,7 @@ async def _do_init_rbac_data(db: AsyncSession) -> None:
                 perm_data,
             )
 
-        logger.info(f"✅ 更新权限: {len(to_update)} 个")
+        logger.info("更新权限: %s 个", len(to_update))
 
     # 7. 重新获取所有权限用于角色初始化
     updated_permissions = await init_permissions(db)
@@ -463,7 +468,7 @@ async def _do_init_rbac_data(db: AsyncSession) -> None:
     # 8. 初始化角色
     await init_roles(db, updated_permissions)
 
-    logger.info(f"📊 权限同步完成，当前总计: {len(defined_permissions)} 个权限")
+    logger.info("权限同步完成，当前总计: %s 个权限", len(defined_permissions))
 
 
 # ============================================================================

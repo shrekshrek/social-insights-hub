@@ -12,7 +12,7 @@
 | UI 库 | @nuxt/ui v4 + Tailwind CSS v4 | 基于 Reka UI |
 | 状态管理 | Pinia | 持久化存储 |
 | AI/LLM | LangChain 1.0+ + DeepSeek API | 分析链 |
-| 任务队列 | Celery + Redis | 异步处理 |
+| 任务队列 | Celery + Redis + APScheduler | AI 分析/文档处理（Celery）；轻量定时任务（APScheduler） |
 | 认证 | JWT (后端) + nuxt-auth-utils (前端) | RBAC 权限控制 |
 | 图表 | ECharts | 必须用 ClientOnly 包装 |
 | 部署 | Docker Compose + Nginx | 开发/生产双配置 |

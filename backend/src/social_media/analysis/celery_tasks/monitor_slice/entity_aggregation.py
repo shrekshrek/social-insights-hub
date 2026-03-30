@@ -242,7 +242,7 @@ def normalize_entity_aliases(
                 entity_token_stats = stats
     except Exception as e:
         logger.error(
-            f"[Slice Stage2] Entity alias normalization failed: {e}", exc_info=True
+            "[Slice Stage2] Entity alias normalization failed: %s", e, exc_info=True
         )
 
     if not entity_mapping:
@@ -311,29 +311,29 @@ def normalize_entity_aliases(
 
     logger.info("=" * 60)
     logger.info("[项目级实体归一化] 统计总结:")
-    logger.info(f"  - 原始输入: {input_count} 个实体")
-    logger.info(f"  - 程序归一后: {program_clustered_count} 个实体")
-    logger.info(f"  - LLM 归一后: {len(final_unique)} 个实体")
-    logger.info(f"  - 被合并的实体组数: {len(merged_groups)}")
-    logger.info(f"  - LLM 是否使用: {entity_llm_used}")
+    logger.info("  - 原始输入: %s 个实体", input_count)
+    logger.info("  - 程序归一后: %s 个实体", program_clustered_count)
+    logger.info("  - LLM 归一后: %s 个实体", len(final_unique))
+    logger.info("  - 被合并的实体组数: %s", len(merged_groups))
+    logger.info("  - LLM 是否使用: %s", entity_llm_used)
 
     # 打印输入实体名称（前30）
     if input_names:
         logger.info("[项目级实体归一化] 输入实体名称（前30）:")
-        logger.info(f"  {input_names[:30]}")
+        logger.info("  %s", input_names[:30])
 
     # 打印归一化后的实体名称（前30）
     if final_unique:
         sorted_final = sorted(final_unique)[:30]
         logger.info("[项目级实体归一化] 归一化后实体名称（前30）:")
-        logger.info(f"  {sorted_final}")
+        logger.info("  %s", sorted_final)
 
     if merged_groups:
         logger.info("[项目级实体归一化] 合并详情（显示前 20 组）:")
         for i, (canon, members) in enumerate(
             sorted(merged_groups.items(), key=lambda x: len(x[1]), reverse=True)[:20]
         ):
-            logger.info(f"  {i + 1}. [{canon}] ← {members}")
+            logger.info("  %s. [%s] ← %s", i + 1, canon, members)
     logger.info("=" * 60)
 
     return {

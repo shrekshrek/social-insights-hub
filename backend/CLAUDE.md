@@ -13,7 +13,7 @@
 | 迁移 | Alembic |
 | 数据库 | PostgreSQL 16 |
 | 缓存/队列 | Redis 7 |
-| 异步任务 | Celery + gevent |
+| 异步任务 | Celery + gevent（AI 分析流水线）；APScheduler（轻量定时任务） |
 | LLM | LangChain 1.0+ + DeepSeek API |
 | 包管理 | uv |
 | Lint/Format | Ruff |
@@ -77,5 +77,6 @@ backend/src/
 ## 注意事项
 
 - 后端命令在 Docker 容器内执行 (pnpm scripts 自动代理)
-- Celery Worker 使用 gevent pool，LLM 调用走异步
+- Celery Worker 使用 gevent pool，LLM 调用走异步；仅负责 AI 分析流水线 + 文档处理
+- APScheduler 运行在 FastAPI asyncio 事件循环中，负责所有轻量定时任务（策略检测、agent 超时回收、KB 爬虫）；无需 celery-beat 容器
 - 每次 LLM 调用记录 token 用量和费用到 AnalysisJob

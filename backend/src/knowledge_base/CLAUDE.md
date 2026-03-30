@@ -15,7 +15,7 @@
 | DELETE | `/knowledge-base/documents/{id}` | 删除文档（仅上传者） |
 | POST | `/knowledge-base/search` | RAG 检索测试 |
 | GET | `/knowledge-base/crawlers/status` | 各来源文档数/状态统计（需登录） |
-| POST | `/knowledge-base/crawlers/{source_type}/run` | 手动触发爬取，返回 task_id（需登录） |
+| POST | `/knowledge-base/crawlers/{source_type}/run` | 手动触发爬取，后台异步执行（需登录） |
 
 ### 核心函数
 
@@ -66,7 +66,7 @@ market_context = await retrieve_market_context(
 - **CrawlSource**: NamedTuple，包含 `url, title, file_bytes, filename, source_meta`
 - **_upsert() 去重**: `source_url + source_type` 联合唯一约束；`ready/processing/pending` → 跳过；`failed` → 重置重试
 - **_crawl_url()**: 调用 Crawl4AI REST API���`http://crawl4ai:11235/crawl`），返回 fit_markdown
-- **Celery Beat 调度**: NBS 每月1日03:00，CNNIC 每月15日03:00，govsite 每周一04:00
+- **APScheduler 调度**: NBS 每月1日03:00，CNNIC 每月15日03:00，govsite 每周一04:00（在 FastAPI asyncio 事件循环中原生运行，无需 gevent 桥接）
 
 ### 数据来源
 
@@ -80,5 +80,6 @@ market_context = await retrieve_market_context(
 
 1. 继承 `BaseCrawler`，设置 `source_type` 类属性，实现 `discover()`
 2. 在 `crawlers/registry.py` 的 `CRAWLER_REGISTRY` 中注册
-3. 在 `tasks.py` 添加对应 Celery task（参考现有 `crawl_cnnic_task` 模式）
-4. 可选：在 `celery_app.py` 的 `beat_schedule` 中添加定时规则
+3. 可选：在 `src/scheduler.py` 的 `create_scheduler()` 中添加定时 job（`crawl_source` 函数已通用，只需传 `args=[source_type]`）
+
+无需改动 `tasks.py`——`crawl_source(source_type)` 函数通过 `CRAWLER_REGISTRY` 动态路由，所有已注册的爬虫均自动支持。

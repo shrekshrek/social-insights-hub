@@ -612,7 +612,7 @@ def _clean_entity_attributes_sync(
         # 这里为了简单，假设 Runnable 是线程安全的 (ChatPromptTemplate + ChatModel 通常是)。
         _ = create_attribute_normalization_chain()
     except Exception as e:
-        logger.warning(f"[属性清洗] 初始化 LLM 失败，跳过清洗: {e}")
+        logger.warning("[属性清洗] 初始化 LLM 失败，跳过清洗: %s", e)
         return entity_data, token_stats
 
     # 筛选需要清洗的实体，并根据评分确定清洗字段范围
@@ -624,7 +624,8 @@ def _clean_entity_attributes_sync(
     ]
 
     logger.info(
-        f"[属性清洗] 开始清洗 {len(entities_to_clean)} 个 Top 实体的属性 (Top 3 清洗全部字段, Top 4-10 清洗核心字段)"
+        "[属性清洗] 开始清洗 %s 个 Top 实体的属性 (Top 3 清洗全部字段, Top 4-10 清洗核心字段)",
+        len(entities_to_clean),
     )
 
     # 准备任务列表

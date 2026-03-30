@@ -129,7 +129,7 @@ def parse_monitor_entity_merge_response(response_text: str) -> Dict[str, Any]:
     try:
         result = json.loads(response_text.strip())
     except Exception:
-        logger.error(f"JSON Parse Error: {response_text[:200]}...")
+        logger.error("JSON Parse Error: %s...", response_text[:200])
         return {"entities": [], "entity_mapping": {}, "tags_mapping": {}}
 
     if not isinstance(result, dict):

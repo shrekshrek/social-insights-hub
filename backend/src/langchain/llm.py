@@ -276,12 +276,3 @@ def get_model_info(model_type: str = "chat") -> Dict[str, Any]:
             "use_cases": ["主题聚类", "竞品分析", "趋势分析", "复杂推理", "深度分析"],
         }
 
-
-# 模块初始化日志
-logger.info("✅ LangChain LLM模块加载完成（LangChain 1.0规范）")
-logger.info(
-    f"   - Chat模型: {getattr(settings, 'DEEPSEEK_CHAT_MODEL', 'deepseek-chat')}"
-)
-logger.info(
-    f"   - Reasoner模型: {getattr(settings, 'DEEPSEEK_REASONER_MODEL', 'deepseek-reasoner')}"
-)

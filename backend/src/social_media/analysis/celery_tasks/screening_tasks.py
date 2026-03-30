@@ -74,7 +74,7 @@ def _analyze_batch_posts(
             posts = {post.id: post for post in result.scalars().all()}
 
             if not posts:
-                logger.warning(f"批次原文均不存在: {post_ids}")
+                logger.warning("批次原文均不存在: %s", post_ids)
                 return {"success": False, "analyzed": 0, "failed": len(post_ids)}
 
             # 2. 构建原文内容列表
@@ -113,7 +113,7 @@ def _analyze_batch_posts(
                     raise ValueError("响应不是数组格式")
 
             except (json.JSONDecodeError, ValueError) as e:
-                logger.error(f"解析AI批量响应失败: {e}\nResponse: {response.content}")
+                logger.error("解析AI批量响应失败: %s\nResponse: %s", e, response.content)
                 raise ValueError(f"无法解析AI响应: {e}")
 
             # 5. 批量保存结果
@@ -174,7 +174,7 @@ def _analyze_batch_posts(
                     analyzed_count += 1
 
                 except Exception as e:
-                    logger.error(f"保存原文 {post_id} 分析结果失败: {e}")
+                    logger.error("保存原文 %s 分析结果失败: %s", post_id, e)
                     failed_count += 1
 
             db.commit()
@@ -184,7 +184,9 @@ def _analyze_batch_posts(
             if ghost_count > 0:
                 missing = [pid for pid in post_ids if pid not in processed_post_ids]
                 logger.warning(
-                    f"批次中 {ghost_count} 个原文未被LLM覆盖（post_id不匹配或不在DB中），计入失败: {missing}"
+                    "批次中 %s 个原文未被LLM覆盖（post_id不匹配或不在DB中），计入失败: %s",
+                    ghost_count,
+                    missing,
                 )
                 failed_count += ghost_count
 
@@ -198,7 +200,7 @@ def _analyze_batch_posts(
                 for _ in range(failed_count):
                     progress_mgr.increment_failed()
 
-            logger.info(f"批量分析完成: {analyzed_count}/{len(post_ids)} 成功")
+            logger.info("批量分析完成: %s/%s 成功", analyzed_count, len(post_ids))
             return {
                 "success": True,
                 "analyzed": analyzed_count,
@@ -210,7 +212,7 @@ def _analyze_batch_posts(
             db.close()
 
     except Exception as e:
-        logger.error(f"批量分析失败: {e}", exc_info=True)
+        logger.error("批量分析失败: %s", e, exc_info=True)
         progress_mgr = AnalysisProgressManager(result_id)
         for _ in range(len(post_ids)):
             progress_mgr.increment_failed()
@@ -301,12 +303,12 @@ def finalize_screening_analysis(result_id: int, total_count: int):
             select(AnalysisJob).where(AnalysisJob.id == result_id)
         ).scalar_one_or_none()
         if job and job.status != "processing":
-            logger.info(f"Job {result_id} 状态已为 {job.status}，跳过重复 finalizer")
+            logger.info("Job %s 状态已为 %s，跳过重复 finalizer", result_id, job.status)
             return {"status": "skipped", "reason": f"job already {job.status}"}
     finally:
         db_check.close()
 
-    logger.info(f"等待所有 {total_count} 个子任务完成...")
+    logger.info("等待所有 %s 个子任务完成...", total_count)
 
     # 轮询检查进度
     max_wait_time = 3600  # 最多等待1小时
@@ -317,7 +319,7 @@ def finalize_screening_analysis(result_id: int, total_count: int):
         progress = progress_mgr.get_progress()
         current_total = progress["analyzed_count"] + progress["failed_count"]
 
-        logger.info(f"当前进度: {current_total}/{total_count}")
+        logger.info("当前进度: %s/%s", current_total, total_count)
 
         if current_total >= total_count:
             # 所有任务已完成
@@ -393,8 +395,10 @@ def run_screening_task(
         workflow.apply_async()
 
         logger.info(
-            f"已提交 {len(batches)} 个批次任务（共 {len(post_ids)} 个原文，"
-            f"每批 {batch_size} 个）到队列，启动监控任务"
+            "已提交 %s 个批次任务（共 %s 个原文，每批 %s 个）到队列，启动监控任务",
+            len(batches),
+            len(post_ids),
+            batch_size,
         )
 
         return {
@@ -406,7 +410,7 @@ def run_screening_task(
         }
 
     except Exception as e:
-        logger.error(f"协调器任务失败: {e}", exc_info=True)
+        logger.error("协调器任务失败: %s", e, exc_info=True)
         _update_task_status(
             result_id=result_id,
             status="failed",

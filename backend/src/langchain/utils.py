@@ -61,7 +61,7 @@ def extract_token_usage(
             logger.warning("无法从响应中提取token使用信息")
 
     except Exception as e:
-        logger.error(f"提取token使用信息时出错: {e}", exc_info=True)
+        logger.error("提取token使用信息时出错: %s", e, exc_info=True)
 
     # 计算成本（与 llm_utils.invoke_chain_with_stats_sync 保持一致）
     cost_cny = 0.0
@@ -79,7 +79,7 @@ def extract_token_usage(
                 + output_tokens * settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION / 1_000_000
             )
     except Exception as e:
-        logger.warning(f"成本计算失败: {e}")
+        logger.warning("成本计算失败: %s", e)
 
     return {
         "summary": {
@@ -135,11 +135,11 @@ def get_response_content(response: Any) -> str:
         if isinstance(response, str):
             return response
 
-        logger.warning(f"无法从响应中提取内容，响应类型: {type(response)}")
+        logger.warning("无法从响应中提取内容，响应类型: %s", type(response))
         return str(response)
 
     except Exception as e:
-        logger.error(f"提取响应内容时出错: {e}", exc_info=True)
+        logger.error("提取响应内容时出错: %s", e, exc_info=True)
         return ""
 
 
@@ -558,9 +558,6 @@ async def invoke_llm_with_stats(
         return response, stats
 
     except Exception as e:
-        logger.error(f"Error in invoke_llm_with_stats: {e}")
+        logger.error("Error in invoke_llm_with_stats: %s", e)
         raise
 
-
-# 模块初始化日志
-logger.info("✅ LangChain工具函数模块加载完成")

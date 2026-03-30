@@ -74,11 +74,6 @@ if keepalive_opts:
 # 创建同步Redis连接池（用于Celery + gevent）
 sync_redis_pool = redis.ConnectionPool.from_url(settings.REDIS_URL, **REDIS_POOL_CONFIG)
 
-logger.info(
-    f"✅ Redis连接池初始化完成: "
-    f"max_connections={REDIS_POOL_CONFIG['max_connections']}, "
-    f"timeout={REDIS_POOL_CONFIG['socket_timeout']}s"
-)
 
 
 def get_sync_redis() -> redis.Redis:

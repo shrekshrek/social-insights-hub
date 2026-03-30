@@ -81,7 +81,7 @@ class GovsiteCrawler(BaseCrawler):
     def _extract_article_links(
         self, markdown: str, seen: set[str]
     ) -> list[tuple[str, str]]:
-        """从搜索结果 Markdown 提��近 3 年政策文章链接"""
+        """从搜索结果 Markdown 提取近 3 年政策文章链接"""
         links = _LINK_PATTERN.findall(markdown)
         result = []
         for title, url in links:

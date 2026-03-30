@@ -231,22 +231,22 @@ def normalize_opinion_aliases_by_category(
 
     logger.info("=" * 60)
     logger.info("[项目级观点归一化] 统计总结:")
-    logger.info(f"  - 原始输入: {input_count} 个观点")
+    logger.info("  - 原始输入: %s 个观点", input_count)
     logger.info(
-        f"  - 程序归一后: {total_program_clustered} 个观点（跨 {len(grouped)} 个类目）"
+        "  - 程序归一后: %s 个观点（跨 %s 个类目）", total_program_clustered, len(grouped)
     )
 
     # 打印输入观点名称（前30）
     logger.info("[项目级观点归一化] 输入观点名称（前30）:")
-    logger.info(f"  {input_names[:30]}")
+    logger.info("  %s", input_names[:30])
 
     # 类目对齐信息
     cat_map = cat_alignment_result.get("category_map") or {}
     if cat_map:
-        logger.info(f"  - 类目对齐: {len(cat_map)} 个类目被映射")
+        logger.info("  - 类目对齐: %s 个类目被映射", len(cat_map))
         for old_cat, new_cat in list(cat_map.items())[:10]:
             if old_cat != new_cat:
-                logger.info(f"    [{old_cat}] → [{new_cat}]")
+                logger.info("    [%s] → [%s]", old_cat, new_cat)
 
     # 按类目统计合并详情
     logger.info("[项目级观点归一化] 各类目合并详情:")
@@ -261,16 +261,17 @@ def normalize_opinion_aliases_by_category(
 
         if merged_in_cat:
             logger.info(
-                f"  [{cat_name}] 输入:{len(mapping)} → 输出:{unique_canons}, 合并组:{len(merged_in_cat)}"
+                "  [%s] 输入:%s → 输出:%s, 合并组:%s",
+                cat_name, len(mapping), unique_canons, len(merged_in_cat),
             )
             for canon, members in sorted(
                 merged_in_cat.items(), key=lambda x: len(x[1]), reverse=True
             )[:5]:
-                logger.info(f"    [{canon}] ← {members[:8]}")
+                logger.info("    [%s] ← %s", canon, members[:8])
 
-    logger.info(f"  - LLM 归一后总计: {total_llm_output} 个观点")
-    logger.info(f"  - 被合并的观点组总数: {total_merged_groups}")
-    logger.info(f"  - LLM 是否使用: {topic_llm_used}")
+    logger.info("  - LLM 归一后总计: %s 个观点", total_llm_output)
+    logger.info("  - 被合并的观点组总数: %s", total_merged_groups)
+    logger.info("  - LLM 是否使用: %s", topic_llm_used)
     logger.info("=" * 60)
 
     return {

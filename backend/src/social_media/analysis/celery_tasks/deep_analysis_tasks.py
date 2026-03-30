@@ -74,7 +74,7 @@ def _filter_invalid_entities(data: dict) -> dict:
         ]
         filtered_count = original_count - len(data["entities"])
         if filtered_count > 0:
-            logger.warning(f"过滤掉 {filtered_count} 个无效实体（name或type为空）")
+            logger.warning("过滤掉 %s 个无效实体（name或type为空）", filtered_count)
     return data
 
 
@@ -97,7 +97,7 @@ def _analyze_single_post(
     with SyncSessionLocal() as db:
         post = db.query(SocialPost).filter(SocialPost.id == post_id).first()
         if not post:
-            logger.warning(f"原文 {post_id} 不存在")
+            logger.warning("原文 %s 不存在", post_id)
             return {"success": False, "error": "post_not_found"}
         content = f"标题：{post.title or '无'}\n正文：{post.content}"
 
@@ -108,7 +108,7 @@ def _analyze_single_post(
             chain=chain, input_dict={"content": content}, llm_type="chat"
         )
     except Exception as e:
-        logger.error(f"深度分析原文 {post_id} LLM调用失败: {e}", exc_info=True)
+        logger.error("深度分析原文 %s LLM调用失败: %s", post_id, e, exc_info=True)
         return {"success": False, "error": str(e)}
 
     # Phase 3: 解析响应（纯CPU，无需连接）
@@ -128,7 +128,7 @@ def _analyze_single_post(
         extraction_dict = validated_result.model_dump()
 
     except (json.JSONDecodeError, ValueError) as e:
-        logger.error(f"解析AI响应失败: {e}\nResponse: {response_content}")
+        logger.error("解析AI响应失败: %s\nResponse: %s", e, response_content)
         return {"success": False, "error": f"parse_error: {str(e)}"}
 
     # Phase 4: 写回结果（毫秒级，快速释放连接）
@@ -154,10 +154,10 @@ def _analyze_single_post(
 
             db.commit()
     except Exception as e:
-        logger.error(f"深度分析原文 {post_id} 保存结果失败: {e}", exc_info=True)
+        logger.error("深度分析原文 %s 保存结果失败: %s", post_id, e, exc_info=True)
         return {"success": False, "error": str(e)}
 
-    logger.info(f"原文 {post_id} 深度分析完成")
+    logger.info("原文 %s 深度分析完成", post_id)
     return {
         "success": True,
         "post_id": post_id,
@@ -204,7 +204,7 @@ def analyze_single_post_deep(
         return result
 
     except Exception as e:
-        logger.error(f"Celery任务执行失败 (post_id={post_id}): {e}", exc_info=True)
+        logger.error("Celery任务执行失败 (post_id=%s): %s", post_id, e, exc_info=True)
         progress_mgr = AnalysisProgressManager(result_id)
         progress_mgr.increment_failed()
 
@@ -213,7 +213,7 @@ def analyze_single_post_deep(
             raise self.retry(exc=e)
 
         # 重试耗尽：返回失败结果而非抛出异常，保证 chord callback 能被调用
-        logger.warning(f"原文 {post_id} 深度分析重试耗尽，返回失败结果")
+        logger.warning("原文 %s 深度分析重试耗尽，返回失败结果", post_id)
         return {"success": False, "error": str(e), "post_id": post_id}
 
 
@@ -262,11 +262,14 @@ def finalize_post_deep_analysis(
         )
 
         if completed >= total_count:
-            logger.info(f"[Finalizer] 所有子任务已完成: {completed}/{total_count}")
+            logger.info("[Finalizer] 所有子任务已完成: %s/%s", completed, total_count)
             break
 
         logger.info(
-            f"[Finalizer] 等待子任务完成: {completed}/{total_count}, 已等待 {int(time.time() - start_time)}s"
+            "[Finalizer] 等待子任务完成: %s/%s, 已等待 %ss",
+            completed,
+            total_count,
+            int(time.time() - start_time),
         )
         time.sleep(poll_interval)
     else:
@@ -277,7 +280,7 @@ def finalize_post_deep_analysis(
         progress_mgr.finalize()
         logger.info("[Finalizer] 进度已同步到数据库")
     except Exception as e:
-        logger.error(f"[Finalizer] 同步进度到数据库失败: {e}", exc_info=True)
+        logger.error("[Finalizer] 同步进度到数据库失败: %s", e, exc_info=True)
 
     # 3. 返回最终统计
     final_progress = progress_mgr.get_progress()
@@ -325,7 +328,9 @@ def run_post_deep_task(
         return {"status": "skipped", "reason": "no_posts"}
 
     logger.info(
-        f"[Coordinator] 启动原文深度分析: result_id={result_id}, 原文数={len(post_ids)}"
+        "[Coordinator] 启动原文深度分析: result_id=%s, 原文数=%s",
+        result_id,
+        len(post_ids),
     )
 
     # 1. 初始化 Redis 进度管理
@@ -354,7 +359,9 @@ def run_post_deep_task(
     )
 
     logger.info(
-        f"[Coordinator] 已分发 {len(post_ids)} 个子任务，chord_id={workflow.id}"
+        "[Coordinator] 已分发 %s 个子任务，chord_id=%s",
+        len(post_ids),
+        workflow.id,
     )
 
     return {
@@ -447,7 +454,7 @@ def _analyze_single_post_comments(
     with SyncSessionLocal() as db:
         post = db.query(SocialPost).filter(SocialPost.id == post_id).first()
         if not post:
-            logger.warning(f"原文 {post_id} 不存在")
+            logger.warning("原文 %s 不存在", post_id)
             return {"success": False, "error": "post_not_found"}
 
         context = ""
@@ -468,7 +475,7 @@ def _analyze_single_post_comments(
         )
 
         if not comments:
-            logger.info(f"原文 {post_id} 没有评论，跳过")
+            logger.info("原文 %s 没有评论，跳过", post_id)
             return {"success": False, "error": "no_comments"}
 
         valid_comments = [
@@ -499,7 +506,7 @@ def _analyze_single_post_comments(
             llm_type="chat",
         )
     except Exception as e:
-        logger.error(f"分析原文 {post_id} 评论LLM调用失败: {e}", exc_info=True)
+        logger.error("分析原文 %s 评论LLM调用失败: %s", post_id, e, exc_info=True)
         return {"success": False, "error": str(e)}
 
     # Phase 3: 解析响应（纯CPU，无需连接）
@@ -520,7 +527,7 @@ def _analyze_single_post_comments(
         extraction_dict = validated_result.model_dump()
 
     except (json.JSONDecodeError, ValueError) as e:
-        logger.error(f"解析评论AI响应失败: {e}\nResponse: {response_content}")
+        logger.error("解析评论AI响应失败: %s\nResponse: %s", e, response_content)
         return {"success": False, "error": f"parse_error: {str(e)}"}
 
     # Phase 4: 写回结果（毫秒级，快速释放连接）
@@ -546,11 +553,13 @@ def _analyze_single_post_comments(
 
             db.commit()
     except Exception as e:
-        logger.error(f"分析原文 {post_id} 评论保存结果失败: {e}", exc_info=True)
+        logger.error("分析原文 %s 评论保存结果失败: %s", post_id, e, exc_info=True)
         return {"success": False, "error": str(e)}
 
     logger.info(
-        f"原文 {post_id} 的评论深度分析完成（分析了{len(valid_comments)}条评论）"
+        "原文 %s 的评论深度分析完成（分析了%s条评论）",
+        post_id,
+        len(valid_comments),
     )
     return {
         "success": True,
@@ -602,7 +611,7 @@ def analyze_single_post_comments_deep(
 
     except Exception as e:
         logger.error(
-            f"Celery任务执行失败 (评论分析, post_id={post_id}): {e}", exc_info=True
+            "Celery任务执行失败 (评论分析, post_id=%s): %s", post_id, e, exc_info=True
         )
         progress_mgr = AnalysisProgressManager(result_id)
         progress_mgr.increment_failed()
@@ -612,7 +621,7 @@ def analyze_single_post_comments_deep(
             raise self.retry(exc=e)
 
         # 重试耗尽：返回失败结果而非抛出异常，保证 chord callback 能被调用
-        logger.warning(f"原文 {post_id} 评论深度分析重试耗尽，返回失败结果")
+        logger.warning("原文 %s 评论深度分析重试耗尽，返回失败结果", post_id)
         return {"success": False, "error": str(e), "post_id": post_id}
 
 
@@ -644,7 +653,9 @@ def finalize_comment_deep_analysis(
     注意：聚合分析已移至独立 API (POST /tasks/{task_id}/aggregation)
     """
     logger.info(
-        f"[Finalizer] 评论深度分析任务开始最终化: result_id={result_id}, total={total_count}"
+        "[Finalizer] 评论深度分析任务开始最终化: result_id=%s, total=%s",
+        result_id,
+        total_count,
     )
 
     progress_mgr = AnalysisProgressManager(result_id)
@@ -662,12 +673,17 @@ def finalize_comment_deep_analysis(
 
         if completed >= total_count:
             logger.info(
-                f"[Finalizer] 所有评论分析子任务已完成: {completed}/{total_count}"
+                "[Finalizer] 所有评论分析子任务已完成: %s/%s",
+                completed,
+                total_count,
             )
             break
 
         logger.info(
-            f"[Finalizer] 等待评论分析完成: {completed}/{total_count}, 已等待 {int(time.time() - start_time)}s"
+            "[Finalizer] 等待评论分析完成: %s/%s, 已等待 %ss",
+            completed,
+            total_count,
+            int(time.time() - start_time),
         )
         time.sleep(poll_interval)
     else:
@@ -678,7 +694,7 @@ def finalize_comment_deep_analysis(
         progress_mgr.finalize()
         logger.info("[Finalizer] 评论分析进度已同步到数据库")
     except Exception as e:
-        logger.error(f"[Finalizer] 同步评论分析进度失败: {e}", exc_info=True)
+        logger.error("[Finalizer] 同步评论分析进度失败: %s", e, exc_info=True)
 
     # 3. 返回最终统计
     final_progress = progress_mgr.get_progress()
@@ -726,7 +742,9 @@ def run_comment_deep_task(
         return {"status": "skipped", "reason": "no_posts"}
 
     logger.info(
-        f"[Coordinator] 启动评论深度分析: result_id={result_id}, 原文数={len(post_ids)}"
+        "[Coordinator] 启动评论深度分析: result_id=%s, 原文数=%s",
+        result_id,
+        len(post_ids),
     )
 
     # 1. 初始化进度
@@ -755,7 +773,9 @@ def run_comment_deep_task(
     )
 
     logger.info(
-        f"[Coordinator] 已分发 {len(post_ids)} 个评论分析子任务，chord_id={workflow.id}"
+        "[Coordinator] 已分发 %s 个评论分析子任务，chord_id=%s",
+        len(post_ids),
+        workflow.id,
     )
 
     return {

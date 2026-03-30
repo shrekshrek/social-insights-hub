@@ -15,13 +15,20 @@ from .base import BaseCrawler, CrawlSource
 
 logger = logging.getLogger(__name__)
 
-_INDEX_URL = "https://www.cnnic.cn/hlwfzyj/hlwxzbg/"
-_PDF_PATTERN = re.compile(r"https?://[^\s\"']+\.pdf", re.IGNORECASE)
-_REPORT_KEYWORD = "hlwxzbg"  # 互联网络发展状况统计报告 URL 特征
+_INDEX_URL = "https://www.cnnic.com.cn/IDR/ReportDownloads/"
+
+# Markdown 链接：[The 55th Survey Report](https://...pdf)
+_LINK_PATTERN = re.compile(
+    r"\[([^\]]+Survey Report[^\]]*)\]\((https://www\.cnnic\.com\.cn[^\)]+\.pdf)\)",
+    re.IGNORECASE,
+)
+
+# 英文序数 → 数字：55th → 55
+_ORDINAL_PATTERN = re.compile(r"(\d+)(?:st|nd|rd|th)", re.IGNORECASE)
 
 
 class CNNICCrawler(BaseCrawler):
-    """CNNIC 互联网发展统计报告爬取器"""
+    """CNNIC 互联网络发展状况统计报告爬取器"""
 
     source_type = "cnnic"
 
@@ -29,14 +36,13 @@ class CNNICCrawler(BaseCrawler):
         logger.info("[cnnic] 抓取报告列表页: %s", _INDEX_URL)
         markdown = await self._crawl_url(_INDEX_URL, query="互联网发展统计报告")
 
-        pdf_urls = self._extract_pdf_urls(markdown)
-        logger.info("[cnnic] 发现 %d 个 PDF 链接", len(pdf_urls))
+        entries = self._extract_entries(markdown)
+        logger.info("[cnnic] 发现 %d 份报告", len(entries))
 
         sources = []
-        for url in pdf_urls:
+        for title, url in entries:
             try:
                 pdf_bytes = await self._download_pdf(url)
-                title = self._title_from_url(url)
                 year = self._year_from_url(url)
                 sources.append(
                     CrawlSource(
@@ -53,48 +59,41 @@ class CNNICCrawler(BaseCrawler):
 
         return sources
 
-    def _extract_pdf_urls(self, markdown: str) -> list[str]:
-        """从 Markdown 中提取 CNNIC 报告 PDF 链接"""
-        urls = _PDF_PATTERN.findall(markdown)
+    def _extract_entries(self, markdown: str) -> list[tuple[str, str]]:
+        """从列表页 Markdown 提取（中文标题, PDF URL）对，去重"""
         seen: set[str] = set()
         result = []
-        for url in urls:
-            url = url.rstrip(")")  # Markdown 链接可能携带尾部括号
-            if _REPORT_KEYWORD in url and url not in seen:
-                seen.add(url)
-                result.append(url)
+        for m in _LINK_PATTERN.finditer(markdown):
+            link_text, url = m.group(1).strip(), m.group(2)
+            if url in seen:
+                continue
+            seen.add(url)
+            title = self._localize_title(link_text, url)
+            result.append((title, url))
         return result
 
+    def _localize_title(self, link_text: str, url: str) -> str:
+        """将 'The 55th Survey Report' 转为中文标题"""
+        m = _ORDINAL_PATTERN.search(link_text)
+        issue = m.group(1) if m else "?"
+        year = self._year_from_url(url)
+        year_str = f"（{year}年）" if year else ""
+        return f"CNNIC 第{issue}次互联网络发展状况统计报告{year_str}"
+
+    def _year_from_url(self, url: str) -> int | None:
+        m = re.search(r"/(20\d{2})\d{2}/", url)
+        return int(m.group(1)) if m else None
+
     async def _download_pdf(self, url: str) -> bytes:
-        """用 httpx 直接下载 PDF 字节"""
         async with httpx.AsyncClient(
             timeout=settings_timeout(),
             follow_redirects=True,
-            verify=False,  # 部分政府站点自签证书
+            verify=False,
             headers={"User-Agent": "Mozilla/5.0 (compatible; SIH-Crawler/1.0)"},
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             return resp.content
-
-    def _title_from_url(self, url: str) -> str:
-        """从 URL 推断报告标题"""
-        filename = url.rsplit("/", 1)[-1].replace(".pdf", "")
-        year = self._year_from_url(url)
-        if year:
-            return f"CNNIC 第{self._issue_from_url(url)}次互联网络发展状况统计报告（{year}年）"
-        return f"CNNIC 互联网络发展状况统计报告 {filename}"
-
-    def _year_from_url(self, url: str) -> int | None:
-        m = re.search(r"(20\d{2})", url)
-        return int(m.group(1)) if m else None
-
-    def _issue_from_url(self, url: str) -> str:
-        """尝试从 URL 推断期次（如第54次）"""
-        m = re.search(r"(\d{2,3})ci|hlwxzbg(\d{2,3})", url, re.IGNORECASE)
-        if m:
-            return m.group(1) or m.group(2)
-        return "N"
 
 
 def settings_timeout() -> float:

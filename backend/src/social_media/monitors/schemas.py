@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional, List, Literal
 from src.schemas import CustomBaseModel, PaginatedResponse
 
 if TYPE_CHECKING:
-    from src.social_media.monitors.models import Monitor, Platform
+    from src.social_media.monitors.models import Monitor
 
 
 # ==================== Platform Schemas ====================

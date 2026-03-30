@@ -90,16 +90,16 @@
     <!-- 爬虫状态面板 -->
     <UCard>
       <template #header>
-        <div class="flex items-center justify-between cursor-pointer" @click="showCrawlerPanel = !showCrawlerPanel">
+        <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold flex items-center gap-2">
             <UIcon name="i-heroicons-cloud-arrow-down" class="w-4 h-4" />
             数据源状态
           </h2>
-          <UButton variant="ghost" size="sm" icon="i-heroicons-arrow-path" />
+          <UButton variant="ghost" size="sm" icon="i-heroicons-arrow-path" @click="() => refreshCrawler()" />
         </div>
       </template>
 
-      <div v-if="showCrawlerPanel">
+      <div>
         <ClientOnly>
           <template #fallback>
             <div class="text-center py-4 text-gray-500">加载状态中...</div>
@@ -186,7 +186,8 @@ const sourceTypeFilter = ref<'all' | 'upload' | 'cnnic' | 'nbs' | 'govsite'>('al
 const sourceTypeOptions = [
   { label: '全部', value: 'all' },
   { label: '上传', value: 'upload' },
-  { label: 'CNNIC', value: 'cnnic' },
+  { label: 'CNNIC 统计报告', value: 'cnnic' },
+  { label: 'CNNIC 专题研究', value: 'cnnic_research' },
   { label: 'NBS', value: 'nbs' },
   { label: 'gov.cn', value: 'govsite' },
 ]
@@ -203,7 +204,7 @@ const { data: documentsData, pending: loading, refresh } = getDocuments(params)
 const documents = computed(() => documentsData.value?.items || [])
 
 // 爬虫状态面板
-const showCrawlerPanel = ref(false)
+const showCrawlerPanel = ref(true)
 
 const { data: crawlerData, pending: loadingCrawler, refresh: refreshCrawler } = getCrawlerStatus()
 

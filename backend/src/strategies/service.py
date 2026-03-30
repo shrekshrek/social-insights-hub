@@ -1,14 +1,14 @@
 """策略定义业务逻辑"""
 
 import asyncio
-import io
 import logging
 import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, func, delete as sa_delete, update, and_
+from sqlalchemy import select, func, update, and_
 from src.utils import run_cpu_bound_task
+from src.knowledge_base.service import parse_text as _extract_text_from_bytes
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
@@ -72,6 +72,8 @@ from .schemas import (
     StrategyListItem,
     SliceSummary,
 )
+
+_MAX_BRIEF_TEXT_CHARS = 10000
 
 # 便捷别名，service 内部直接用
 _strategy_read = StrategyRead.from_orm_full
@@ -1550,11 +1552,6 @@ async def _create_auto_slices(
     建完切片后立即触发 LLM 覆盖度验证并写入 strategy.coverage_check_result。
     """
     from src.social_media.analysis.service import create_monitor_slice
-    from src.langchain.chains.strategy_coverage_check_chain import (
-        create_coverage_check_chain,
-        format_coverage_check_inputs,
-        parse_coverage_check_response,
-    )
 
     blueprint: list[dict] = []
     research_design = strategy.research_design or {}
@@ -1672,7 +1669,7 @@ async def get_data_overview(
     strategy: Strategy,
 ) -> "DataOverviewResponse":
     """数据全景：返回该策略已关联的切片列表 + 覆盖度验证结果。"""
-    from .schemas import DataOverviewResponse, SliceSummary
+    from .schemas import DataOverviewResponse
 
     slice_summaries = [
         SliceSummary(
@@ -1706,11 +1703,6 @@ async def adjust_slices(
     每个 adjustment 格式：{slice_id, name?, subject?, competitors?}
     """
     from src.social_media.analysis.models import AnalysisSlice
-    from src.langchain.chains.strategy_coverage_check_chain import (
-        create_coverage_check_chain,
-        format_coverage_check_inputs,
-        parse_coverage_check_response,
-    )
 
     # 校验 slice 归属
     strategy_slice_ids = {ss.slice_id for ss in strategy.slices}

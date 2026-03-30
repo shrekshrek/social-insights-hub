@@ -35,6 +35,7 @@ celery_app = Celery(
         "src.social_media.analysis.celery_tasks.auto_analysis_tasks",
         "src.knowledge_base.tasks",
         "src.agent.tasks",
+        "src.strategies.tasks",
         # Future task modules:
         # "src.social_media.analysis.celery_tasks.clustering_tasks",
         # "src.social_media.analysis.celery_tasks.competitive_tasks",
@@ -92,6 +93,16 @@ celery_app.conf.beat_schedule = {
     "agent-reset-timed-out-tasks": {
         "task": "agent.reset_timed_out_tasks",
         "schedule": crontab(minute="*/5"),
+    },
+    # 策略探测自动审查：每 2 分钟（消除前端轮询依赖）
+    "strategies-auto-probe-review": {
+        "task": "strategies.auto_probe_review",
+        "schedule": crontab(minute="*/2"),
+    },
+    # 策略全量采集自���建切片：每 2 分钟（消除前端轮询依赖）
+    "strategies-auto-collection-check": {
+        "task": "strategies.auto_collection_check",
+        "schedule": crontab(minute="*/2"),
     },
     # NBS 月度数据：每月 1 日 03:00
     "crawl-nbs-monthly": {

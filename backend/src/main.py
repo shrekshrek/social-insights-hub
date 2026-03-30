@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
@@ -29,7 +28,6 @@ from src.middleware import (
     SecurityHeadersMiddleware,
 )
 from src.rate_limit import limiter
-from src.agent.tasks import run_periodic_reset
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +61,8 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ 平台数据初始化失败: {e}", exc_info=True)
         logger.warning("⚠️ 应用将以现有平台配置启动")
 
-    # 启动超时任务重置循环（每 5 分钟）
-    reset_task = asyncio.create_task(run_periodic_reset(interval_seconds=300))
-
     yield  # 应用运行期间
 
-    # 关闭时清理
-    reset_task.cancel()
     logger.info("📴 应用关闭")
 
 

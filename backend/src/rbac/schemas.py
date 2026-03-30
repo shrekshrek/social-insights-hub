@@ -1,8 +1,13 @@
-from typing import Optional, List
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional, List
 
 from pydantic import Field, computed_field
 
 from src.schemas import CustomBaseModel, PaginatedResponse
+
+if TYPE_CHECKING:
+    from src.rbac.models import Role
 
 
 # Permission schemas - 基于target+action的最终设计
@@ -73,6 +78,21 @@ class RoleRead(RoleBase):
         from .models import SystemRoles
 
         return SystemRoles.is_core_role(self.name)
+
+    @classmethod
+    def from_orm_full(cls, role: "Role") -> "RoleRead":
+        """从 ORM Role 构造，处理 role_permissions 关联。
+        要求 role.role_permissions 已预加载（selectinload）。
+        """
+        permissions = [rp.permission for rp in role.role_permissions]
+        return cls(
+            id=role.id,
+            name=role.name,
+            display_name=role.display_name,
+            description=role.description,
+            permission_strategy=role.permission_strategy,
+            permissions=permissions,
+        )
 
 
 # User Role schemas

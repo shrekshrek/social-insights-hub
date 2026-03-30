@@ -34,6 +34,7 @@ celery_app = Celery(
         "src.social_media.analysis.celery_tasks.monitor_slice_tasks",
         "src.social_media.analysis.celery_tasks.auto_analysis_tasks",
         "src.knowledge_base.tasks",
+        "src.agent.tasks",
         # Future task modules:
         # "src.social_media.analysis.celery_tasks.clustering_tasks",
         # "src.social_media.analysis.celery_tasks.competitive_tasks",
@@ -87,6 +88,11 @@ celery_app.conf.update(
 )
 
 celery_app.conf.beat_schedule = {
+    # Agent 超时任务回收：每 5 分钟
+    "agent-reset-timed-out-tasks": {
+        "task": "agent.reset_timed_out_tasks",
+        "schedule": crontab(minute="*/5"),
+    },
     # NBS 月度数据：每月 1 日 03:00
     "crawl-nbs-monthly": {
         "task": "knowledge_base.crawl_nbs",

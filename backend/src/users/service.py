@@ -74,6 +74,13 @@ async def delete_user(db: AsyncSession, user_id: int) -> bool:
     return True
 
 
+async def user_to_schema(db: AsyncSession, user: User) -> auth_schemas.UserRead:
+    """将 ORM User 转为 UserRead（附带角色），避免重复的 get_user_roles + from_orm_full。"""
+    user_roles = await rbac_service.get_user_roles(db, user.id)
+    role_names = [role.name for role in user_roles]
+    return auth_schemas.UserRead.from_orm_full(user, role_names)
+
+
 async def get_user_with_roles(
     db: AsyncSession, user_id: int
 ) -> Optional[auth_schemas.UserRead]:
@@ -81,14 +88,7 @@ async def get_user_with_roles(
     user = await get_user_by_id(db, user_id)
     if not user:
         return None
-
-    # 获取用户的角色信息
-    user_roles = await rbac_service.get_user_roles(db, user.id)
-    role_names = [role.name for role in user_roles]
-
-    # 构造包含角色信息的用户数据
-    # 使用统一的转换函数
-    return convert_user_to_schema(user, role_names)
+    return await user_to_schema(db, user)
 
 
 async def get_users_with_roles_batch(
@@ -117,24 +117,10 @@ async def get_users_with_roles_batch(
         user_roles_map[user_id].append(role_name)
 
     # 构造响应数据
-    result = []
-    for user in users:
-        role_names = user_roles_map.get(user.id, [])
-        result.append(convert_user_to_schema(user, role_names))
-
-    return result
-
-
-def convert_user_to_schema(user: User, role_names: List[str]) -> auth_schemas.UserRead:
-    """统一的用户数据转换工具函数（公开）"""
-    return auth_schemas.UserRead(
-        id=user.id,
-        username=user.username,
-        email=user.email,
-        created_at=user.created_at,
-        updated_at=user.updated_at,
-        roles=role_names,
-    )
+    return [
+        auth_schemas.UserRead.from_orm_full(user, user_roles_map.get(user.id, []))
+        for user in users
+    ]
 
 
 async def create_user_admin(
@@ -167,6 +153,4 @@ async def create_user_admin(
         role_ids=role_ids,
     )
 
-    user_roles = await rbac_service.get_user_roles(db, new_user.id)
-    role_names = [role.name for role in user_roles]
-    return convert_user_to_schema(new_user, role_names)
+    return await user_to_schema(db, new_user)

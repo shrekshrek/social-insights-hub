@@ -1,8 +1,8 @@
 # 策略模块多数据源架构方案
 
 > 设计日期：2026-03-26
-> 最后更新：2026-03-26
-> 状态：阶段一已完成，阶段二/三待实施
+> 最后更新：2026-03-30
+> 状态：阶段一/二已完成，阶段三待实施
 
 ---
 
@@ -36,8 +36,10 @@
    ✅ 社交媒体（当前可用）
       能解决：用户情感与口碑、品牌认知、竞品社媒声量...
       不能解决：市场规模等结构化数据
-   🔒 网络搜索（未开通）
-      若开通可补充：行业趋势、竞品公开动态...
+   ✅ 市场知识库（当前可用）
+      能解决：行业背景、政策信息、公共统计数据、内部资料补充
+   🔒 新闻媒体（未开通）
+      若开通可补充：近期舆情事件、PR 传播动态...
 
 ③ 确认并创建策略（channel_plan 存入 brand_brief）
 
@@ -50,7 +52,7 @@
 ⑥ 数据归一化 → Phase 1/2/3 最终分析
 ```
 
-> ⚠️ 步骤②（创建页展示 channel_plan）目前尚未实现，channel_plan 已生成并存库，但用户不可见。
+> ✅ 步骤②（创建页展示 channel_plan）已实现，用户可在创建前看到可用/未开通渠道与能力边界。
 
 ---
 
@@ -78,11 +80,18 @@
             "channel_brief": "聚焦[subject]在社媒的用户讨论，分析消费者情感..."
         },
         {
-            "type": "web_search",
+            "type": "knowledge_base",
+            "available": True,
+            "solvable": ["行业背景数据", "政策趋势参考", "内部资料补充"],
+            "unsolvable": ["实时用户互动数据"],
+            "channel_brief": "检索知识库中与[subject]相关的行业报告、政策与内部资料，补充策略研究的市场背景。"
+        },
+        {
+            "type": "news_media",
             "available": False,          # 未来接入
-            "solvable": ["市场规模", "行业趋势", "竞品公开动态"],
+            "solvable": ["近期舆情事件", "媒体传播动态"],
             "unsolvable": [],
-            "channel_brief": "搜索[subject]相关行业报告与新闻..."
+            "channel_brief": "跟踪[subject]相关新闻与报道，补充事件脉络与舆情语境。"
         }
     ]
 }
@@ -106,8 +115,10 @@ social_media   → research_design_chain（✅ 已实现）
                  输入：channel_brief + subject + constraints（补充上下文）
                  输出：keywords / platforms / slice_blueprint
 
-web_search     → web_search_design_chain（⬜ 未来）
-knowledge_base → knowledge_base_design_chain（⬜ 未来）
+knowledge_base → 无独立 design chain（✅ 已接入）
+                 通过 `retrieve_market_context()` 在 Phase1/2 生成前注入 RAG 结果
+
+news_media     → news_media_design_chain（⬜ 未来）
 ```
 
 **扩展方式**：新增渠道时，只需增加对应的 design chain，channel_plan 路由逻辑不变。
@@ -122,11 +133,11 @@ knowledge_base → knowledge_base_design_chain（⬜ 未来）
 social_media（✅ 现有，不变）:
   Monitor → DataTask → probe → 全量采集 → AnalysisSlice
 
-knowledge_base（⬜ 未来）:
-  KnowledgeBase → 文档分块 → LLM 摘要 → KnowledgeSummary
+knowledge_base（✅ 已接入）:
+  KnowledgeDocument/Chunk（平台公共 + 用户私有）→ 向量检索 → market_context 注入 Phase1/2
 
-web_search（⬜ 未来）:
-  SearchConfig → 搜索结果 → 页面提取 → WebSearchSummary
+news_media（⬜ 未来）:
+  SourceConfig → 新闻检索/抓取 → 结构化摘要
 ```
 
 `AnalysisSlice` 的现有逻辑完全保留，不做任何修改。
@@ -154,9 +165,9 @@ async def load_strategy_inputs(
     # for kb in strategy.knowledge_summaries:
     #     inputs.append(adapt_knowledge_summary(kb))
 
-    # 路径 C（未来）：网络搜索摘要
-    # for ws in strategy.web_search_summaries:
-    #     inputs.append(adapt_web_search(ws))
+    # 路径 C（未来）：新闻媒体摘要
+    # for nm in strategy.news_media_summaries:
+    #     inputs.append(adapt_news_media_summary(nm))
 
     return inputs
 ```
@@ -183,7 +194,7 @@ class BrandBrief:
     channel_plan: list[ChannelPlanItem] | None  # 渠道分发结果
 
 class ChannelPlanItem:
-    type: str          # social_media / web_search / knowledge_base / vertical_platform
+    type: str          # social_media / knowledge_base / news_media / vertical_platform
     available: bool    # 当前是否可用
     solvable: list[str]    # 该渠道能解决的问题
     unsolvable: list[str]  # 该渠道的局限
@@ -211,15 +222,15 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 3. ✅ `research_design_chain` 接收社媒 `channel_brief` 替代原始完整 brief
 4. ✅ 新建策略页展示 `channel_plan` 结果，让用户在创建前了解研究边界
 
-### 阶段二：UX 补全 + 归一化层（近期）
+### 阶段二：UX 补全 + 归一化层（已完成）
 
 5. ✅ 新建策略页：AI 解析后展示 channel_plan，标注可用/未开通渠道及能力边界
 6. ✅ `load_strategy_inputs()` 替换 `load_slice_data()`：当前行为不变，接口已为多数据源就绪
+7. ✅ Knowledge Base：RAG 检索接入，Phase1/2 注入 `market_context`
 
 ### 阶段三：新数据源（长期）
 
-7. ⬜ KnowledgeBase 数据源：独立模型 + 处理管线 + Layer 3 适配器
-8. ⬜ WebSearch 数据源：同上
+8. ⬜ News Media 数据源：独立模型 + 处理管线 + Layer 3 适配器
 
 ---
 
@@ -227,7 +238,7 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 
 ### 多渠道并行时的状态管理
 
-当前状态机（`probing → collecting → ready`）假设单渠道串行。接入第二个渠道时，不同渠道可能处于不同进度（如社媒已 `collecting`，web_search 还在 `planned`）——现有状态流无法表达这种并行状态。
+当前状态机（`probing → collecting → ready`）假设单渠道串行。接入第二个渠道时，不同渠道可能处于不同进度（如社媒已 `collecting`，news_media 还在 `planned`）——现有状态流无法表达这种并行状态。
 
 **当前结论**：单渠道阶段不受影响，接入第二个渠道前需专项设计状态追踪方式，届时再决策。
 
@@ -242,6 +253,7 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 | `strategy_brief_parser_chain` | ✅ 已改 | 升级为渠道分发判断，输出 `channel_plan` |
 | `strategy_research_design_chain` | ✅ 已改 | 接收 `channel_brief`，移除课题适配度评估 |
 | `service.py` Phase 生成函数 | ✅ 已改 | `load_slice_data()` → `load_strategy_inputs()` |
+| `service.py` 市场背景注入 | ✅ 已改 | Phase1/2 前调用 `retrieve_market_context()` 注入 `market_context` |
 | `Strategy` 模型 | ✅ 已改 | `channel_plan` 存于 `brand_brief` JSON |
 | 新建策略前端 | ✅ 已改 | AI 解析后展示 channel_plan，策略详情页 brief 区也展示 |
 

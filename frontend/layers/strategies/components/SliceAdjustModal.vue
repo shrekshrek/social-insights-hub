@@ -1,5 +1,5 @@
 <template>
-  <UModal v-model:open="open">
+  <UModal v-model:open="open" title="微调切片配置" description="调整切片的名称、主体品牌和竞品配置">
     <template #content>
       <UCard>
         <template #header>

@@ -1,11 +1,16 @@
 """策略定义 Pydantic Schemas"""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import Field, model_validator
 
 from src.schemas import CustomBaseModel, PaginatedResponse
+
+if TYPE_CHECKING:
+    from src.strategies.models import Strategy
 
 
 # ==================== Brand Brief ====================
@@ -174,7 +179,10 @@ class CollectionTaskStatus(CustomBaseModel):
     """单个采集任务状态"""
 
     task_id: int
+    keyword: str = ""
+    platform: str = ""
     status: str
+    posts_count: int = 0
     has_analysis: bool = False
 
 
@@ -243,6 +251,19 @@ class StrategyListItem(CustomBaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @classmethod
+    def from_orm_full(cls, strategy: "Strategy") -> "StrategyListItem":
+        return cls(
+            id=strategy.id,
+            name=strategy.name,
+            status=strategy.status,
+            slice_count=len(strategy.slices),
+            created_by=strategy.created_by,
+            creator_name=strategy.creator.username if strategy.creator else "",
+            created_at=strategy.created_at,
+            updated_at=strategy.updated_at,
+        )
+
 
 class StrategyRead(CustomBaseModel):
     """策略详情"""
@@ -278,6 +299,44 @@ class StrategyRead(CustomBaseModel):
     creator_name: str
     created_at: datetime
     updated_at: datetime
+
+    @classmethod
+    def from_orm_full(cls, strategy: "Strategy") -> "StrategyRead":
+        """从 ORM Strategy 对象构造，处理所有跨关联字段。
+        要求 strategy.slices → .slice → .monitor 已预加载（selectinload）。
+        """
+        slices = [
+            SliceSummary(
+                slice_id=ss.slice_id,
+                slice_name=ss.slice.name if ss.slice else None,
+                monitor_id=ss.slice.monitor_id if ss.slice else 0,
+                monitor_name=(
+                    ss.slice.monitor.name if ss.slice and ss.slice.monitor else ""
+                ),
+            )
+            for ss in strategy.slices
+        ]
+        return cls(
+            id=strategy.id,
+            name=strategy.name,
+            status=strategy.status,
+            brand_brief=strategy.brand_brief,
+            research_design=strategy.research_design,
+            probe_review_result=strategy.probe_review_result,
+            probe_round=strategy.probe_round,
+            coverage_check_result=strategy.coverage_check_result,
+            output_type=strategy.output_type,
+            phase1_result=strategy.phase1_result,
+            phase2_result=strategy.phase2_result,
+            phase3_result=strategy.phase3_result,
+            monitor_id=strategy.monitor_id,
+            task_ids=list(strategy.task_ids or []),
+            slices=slices,
+            created_by=strategy.created_by,
+            creator_name=strategy.creator.username if strategy.creator else "",
+            created_at=strategy.created_at,
+            updated_at=strategy.updated_at,
+        )
 
 
 StrategyListResponse = PaginatedResponse[StrategyListItem]

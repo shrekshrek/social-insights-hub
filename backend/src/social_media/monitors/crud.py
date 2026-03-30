@@ -249,8 +249,9 @@ async def check_monitor_access(db: AsyncSession, monitor_id: int, user_id: int) 
         return False
 
     # 检查是否是管理员或超级管理员
-    role_names = [ur.role.name for ur in user.user_roles]
-    if "admin" in role_names or "super_admin" in role_names:
+    from src.rbac.utils import is_admin_or_super_admin
+
+    if is_admin_or_super_admin(user):
         return True
 
     # 获取项目信息
@@ -265,3 +266,20 @@ async def check_monitor_access(db: AsyncSession, monitor_id: int, user_id: int) 
     # 检查是否是participant
     participant_ids = [p.id for p in monitor.participants]
     return user_id in participant_ids
+
+
+async def assert_monitor_access(
+    db: AsyncSession,
+    monitor_id: int,
+    user_id: int,
+    detail: str = "You don't have access to this monitor",
+) -> None:
+    """验证用户有 monitor 访问权限，无权限时直接抛 HTTP 403。"""
+    from fastapi import HTTPException, status as http_status
+
+    has_access = await check_monitor_access(db, monitor_id, user_id)
+    if not has_access:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )

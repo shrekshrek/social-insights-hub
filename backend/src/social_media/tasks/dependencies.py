@@ -31,17 +31,9 @@ async def validate_task_access(
     db: AsyncSession = Depends(get_async_db),
 ) -> DataTask:
     """验证用户是否有任务访问权限（通过项目权限）"""
-    # 检查用户是否有项目访问权限
-    has_access = await social_crud.check_monitor_access(
-        db, task.monitor_id, current_user.id
+    await social_crud.assert_monitor_access(
+        db, task.monitor_id, current_user.id, detail="You don't have access to this task"
     )
-
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
-
     return task
 
 
@@ -95,14 +87,7 @@ async def validate_post_access(
         )
 
     # 检查用户是否有项目访问权限
-    has_access = await social_crud.check_monitor_access(
-        db, task.monitor_id, current_user.id
+    await social_crud.assert_monitor_access(
+        db, task.monitor_id, current_user.id, detail="You don't have access to this post"
     )
-
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this post",
-        )
-
     return post

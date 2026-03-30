@@ -8,7 +8,6 @@ from src.auth import schemas, service, models, security
 from src.schemas import MessageResponse
 from src.auth.dependencies import get_current_user, oauth2_scheme
 from src.auth.blacklist import add_token_to_blacklist
-from src.rbac import service as rbac_service
 from src.users import service as user_service
 from src.config import settings
 from src.database import get_async_db
@@ -35,9 +34,7 @@ async def register(
     db_user = await service.create_user(db=db, user=user)
 
     # 用户注册成功，补充角色确保响应包含 roles 数组
-    user_roles = await rbac_service.get_user_roles(db, db_user.id)
-    role_names = [role.name for role in user_roles]
-    return user_service.convert_user_to_schema(db_user, role_names)
+    return await user_service.user_to_schema(db, db_user)
 
 
 @router.post(

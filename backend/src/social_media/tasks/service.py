@@ -39,14 +39,7 @@ async def create_task(
         )
 
     # 验证用户是否有项目访问权限
-    has_access = await social_crud.check_monitor_access(
-        db, task_in.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this monitor",
-        )
+    await social_crud.assert_monitor_access(db, task_in.monitor_id, current_user_id)
 
     # 准备任务数据
     task_data = task_in.model_dump()
@@ -70,14 +63,7 @@ async def get_task(
     # 验证用户是否有项目访问权限
     from src.social_media.monitors import crud as social_crud
 
-    has_access = await social_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await social_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don't have access to this task")
 
     return task
 
@@ -101,14 +87,7 @@ async def get_tasks_list(
     if monitor_id is not None and current_user_id is not None:
         from src.social_media.monitors import crud as social_crud
 
-        has_access = await social_crud.check_monitor_access(
-            db, monitor_id, current_user_id
-        )
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this monitor",
-            )
+        await social_crud.assert_monitor_access(db, monitor_id, current_user_id)
 
     skip = (page - 1) * page_size
     return await crud.get_tasks(
@@ -434,14 +413,7 @@ async def query_cross_task_posts(
     if monitor_id is not None and current_user_id is not None:
         from src.social_media.monitors import crud as social_crud
 
-        has_access = await social_crud.check_monitor_access(
-            db, monitor_id, current_user_id
-        )
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this monitor",
-            )
+        await social_crud.assert_monitor_access(db, monitor_id, current_user_id)
 
     posts = await crud.get_posts_by_platform_post_id(
         db,

@@ -92,12 +92,6 @@ async def create_monitor(
     """
     result = await service.create_monitor(db, monitor_in, current_user.id)
 
-    # 构建响应
-    monitor_dict = schemas.MonitorRead.model_validate(
-        result["monitor"]
-    ).model_dump()
-    monitor_dict["participant_ids"] = [p.id for p in result["monitor"].participants]
-
     # 转换任务为字典列表
     from src.social_media.tasks.schemas import DataTaskReadWithRelations
 
@@ -111,7 +105,8 @@ async def create_monitor(
         tasks_list.append(task_dict)
 
     return schemas.MonitorCreateResponse(
-        monitor=schemas.MonitorRead(**monitor_dict), created_tasks=tasks_list
+        monitor=schemas.MonitorRead.from_orm_full(result["monitor"]),
+        created_tasks=tasks_list,
     )
 
 
@@ -167,12 +162,9 @@ async def get_monitors(
         search=search,
     )
 
-    # 转换为带owner用户名的response
-    monitors_with_owner = []
-    for monitor in monitors:
-        monitor_dict = schemas.MonitorRead.model_validate(monitor).model_dump()
-        monitor_dict["owner_username"] = monitor.owner.username
-        monitors_with_owner.append(schemas.MonitorReadWithOwner(**monitor_dict))
+    monitors_with_owner = [
+        schemas.MonitorReadWithOwner.from_orm_full(m) for m in monitors
+    ]
 
     return schemas.MonitorListResponse.create(
         items=monitors_with_owner,
@@ -199,11 +191,7 @@ async def get_monitor(
     返回包含关联平台和参与者信息。
     """
     # 构建参与者ID列表和用户名列表
-    monitor_dict = schemas.MonitorRead.model_validate(monitor).model_dump()
-    monitor_dict["participant_ids"] = [p.id for p in monitor.participants]
-    monitor_dict["owner_username"] = monitor.owner.username
-    monitor_dict["participant_usernames"] = [p.username for p in monitor.participants]
-    return schemas.MonitorReadWithOwner(**monitor_dict)
+    return schemas.MonitorReadWithOwner.from_orm_full(monitor)
 
 
 @router.put(
@@ -225,11 +213,7 @@ async def update_monitor(
     可以更新项目名称、描述、关键词、时间范围等。
     """
     updated_monitor = await service.update_monitor(db, monitor, monitor_update)
-    monitor_dict = schemas.MonitorRead.model_validate(
-        updated_monitor
-    ).model_dump()
-    monitor_dict["participant_ids"] = [p.id for p in updated_monitor.participants]
-    return schemas.MonitorRead(**monitor_dict)
+    return schemas.MonitorRead.from_orm_full(updated_monitor)
 
 
 @router.delete(
@@ -320,11 +304,7 @@ async def add_participants_to_monitor(
     updated_monitor = await service.add_participants(
         db, monitor, participant_assignment.user_ids
     )
-    monitor_dict = schemas.MonitorRead.model_validate(
-        updated_monitor
-    ).model_dump()
-    monitor_dict["participant_ids"] = [p.id for p in updated_monitor.participants]
-    return schemas.MonitorRead(**monitor_dict)
+    return schemas.MonitorRead.from_orm_full(updated_monitor)
 
 
 @router.delete(
@@ -346,11 +326,7 @@ async def remove_participant_from_monitor(
     不能移除项目owner。
     """
     updated_monitor = await service.remove_participant(db, monitor, user_id)
-    monitor_dict = schemas.MonitorRead.model_validate(
-        updated_monitor
-    ).model_dump()
-    monitor_dict["participant_ids"] = [p.id for p in updated_monitor.participants]
-    return schemas.MonitorRead(**monitor_dict)
+    return schemas.MonitorRead.from_orm_full(updated_monitor)
 
 
 # ==================== Deep Analysis Settings ====================
@@ -377,11 +353,7 @@ async def update_deep_analysis_settings(
     updated_monitor = await service.update_deep_analysis_settings(
         db, monitor, settings_update.settings
     )
-    monitor_dict = schemas.MonitorRead.model_validate(
-        updated_monitor
-    ).model_dump()
-    monitor_dict["participant_ids"] = [p.id for p in updated_monitor.participants]
-    return schemas.MonitorRead(**monitor_dict)
+    return schemas.MonitorRead.from_orm_full(updated_monitor)
 
 
 @router.get(

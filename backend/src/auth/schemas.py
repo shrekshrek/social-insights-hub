@@ -1,8 +1,22 @@
+from __future__ import annotations
+
 from pydantic import EmailStr, Field, field_validator
 from datetime import datetime
-from typing import List
+from typing import TYPE_CHECKING, List
 import re
 from src.schemas import CustomBaseModel
+
+if TYPE_CHECKING:
+    from src.auth.models import User
+
+
+def _validate_password_strength(v: str) -> str:
+    """验证密码必须同时包含字母和数字。"""
+    if not re.search(r"[A-Za-z]", v):
+        raise ValueError("密码必须包含字母")
+    if not re.search(r"\d", v):
+        raise ValueError("密码必须包含数字")
+    return v
 
 
 # --- User Schemas ---
@@ -30,11 +44,7 @@ class UserCreate(CustomBaseModel):
     @classmethod
     def validate_password(cls, v: str) -> str:
         """验证密码强度"""
-        if not re.search(r"[A-Za-z]", v):
-            raise ValueError("密码必须包含字母")
-        if not re.search(r"\d", v):
-            raise ValueError("密码必须包含数字")
-        return v
+        return _validate_password_strength(v)
 
 
 class UserRead(CustomBaseModel):
@@ -49,6 +59,18 @@ class UserRead(CustomBaseModel):
     created_at: datetime
     updated_at: datetime
     roles: List[str] = Field(default_factory=list)  # 用户的角色名称列表
+
+    @classmethod
+    def from_orm_full(cls, user: "User", role_names: List[str]) -> "UserRead":
+        """从 ORM User 对象构造，role_names 需由调用方从 RBAC 层查询后传入。"""
+        return cls(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            roles=role_names,
+        )
 
 
 # --- Token Schemas ---
@@ -76,8 +98,4 @@ class ChangePassword(CustomBaseModel):
     @classmethod
     def validate_new_password(cls, v: str) -> str:
         """验证新密码强度"""
-        if not re.search(r"[A-Za-z]", v):
-            raise ValueError("新密码必须包含字母")
-        if not re.search(r"\d", v):
-            raise ValueError("新密码必须包含数字")
-        return v
+        return _validate_password_strength(v)

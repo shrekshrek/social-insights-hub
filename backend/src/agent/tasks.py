@@ -1,26 +1,27 @@
-"""Agent 后台任务
+"""Agent 后台任务（Celery/Beat 调度）
 
-- reset_timed_out_tasks: 定时检测超时的 accepted 任务并重置为 pending
+- reset_timed_out_tasks_sync: 检测超时 accepted 任务并重置为 pending
+- reset_timed_out_tasks_task: 提供给 Celery Beat 的定时入口
 """
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
 
+from src.celery_app import celery_app
 from src.config import settings
-from src.database import AsyncSessionLocal
+from src.database import SyncSessionLocal
 from src.social_media.tasks.models import DataTask
 
 logger = logging.getLogger(__name__)
 
 
-async def reset_timed_out_tasks() -> int:
-    """将超时的 accepted 任务重置为 pending
+def reset_timed_out_tasks_sync() -> int:
+    """将超时的 accepted 任务重置为 pending。
 
     任务被爬虫接收（accepted）后，若超过 AGENT_TASK_TIMEOUT_HOURS 仍未完成，
-    说明爬虫崩溃/重启导致任务丢失，重置为 pending 以��重新分配。
+    说明爬虫崩溃/重启导致任务丢失，重置为 pending 以便重新分配。
 
     Returns:
         int: 重置的任务数量
@@ -28,7 +29,7 @@ async def reset_timed_out_tasks() -> int:
     timeout_hours = settings.AGENT_TASK_TIMEOUT_HOURS
     cutoff = datetime.now(timezone.utc) - timedelta(hours=timeout_hours)
 
-    async with AsyncSessionLocal() as db:
+    with SyncSessionLocal() as db:
         stmt = (
             select(DataTask.id, DataTask.keywords, DataTask.accepted_at)
             .where(
@@ -38,27 +39,26 @@ async def reset_timed_out_tasks() -> int:
                 DataTask.is_deleted.is_(False),
             )
         )
-        result = await db.execute(stmt)
-        timed_out = result.all()
+        timed_out = db.execute(stmt).all()
 
         if not timed_out:
             return 0
 
         task_ids = [row.id for row in timed_out]
-
-        await db.execute(
+        db.execute(
             update(DataTask)
             .where(DataTask.id.in_(task_ids))
             .values(status="pending", accepted_at=None, accepted_by=None)
         )
-        await db.commit()
+        db.commit()
 
+        now = datetime.now(timezone.utc)
         for row in timed_out:
             logger.warning(
                 "Task %d (keywords=%r) reset to pending after %.1fh (accepted_at=%s)",
                 row.id,
                 row.keywords,
-                (datetime.now(timezone.utc) - row.accepted_at).total_seconds() / 3600,
+                (now - row.accepted_at).total_seconds() / 3600,
                 row.accepted_at,
             )
 
@@ -66,11 +66,9 @@ async def reset_timed_out_tasks() -> int:
         return len(task_ids)
 
 
-async def run_periodic_reset(interval_seconds: int = 300) -> None:
-    """在 FastAPI lifespan 中运行的周期性重置循环"""
-    while True:
-        await asyncio.sleep(interval_seconds)
-        try:
-            await reset_timed_out_tasks()
-        except Exception as e:
-            logger.error("reset_timed_out_tasks failed: %s", e, exc_info=True)
+@celery_app.task(name="agent.reset_timed_out_tasks", bind=True, max_retries=0)
+def reset_timed_out_tasks_task(self) -> dict[str, int]:
+    """Celery Beat 触发：执行超时任务回收。"""
+    reset_count = reset_timed_out_tasks_sync()
+    logger.info("Agent timeout reset completed, reset_count=%d", reset_count)
+    return {"reset_count": reset_count}

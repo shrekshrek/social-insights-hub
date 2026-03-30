@@ -30,6 +30,7 @@ from src.auth.dependencies import get_current_user
 from src.auth.models import User
 
 from . import service
+from .models import AnalysisSlice
 from .schemas import (
     RunScreeningRequest,
     RunDeepAnalysisRequest,
@@ -505,6 +506,30 @@ async def create_monitor_slice(
     return ProjectSliceResponse.model_validate(slice_record)
 
 
+async def _get_slice_or_403(
+    db: AsyncSession,
+    monitor_id: int,
+    slice_id: int,
+    current_user: User,
+) -> AnalysisSlice:
+    """验证访问权限并返回切片，无权或不存在时抛出对应 HTTP 异常。"""
+    from src.social_media.monitors import crud as monitor_crud
+
+    await monitor_crud.assert_monitor_access(db, monitor_id, current_user.id)
+    stmt = (
+        select(AnalysisSlice)
+        .where(AnalysisSlice.id == slice_id)
+        .where(AnalysisSlice.monitor_id == monitor_id)
+    )
+    result = await db.execute(stmt)
+    slice_record = result.scalar_one_or_none()
+    if not slice_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
+        )
+    return slice_record
+
+
 @router.get(
     "/monitors/{monitor_id}/slices",
     response_model=ProjectSliceListResponse,
@@ -517,18 +542,8 @@ async def list_monitor_slices(
 ):
     """获取项目下的历史切片列表（按创建时间倒序）"""
     from src.social_media.monitors import crud as monitor_crud
-    from .models import AnalysisSlice
-    from sqlalchemy import select
 
-    has_access = await monitor_crud.check_monitor_access(
-        db, monitor_id, current_user.id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this monitor",
-        )
-
+    await monitor_crud.assert_monitor_access(db, monitor_id, current_user.id)
     stmt = (
         select(AnalysisSlice)
         .where(AnalysisSlice.monitor_id == monitor_id)
@@ -553,30 +568,7 @@ async def get_monitor_slice(
     current_user: User = Depends(get_current_user),
 ):
     """获取单个切片详情"""
-    from src.social_media.monitors import crud as monitor_crud
-    from .models import AnalysisSlice
-    from sqlalchemy import select
-
-    has_access = await monitor_crud.check_monitor_access(
-        db, monitor_id, current_user.id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this monitor",
-        )
-
-    stmt = (
-        select(AnalysisSlice)
-        .where(AnalysisSlice.id == slice_id)
-        .where(AnalysisSlice.monitor_id == monitor_id)
-    )
-    result = await db.execute(stmt)
-    slice_record = result.scalar_one_or_none()
-    if not slice_record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
-        )
+    slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
     return ProjectSliceResponse.model_validate(slice_record)
 
 
@@ -596,31 +588,7 @@ async def update_monitor_slice(
     current_user: User = Depends(get_current_user),
 ):
     """更新切片名称。需要项目访问权限。"""
-    from src.social_media.monitors import crud as monitor_crud
-    from .models import AnalysisSlice
-    from sqlalchemy import select
-
-    has_access = await monitor_crud.check_monitor_access(
-        db, monitor_id, current_user.id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this monitor",
-        )
-
-    stmt = (
-        select(AnalysisSlice)
-        .where(AnalysisSlice.id == slice_id)
-        .where(AnalysisSlice.monitor_id == monitor_id)
-    )
-    result = await db.execute(stmt)
-    slice_record = result.scalar_one_or_none()
-    if not slice_record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
-        )
-
+    slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
     slice_record.name = request.name
     await db.commit()
     await db.refresh(slice_record)
@@ -640,31 +608,7 @@ async def delete_monitor_slice(
     current_user: User = Depends(get_current_user),
 ):
     """删除单个切片（硬删除）"""
-    from src.social_media.monitors import crud as monitor_crud
-    from .models import AnalysisSlice
-    from sqlalchemy import select
-
-    has_access = await monitor_crud.check_monitor_access(
-        db, monitor_id, current_user.id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this monitor",
-        )
-
-    stmt = (
-        select(AnalysisSlice)
-        .where(AnalysisSlice.id == slice_id)
-        .where(AnalysisSlice.monitor_id == monitor_id)
-    )
-    result = await db.execute(stmt)
-    slice_record = result.scalar_one_or_none()
-    if not slice_record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
-        )
-
+    slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
     await db.delete(slice_record)
     await db.commit()
     return MessageResponse(message=f"Slice {slice_id} deleted successfully")
@@ -689,30 +633,9 @@ async def export_monitor_slice(
 
     包含封面、概览摘要和已完成的报告（行业格局、话题洞察、战略诊断）。
     """
-    from src.social_media.monitors import crud as monitor_crud
-    from .models import AnalysisSlice
     from .export_docx import generate_slice_report_docx
 
-    has_access = await monitor_crud.check_monitor_access(
-        db, monitor_id, current_user.id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this monitor",
-        )
-
-    stmt = (
-        select(AnalysisSlice)
-        .where(AnalysisSlice.id == slice_id)
-        .where(AnalysisSlice.monitor_id == monitor_id)
-    )
-    result = await db.execute(stmt)
-    slice_record = result.scalar_one_or_none()
-    if not slice_record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Slice not found"
-        )
+    slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
 
     reports = (slice_record.result_data or {}).get("reports")
     if not reports:

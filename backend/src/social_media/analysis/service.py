@@ -49,14 +49,7 @@ async def run_post_screening(
         )
 
     # 验证用户权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
     # 获取要分析的原文ID列表
     post_ids = request.post_ids or []
@@ -135,14 +128,7 @@ async def run_post_deep_analysis(
             detail=f"Task {request.task_id} not found",
         )
 
-    has_access = await monitor_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
     # 获取要分析的原文ID列表
     post_ids = request.post_ids or []
@@ -220,14 +206,7 @@ async def create_monitor_slice(
     from src.social_media.tasks.models import DataTask
 
     # 权限校验
-    has_access = await monitor_crud.check_monitor_access(
-        db, monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this monitor",
-        )
+    await monitor_crud.assert_monitor_access(db, monitor_id, current_user_id)
 
     # 任务校验：必须属于该项目且未删除
     if not task_ids:
@@ -427,14 +406,7 @@ async def run_comment_deep_analysis(
             detail=f"Task {request.task_id} not found",
         )
 
-    has_access = await monitor_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
     # 获取要分析的原文ID列表（因为评论分析是基于原文的）
     post_ids = request.post_ids or []
@@ -540,14 +512,7 @@ async def get_task_post_analyses(
         )
 
     # 验证用户权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
     # 构建查询
     stmt = (
@@ -678,14 +643,7 @@ async def preview_deep_analysis_candidates(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
         )
-    has_access = await monitor_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
     # 查询所有原文与分析结果
     stmt = (
@@ -795,14 +753,7 @@ async def delete_task_analyses(
         )
 
     # 验证用户权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
     # 查询要删除的记录数
     count_stmt = select(func.count()).where(PostAnalysis.task_id == task_id)
@@ -907,14 +858,7 @@ async def run_task_aggregation(
         )
 
     # 验证用户权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
     # 检查是否有已分析的原文
     stmt = (
@@ -997,14 +941,7 @@ async def get_task_aggregation(
         )
 
     # 验证用户权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, task.monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this task",
-        )
+    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
     # 从 DataTask 获取 analysis_result
     stmt = select(DataTask).where(DataTask.id == task_id)

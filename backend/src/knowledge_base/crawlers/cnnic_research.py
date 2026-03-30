@@ -18,10 +18,8 @@ logger = logging.getLogger(__name__)
 _LIST_URL = "https://www.cnnic.net.cn/6/86/88/index.html"
 _BASE_URL = "https://www.cnnic.net.cn"
 
-# 文章 URL 模式：/n4/{year}/{date}/c88-{id}.html
-_ARTICLE_PATTERN = re.compile(
-    r"https?://www\.cnnic\.net\.cn(/n4/\d{4}/\d{4}/c88-\d+\.html)"
-)
+# 文章路径模式：/n4/{year}/{date}/c88-{id}.html（HTML 中为相对路径）
+_ARTICLE_PATTERN = re.compile(r'(/n4/\d{4}/\d{4}/c88-\d+\.html)')
 
 # 文章页内 PDF 链接：/NMediaFile/...
 _PDF_PATTERN = re.compile(r'href="(/NMediaFile/[^"]+\.pdf)"', re.IGNORECASE)

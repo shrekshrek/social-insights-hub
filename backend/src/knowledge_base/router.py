@@ -242,7 +242,7 @@ async def search_documents(
     )
 
 
-_CRAWLER_SOURCE_TYPES = {"cnnic", "nbs", "govsite"}
+_CRAWLER_SOURCE_TYPES = {"cnnic", "cnnic_research", "nbs", "govsite"}
 
 
 @router.get(

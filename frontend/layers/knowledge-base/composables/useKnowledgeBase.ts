@@ -73,6 +73,7 @@ export function useKnowledgeBase() {
   function sourceTypeLabel(sourceType: string): string {
     const labels: Record<string, string> = {
       'cnnic': 'CNNIC 统计报告',
+      'cnnic_research': 'CNNIC 专题研究',
       'nbs': 'NBS 月报',
       'govsite': 'gov.cn 政策',
       'upload': '用户上传',

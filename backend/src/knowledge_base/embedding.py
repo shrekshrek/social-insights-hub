@@ -28,20 +28,25 @@ class EmbeddingService:
         )
         self._model = settings.EMBEDDING_MODEL
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        """将文本列表转为向量嵌入列表
+    async def embed(self, texts: list[str], batch_size: int = 32) -> list[list[float]]:
+        """将文本列表转为向量嵌入列表，自动分批以满足 API 限制
 
         Args:
             texts: 待嵌入的文本列表
+            batch_size: 每批大小，默认 32（SiliconFlow 上限）
 
         Returns:
             1024 维浮点向量列表（余弦归一化由 API 保证，normalize_embeddings=True 等效）
         """
-        response = await self._client.embeddings.create(
-            input=texts,
-            model=self._model,
-        )
-        return [item.embedding for item in response.data]
+        results: list[list[float]] = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            response = await self._client.embeddings.create(
+                input=batch,
+                model=self._model,
+            )
+            results.extend(item.embedding for item in response.data)
+        return results
 
 
 @lru_cache(maxsize=1)

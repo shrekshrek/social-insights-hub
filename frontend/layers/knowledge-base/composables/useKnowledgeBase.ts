@@ -93,12 +93,12 @@ export function useKnowledgeBase() {
   }
 
   // 状态颜色
-  function statusColor(status: string): string {
-    const colors: Record<string, string> = {
+  function statusColor(status: string): 'neutral' | 'info' | 'success' | 'error' {
+    const colors: Record<string, 'neutral' | 'info' | 'success' | 'error'> = {
       'pending': 'neutral',
-      'processing': 'blue',
-      'ready': 'green',
-      'failed': 'red',
+      'processing': 'info',
+      'ready': 'success',
+      'failed': 'error',
     }
     return colors[status] ?? 'neutral'
   }

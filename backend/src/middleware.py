@@ -74,10 +74,12 @@ class GZipRequestMiddleware:
         try:
             decompressed_body = gzip.decompress(compressed_body)
             logger.debug(
-                f"GZip decompressed: {len(compressed_body)} -> {len(decompressed_body)} bytes"
+                "GZip decompressed: %s -> %s bytes",
+                len(compressed_body),
+                len(decompressed_body),
             )
         except gzip.BadGzipFile as e:
-            logger.warning(f"[GZip Middleware] Invalid gzip data: {e}")
+            logger.warning("[GZip Middleware] Invalid gzip data: %s", e)
             response = JSONResponse(
                 status_code=400,
                 content={"detail": "Invalid gzip compressed data"},
@@ -85,7 +87,7 @@ class GZipRequestMiddleware:
             await response(scope, receive, send)
             return
         except Exception as e:
-            logger.error(f"[GZip Middleware] Decompression error: {e}")
+            logger.error("[GZip Middleware] Decompression error: %s", e)
             response = JSONResponse(
                 status_code=400,
                 content={"detail": f"Failed to decompress request body: {str(e)}"},
@@ -148,11 +150,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         # 记录请求日志
         if self.log_requests:
             logger.info(
-                f"Request started - ID: {request_id} | "
-                f"Method: {request.method} | "
-                f"URL: {request.url} | "
-                f"Client IP: {client_ip} | "
-                f"User Agent: {user_agent}"
+                "Request started - ID: %s | Method: %s | URL: %s | Client IP: %s | User Agent: %s",
+                request_id,
+                request.method,
+                request.url,
+                client_ip,
+                user_agent,
             )
 
         # 处理请求
@@ -165,9 +168,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             # 记录响应日志
             if self.log_responses:
                 logger.info(
-                    f"Request completed - ID: {request_id} | "
-                    f"Status: {response.status_code} | "
-                    f"Process Time: {process_time:.3f}s"
+                    "Request completed - ID: %s | Status: %s | Process Time: %.3fs",
+                    request_id,
+                    response.status_code,
+                    process_time,
                 )
 
             # 添加响应头
@@ -182,9 +186,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
             # 记录错误日志
             logger.error(
-                f"Request failed - ID: {request_id} | "
-                f"Error: {str(e)} | "
-                f"Process Time: {process_time:.3f}s",
+                "Request failed - ID: %s | Error: %s | Process Time: %.3fs",
+                request_id,
+                str(e),
+                process_time,
                 exc_info=True,
             )
 
@@ -202,7 +207,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
         except BaseAPIException as e:
             # 处理自定义API异常
-            logger.warning(f"API Exception: {e.error_code} - {e.message}")
+            logger.warning("API Exception: %s - %s", e.error_code, e.message)
 
             error_detail = ErrorDetail(code=e.error_code, message=e.message)
 
@@ -216,7 +221,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
         except HTTPException as e:
             # 处理FastAPI HTTP异常
-            logger.warning(f"HTTP Exception: {e.status_code} - {e.detail}")
+            logger.warning("HTTP Exception: %s - %s", e.status_code, e.detail)
 
             # 如果detail已经是我们的错误格式，直接返回
             if isinstance(e.detail, dict) and "error" in e.detail:
@@ -238,7 +243,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
         except ValidationError as e:
             # 处理Pydantic验证错误
-            logger.warning(f"Validation Error: {e}")
+            logger.warning("Validation Error: %s", e)
 
             # 提取第一个验证错误
             first_error = e.errors()[0]
@@ -255,7 +260,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
         except SQLAlchemyError as e:
             # 处理数据库错误
-            logger.error(f"Database Error: {e}", exc_info=True)
+            logger.error("Database Error: %s", e, exc_info=True)
 
             error_detail = ErrorDetail(
                 code="DATABASE_ERROR", message="Database operation failed"
@@ -270,7 +275,7 @@ class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
 
         except Exception as e:
             # 处理未知异常
-            logger.error(f"Unexpected Error: {e}", exc_info=True)
+            logger.error("Unexpected Error: %s", e, exc_info=True)
 
             error_detail = ErrorDetail(
                 code="INTERNAL_SERVER_ERROR", message="An unexpected error occurred"

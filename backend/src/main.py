@@ -35,35 +35,47 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    logger.info("🚀 启动应用...")
+    logger.info("Application starting...")
 
     # 启动时同步权限
     try:
         async with AsyncSessionLocal() as db:
-            logger.info("开始权限同步...")
+            logger.info("Syncing RBAC permissions...")
             await init_rbac_data(db)
-            logger.info("✅ 权限同步成功")
+            logger.info("RBAC permissions synced")
     except Exception as e:
-        logger.error(f"❌ 权限同步失败: {e}", exc_info=True)
+        logger.error("RBAC sync failed: %s", e, exc_info=True)
         # 生产环境失败即阻止启动；开发环境容错继续
         if (settings.ENVIRONMENT or "").lower() == "production":
-            logger.critical("RBAC 权限同步在生产环境失败，阻止应用启动")
+            logger.critical("RBAC sync failed in production, aborting startup")
             raise
-        logger.warning("⚠️ 应用将以现有权限配置启动（开发环境容错）")
+        logger.warning("RBAC sync failed, starting with existing permissions (dev mode)")
 
     # 初始化平台数据
     try:
         async with AsyncSessionLocal() as db:
-            logger.info("开始初始化平台数据...")
+            logger.info("Initializing platform data...")
             await init_platforms(db)
-            logger.info("✅ 平台数据初始化成功")
+            logger.info("Platform data initialized")
     except Exception as e:
-        logger.error(f"❌ 平台数据初始化失败: {e}", exc_info=True)
-        logger.warning("⚠️ 应用将以现有平台配置启动")
+        logger.error("Platform init failed: %s", e, exc_info=True)
+        logger.warning("Starting with existing platform config")
+
+    # 启动 APScheduler（轻量定时任务）
+    scheduler = None
+    try:
+        from src.scheduler import create_scheduler
+        scheduler = create_scheduler()
+        scheduler.start()
+        logger.info("APScheduler started")
+    except Exception as e:
+        logger.error("APScheduler failed to start: %s", e, exc_info=True)
 
     yield  # 应用运行期间
 
-    logger.info("📴 应用关闭")
+    if scheduler is not None:
+        scheduler.shutdown(wait=False)
+    logger.info("Application shutdown")
 
 
 app_display_name = settings.APP_NAME or settings.PROJECT_NAME

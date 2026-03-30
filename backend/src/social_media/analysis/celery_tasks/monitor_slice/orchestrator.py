@@ -84,7 +84,7 @@ def run_monitor_slice_pipeline_sync(
             )
         except Exception:
             logger.exception(
-                f"[项目切片] 流水线异常中止: slice_id={slice_id}"
+                "[项目切片] 流水线异常中止: slice_id=%s", slice_id
             )
             # 标记当前阶段为 failed，避免永远卡在 processing
             if stage2.get("status") == "processing":
@@ -99,7 +99,7 @@ def run_monitor_slice_pipeline_sync(
                 commit_result()
             except Exception:
                 logger.exception(
-                    f"[项目切片] 异常恢复写入失败: slice_id={slice_id}"
+                    "[项目切片] 异常恢复写入失败: slice_id=%s", slice_id
                 )
             return {
                 "status": "failed",
@@ -210,16 +210,16 @@ def _run_pipeline_body(
             top_topics=[t for t in top_topics if isinstance(t, dict)],
         )
 
-    logger.info(f"[项目切片] 并行启动实体归一和观点归一: slice_id={slice_id}")
+    logger.info("[项目切片] 并行启动实体归一和观点归一: slice_id=%s", slice_id)
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_entity = executor.submit(run_entity_normalization)
         future_opinion = executor.submit(run_opinion_normalization)
 
     # .result() 会重新抛出线程内的异常，由外层 try/except 统一处理
     ent_norm_result = future_entity.result()
-    logger.info(f"[项目切片] 实体归一完成: slice_id={slice_id}")
+    logger.info("[项目切片] 实体归一完成: slice_id=%s", slice_id)
     op_norm_result = future_opinion.result()
-    logger.info(f"[项目切片] 观点归一完成: slice_id={slice_id}")
+    logger.info("[项目切片] 观点归一完成: slice_id=%s", slice_id)
 
     # 3. 处理实体归一结果
     ent_input_count = ent_norm_result.get("input_count") or len(

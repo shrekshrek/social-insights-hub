@@ -27,7 +27,7 @@ class CrawlerRunResponse(CustomBaseModel):
     """手动触发爬取响应"""
 
     source_type: str
-    task_id: str
+    task_id: str | None = None
     message: str
 
 

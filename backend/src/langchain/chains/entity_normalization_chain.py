@@ -246,7 +246,7 @@ async def cluster_entities_with_review(
     formatted_entities = format_entities_for_clustering(entities)
 
     # 第一阶段：初步归一化
-    logger.info(f"实体归一化第一阶段：处理 {len(entities)} 个实体")
+    logger.info("实体归一化第一阶段：处理 %s 个实体", len(entities))
     normalization_chain = create_entity_clustering_chain()
     first_response = await normalization_chain.ainvoke(
         {"entities": formatted_entities, "task_keywords": keywords_str}
@@ -275,7 +275,7 @@ async def cluster_entities_with_review(
     )
 
     final_result = parse_clustering_response(review_response.content)
-    logger.info(f"实体归一化完成：{len(final_result.get('entities', []))} 个实体")
+    logger.info("实体归一化完成：%s 个实体", len(final_result.get("entities", [])))
 
     return final_result
 

@@ -1,22 +1,20 @@
-"""策略后台任务（Celery/Beat 调度）
+"""策略定时任务（由 APScheduler 在 FastAPI asyncio 事件循环中调度）
 
 主动检测策略状态，替代原有「前端轮询才能触发」的设计缺陷：
-- auto_probe_review_task:    探测任务全部分析完成 → 自动触发 LLM 审查
-- auto_collection_check_task: 全量采集全部完成   → 自动触发建切片 + 覆盖度验证
+- check_probing_strategies:    探测任务全部分析完成 → 自动触发 LLM 审查
+- check_collecting_strategies: 全量采集全部完成   → 自动触发建切片 + 覆盖度验证
 """
 
-import asyncio
 import logging
 
 from sqlalchemy import and_, select
 
-from src.celery_app import celery_app
 from src.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
 
-async def _check_probing_strategies() -> int:
+async def check_probing_strategies() -> int:
     """找出所有探测完成但尚未触发审查的策略，触发 LLM 审查。
 
     1. 查询 status=probing 且 probe_review_result=None 的策略
@@ -61,12 +59,12 @@ async def _check_probing_strategies() -> int:
         if strategy_id not in _probe_review_in_progress:
             _probe_review_in_progress.add(strategy_id)
             await _run_probe_review_bg_task(strategy_id, analyzed_summaries)
-            logger.info("Strategy %d: probe review triggered by Beat task", strategy_id)
+            logger.info("Strategy %d: probe review triggered by scheduler", strategy_id)
 
     return len(to_review)
 
 
-async def _check_collecting_strategies() -> int:
+async def check_collecting_strategies() -> int:
     """找出全量采集完成但尚未建切片的策略，触发自动建切片 + 覆盖度验证。
 
     1. 查询 status=collecting 且无 StrategySlice 的策略
@@ -124,7 +122,7 @@ async def _check_collecting_strategies() -> int:
                 )
                 triggered += 1
                 logger.info(
-                    "Strategy %d: slices auto-created by Beat task", strategy.id
+                    "Strategy %d: slices auto-created by scheduler", strategy.id
                 )
             except Exception as e:
                 logger.error(
@@ -135,21 +133,3 @@ async def _check_collecting_strategies() -> int:
                 )
 
     return triggered
-
-
-@celery_app.task(name="strategies.auto_probe_review", bind=True, max_retries=0)
-def auto_probe_review_task(self) -> dict:
-    """Beat 触发：检测探测完成的策略并自动触发 LLM 审查。"""
-    triggered = asyncio.run(_check_probing_strategies())
-    if triggered:
-        logger.info("Beat: triggered probe review for %d strategy(s)", triggered)
-    return {"triggered": triggered}
-
-
-@celery_app.task(name="strategies.auto_collection_check", bind=True, max_retries=0)
-def auto_collection_check_task(self) -> dict:
-    """Beat 触发：检测全量采集完成的策略并自动建切片。"""
-    triggered = asyncio.run(_check_collecting_strategies())
-    if triggered:
-        logger.info("Beat: auto-created slices for %d strategy(s)", triggered)
-    return {"triggered": triggered}

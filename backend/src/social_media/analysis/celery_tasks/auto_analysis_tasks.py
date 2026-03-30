@@ -72,22 +72,22 @@ def _wait_for_analysis_job(job_id: int, timeout: int = TASK_WAIT_TIMEOUT) -> boo
         with _get_db_session() as db:
             job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
             if not job:
-                logger.error(f"Analysis job {job_id} not found")
+                logger.error("Analysis job %s not found", job_id)
                 return False
 
             if job.status == "completed":
-                logger.info(f"Analysis job {job_id} completed successfully")
+                logger.info("Analysis job %s completed successfully", job_id)
                 return True
             elif job.status == "failed":
-                logger.error(f"Analysis job {job_id} failed: {job.error_message}")
+                logger.error("Analysis job %s failed: %s", job_id, job.error_message)
                 return False
 
             # 仍在处理中，继续等待
-            logger.debug(f"Analysis job {job_id} status: {job.status}, waiting...")
+            logger.debug("Analysis job %s status: %s, waiting...", job_id, job.status)
 
         time.sleep(POLL_INTERVAL)
 
-    logger.error(f"Analysis job {job_id} timed out after {timeout} seconds")
+    logger.error("Analysis job %s timed out after %s seconds", job_id, timeout)
     return False
 
 
@@ -105,7 +105,7 @@ def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | N
         # 获取任务信息
         task = db.query(DataTask).filter(DataTask.id == task_id).first()
         if not task:
-            logger.error(f"Task {task_id} not found")
+            logger.error("Task %s not found", task_id)
             return None
 
         # 获取任务下所有原文ID（排除已有初筛结果的），与手动初筛逻辑保持一致
@@ -122,7 +122,7 @@ def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | N
         ]
 
         if not post_ids:
-            logger.info(f"Task {task_id}: No posts to screen (already screened)")
+            logger.info("Task %s: No posts to screen (already screened)", task_id)
             return None
 
         # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
@@ -151,7 +151,10 @@ def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | N
         db.commit()
 
         logger.info(
-            f"Task {task_id}: Started screening job {job_id} for {len(post_ids)} posts"
+            "Task %s: Started screening job %s for %s posts",
+            task_id,
+            job_id,
+            len(post_ids),
         )
         return job_id
 
@@ -191,7 +194,7 @@ def _run_deep_posts(
         ]
 
         if not post_ids:
-            logger.info(f"Task {task_id}: No posts for deep analysis")
+            logger.info("Task %s: No posts for deep analysis", task_id)
             return None
 
         # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
@@ -220,7 +223,10 @@ def _run_deep_posts(
         db.commit()
 
         logger.info(
-            f"Task {task_id}: Started deep posts job {job_id} for {len(post_ids)} posts"
+            "Task %s: Started deep posts job %s for %s posts",
+            task_id,
+            job_id,
+            len(post_ids),
         )
         return job_id
 
@@ -261,7 +267,7 @@ def _run_deep_comments(
         ]
 
         if not posts_with_comments:
-            logger.info(f"Task {task_id}: No posts with comments for deep analysis")
+            logger.info("Task %s: No posts with comments for deep analysis", task_id)
             return None
 
         # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
@@ -290,7 +296,10 @@ def _run_deep_comments(
         db.commit()
 
         logger.info(
-            f"Task {task_id}: Started deep comments job {job_id} for {len(posts_with_comments)} posts"
+            "Task %s: Started deep comments job %s for %s posts",
+            task_id,
+            job_id,
+            len(posts_with_comments),
         )
         return job_id
 
@@ -323,7 +332,7 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         )
 
         if analyzed_count == 0:
-            logger.info(f"Task {task_id}: No analyzed posts for aggregation")
+            logger.info("Task %s: No analyzed posts for aggregation", task_id)
             return None
 
         # 创建实体归一化任务（和手动聚合一致）
@@ -362,7 +371,10 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         db.commit()
 
         logger.info(
-            f"Task {task_id}: Started aggregation (entity_job={entity_job.id}, opinion_job={opinion_job.id})"
+            "Task %s: Started aggregation (entity_job=%s, opinion_job=%s)",
+            task_id,
+            entity_job.id,
+            opinion_job.id,
         )
         return entity_job.id
 
@@ -385,7 +397,7 @@ def run_auto_analysis(
 
     按顺序执行：初筛 → 原文深度 → 评论深度 → 聚合报告
     """
-    logger.info(f"Task {task_id}: Starting auto analysis pipeline")
+    logger.info("Task %s: Starting auto analysis pipeline", task_id)
 
     # 幂等锁（执行侧兜底）：即使触发侧并发，也保证同一 task 只跑一个自动分析链
     owner = getattr(self.request, "id", None) or f"auto-{int(time.time())}"
@@ -408,21 +420,21 @@ def run_auto_analysis(
 
     try:
         # 1. 原文初筛
-        logger.info(f"Task {task_id}: Step 1/4 - Running screening...")
+        logger.info("Task %s: Step 1/4 - Running screening...", task_id)
         screening_job_id = _run_screening(task_id, user_id, monitor_keywords)
         results["screening"] = {"job_id": screening_job_id}
 
         if screening_job_id:
             if not _wait_for_analysis_job(screening_job_id):
                 results["status"] = "failed_at_screening"
-                logger.error(f"Task {task_id}: Screening failed, stopping pipeline")
+                logger.error("Task %s: Screening failed, stopping pipeline", task_id)
                 return results
             results["screening"]["status"] = "completed"
         else:
             results["screening"] = {"status": "skipped", "reason": "no_posts"}
 
         # 2. 原文深度分析
-        logger.info(f"Task {task_id}: Step 2/4 - Running deep posts analysis...")
+        logger.info("Task %s: Step 2/4 - Running deep posts analysis...", task_id)
         deep_posts_job_id = _run_deep_posts(
             task_id, user_id, spam_max, value_min, relevance_min
         )
@@ -432,7 +444,7 @@ def run_auto_analysis(
             if not _wait_for_analysis_job(deep_posts_job_id):
                 results["status"] = "failed_at_deep_posts"
                 logger.error(
-                    f"Task {task_id}: Deep posts analysis failed, stopping pipeline"
+                    "Task %s: Deep posts analysis failed, stopping pipeline", task_id
                 )
                 return results
             results["deep_posts"]["status"] = "completed"
@@ -443,7 +455,7 @@ def run_auto_analysis(
             }
 
         # 3. 评论深度分析
-        logger.info(f"Task {task_id}: Step 3/4 - Running deep comments analysis...")
+        logger.info("Task %s: Step 3/4 - Running deep comments analysis...", task_id)
         deep_comments_job_id = _run_deep_comments(
             task_id, user_id, spam_max, value_min, relevance_min
         )
@@ -453,7 +465,7 @@ def run_auto_analysis(
             if not _wait_for_analysis_job(deep_comments_job_id):
                 results["status"] = "failed_at_deep_comments"
                 logger.error(
-                    f"Task {task_id}: Deep comments analysis failed, stopping pipeline"
+                    "Task %s: Deep comments analysis failed, stopping pipeline", task_id
                 )
                 return results
             results["deep_comments"]["status"] = "completed"
@@ -464,25 +476,25 @@ def run_auto_analysis(
             }
 
         # 4. 聚合报告生成
-        logger.info(f"Task {task_id}: Step 4/4 - Running aggregation...")
+        logger.info("Task %s: Step 4/4 - Running aggregation...", task_id)
         aggregation_job_id = _run_aggregation(task_id, user_id)
         results["aggregation"] = {"job_id": aggregation_job_id}
 
         if aggregation_job_id:
             if not _wait_for_analysis_job(aggregation_job_id):
                 results["status"] = "failed_at_aggregation"
-                logger.error(f"Task {task_id}: Aggregation failed")
+                logger.error("Task %s: Aggregation failed", task_id)
                 return results
             results["aggregation"]["status"] = "completed"
         else:
             results["aggregation"] = {"status": "skipped", "reason": "unknown"}
 
         results["status"] = "completed"
-        logger.info(f"Task {task_id}: Auto analysis pipeline completed successfully")
+        logger.info("Task %s: Auto analysis pipeline completed successfully", task_id)
 
     except Exception as e:
         logger.exception(
-            f"Task {task_id}: Auto analysis pipeline failed with error: {e}"
+            "Task %s: Auto analysis pipeline failed with error: %s", task_id, e
         )
         results["status"] = "error"
         results["error"] = str(e)

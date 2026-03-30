@@ -44,27 +44,27 @@ class AnalysisTaskBase(Task):
         super().before_start(task_id, args, kwargs)
         self._start_time = time.time()
         self._stats = TaskAnalysisStats()
-        logger.info(f"任务 {task_id} 开始执行")
+        logger.info("任务 %s 开始执行", task_id)
 
     def on_success(self, retval: Any, task_id: str, args: tuple, kwargs: dict) -> None:
         """任务成功完成的钩子"""
         super().on_success(retval, task_id, args, kwargs)
         processing_time = int(time.time() - self._start_time) if self._start_time else 0
-        logger.info(f"任务 {task_id} 成功完成，耗时 {processing_time}秒")
+        logger.info("任务 %s 成功完成，耗时 %s秒", task_id, processing_time)
 
     def on_failure(
         self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo
     ) -> None:
         """任务失败的钩子"""
         super().on_failure(exc, task_id, args, kwargs, einfo)
-        logger.error(f"任务 {task_id} 失败: {str(exc)}", exc_info=True)
+        logger.error("任务 %s 失败: %s", task_id, str(exc), exc_info=True)
 
     def on_retry(
         self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo
     ) -> None:
         """任务重试的钩子"""
         super().on_retry(exc, task_id, args, kwargs, einfo)
-        logger.warning(f"任务 {task_id} 重试: {str(exc)}")
+        logger.warning("任务 %s 重试: %s", task_id, str(exc))
 
     def get_stats(self) -> TaskAnalysisStats:
         """获取当前任务的统计信息"""
@@ -137,10 +137,10 @@ class AnalysisTaskBase(Task):
                 await db.execute(stmt)
                 await db.commit()
 
-                logger.debug(f"更新AnalysisJob#{result_id}: status={status}")
+                logger.debug("更新AnalysisJob#%s: status=%s", result_id, status)
 
             except Exception as e:
-                logger.error(f"更新AnalysisJob失败: {e}", exc_info=True)
+                logger.error("更新AnalysisJob失败: %s", e, exc_info=True)
                 await db.rollback()
 
     async def update_monitor_result(
@@ -189,10 +189,10 @@ class AnalysisTaskBase(Task):
                 await db.execute(stmt)
                 await db.commit()
 
-                logger.debug(f"更新AnalysisJob#{result_id}: status={status}")
+                logger.debug("更新AnalysisJob#%s: status=%s", result_id, status)
 
             except Exception as e:
-                logger.error(f"更新AnalysisJob失败: {e}", exc_info=True)
+                logger.error("更新AnalysisJob失败: %s", e, exc_info=True)
                 await db.rollback()
 
 

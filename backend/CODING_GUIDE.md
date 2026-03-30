@@ -46,7 +46,8 @@ backend/
 │   │   └── init_data.py  # 基础权限和角色定义
 │   ├── users/            # 【领域模块】用户管理
 │   │   └── ...
-│   ├── celery_app.py     # Celery 应用实例
+│   ├── celery_app.py     # Celery 应用实例（仅 AI 分析流水线 + 文档处理）
+│   ├── scheduler.py      # APScheduler 实例（所有轻量定时任务统一注册）
 │   ├── database.py       # 数据库连接与配置
 │   ├── redis_client.py   # Redis 连接配置
 │   ├── config.py         # 全局配置
@@ -54,7 +55,7 @@ backend/
 │   ├── middleware.py     # 全局中间件（异常处理、日志等）
 │   ├── pagination.py     # 分页工具
 │   ├── utils.py          # 通用工具函数（CPU密集型任务处理、异步包装器等）
-│   └── main.py           # FastAPI 应用入口
+│   └── main.py           # FastAPI 应用入口（lifespan 启停 APScheduler）
 ├── tests/                # 测试目录
 │   ├── conftest.py       # 测试配置和fixtures
 │   └── test_*.py         # 具体测试文件
@@ -237,10 +238,153 @@ async def get_user(user_id: int):
     - **依赖覆盖**: FastAPI 的 `app.dependency_overrides` 机制被用来在测试时注入隔离的数据库会话，保证测试环境的纯净性
 - **运行测试**: 在 `backend` 目录下，使用 `uv run pytest` 命令来执行完整的测试套件
 
-#### 异步任务队列 (Celery)
-- **标准选择**: 使用 `Celery` 作为处理所有后台和异步任务的标准框架。
-- **消息代理**: 生产和开发环境均使用 `Redis` 作为消息代理 (Broker) 和结果后端 (Result Backend)。
-- **任务定义**: Celery 任务应定义在对应领域模块的 `tasks.py` 文件中，以保持代码的组织性。当模块不需要后台任务时，可以不创建此文件。
+#### 异步任务系统（三层架构）
+
+本项目采用三种互补的异步机制，**各司其职，不可混用**：
+
+| 机制 | 运行上下文 | 适用场景 | 触发方式 |
+|------|-----------|---------|---------|
+| **Celery + gevent** | 独立 Worker 进程（gevent pool） | AI 分析流水线、文档处理等长时任务（需进程隔离） | `.delay()` / `.apply_async()` |
+| **APScheduler** | FastAPI asyncio 事件循环 | 轻量定时检测任务（策略状态轮询、agent 超时回收、KB 爬虫） | `scheduler.add_job(...)` in `scheduler.py` |
+| **FastAPI BackgroundTasks** | FastAPI asyncio 事件循环 | API 端点触发的一次性异步后续操作（无需跟踪结果） | `background_tasks.add_task(fn, *args)` |
+
+---
+
+##### ① Celery 任务（AI 分析流水线 + 文档处理）
+
+**适用条件**：
+- 执行时间超过 30 秒，或需要独立进程隔离
+- 需要结果持久化、任务重试、优先级队列
+- 是 AI LLM 调用链的一部分
+
+**定义规范**（`src/<module>/tasks.py`）：
+
+```python
+from src.celery_app import celery_app
+
+@celery_app.task(name="module.task_name", bind=True, max_retries=3)
+def my_celery_task(self, arg: int) -> None:
+    """任务说明。"""
+    from src.database import AsyncSessionLocal, async_engine
+
+    async def _run() -> None:
+        try:
+            async with AsyncSessionLocal() as db:
+                await do_work(db, arg)
+        finally:
+            # 必须：避免 asyncpg pool 跨事件循环复用
+            await async_engine.dispose()
+
+    _run_async(_run())
+
+
+def _run_async(coro):
+    """在 gevent threadpool 真实 OS 线程中运行协程。"""
+    from gevent import get_hub
+    return get_hub().threadpool.apply(asyncio.run, (coro,))
+```
+
+**注意事项**：
+- gevent worker greenlet 没有 asyncio 事件循环，**必须**通过 `get_hub().threadpool.apply(asyncio.run, coro)` 桥接
+- 每个 `_run()` 协程末尾**必须** `await async_engine.dispose()`，否则下次调用时 asyncpg pool 会绑定已关闭的事件循环
+- 在 `celery_app.py` 的 `include` 列表中注册模块，**不要**添加到 `beat_schedule`
+
+**触发方式**：
+```python
+# 路由层派发
+from .tasks import my_celery_task
+my_celery_task.delay(doc_id)
+```
+
+---
+
+##### ② APScheduler 任务（轻量定时任务）
+
+**适用条件**：
+- 需要按固定间隔或 cron 表达式周期执行
+- 任务本身是 `async def`，可以直接 `await`，无需进程隔离
+- 典型场景：状态轮询、超时回收、定时爬取
+
+**定义规范**：定义为普通 `async def`，放在所属模块的 `tasks.py` 或 `service.py` 中，**不加 `@celery_app.task` 装饰器**：
+
+```python
+# src/<module>/tasks.py
+
+async def my_periodic_job() -> int:
+    """说明。返回处理数量。"""
+    async with AsyncSessionLocal() as db:
+        # 正常的 async SQLAlchemy 操作
+        ...
+    return count
+```
+
+**注册规范**：统一在 `src/scheduler.py` 的 `create_scheduler()` 中注册，**不分散在各模块**：
+
+```python
+# src/scheduler.py
+from src.mymodule.tasks import my_periodic_job
+
+scheduler.add_job(
+    my_periodic_job,
+    "interval",
+    minutes=5,
+    id="my_periodic_job",
+    max_instances=1,         # 防止重叠执行
+    misfire_grace_time=120,  # 错过时窗内可补执行
+)
+```
+
+**部署约束**：`AsyncIOScheduler` 绑定单一 asyncio 事件循环，不支持多进程/多副本部署（否则每个进程都会独立运行所有 job）。当前 docker-compose 使用单 uvicorn worker，此约束不影响现有部署。若将来需要横向扩容，迁移至 APScheduler `SQLAlchemyJobStore`（带数据库分布式锁）。
+
+---
+
+##### ③ FastAPI BackgroundTasks（API 触发的一次性任务）
+
+**适用条件**：
+- 由 API 端点触发，无需跟踪执行结果
+- 任务本身是 `async def`，执行时间秒级到分钟级
+- 典型场景：手动触发爬取、发送通知邮件
+
+**定义规范**：与 APScheduler 共享同一个 `async def` 函数（即 `tasks.py` 中无装饰器的 async 函数）。
+
+**路由层使用**：
+
+```python
+from fastapi import BackgroundTasks
+from .tasks import my_async_fn
+
+@router.post("/trigger", status_code=202)
+async def trigger(
+    background_tasks: BackgroundTasks,   # FastAPI 自动注入，无需 Depends
+    current_user: User = Depends(get_current_user),
+):
+    background_tasks.add_task(my_async_fn, arg1, arg2)
+    return {"message": "已派发"}
+```
+
+---
+
+##### 三层架构决策树
+
+```
+需要执行后台操作？
+│
+├─ 需要按计划/定时周期运行？
+│   └─ → APScheduler（scheduler.py）
+│
+├─ 由 API 端点触发，只需 fire-and-forget？
+│   └─ → FastAPI BackgroundTasks
+│
+└─ 其余情况（AI 分析、文档处理、需要重试/结果跟踪）？
+    └─ → Celery task
+```
+
+##### 禁止事项
+
+- ❌ 不在 `celery_app.py` 的 `beat_schedule` 中添加任何条目（已删除，由 APScheduler 统一管理）
+- ❌ 不在 APScheduler / BackgroundTasks 的 `async def` 函数中调用 `await async_engine.dispose()`（asyncio 原生环境无需此操作）
+- ❌ 不在 Celery task 的 `_run()` 协程中省略 `await async_engine.dispose()`（gevent 环境必须）
+- ❌ 不把 APScheduler 任务分散注册到各模��，统一在 `scheduler.py` 管理
 
 #### LLM 应用开发 (LangChain)
 - **核心框架**: 使用 `LangChain` 作为构建语言模型应用和工作流的核心框架。

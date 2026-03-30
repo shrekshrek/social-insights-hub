@@ -131,7 +131,9 @@ async def accept_task(
     if result.rowcount and result.rowcount > 0:
         await db.commit()
         logger.info(
-            f"Task {task_id} accepted by client: {request.client_id or 'unknown'}"
+            "Task %s accepted by client: %s",
+            task_id,
+            request.client_id or "unknown",
         )
         return
 
@@ -207,8 +209,10 @@ async def update_progress(
 
     await db.commit()
     logger.info(
-        f"Task {task_id} progress updated: status={request.status}, "
-        f"crawled_count={request.crawled_count}"
+        "Task %s progress updated: status=%s, crawled_count=%s",
+        task_id,
+        request.status,
+        request.crawled_count,
     )
 
 
@@ -228,7 +232,9 @@ async def _clear_analysis_results(
             await redis_client.delete(f"analysis:auto:{task_id}:running")
     except Exception as e:
         logger.warning(
-            f"Task {task_id}: Failed to clear auto analysis lock: {e}",
+            "Task %s: Failed to clear auto analysis lock: %s",
+            task_id,
+            e,
             exc_info=True,
         )
 
@@ -249,11 +255,15 @@ async def _clear_analysis_results(
             celery_app.control.revoke(celery_task_id, terminate=True)
         if celery_task_ids:
             logger.info(
-                f"Task {task_id}: Revoked {len(celery_task_ids)} analysis celery tasks"
+                "Task %s: Revoked %s analysis celery tasks",
+                task_id,
+                len(celery_task_ids),
             )
     except Exception as e:
         logger.warning(
-            f"Task {task_id}: Failed to revoke previous analysis celery tasks: {e}",
+            "Task %s: Failed to revoke previous analysis celery tasks: %s",
+            task_id,
+            e,
             exc_info=True,
         )
 
@@ -268,7 +278,7 @@ async def _clear_analysis_results(
     await db.execute(sa_delete(PostAnalysis).where(PostAnalysis.task_id == task_id))
     await db.execute(sa_delete(AnalysisJob).where(AnalysisJob.task_id == task_id))
     await db.flush()
-    logger.info(f"Task {task_id}: Analysis results cleared (posts/comments preserved)")
+    logger.info("Task %s: Analysis results cleared (posts/comments preserved)", task_id)
 
 
 async def upload_result(
@@ -322,7 +332,7 @@ async def upload_result(
 
     # 如果是已完成的任务，先清空现有数据（覆盖模式）
     if is_reupload:
-        logger.info(f"Task {task_id}: Re-uploading data, clearing existing data...")
+        logger.info("Task %s: Re-uploading data, clearing existing data...", task_id)
         await _clear_analysis_results(db, task_id, task)
         await task_crud.delete_task_posts_and_comments(db, task_id)
         # 重置任务统计与时间字段
@@ -333,7 +343,7 @@ async def upload_result(
         task.completed_at = None
         task.error_message = None
         await db.flush()
-        logger.info(f"Task {task_id}: Existing data cleared")
+        logger.info("Task %s: Existing data cleared", task_id)
 
     # 验证平台
     platform_code = task.platform.code if task.platform else None
@@ -457,8 +467,11 @@ async def upload_result(
         await db.commit()
 
         logger.info(
-            f"Task {task_id} result uploaded: "
-            f"posts={posts_count}, comments={comments_count}, status={final_status}"
+            "Task %s result uploaded: posts=%s, comments=%s, status=%s",
+            task_id,
+            posts_count,
+            comments_count,
+            final_status,
         )
 
         # 如果启用了自动分析，触发分析任务链（probe_ready 也需要分析以供审查）
@@ -489,15 +502,18 @@ async def upload_result(
                         user_id=user_id,
                         monitor_keywords=monitor_keywords,
                     )
-                    logger.info(f"Task {task_id}: Auto analysis triggered")
+                    logger.info("Task %s: Auto analysis triggered", task_id)
                 else:
                     logger.info(
-                        f"Task {task_id}: Auto analysis already triggered (lock exists), skip"
+                        "Task %s: Auto analysis already triggered (lock exists), skip",
+                        task_id,
                     )
             except Exception as e:
                 # 锁失败不应阻断主流程：降级为直接触发（由 Celery 执行侧幂等锁兜底）
                 logger.warning(
-                    f"Task {task_id}: Failed to acquire auto analysis lock, fallback trigger: {e}",
+                    "Task %s: Failed to acquire auto analysis lock, fallback trigger: %s",
+                    task_id,
+                    e,
                     exc_info=True,
                 )
                 run_auto_analysis.delay(
@@ -513,7 +529,7 @@ async def upload_result(
         await task_crud.update_task_status(db, task, "failed", error_message=str(e))
         await db.commit()
 
-        logger.error(f"Task {task_id} upload failed: {e}")
+        logger.error("Task %s upload failed: %s", task_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to import data: {str(e)}",

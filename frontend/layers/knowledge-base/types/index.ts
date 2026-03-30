@@ -55,6 +55,6 @@ export interface CrawlerStatusResponse {
 
 export interface CrawlerRunResponse {
   source_type: string
-  task_id: string
+  task_id?: string | null
   message: string
 }

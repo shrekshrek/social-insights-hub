@@ -224,6 +224,7 @@ backend/src/[module_name]/
 ├── schemas.py           # Pydantic模型
 ├── models.py            # SQLAlchemy模型（可选）
 ├── dependencies.py      # 依赖注入（可选）
+├── tasks.py             # 后台任务（可选，见下方说明）
 ├── exceptions.py        # 模块异常（可选）
 ├── utils.py            # 工具函数（可选）
 └── constants.py        # 常量定义（可选）
@@ -234,6 +235,21 @@ backend/src/[module_name]/
 - `service.py` - 包含所有业务逻辑
 - `schemas.py` - 数据验证和序列化
 - `models.py` - 数据库表定义
+- `tasks.py` - 后台任务（需要时创建，遵循三层架构规范）
+
+### 后台任务选型（tasks.py 开发规范）
+
+模块需要后台任务时，根据场景选择���确的机制（**三选一，不可混用**）：
+
+| 场景 | 机制 | 代码位置 |
+|------|------|---------|
+| AI 分析、文档处理等长时/重试任务 | Celery task（`@celery_app.task`） | 模块 `tasks.py` → 在 `celery_app.py` `include` 列表注册 |
+| 定时/周期性轻量检测任务 | APScheduler（`async def`，无装饰器） | 模块 `tasks.py` → 在 `src/scheduler.py` 统一注册 |
+| API 端点触发的一次性 fire-and-forget | FastAPI `BackgroundTasks` | 模块 `tasks.py` 定义 `async def` → `router.py` 中 `background_tasks.add_task(fn, ...)` |
+
+**决策口诀**：需要计划表→APScheduler；端点触发无需跟踪→BackgroundTasks；其余→Celery。
+
+详细规范与代码示例见 [`backend/CODING_GUIDE.md`](../backend/CODING_GUIDE.md) §4 "异步任务系统（三层架构）"。
 
 ### 前端 Layer 标准结构
 

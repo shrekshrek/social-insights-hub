@@ -176,6 +176,18 @@ class Settings(BaseSettings):
         description="Embedding model name (1024-dim output)",
     )
 
+    # Crawl4AI Configuration
+    CRAWL4AI_BASE_URL: str = Field(
+        default="http://crawl4ai:11235",
+        description="Crawl4AI REST API base URL",
+    )
+    CRAWL4AI_TOKEN: str | None = Field(
+        default=None, description="Crawl4AI API token (optional)"
+    )
+    CRAWLER_PDF_TIMEOUT: float = Field(
+        default=60.0, description="Timeout in seconds for PDF downloads"
+    )
+
     # ========== Agent API Configuration ==========
     AGENT_API_KEY: str | None = Field(
         default=None, description="API Key for crawler agent authentication"

@@ -3,7 +3,7 @@
 import base64
 import logging
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Path, Query, UploadFile, status
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,7 @@ from .schemas import (
     SearchRequest,
     SearchResponse,
 )
-from .tasks import crawl_source_task, process_document_task
+from .tasks import crawl_source, process_document_task
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +290,7 @@ async def get_crawler_status(
     summary="手动触发指定来源爬取",
 )
 async def run_crawler(
+    background_tasks: BackgroundTasks,
     source_type: str = Path(..., description="数据来源类型：cnnic / nbs / govsite"),
     current_user: User = Depends(get_current_user),
 ):
@@ -299,10 +300,9 @@ async def run_crawler(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"不支持的来源类型 '{source_type}'，支持：{', '.join(sorted(_CRAWLER_SOURCE_TYPES))}",
         )
-    task = crawl_source_task.delay(source_type)
-    logger.info("手动触发爬取 source_type=%s task_id=%s user=%d", source_type, task.id, current_user.id)
+    background_tasks.add_task(crawl_source, source_type)
+    logger.info("手动触发爬取 source_type=%s user=%d", source_type, current_user.id)
     return CrawlerRunResponse(
         source_type=source_type,
-        task_id=task.id,
         message=f"已派发 {source_type} 爬取任务",
     )

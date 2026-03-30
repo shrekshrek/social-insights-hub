@@ -113,7 +113,7 @@ def aggregate_opinions(
 
     if raw_category_count > 5:
         try:
-            logger.info(f"[观点聚合] 开始类别归一化: {raw_category_count} 个原始类别")
+            logger.info("[观点聚合] 开始类别归一化: %s 个原始类别", raw_category_count)
             cat_norm_chain = create_category_normalization_chain()
             formatted_cats = format_categories_for_normalization(
                 dict(raw_category_counts)
@@ -136,11 +136,12 @@ def aggregate_opinions(
 
             unique_categories = set(category_map.values())
             logger.info(
-                f"[观点聚合] 类别归一化完成: {raw_category_count} -> {len(unique_categories)} 个标准类别"
+                "[观点聚合] 类别归一化完成: %s -> %s 个标准类别",
+                raw_category_count, len(unique_categories),
             )
 
         except Exception as e:
-            logger.error(f"[观点聚合] 类别归一化失败: {e}", exc_info=True)
+            logger.error("[观点聚合] 类别归一化失败: %s", e, exc_info=True)
     else:
         logger.info("[观点聚合] 类别数 <= 5，跳过类别归一化")
 
@@ -468,7 +469,8 @@ def aggregate_opinions(
     token_stats["summary"]["total_duration_seconds"] = execution_duration
 
     logger.info(
-        f"[观点聚合] 最终输出: {len(aggregated_opinions)} 个话题 (共 {total_count} 个，保留 Top 60)"
+        "[观点聚合] 最终输出: %s 个话题 (共 %s 个，保留 Top 60)",
+        len(aggregated_opinions), total_count,
     )
 
     return {"opinions": aggregated_opinions, "llm_token_stats": token_stats}

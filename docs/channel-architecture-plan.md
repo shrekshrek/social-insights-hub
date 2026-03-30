@@ -154,7 +154,7 @@ P0-Week2: 前端 + 策略集成
   Brief Parser 更新渠道定义
 
 P0.5-Week3: 公开数据接入
-  国家统计局 API + Celery Beat
+  国家统计局 API + APScheduler
   CNNIC PDF 解析
   巨潮资讯按需爬取
 

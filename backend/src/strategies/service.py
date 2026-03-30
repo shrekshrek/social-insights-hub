@@ -189,7 +189,7 @@ async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dic
     """加载策略输入数据，屏蔽数据来源差异
 
     当前支持：社媒切片（AnalysisSlice.result_data）。
-    未来扩展点：知识库摘要、网络搜索摘要通��此函数统一接入。
+    未来扩展点：知识库摘要、网络搜索摘要通过此函数统一接入。
     """
     slice_ids = [s.slice_id for s in strategy.slices]
     if not slice_ids:
@@ -708,7 +708,7 @@ async def confirm_research(
         if not clean_keywords:
             continue
 
-        # 探测任务：仅采 probe_notes 条，跳过评论（加快速度），下发给��虫时直接用 max_notes_count
+        # 探测任务：仅采 probe_notes 条，跳过评论（加快速度），下发给爬虫时直接用 max_notes_count
         probe_task_params = {
             "max_notes_count": probe_notes,
             "enable_comments": 0,
@@ -1354,7 +1354,7 @@ async def refine_probe(
         )
     old_dim_map: dict[str, str] = dict(research_design.get("_task_dimension_map") or {})
 
-    # 以现有所有 task_ids 为基础逐项操作，未提及的任务自动保���
+    # 以现有所有 task_ids 为基础逐项操作，未提及的任务自动保留
     current_task_ids = list(probe_task_ids)
     new_task_dim_map = dict(old_dim_map)
     removed_task_ids: list[int] = []

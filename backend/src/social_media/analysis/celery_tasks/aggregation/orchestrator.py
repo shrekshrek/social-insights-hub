@@ -181,7 +181,7 @@ def aggregate_task_analysis(
     Returns:
         dict: 聚合结果，存入 AnalysisJob.result_data
     """
-    logger.info(f"开始聚合任务 {task_id} 的分析结果")
+    logger.info("开始聚合任务 %s 的分析结果", task_id)
 
     # 0. 获取任务信息（关键词用于主体过滤）
     task_stmt = select(DataTask).where(DataTask.id == task_id)
@@ -191,7 +191,7 @@ def aggregate_task_analysis(
     if task and task.keywords:
         # 关键词可能是逗号分隔的字符串
         task_keywords = [k.strip() for k in task.keywords.split(",") if k.strip()]
-        logger.info(f"任务 {task_id} 关键词: {task_keywords}")
+        logger.info("任务 %s 关键词: %s", task_id, task_keywords)
 
     # 1. 查询所有原文及其分析结果
     stmt = (
@@ -204,7 +204,7 @@ def aggregate_task_analysis(
     rows = result.all()
 
     if not rows:
-        logger.warning(f"任务 {task_id} 没有原文数据")
+        logger.warning("任务 %s 没有原文数据", task_id)
         return _empty_result()
 
     # 2. 准备聚合数据
@@ -345,7 +345,7 @@ def aggregate_task_analysis(
                     topic_stats = future.result()
                     logger.info("[并行聚合] 观点聚合完成")
             except Exception as e:
-                logger.error(f"[并行聚合] 聚合任务失败: {e}")
+                logger.error("[并行聚合] 聚合任务失败: %s", e)
                 raise
 
     # 更新 AnalysisJob 记录

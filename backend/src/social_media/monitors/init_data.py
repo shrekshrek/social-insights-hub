@@ -81,7 +81,7 @@ async def init_platforms(db: AsyncSession) -> None:
         existing_platform = result.scalar_one_or_none()
 
         if existing_platform:
-            logger.debug(f"平台 {platform_data['name']} 已存在，跳过")
+            logger.debug("平台 %s 已存在，跳过", platform_data["name"])
             existing_count += 1
             continue
 
@@ -89,14 +89,14 @@ async def init_platforms(db: AsyncSession) -> None:
         platform = Platform(**platform_data)
         db.add(platform)
         created_count += 1
-        logger.info(f"创建平台: {platform_data['name']} ({platform_data['code']})")
+        logger.info("创建平台: %s (%s)", platform_data["name"], platform_data["code"])
 
     if created_count > 0:
         await db.commit()
-        logger.info(f"✅ 成功创建 {created_count} 个平台")
+        logger.info("成功创建 %s 个平台", created_count)
 
     if existing_count > 0:
-        logger.info(f"跳过 {existing_count} 个已存在的平台")
+        logger.info("跳过 %s 个已存在的平台", existing_count)
 
     logger.info("社交媒体平台数据初始化完成")
 

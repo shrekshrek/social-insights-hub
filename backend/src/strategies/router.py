@@ -52,7 +52,7 @@ async def create_strategy(
 ):
     """创建新策略，关联指定切片"""
     strategy = await service.create_strategy(db, data, current_user.id)
-    return service.build_strategy_read(strategy)
+    return StrategyRead.from_orm_full(strategy)
 
 
 @router.get(
@@ -78,7 +78,7 @@ async def list_strategies(
         search=search,
     )
     return PaginatedResponse[StrategyListItem].create(
-        items=[service.build_strategy_list_item(s) for s in items],
+        items=[StrategyListItem.from_orm_full(s) for s in items],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -95,7 +95,7 @@ async def get_strategy(
     strategy: Strategy = Depends(validate_strategy_owner),
 ):
     """获取策略详情"""
-    return service.build_strategy_read(strategy)
+    return StrategyRead.from_orm_full(strategy)
 
 
 @router.put(
@@ -111,7 +111,7 @@ async def update_strategy(
 ):
     """更新策略基本信息（名称/Brief）"""
     updated = await service.update_strategy(db, strategy, data)
-    return service.build_strategy_read(updated)
+    return StrategyRead.from_orm_full(updated)
 
 
 @router.delete(
@@ -284,11 +284,12 @@ async def adjust_slices(
     current_user: User = Depends(get_current_user),
 ):
     """微调切片配置（名称/主体/竞品），自动重新验证覆盖度"""
-    return await service.adjust_slices(
+    updated = await service.adjust_slices(
         db, strategy,
         [item.model_dump() for item in data.adjustments],
         current_user.id,
     )
+    return StrategyRead.from_orm_full(updated)
 
 
 # ==================== 生成端点 ====================
@@ -306,7 +307,7 @@ async def generate_phase1(
 ):
     """AI 生成 Phase 1: Social Tension + Brand Opportunity"""
     updated = await service.generate_phase1(db, strategy)
-    return service.build_strategy_read(updated)
+    return StrategyRead.from_orm_full(updated)
 
 
 @router.post(
@@ -321,7 +322,7 @@ async def generate_phase2(
 ):
     """AI 生成 Phase 2: Brand Social Role + Social Strategy"""
     updated = await service.generate_phase2(db, strategy)
-    return service.build_strategy_read(updated)
+    return StrategyRead.from_orm_full(updated)
 
 
 @router.post(
@@ -336,7 +337,7 @@ async def generate_phase3(
 ):
     """AI 生成 Phase 3: Big Idea + Content Strategy"""
     updated = await service.generate_phase3(db, strategy)
-    return service.build_strategy_read(updated)
+    return StrategyRead.from_orm_full(updated)
 
 
 # ==================== 编辑端点 ====================
@@ -355,7 +356,7 @@ async def edit_phase1(
 ):
     """编辑 Phase 1 结果（自动清除 Phase 2/3）"""
     updated = await service.edit_phase_result(db, strategy, phase=1, result=data.result)
-    return service.build_strategy_read(updated)
+    return StrategyRead.from_orm_full(updated)
 
 
 @router.put(
@@ -371,7 +372,7 @@ async def edit_phase2(
 ):
     """编辑 Phase 2 结果（自动清除 Phase 3）"""
     updated = await service.edit_phase_result(db, strategy, phase=2, result=data.result)
-    return service.build_strategy_read(updated)
+    return StrategyRead.from_orm_full(updated)
 
 
 @router.put(
@@ -387,7 +388,7 @@ async def edit_phase3(
 ):
     """编辑 Phase 3 结果"""
     updated = await service.edit_phase_result(db, strategy, phase=3, result=data.result)
-    return service.build_strategy_read(updated)
+    return StrategyRead.from_orm_full(updated)
 
 
 # ==================== 导出端点 ====================

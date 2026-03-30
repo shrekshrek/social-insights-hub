@@ -1,9 +1,14 @@
 """社交媒体数据模块的Pydantic schemas"""
 
+from __future__ import annotations
+
 from pydantic import Field, model_validator
 from datetime import datetime
-from typing import Optional, List, Literal
+from typing import TYPE_CHECKING, Optional, List, Literal
 from src.schemas import CustomBaseModel, PaginatedResponse
+
+if TYPE_CHECKING:
+    from src.social_media.monitors.models import Monitor, Platform
 
 
 # ==================== Platform Schemas ====================
@@ -25,8 +30,6 @@ class PlatformRead(PlatformBase):
     id: int
     created_at: datetime
     updated_at: datetime
-
-    model_config = {"from_attributes": True}
 
 
 PlatformListResponse = PaginatedResponse[PlatformRead]
@@ -112,7 +115,21 @@ class MonitorRead(MonitorBase):
     # 关联数据
     participant_ids: List[int] = Field(default_factory=list, description="参与者ID列表")
 
-    model_config = {"from_attributes": True}
+    @classmethod
+    def from_orm_full(cls, monitor: "Monitor") -> "MonitorRead":
+        """从 ORM Monitor 构造，处理多对多 participants 关联。"""
+        return cls(
+            id=monitor.id,
+            name=monitor.name,
+            description=monitor.description,
+            start_date=monitor.start_date,
+            end_date=monitor.end_date,
+            owner_id=monitor.owner_id,
+            deep_analysis_settings=monitor.deep_analysis_settings,
+            created_at=monitor.created_at,
+            updated_at=monitor.updated_at,
+            participant_ids=[p.id for p in monitor.participants],
+        )
 
 
 class MonitorReadWithOwner(MonitorRead):
@@ -122,6 +139,16 @@ class MonitorReadWithOwner(MonitorRead):
     participant_usernames: List[str] = Field(
         default_factory=list, description="参与者用户名列表"
     )
+
+    @classmethod
+    def from_orm_full(cls, monitor: "Monitor") -> "MonitorReadWithOwner":  # type: ignore[override]
+        """从 ORM Monitor 构造，包含 owner/participants 用户名。"""
+        base = MonitorRead.from_orm_full(monitor)
+        return cls(
+            **base.model_dump(),
+            owner_username=monitor.owner.username if monitor.owner else "",
+            participant_usernames=[p.username for p in monitor.participants],
+        )
 
 
 MonitorListResponse = PaginatedResponse[MonitorReadWithOwner]

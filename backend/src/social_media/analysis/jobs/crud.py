@@ -13,6 +13,19 @@ from src.social_media.analysis.models import AnalysisJob
 from src.social_media.analysis.schemas import AnalysisProgressResponse
 
 
+async def _get_job_or_404(db: AsyncSession, job_id: int) -> AnalysisJob:
+    """查询 AnalysisJob，不存在则抛 404。"""
+    stmt = select(AnalysisJob).where(AnalysisJob.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Analysis job {job_id} not found",
+        )
+    return job
+
+
 async def get_analysis_jobs(
     db: AsyncSession,
     current_user_id: int,
@@ -182,13 +195,9 @@ async def get_analysis_job(
     job = row.AnalysisJob
 
     # 验证用户权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, job.monitor_id, current_user_id
+    await monitor_crud.assert_monitor_access(
+        db, job.monitor_id, current_user_id, detail="You don't have access to this analysis job"
     )
-    if not has_access:
-        raise HTTPException(
-            status_code=403, detail="You don't have access to this analysis job"
-        )
 
     return {
         "id": job.id,
@@ -224,26 +233,12 @@ async def get_analysis_progress(
     """获取分析任务进度"""
     from src.social_media.monitors import crud as monitor_crud
 
-    # 查询分析任务
-    stmt = select(AnalysisJob).where(AnalysisJob.id == job_id)
-    result = await db.execute(stmt)
-    job = result.scalar_one_or_none()
-
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analysis job {job_id} not found",
-        )
+    job = await _get_job_or_404(db, job_id)
 
     # 验证权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, job.monitor_id, current_user_id
+    await monitor_crud.assert_monitor_access(
+        db, job.monitor_id, current_user_id, detail="You don't have access to this analysis job"
     )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this analysis job",
-        )
 
     # 计算进度（限制最大100%）
     progress = 0.0
@@ -283,26 +278,12 @@ async def cancel_analysis_job(
     from celery import current_app as celery_app
     from src.social_media.monitors import crud as monitor_crud
 
-    # 查询分析任务
-    stmt = select(AnalysisJob).where(AnalysisJob.id == job_id)
-    result = await db.execute(stmt)
-    job = result.scalar_one_or_none()
-
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analysis job {job_id} not found",
-        )
+    job = await _get_job_or_404(db, job_id)
 
     # 验证权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, job.monitor_id, current_user_id
+    await monitor_crud.assert_monitor_access(
+        db, job.monitor_id, current_user_id, detail="You don't have access to this analysis job"
     )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this analysis job",
-        )
 
     if job.status not in ("pending", "processing"):
         raise HTTPException(
@@ -328,26 +309,12 @@ async def delete_analysis_job(
     """删除分析任务"""
     from src.social_media.monitors import crud as monitor_crud
 
-    # 查询分析任务
-    stmt = select(AnalysisJob).where(AnalysisJob.id == job_id)
-    result = await db.execute(stmt)
-    job = result.scalar_one_or_none()
-
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analysis job {job_id} not found",
-        )
+    job = await _get_job_or_404(db, job_id)
 
     # 验证权限
-    has_access = await monitor_crud.check_monitor_access(
-        db, job.monitor_id, current_user_id
+    await monitor_crud.assert_monitor_access(
+        db, job.monitor_id, current_user_id, detail="You don't have access to this analysis job"
     )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this analysis job",
-        )
 
     await db.delete(job)
     await db.commit()

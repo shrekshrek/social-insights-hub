@@ -48,7 +48,7 @@ services:
     restart: unless-stopped
 
   postgres_db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: prod-postgres-db
     command: postgres -c max_connections=200
     env_file:
@@ -68,6 +68,21 @@ services:
       dockerfile: Dockerfile
     container_name: prod-celery-worker
     command: uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=100
+    env_file:
+      - .env.production  # 使用根目录的统一配置
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: prod-celery-beat
+    command: uv run celery -A src.celery_app beat --loglevel=info
     env_file:
       - .env.production  # 使用根目录的统一配置
     depends_on:

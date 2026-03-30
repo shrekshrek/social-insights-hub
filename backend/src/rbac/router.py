@@ -110,7 +110,7 @@ async def get_roles(
     roles, total = await service.get_roles(db, pagination)
 
     # 转换为响应格式
-    role_items = service._convert_roles_to_schemas(roles)
+    role_items = [schemas.RoleRead.from_orm_full(r) for r in roles]
 
     return schemas.RoleListResponse.create(
         items=role_items,
@@ -139,7 +139,7 @@ async def create_role(
 
         # 重新获取角色信息（包含权限）
         db_role = await service.get_role_by_id(db, db_role.id)
-        return service._convert_role_to_schema(db_role)
+        return schemas.RoleRead.from_orm_full(db_role)
     except service.RoleAlreadyExistsException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -164,7 +164,7 @@ async def get_role(
             status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
         )
 
-    return service._convert_role_to_schema(role)
+    return schemas.RoleRead.from_orm_full(role)
 
 
 @router.put(
@@ -190,7 +190,7 @@ async def update_role(
 
     # 重新获取角色信息（包含权限）
     db_role = await service.get_role_by_id(db, role_id)
-    return service._convert_role_to_schema(db_role)
+    return schemas.RoleRead.from_orm_full(db_role)
 
 
 @router.delete(
@@ -313,7 +313,7 @@ async def get_user_roles(
     roles = await service.get_user_roles(db, user_id)
 
     # 转换为响应格式
-    return service._convert_roles_to_schemas(roles)
+    return [schemas.RoleRead.from_orm_full(r) for r in roles]
 
 
 @router.get(

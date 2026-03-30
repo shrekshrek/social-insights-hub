@@ -1,4 +1,16 @@
 """RBAC工具函数"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.auth.models import User
+
+
+def is_admin_or_super_admin(user: "User") -> bool:
+    """检查用户是否是管理员或超级管理员"""
+    role_names = [ur.role.name for ur in user.user_roles]
+    return "admin" in role_names or "super_admin" in role_names
 
 
 def create_module_permissions(

@@ -532,7 +532,8 @@ GET /api/v1/agent/health
    - `result` 接口幂等，根据 task_id 判断重复上传
 
 3. **超时处理**
-   - FastAPI 后台任务（每 5 分钟）：`accepted` 超过 2 小时未完成 → 重置为 `pending`，清空 `accepted_at`/`accepted_by`
+   - Celery Beat 定时任务（每 5 分钟）：`accepted` 超过 2 小时未完成 → 重置为 `pending`，清空 `accepted_at`/`accepted_by`
+   - 对应任务名：`agent.reset_timed_out_tasks`
    - 处理爬虫 accept 后崩溃/重启导致任务丢失的场景
 
 4. **数据入库**

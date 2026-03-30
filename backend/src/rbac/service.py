@@ -528,18 +528,10 @@ async def get_users_with_role(db: AsyncSession, role_id: int) -> List[User]:
 
 
 def _convert_role_to_schema(role: models.Role) -> schemas.RoleRead:
-    """内部工具函数：将Role模型转换为RoleRead schema"""
-    permissions = [rp.permission for rp in role.role_permissions]
-    return schemas.RoleRead(
-        id=role.id,
-        name=role.name,
-        display_name=role.display_name,
-        description=role.description,
-        permission_strategy=role.permission_strategy,
-        permissions=permissions,
-    )
+    """内部工具函数：已弃用，请使用 RoleRead.from_orm_full()"""
+    return schemas.RoleRead.from_orm_full(role)
 
 
 def _convert_roles_to_schemas(roles: List[models.Role]) -> List[schemas.RoleRead]:
-    """批量转换角色列表"""
-    return [_convert_role_to_schema(role) for role in roles]
+    """批量转换角色列表：已弃用，请使用 [RoleRead.from_orm_full(r) for r in roles]"""
+    return [schemas.RoleRead.from_orm_full(role) for role in roles]

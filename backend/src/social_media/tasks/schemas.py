@@ -223,7 +223,13 @@ class SocialCommentListResponse(CustomBaseModel):
 # ==================== JSON Upload Schemas ====================
 
 
-class RawPostData(CustomBaseModel):
+class _RawDataBase(CustomBaseModel):
+    """允许任意额外字段的宽松基类，供各平台原始数据 Schema 继承。"""
+
+    model_config = {"extra": "allow"}
+
+
+class RawPostData(_RawDataBase):
     """原始原文数据（宽松验证，由适配器负责转换）
 
     支持各平台原始字段名，如：
@@ -233,13 +239,9 @@ class RawPostData(CustomBaseModel):
     等等
     """
 
-    model_config = {"extra": "allow"}  # 允许任意额外字段
 
-
-class RawCommentData(CustomBaseModel):
+class RawCommentData(_RawDataBase):
     """原始评论数据（宽松验证，由适配器负责转换）"""
-
-    model_config = {"extra": "allow"}  # 允许任意额外字段
 
 
 class JSONUploadData(CustomBaseModel):

@@ -280,14 +280,7 @@ async def compare_tasks(
     from src.social_media.monitors import crud as monitor_crud
 
     # 1. 权限校验
-    has_access = await monitor_crud.check_monitor_access(
-        db, monitor_id, current_user_id
-    )
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this monitor",
-        )
+    await monitor_crud.assert_monitor_access(db, monitor_id, current_user_id)
 
     # 2. 任务校验
     stmt = (

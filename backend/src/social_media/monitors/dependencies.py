@@ -7,14 +7,9 @@ from typing import Annotated
 from src.auth.models import User
 from src.auth.dependencies import get_current_user
 from src.database import get_async_db
+from src.rbac.utils import is_admin_or_super_admin
 from . import crud
 from .models import Monitor, Platform
-
-
-def is_admin_or_super_admin(user: User) -> bool:
-    """检查用户是否是管理员或超级管理员"""
-    role_names = [ur.role.name for ur in user.user_roles]
-    return "admin" in role_names or "super_admin" in role_names
 
 
 async def validate_platform_exists(

@@ -12,7 +12,6 @@ from src.rbac.dependencies import (
     require_user_delete,
     require_user_write,
 )
-from src.rbac import service as rbac_service
 from src.users.dependencies import (
     require_user_read_or_self,
     require_user_write_or_self,
@@ -40,12 +39,7 @@ async def read_users_me(
 
     Returns the user profile information for the currently authenticated user.
     """
-    # 获取用户的角色信息
-    user_roles = await rbac_service.get_user_roles(db, current_user.id)
-    role_names = [role.name for role in user_roles]
-
-    # 使用统一的转换函数
-    return service.convert_user_to_schema(current_user, role_names)
+    return await service.user_to_schema(db, current_user)
 
 
 @router.get(

@@ -38,12 +38,6 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   '/users/[id]': { permission: PERMISSIONS.USER_READ },
   '/users/[id]/edit': { permission: PERMISSIONS.USER_WRITE },
   '/users/[id]/roles': { permission: PERMISSIONS.USER_WRITE },
-  '/rbac': {
-    permission: PERMISSIONS.ROLE_MGMT_ACCESS,
-    label: '角色管理',
-    showInNav: true,
-    order: 40,
-  },
   '/rbac/roles': {
     permission: PERMISSIONS.ROLE_MGMT_ACCESS,
     label: '角色管理',

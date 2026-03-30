@@ -27,17 +27,22 @@ def process_document_task(document_id: int) -> None:
     """处理知识库文档（同步 Celery 任务包装器）
 
     内部通过 gevent threadpool 在真实 OS 线程中运行 asyncio。
+    使用 NullPool 避免跨事件循环复用 asyncpg 连接池导致的
+    "Future attached to a different loop" 错误（每次任务创建独立连接，用完即关）。
     失败时记录日志但不抛出，不触发 Celery 重试（文档状态已在 service 层写为 failed）。
     """
-    from src.database import AsyncSessionLocal, async_engine
+    from sqlalchemy.pool import NullPool
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from src.config import settings
     from src.knowledge_base.service import process_document
 
     async def _run() -> None:
+        engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
         try:
-            async with AsyncSessionLocal() as db:
+            async with AsyncSession(engine) as db:
                 await process_document(db, document_id)
         finally:
-            await async_engine.dispose()
+            await engine.dispose()
 
     try:
         _run_async(_run())

@@ -37,9 +37,10 @@ def process_document_task(document_id: int) -> None:
     from src.knowledge_base.service import process_document
 
     async def _run() -> None:
-        engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
+        db_url = str(settings.DATABASE_URL).replace("postgresql+psycopg://", "postgresql+asyncpg://")
+        engine = create_async_engine(db_url, poolclass=NullPool)
         try:
-            async with AsyncSession(engine) as db:
+            async with AsyncSession(engine, expire_on_commit=False) as db:
                 await process_document(db, document_id)
         finally:
             await engine.dispose()

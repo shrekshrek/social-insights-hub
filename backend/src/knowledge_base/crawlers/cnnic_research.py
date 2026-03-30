@@ -37,9 +37,9 @@ class CNNICResearchCrawler(BaseCrawler):
 
     async def discover(self) -> list[CrawlSource]:
         logger.info("[cnnic_research] 抓取报告列表: %s", _LIST_URL)
-        markdown = await self._crawl_url(_LIST_URL, query="研究报告")
+        html = await self._fetch_html(_LIST_URL)
 
-        article_urls = self._extract_article_urls(markdown)
+        article_urls = self._extract_article_urls(html)
         logger.info("[cnnic_research] 发现 %d 篇研究报告文章", len(article_urls))
 
         sources = []
@@ -66,11 +66,23 @@ class CNNICResearchCrawler(BaseCrawler):
 
         return sources
 
-    def _extract_article_urls(self, markdown: str) -> list[str]:
-        """从列表页 Markdown 提取文章链接（去重）"""
+    async def _fetch_html(self, url: str) -> str:
+        """直接用 httpx 获取 HTML（政府站点服务端渲染，无需 Playwright）"""
+        async with httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            verify=False,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+        ) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return resp.text
+
+    def _extract_article_urls(self, html: str) -> list[str]:
+        """从列表页 HTML 提取文章链接（去重）"""
         seen: set[str] = set()
         result = []
-        for m in _ARTICLE_PATTERN.finditer(markdown):
+        for m in _ARTICLE_PATTERN.finditer(html):
             path = m.group(1)
             url = _BASE_URL + path
             if url not in seen:

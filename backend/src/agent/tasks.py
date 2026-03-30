@@ -1,13 +1,13 @@
 """Agent 后台任务（Celery/Beat 调度）
 
-- reset_timed_out_tasks_sync: 检测超时 accepted 任务并重置为 pending
+- reset_timed_out_tasks_sync: 检测超时的 accepted/running 任务并重置为 pending
 - reset_timed_out_tasks_task: 提供给 Celery Beat 的定时入口
 """
 
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from src.celery_app import celery_app
 from src.config import settings
@@ -18,10 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 def reset_timed_out_tasks_sync() -> int:
-    """将超时的 accepted 任务重置为 pending。
+    """将超时的 accepted/running 任务重置为 pending。
 
-    任务被爬虫接收（accepted）后，若超过 AGENT_TASK_TIMEOUT_HOURS 仍未完成，
-    说明爬虫崩溃/重启导致任务丢失，重置为 pending 以便重新分配。
+    两种场景均以 accepted_at 作为计时起点：
+    - accepted：爬虫接收后未启动（崩溃/重启）
+    - running：爬虫启动后中途崩溃，进度上报随之停止
 
     Returns:
         int: 重置的任务数量
@@ -31,9 +32,12 @@ def reset_timed_out_tasks_sync() -> int:
 
     with SyncSessionLocal() as db:
         stmt = (
-            select(DataTask.id, DataTask.keywords, DataTask.accepted_at)
+            select(DataTask.id, DataTask.keywords, DataTask.status, DataTask.accepted_at)
             .where(
-                DataTask.status == "accepted",
+                or_(
+                    DataTask.status == "accepted",
+                    DataTask.status == "running",
+                ),
                 DataTask.accepted_at.isnot(None),
                 DataTask.accepted_at < cutoff,
                 DataTask.is_deleted.is_(False),
@@ -55,9 +59,10 @@ def reset_timed_out_tasks_sync() -> int:
         now = datetime.now(timezone.utc)
         for row in timed_out:
             logger.warning(
-                "Task %d (keywords=%r) reset to pending after %.1fh (accepted_at=%s)",
+                "Task %d (keywords=%r, status=%s) reset to pending after %.1fh (accepted_at=%s)",
                 row.id,
                 row.keywords,
+                row.status,
                 (now - row.accepted_at).total_seconds() / 3600,
                 row.accepted_at,
             )

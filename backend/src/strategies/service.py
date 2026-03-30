@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, func, delete as sa_delete, and_
+from sqlalchemy import select, func, delete as sa_delete, update, and_
 from src.utils import run_cpu_bound_task
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -956,7 +956,7 @@ async def _run_probe_review_bg_task(
             )
 
             if review_result.get("overall_verdict") == "all_pass":
-                await approve_probe(db, strategy)
+                await approve_probe(db, strategy, current_user_id=strategy.created_by)
     except Exception as e:
         logger.error(
             "Strategy %d probe review background task failed: %s", strategy_id, e, exc_info=True
@@ -1226,16 +1226,6 @@ async def approve_probe(
             detail="当前没有探测任务，无法确认",
         )
 
-    # 查询 probe 任务
-    stmt = select(Strategy).where(Strategy.id == strategy.id)
-    stmt = stmt.options(selectinload(Strategy.task_ids))
-    result = await db.execute(stmt)
-    strategy_result = result.scalar_one_or_none()
-    if not strategy_result:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="策略不存在")
-
-    strategy_obj = strategy_result
-
     # 批量加载 probe 任务（避免 N+1 查询）
     probe_tasks_stmt = select(DataTask).where(
         and_(
@@ -1248,7 +1238,7 @@ async def approve_probe(
     probe_tasks = list(probe_tasks_result.scalars().all())
 
     # 维度映射是自动建切片的唯一依据：必须完整存在
-    research_design = strategy_obj.research_design or {}
+    research_design = strategy.research_design or {}
     if not isinstance(research_design, dict):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1300,16 +1290,16 @@ async def approve_probe(
         collect_dim_map[str(collect_task.id)] = dim
 
     # 更新策略
-    strategy_obj.task_ids = collect_task_ids
-    strategy_obj.status = "collecting"
+    strategy.task_ids = collect_task_ids
+    strategy.status = "collecting"
     research_design["_task_dimension_map"] = collect_dim_map
-    strategy_obj.research_design = research_design
-    flag_modified(strategy_obj, "task_ids")
-    flag_modified(strategy_obj, "status")
-    flag_modified(strategy_obj, "research_design")
+    strategy.research_design = research_design
+    flag_modified(strategy, "task_ids")
+    flag_modified(strategy, "status")
+    flag_modified(strategy, "research_design")
 
     await db.commit()
-    updated = await get_strategy_by_id(db, strategy_obj.id)
+    updated = await get_strategy_by_id(db, strategy.id)
     return ApproveProbeResponse(
         approved_task_count=len(collect_task_ids),
         strategy=_strategy_read(updated),
@@ -1340,65 +1330,82 @@ async def refine_probe(
             detail="当前没有探测任务，无法调整",
         )
 
-    # 软删除旧探测任务
-    from sqlalchemy import select, and_, delete as sa_delete
+    # 加载现有 probe 任务（用于软删除）
+    from sqlalchemy import select, and_
     from src.social_media.tasks.models import DataTask
 
-    old_tasks_stmt = select(DataTask).where(
-        and_(
-            DataTask.id.in_(probe_task_ids),
-            DataTask.phase == "probe",
-            DataTask.is_deleted.is_(False),
+    old_tasks_result = await db.execute(
+        select(DataTask).where(
+            and_(
+                DataTask.id.in_(probe_task_ids),
+                DataTask.phase == "probe",
+                DataTask.is_deleted.is_(False),
+            )
         )
     )
-    old_tasks_result = await db.execute(old_tasks_stmt)
-    
-    # 构造新任务
-    removed_task_ids = list(probe_task_ids)
-    new_task_ids = []
-    new_task_dim_map: dict[str, str] = {}
-    for item in data.refinements:
-        if item.task_id is None and item.new_keyword is None:
-            raise ValueError("新增任务时 new_keyword 不能为空")
-        
-        if item.task_id is not None and item.new_keyword is not None:
-            raise ValueError("task_id 和 new_keyword 不能同时指定")
-        
-        if item.task_id is not None and not item.dimension:
-            raise ValueError("新增任务时 dimension 不能为空")
+    old_tasks_map: dict[int, DataTask] = {t.id: t for t in old_tasks_result.scalars().all()}
 
-        # 软删除旧任务
-        await db.execute(
-            sa_delete(DataTask).where(DataTask.id == item.task_id)
+    # 继承现有维度映射，在此基础上增删改
+    research_design = strategy.research_design or {}
+    if not isinstance(research_design, dict):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="研究计划数据异常：research_design 必须为对象",
         )
-        
-        # 为每个平台创建新任务
-        for platform_name in item.platform:
-            code = PLATFORM_NAME_TO_CODE.get(platform_name, platform_name)
-            platform = await get_platform_by_code(db, code)
-            if not platform:
-                continue
-            
-            # 设置 max_pages 根据平台（同 confirm_research 逻辑）
-            max_pages = 2 if code in ("wb", "tieba") else 1
-            
-            if not item.dimension:
+    old_dim_map: dict[str, str] = dict(research_design.get("_task_dimension_map") or {})
+
+    # 以现有所有 task_ids 为基础逐项操作，未提及的任务自动保���
+    current_task_ids = list(probe_task_ids)
+    new_task_dim_map = dict(old_dim_map)
+    removed_task_ids: list[int] = []
+    created_task_ids: list[int] = []
+
+    for item in data.refinements:
+        # 三种操作：
+        #   替换：task_id + new_keyword  → 软删旧任务，继承维度，创建新任务
+        #   移除：task_id + new_keyword=None → 仅软删旧任务
+        #   新增：task_id=None + new_keyword + dimension → 仅创建新任务
+
+        # 步骤 1：软删除旧任务（替换/移除时）
+        if item.task_id is not None:
+            old_task = old_tasks_map.get(item.task_id)
+            if old_task:
+                old_task.is_deleted = True
+            if item.task_id in current_task_ids:
+                current_task_ids.remove(item.task_id)
+            new_task_dim_map.pop(str(item.task_id), None)
+            removed_task_ids.append(item.task_id)
+
+        # 步骤 2：创建新任务（替换/新增时）
+        if item.new_keyword is not None:
+            code = PLATFORM_NAME_TO_CODE.get(item.platform, item.platform)
+            platform_obj = await get_platform_by_code(db, code)
+            if not platform_obj:
                 raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="调整后的探测任务必须提供 dimension",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"平台 {item.platform} 不存在",
                 )
 
+            # 维度：优先使用 item.dimension；替换时可继承旧任务维度
+            dimension = item.dimension or old_dim_map.get(str(item.task_id), "")
+            if not dimension:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="创建探测任务必须提供 dimension",
+                )
+
+            max_pages = 2 if code in ("wb", "tieba") else 1
             new_task = await create_task(
                 db,
                 DataTaskCreate(
-                    name=f"{item.new_keyword}-{platform.name}",
+                    name=f"{item.new_keyword}-{platform_obj.name}",
                     monitor_id=strategy.monitor_id,
-                    platform_id=platform.id,
+                    platform_id=platform_obj.id,
                     task_type="search",
                     keywords=item.new_keyword,
                     data_source="remote_crawler",
                     task_params={
-                        "max_notes_count": 20,  # 探测任务默认 20 条
+                        "max_notes_count": 20,
                         "enable_comments": 0,
                         "per_note_max_comments_count": 0,
                         "max_pages": max_pages,
@@ -1408,21 +1415,17 @@ async def refine_probe(
                 ),
                 current_user_id,
             )
-            new_task_ids.append(new_task.id)
-            new_task_dim_map[str(new_task.id)] = item.dimension
+            current_task_ids.append(new_task.id)
+            created_task_ids.append(new_task.id)
+            new_task_dim_map[str(new_task.id)] = dimension
 
-    # 更新 strategy
-    research_design = strategy.research_design or {}
-    if not isinstance(research_design, dict):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="研究计划数据异常：research_design 必须为对象",
-        )
-
-    strategy.task_ids = new_task_ids
-    strategy.probe_round = strategy.probe_round + 1 if strategy.probe_round else 1
+    # 重置审查结果，确保新一轮探测完成后重新触发审查
+    strategy.probe_review_result = None
+    strategy.task_ids = current_task_ids
+    strategy.probe_round = (strategy.probe_round or 0) + 1
     research_design["_task_dimension_map"] = new_task_dim_map
     strategy.research_design = research_design
+    flag_modified(strategy, "probe_review_result")
     flag_modified(strategy, "task_ids")
     flag_modified(strategy, "probe_round")
     flag_modified(strategy, "research_design")
@@ -1432,8 +1435,8 @@ async def refine_probe(
     updated = await get_strategy_by_id(db, strategy.id)
     return RefineProbeResponse(
         removed_task_ids=removed_task_ids,
-        created_task_ids=new_task_ids,
-        probe_round=strategy.probe_round,
+        created_task_ids=created_task_ids,
+        probe_round=updated.probe_round,
         strategy=_strategy_read(updated),
     )
 
@@ -1467,6 +1470,25 @@ async def check_collection_status(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="未找到采集任务",
+        )
+
+    # failed 任务自动重置为 pending，让爬虫重试（利用本地 checkpoint 续采）
+    failed_tasks = [t for t in tasks if t.status == "failed"]
+    if failed_tasks:
+        failed_ids = [t.id for t in failed_tasks]
+        await db.execute(
+            update(DataTask)
+            .where(DataTask.id.in_(failed_ids))
+            .values(status="pending", accepted_at=None, accepted_by=None)
+        )
+        await db.commit()
+        for t in failed_tasks:
+            t.status = "pending"
+        logger.info(
+            "Strategy %s: reset %d failed collect task(s) to pending for retry: %s",
+            strategy.id,
+            len(failed_ids),
+            failed_ids,
         )
 
     all_completed = all(task.status == "completed" for task in tasks)

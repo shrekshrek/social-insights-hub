@@ -2,20 +2,26 @@
 
 import base64
 import logging
+import mimetypes
+import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Path, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
 from src.auth.models import User
 from src.database import get_async_db
+from src.rbac.service import check_user_permission
 from src.pagination import PaginationParams, get_pagination_params
 from src.schemas import MessageResponse, PaginatedResponse
 
 from . import service
 from .models import KnowledgeDocument
 from .schemas import (
+    BatchDeleteRequest,
+    BatchDeleteResponse,
     ChunkResult,
     CrawlerRunResponse,
     CrawlerStatusItem,
@@ -152,6 +158,34 @@ async def get_document(
     return DocumentRead.model_validate(doc)
 
 
+@router.get(
+    "/documents/{doc_id}/file",
+    status_code=status.HTTP_200_OK,
+    summary="查看/下载知识库文档原文",
+)
+async def get_document_file(
+    doc_id: int = Path(...),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """返回文档原始文件（PDF/DOCX/TXT）供浏览器直接查看"""
+    doc = await service.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"文档 {doc_id} 不存在")
+    if doc.workspace_id is not None and doc.workspace_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该文档")
+    if not doc.file_path or not os.path.exists(doc.file_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在，可能在处理前未保存")
+
+    media_type = mimetypes.guess_type(doc.file_name or "")[0] or "application/octet-stream"
+    return FileResponse(
+        path=doc.file_path,
+        media_type=media_type,
+        filename=doc.file_name or f"document_{doc_id}",
+        headers={"Content-Disposition": f"inline; filename=\"{doc.file_name or f'document_{doc_id}'}\""},
+    )
+
+
 @router.delete(
     "/documents/{doc_id}",
     response_model=MessageResponse,
@@ -170,14 +204,42 @@ async def delete_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"文档 {doc_id} 不存在",
         )
-    # 只有文档所有者可以删除（平台公共文档需 admin 权限，暂不实现）
-    if doc.workspace_id != current_user.id:
+    is_owner = doc.workspace_id == current_user.id
+    is_admin = await check_user_permission(db, current_user.id, "knowledge_base:delete")
+    if not is_owner and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有文档上传者可以删除该文档",
+            detail="无权删除该文档",
         )
     await service.delete_document(db, doc)
     return MessageResponse(message=f"文档 {doc_id} 已删除")
+
+
+@router.delete(
+    "/documents",
+    response_model=BatchDeleteResponse,
+    status_code=status.HTTP_200_OK,
+    summary="批量删除知识库文档",
+)
+async def batch_delete_documents(
+    request: BatchDeleteRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """批量删除文档，跳过无权限的条目"""
+    is_admin = await check_user_permission(db, current_user.id, "knowledge_base:delete")
+    deleted = skipped = 0
+    for doc_id in request.ids:
+        doc = await service.get_document(db, doc_id)
+        if not doc:
+            skipped += 1
+            continue
+        if doc.workspace_id != current_user.id and not is_admin:
+            skipped += 1
+            continue
+        await service.delete_document(db, doc)
+        deleted += 1
+    return BatchDeleteResponse(deleted=deleted, skipped=skipped)
 
 
 @router.post(
@@ -242,7 +304,7 @@ async def search_documents(
     )
 
 
-_CRAWLER_SOURCE_TYPES = {"cnnic", "cnnic_research", "nbs", "govsite"}
+_CRAWLER_SOURCE_TYPES = {"cnnic", "nbs", "govsite"}
 
 
 @router.get(

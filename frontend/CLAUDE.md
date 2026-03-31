@@ -70,6 +70,7 @@ frontend/
 
 ## 编码约定
 
+- 确认对话框**必须**用 `const { $confirm } = useNuxtApp()` 程序化调用，禁止内联 `UModal`
 - API 调用**必须**用 `useApi.ts` (`apiRequest` / `useApiData`)，禁止裸 `$fetch`
 - 动态内容**必须**用 `<ClientOnly>` 包装并提供 fallback
 - SSR 数据获取优先用 `useApiData()`，避免仅在 `onMounted` 获取

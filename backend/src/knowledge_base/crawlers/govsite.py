@@ -18,9 +18,9 @@ _CURRENT_YEAR = datetime.now(timezone.utc).year
 _MIN_YEAR = _CURRENT_YEAR - 3
 
 _SEARCH_URLS = [
-    "https://sousuo.www.gov.cn/s.htm?type=zhengce&q=%E4%BA%92%E8%81%94%E7%BD%91&sort=pubtime",
-    "https://sousuo.www.gov.cn/s.htm?type=zhengce&q=%E6%95%B0%E5%AD%97%E7%BB%8F%E6%B5%8E&sort=pubtime",
-    "https://sousuo.www.gov.cn/s.htm?type=zhengce&q=%E5%B9%B3%E5%8F%B0%E7%BB%8F%E6%B5%8E&sort=pubtime",
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E4%BA%92%E8%81%94%E7%BD%91&t=zhengcelibrary",
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E6%95%B0%E5%AD%97%E7%BB%8F%E6%B5%8E&t=zhengcelibrary",
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E5%B9%B3%E5%8F%B0%E7%BB%8F%E6%B5%8E&t=zhengcelibrary",
 ]
 
 _BASE_URL = "https://www.gov.cn"
@@ -29,10 +29,10 @@ _BASE_URL = "https://www.gov.cn"
 _LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\)]+)\)")
 
 # gov.cn 政策文章 URL 特征（排除首页/导航/搜索页）
-_ARTICLE_PATH_PATTERN = re.compile(r"www\.gov\.cn/.+/\d{8}/")
+_ARTICLE_PATH_PATTERN = re.compile(r"www\.gov\.cn/.+/\d{6}/")
 
-# 从 URL 提取年份
-_YEAR_PATTERN = re.compile(r"/(20\d{2})\d{4}/")
+# 从 URL 提取年份（YYYYMM 格式）
+_YEAR_PATTERN = re.compile(r"/(20\d{2})\d{2}/")
 
 
 class GovsiteCrawler(BaseCrawler):
@@ -104,9 +104,9 @@ class GovsiteCrawler(BaseCrawler):
         return int(m.group(1)) if m else None
 
     def _date_from_url(self, url: str) -> str:
-        m = re.search(r"/(20\d{2})(\d{2})(\d{2})/", url)
+        m = re.search(r"/(20\d{2})(\d{2})/", url)
         if m:
-            return f"{m.group(1)}{m.group(2)}{m.group(3)}"
+            return f"{m.group(1)}{m.group(2)}"
         return "unknown"
 
     def _slug_from_url(self, url: str) -> str:

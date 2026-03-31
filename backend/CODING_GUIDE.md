@@ -109,8 +109,72 @@ class UserResponse(CustomBaseModel):
 #### 依赖注入 (Dependency Injection)
 - **解耦和复用**: 将可重用的逻辑（如获取当前用户、数据库会话）封装在依赖项中，并在多个端点中复用。
 - **异步优先**: 优先使用 `async def` 定义依赖项，以保持应用的非阻塞特性。
-- **权限检查**: 使用 `src.rbac.dependencies` 中的权限检查依赖进行 API 访问控制：
 - **避免过度抽象**: 只在真正需要复用时才创建依赖项，避免为了抽象而抽象。
+
+#### 权限检查规范
+
+**单一权限检查**：路由层通过 `src.rbac.dependencies` 中预定义的依赖函数，不使用返回值时用 `_` 占位：
+
+```python
+from src.rbac.dependencies import require_user_read, require_user_write
+
+@router.get("/users", ...)
+async def list_users(
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_user_read),
+):
+    ...
+```
+
+**组合逻辑（owner OR admin）**：单个依赖无法表达时，在 router 内直接调用 `check_user_permission()`：
+
+```python
+is_owner = doc.workspace_id == current_user.id
+is_admin = await check_user_permission(db, current_user.id, "knowledge_base:delete")
+if not is_owner and not is_admin:
+    raise HTTPException(status_code=403, detail="无权操作")
+```
+
+业务层（service）内部的批量权限判断同样可直接调用 `check_user_permission()`。
+
+#### 日志格式规范
+
+logger 调用**必须**使用 `%s` 占位符，**禁止** f-string：
+
+```python
+# ✅ 正确
+logger.info("文档 %d 处理完成，共 %d 个分块", doc_id, len(chunks))
+logger.error("文档 %d 处理失败: %s", doc_id, e, exc_info=True)
+
+# ❌ 错误
+logger.info(f"文档 {doc_id} 处理完成，共 {len(chunks)} 个分块")
+```
+
+异常日志**必须**加 `exc_info=True` 以记录完整堆栈。
+
+#### 自定义业务异常
+
+业务异常**必须**继承 `HTTPException`，在 `__init__` 中设置 `status_code` 和 `detail`，放在模块的 `exceptions.py` 中：
+
+```python
+from fastapi import HTTPException, status
+
+class DocumentNotFoundException(HTTPException):
+    def __init__(self, doc_id: int):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"文档 {doc_id} 不存在",
+        )
+
+class DocumentAccessDeniedException(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问该文档",
+        )
+```
+
+简单的一次性校验直接用 `raise HTTPException(...)` 即可，无需单独定义异常类。
 
 #### API 响应与错误处理
 - **FastAPI 原生优先**: 充分利用 FastAPI 的内置特性，直接返回业务数据，让框架处理序列化
@@ -384,7 +448,7 @@ async def trigger(
 - ❌ 不在 `celery_app.py` 的 `beat_schedule` 中添加任何条目（已删除，由 APScheduler 统一管理）
 - ❌ 不在 APScheduler / BackgroundTasks 的 `async def` 函数中调用 `await async_engine.dispose()`（asyncio 原生环境无需此操作）
 - ❌ 不在 Celery task 的 `_run()` 协程中省略 `await async_engine.dispose()`（gevent 环境必须）
-- ❌ 不把 APScheduler 任务分散注册到各模��，统一在 `scheduler.py` 管理
+- ❌ 不把 APScheduler 任务分散注册到各模块，统一在 `scheduler.py` 管理
 
 #### LLM 应用开发 (LangChain)
 - **核心框架**: 使用 `LangChain` 作为构建语言模型应用和工作流的核心框架。

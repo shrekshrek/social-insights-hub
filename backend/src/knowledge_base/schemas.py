@@ -40,6 +40,7 @@ class DocumentRead(CustomBaseModel):
     source_type: str
     source_url: str | None
     file_name: str | None
+    file_path: str | None = None
     industry_tags: list[str]
     chunk_count: int
     processing_status: str  # pending / processing / ready / failed
@@ -72,6 +73,19 @@ class ChunkResult(CustomBaseModel):
     content: str
     score: float
     chunk_index: int
+
+
+class BatchDeleteRequest(CustomBaseModel):
+    """批量删除请求"""
+
+    ids: list[int] = Field(..., min_length=1, description="要删除的文档 ID 列表")
+
+
+class BatchDeleteResponse(CustomBaseModel):
+    """批量删除响应"""
+
+    deleted: int
+    skipped: int  # 无权限或不存在的
 
 
 class SearchResponse(CustomBaseModel):

@@ -31,7 +31,7 @@ _TITLE_PATTERN = re.compile(r'[《「\u201c]([^》」\u201d]+)[》」\u201d]')
 class CNNICResearchCrawler(BaseCrawler):
     """CNNIC 专题研究报告爬取器（AI、数字消费、中小企业等）"""
 
-    source_type = "cnnic_research"
+    source_type = "cnnic"
 
     async def discover(self) -> list[CrawlSource]:
         logger.info("[cnnic_research] 抓取报告列表: %s", _LIST_URL)
@@ -49,6 +49,9 @@ class CNNICResearchCrawler(BaseCrawler):
                     continue
                 full_pdf_url = _BASE_URL + pdf_url
                 pdf_bytes = await self._download_pdf(full_pdf_url)
+                if not pdf_bytes:
+                    logger.warning("[cnnic_research] PDF 为空，跳过: %s", full_pdf_url)
+                    continue
                 sources.append(
                     CrawlSource(
                         url=article_url,
@@ -105,8 +108,9 @@ class CNNICResearchCrawler(BaseCrawler):
 
         title_match = re.search(r"<title>(.*?)(?:--[^<]*)?\s*</title>", html)
         raw_title = title_match.group(1).strip() if title_match else ""
-        m = _TITLE_PATTERN.search(raw_title)
-        title = m.group(1) if m else raw_title or url.rsplit("/", 1)[-1]
+        # 整个标题被《》包裹时去掉外层引号（如《数字消费发展报告（2025）》→数字消费发展报告（2025））
+        # 标题含前缀时保留完整内容（如第57次《中国互联网络发展状况统计报告》）
+        title = re.sub(r"^《(.+)》$", r"\1", raw_title) if raw_title else url.rsplit("/", 1)[-1]
 
         return pdf_path, title
 

@@ -62,6 +62,21 @@ export function useKnowledgeBase() {
     })
   }
 
+  // 查看文档原文（新标签页）
+  async function viewDocument(id: number): Promise<void> {
+    const config = useRuntimeConfig()
+    const { session } = useUserSession()
+    const token = session.value?.accessToken
+    if (!token) return
+
+    const url = `${config.public.apiBase}/knowledge-base/documents/${id}/file`
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (!resp.ok) throw new Error('文件获取失败')
+    const blob = await resp.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    window.open(blobUrl, '_blank')
+  }
+
   // 删除文档（保持 apiRequest 用于写操作）
   async function deleteDocument(id: number) {
     return apiRequest(`/knowledge-base/documents/${id}`, {
@@ -69,11 +84,18 @@ export function useKnowledgeBase() {
     })
   }
 
+  // 批量删除文档
+  async function deleteDocuments(ids: number[]) {
+    return apiRequest<{ deleted: number; skipped: number }>('/knowledge-base/documents', {
+      method: 'DELETE',
+      body: { ids },
+    })
+  }
+
   // 来源类型标签辅助
   function sourceTypeLabel(sourceType: string): string {
     const labels: Record<string, string> = {
-      'cnnic': 'CNNIC 统计报告',
-      'cnnic_research': 'CNNIC 专题研究',
+      'cnnic': 'CNNIC 报告库',
       'nbs': 'NBS 月报',
       'govsite': 'gov.cn 政策',
       'upload': '用户上传',
@@ -119,7 +141,9 @@ export function useKnowledgeBase() {
     searchDocuments,
     getCrawlerStatus,
     runCrawler,
+    viewDocument,
     deleteDocument,
+    deleteDocuments,
     sourceTypeLabel,
     statusLabel,
     statusColor,

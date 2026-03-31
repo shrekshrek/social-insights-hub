@@ -350,6 +350,59 @@ const { data } = usersApi.getUsers({
 - **认证处理**: 401错误自动触发登出并重定向到登录页
 - **业务封装**: 在各 Layer 的 composables 中封装特定的业务 API
 
+#### catch 块约定
+
+`apiRequest` 和 `useApiData` 已统一处理错误并弹出 Toast，**catch 块留空并注明原因**，禁止 `console.error` / `console.log`：
+
+```typescript
+try {
+  await deleteDocument(id)
+  toast.add({ title: '删除成功', color: 'success' })
+  refresh()
+} catch {
+  // 错误已由 apiRequest 统一处理
+}
+```
+
+例外：若调用的不是 `apiRequest`（如裸 `fetch`），需在 catch 中手动 `toast.add`。
+
+#### loading 状态管理
+
+写操作统一用 `ref` + `try/finally` 确保状态重置，防止异常导致按钮永久 loading：
+
+```typescript
+const loading = ref(false)
+
+async function handleSubmit() {
+  loading.value = true
+  try {
+    await apiRequest(...)
+  } catch {
+    // 错误已由 apiRequest 统一处理
+  } finally {
+    loading.value = false
+  }
+}
+```
+
+#### useApiData key 命名规则
+
+| 场景 | 规则 | 示例 |
+|------|------|------|
+| 无参数固定资源 | `'module-resource'` | `'crawler-status'` |
+| 含静态 ID | `'module-resource-${id}'` | `'document-42'` |
+| 含动态查询参数 | `computed(() => '...')` 包装 | `computed(() => \`documents-list-${page}-${size}-${type}\`)` |
+
+动态参数必须用 `computed` 包装，确保参数变化时自动重新请求：
+
+```typescript
+const key = computed(() => {
+  const p = unref(params)
+  return `documents-list-${p?.page || 1}-${p?.page_size || 20}-${p?.source_type || 'all'}`
+})
+return useApiData<T>('/knowledge-base/documents', { query: params, key })
+```
+
 ---
 
 ### 9. 客户端渲染与数据可视化

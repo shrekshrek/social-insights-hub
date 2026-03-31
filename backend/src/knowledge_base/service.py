@@ -11,7 +11,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.utils import run_cpu_bound_task
-from .embedding import get_embedding_service
+from .embedding import EmbeddingService, get_embedding_service
 from .models import KnowledgeChunk, KnowledgeDocument
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ def chunk_text(
     return chunks
 
 
-async def process_document(db: AsyncSession, doc_id: int) -> None:
+async def process_document(db: AsyncSession, doc_id: int, embedding_svc: EmbeddingService | None = None) -> None:
     """解析 → 分块 → 向量化 → 批量写入 knowledge_chunks → 更新 status=ready
 
     异常时 status=failed + error_message，不抛出（Celery 任务不重试）。
@@ -115,6 +115,16 @@ async def process_document(db: AsyncSession, doc_id: int) -> None:
 
         file_bytes = base64.b64decode(file_bytes_b64)
 
+        # 保存原始文件到磁盘（供查看原文使用）
+        import os
+        from pathlib import Path
+        storage_dir = Path("/app/storage/knowledge_base") / (doc.source_type or "upload")
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+        saved_path = storage_dir / f"{doc_id}.{ext}"
+        saved_path.write_bytes(file_bytes)
+        doc.file_path = str(saved_path)
+
         # 解析文本（CPU 密集型）
         raw_text = await run_cpu_bound_task(parse_text, file_bytes, filename)
         if not raw_text.strip():
@@ -126,8 +136,8 @@ async def process_document(db: AsyncSession, doc_id: int) -> None:
             raise ValueError("文档分块结果为空")
 
         # 向量化（CPU 密集型，批量处理）
-        embedding_svc = get_embedding_service()
-        embeddings = await embedding_svc.embed(chunks)
+        svc = embedding_svc or get_embedding_service()
+        embeddings = await svc.embed(chunks)
 
         # 删除旧分块（重新处理时）
         old_chunks = await db.execute(
@@ -273,6 +283,13 @@ async def get_document(db: AsyncSession, doc_id: int) -> KnowledgeDocument | Non
 
 
 async def delete_document(db: AsyncSession, doc: KnowledgeDocument) -> None:
-    """删除文档及所有分块（CASCADE）"""
+    """删除文档及所有分块（CASCADE），同时清理磁盘文件"""
+    import os
+    file_path = doc.file_path
     await db.delete(doc)
     await db.commit()
+    if file_path:
+        try:
+            os.remove(file_path)
+        except OSError:
+            logger.warning("删除文件失败（已忽略）: %s", file_path)

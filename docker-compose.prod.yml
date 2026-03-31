@@ -25,6 +25,8 @@ services:
       - "8000:8000"
     env_file:
       - .env.production  # 使用根目录的统一配置
+    volumes:
+      - kb_storage_prod:/app/storage
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -70,6 +72,8 @@ services:
     command: uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=100
     env_file:
       - .env.production  # 使用根目录的统一配置
+    volumes:
+      - kb_storage_prod:/app/storage
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -87,4 +91,5 @@ services:
 
 volumes:
   postgres_data_prod:
-  redis_data_prod: 
+  redis_data_prod:
+  kb_storage_prod:

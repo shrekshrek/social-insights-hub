@@ -52,6 +52,9 @@ class KnowledgeDocument(Base):
     file_name: Mapped[str | None] = mapped_column(
         Text(), nullable=True, comment="原始文件名"
     )
+    file_path: Mapped[str | None] = mapped_column(
+        Text(), nullable=True, comment="服务器本地文件路径，用于查看原文"
+    )
     industry_tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text()),
         nullable=False,

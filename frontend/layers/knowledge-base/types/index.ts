@@ -5,6 +5,7 @@ export interface KnowledgeDocument {
   source_type: string
   source_url: string | null
   file_name: string | null
+  file_path: string | null
   industry_tags: string[]
   chunk_count: number
   processing_status: 'pending' | 'processing' | 'ready' | 'failed'

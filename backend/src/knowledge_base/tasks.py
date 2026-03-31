@@ -37,20 +37,17 @@ def process_document_task(document_id: int) -> None:
     from src.knowledge_base.service import process_document
 
     async def _run() -> None:
-        from src.knowledge_base.embedding import get_embedding_service
+        from src.knowledge_base.embedding import EmbeddingService
 
         db_url = str(settings.DATABASE_URL).replace("postgresql+psycopg://", "postgresql+asyncpg://")
         engine = create_async_engine(db_url, poolclass=NullPool)
+        svc = EmbeddingService()
         try:
             async with AsyncSession(engine, expire_on_commit=False) as db:
-                await process_document(db, document_id)
+                await process_document(db, document_id, embedding_svc=svc)
         finally:
             await engine.dispose()
-            # 显式关闭 httpx 客户端（避免 "Event loop is closed" 警告）
-            # 并清除缓存，下次任务获得绑定到新循环的新实例
-            svc = get_embedding_service()
             await svc._client.close()
-            get_embedding_service.cache_clear()
 
     try:
         _run_async(_run())

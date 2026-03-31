@@ -1,1 +1,4 @@
 celerybeat-schedule
+
+# 知识库文件存储（开发环境本地文件，不提交）
+storage/

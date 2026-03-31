@@ -65,14 +65,14 @@ market_context = await retrieve_market_context(
 - **BaseCrawler**: 抽象基类，子类实现 `discover() → list[CrawlSource]`
 - **CrawlSource**: NamedTuple，包含 `url, title, file_bytes, filename, source_meta`
 - **_upsert() 去重**: `source_url + source_type` 联合唯一约束；`ready/processing/pending` → 跳过；`failed` → 重置重试
-- **_crawl_url()**: 调用 Crawl4AI REST API���`http://crawl4ai:11235/crawl`），返回 fit_markdown
-- **APScheduler 调度**: NBS 每月1日03:00，CNNIC 每月15日03:00，govsite 每周一04:00（在 FastAPI asyncio 事件循环中原生运行，无需 gevent 桥接）
+- **_crawl_url()**: 调用 Crawl4AI REST API（`http://crawl4ai:11235/crawl`），返回 fit_markdown
+- **APScheduler 调度**: NBS 每月1日03:00，cnnic 每月15日03:00，govsite 每周一04:00（在 FastAPI asyncio 事件循环中原生运行，无需 gevent 桥接）
 
 ### 数据来源
 
 | source_type | 来源 | 内容 | 获取方式 |
 |-------------|------|------|---------|
-| `cnnic` | cnnic.cn | 互联网发展统计报告 PDF | Crawl4AI 发现链接 → httpx 下载 |
+| `cnnic` | cnnic.net.cn | 互联网发展统计报告 + 专题研究 PDF | httpx 直接抓取（无需 Crawl4AI） |
 | `nbs` | stats.gov.cn | 月度经济指标月报 | Crawl4AI → Markdown |
 | `govsite` | www.gov.cn | 互联网/数字经济/平台经济政策 | Crawl4AI 搜索页 → Markdown |
 

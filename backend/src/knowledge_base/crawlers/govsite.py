@@ -18,18 +18,28 @@ _CURRENT_YEAR = datetime.now(timezone.utc).year
 _MIN_YEAR = _CURRENT_YEAR - 3
 
 _SEARCH_URLS = [
-    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E4%BA%92%E8%81%94%E7%BD%91&t=zhengcelibrary",
-    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E6%95%B0%E5%AD%97%E7%BB%8F%E6%B5%8E&t=zhengcelibrary",
-    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E5%B9%B3%E5%8F%B0%E7%BB%8F%E6%B5%8E&t=zhengcelibrary",
+    # 基础互联网/数字经济
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E4%BA%92%E8%81%94%E7%BD%91&t=zhengcelibrary",        # 互联网
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E6%95%B0%E5%AD%97%E7%BB%8F%E6%B5%8E&t=zhengcelibrary",  # 数字经济
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E5%B9%B3%E5%8F%B0%E7%BB%8F%E6%B5%8E&t=zhengcelibrary",  # 平台经济
+    # 社媒/营销相关
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E4%BA%92%E8%81%94%E7%BD%91%E5%B9%BF%E5%91%8A&t=zhengcelibrary",  # 互联网广告
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E7%94%B5%E5%AD%90%E5%95%86%E5%8A%A1&t=zhengcelibrary",          # 电子商务
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E6%B6%88%E8%B4%B9%E8%80%85%E6%9D%83%E7%9B%8A&t=zhengcelibrary", # 消费者权益
 ]
 
 _BASE_URL = "https://www.gov.cn"
 
-# Markdown 链接模式：[标题](URL)
-_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\)]+)\)")
+# Markdown 链接模式：[标题](URL) 或 [标题](URL "title")，只取 URL 部分
+_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\s\)]+)")
 
 # gov.cn 政策文章 URL 特征（排除首页/导航/搜索页）
 _ARTICLE_PATH_PATTERN = re.compile(r"www\.gov\.cn/.+/\d{6}/")
+
+# 标题黑名单关键词（过滤与社媒营销无关的政策）
+_TITLE_BLACKLIST = re.compile(
+    r"工业互联网|农药|药品|医疗器械|气象|期货|跨境电子商务|金融消费者|金融机构消费者|政务移动"
+)
 
 # 从 URL 提取年份（YYYYMM 格式）
 _YEAR_PATTERN = re.compile(r"/(20\d{2})\d{2}/")
@@ -59,7 +69,7 @@ class GovsiteCrawler(BaseCrawler):
         sources = []
         for title, url in article_links:
             try:
-                content = await self._crawl_url(url, query="互联网 数字经济 平台经济 政策")
+                content = await self._crawl_url(url)
                 if not content.strip():
                     continue
                 date_str = self._date_from_url(url)
@@ -96,7 +106,12 @@ class GovsiteCrawler(BaseCrawler):
             if url.startswith("/"):
                 url = _BASE_URL + url
             seen.add(url)
-            result.append((title.strip(), url))
+            # 去除 BM25 高亮标记（如 _互联网_ → 互联网）
+            clean_title = re.sub(r"\s*_([^_]+)_\s*", r"\1", title).strip()
+            # 过滤与社媒营销无关的政策文章
+            if _TITLE_BLACKLIST.search(clean_title):
+                continue
+            result.append((clean_title, url))
         return result
 
     def _year_from_url(self, url: str) -> int | None:

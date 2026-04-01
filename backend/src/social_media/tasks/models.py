@@ -11,6 +11,7 @@ from src.database import Base
 if TYPE_CHECKING:
     from src.social_media.monitors.models import Monitor, Platform
     from src.auth.models import User
+    from src.strategies.models import Strategy
 
 
 class DataTask(Base):
@@ -59,6 +60,14 @@ class DataTask(Base):
         nullable=False,
         index=True,
         comment="数据源: remote_crawler/local_upload",
+    )
+
+    # 策略关联（可选，通过 FK 反查）
+    strategy_id: Mapped[int | None] = mapped_column(
+        ForeignKey("strategies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="所属策略 ID（策略流程专用，普通任务为 NULL）",
     )
 
     # 采集阶段（策略流程专用）
@@ -142,6 +151,12 @@ class DataTask(Base):
     )
     creator: Mapped["User"] = relationship(
         "src.auth.models.User", foreign_keys=[creator_id], lazy="selectin"
+    )
+    strategy: Mapped["Strategy | None"] = relationship(
+        "Strategy",
+        foreign_keys=[strategy_id],
+        lazy="select",
+        back_populates="tasks",
     )
 
     posts: Mapped[list["SocialPost"]] = relationship(

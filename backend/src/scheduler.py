@@ -68,7 +68,7 @@ def create_scheduler() -> AsyncIOScheduler:
         day=15,
         hour=3,
         minute=0,
-        id="crawl_cnnic_research",
+        id="crawl_cnnic",
         max_instances=1,
         misfire_grace_time=3600,
     )

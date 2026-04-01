@@ -17,10 +17,10 @@ _INDEX_URL = "https://www.stats.gov.cn/sj/zxfb/"
 _BASE_URL = "https://www.stats.gov.cn"
 
 # 只抓含这些关键词的月报，过滤季报/年报/专题
-_KEYWORDS = ["居民消费价格", "工业生产者出厂价格", "国内生产总值", "社会消费品零售", "全国居民人均"]
+_KEYWORDS = ["居民消费价格", "工业生产者出厂价格", "国内生产总值", "社会消费品零售", "全国居民人均", "国民经济"]
 
-# Markdown 链接模式：[标题](URL)
-_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\)]+)\)")
+# Markdown 链接模式：[标题](URL) 或 [标题](URL "title")，只取 URL 部分
+_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\s\)]+)")
 
 
 class NBSCrawler(BaseCrawler):
@@ -30,7 +30,11 @@ class NBSCrawler(BaseCrawler):
 
     async def discover(self) -> list[CrawlSource]:
         logger.info("[nbs] 抓取月度发布列表: %s", _INDEX_URL)
-        markdown = await self._crawl_url(_INDEX_URL, query="月度统计数据")
+        try:
+            markdown = await self._crawl_url(_INDEX_URL)
+        except Exception as e:
+            logger.error("[nbs] 列表页抓取失败: %s", e, exc_info=True)
+            return []
 
         article_links = self._extract_article_links(markdown)
         logger.info("[nbs] 发现相关月报 %d 篇", len(article_links))
@@ -38,8 +42,9 @@ class NBSCrawler(BaseCrawler):
         sources = []
         for title, url in article_links:
             try:
-                content = await self._crawl_url(url, query=" ".join(_KEYWORDS))
+                content = await self._crawl_url(url)
                 if not content.strip():
+                    logger.warning("[nbs] 内容为空: %s", url)
                     continue
                 date_str = self._date_from_url(url)
                 sources.append(
@@ -53,7 +58,7 @@ class NBSCrawler(BaseCrawler):
                 )
                 logger.info("[nbs] 已抓取: %s", title)
             except Exception as e:
-                logger.warning("[nbs] 跳过 %s: %s", url, e)
+                logger.warning("[nbs] 跳过 %s: %s", url, e, exc_info=True)
 
         return sources
 
@@ -70,7 +75,7 @@ class NBSCrawler(BaseCrawler):
                 if url.startswith("/"):
                     url = _BASE_URL + url
                 seen.add(url)
-                result.append((title, url))
+                result.append((title.strip(), url))
         return result
 
     def _date_from_url(self, url: str) -> str:

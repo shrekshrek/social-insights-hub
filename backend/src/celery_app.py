@@ -39,6 +39,9 @@ celery_app = Celery(
     ],
 )
 
+# 确保 Strategy 模型注册到 SQLAlchemy（避免 DataTask 关系配置警告）
+from src.strategies.models import Strategy  # noqa: F401
+
 # 详细的Celery配置
 celery_app.conf.update(
     # ========== 任务序列化 ==========

@@ -689,22 +689,87 @@ async def confirm_research(
                 detail=f"创建监测项目失败: {e.detail}",
             ) from e
 
+    # 创建或复用 NewsMonitor（如果有新闻渠道）
+    news_monitor = None
+    has_news_channel = any(d.get("channel") == "news_media" for d in data_plan)
+
+    if has_news_channel:
+        if strategy.news_monitor_id:
+            from src.news_media.models import NewsMonitor
+            news_monitor = await db.get(NewsMonitor, strategy.news_monitor_id)
+        else:
+            from src.news_media.service import create_news_monitor
+            from src.news_media.schemas import NewsMonitorCreate
+
+            news_monitor = await create_news_monitor(
+                db,
+                NewsMonitorCreate(
+                    name=f"{strategy.name} - 新闻监测",
+                    description=f"策略「{strategy.name}」的新闻数据采集",
+                ),
+                current_user_id,
+            )
+            strategy.news_monitor_id = news_monitor.id
+
     # 为每个维度×关键词×平台创建独立任务（每个关键词独立，便于探测审查逐词评估）
     created_task_ids: list[int] = []
+    created_news_task_ids: list[int] = []
     task_dimension_map: dict[int, str] = {}  # task_id → dimension_name
+    news_task_dimension_map: dict[int, str] = {}  # news_task_id → dimension_name
     partial_errors: list[str] = []
 
     for dimension in data_plan:
+        channel = dimension.get("channel", "social_media")  # 默认社媒渠道
         dimension_name = dimension.get("dimension_name", "").strip()
         keywords = dimension.get("keywords") or []
-        platforms = dimension.get("platforms") or []
 
-        if not dimension_name or not keywords or not platforms:
+        if not dimension_name or not keywords:
             partial_errors.append(f"跳过不完整的数据维度: {dimension_name}")
             continue
 
         clean_keywords = [kw.strip() for kw in keywords if kw.strip()]
         if not clean_keywords:
+            continue
+
+        # 根据渠道类型分别处理
+        if channel == "news_media":
+            # 新闻渠道：创建新闻任务并立即执行探测
+            if not news_monitor:
+                partial_errors.append(f"新闻渠道缺少 NewsMonitor: {dimension_name}")
+                continue
+
+            from src.news_media.service import create_news_task, execute_news_probe
+            from src.news_media.schemas import NewsTaskCreate
+
+            for keyword in clean_keywords:
+                try:
+                    news_task = await create_news_task(
+                        db,
+                        news_monitor.id,
+                        NewsTaskCreate(
+                            name=f"{dimension_name} - {keyword}",
+                            keywords=keyword,
+                            search_params={"max_results": 10},
+                        ),
+                        current_user_id,
+                        strategy_id=strategy.id,
+                        phase="probe",
+                    )
+                    created_news_task_ids.append(news_task.id)
+                    news_task_dimension_map[news_task.id] = dimension_name
+
+                    # 立即执行探测
+                    await execute_news_probe(db, news_task)
+                except Exception as e:
+                    logger.error(f"创建新闻任务失败: {keyword} - {e}")
+                    partial_errors.append(f"创建新闻任务「{keyword}」失败: {e}")
+
+            continue
+
+        # 社媒渠道：原有逻辑
+        platforms = dimension.get("platforms") or []
+        if not platforms:
+            partial_errors.append(f"社媒维度缺少平台配置: {dimension_name}")
             continue
 
         # 探测任务：仅采 probe_notes 条，跳过评论（加快速度），下发给爬虫时直接用 max_notes_count
@@ -763,6 +828,9 @@ async def confirm_research(
     research_design["_task_dimension_map"] = {
         str(tid): dim for tid, dim in task_dimension_map.items()
     }
+    research_design["_news_task_dimension_map"] = {
+        str(tid): dim for tid, dim in news_task_dimension_map.items()
+    }
     strategy.research_design = research_design
     flag_modified(strategy, "research_design")
 
@@ -774,6 +842,7 @@ async def confirm_research(
     return ConfirmResearchResponse(
         created_monitor_id=monitor.id,
         created_task_count=len(created_task_ids),
+        created_news_task_count=len(created_news_task_ids),
         partial_errors=partial_errors,
         strategy=_strategy_read(updated),
     )
@@ -1207,7 +1276,7 @@ async def check_probe_status(
     strategy: Strategy,
 ) -> ProbeStatusResponse:
     """查询探测任务进度，全部分析完成后自动触发后台 LLM 审查。"""
-    # 查询该策略的所有 probe 任务
+    # 查询该策略的所有社媒 probe 任务
     probe_tasks_result = await db.execute(
         select(DataTask).where(
             DataTask.strategy_id == strategy.id,
@@ -1217,7 +1286,11 @@ async def check_probe_status(
     )
     probe_tasks = list(probe_tasks_result.scalars().all())
 
-    if not probe_tasks:
+    # 查询该策略的所有新闻 probe 任务
+    from src.news_media.service import get_news_tasks_by_strategy
+    news_probe_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="probe")
+
+    if not probe_tasks and not news_probe_tasks:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="当前没有探测任务，无法查询进度",
@@ -1226,8 +1299,16 @@ async def check_probe_status(
     task_ids = [t.id for t in probe_tasks]
     task_statuses, analyzed_summaries = await _build_probe_task_summaries(db, task_ids)
 
-    all_analyzed = bool(task_statuses) and all(t.has_analysis for t in task_statuses)
-    analyzed_count = sum(1 for t in task_statuses if t.has_analysis)
+    # 新闻任务状态（新闻探测已同步完成，直接检查 status）
+    news_all_analyzed = all(t.status == "completed" and t.analysis_result for t in news_probe_tasks)
+    news_analyzed_count = sum(1 for t in news_probe_tasks if t.status == "completed" and t.analysis_result)
+
+    all_analyzed = (
+        (bool(task_statuses) and all(t.has_analysis for t in task_statuses))
+        and news_all_analyzed
+    )
+    analyzed_count = sum(1 for t in task_statuses if t.has_analysis) + news_analyzed_count
+    total_count = len(task_statuses) + len(news_probe_tasks)
 
     # 全部分析完成且尚无审查结果 → 触发后台 LLM 审查
     if all_analyzed and not strategy.probe_review_result and strategy.id not in _probe_review_in_progress:
@@ -1241,7 +1322,7 @@ async def check_probe_status(
         tasks=task_statuses,
         all_analyzed=all_analyzed,
         analyzed_count=analyzed_count,
-        total_count=len(task_statuses),
+        total_count=total_count,
         probe_review_result=strategy.probe_review_result,
         strategy=_strategy_read(strategy),
     )
@@ -1481,7 +1562,7 @@ async def check_collection_status(
     """查询全量采集进度，全部完成+分析后自动建切片并验证覆盖度。"""
     from src.social_media.tasks.models import DataTask
 
-    # 查询该策略的所有 collect 任务
+    # 查询该策略的所有社媒 collect 任务
     stmt = select(DataTask).where(
         and_(
             DataTask.strategy_id == strategy.id,
@@ -1492,7 +1573,11 @@ async def check_collection_status(
     result = await db.execute(stmt)
     tasks = list(result.scalars().all())
 
-    if not tasks:
+    # 查询该策略的所有新闻 collect 任务
+    from src.news_media.service import get_news_tasks_by_strategy
+    news_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="collect")
+
+    if not tasks and not news_tasks:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="未找到采集任务",
@@ -1517,8 +1602,14 @@ async def check_collection_status(
             failed_ids,
         )
 
-    all_completed = all(task.status == "completed" for task in tasks)
-    all_analyzed = all(task.analysis_result is not None for task in tasks)
+    all_completed = (
+        all(task.status == "completed" for task in tasks)
+        and all(t.status == "completed" for t in news_tasks)
+    )
+    all_analyzed = (
+        all(task.analysis_result is not None for task in tasks)
+        and all(t.analysis_result is not None for t in news_tasks)
+    )
 
     task_statuses = [
         CollectionTaskStatus(
@@ -1542,7 +1633,7 @@ async def check_collection_status(
                 "Strategy %s: 所有任务完成且已分析，开始自动建切片", strategy.id
             )
             try:
-                await _create_auto_slices(db, strategy, tasks, current_user_id)
+                await _create_auto_slices(db, strategy, tasks, current_user_id, news_tasks)
                 slices_created = True
                 logger.info("Strategy %s: 自动建切片完成", strategy.id)
             except Exception as e:
@@ -1568,6 +1659,7 @@ async def _create_auto_slices(
     strategy: Strategy,
     collect_tasks: list,
     current_user_id: int,
+    news_tasks: list = None,
 ) -> None:
     """按 slice_blueprint 自动创建 AnalysisSlice，并关联到策略。
 
@@ -1587,6 +1679,7 @@ async def _create_auto_slices(
         # blueprint 条目示例: {name, subject, competitors, source_dimensions: [...]} 
         # 维度映射唯一来源：research_design._task_dimension_map
         task_dim_map = research_design.get("_task_dimension_map")
+        news_task_dim_map = research_design.get("_news_task_dimension_map") or {}
         if not isinstance(task_dim_map, dict) or not task_dim_map:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -1602,6 +1695,13 @@ async def _create_auto_slices(
                     detail=f"采集任务 {task.id} 缺少维度映射，无法自动建切片",
                 )
             dimension_to_tasks.setdefault(dim, []).append(task)
+
+        # 新闻任务也加入维度映射
+        if news_tasks:
+            for task in news_tasks:
+                dim = news_task_dim_map.get(str(task.id))
+                if dim:
+                    dimension_to_tasks.setdefault(dim, []).append(task)
 
 
         slice_objs: list = []

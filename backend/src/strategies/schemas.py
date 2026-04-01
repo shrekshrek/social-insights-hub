@@ -98,6 +98,7 @@ class ConfirmResearchResponse(CustomBaseModel):
 
     created_monitor_id: int
     created_task_count: int
+    created_news_task_count: int = 0
     partial_errors: list[str] = Field(default_factory=list)
     strategy: "StrategyRead"
 

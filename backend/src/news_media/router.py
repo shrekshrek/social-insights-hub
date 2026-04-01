@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
 from src.auth.models import User
-from src.database import get_db
+from src.database import get_async_db
 from src.news_media import service
 from src.news_media.schemas import (
     NewsMonitorCreate,
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/news-media", tags=["News Media"])
 )
 async def create_monitor(
     data: NewsMonitorCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """创建新闻监测项目"""
@@ -43,7 +43,7 @@ async def create_monitor(
 async def create_and_execute_task(
     monitor_id: int,
     data: NewsTaskCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """创建新闻任务并立即执行"""

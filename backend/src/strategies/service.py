@@ -1340,7 +1340,7 @@ async def approve_probe(
     from src.social_media.tasks.schemas import DataTaskCreate
     from src.social_media.tasks.service import create_task
 
-    # 获取当前所有 probe 任务
+    # 获取当前所有社媒 probe 任务
     probe_tasks_stmt = select(DataTask).where(
         and_(
             DataTask.strategy_id == strategy.id,
@@ -1351,7 +1351,11 @@ async def approve_probe(
     probe_tasks_result = await db.execute(probe_tasks_stmt)
     probe_tasks = list(probe_tasks_result.scalars().all())
 
-    if not probe_tasks:
+    # 获取新闻 probe 任务
+    from src.news_media.service import get_news_tasks_by_strategy
+    news_probe_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="probe")
+
+    if not probe_tasks and not news_probe_tasks:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="当前没有探测任务，无法确认",
@@ -1410,9 +1414,41 @@ async def approve_probe(
         collect_task_ids.append(collect_task.id)
         collect_dim_map[str(collect_task.id)] = dim
 
+    # 为新闻 probe 任务创建全量采集任务
+    news_collect_dim_map: dict[str, str] = {}
+    if news_probe_tasks:
+        from src.news_media.service import create_news_task, execute_news_collect
+        from src.news_media.schemas import NewsTaskCreate
+
+        news_probe_dim_map = research_design.get("_news_task_dimension_map") or {}
+
+        for npt in news_probe_tasks:
+            dim = news_probe_dim_map.get(str(npt.id))
+            if not dim:
+                continue
+
+            news_collect_task = await create_news_task(
+                db,
+                npt.monitor_id,
+                NewsTaskCreate(
+                    name=f"{npt.name} - 全量",
+                    keywords=npt.keywords,
+                    search_params={"max_results": 30},
+                ),
+                current_user_id,
+                strategy_id=strategy.id,
+                phase="collect",
+            )
+            news_collect_dim_map[str(news_collect_task.id)] = dim
+
+            # 后台执行全量采集
+            import asyncio
+            asyncio.ensure_future(execute_news_collect(db, news_collect_task))
+
     # 更新策略
     strategy.status = "collecting"
     research_design["_task_dimension_map"] = collect_dim_map
+    research_design["_news_task_dimension_map"] = news_collect_dim_map
     strategy.research_design = research_design
     flag_modified(strategy, "research_design")
 

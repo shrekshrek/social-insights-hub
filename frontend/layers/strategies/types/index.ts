@@ -237,6 +237,7 @@ export interface ConfirmResearchRequest {
 export interface ConfirmResearchResponse {
   created_monitor_id: number
   created_task_count: number
+  created_news_task_count: number
   partial_errors: string[]
   strategy: Strategy
 }

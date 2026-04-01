@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from src.auth.models import User
     from src.social_media.analysis.models import AnalysisSlice
     from src.social_media.monitors.models import Monitor
+    from src.social_media.tasks.models import DataTask
+    from src.news_media.models import NewsMonitor, NewsTask
 
 
 class Strategy(Base):
@@ -82,13 +84,13 @@ class Strategy(Base):
     )
 
     # 关联
-    monitor_id: Mapped[int | None] = mapped_column(
+    social_monitor_id: Mapped[int | None] = mapped_column(
         ForeignKey("monitors.id"), nullable=True,
-        comment="策略创建的 Monitor ID",
+        comment="策略创建的社媒 Monitor ID",
     )
-    task_ids: Mapped[list] = mapped_column(
-        JSON, nullable=False, server_default="[]",
-        comment="策略创建的所有 DataTask ID",
+    news_monitor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("news_monitors.id"), nullable=True,
+        comment="策略创建的新闻 Monitor ID",
     )
 
     # 时间戳
@@ -105,10 +107,27 @@ class Strategy(Base):
         foreign_keys=[created_by],
         lazy="selectin",
     )
-    monitor: Mapped["Monitor | None"] = relationship(
+    social_monitor: Mapped["Monitor | None"] = relationship(
         "src.social_media.monitors.models.Monitor",
-        foreign_keys=[monitor_id],
+        foreign_keys=[social_monitor_id],
         lazy="selectin",
+    )
+    news_monitor: Mapped["NewsMonitor | None"] = relationship(
+        "src.news_media.models.NewsMonitor",
+        foreign_keys=[news_monitor_id],
+        lazy="selectin",
+    )
+    tasks: Mapped[list["DataTask"]] = relationship(
+        "src.social_media.tasks.models.DataTask",
+        foreign_keys="DataTask.strategy_id",
+        back_populates="strategy",
+        lazy="select",
+    )
+    news_tasks: Mapped[list["NewsTask"]] = relationship(
+        "src.news_media.models.NewsTask",
+        foreign_keys="NewsTask.strategy_id",
+        back_populates="strategy",
+        lazy="select",
     )
     slices: Mapped[list["StrategySlice"]] = relationship(
         back_populates="strategy",

@@ -290,8 +290,8 @@ class StrategyRead(CustomBaseModel):
     phase3_result: dict | None = None
 
     # 关联
-    monitor_id: int | None = None
-    task_ids: list[int] = Field(default_factory=list)
+    social_monitor_id: int | None = None
+    news_monitor_id: int | None = None
     slices: list[SliceSummary] = Field(default_factory=list)
 
     # 元信息
@@ -329,8 +329,8 @@ class StrategyRead(CustomBaseModel):
             phase1_result=strategy.phase1_result,
             phase2_result=strategy.phase2_result,
             phase3_result=strategy.phase3_result,
-            monitor_id=strategy.monitor_id,
-            task_ids=list(strategy.task_ids or []),
+            social_monitor_id=strategy.social_monitor_id,
+            news_monitor_id=strategy.news_monitor_id,
             slices=slices,
             created_by=strategy.created_by,
             creator_name=strategy.creator.username if strategy.creator else "",

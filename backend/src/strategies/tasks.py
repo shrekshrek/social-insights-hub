@@ -27,6 +27,7 @@ async def check_probing_strategies() -> int:
         _probe_review_in_progress,
         _run_probe_review_bg_task,
     )
+    from src.social_media.tasks.models import DataTask
 
     to_review: list[tuple[int, list[dict]]] = []
 
@@ -41,10 +42,22 @@ async def check_probing_strategies() -> int:
                 continue
             if strategy.id in _probe_review_in_progress:
                 continue
-            task_ids = list(strategy.task_ids or [])
-            if not task_ids:
+
+            # 查询该策略的所有 probe 任务
+            tasks_result = await db.execute(
+                select(DataTask).where(
+                    and_(
+                        DataTask.strategy_id == strategy.id,
+                        DataTask.phase == "probe",
+                        DataTask.is_deleted.is_(False),
+                    )
+                )
+            )
+            probe_tasks = list(tasks_result.scalars().all())
+            if not probe_tasks:
                 continue
 
+            task_ids = [t.id for t in probe_tasks]
             task_statuses, analyzed_summaries = await _build_probe_task_summaries(
                 db, task_ids
             )
@@ -84,14 +97,11 @@ async def check_collecting_strategies() -> int:
         strategies = result.scalars().all()
 
         for strategy in strategies:
-            task_ids = list(strategy.task_ids or [])
-            if not task_ids:
-                continue
-
+            # 查询该策略的所有 collect 任务
             tasks_result = await db.execute(
                 select(DataTask).where(
                     and_(
-                        DataTask.id.in_(task_ids),
+                        DataTask.strategy_id == strategy.id,
                         DataTask.phase == "collect",
                         DataTask.is_deleted.is_(False),
                     )

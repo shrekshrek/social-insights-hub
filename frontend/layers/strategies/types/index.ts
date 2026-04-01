@@ -193,8 +193,7 @@ export interface Strategy {
   phase3_result: Record<string, unknown> | null
 
   // 关联
-  monitor_id: number | null
-  task_ids: number[]
+  social_monitor_id: number | null
   slices: SliceSummary[]
 
   // 元信息

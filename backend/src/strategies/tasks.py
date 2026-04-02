@@ -18,7 +18,7 @@ async def check_probing_strategies() -> int:
     """找出所有探测完成但尚未触发审查的策略，触发 LLM 审查。
 
     1. 查询 status=probing 且 probe_review_result=None 的策略
-    2. 确认所有 probe 任务均已完成分析
+    2. 确认所有 probe 任务（社媒 + 新闻）均已完成分析
     3. 调用 _run_probe_review_bg_task（内部自开 session，与本函数 session 无冲突）
     """
     from src.strategies.models import Strategy
@@ -28,6 +28,7 @@ async def check_probing_strategies() -> int:
         _run_probe_review_bg_task,
     )
     from src.social_media.tasks.models import DataTask
+    from src.news_media.service import get_news_tasks_by_strategy
 
     to_review: list[tuple[int, list[dict]]] = []
 
@@ -43,7 +44,7 @@ async def check_probing_strategies() -> int:
             if strategy.id in _probe_review_in_progress:
                 continue
 
-            # 查询该策略的所有 probe 任务
+            # 查询该策略的所有社媒 probe 任务
             tasks_result = await db.execute(
                 select(DataTask).where(
                     and_(
@@ -54,17 +55,29 @@ async def check_probing_strategies() -> int:
                 )
             )
             probe_tasks = list(tasks_result.scalars().all())
-            if not probe_tasks:
+
+            # 查询该策略的所有新闻 probe 任务
+            news_probe_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="probe")
+
+            if not probe_tasks and not news_probe_tasks:
                 continue
 
             task_ids = [t.id for t in probe_tasks]
             task_statuses, analyzed_summaries = await _build_probe_task_summaries(
                 db, task_ids
             )
-            all_analyzed = bool(task_statuses) and all(
+
+            # 社媒任务全部已分析
+            social_all_analyzed = bool(task_statuses) and all(
                 t.has_analysis for t in task_statuses
             )
-            if all_analyzed:
+            # 新闻任务全部已分析
+            news_all_analyzed = all(
+                t.status == "completed" and t.analysis_result
+                for t in news_probe_tasks
+            ) if news_probe_tasks else True
+
+            if social_all_analyzed and news_all_analyzed:
                 to_review.append((strategy.id, analyzed_summaries))
 
     # 在 session 关闭后调用，_run_probe_review_bg_task 内部自开 session
@@ -81,12 +94,13 @@ async def check_collecting_strategies() -> int:
     """找出全量采集完成但尚未建切片的策略，触发自动建切片 + 覆盖度验证。
 
     1. 查询 status=collecting 且无 StrategySlice 的策略
-    2. 确认所有 collect 任务均 completed 且已有分析结果
+    2. 确认所有 collect 任务（社媒 + 新闻）均 completed 且已有分析结果
     3. 调用 _create_auto_slices（内部 commit，不需要外层提交）
     """
     from src.social_media.tasks.models import DataTask
     from src.strategies.models import Strategy, StrategySlice
     from src.strategies.service import _create_auto_slices, get_strategy_by_id
+    from src.news_media.service import get_news_tasks_by_strategy
 
     triggered = 0
 
@@ -97,7 +111,7 @@ async def check_collecting_strategies() -> int:
         strategies = result.scalars().all()
 
         for strategy in strategies:
-            # 查询该策略的所有 collect 任务
+            # 查询该策略的所有社媒 collect 任务
             tasks_result = await db.execute(
                 select(DataTask).where(
                     and_(
@@ -108,12 +122,23 @@ async def check_collecting_strategies() -> int:
                 )
             )
             tasks = list(tasks_result.scalars().all())
-            if not tasks:
+
+            # 查询该策略的所有新闻 collect 任务
+            news_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="collect")
+
+            if not tasks and not news_tasks:
                 continue
 
+            # 社媒任务全部完成且有分析
             if not all(t.status == "completed" for t in tasks):
                 continue
             if not all(t.analysis_result is not None for t in tasks):
+                continue
+
+            # 新闻任务全部完成且有分析
+            if not all(t.status == "completed" for t in news_tasks):
+                continue
+            if not all(t.analysis_result is not None for t in news_tasks):
                 continue
 
             # 已有切片则跳过（幂等保护）
@@ -128,7 +153,8 @@ async def check_collecting_strategies() -> int:
             try:
                 full_strategy = await get_strategy_by_id(db, strategy.id)
                 await _create_auto_slices(
-                    db, full_strategy, tasks, current_user_id=strategy.created_by
+                    db, full_strategy, tasks, current_user_id=strategy.created_by,
+                    news_tasks=news_tasks,
                 )
                 triggered += 1
                 logger.info(

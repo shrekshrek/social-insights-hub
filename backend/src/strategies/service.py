@@ -554,15 +554,26 @@ async def reset_to_design(
             detail="当前状态无需重置",
         )
 
-    # 软删除所有已创建的任务
+    # 软删除所有社媒任务
     tasks_to_delete = await db.execute(
         select(DataTask).where(
             DataTask.strategy_id == strategy.id,
             DataTask.is_deleted.is_(False),
         )
     )
-    for task in tasks_to_delete.scalars().all():
+    deleted_social_tasks = list(tasks_to_delete.scalars().all())
+    for task in deleted_social_tasks:
         await task_crud.delete_task(db, task)
+
+    # 删除所有新闻任务
+    deleted_news_count = 0
+    if strategy.news_monitor_id:
+        from src.news_media.service import get_news_tasks_by_strategy, delete_news_task
+
+        news_tasks = await get_news_tasks_by_strategy(db, strategy.id)
+        for nt in news_tasks:
+            await delete_news_task(db, nt)
+            deleted_news_count += 1
 
     # 清除探测/采集阶段的数据，回退状态
     strategy.probe_review_result = None
@@ -580,9 +591,10 @@ async def reset_to_design(
 
     updated = await get_strategy_by_id(db, strategy.id)
     logger.info(
-        "Strategy %d 重置到研究设计阶段 (删除 %d 个任务)",
+        "Strategy %d 重置到研究设计阶段 (删除 %d 社媒 + %d 新闻任务)",
         strategy.id,
-        len(task_ids),
+        len(deleted_social_tasks),
+        deleted_news_count,
     )
     return _strategy_read(updated)
 

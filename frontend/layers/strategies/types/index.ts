@@ -194,6 +194,7 @@ export interface Strategy {
 
   // 关联
   social_monitor_id: number | null
+  news_monitor_id: number | null
   slices: SliceSummary[]
 
   // 元信息

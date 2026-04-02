@@ -231,7 +231,7 @@ async def refine_probe(
     """调整不合格的关键词，创建新探测任务，probe_round++"""
     return await service.refine_probe(
         db, strategy,
-        [item.model_dump() for item in data.refinements],
+        data,
         current_user.id,
     )
 

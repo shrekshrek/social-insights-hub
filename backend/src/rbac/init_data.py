@@ -216,6 +216,22 @@ BUSINESS_PERMISSIONS = [
             "delete": "允许删除知识库文档",
         },
     ),
+    *create_module_permissions(
+        "news_media",
+        ["access", "read", "write", "delete"],
+        display_names={
+            "access": "访问新闻监测",
+            "read": "查看新闻任务",
+            "write": "创建新闻任务",
+            "delete": "删除新闻监测",
+        },
+        descriptions={
+            "access": "允许访问新闻监测页面",
+            "read": "允许查看新闻监测项目和任务",
+            "write": "允许创建新闻监测项目和任务",
+            "delete": "允许删除新闻监测项目",
+        },
+    ),
 ]
 
 # 合并所有权限

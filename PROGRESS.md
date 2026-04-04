@@ -39,10 +39,13 @@
 | knowledge_base/全栈 | 已完成 | 市场知识库：文档上传/解析/向量化/RAG 检索；策略 Phase1/2 注入 market_context；渠道架构同步（合并 industry_data、删除 ecommerce）；postgres 迁移至 pgvector/pgvector:pg16 |
 | knowledge_base/crawlers/全栈 | 已完成 | Crawl4AI + APScheduler 定时爬取 CNNIC/NBS/gov.cn；admin GET /crawlers/status + POST /crawlers/{source_type}/run；Embedding API 迁移至 SiliconFlow |
 | knowledge_base/前端 | 已完成 | 文档列表/上传/删除、RAG 检索测试、爬虫状态管理 |
+| news_media/后端 | 已完成 | 监测项目/任务 CRUD，SerpAPI+Crawl4AI 采集，news_tagging_chain+news_insight_chain 两条 LLM 链，策略流水线集成（probe/collect 两阶段） |
+| news_media/前端 | 已完成 | 监测项目列表/创建/详情页，任务列表（全局+按项目）/详情页，文章列表（含相关性/来源等级筛选），分析报告展示（coverage/sentiment/narratives/entities/competitive_landscape/key_quotes） |
 
 ## 下次继续的入口
-知识库前端模块已完成。根据项目当前状态，下一步建议：
+新闻监测(news_media)前端模块已完成。根据项目当前状态，下一步建议：
 - 验收：运行完整的测试，确保所有功能正常工作
-- 文档：更新或完善模块 CLAUDE.md（如需）
+- 测试：补充 news_media 后端集成测试
+- 文档：更新根 CLAUDE.md 模块列表（添加 news_media）
 - 部署：准备生产环境部署配置检查
 

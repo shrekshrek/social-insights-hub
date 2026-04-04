@@ -126,6 +126,7 @@ export default defineNuxtConfig({
     './layers/users',
     './layers/rbac',
     './layers/social-media',
+    './layers/news-media',
     './layers/strategies',
     './layers/knowledge-base',
   ],

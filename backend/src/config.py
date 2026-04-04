@@ -188,6 +188,11 @@ class Settings(BaseSettings):
         default=60.0, description="Timeout in seconds for PDF downloads"
     )
 
+    # SerpAPI Configuration
+    SERPAPI_API_KEY: str | None = Field(
+        default=None, description="SerpAPI API key for news search"
+    )
+
     # ========== Agent API Configuration ==========
     AGENT_API_KEY: str | None = Field(
         default=None, description="API Key for crawler agent authentication"

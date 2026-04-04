@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -20,7 +20,9 @@ class NewsMonitor(Base):
     __tablename__ = "news_monitors"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="监测项目名称")
+    name: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True, index=True, comment="监测项目名称"
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="项目描述")
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"
@@ -84,7 +86,7 @@ class NewsTask(Base):
         Integer, server_default="0", comment="采集到的文章数量"
     )
     analysis_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="分析结果（结构化洞察）"
+        JSON, nullable=True, comment="任务级聚合分析结果"
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(
@@ -107,3 +109,91 @@ class NewsTask(Base):
     strategy: Mapped["Strategy | None"] = relationship(
         "Strategy", foreign_keys=[strategy_id], lazy="select", back_populates="news_tasks"
     )
+    articles: Mapped[list["NewsArticle"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan", lazy="select"
+    )
+
+
+class NewsArticle(Base):
+    """新闻文章 — 对标社媒的 SocialPost
+
+    存储 SerpAPI 搜索到的文章元数据 + Crawl4AI 抓取的全文 + 逐篇轻量分析结果。
+    probe 阶段仅有元数据和 snippet；collect 阶段补充 full_text 和分析字段。
+    """
+
+    __tablename__ = "news_articles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # 任务关联
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("news_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="所属采集任务ID",
+    )
+
+    # 文章元数据（SerpAPI 返回）
+    url: Mapped[str] = mapped_column(
+        String(2048), nullable=False, unique=True, index=True, comment="文章链接（去重键）"
+    )
+    title: Mapped[str] = mapped_column(String(500), nullable=False, comment="文章标题")
+    snippet: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="SerpAPI 返回的摘要片段"
+    )
+    source_name: Mapped[str] = mapped_column(
+        String(255), nullable=False, comment="来源媒体名称"
+    )
+    source_tier: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="tier3",
+        comment="来源等级: tier1(权威央媒) / tier2(行业门户) / tier3(其他)",
+    )
+    author: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="作者"
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="发布时间"
+    )
+    image_url: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True, comment="配图链接"
+    )
+
+    # Crawl4AI 抓取的全文（probe 阶段为 NULL）
+    full_text: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="Crawl4AI 抓取的全文（仅内部分析用，不对外展示）"
+    )
+
+    # 逐篇轻量分析结果（news_tagging_chain 产出）
+    relevance: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="与研究目标的相关程度: high / medium / low"
+    )
+    sentiment: Mapped[float | None] = mapped_column(
+        Float, nullable=True, comment="情感分 -1 ~ 1"
+    )
+    article_type: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, comment="文章类型: report / opinion / pr / analysis"
+    )
+    mentioned_entities: Mapped[list | None] = mapped_column(
+        JSON, nullable=True, comment='提及的实体名单: [{"name": "...", "role": "target/competitor/context"}]'
+    )
+    key_quotes: Mapped[list | None] = mapped_column(
+        JSON, nullable=True, comment='关键引述: [{"speaker": "...", "quote": "..."}]'
+    )
+    summary: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="一句话摘要"
+    )
+
+    # 原始数据
+    raw_data: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="SerpAPI 原始响应（保留以支持未来重解析）"
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # 关联
+    task: Mapped["NewsTask"] = relationship(back_populates="articles", lazy="selectin")

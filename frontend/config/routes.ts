@@ -105,6 +105,22 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     permission: PERMISSIONS.KB_READ,
     label: 'RAG 检索测试',
   },
+  // 新闻监测模块
+  '/news-media': {
+    permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
+    label: '新闻监测',
+    showInNav: true,
+    order: 100,
+  },
+  '/news-media/create': { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
+  '/news-media/[id]': { permission: PERMISSIONS.NEWS_MEDIA_READ },
+  '/news-media/tasks': {
+    permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
+    label: '新闻采集',
+    showInNav: true,
+    order: 110,
+  },
+  '/news-media/tasks/[id]': { permission: PERMISSIONS.NEWS_MEDIA_READ },
 }
 
 /**

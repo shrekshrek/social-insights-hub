@@ -770,8 +770,10 @@ async def confirm_research(
                     created_news_task_ids.append(news_task.id)
                     news_task_dimension_map[news_task.id] = dimension_name
 
-                    # 立即执行探测
-                    await execute_news_probe(db, news_task)
+                    # 立即执行探测（传入研究目标供相关性判断）
+                    brief = strategy.brand_brief or {}
+                    goal = brief.get("analysis_goal", keyword)
+                    await execute_news_probe(db, news_task, analysis_goal=goal)
                 except Exception as e:
                     logger.error(f"创建新闻任务失败: {keyword} - {e}")
                     partial_errors.append(f"创建新闻任务「{keyword}」失败: {e}")
@@ -1315,10 +1317,30 @@ async def check_probe_status(
     news_all_analyzed = all(t.status == "completed" and t.analysis_result for t in news_probe_tasks)
     news_analyzed_count = sum(1 for t in news_probe_tasks if t.status == "completed" and t.analysis_result)
 
-    all_analyzed = (
-        (bool(task_statuses) and all(t.has_analysis for t in task_statuses))
-        and news_all_analyzed
-    )
+    # 将新闻 probe 结果纳入 analyzed_summaries 供审查
+    for npt in news_probe_tasks:
+        if npt.status == "completed" and npt.analysis_result:
+            ar = npt.analysis_result or {}
+            meta = ar.get("meta") or {}
+            articles_summary = ar.get("articles_summary") or []
+            analyzed_summaries.append({
+                "task_id": npt.id,
+                "keyword": npt.keywords or "",
+                "platform": "news_media",
+                "posts_count": meta.get("articles_total", 0),
+                "deep_analyzed": meta.get("articles_relevant", 0),
+                "entity_match": any(
+                    a.get("relevance") == "high" for a in articles_summary
+                ),
+                "top_topics": [],
+                "promotion_ratio": None,
+                "channel": "news_media",
+            })
+
+    # 兼容纯新闻策略（无社媒任务时 task_statuses 为空）
+    social_all_analyzed = not task_statuses or all(t.has_analysis for t in task_statuses)
+    news_check = not news_probe_tasks or news_all_analyzed
+    all_analyzed = social_all_analyzed and news_check and (task_statuses or news_probe_tasks)
     analyzed_count = sum(1 for t in task_statuses if t.has_analysis) + news_analyzed_count
     total_count = len(task_statuses) + len(news_probe_tasks)
 
@@ -1428,8 +1450,9 @@ async def approve_probe(
 
     # 为新闻 probe 任务创建全量采集任务
     news_collect_dim_map: dict[str, str] = {}
+    news_collect_task_ids: list[int] = []
     if news_probe_tasks:
-        from src.news_media.service import create_news_task, execute_news_collect
+        from src.news_media.service import create_news_task
         from src.news_media.schemas import NewsTaskCreate
 
         news_probe_dim_map = research_design.get("_news_task_dimension_map") or {}
@@ -1452,10 +1475,7 @@ async def approve_probe(
                 phase="collect",
             )
             news_collect_dim_map[str(news_collect_task.id)] = dim
-
-            # 后台执行全量采集
-            import asyncio
-            asyncio.ensure_future(execute_news_collect(db, news_collect_task))
+            news_collect_task_ids.append(news_collect_task.id)
 
     # 更新策略
     strategy.status = "collecting"
@@ -1465,6 +1485,32 @@ async def approve_probe(
     flag_modified(strategy, "research_design")
 
     await db.commit()
+
+    # 新闻全量采集在独立 session 中后台执行（避免共享请求级 session）
+    if news_collect_task_ids:
+        import asyncio
+
+        brief = strategy.brand_brief or {}
+        _goal = brief.get("analysis_goal", "")
+        _subject = brief.get("subject", "")
+
+        async def _bg_news_collect(task_id: int, goal: str, subject: str) -> None:
+            from src.database import AsyncSessionLocal
+            from src.news_media.service import execute_news_collect
+            from src.news_media import crud as news_crud
+
+            async with AsyncSessionLocal() as session:
+                task = await news_crud.get_task_by_id(session, task_id, load_relations=False)
+                if task:
+                    try:
+                        await execute_news_collect(session, task, analysis_goal=goal, subject=subject)
+                        await session.commit()
+                    except Exception as exc:
+                        logger.error("Background news collect failed for task %d: %s", task_id, exc)
+
+        for tid in news_collect_task_ids:
+            asyncio.ensure_future(_bg_news_collect(tid, _goal, _subject))
+
     updated = await get_strategy_by_id(db, strategy.id)
     return ApproveProbeResponse(
         approved_task_count=len(collect_task_ids),

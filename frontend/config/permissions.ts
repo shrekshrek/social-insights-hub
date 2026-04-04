@@ -54,6 +54,12 @@ export const PERMISSIONS = {
   KB_READ: {target: 'knowledge_base', action: 'read'},
   KB_WRITE: {target: 'knowledge_base', action: 'write'},
   KB_DELETE: {target: 'knowledge_base', action: 'delete'},
+
+  // 新闻监测
+  NEWS_MEDIA_ACCESS: {target: 'news_media', action: 'access'},
+  NEWS_MEDIA_READ: {target: 'news_media', action: 'read'},
+  NEWS_MEDIA_WRITE: {target: 'news_media', action: 'write'},
+  NEWS_MEDIA_DELETE: {target: 'news_media', action: 'delete'},
 } as const satisfies Record<string, Permission>
 
 // ============================================================================

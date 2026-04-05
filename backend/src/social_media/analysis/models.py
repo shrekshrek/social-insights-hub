@@ -73,7 +73,7 @@ class PostAnalysis(Base):
 
     # 关联关系
     task_id: Mapped[int] = mapped_column(
-        ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
+        ForeignKey("social_tasks.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
         comment="关联的数据任务ID",
@@ -179,7 +179,7 @@ class AnalysisJob(Base):
         comment="关联的项目ID（必填）",
     )
     task_id: Mapped[int | None] = mapped_column(
-        ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
+        ForeignKey("social_tasks.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
         comment="关联的数据任务ID（任务级分析时填写，项目级分析时为空）",

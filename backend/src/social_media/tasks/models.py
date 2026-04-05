@@ -21,7 +21,7 @@ class DataTask(Base):
     任务采用快照模式，每次执行创建新任务，数据独立存储。
     """
 
-    __tablename__ = "social_data_tasks"
+    __tablename__ = "social_tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -190,7 +190,7 @@ class SocialPost(Base):
 
     # 任务关联（强关联）
     task_id: Mapped[int] = mapped_column(
-        ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
+        ForeignKey("social_tasks.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -297,7 +297,7 @@ class SocialComment(Base):
 
     # 任务和原文关联（强关联）
     task_id: Mapped[int] = mapped_column(
-        ForeignKey("social_data_tasks.id", ondelete="CASCADE"),
+        ForeignKey("social_tasks.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

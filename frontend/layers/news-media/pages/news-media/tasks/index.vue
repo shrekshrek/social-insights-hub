@@ -204,6 +204,12 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
 
       <div class="flex items-center gap-3">
         <UButton
+          icon="i-heroicons-plus"
+          to="/news-media/tasks/create"
+        >
+          新建任务
+        </UButton>
+        <UButton
           variant="outline"
           icon="i-heroicons-arrow-path"
           :loading="refreshing"

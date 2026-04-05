@@ -70,11 +70,12 @@ export const useSocialMonitors = () => {
   };
 
   // 添加监测参与者
-  const addParticipant = async (monitorId: number, userId: number) => {
+  const addParticipant = async (monitorId: number, userIds: number[]) => {
     const result = await apiRequest<SocialMonitor>(
-      `/social-media/monitors/${monitorId}/participants/${userId}`,
+      `/social-media/monitors/${monitorId}/participants`,
       {
         method: "POST",
+        body: { user_ids: userIds },
       },
     );
     showSuccess("参与者添加成功！");

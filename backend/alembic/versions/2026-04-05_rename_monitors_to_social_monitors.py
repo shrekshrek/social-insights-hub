@@ -23,12 +23,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 删除旧外键约束
-    op.drop_constraint("monitor_participants_monitor_id_fkey", "monitor_participants", type_="foreignkey")
-    op.drop_constraint("social_data_tasks_monitor_id_fkey", "social_data_tasks", type_="foreignkey")
-    op.drop_constraint("analysis_jobs_monitor_id_fkey", "analysis_jobs", type_="foreignkey")
-    op.drop_constraint("analysis_slices_monitor_id_fkey", "analysis_slices", type_="foreignkey")
-    op.drop_constraint("strategies_monitor_id_fkey", "strategies", type_="foreignkey")
+    # 删除旧外键约束（使用数据库实际约束名）
+    op.drop_constraint("fk_monitor_participants_monitor_id_monitors", "monitor_participants", type_="foreignkey")
+    op.drop_constraint("fk_social_data_tasks_monitor_id_monitors", "social_data_tasks", type_="foreignkey")
+    op.drop_constraint("fk_analysis_jobs_monitor_id_monitors", "analysis_jobs", type_="foreignkey")
+    op.drop_constraint("fk_analysis_slices_monitor_id_monitors", "analysis_slices", type_="foreignkey")
+    op.drop_constraint("fk_strategies_monitor_id_monitors", "strategies", type_="foreignkey")
 
     # 重命名表
     op.rename_table("monitors", "social_monitors")
@@ -38,7 +38,7 @@ def upgrade() -> None:
     op.create_foreign_key(None, "social_data_tasks", "social_monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
     op.create_foreign_key(None, "analysis_jobs", "social_monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
     op.create_foreign_key(None, "analysis_slices", "social_monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
-    op.create_foreign_key(None, "strategies", "social_monitors", ["monitor_id"], ["id"])
+    op.create_foreign_key(None, "strategies", "social_monitors", ["social_monitor_id"], ["id"])
 
 
 def downgrade() -> None:
@@ -50,8 +50,8 @@ def downgrade() -> None:
 
     op.rename_table("social_monitors", "monitors")
 
-    op.create_foreign_key("strategies_monitor_id_fkey", "strategies", "monitors", ["monitor_id"], ["id"])
-    op.create_foreign_key("analysis_slices_monitor_id_fkey", "analysis_slices", "monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
-    op.create_foreign_key("analysis_jobs_monitor_id_fkey", "analysis_jobs", "monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
-    op.create_foreign_key("social_data_tasks_monitor_id_fkey", "social_data_tasks", "monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
-    op.create_foreign_key("monitor_participants_monitor_id_fkey", "monitor_participants", "monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key("fk_strategies_monitor_id_monitors", "strategies", "monitors", ["social_monitor_id"], ["id"])
+    op.create_foreign_key("fk_analysis_slices_monitor_id_monitors", "analysis_slices", "monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key("fk_analysis_jobs_monitor_id_monitors", "analysis_jobs", "monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key("fk_social_data_tasks_monitor_id_monitors", "social_data_tasks", "monitors", ["monitor_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key("fk_monitor_participants_monitor_id_monitors", "monitor_participants", "monitors", ["monitor_id"], ["id"], ondelete="CASCADE")

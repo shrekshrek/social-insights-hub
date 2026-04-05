@@ -41,6 +41,6 @@ class User(Base):
     # 监测关系（作为participant）
     participating_monitors: Mapped[list["SocialMonitor"]] = relationship(
         "src.social_media.monitors.models.SocialMonitor",
-        secondary="monitor_participants",
+        secondary="social_monitor_participants",
         back_populates="participants",
     )

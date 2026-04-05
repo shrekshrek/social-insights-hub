@@ -32,6 +32,15 @@
               <span>|</span>
               <span>{{ formatDate(strategy.created_at) }}</span>
             </div>
+            <div v-if="strategy" class="mt-2">
+              <ParticipantsManager
+                :participants="(strategy!.participant_ids || []).map((id: number, i: number) => ({ id, username: strategy!.participant_usernames?.[i] || String(id) }))"
+                :owner-id="strategy.created_by"
+                :can-manage="strategy.created_by === currentUserId"
+                :on-add="async (ids: number[]) => { await strategiesApi.addParticipant(strategyId, ids); await refreshStrategy() }"
+                :on-remove="async (uid: number) => { await strategiesApi.removeParticipant(strategyId, uid); await refreshStrategy() }"
+              />
+            </div>
           </ClientOnly>
         </div>
       </div>
@@ -390,9 +399,10 @@ const STAGES = [
 
 const route = useRoute()
 const strategiesApi = useStrategies()
+const { currentUserId } = usePermissions()
 
 const strategyId = computed(() => Number(route.params.id))
-const { data: strategy, pending } = strategiesApi.getStrategy(strategyId)
+const { data: strategy, pending, refresh: refreshStrategy } = strategiesApi.getStrategy(strategyId)
 
 // ── 轮询 ──────────────────────────────────────────────────────────────────────
 

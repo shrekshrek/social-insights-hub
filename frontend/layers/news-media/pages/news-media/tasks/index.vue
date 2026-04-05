@@ -207,7 +207,7 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
           icon="i-heroicons-plus"
           to="/news-media/tasks/create"
         >
-          新建任务
+          新建新闻采集任务
         </UButton>
         <UButton
           variant="outline"

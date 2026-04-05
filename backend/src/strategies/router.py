@@ -32,6 +32,7 @@ from .schemas import (
     RefineProbeResponse,
     StrategyCreate,
     StrategyListItem,
+    StrategyParticipantAssignment,
     StrategyRead,
     StrategyUpdate,
 )
@@ -127,6 +128,36 @@ async def delete_strategy(
     """删除策略"""
     await service.delete_strategy(db, strategy)
     return MessageResponse(message="策略已删除")
+
+
+@router.post(
+    "/{strategy_id}/participants",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="为策略添加参与者（同步到关联监测）",
+)
+async def add_participants(
+    data: StrategyParticipantAssignment,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    updated = await service.add_participants_to_strategy(db, strategy, data.user_ids)
+    return StrategyRead.from_orm_full(updated)
+
+
+@router.delete(
+    "/{strategy_id}/participants/{user_id}",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="从策略移除参与者（同步到关联监测）",
+)
+async def remove_participant(
+    user_id: int,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    updated = await service.remove_participant_from_strategy(db, strategy, user_id)
+    return StrategyRead.from_orm_full(updated)
 
 
 # ==================== ① 研究设计 ====================

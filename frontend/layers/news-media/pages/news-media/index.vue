@@ -34,7 +34,7 @@ const handleRefresh = async () => {
 const handleDelete = async (monitor: NewsMonitorWithOwner) => {
   const { $confirm } = useNuxtApp()
   const confirmed = await $confirm({
-    title: '删除监测',
+    title: '删除新闻监测',
     message: `确定要删除新闻监测 "${monitor.name}" 吗？此操作不可恢复，所有相关任务和数据也将被删除。`,
     confirmText: '删除',
     cancelText: '取消',

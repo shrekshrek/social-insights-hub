@@ -48,7 +48,7 @@ export const useNewsMonitors = () => {
       method: 'PUT',
       body: data,
     })
-    showSuccess('监测项目更新成功！')
+    showSuccess('新闻监测更新成功！')
     return result
   }
 
@@ -56,7 +56,7 @@ export const useNewsMonitors = () => {
     await apiRequest(`/news-media/monitors/${id}`, {
       method: 'DELETE',
     })
-    showSuccess('监测项目删除成功！')
+    showSuccess('新闻监测删除成功！')
     return true
   }
 
@@ -74,6 +74,24 @@ export const useNewsMonitors = () => {
     })
   }
 
+  const addParticipant = async (monitorId: number, userIds: number[]) => {
+    const result = await apiRequest<NewsMonitorWithOwner>(
+      `/news-media/monitors/${monitorId}/participants`,
+      { method: 'POST', body: { user_ids: userIds } },
+    )
+    showSuccess('参与者添加成功！')
+    return result
+  }
+
+  const removeParticipant = async (monitorId: number, userId: number) => {
+    const result = await apiRequest<NewsMonitorWithOwner>(
+      `/news-media/monitors/${monitorId}/participants/${userId}`,
+      { method: 'DELETE' },
+    )
+    showSuccess('参与者移除成功！')
+    return result
+  }
+
   return {
     getMonitors,
     getMonitor,
@@ -82,6 +100,8 @@ export const useNewsMonitors = () => {
     deleteMonitor,
     getMonitorAggregated,
     runMonitorAggregate,
+    addParticipant,
+    removeParticipant,
   }
 }
 

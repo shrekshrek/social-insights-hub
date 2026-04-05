@@ -5,7 +5,7 @@ from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .models import Platform, SocialMonitor, monitor_participants
+from .models import Platform, SocialMonitor, social_monitor_participants as monitor_participants
 from src.auth.models import User
 
 

@@ -8,12 +8,14 @@ export interface NewsMonitor {
   description: string | null
   owner_id: number
   aggregated_result: NewsAnalysisResult | null
+  participant_ids: number[]
   created_at: string
   updated_at: string
 }
 
 export interface NewsMonitorWithOwner extends NewsMonitor {
   owner_username: string
+  participant_usernames: string[]
 }
 
 export interface NewsTask {
@@ -41,6 +43,7 @@ export interface NewsTaskWithRelations extends NewsTask {
 export interface NewsMonitorCreate {
   name: string
   description?: string | null
+  participant_ids?: number[]
 }
 
 export interface NewsMonitorUpdate {

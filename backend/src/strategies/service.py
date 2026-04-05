@@ -111,6 +111,16 @@ async def create_strategy(
     db.add(strategy)
     await db.flush()
 
+    # 添加参与者
+    if data.participant_ids:
+        from src.auth.models import User as UserModel
+
+        filtered_ids = [uid for uid in data.participant_ids if uid != user_id]
+        if filtered_ids:
+            users = await db.execute(select(UserModel).where(UserModel.id.in_(filtered_ids)))
+            for u in users.scalars().all():
+                strategy.participants.append(u)
+
     # 创建关联
     for sid in data.slice_ids:
         db.add(StrategySlice(strategy_id=strategy.id, slice_id=sid))
@@ -131,12 +141,21 @@ async def get_strategies(
 ) -> tuple[list[Strategy], int]:
     """获取策略列表
 
-    admin 看全部，普通用户只看自己创建的。
+    admin 看全部，普通用户看自己创建或参与的。
     """
+    from src.strategies.models import strategy_participants
+
     query = select(Strategy)
 
     if not is_admin:
-        query = query.where(Strategy.created_by == user_id)
+        participated_subq = (
+            select(strategy_participants.c.strategy_id)
+            .where(strategy_participants.c.user_id == user_id)
+            .scalar_subquery()
+        )
+        query = query.where(
+            (Strategy.created_by == user_id) | Strategy.id.in_(participated_subq)
+        )
 
     if search:
         query = query.where(Strategy.name.ilike(f"%{search}%"))
@@ -160,6 +179,7 @@ async def get_strategy_by_id(db: AsyncSession, strategy_id: int) -> Strategy | N
         .where(Strategy.id == strategy_id)
         .options(
             selectinload(Strategy.creator),
+            selectinload(Strategy.participants),
             selectinload(Strategy.slices)
             .selectinload(StrategySlice.slice)
             .selectinload(AnalysisSlice.monitor),
@@ -186,6 +206,82 @@ async def delete_strategy(db: AsyncSession, strategy: Strategy) -> None:
     """删除策略（CASCADE 自动清理 strategy_slices）"""
     await db.delete(strategy)
     await db.commit()
+
+
+async def add_participants_to_strategy(
+    db: AsyncSession, strategy: Strategy, user_ids: list[int]
+) -> Strategy:
+    """为策略添加参与者，并同步到关联的 SocialMonitor / NewsMonitor"""
+    from src.auth.models import User
+
+    # 过滤 owner 自身
+    filtered_ids = [uid for uid in user_ids if uid != strategy.created_by]
+    if not filtered_ids:
+        return strategy
+
+    users = await db.execute(select(User).where(User.id.in_(filtered_ids)))
+    new_participants = users.scalars().all()
+    existing_ids = {u.id for u in strategy.participants}
+    for user in new_participants:
+        if user.id not in existing_ids:
+            strategy.participants.append(user)
+
+    await db.flush()
+    await _sync_participants_to_monitors(db, strategy)
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def remove_participant_from_strategy(
+    db: AsyncSession, strategy: Strategy, user_id: int
+) -> Strategy:
+    """从策略移除参与者，并同步到关联的 SocialMonitor / NewsMonitor"""
+    if user_id == strategy.created_by:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能移除策略创建者",
+        )
+    if user_id not in {p.id for p in strategy.participants}:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"用户 {user_id} 不是该策略的参与者",
+        )
+    strategy.participants = [p for p in strategy.participants if p.id != user_id]
+    await db.flush()
+    await _sync_participants_to_monitors(db, strategy)
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -> None:
+    """将策略 participants 同步（覆盖）到关联的 SocialMonitor 和 NewsMonitor。
+
+    只同步由策略创建/关联的 monitor（通过 social_monitor_id / news_monitor_id 判断）。
+    独立创建的 monitor 不受此影响。
+    """
+    participant_ids = [p.id for p in strategy.participants]
+
+    if strategy.social_monitor_id:
+        from src.social_media.monitors.crud import get_social_monitor_by_id
+        from src.auth.models import User
+
+        monitor = await get_social_monitor_by_id(db, strategy.social_monitor_id, load_relations=True)
+        if monitor:
+            users = await db.execute(select(User).where(User.id.in_(participant_ids)))
+            new_participants = [u for u in users.scalars().all() if u.id != monitor.owner_id]
+            monitor.participants = new_participants
+            await db.flush()
+
+    if strategy.news_monitor_id:
+        from src.news_media.crud import get_monitor_by_id as get_news_monitor_by_id
+        from src.auth.models import User
+
+        news_monitor = await get_news_monitor_by_id(db, strategy.news_monitor_id, load_relations=True)
+        if news_monitor:
+            users2 = await db.execute(select(User).where(User.id.in_(participant_ids)))
+            new_participants2 = [u for u in users2.scalars().all() if u.id != news_monitor.owner_id]
+            news_monitor.participants = new_participants2
+            await db.flush()
 
 
 async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dict]:
@@ -691,6 +787,7 @@ async def confirm_research(
                 SocialMonitorCreate(
                     name=monitor_name,
                     description=f"策略「{strategy.name}」的研究数据采集",
+                    participant_ids=[p.id for p in strategy.participants],
                 ),
                 current_user_id,
             )
@@ -718,6 +815,7 @@ async def confirm_research(
                 NewsMonitorCreate(
                     name=f"{strategy.name} - 新闻监测",
                     description=f"策略「{strategy.name}」的新闻数据采集",
+                    participant_ids=[p.id for p in strategy.participants],
                 ),
                 current_user_id,
             )

@@ -3,13 +3,15 @@
 from typing import TYPE_CHECKING
 from datetime import datetime
 from sqlalchemy import (
+    Column,
     Integer,
+    ForeignKey,
     String,
     DateTime,
-    ForeignKey,
     JSON,
     CheckConstraint,
     Index,
+    Table,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -22,6 +24,25 @@ if TYPE_CHECKING:
     from src.social_media.monitors.models import SocialMonitor
     from src.social_media.tasks.models import SocialTask
     from src.news_media.models import NewsMonitor, NewsTask
+
+
+# 策略-参与者关联表（多对多）
+strategy_participants = Table(
+    "strategy_participants",
+    Base.metadata,
+    Column(
+        "strategy_id",
+        Integer,
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 class Strategy(Base):
@@ -90,7 +111,7 @@ class Strategy(Base):
     )
     news_monitor_id: Mapped[int | None] = mapped_column(
         ForeignKey("news_monitors.id"), nullable=True,
-        comment="策略创建的新闻 SocialMonitor ID",
+        comment="策略创建的新闻 NewsMonitor ID",
     )
 
     # 时间戳
@@ -105,6 +126,11 @@ class Strategy(Base):
     creator: Mapped["User"] = relationship(
         "src.auth.models.User",
         foreign_keys=[created_by],
+        lazy="selectin",
+    )
+    participants: Mapped[list["User"]] = relationship(
+        "src.auth.models.User",
+        secondary=strategy_participants,
         lazy="selectin",
     )
     social_monitor: Mapped["SocialMonitor | None"] = relationship(

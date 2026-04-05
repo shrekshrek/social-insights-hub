@@ -14,10 +14,11 @@ definePageMeta({
 const route = useRoute()
 const monitorId = computed(() => Number(route.params.id))
 
-const { getMonitor, deleteMonitor, batchCreateTasks } = useMonitors()
+const { getMonitor, deleteMonitor, batchCreateTasks, addParticipant, removeParticipant } = useMonitors()
 const { getTasks, deleteTask } = useTasks()
 const { createMonitorSlice, deleteMonitorSlice } = useAnalysis()
 const { useApiData } = useApi()
+const { currentUserId } = usePermissions()
 
 // 获取项目详情（使用顶层 await）
 const { data: monitor, pending: _monitorLoading, refresh: refreshMonitor } = await getMonitor(monitorId.value)
@@ -844,12 +845,16 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
               参与者
             </h3>
-            <p
-              class="mt-1 text-sm text-gray-900 dark:text-white truncate"
-              :title="monitor.participant_usernames?.join(', ') || '无'"
-            >
-              {{ monitor.participant_usernames?.length ? monitor.participant_usernames.join(', ') : '无' }}
-            </p>
+            <ClientOnly fallback="...">
+              <ParticipantsManager
+                class="mt-1"
+                :participants="(monitor?.participant_ids || []).map((id: number, i: number) => ({ id, username: monitor?.participant_usernames?.[i] || String(id) }))"
+                :owner-id="monitor?.owner_id || 0"
+                :can-manage="monitor?.owner_id === currentUserId"
+                :on-add="async (ids: number[]) => { await addParticipant(monitorId, ids); await refreshMonitor() }"
+                :on-remove="async (uid: number) => { await removeParticipant(monitorId, uid); await refreshMonitor() }"
+              />
+            </ClientOnly>
           </div>
 
           <div>

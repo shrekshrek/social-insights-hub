@@ -22,10 +22,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.drop_constraint("social_posts_task_id_fkey", "social_posts", type_="foreignkey")
-    op.drop_constraint("social_comments_task_id_fkey", "social_comments", type_="foreignkey")
-    op.drop_constraint("post_analysis_task_id_fkey", "post_analysis", type_="foreignkey")
-    op.drop_constraint("analysis_jobs_task_id_fkey", "analysis_jobs", type_="foreignkey")
+    # 删除旧外键约束（使用数据库实际约束名）
+    op.drop_constraint("fk_social_posts_task_id_social_data_tasks", "social_posts", type_="foreignkey")
+    op.drop_constraint("fk_social_comments_task_id_social_data_tasks", "social_comments", type_="foreignkey")
+    op.drop_constraint("fk_post_analysis_task_id_social_data_tasks", "post_analysis", type_="foreignkey")
+    op.drop_constraint("fk_analysis_jobs_task_id_social_data_tasks", "analysis_jobs", type_="foreignkey")
 
     op.rename_table("social_data_tasks", "social_tasks")
 
@@ -43,7 +44,7 @@ def downgrade() -> None:
 
     op.rename_table("social_tasks", "social_data_tasks")
 
-    op.create_foreign_key("analysis_jobs_task_id_fkey", "analysis_jobs", "social_data_tasks", ["task_id"], ["id"], ondelete="CASCADE")
-    op.create_foreign_key("post_analysis_task_id_fkey", "post_analysis", "social_data_tasks", ["task_id"], ["id"], ondelete="CASCADE")
-    op.create_foreign_key("social_comments_task_id_fkey", "social_comments", "social_data_tasks", ["task_id"], ["id"], ondelete="CASCADE")
-    op.create_foreign_key("social_posts_task_id_fkey", "social_posts", "social_data_tasks", ["task_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key("fk_analysis_jobs_task_id_social_data_tasks", "analysis_jobs", "social_data_tasks", ["task_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key("fk_post_analysis_task_id_social_data_tasks", "post_analysis", "social_data_tasks", ["task_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key("fk_social_comments_task_id_social_data_tasks", "social_comments", "social_data_tasks", ["task_id"], ["id"], ondelete="CASCADE")
+    op.create_foreign_key("fk_social_posts_task_id_social_data_tasks", "social_posts", "social_data_tasks", ["task_id"], ["id"], ondelete="CASCADE")

@@ -230,6 +230,25 @@ export const useStrategies = () => {
     })
   }
 
+  // ==================== Participants ====================
+
+  const addParticipant = async (id: number, userIds: number[]) => {
+    const result = await apiRequest<Strategy>(`/strategies/${id}/participants`, {
+      method: 'POST',
+      body: { user_ids: userIds },
+    })
+    showSuccess('参与者添加成功')
+    return result
+  }
+
+  const removeParticipant = async (id: number, userId: number) => {
+    const result = await apiRequest<Strategy>(`/strategies/${id}/participants/${userId}`, {
+      method: 'DELETE',
+    })
+    showSuccess('参与者移除成功')
+    return result
+  }
+
   return {
     getStrategies,
     getStrategy,
@@ -251,5 +270,7 @@ export const useStrategies = () => {
     exportStrategy,
     parseBrief,
     parseBriefText,
+    addParticipant,
+    removeParticipant,
   }
 }

@@ -255,10 +255,10 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-          数据采集任务
+          社媒采集
         </h1>
         <p class="text-gray-600 dark:text-gray-400 mt-1">
-          管理您的社交媒体数据采集任务
+          管理所有社交媒体采集任务
         </p>
       </div>
 

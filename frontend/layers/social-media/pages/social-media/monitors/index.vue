@@ -38,8 +38,8 @@ const handleRefresh = async () => {
 const handleDelete = async (monitor: SocialMonitor) => {
   const { $confirm } = useNuxtApp();
   const confirmed = await $confirm({
-    title: "删除监测",
-    message: `确定要删除监测 "${monitor.name}" 吗？此操作不可恢复，所有相关任务和数据也将被删除。`,
+    title: "删除社媒监测",
+    message: `确定要删除社媒监测 "${monitor.name}" 吗？此操作不可恢复，所有相关任务和数据也将被删除。`,
     confirmText: "删除",
     cancelText: "取消",
     type: "error",
@@ -151,10 +151,10 @@ const columns = computed<TableColumn<SocialMonitor>[]>(() => {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-          社交媒体项目
+          社媒监测
         </h1>
         <p class="text-gray-600 dark:text-gray-400 mt-1">
-          管理您的社交媒体数据采集项目
+          管理社交媒体监测项目
         </p>
       </div>
 

@@ -197,6 +197,10 @@ export interface Strategy {
   news_monitor_id: number | null
   slices: SliceSummary[]
 
+  // 参与者
+  participant_ids: number[]
+  participant_usernames: string[]
+
   // 元信息
   created_by: number
   creator_name: string

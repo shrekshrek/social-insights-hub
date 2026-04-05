@@ -27,6 +27,23 @@ async def validate_news_monitor_exists(
     return monitor
 
 
+async def validate_news_monitor_access(
+    monitor: NewsMonitor = Depends(validate_news_monitor_exists),
+    current_user: User = Depends(get_current_user),
+) -> NewsMonitor:
+    """验证用户是否有新闻监测项目访问权限（admin / owner / participant）"""
+    if is_admin_or_super_admin(current_user):
+        return monitor
+    if monitor.owner_id == current_user.id:
+        return monitor
+    if current_user.id in {p.id for p in monitor.participants}:
+        return monitor
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You don't have access to this monitor. Only the monitor owner, participants, or administrators can access this monitor.",
+    )
+
+
 async def validate_news_monitor_owner(
     monitor: NewsMonitor = Depends(validate_news_monitor_exists),
     current_user: User = Depends(get_current_user),
@@ -60,12 +77,19 @@ async def validate_news_task_access(
     task: NewsTask = Depends(validate_news_task_exists),
     current_user: User = Depends(get_current_user),
 ) -> NewsTask:
-    """验证用户是否有权限访问新闻任务（通过监测项目的 owner 判断）"""
+    """验证用户是否有权限访问新闻任务（通过监测项目的 owner/participant 判断）"""
     if is_admin_or_super_admin(current_user):
         return task
-    if not task.monitor or task.monitor.owner_id != current_user.id:
+    if not task.monitor:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have access to this task",
         )
-    return task
+    if task.monitor.owner_id == current_user.id:
+        return task
+    if current_user.id in {p.id for p in task.monitor.participants}:
+        return task
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You don't have access to this task",
+    )

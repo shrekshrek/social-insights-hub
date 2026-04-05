@@ -44,6 +44,7 @@ class StrategyCreate(CustomBaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="策略名称")
     slice_ids: list[int] = Field(default_factory=list, description="关联切片ID列表（可选）")
     brand_brief: BrandBrief | None = Field(None, description="结构化 Brand Brief（可选）")
+    participant_ids: list[int] = Field(default_factory=list, description="参与者用户ID列表")
 
 
 class StrategyUpdate(CustomBaseModel):
@@ -295,6 +296,10 @@ class StrategyRead(CustomBaseModel):
     news_monitor_id: int | None = None
     slices: list[SliceSummary] = Field(default_factory=list)
 
+    # 参与者
+    participant_ids: list[int] = Field(default_factory=list)
+    participant_usernames: list[str] = Field(default_factory=list)
+
     # 元信息
     created_by: int
     creator_name: str
@@ -317,6 +322,7 @@ class StrategyRead(CustomBaseModel):
             )
             for ss in strategy.slices
         ]
+        participants = getattr(strategy, "participants", []) or []
         return cls(
             id=strategy.id,
             name=strategy.name,
@@ -333,11 +339,19 @@ class StrategyRead(CustomBaseModel):
             social_monitor_id=strategy.social_monitor_id,
             news_monitor_id=strategy.news_monitor_id,
             slices=slices,
+            participant_ids=[p.id for p in participants],
+            participant_usernames=[p.username for p in participants],
             created_by=strategy.created_by,
             creator_name=strategy.creator.username if strategy.creator else "",
             created_at=strategy.created_at,
             updated_at=strategy.updated_at,
         )
+
+
+class StrategyParticipantAssignment(CustomBaseModel):
+    """策略参与者批量添加请求"""
+
+    user_ids: list[int] = Field(..., min_length=1, description="要添加的参与者用户ID列表")
 
 
 StrategyListResponse = PaginatedResponse[StrategyListItem]

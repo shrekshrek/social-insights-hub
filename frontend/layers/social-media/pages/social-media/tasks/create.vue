@@ -447,10 +447,10 @@ const handleSubmit = async () => {
         />
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-            新建任务
+            新建社媒采集任务
           </h1>
           <p class="text-gray-600 dark:text-gray-400 mt-1">
-            创建一个新的数据采集任务
+            创建一个新的社媒采集任务
           </p>
         </div>
       </div>

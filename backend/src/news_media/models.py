@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, JSON, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -12,6 +12,25 @@ from src.database import Base
 if TYPE_CHECKING:
     from src.auth.models import User
     from src.strategies.models import Strategy
+
+
+# 新闻监测-参与者关联表（多对多）
+news_monitor_participants = Table(
+    "news_monitor_participants",
+    Base.metadata,
+    Column(
+        "monitor_id",
+        Integer,
+        ForeignKey("news_monitors.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 class NewsMonitor(Base):
@@ -40,6 +59,9 @@ class NewsMonitor(Base):
 
     owner: Mapped["User"] = relationship(
         "src.auth.models.User", foreign_keys=[owner_id], lazy="selectin"
+    )
+    participants: Mapped[list["User"]] = relationship(
+        "src.auth.models.User", secondary=news_monitor_participants, lazy="selectin"
     )
     tasks: Mapped[list["NewsTask"]] = relationship(
         back_populates="monitor", cascade="all, delete-orphan", lazy="select"

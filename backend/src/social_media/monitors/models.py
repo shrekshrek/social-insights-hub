@@ -1,4 +1,4 @@
-"""社交媒体数据模型"""
+"""社媒监测数据模型"""
 
 from typing import TYPE_CHECKING
 from datetime import datetime
@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 
 
 # 项目-参与者关联表（多对多）
-monitor_participants = Table(
-    "monitor_participants",
+social_monitor_participants = Table(
+    "social_monitor_participants",
     Base.metadata,
     Column(
         "monitor_id",
@@ -111,7 +111,7 @@ class SocialMonitor(Base):
     )
 
     participants: Mapped[list["User"]] = relationship(
-        "src.auth.models.User", secondary=monitor_participants, lazy="selectin"
+        "src.auth.models.User", secondary=social_monitor_participants, lazy="selectin"
     )
 
     # TODO: 添加以下关系（在后续阶段实现）

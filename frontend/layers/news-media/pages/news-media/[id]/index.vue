@@ -10,10 +10,11 @@ definePageMeta({
 const route = useRoute()
 const monitorId = Number(route.params.id)
 
-const { getMonitor, deleteMonitor: deleteMonitorApi, getMonitorAggregated, runMonitorAggregate } = useNewsMonitors()
+const { getMonitor, deleteMonitor: deleteMonitorApi, getMonitorAggregated, runMonitorAggregate, addParticipant, removeParticipant } = useNewsMonitors()
 const { getTasks, deleteTask, executeTask } = useNewsTasks()
+const { currentUserId } = usePermissions()
 
-const { data: monitor, pending: monitorLoading } = getMonitor(monitorId)
+const { data: monitor, pending: monitorLoading, refresh: refreshMonitor } = getMonitor(monitorId)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -340,6 +341,18 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             <span class="text-gray-500 dark:text-gray-400">任务数</span>
             <p class="font-medium mt-0.5">{{ totalTasks }}</p>
           </div>
+        </div>
+        <div class="mt-4 border-t border-gray-100 dark:border-gray-800 pt-4">
+          <span class="text-sm text-gray-500 dark:text-gray-400 mb-2 block">参与者</span>
+          <ClientOnly fallback="...">
+            <ParticipantsManager
+              :participants="(monitor!.participant_ids || []).map((id: number, i: number) => ({ id, username: monitor!.participant_usernames?.[i] || String(id) }))"
+              :owner-id="monitor.owner_id"
+              :can-manage="monitor.owner_id === currentUserId"
+              :on-add="async (ids: number[]) => { await addParticipant(monitorId, ids); await refreshMonitor() }"
+              :on-remove="async (uid: number) => { await removeParticipant(monitorId, uid); await refreshMonitor() }"
+            />
+          </ClientOnly>
         </div>
       </UCard>
 

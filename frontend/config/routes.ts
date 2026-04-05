@@ -55,7 +55,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     order: 50,
   },
   "/rbac/permissions/[id]": { permission: PERMISSIONS.PERMISSION_READ },
-  // 社交媒体数据洞察模块
+  // 社媒监测模块
   "/social-media/monitors": {
     permission: PERMISSIONS.MONITOR_ACCESS,
     label: "社媒监测",
@@ -66,7 +66,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/social-media/monitors/[id]": { permission: PERMISSIONS.MONITOR_READ },
   "/social-media/tasks": {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
-    label: "数据采集",
+    label: "社媒采集",
     showInNav: true,
     order: 70,
   },

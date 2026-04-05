@@ -154,7 +154,7 @@ const handleSubmit = async () => {
             新建项目
           </h1>
           <p class="text-gray-600 dark:text-gray-400 mt-1">
-            创建一个新的社交媒体数据采集项目
+            创建一个新的社媒监测项目
           </p>
         </div>
       </div>

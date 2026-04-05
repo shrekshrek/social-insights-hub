@@ -5,7 +5,7 @@
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-          策略管理
+          策略研究
         </h1>
         <p class="text-gray-600 dark:text-gray-400 mt-1">
           基于社交洞察数据的品牌策略生成

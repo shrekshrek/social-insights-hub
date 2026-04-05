@@ -11,7 +11,7 @@ from sqlalchemy import or_, select, update
 
 from src.config import settings
 from src.database import AsyncSessionLocal
-from src.social_media.tasks.models import DataTask
+from src.social_media.tasks.models import SocialTask
 
 logger = logging.getLogger(__name__)
 
@@ -31,15 +31,15 @@ async def reset_timed_out_tasks() -> int:
 
     async with AsyncSessionLocal() as db:
         stmt = (
-            select(DataTask.id, DataTask.keywords, DataTask.status, DataTask.accepted_at)
+            select(SocialTask.id, SocialTask.keywords, SocialTask.status, SocialTask.accepted_at)
             .where(
                 or_(
-                    DataTask.status == "accepted",
-                    DataTask.status == "running",
+                    SocialTask.status == "accepted",
+                    SocialTask.status == "running",
                 ),
-                DataTask.accepted_at.isnot(None),
-                DataTask.accepted_at < cutoff,
-                DataTask.is_deleted.is_(False),
+                SocialTask.accepted_at.isnot(None),
+                SocialTask.accepted_at < cutoff,
+                SocialTask.is_deleted.is_(False),
             )
         )
         timed_out = (await db.execute(stmt)).all()
@@ -49,8 +49,8 @@ async def reset_timed_out_tasks() -> int:
 
         task_ids = [row.id for row in timed_out]
         await db.execute(
-            update(DataTask)
-            .where(DataTask.id.in_(task_ids))
+            update(SocialTask)
+            .where(SocialTask.id.in_(task_ids))
             .values(status="pending", accepted_at=None, accepted_by=None)
         )
         await db.commit()

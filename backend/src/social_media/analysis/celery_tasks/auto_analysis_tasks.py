@@ -97,13 +97,13 @@ def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | N
     Returns:
         分析任务ID，失败返回 None
     """
-    from src.social_media.tasks.models import SocialPost, DataTask
+    from src.social_media.tasks.models import SocialPost, SocialTask as SocialTask
     from src.social_media.analysis.models import PostAnalysis
     from .screening_tasks import run_screening_task
 
     with _get_db_session() as db:
         # 获取任务信息
-        task = db.query(DataTask).filter(DataTask.id == task_id).first()
+        task = db.query(SocialTask).filter(SocialTask.id == task_id).first()
         if not task:
             logger.error("Task %s not found", task_id)
             return None
@@ -168,11 +168,11 @@ def _run_deep_posts(
 ) -> int | None:
     """执行原文深度分析"""
     from src.social_media.analysis.models import PostAnalysis
-    from src.social_media.tasks.models import DataTask, SocialPost
+    from src.social_media.tasks.models import SocialTask as SocialTask, SocialPost
     from .deep_analysis_tasks import run_post_deep_task
 
     with _get_db_session() as db:
-        task = db.query(DataTask).filter(DataTask.id == task_id).first()
+        task = db.query(SocialTask).filter(SocialTask.id == task_id).first()
         if not task:
             return None
 
@@ -244,11 +244,11 @@ def _run_deep_comments(
     （不额外按阈值过滤，避免与现有 preview 逻辑产生分歧）
     """
     from src.social_media.analysis.models import PostAnalysis
-    from src.social_media.tasks.models import DataTask, SocialPost
+    from src.social_media.tasks.models import SocialTask as SocialTask, SocialPost
     from .deep_analysis_tasks import run_comment_deep_task
 
     with _get_db_session() as db:
-        task = db.query(DataTask).filter(DataTask.id == task_id).first()
+        task = db.query(SocialTask).filter(SocialTask.id == task_id).first()
         if not task:
             return None
 
@@ -310,13 +310,13 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
     和手动聚合保持一致：创建实体归一化和观点归一化两个任务
     """
     from sqlalchemy import func
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask as SocialTask
     from src.social_media.analysis.models import PostAnalysis
     from src.social_media.analysis.jobs import create_analysis_job_sync
     from .aggregation_tasks import run_aggregation_task
 
     with _get_db_session() as db:
-        task = db.query(DataTask).filter(DataTask.id == task_id).first()
+        task = db.query(SocialTask).filter(SocialTask.id == task_id).first()
         if not task:
             return None
 

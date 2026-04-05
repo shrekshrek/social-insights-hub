@@ -88,7 +88,7 @@ const dateRangeText = computed(() => {
 const handleSubmit = async () => {
   submitting.value = true
   try {
-    const monitorData: MonitorCreate = {
+    const monitorData: SocialMonitorCreate = {
       name: monitorState.name,
       description: monitorState.description || undefined,
       start_date: formatDateToString(monitorState.date_range?.start as DateValue),
@@ -97,7 +97,7 @@ const handleSubmit = async () => {
 
     // 如果启用了快速任务创建
     if (enableQuickTasks.value) {
-      const quickTasks: QuickTaskCreate = {
+      const quickTasks: SocialQuickTaskCreate = {
         platform_ids: quickTaskState.platform_ids,
         task_type: quickTaskState.task_type,
         data_source: quickTaskState.data_source,

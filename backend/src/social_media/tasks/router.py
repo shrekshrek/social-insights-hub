@@ -12,7 +12,8 @@ from src.schemas import MessageResponse
 
 from . import schemas, service
 from .dependencies import validate_task_access, validate_task_owner
-from .models import DataTask
+from .models import SocialTask
+
 
 
 router = APIRouter(
@@ -26,13 +27,13 @@ router = APIRouter(
 
 @router.post(
     "",
-    response_model=schemas.DataTaskRead,
+    response_model=schemas.SocialTaskRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create new task",
     description="创建新的社交媒体数据获取任务",
 )
 async def create_task(
-    task_in: schemas.DataTaskCreate,
+    task_in: schemas.SocialTaskCreate,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -117,7 +118,7 @@ async def get_tasks(
     # 转换为带关联信息的response
     tasks_with_relations = []
     for task in tasks:
-        task_dict = schemas.DataTaskRead.model_validate(task).model_dump()
+        task_dict = schemas.SocialTaskRead.model_validate(task).model_dump()
         task_dict["monitor_name"] = task.monitor.name if task.monitor else None
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
@@ -127,7 +128,7 @@ async def get_tasks(
             task_dict["aggregation_status"] = "completed"
         else:
             task_dict["aggregation_status"] = latest_job_map.get(task.id)
-        tasks_with_relations.append(schemas.DataTaskReadWithRelations(**task_dict))
+        tasks_with_relations.append(schemas.SocialTaskReadWithRelations(**task_dict))
 
     return schemas.DataTaskListResponse.create(
         items=tasks_with_relations,
@@ -139,13 +140,13 @@ async def get_tasks(
 
 @router.get(
     "/{task_id}",
-    response_model=schemas.DataTaskReadWithRelations,
+    response_model=schemas.SocialTaskReadWithRelations,
     status_code=status.HTTP_200_OK,
     summary="Get task by ID",
     description="获取任务详情",
 )
 async def get_task(
-    task: DataTask = Depends(validate_task_access),
+    task: SocialTask = Depends(validate_task_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -168,26 +169,26 @@ async def get_task(
         )).scalar_one_or_none()
 
     # 转换为带关联信息的response
-    task_dict = schemas.DataTaskRead.model_validate(task).model_dump()
+    task_dict = schemas.SocialTaskRead.model_validate(task).model_dump()
     task_dict["monitor_name"] = task.monitor.name if task.monitor else None
     task_dict["platform_name"] = task.platform.name if task.platform else None
     task_dict["platform_code"] = task.platform.code if task.platform else None
     task_dict["creator_username"] = task.creator.username if task.creator else None
     task_dict["aggregation_status"] = aggregation_status
-    return schemas.DataTaskReadWithRelations(**task_dict)
+    return schemas.SocialTaskReadWithRelations(**task_dict)
 
 
 @router.put(
     "/{task_id}",
-    response_model=schemas.DataTaskRead,
+    response_model=schemas.SocialTaskRead,
     status_code=status.HTTP_200_OK,
     summary="Update task",
     description="更新任务信息",
 )
 async def update_task(
-    task_update: schemas.DataTaskUpdate,
+    task_update: schemas.SocialTaskUpdate,
     db: AsyncSession = Depends(get_async_db),
-    task: DataTask = Depends(validate_task_owner),
+    task: SocialTask = Depends(validate_task_owner),
 ):
     """
     更新任务信息。
@@ -207,7 +208,7 @@ async def update_task(
 )
 async def delete_task(
     db: AsyncSession = Depends(get_async_db),
-    task: DataTask = Depends(validate_task_owner),
+    task: SocialTask = Depends(validate_task_owner),
 ):
     """
     删除任务（软删除）。
@@ -221,14 +222,14 @@ async def delete_task(
 
 @router.post(
     "/{task_id}/clear-data",
-    response_model=schemas.DataTaskRead,
+    response_model=schemas.SocialTaskRead,
     status_code=status.HTTP_200_OK,
     summary="Clear task data",
     description="清空任务的所有数据以便重新上传或采集",
 )
 async def clear_task_data(
     db: AsyncSession = Depends(get_async_db),
-    task: DataTask = Depends(validate_task_owner),
+    task: SocialTask = Depends(validate_task_owner),
 ):
     """
     清空任务的所有数据（软删除原文和评论），重置任务状态。

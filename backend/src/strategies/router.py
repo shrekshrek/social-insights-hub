@@ -165,7 +165,7 @@ async def reset_to_design(
     "/{strategy_id}/confirm-research",
     response_model=ConfirmResearchResponse,
     status_code=status.HTTP_200_OK,
-    summary="确认研究计划，创建 Monitor + 探测任务",
+    summary="确认研究计划，创建 SocialMonitor + 探测任务",
 )
 async def confirm_research(
     data: ConfirmResearchRequest,
@@ -173,7 +173,7 @@ async def confirm_research(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """确认研究计划，一键创建 Monitor 和探测任务，状态推进到 probing"""
+    """确认研究计划，一键创建 SocialMonitor 和探测任务，状态推进到 probing"""
     return await service.confirm_research(
         db, strategy, data.research_design, current_user.id,
         notes_per_task=data.notes_per_task,

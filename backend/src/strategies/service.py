@@ -52,8 +52,8 @@ from src.langchain import extract_token_usage
 from src.social_media.analysis.jobs.factory import create_analysis_job_async
 from src.social_media.analysis.models import AnalysisType
 from src.social_media.analysis.models import AnalysisSlice
-from src.social_media.monitors.crud import assert_monitor_access
-from src.social_media.tasks.models import DataTask
+from src.social_media.monitors.crud import assert_social_monitor_access as assert_monitor_access
+from src.social_media.tasks.models import SocialTask as SocialTask
 from .models import Strategy, StrategySlice
 from .schemas import (
     ApproveProbeResponse,
@@ -543,10 +543,10 @@ async def reset_to_design(
     """重置策略到研究设计阶段，软删除已创建的任务
 
     允许用户从探测/采集阶段回退到 planned，重新编辑研究计划。
-    保留 Monitor（复用），保留 research_design（可重新编辑后确认）。
+    保留 SocialMonitor（复用），保留 research_design（可重新编辑后确认）。
     """
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask as SocialTask
 
     if STATUS_ORDER.get(strategy.status, 0) <= STATUS_ORDER["planned"]:
         raise HTTPException(
@@ -556,9 +556,9 @@ async def reset_to_design(
 
     # 软删除所有社媒任务
     tasks_to_delete = await db.execute(
-        select(DataTask).where(
-            DataTask.strategy_id == strategy.id,
-            DataTask.is_deleted.is_(False),
+        select(SocialTask).where(
+            SocialTask.strategy_id == strategy.id,
+            SocialTask.is_deleted.is_(False),
         )
     )
     deleted_social_tasks = list(tasks_to_delete.scalars().all())
@@ -608,15 +608,15 @@ async def confirm_research(
     notes_per_task: int = 50,
     probe_notes: int = 20,
 ) -> ConfirmResearchResponse:
-    """确认研究计划，创建一个 Monitor + 探测任务
+    """确认研究计划，创建一个 SocialMonitor + 探测任务
 
-    遍历 data_plan 中每个维度的关键词×平台组合创建 DataTask，
+    遍历 data_plan 中每个维度的关键词×平台组合创建 SocialTask，
     task_params 包含 max_pages 用于控制翻页数量（探测任务：1页或2页）。
     """
     from src.social_media.monitors.crud import get_monitor_by_name, get_platform_by_code
-    from src.social_media.monitors.schemas import MonitorCreate
+    from src.social_media.monitors.schemas import SocialMonitorCreate
     from src.social_media.monitors.service import create_monitor
-    from src.social_media.tasks.schemas import DataTaskCreate
+    from src.social_media.tasks.schemas import SocialTaskCreate as SocialTaskCreate
     from src.social_media.tasks.service import create_task
 
     if STATUS_ORDER.get(strategy.status, 0) > STATUS_ORDER["probing"]:
@@ -628,7 +628,7 @@ async def confirm_research(
     # 从 probing 状态重新确认：清理旧探测数据，重新创建任务
     if strategy.status == "probing":
         from src.social_media.tasks import crud as task_crud
-        from src.social_media.tasks.models import DataTask as _DataTask
+        from src.social_media.tasks.models import SocialTask as _DataTask
 
         old_tasks = await db.execute(
             select(_DataTask).where(
@@ -667,11 +667,11 @@ async def confirm_research(
     flag_modified(strategy, "research_design")
     strategy.output_type = research_design.get("output_type", "brand_strategy")
 
-    # 复用已有 Monitor 或创建新的
+    # 复用已有 SocialMonitor 或创建新的
     if strategy.social_monitor_id:
-        from src.social_media.monitors.models import Monitor
+        from src.social_media.monitors.models import SocialMonitor as SocialMonitor
 
-        monitor = await db.get(Monitor, strategy.social_monitor_id)
+        monitor = await db.get(SocialMonitor, strategy.social_monitor_id)
         if not monitor:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -688,7 +688,7 @@ async def confirm_research(
         try:
             result = await create_monitor(
                 db,
-                MonitorCreate(
+                SocialMonitorCreate(
                     name=monitor_name,
                     description=f"策略「{strategy.name}」的研究数据采集",
                 ),
@@ -810,7 +810,7 @@ async def confirm_research(
 
                     task = await create_task(
                         db,
-                        DataTaskCreate(
+                        SocialTaskCreate(
                             name=f"{keyword}-{platform.name}",
                             monitor_id=monitor.id,
                             platform_id=platform.id,
@@ -878,13 +878,13 @@ async def _build_probe_task_summaries(
         (task_statuses, analyzed_summaries)
         analyzed_summaries 只包含已有分析结果的任务摘要，供审查使用
     """
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask as SocialTask
 
     if not task_ids:
         return [], []
 
-    query = select(DataTask).where(
-        DataTask.id.in_(task_ids), DataTask.is_deleted.is_(False)
+    query = select(SocialTask).where(
+        SocialTask.id.in_(task_ids), SocialTask.is_deleted.is_(False)
     )
     result = await db.execute(query)
     tasks = result.scalars().all()
@@ -1292,10 +1292,10 @@ async def check_probe_status(
     """查询探测任务进度，全部分析完成后自动触发后台 LLM 审查。"""
     # 查询该策略的所有社媒 probe 任务
     probe_tasks_result = await db.execute(
-        select(DataTask).where(
-            DataTask.strategy_id == strategy.id,
-            DataTask.phase == "probe",
-            DataTask.is_deleted.is_(False),
+        select(SocialTask).where(
+            SocialTask.strategy_id == strategy.id,
+            SocialTask.phase == "probe",
+            SocialTask.is_deleted.is_(False),
         )
     )
     probe_tasks = list(probe_tasks_result.scalars().all())
@@ -1370,16 +1370,16 @@ async def approve_probe(
     current_user_id: int,
 ) -> ApproveProbeResponse:
     """手动确认探测，为每个探测任务创建独立的全量采集任务（phase="collect"）"""
-    from src.social_media.tasks.models import DataTask
-    from src.social_media.tasks.schemas import DataTaskCreate
+    from src.social_media.tasks.models import SocialTask as SocialTask
+    from src.social_media.tasks.schemas import SocialTaskCreate as SocialTaskCreate
     from src.social_media.tasks.service import create_task
 
     # 获取当前所有社媒 probe 任务
-    probe_tasks_stmt = select(DataTask).where(
+    probe_tasks_stmt = select(SocialTask).where(
         and_(
-            DataTask.strategy_id == strategy.id,
-            DataTask.phase == "probe",
-            DataTask.is_deleted.is_(False),
+            SocialTask.strategy_id == strategy.id,
+            SocialTask.phase == "probe",
+            SocialTask.is_deleted.is_(False),
         )
     )
     probe_tasks_result = await db.execute(probe_tasks_stmt)
@@ -1431,7 +1431,7 @@ async def approve_probe(
 
         collect_task = await create_task(
             db,
-            DataTaskCreate(
+            SocialTaskCreate(
                 name=f"{pt.keywords}-{pt.platform.name}",
                 monitor_id=strategy.social_monitor_id,
                 platform_id=pt.platform_id,
@@ -1524,7 +1524,7 @@ async def refine_probe(
     current_user_id: int,
 ) -> RefineProbeResponse:
     """调整探测任务关键词，创建新的探测任务（phase="probe"），probe_round++"""
-    from src.social_media.tasks.schemas import DataTaskCreate
+    from src.social_media.tasks.schemas import SocialTaskCreate as SocialTaskCreate
     from src.social_media.tasks.service import create_task
     from src.social_media.monitors.crud import get_platform_by_code
 
@@ -1536,18 +1536,18 @@ async def refine_probe(
 
     # 加载现有 probe 任务（用于软删除）
     from sqlalchemy import select, and_
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask as SocialTask
 
     old_tasks_result = await db.execute(
-        select(DataTask).where(
+        select(SocialTask).where(
             and_(
-                DataTask.strategy_id == strategy.id,
-                DataTask.phase == "probe",
-                DataTask.is_deleted.is_(False),
+                SocialTask.strategy_id == strategy.id,
+                SocialTask.phase == "probe",
+                SocialTask.is_deleted.is_(False),
             )
         )
     )
-    old_tasks_map: dict[int, DataTask] = {t.id: t for t in old_tasks_result.scalars().all()}
+    old_tasks_map: dict[int, SocialTask] = {t.id: t for t in old_tasks_result.scalars().all()}
 
     if not old_tasks_map:
         raise HTTPException(
@@ -1607,7 +1607,7 @@ async def refine_probe(
             max_pages = 2 if code in ("wb", "tieba") else 1
             new_task = await create_task(
                 db,
-                DataTaskCreate(
+                SocialTaskCreate(
                     name=f"{item.new_keyword}-{platform_obj.name}",
                     monitor_id=strategy.social_monitor_id,
                     platform_id=platform_obj.id,
@@ -1654,14 +1654,14 @@ async def check_collection_status(
     current_user_id: int,
 ) -> CollectionStatusResponse:
     """查询全量采集进度，全部完成+分析后自动建切片并验证覆盖度。"""
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask as SocialTask
 
     # 查询该策略的所有社媒 collect 任务
-    stmt = select(DataTask).where(
+    stmt = select(SocialTask).where(
         and_(
-            DataTask.strategy_id == strategy.id,
-            DataTask.phase == "collect",
-            DataTask.is_deleted.is_(False),
+            SocialTask.strategy_id == strategy.id,
+            SocialTask.phase == "collect",
+            SocialTask.is_deleted.is_(False),
         )
     )
     result = await db.execute(stmt)
@@ -1682,8 +1682,8 @@ async def check_collection_status(
     if failed_tasks:
         failed_ids = [t.id for t in failed_tasks]
         await db.execute(
-            update(DataTask)
-            .where(DataTask.id.in_(failed_ids))
+            update(SocialTask)
+            .where(SocialTask.id.in_(failed_ids))
             .values(status="pending", accepted_at=None, accepted_by=None)
         )
         await db.commit()

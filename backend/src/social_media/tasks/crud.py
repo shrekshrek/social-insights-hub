@@ -5,32 +5,34 @@ from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .models import DataTask, SocialPost, SocialComment
+from .models import SocialTask, SocialPost, SocialComment
+
+# Backward-compat alias used throughout this file
 
 
-# ==================== DataTask CRUD ====================
+# ==================== SocialTask CRUD ====================
 
 
-async def get_task_by_id(
+async def get_social_task_by_id(
     db: AsyncSession, task_id: int, load_relations: bool = False
-) -> Optional[DataTask]:
+) -> Optional[SocialTask]:
     """根据ID获取任务"""
-    query = select(DataTask).where(
-        DataTask.id == task_id, DataTask.is_deleted.is_(False)
+    query = select(SocialTask).where(
+        SocialTask.id == task_id, SocialTask.is_deleted.is_(False)
     )
 
     if load_relations:
         query = query.options(
-            selectinload(DataTask.monitor),
-            selectinload(DataTask.platform),
-            selectinload(DataTask.creator),
+            selectinload(SocialTask.monitor),
+            selectinload(SocialTask.platform),
+            selectinload(SocialTask.creator),
         )
 
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
-async def get_tasks(
+async def get_social_tasks(
     db: AsyncSession,
     skip: int = 0,
     limit: int = 20,
@@ -42,59 +44,59 @@ async def get_tasks(
     creator_id: Optional[int] = None,
     search: Optional[str] = None,
     phase: Optional[str] = None,
-) -> tuple[List[DataTask], int]:
+) -> tuple[List[SocialTask], int]:
     """获取任务列表（带过滤和分页）"""
     # 构建查询条件
-    conditions = [DataTask.is_deleted.is_(False)]
+    conditions = [SocialTask.is_deleted.is_(False)]
 
     if monitor_id is not None:
-        conditions.append(DataTask.monitor_id == monitor_id)
+        conditions.append(SocialTask.monitor_id == monitor_id)
 
     if platform_id is not None:
-        conditions.append(DataTask.platform_id == platform_id)
+        conditions.append(SocialTask.platform_id == platform_id)
 
     if task_type:
-        conditions.append(DataTask.task_type == task_type)
+        conditions.append(SocialTask.task_type == task_type)
 
     if status:
-        conditions.append(DataTask.status == status)
+        conditions.append(SocialTask.status == status)
 
     if data_source:
-        conditions.append(DataTask.data_source == data_source)
+        conditions.append(SocialTask.data_source == data_source)
 
     if creator_id is not None:
-        conditions.append(DataTask.creator_id == creator_id)
+        conditions.append(SocialTask.creator_id == creator_id)
 
     if phase:
-        conditions.append(DataTask.phase == phase)
+        conditions.append(SocialTask.phase == phase)
 
     if search:
         search_pattern = f"%{search}%"
         conditions.append(
             or_(
-                DataTask.name.ilike(search_pattern),
-                DataTask.description.ilike(search_pattern),
-                DataTask.keywords.ilike(search_pattern),
+                SocialTask.name.ilike(search_pattern),
+                SocialTask.description.ilike(search_pattern),
+                SocialTask.keywords.ilike(search_pattern),
             )
         )
 
     # 统计总数
-    count_query = select(func.count()).select_from(DataTask).where(and_(*conditions))
+    count_query = select(func.count()).select_from(SocialTask).where(and_(*conditions))
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
     # 查询数据
     query = (
-        select(DataTask)
+        select(SocialTask)
         .where(and_(*conditions))
         .options(
-            selectinload(DataTask.monitor),
-            selectinload(DataTask.platform),
-            selectinload(DataTask.creator),
+            selectinload(SocialTask.monitor),
+            selectinload(SocialTask.platform),
+            selectinload(SocialTask.creator),
         )
         .offset(skip)
         .limit(limit)
-        .order_by(DataTask.created_at.desc())
+        .order_by(SocialTask.created_at.desc())
     )
 
     result = await db.execute(query)
@@ -103,16 +105,16 @@ async def get_tasks(
     return list(tasks), total
 
 
-async def create_task(db: AsyncSession, task_data: dict, creator_id: int) -> DataTask:
+async def create_social_task(db: AsyncSession, task_data: dict, creator_id: int) -> SocialTask:
     """创建任务"""
-    task = DataTask(**task_data, creator_id=creator_id)
+    task = SocialTask(**task_data, creator_id=creator_id)
     db.add(task)
     await db.flush()  # 获取任务ID
     await db.refresh(task, ["monitor", "platform", "creator"])
     return task
 
 
-async def update_task(db: AsyncSession, task: DataTask, update_data: dict) -> DataTask:
+async def update_social_task(db: AsyncSession, task: SocialTask, update_data: dict) -> SocialTask:
     """更新任务"""
     for key, value in update_data.items():
         if value is not None:
@@ -123,9 +125,9 @@ async def update_task(db: AsyncSession, task: DataTask, update_data: dict) -> Da
     return task
 
 
-async def update_task_status(
-    db: AsyncSession, task: DataTask, status: str, error_message: Optional[str] = None
-) -> DataTask:
+async def update_social_task_status(
+    db: AsyncSession, task: SocialTask, status: str, error_message: Optional[str] = None
+) -> SocialTask:
     """更新任务状态"""
     task.status = status
     if error_message:
@@ -141,12 +143,12 @@ async def update_task_status(
     return task
 
 
-async def update_task_counts(
+async def update_social_task_counts(
     db: AsyncSession,
-    task: DataTask,
+    task: SocialTask,
     posts_count: Optional[int] = None,
     comments_count: Optional[int] = None,
-) -> DataTask:
+) -> SocialTask:
     """更新任务统计数据"""
     if posts_count is not None:
         task.posts_count = posts_count
@@ -158,7 +160,7 @@ async def update_task_counts(
     return task
 
 
-async def delete_task(db: AsyncSession, task: DataTask) -> None:
+async def delete_social_task(db: AsyncSession, task: SocialTask) -> None:
     """软删除任务"""
     task.is_deleted = True
     await db.flush()
@@ -318,11 +320,11 @@ async def get_posts_by_platform_post_id(
 
     # 如果指定项目，只查询该项目下的任务
     if monitor_id is not None:
-        conditions.append(DataTask.monitor_id == monitor_id)
+        conditions.append(SocialTask.monitor_id == monitor_id)
 
         query = (
             select(SocialPost)
-            .join(DataTask, SocialPost.task_id == DataTask.id)
+            .join(SocialTask, SocialPost.task_id == SocialTask.id)
             .where(and_(*conditions))
             .order_by(SocialPost.published_at.desc())
         )
@@ -494,7 +496,7 @@ async def bulk_create_tasks(
     keywords: Optional[str] = None,
     task_params: Optional[dict] = None,
     auto_analyze: bool = False,
-) -> List[DataTask]:
+) -> List[SocialTask]:
     """为多个平台批量创建相同配置的任务
 
     Args:
@@ -561,7 +563,7 @@ async def bulk_create_tasks(
             "auto_analyze": auto_analyze,
         }
 
-        task = DataTask(**task_data, creator_id=creator_id)
+        task = SocialTask(**task_data, creator_id=creator_id)
         tasks.append(task)
 
     db.add_all(tasks)
@@ -570,13 +572,13 @@ async def bulk_create_tasks(
     # 重新查询以获取完整的关系数据
     task_ids = [task.id for task in tasks]
     result = await db.execute(
-        select(DataTask)
+        select(SocialTask)
         .options(
-            selectinload(DataTask.monitor),
-            selectinload(DataTask.platform),
-            selectinload(DataTask.creator),
+            selectinload(SocialTask.monitor),
+            selectinload(SocialTask.platform),
+            selectinload(SocialTask.creator),
         )
-        .where(DataTask.id.in_(task_ids))
+        .where(SocialTask.id.in_(task_ids))
     )
     refreshed_tasks = result.scalars().all()
 
@@ -629,3 +631,14 @@ async def soft_delete_task_comments(db: AsyncSession, task_id: int) -> int:
 
     await db.flush()
     return result.rowcount
+
+
+# ==================== Backward-compatible aliases ====================
+
+get_task_by_id = get_social_task_by_id
+get_tasks = get_social_tasks
+create_task = create_social_task
+update_task = update_social_task
+update_task_status = update_social_task_status
+update_task_counts = update_social_task_counts
+delete_task = delete_social_task

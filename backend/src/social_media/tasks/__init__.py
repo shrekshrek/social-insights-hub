@@ -6,7 +6,9 @@
 2. 本地JSON文件上传
 """
 
-from .models import DataTask, SocialPost, SocialComment
+from .models import SocialTask, SocialPost, SocialComment
 from .router import router
 
-__all__ = ["DataTask", "SocialPost", "SocialComment", "router"]
+# Backward-compat alias
+
+__all__ = ["SocialTask", "SocialTask", "SocialPost", "SocialComment", "router"]

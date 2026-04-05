@@ -35,7 +35,7 @@ from src.social_media.analysis.jobs import (
     complete_analysis_job_sync,
     start_analysis_job_sync,
 )
-from src.social_media.tasks.models import SocialPost, DataTask
+from src.social_media.tasks.models import SocialPost, SocialTask as SocialTask
 from .metrics import (
     calculate_cii_for_post,
     calculate_nsr,
@@ -184,7 +184,7 @@ def aggregate_task_analysis(
     logger.info("开始聚合任务 %s 的分析结果", task_id)
 
     # 0. 获取任务信息（关键词用于主体过滤）
-    task_stmt = select(DataTask).where(DataTask.id == task_id)
+    task_stmt = select(SocialTask).where(SocialTask.id == task_id)
     task = db.execute(task_stmt).scalar_one_or_none()
 
     task_keywords: list[str] = []

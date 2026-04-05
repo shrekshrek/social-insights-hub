@@ -405,7 +405,7 @@ const handleSubmit = async () => {
       }
     }
 
-    const taskData: DataTaskCreate = {
+    const taskData: SocialTaskCreate = {
       name: state.name,
       description: state.description || undefined,
       monitor_id: state.monitor_id!,

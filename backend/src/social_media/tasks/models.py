@@ -9,12 +9,12 @@ from sqlalchemy.sql import func
 from src.database import Base
 
 if TYPE_CHECKING:
-    from src.social_media.monitors.models import Monitor, Platform
+    from src.social_media.monitors.models import SocialMonitor, Platform
     from src.auth.models import User
     from src.strategies.models import Strategy
 
 
-class DataTask(Base):
+class SocialTask(Base):
     """数据获取任务模型
 
     每个任务代表一次数据采集操作，可以通过远程爬虫或本地上传获取数据。
@@ -139,8 +139,8 @@ class DataTask(Base):
     )
 
     # 关系
-    monitor: Mapped["Monitor"] = relationship(
-        "src.social_media.monitors.models.Monitor",
+    monitor: Mapped["SocialMonitor"] = relationship(
+        "src.social_media.monitors.models.SocialMonitor",
         foreign_keys=[monitor_id],
         lazy="selectin",
     )
@@ -156,7 +156,7 @@ class DataTask(Base):
         "Strategy",
         foreign_keys=[strategy_id],
         lazy="select",
-        back_populates="tasks",
+        back_populates="social_tasks",
     )
 
     posts: Mapped[list["SocialPost"]] = relationship(
@@ -174,7 +174,7 @@ class DataTask(Base):
     )
 
     def __repr__(self):
-        return f"<DataTask(id={self.id}, name='{self.name}', type='{self.task_type}', status='{self.status}')>"
+        return f"<SocialTask(id={self.id}, name='{self.name}', type='{self.task_type}', status='{self.status}')>"
 
 
 class SocialPost(Base):
@@ -260,8 +260,8 @@ class SocialPost(Base):
     )
 
     # 关系
-    task: Mapped["DataTask"] = relationship(
-        "DataTask", back_populates="posts", lazy="selectin"
+    task: Mapped["SocialTask"] = relationship(
+        "SocialTask", back_populates="posts", lazy="selectin"
     )
     platform: Mapped["Platform"] = relationship(
         "src.social_media.monitors.models.Platform",
@@ -355,8 +355,8 @@ class SocialComment(Base):
     )
 
     # 关系
-    task: Mapped["DataTask"] = relationship(
-        "DataTask", back_populates="comments", lazy="selectin"
+    task: Mapped["SocialTask"] = relationship(
+        "SocialTask", back_populates="comments", lazy="selectin"
     )
     post: Mapped["SocialPost"] = relationship(
         "SocialPost", back_populates="comments", lazy="selectin"

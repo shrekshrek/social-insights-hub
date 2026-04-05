@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional, List, Literal
 from src.schemas import CustomBaseModel, PaginatedResponse
 
 if TYPE_CHECKING:
-    from src.social_media.monitors.models import Monitor
+    from src.social_media.monitors.models import SocialMonitor
 
 
 # ==================== Platform Schemas ====================
@@ -35,10 +35,10 @@ class PlatformRead(PlatformBase):
 PlatformListResponse = PaginatedResponse[PlatformRead]
 
 
-# ==================== Monitor Schemas ====================
+# ==================== SocialMonitor Schemas ====================
 
 
-class MonitorBase(CustomBaseModel):
+class SocialMonitorBase(CustomBaseModel):
     """社交项目基础模型"""
 
     name: str = Field(..., min_length=1, max_length=255, description="项目名称")
@@ -47,7 +47,7 @@ class MonitorBase(CustomBaseModel):
     end_date: Optional[datetime] = Field(None, description="项目结束时间")
 
 
-class QuickTaskCreate(CustomBaseModel):
+class SocialQuickTaskCreate(CustomBaseModel):
     """快速创建任务配置（仅支持search和homefeed）"""
 
     platform_ids: List[int] = Field(..., min_length=1, description="平台ID列表")
@@ -81,18 +81,18 @@ class QuickTaskCreate(CustomBaseModel):
         return self
 
 
-class MonitorCreate(MonitorBase):
+class SocialMonitorCreate(SocialMonitorBase):
     """创建社交项目请求模型"""
 
     participant_ids: List[int] = Field(
         default_factory=list, description="参与者用户ID列表"
     )
-    quick_tasks: Optional[QuickTaskCreate] = Field(
+    quick_tasks: Optional[SocialQuickTaskCreate] = Field(
         None, description="同时创建任务（可选）"
     )
 
 
-class MonitorUpdate(CustomBaseModel):
+class SocialMonitorUpdate(CustomBaseModel):
     """更新社交项目请求模型"""
 
     name: Optional[str] = Field(
@@ -103,7 +103,7 @@ class MonitorUpdate(CustomBaseModel):
     end_date: Optional[datetime] = Field(None, description="项目结束时间")
 
 
-class MonitorRead(MonitorBase):
+class SocialMonitorRead(SocialMonitorBase):
     """社交项目读取模型（返回给客户端）"""
 
     id: int
@@ -116,8 +116,8 @@ class MonitorRead(MonitorBase):
     participant_ids: List[int] = Field(default_factory=list, description="参与者ID列表")
 
     @classmethod
-    def from_orm_full(cls, monitor: "Monitor") -> "MonitorRead":
-        """从 ORM Monitor 构造，处理多对多 participants 关联。"""
+    def from_orm_full(cls, monitor: "SocialMonitor") -> "SocialMonitorRead":
+        """从 ORM SocialMonitor 构造，处理多对多 participants 关联。"""
         return cls(
             id=monitor.id,
             name=monitor.name,
@@ -132,7 +132,7 @@ class MonitorRead(MonitorBase):
         )
 
 
-class MonitorReadWithOwner(MonitorRead):
+class SocialMonitorReadWithOwner(SocialMonitorRead):
     """带owner信息的项目读取模型"""
 
     owner_username: str = Field(..., description="项目创建者用户名")
@@ -141,9 +141,9 @@ class MonitorReadWithOwner(MonitorRead):
     )
 
     @classmethod
-    def from_orm_full(cls, monitor: "Monitor") -> "MonitorReadWithOwner":  # type: ignore[override]
-        """从 ORM Monitor 构造，包含 owner/participants 用户名。"""
-        base = MonitorRead.from_orm_full(monitor)
+    def from_orm_full(cls, monitor: "SocialMonitor") -> "SocialMonitorReadWithOwner":  # type: ignore[override]
+        """从 ORM SocialMonitor 构造，包含 owner/participants 用户名。"""
+        base = SocialMonitorRead.from_orm_full(monitor)
         return cls(
             **base.model_dump(),
             owner_username=monitor.owner.username if monitor.owner else "",
@@ -151,13 +151,13 @@ class MonitorReadWithOwner(MonitorRead):
         )
 
 
-MonitorListResponse = PaginatedResponse[MonitorReadWithOwner]
+MonitorListResponse = PaginatedResponse[SocialMonitorReadWithOwner]
 
 
 class MonitorCreateResponse(CustomBaseModel):
     """创建项目响应（包含项目和可选的批量创建任务）"""
 
-    monitor: MonitorRead = Field(..., description="创建的项目")
+    monitor: SocialMonitorRead = Field(..., description="创建的项目")
     created_tasks: List[dict] = Field(
         default_factory=list, description="批量创建的任务列表"
     )
@@ -171,7 +171,7 @@ class BatchTasksCreateResponse(CustomBaseModel):
     )
 
 
-# ==================== Monitor-Participant Management ====================
+# ==================== SocialMonitor-Participant Management ====================
 
 
 class MonitorParticipantAssignment(CustomBaseModel):
@@ -259,3 +259,10 @@ class TaskComparisonResponse(CustomBaseModel):
     overview: TaskComparisonOverview
     matrix: List[TaskComparisonItem]
     comment_analysis: CommentAnalysis
+
+
+# ==================== Backward-compatible aliases ====================
+
+SocialMonitorBase = SocialMonitorBase
+SocialMonitorRead = SocialMonitorRead
+SocialMonitorReadWithOwner = SocialMonitorReadWithOwner

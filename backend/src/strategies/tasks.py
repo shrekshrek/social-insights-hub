@@ -27,7 +27,7 @@ async def check_probing_strategies() -> int:
         _probe_review_in_progress,
         _run_probe_review_bg_task,
     )
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask
     from src.news_media.service import get_news_tasks_by_strategy
 
     to_review: list[tuple[int, list[dict]]] = []
@@ -46,11 +46,11 @@ async def check_probing_strategies() -> int:
 
             # 查询该策略的所有社媒 probe 任务
             tasks_result = await db.execute(
-                select(DataTask).where(
+                select(SocialTask).where(
                     and_(
-                        DataTask.strategy_id == strategy.id,
-                        DataTask.phase == "probe",
-                        DataTask.is_deleted.is_(False),
+                        SocialTask.strategy_id == strategy.id,
+                        SocialTask.phase == "probe",
+                        SocialTask.is_deleted.is_(False),
                     )
                 )
             )
@@ -97,7 +97,7 @@ async def check_collecting_strategies() -> int:
     2. 确认所有 collect 任务（社媒 + 新闻）均 completed 且已有分析结果
     3. 调用 _create_auto_slices（内部 commit，不需要外层提交）
     """
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask
     from src.strategies.models import Strategy, StrategySlice
     from src.strategies.service import _create_auto_slices, get_strategy_by_id
     from src.news_media.service import get_news_tasks_by_strategy
@@ -113,11 +113,11 @@ async def check_collecting_strategies() -> int:
         for strategy in strategies:
             # 查询该策略的所有社媒 collect 任务
             tasks_result = await db.execute(
-                select(DataTask).where(
+                select(SocialTask).where(
                     and_(
-                        DataTask.strategy_id == strategy.id,
-                        DataTask.phase == "collect",
-                        DataTask.is_deleted.is_(False),
+                        SocialTask.strategy_id == strategy.id,
+                        SocialTask.phase == "collect",
+                        SocialTask.is_deleted.is_(False),
                     )
                 )
             )

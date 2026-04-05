@@ -19,8 +19,8 @@ from src.database import Base
 if TYPE_CHECKING:
     from src.auth.models import User
     from src.social_media.analysis.models import AnalysisSlice
-    from src.social_media.monitors.models import Monitor
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.monitors.models import SocialMonitor
+    from src.social_media.tasks.models import SocialTask
     from src.news_media.models import NewsMonitor, NewsTask
 
 
@@ -28,7 +28,7 @@ class Strategy(Base):
     """策略研究引擎
 
     智能研究编排者：研究设计 → 探测验证 → 全量采集 → 自动建切片 → 产出生成。
-    用户全程留在策略页面，系统自动完成 Monitor 创建、任务管理、切片创建。
+    用户全程留在策略页面，系统自动完成 SocialMonitor 创建、任务管理、切片创建。
     """
 
     __tablename__ = "strategies"
@@ -86,11 +86,11 @@ class Strategy(Base):
     # 关联
     social_monitor_id: Mapped[int | None] = mapped_column(
         ForeignKey("social_monitors.id"), nullable=True,
-        comment="策略创建的社媒 Monitor ID",
+        comment="策略创建的社媒 SocialMonitor ID",
     )
     news_monitor_id: Mapped[int | None] = mapped_column(
         ForeignKey("news_monitors.id"), nullable=True,
-        comment="策略创建的新闻 Monitor ID",
+        comment="策略创建的新闻 SocialMonitor ID",
     )
 
     # 时间戳
@@ -107,8 +107,8 @@ class Strategy(Base):
         foreign_keys=[created_by],
         lazy="selectin",
     )
-    social_monitor: Mapped["Monitor | None"] = relationship(
-        "src.social_media.monitors.models.Monitor",
+    social_monitor: Mapped["SocialMonitor | None"] = relationship(
+        "src.social_media.monitors.models.SocialMonitor",
         foreign_keys=[social_monitor_id],
         lazy="selectin",
     )
@@ -117,9 +117,9 @@ class Strategy(Base):
         foreign_keys=[news_monitor_id],
         lazy="selectin",
     )
-    tasks: Mapped[list["DataTask"]] = relationship(
-        "src.social_media.tasks.models.DataTask",
-        foreign_keys="DataTask.strategy_id",
+    social_tasks: Mapped[list["SocialTask"]] = relationship(
+        "src.social_media.tasks.models.SocialTask",
+        foreign_keys="SocialTask.strategy_id",
         back_populates="strategy",
         lazy="select",
     )

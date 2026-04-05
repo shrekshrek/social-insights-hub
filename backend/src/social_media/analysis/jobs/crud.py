@@ -39,8 +39,8 @@ async def get_analysis_jobs(
     end_date: str | None = None,
 ) -> tuple[List[Dict[str, Any]], int]:
     """获取全局分析任务列表（带筛选和关联信息）"""
-    from src.social_media.monitors.models import Monitor
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.monitors.models import SocialMonitor as SocialMonitor
+    from src.social_media.tasks.models import SocialTask as SocialTask
     from src.auth.models import User
     from src.social_media.analysis.models import AnalysisSlice
 
@@ -48,12 +48,12 @@ async def get_analysis_jobs(
     stmt = (
         select(
             AnalysisJob,
-            Monitor.name.label("monitor_name"),
-            DataTask.name.label("task_name"),
+            SocialMonitor.name.label("monitor_name"),
+            SocialTask.name.label("task_name"),
             User.username.label("user_name"),
         )
-        .join(Monitor, AnalysisJob.monitor_id == Monitor.id)
-        .join(DataTask, AnalysisJob.task_id == DataTask.id, isouter=True)
+        .join(SocialMonitor, AnalysisJob.monitor_id == SocialMonitor.id)
+        .join(SocialTask, AnalysisJob.task_id == SocialTask.id, isouter=True)
         .join(User, AnalysisJob.user_id == User.id)
     )
 
@@ -167,8 +167,8 @@ async def get_analysis_job(
     db: AsyncSession, job_id: int, current_user_id: int
 ) -> Optional[Dict[str, Any]]:
     """获取单个分析任务详情（带关联信息）"""
-    from src.social_media.monitors.models import Monitor
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.monitors.models import SocialMonitor as SocialMonitor
+    from src.social_media.tasks.models import SocialTask as SocialTask
     from src.auth.models import User
     from src.social_media.monitors import crud as monitor_crud
 
@@ -176,12 +176,12 @@ async def get_analysis_job(
     stmt = (
         select(
             AnalysisJob,
-            Monitor.name.label("monitor_name"),
-            DataTask.name.label("task_name"),
+            SocialMonitor.name.label("monitor_name"),
+            SocialTask.name.label("task_name"),
             User.username.label("user_name"),
         )
-        .join(Monitor, AnalysisJob.monitor_id == Monitor.id)
-        .join(DataTask, AnalysisJob.task_id == DataTask.id, isouter=True)
+        .join(SocialMonitor, AnalysisJob.monitor_id == SocialMonitor.id)
+        .join(SocialTask, AnalysisJob.task_id == SocialTask.id, isouter=True)
         .join(User, AnalysisJob.user_id == User.id)
         .where(AnalysisJob.id == job_id)
     )

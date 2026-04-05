@@ -16,8 +16,8 @@ from sqlalchemy.sql import func
 from src.database import Base
 
 if TYPE_CHECKING:
-    from src.social_media.tasks.models import DataTask, SocialPost
-    from src.social_media.monitors.models import Monitor
+    from src.social_media.tasks.models import SocialTask as SocialTask, SocialPost
+    from src.social_media.monitors.models import SocialMonitor as SocialMonitor
     from src.auth.models import User
 
 
@@ -134,8 +134,8 @@ class PostAnalysis(Base):
     )
 
     # ===== 关系 =====
-    task: Mapped["DataTask"] = relationship(
-        "src.social_media.tasks.models.DataTask",
+    task: Mapped["SocialTask"] = relationship(
+        "src.social_media.tasks.models.SocialTask",
         foreign_keys=[task_id],
         lazy="selectin",
     )
@@ -261,13 +261,13 @@ class AnalysisJob(Base):
     )
 
     # ===== 关系 =====
-    monitor: Mapped["Monitor"] = relationship(
-        "src.social_media.monitors.models.Monitor",
+    monitor: Mapped["SocialMonitor"] = relationship(
+        "src.social_media.monitors.models.SocialMonitor",
         foreign_keys=[monitor_id],
         lazy="selectin",
     )
-    task: Mapped["DataTask | None"] = relationship(
-        "src.social_media.tasks.models.DataTask",
+    task: Mapped["SocialTask | None"] = relationship(
+        "src.social_media.tasks.models.SocialTask",
         foreign_keys=[task_id],
         lazy="selectin",
     )
@@ -353,8 +353,8 @@ class AnalysisSlice(Base):
         onupdate=func.now(),
     )
 
-    monitor: Mapped["Monitor"] = relationship(
-        "src.social_media.monitors.models.Monitor",
+    monitor: Mapped["SocialMonitor"] = relationship(
+        "src.social_media.monitors.models.SocialMonitor",
         foreign_keys=[monitor_id],
         lazy="selectin",
     )

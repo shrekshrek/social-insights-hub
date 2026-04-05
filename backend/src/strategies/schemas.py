@@ -80,7 +80,7 @@ class DesignResearchResponse(CustomBaseModel):
 
 
 class ConfirmResearchRequest(CustomBaseModel):
-    """确认研究计划，创建 Monitor + 探测任务"""
+    """确认研究计划，创建 SocialMonitor + 探测任务"""
 
     research_design: dict[str, Any] = Field(
         ..., description="用户编辑后的研究计划（完整 JSON）"

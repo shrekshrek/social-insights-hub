@@ -7,10 +7,10 @@ from pydantic import Field, field_validator
 from src.schemas import CustomBaseModel
 
 
-# ==================== DataTask Schemas ====================
+# ==================== SocialTask Schemas ====================
 
 
-class DataTaskBase(CustomBaseModel):
+class SocialTaskBase(CustomBaseModel):
     """任务基础模型"""
 
     name: str = Field(..., min_length=1, max_length=255, description="任务名称")
@@ -25,7 +25,7 @@ class DataTaskBase(CustomBaseModel):
     task_params: Optional[dict] = Field(None, description="任务参数")
 
 
-class DataTaskCreate(DataTaskBase):
+class SocialTaskCreate(SocialTaskBase):
     """创建任务"""
 
     monitor_id: int = Field(..., gt=0, description="项目ID")
@@ -38,7 +38,7 @@ class DataTaskCreate(DataTaskBase):
     phase: Optional[str] = Field(None, description="采集阶段: probe（探测）/ collect（全量）")
 
 
-class DataTaskUpdate(CustomBaseModel):
+class SocialTaskUpdate(CustomBaseModel):
     """更新任务"""
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -48,7 +48,7 @@ class DataTaskUpdate(CustomBaseModel):
     status: Optional[str] = Field(None, pattern="^(pending|running|completed|failed)$")
 
 
-class DataTaskRead(DataTaskBase):
+class SocialTaskRead(SocialTaskBase):
     """任务详情返回"""
 
     id: int
@@ -68,7 +68,7 @@ class DataTaskRead(DataTaskBase):
     updated_at: datetime
 
 
-class DataTaskReadWithRelations(DataTaskRead):
+class SocialTaskReadWithRelations(SocialTaskRead):
     """任务详情（包含关联信息）"""
 
     monitor_name: Optional[str] = None
@@ -81,7 +81,7 @@ class DataTaskReadWithRelations(DataTaskRead):
 class DataTaskListResponse(CustomBaseModel):
     """任务列表响应"""
 
-    items: List[DataTaskReadWithRelations]
+    items: List[SocialTaskReadWithRelations]
     total: int
     page: int
     page_size: int
@@ -89,7 +89,7 @@ class DataTaskListResponse(CustomBaseModel):
     @classmethod
     def create(
         cls,
-        items: List[DataTaskReadWithRelations],
+        items: List[SocialTaskReadWithRelations],
         total: int,
         page: int,
         page_size: int,
@@ -325,3 +325,11 @@ class PostQueryResponse(CustomBaseModel):
 
 # 解决循环引用
 SocialPostWithComments.model_rebuild()
+
+
+# ==================== Backward-compatible aliases ====================
+
+SocialTaskBase = SocialTaskBase
+SocialTaskUpdate = SocialTaskUpdate
+SocialTaskRead = SocialTaskRead
+SocialTaskReadWithRelations = SocialTaskReadWithRelations

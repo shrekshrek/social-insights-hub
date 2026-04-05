@@ -11,6 +11,8 @@ import type {
   NewsTask,
   NewsTaskWithRelations,
   NewsTaskCreate,
+  MonitorAggregatedStats,
+  NewsAnalysisResult,
 } from '../types'
 
 export const useNewsMonitors = () => {
@@ -58,12 +60,28 @@ export const useNewsMonitors = () => {
     return true
   }
 
+  const getMonitorAggregated = async (monitorId: number): Promise<MonitorAggregatedStats> => {
+    return apiRequest<MonitorAggregatedStats>(`/news-media/monitors/${monitorId}/aggregated`)
+  }
+
+  const runMonitorAggregate = async (
+    monitorId: number,
+    params?: { analysis_goal?: string; subject?: string },
+  ): Promise<NewsAnalysisResult> => {
+    return apiRequest<NewsAnalysisResult>(`/news-media/monitors/${monitorId}/aggregate`, {
+      method: 'POST',
+      body: params || {},
+    })
+  }
+
   return {
     getMonitors,
     getMonitor,
     createMonitor,
     updateMonitor,
     deleteMonitor,
+    getMonitorAggregated,
+    runMonitorAggregate,
   }
 }
 

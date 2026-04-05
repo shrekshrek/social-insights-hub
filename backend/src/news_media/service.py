@@ -103,7 +103,6 @@ async def create_news_task(
         "keywords": data.keywords,
         "phase": phase,
         "search_params": data.search_params,
-        "search_provider": monitor.search_provider,
         "created_by": user_id,
     }
     task = await crud.create_task(db, task_data)
@@ -168,13 +167,15 @@ async def _search_and_store_articles(
     db: AsyncSession,
     task: NewsTask,
     max_results: int = 10,
+    channels: tuple = ("baidu",),
 ) -> list:
-    """SerpAPI 搜索 + 存入 NewsArticle（去重），返回新建的文章列表"""
-    from src.news_media.serpapi_client import search_baidu_news
+    """双渠道搜索 + 存入 NewsArticle（去重），返回新建的文章列表"""
+    from src.news_media.news_search.aggregator import search_news
 
-    search_results = await search_baidu_news(
+    search_results = await search_news(
         query=task.keywords,
         max_results=max_results,
+        channels=list(channels),
     )
     if not search_results:
         return []
@@ -192,6 +193,7 @@ async def _search_and_store_articles(
             "snippet": r.get("snippet"),
             "source_name": r["source_name"],
             "source_tier": r["source_tier"],
+            "search_source": r.get("search_source", "baidu"),
             "published_at": r.get("published_at"),
             "image_url": r.get("image_url"),
             "raw_data": r.get("raw_data"),
@@ -340,6 +342,114 @@ async def _run_insight_analysis(
         return {"error": str(e)}
 
 
+# ==================== Monitor 聚合分析 ====================
+
+
+async def get_monitor_aggregated_stats(
+    db: AsyncSession,
+    monitor_id: int,
+) -> dict:
+    """统计聚合：从各 collect 任务的 analysis_result 合并统计，无 LLM 调用。
+
+    返回：文章总数、相关文章数、情感分布、实体 Top10、来源分布。
+    Monitor 无文章时返回全零结构。
+    """
+    articles = await crud.get_articles_by_monitor(db, monitor_id, phase="collect")
+
+    if not articles:
+        return {
+            "articles_total": 0,
+            "articles_relevant": 0,
+            "source_tier_distribution": {"tier1": 0, "tier2": 0, "tier3": 0},
+            "sentiment_distribution": {"positive": 0, "neutral": 0, "negative": 0},
+            "sentiment_overall": None,
+            "top_entities": [],
+            "search_source_distribution": {"baidu": 0, "duckduckgo": 0},
+        }
+
+    # 基础统计
+    relevant = [a for a in articles if a.relevance in ("high", "medium")]
+    tier_counts: dict[str, int] = {"tier1": 0, "tier2": 0, "tier3": 0}
+    sentiment_dist = {"positive": 0, "neutral": 0, "negative": 0}
+    source_dist: dict[str, int] = {"baidu": 0, "duckduckgo": 0}
+    sentiment_scores: list[float] = []
+    entity_mentions: dict[str, int] = {}
+
+    for a in articles:
+        # 来源分布
+        tier = a.source_tier or "tier3"
+        tier_counts[tier] = tier_counts.get(tier, 0) + 1
+
+        # 搜索渠道分布
+        src = getattr(a, "search_source", "baidu") or "baidu"
+        source_dist[src] = source_dist.get(src, 0) + 1
+
+    for a in relevant:
+        # 情感
+        if a.sentiment is not None:
+            sentiment_scores.append(a.sentiment)
+            if a.sentiment > 0:
+                sentiment_dist["positive"] += 1
+            elif a.sentiment < 0:
+                sentiment_dist["negative"] += 1
+            else:
+                sentiment_dist["neutral"] += 1
+
+        # 实体统计
+        for ent in (a.mentioned_entities or []):
+            name = ent.get("name", "")
+            if name:
+                entity_mentions[name] = entity_mentions.get(name, 0) + 1
+
+    sentiment_overall = (
+        round(sum(sentiment_scores) / len(sentiment_scores), 3)
+        if sentiment_scores else None
+    )
+    top_entities = sorted(
+        [{"name": k, "mention_count": v} for k, v in entity_mentions.items()],
+        key=lambda x: x["mention_count"],
+        reverse=True,
+    )[:10]
+
+    return {
+        "articles_total": len(articles),
+        "articles_relevant": len(relevant),
+        "source_tier_distribution": tier_counts,
+        "sentiment_distribution": sentiment_dist,
+        "sentiment_overall": sentiment_overall,
+        "top_entities": top_entities,
+        "search_source_distribution": source_dist,
+    }
+
+
+async def run_monitor_narrative_aggregate(
+    db: AsyncSession,
+    monitor: NewsMonitor,
+    analysis_goal: str = "",
+    subject: str = "",
+) -> dict:
+    """叙事聚合：合并 monitor 下所有 collect 任务文章，跑一次 news_insight_chain。
+
+    结果写入 monitor.aggregated_result 并 commit。
+    无 completed collect 任务时抛 HTTPException 400。
+    """
+    articles = await crud.get_articles_by_monitor(db, monitor.id, phase="collect")
+    if not articles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该监测项目下没有已完成的全量采集任务，无法生成聚合报告",
+        )
+
+    goal = analysis_goal or monitor.name
+    subj = subject or monitor.name
+    insights = await _run_insight_analysis(articles, analysis_goal=goal, subject=subj)
+
+    monitor.aggregated_result = insights
+    await db.commit()
+    await db.refresh(monitor)
+    return insights
+
+
 # ==================== Task Execution ====================
 
 
@@ -348,17 +458,19 @@ async def execute_news_probe(
     task: NewsTask,
     analysis_goal: str = "",
 ) -> None:
-    """执行新闻探测：SerpAPI 搜索 → 存 NewsArticle → 逐篇标注
+    """执行新闻探测：百度新闻搜索 → 存 NewsArticle → 逐篇标注
 
-    Probe 阶段不抓全文，使用 snippet 做轻量标注。
+    Probe 阶段仅用百度渠道，不抓全文，使用 snippet 做轻量标注。
     调用者负责 commit。
     """
     try:
         task.status = "running"
         await db.flush()
 
-        # Step 1: SerpAPI 搜索 + 存文章
-        articles = await _search_and_store_articles(db, task, max_results=10)
+        # Step 1: 搜索（仅百度）+ 存文章
+        articles = await _search_and_store_articles(
+            db, task, max_results=10, channels=("baidu",)
+        )
 
         if not articles:
             task.status = "completed"
@@ -418,9 +530,10 @@ async def execute_news_collect(
     analysis_goal: str = "",
     subject: str = "",
 ) -> None:
-    """执行新闻全量采集：SerpAPI → Crawl4AI → 逐篇标注 → 整体分析
+    """执行新闻全量采集：百度+DuckDuckGo → Crawl4AI → 逐篇标注 → 整体分析
 
-    调用者负责 commit。
+    异步后台执行（调用方通过 asyncio.create_task 触发）。
+    使用独立 db session，执行完毕后自行 commit。
     """
     try:
         task.status = "running"
@@ -429,8 +542,10 @@ async def execute_news_collect(
         goal = analysis_goal or task.keywords
         subj = subject or task.keywords
 
-        # Step 1: SerpAPI 搜索扩量 + 存文章
-        articles = await _search_and_store_articles(db, task, max_results=50)
+        # Step 1: 双渠道搜索扩量 + 存文章
+        articles = await _search_and_store_articles(
+            db, task, max_results=50, channels=("baidu", "duckduckgo")
+        )
 
         if not articles:
             task.status = "completed"
@@ -489,7 +604,7 @@ async def execute_news_collect(
         task.status = "completed"
         task.articles_count = len(all_articles)
         task.analysis_result = analysis_result
-        await db.flush()
+        await db.commit()
         logger.info(
             "NewsTask %d: collect completed, %d articles, %d crawled",
             task.id, len(all_articles), articles_crawled,
@@ -498,6 +613,5 @@ async def execute_news_collect(
     except Exception as e:
         task.status = "failed"
         task.error_message = str(e)
-        await db.flush()
+        await db.commit()
         logger.error("NewsTask %d: collect failed: %s", task.id, e, exc_info=True)
-        raise

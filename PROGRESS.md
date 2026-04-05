@@ -39,13 +39,12 @@
 | knowledge_base/全栈 | 已完成 | 市场知识库：文档上传/解析/向量化/RAG 检索；策略 Phase1/2 注入 market_context；渠道架构同步（合并 industry_data、删除 ecommerce）；postgres 迁移至 pgvector/pgvector:pg16 |
 | knowledge_base/crawlers/全栈 | 已完成 | Crawl4AI + APScheduler 定时爬取 CNNIC/NBS/gov.cn；admin GET /crawlers/status + POST /crawlers/{source_type}/run；Embedding API 迁移至 SiliconFlow |
 | knowledge_base/前端 | 已完成 | 文档列表/上传/删除、RAG 检索测试、爬虫状态管理 |
-| news_media/后端 | 已完成 | 监测项目/任务 CRUD，SerpAPI+Crawl4AI 采集，news_tagging_chain+news_insight_chain 两条 LLM 链，策略流水线集成（probe/collect 两阶段） |
-| news_media/前端 | 已完成 | 监测项目列表/创建/详情页，任务列表（全局+按项目）/详情页，文章列表（含相关性/来源等级筛选），分析报告展示（coverage/sentiment/narratives/entities/competitive_landscape/key_quotes） |
+| news_media/后端 | 已完成 | 双渠道聚合（百度 Crawl4AI + DuckDuckGo ddgs）；probe=百度 10 条，collect=双渠道各 50 条+URL 去重；monitor 级统计聚合（无 LLM）+ 叙事聚合（news_insight_chain）；asyncio.create_task 异步后台 collect；Alembic 迁移（删除 search_provider，新增 aggregated_result/search_source） |
+| news_media/前端 | 已完成 | 监测项目列表/创建/详情页（含统计聚合面板+叙事聚合报告），跨项目任务列表（状态/阶段/关键词筛选），任务详情页（文章列表含搜索渠道 badge：百度/DDG），文章来源等级/相关性筛选 |
 
 ## 下次继续的入口
-新闻监测(news_media)前端模块已完成。根据项目当前状态，下一步建议：
-- 验收：运行完整的测试，确保所有功能正常工作
-- 测试：补充 news_media 后端集成测试
-- 文档：更新根 CLAUDE.md 模块列表（添加 news_media）
-- 部署：准备生产环境部署配置检查
+news_media 全栈重构完成（双渠道聚合 + monitor 级聚合）。建议下一步：
+- 测试：启动 Docker 环境后运行 `pnpm be:test` 验证后端集成测试
+- 验证：运行 `pnpm be:migrate:up` 执行 news_media 重构迁移
+- 功能测试：创建监测项目 → 探测任务 → 全量任务 → 查看文章 → 生成聚合报告
 

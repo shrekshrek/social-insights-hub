@@ -173,7 +173,7 @@ class AnalysisJob(Base):
 
     # ===== 关联关系 =====
     monitor_id: Mapped[int] = mapped_column(
-        ForeignKey("monitors.id", ondelete="CASCADE"),
+        ForeignKey("social_monitors.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
         comment="关联的项目ID（必填）",
@@ -317,7 +317,7 @@ class AnalysisSlice(Base):
     )
 
     monitor_id: Mapped[int] = mapped_column(
-        ForeignKey("monitors.id", ondelete="CASCADE"),
+        ForeignKey("social_monitors.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
         comment="关联的项目ID",

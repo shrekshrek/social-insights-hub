@@ -31,7 +31,7 @@ class DataTask(Base):
 
     # 关联关系
     monitor_id: Mapped[int] = mapped_column(
-        ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("social_monitors.id", ondelete="CASCADE"), nullable=False, index=True
     )
     platform_id: Mapped[int] = mapped_column(
         ForeignKey("platforms.id"), nullable=False, index=True

@@ -85,7 +85,7 @@ class Strategy(Base):
 
     # 关联
     social_monitor_id: Mapped[int | None] = mapped_column(
-        ForeignKey("monitors.id"), nullable=True,
+        ForeignKey("social_monitors.id"), nullable=True,
         comment="策略创建的社媒 Monitor ID",
     )
     news_monitor_id: Mapped[int | None] = mapped_column(

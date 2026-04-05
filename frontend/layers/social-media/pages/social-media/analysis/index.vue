@@ -31,11 +31,11 @@ const params = computed(() => ({
   page_size: pageSize.value,
   analysis_type: selectedType.value,
   status: selectedStatus.value,
-  // 处理空值和 NaN
-  monitor_id: typeof searchMonitorId.value === 'number' && !Number.isNaN(searchMonitorId.value)
+  // 处理空值和 NaN（暂时只支持社媒监测 ID 筛选）
+  social_monitor_id: typeof searchMonitorId.value === 'number' && !Number.isNaN(searchMonitorId.value)
     ? searchMonitorId.value
     : undefined,
-  task_id: typeof searchTaskId.value === 'number' && !Number.isNaN(searchTaskId.value)
+  social_task_id: typeof searchTaskId.value === 'number' && !Number.isNaN(searchTaskId.value)
     ? searchTaskId.value
     : undefined,
 }))
@@ -265,11 +265,17 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       },
     },
     {
-      accessorKey: 'monitor_name',
+      accessorKey: 'social_monitor_name',
       header: '项目',
       cell: ({ row }) => {
-        const monitorId = row.original.monitor_id
-        const monitorName = row.original.monitor_name
+        const job = row.original
+        // 优先展示社媒监测，兜底展示新闻监测
+        const monitorId = job.social_monitor_id || job.news_monitor_id
+        const monitorName = job.social_monitor_name || job.news_monitor_name
+        const isNews = !job.social_monitor_id && !!job.news_monitor_id
+        const link = isNews
+          ? `/news-media/${monitorId}`
+          : `/social-media/monitors/${monitorId}`
         if (!monitorId) {
           return h('span', { class: 'text-gray-400' }, '-')
         }
@@ -280,18 +286,24 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
                 variant: 'link',
                 size: 'xs',
                 class: 'p-0 font-normal truncate max-w-24',
-                to: `/social-media/monitors/${monitorId}`,
+                to: link,
               }, () => monitorName)
             : null,
         ])
       },
     },
     {
-      accessorKey: 'task_name',
+      accessorKey: 'social_task_name',
       header: '任务',
       cell: ({ row }) => {
-        const taskId = row.original.task_id
-        const taskName = row.original.task_name
+        const job = row.original
+        // 优先展示社媒任务，兜底展示新闻任务
+        const taskId = job.social_task_id || job.news_task_id
+        const taskName = job.social_task_name || job.news_task_name
+        const isNews = !job.social_task_id && !!job.news_task_id
+        const taskLink = isNews
+          ? `/news-media/tasks/${taskId}`
+          : `/social-media/tasks/${taskId}`
 
         // 任务级：显示 ID + 任务名
         if (taskId) {
@@ -302,20 +314,20 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
                   variant: 'link',
                   size: 'xs',
                   class: 'p-0 font-normal truncate max-w-24',
-                  to: `/social-media/tasks/${taskId}`,
+                  to: taskLink,
                 }, () => taskName)
               : null,
           ])
         }
 
         // 项目级切片：显示切片名并跳转切片详情
-        if (row.original.slice_id) {
-          const label = row.original.slice_name || `切片 #${row.original.slice_id}`
+        if (job.slice_id) {
+          const label = job.slice_name || `切片 #${job.slice_id}`
           return h(Button, {
             variant: 'link',
             size: 'xs',
             class: 'p-0 font-normal',
-            to: `/social-media/monitors/${row.original.monitor_id}/analysis?slice_id=${row.original.slice_id}`,
+            to: `/social-media/monitors/${job.social_monitor_id}/analysis?slice_id=${job.slice_id}`,
           }, () => label)
         }
 

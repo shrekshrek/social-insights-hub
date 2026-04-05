@@ -77,8 +77,8 @@ async def run_post_screening(
     # 创建分析任务记录
     analysis_job = await create_analysis_job_async(
         db=db,
-        monitor_id=task.monitor_id,
-        task_id=request.task_id,
+        social_monitor_id=task.monitor_id,
+        social_task_id=request.task_id,
         user_id=current_user_id,
         analysis_type="screening_posts",
         source_count=len(post_ids),
@@ -90,7 +90,7 @@ async def run_post_screening(
     # 启动Celery任务
     celery_result = run_screening_task.delay(
         result_id=analysis_job.id,
-        task_id=request.task_id,
+        social_task_id=request.task_id,
         post_ids=post_ids,
         monitor_keywords=monitor_keywords,
     )
@@ -154,8 +154,8 @@ async def run_post_deep_analysis(
     # 创建分析任务记录
     analysis_job = await create_analysis_job_async(
         db=db,
-        monitor_id=task.monitor_id,
-        task_id=request.task_id,
+        social_monitor_id=task.monitor_id,
+        social_task_id=request.task_id,
         user_id=current_user_id,
         analysis_type="deep_posts",
         source_count=len(post_ids),
@@ -171,7 +171,7 @@ async def run_post_deep_analysis(
     # 启动Celery任务
     celery_result = run_post_deep_task.delay(
         result_id=analysis_job.id,
-        task_id=request.task_id,
+        social_task_id=request.task_id,
         post_ids=post_ids,
         analysis_focus=request.analysis_focus,
     )
@@ -432,8 +432,8 @@ async def run_comment_deep_analysis(
     # 创建分析任务记录
     analysis_job = await create_analysis_job_async(
         db=db,
-        monitor_id=task.monitor_id,
-        task_id=request.task_id,
+        social_monitor_id=task.monitor_id,
+        social_task_id=request.task_id,
         user_id=current_user_id,
         analysis_type="deep_comments",
         source_count=len(post_ids),
@@ -449,7 +449,7 @@ async def run_comment_deep_analysis(
     # 启动Celery任务
     celery_result = run_comment_deep_task.delay(
         result_id=analysis_job.id,
-        task_id=request.task_id,
+        social_task_id=request.task_id,
         post_ids=post_ids,
         analysis_focus=request.analysis_focus,
     )
@@ -879,16 +879,16 @@ async def run_task_aggregation(
     # 这样前端可以立即检测到任务在运行，不需要等待 Celery 任务内部创建
     entity_job = await create_analysis_job_async(
         db=db,
-        monitor_id=task.monitor_id,
-        task_id=task_id,
+        social_monitor_id=task.monitor_id,
+        social_task_id=task_id,
         user_id=current_user_id,
         analysis_type="entity_normalization",
         source_count=analyzed_count,
     )
     opinion_job = await create_analysis_job_async(
         db=db,
-        monitor_id=task.monitor_id,
-        task_id=task_id,
+        social_monitor_id=task.monitor_id,
+        social_task_id=task_id,
         user_id=current_user_id,
         analysis_type="opinion_normalization",
         source_count=analyzed_count,
@@ -897,7 +897,7 @@ async def run_task_aggregation(
     # 启动 Celery 任务，传递预创建的 job_id
     celery_result = run_aggregation_task.delay(
         task_id=task_id,
-        monitor_id=task.monitor_id,
+        social_monitor_id=task.monitor_id,
         user_id=current_user_id,
         entity_job_id=entity_job.id,
         opinion_job_id=opinion_job.id,

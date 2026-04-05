@@ -289,8 +289,8 @@ def aggregate_task_analysis(
             # 向后兼容：内部创建 job
             entity_job = create_analysis_job_sync(
                 db=db,
-                monitor_id=monitor_id,
-                task_id=task_id,
+                social_monitor_id=monitor_id,
+                social_task_id=task_id,
                 user_id=user_id,
                 analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
                 source_count=len(posts_data),
@@ -304,8 +304,8 @@ def aggregate_task_analysis(
             # 向后兼容：内部创建 job
             opinion_job = create_analysis_job_sync(
                 db=db,
-                monitor_id=monitor_id,
-                task_id=task_id,
+                social_monitor_id=monitor_id,
+                social_task_id=task_id,
                 user_id=user_id,
                 analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
                 source_count=len(posts_data),

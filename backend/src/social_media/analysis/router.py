@@ -67,8 +67,10 @@ router = APIRouter(
 async def get_analysis_jobs(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    monitor_id: int | None = Query(None, description="按项目ID筛选"),
-    task_id: int | None = Query(None, description="按任务ID筛选"),
+    social_monitor_id: int | None = Query(None, description="按社媒监测项目ID筛选"),
+    social_task_id: int | None = Query(None, description="按社媒采集任务ID筛选"),
+    news_monitor_id: int | None = Query(None, description="按新闻监测项目ID筛选"),
+    news_task_id: int | None = Query(None, description="按新闻采集任务ID筛选"),
     analysis_type: str | None = Query(None, description="按分析类型筛选"),
     status_filter: str | None = Query(None, alias="status", description="按状态筛选"),
     start_date: str | None = Query(None, description="开始日期 (YYYY-MM-DD)"),
@@ -80,9 +82,11 @@ async def get_analysis_jobs(
     获取全局分析任务列表
 
     支持筛选条件：
-    - monitor_id: 按项目筛选
-    - task_id: 按数据任务筛选
-    - analysis_type: screening_posts/deep_posts/deep_comments/topic_clustering/competitive
+    - social_monitor_id: 按社媒监测项目筛选
+    - social_task_id: 按社媒采集任务筛选
+    - news_monitor_id: 按新闻监测项目筛选
+    - news_task_id: 按新闻采集任务筛选
+    - analysis_type: screening_posts/deep_posts/news_tagging/news_insight/...
     - status: pending/processing/completed/failed
     - start_date/end_date: 日期范围
     """
@@ -91,8 +95,10 @@ async def get_analysis_jobs(
         current_user_id=current_user.id,
         page=page,
         page_size=page_size,
-        monitor_id=monitor_id,
-        task_id=task_id,
+        social_monitor_id=social_monitor_id,
+        social_task_id=social_task_id,
+        news_monitor_id=news_monitor_id,
+        news_task_id=news_task_id,
         analysis_type=analysis_type,
         status=status_filter,
         start_date=start_date,

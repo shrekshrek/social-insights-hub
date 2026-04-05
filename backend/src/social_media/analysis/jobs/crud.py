@@ -31,8 +31,10 @@ async def get_analysis_jobs(
     current_user_id: int,
     page: int = 1,
     page_size: int = 20,
-    monitor_id: int | None = None,
-    task_id: int | None = None,
+    social_monitor_id: int | None = None,
+    social_task_id: int | None = None,
+    news_monitor_id: int | None = None,
+    news_task_id: int | None = None,
     analysis_type: str | None = None,
     status: str | None = None,
     start_date: str | None = None,
@@ -41,30 +43,41 @@ async def get_analysis_jobs(
     """获取全局分析任务列表（带筛选和关联信息）"""
     from src.social_media.monitors.models import SocialMonitor as SocialMonitor
     from src.social_media.tasks.models import SocialTask as SocialTask
+    from src.news_media.models import NewsMonitor, NewsTask
     from src.auth.models import User
     from src.social_media.analysis.models import AnalysisSlice
 
-    # 构建基础查询
+    # 构建基础查询（全部用 outer join，因为各 FK 均为 nullable）
     stmt = (
         select(
             AnalysisJob,
-            SocialMonitor.name.label("monitor_name"),
-            SocialTask.name.label("task_name"),
+            SocialMonitor.name.label("social_monitor_name"),
+            SocialTask.name.label("social_task_name"),
+            NewsMonitor.name.label("news_monitor_name"),
+            NewsTask.name.label("news_task_name"),
             User.username.label("user_name"),
         )
-        .join(SocialMonitor, AnalysisJob.monitor_id == SocialMonitor.id)
-        .join(SocialTask, AnalysisJob.task_id == SocialTask.id, isouter=True)
+        .join(SocialMonitor, AnalysisJob.social_monitor_id == SocialMonitor.id, isouter=True)
+        .join(SocialTask, AnalysisJob.social_task_id == SocialTask.id, isouter=True)
+        .join(NewsMonitor, AnalysisJob.news_monitor_id == NewsMonitor.id, isouter=True)
+        .join(NewsTask, AnalysisJob.news_task_id == NewsTask.id, isouter=True)
         .join(User, AnalysisJob.user_id == User.id)
     )
 
     # 筛选条件
     conditions = []
 
-    if monitor_id is not None:
-        conditions.append(AnalysisJob.monitor_id == monitor_id)
+    if social_monitor_id is not None:
+        conditions.append(AnalysisJob.social_monitor_id == social_monitor_id)
 
-    if task_id is not None:
-        conditions.append(AnalysisJob.task_id == task_id)
+    if social_task_id is not None:
+        conditions.append(AnalysisJob.social_task_id == social_task_id)
+
+    if news_monitor_id is not None:
+        conditions.append(AnalysisJob.news_monitor_id == news_monitor_id)
+
+    if news_task_id is not None:
+        conditions.append(AnalysisJob.news_task_id == news_task_id)
 
     if analysis_type:
         conditions.append(AnalysisJob.analysis_type == analysis_type)
@@ -108,7 +121,7 @@ async def get_analysis_jobs(
         job = row.AnalysisJob
         cfg = job.analysis_config if isinstance(job.analysis_config, dict) else {}
         sid = cfg.get("slice_id")
-        if job.task_id is None and isinstance(sid, int):
+        if job.social_task_id is None and isinstance(sid, int):
             slice_ids.add(sid)
 
     slice_name_by_id: dict[int, str | None] = {}
@@ -124,13 +137,15 @@ async def get_analysis_jobs(
     for row in rows:
         job = row.AnalysisJob
         cfg = job.analysis_config if isinstance(job.analysis_config, dict) else {}
-        slice_id = cfg.get("slice_id") if job.task_id is None else None
+        slice_id = cfg.get("slice_id") if job.social_task_id is None else None
         if not isinstance(slice_id, int):
             slice_id = None
         item = {
             "id": job.id,
-            "monitor_id": job.monitor_id,
-            "task_id": job.task_id,
+            "social_monitor_id": job.social_monitor_id,
+            "social_task_id": job.social_task_id,
+            "news_monitor_id": job.news_monitor_id,
+            "news_task_id": job.news_task_id,
             "user_id": job.user_id,
             "analysis_type": job.analysis_type,
             "celery_task_id": job.celery_task_id,
@@ -150,8 +165,10 @@ async def get_analysis_jobs(
             "created_at": job.created_at,
             "updated_at": job.updated_at,
             # 关联名称
-            "monitor_name": row.monitor_name,
-            "task_name": row.task_name,
+            "social_monitor_name": row.social_monitor_name,
+            "social_task_name": row.social_task_name,
+            "news_monitor_name": row.news_monitor_name,
+            "news_task_name": row.news_task_name,
             "slice_id": slice_id,
             "slice_name": slice_name_by_id.get(slice_id)
             if slice_id is not None
@@ -169,19 +186,22 @@ async def get_analysis_job(
     """获取单个分析任务详情（带关联信息）"""
     from src.social_media.monitors.models import SocialMonitor as SocialMonitor
     from src.social_media.tasks.models import SocialTask as SocialTask
+    from src.news_media.models import NewsMonitor, NewsTask
     from src.auth.models import User
-    from src.social_media.monitors import crud as monitor_crud
 
-    # 查询分析任务及关联信息
     stmt = (
         select(
             AnalysisJob,
-            SocialMonitor.name.label("monitor_name"),
-            SocialTask.name.label("task_name"),
+            SocialMonitor.name.label("social_monitor_name"),
+            SocialTask.name.label("social_task_name"),
+            NewsMonitor.name.label("news_monitor_name"),
+            NewsTask.name.label("news_task_name"),
             User.username.label("user_name"),
         )
-        .join(SocialMonitor, AnalysisJob.monitor_id == SocialMonitor.id)
-        .join(SocialTask, AnalysisJob.task_id == SocialTask.id, isouter=True)
+        .join(SocialMonitor, AnalysisJob.social_monitor_id == SocialMonitor.id, isouter=True)
+        .join(SocialTask, AnalysisJob.social_task_id == SocialTask.id, isouter=True)
+        .join(NewsMonitor, AnalysisJob.news_monitor_id == NewsMonitor.id, isouter=True)
+        .join(NewsTask, AnalysisJob.news_task_id == NewsTask.id, isouter=True)
         .join(User, AnalysisJob.user_id == User.id)
         .where(AnalysisJob.id == job_id)
     )
@@ -194,15 +214,15 @@ async def get_analysis_job(
 
     job = row.AnalysisJob
 
-    # 验证用户权限
-    await monitor_crud.assert_monitor_access(
-        db, job.monitor_id, current_user_id, detail="You don't have access to this analysis job"
-    )
+    # 验证用户权限（按模块判断）
+    await _assert_job_access(db, job, current_user_id)
 
     return {
         "id": job.id,
-        "monitor_id": job.monitor_id,
-        "task_id": job.task_id,
+        "social_monitor_id": job.social_monitor_id,
+        "social_task_id": job.social_task_id,
+        "news_monitor_id": job.news_monitor_id,
+        "news_task_id": job.news_task_id,
         "user_id": job.user_id,
         "analysis_type": job.analysis_type,
         "celery_task_id": job.celery_task_id,
@@ -221,24 +241,54 @@ async def get_analysis_job(
         "error_message": job.error_message,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
-        "monitor_name": row.monitor_name,
-        "task_name": row.task_name,
+        "social_monitor_name": row.social_monitor_name,
+        "social_task_name": row.social_task_name,
+        "news_monitor_name": row.news_monitor_name,
+        "news_task_name": row.news_task_name,
         "user_name": row.user_name,
     }
+
+
+async def _assert_job_access(db: AsyncSession, job: AnalysisJob, current_user_id: int) -> None:
+    """验证用户对 AnalysisJob 的访问权限（按模块判断）"""
+    if job.social_monitor_id:
+        from src.social_media.monitors import crud as monitor_crud
+        await monitor_crud.assert_monitor_access(
+            db, job.social_monitor_id, current_user_id,
+            detail="You don't have access to this analysis job"
+        )
+    elif job.news_monitor_id:
+        from src.news_media.crud import get_monitor_by_id as get_news_monitor
+        from src.rbac.utils import is_admin_or_super_admin
+        from src.auth.models import User
+        from sqlalchemy import select
+
+        monitor = await get_news_monitor(db, job.news_monitor_id, load_relations=True)
+        if not monitor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="News monitor not found",
+            )
+        # 检查用户权限
+        user_stmt = select(User).where(User.id == current_user_id)
+        user = (await db.execute(user_stmt)).scalar_one_or_none()
+        if user and is_admin_or_super_admin(user):
+            return
+        if monitor.owner_id != current_user_id and current_user_id not in {p.id for p in monitor.participants}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this analysis job",
+            )
 
 
 async def get_analysis_progress(
     db: AsyncSession, job_id: int, current_user_id: int
 ) -> AnalysisProgressResponse:
     """获取分析任务进度"""
-    from src.social_media.monitors import crud as monitor_crud
-
     job = await _get_job_or_404(db, job_id)
 
     # 验证权限
-    await monitor_crud.assert_monitor_access(
-        db, job.monitor_id, current_user_id, detail="You don't have access to this analysis job"
-    )
+    await _assert_job_access(db, job, current_user_id)
 
     # 计算进度（限制最大100%）
     progress = 0.0
@@ -276,14 +326,11 @@ async def cancel_analysis_job(
 ) -> bool:
     """取消分析任务"""
     from celery import current_app as celery_app
-    from src.social_media.monitors import crud as monitor_crud
 
     job = await _get_job_or_404(db, job_id)
 
     # 验证权限
-    await monitor_crud.assert_monitor_access(
-        db, job.monitor_id, current_user_id, detail="You don't have access to this analysis job"
-    )
+    await _assert_job_access(db, job, current_user_id)
 
     if job.status not in ("pending", "processing"):
         raise HTTPException(
@@ -307,14 +354,10 @@ async def delete_analysis_job(
     db: AsyncSession, job_id: int, current_user_id: int
 ) -> bool:
     """删除分析任务"""
-    from src.social_media.monitors import crud as monitor_crud
-
     job = await _get_job_or_404(db, job_id)
 
     # 验证权限
-    await monitor_crud.assert_monitor_access(
-        db, job.monitor_id, current_user_id, detail="You don't have access to this analysis job"
-    )
+    await _assert_job_access(db, job, current_user_id)
 
     await db.delete(job)
     await db.commit()

@@ -33,7 +33,6 @@ class NewsMonitorRead(CustomBaseModel):
     description: str | None
     owner_id: int
     aggregated_result: dict | None = None
-    participant_ids: list[int] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

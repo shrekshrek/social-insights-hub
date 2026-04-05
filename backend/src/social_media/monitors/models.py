@@ -28,7 +28,7 @@ monitor_participants = Table(
     Column(
         "monitor_id",
         Integer,
-        ForeignKey("monitors.id", ondelete="CASCADE"),
+        ForeignKey("social_monitors.id", ondelete="CASCADE"),
         primary_key=True,
     ),
     Column(
@@ -75,7 +75,7 @@ class Monitor(Base):
     包含多个数据获取任务和分析结果。
     """
 
-    __tablename__ = "monitors"
+    __tablename__ = "social_monitors"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(

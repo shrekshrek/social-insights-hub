@@ -383,14 +383,14 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     job = await create_analysis_job_async(
         db,
-        monitor_id=strategy.social_monitor_id,
-        task_id=None,
+        social_monitor_id=strategy.social_monitor_id,
+        news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.created_by,
         analysis_type=AnalysisType.STRATEGY_PHASE1.value,
         source_count=len(slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
-    ) if strategy.social_monitor_id else None
+    )
 
     start = time.time()
     response = await chain.ainvoke(inputs)
@@ -399,13 +399,12 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     result = parse_phase1_response(response.content)
     logger.info("Strategy %d Phase 1 生成完成 (%.1fs)", strategy.id, duration)
 
-    if job:
-        now = datetime.now(timezone.utc)
-        job.status = "completed"
-        job.completed_at = now
-        job.analyzed_count = 1
-        job.processing_time = int(duration)
-        job.token_usage = extract_token_usage(response, duration_seconds=duration)
+    now = datetime.now(timezone.utc)
+    job.status = "completed"
+    job.completed_at = now
+    job.analyzed_count = 1
+    job.processing_time = int(duration)
+    job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
     strategy.phase1_result = result
     strategy.phase2_result = None
@@ -453,14 +452,14 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     job = await create_analysis_job_async(
         db,
-        monitor_id=strategy.social_monitor_id,
-        task_id=None,
+        social_monitor_id=strategy.social_monitor_id,
+        news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.created_by,
         analysis_type=AnalysisType.STRATEGY_PHASE2.value,
         source_count=len(slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
-    ) if strategy.social_monitor_id else None
+    )
 
     start = time.time()
     response = await chain.ainvoke(inputs)
@@ -469,13 +468,12 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
     result = parse_phase2_response(response.content)
     logger.info("Strategy %d Phase 2 生成完成 (%.1fs)", strategy.id, duration)
 
-    if job:
-        now = datetime.now(timezone.utc)
-        job.status = "completed"
-        job.completed_at = now
-        job.analyzed_count = 1
-        job.processing_time = int(duration)
-        job.token_usage = extract_token_usage(response, duration_seconds=duration)
+    now = datetime.now(timezone.utc)
+    job.status = "completed"
+    job.completed_at = now
+    job.analyzed_count = 1
+    job.processing_time = int(duration)
+    job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
     strategy.phase2_result = result
     strategy.phase3_result = None
@@ -507,14 +505,14 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     job = await create_analysis_job_async(
         db,
-        monitor_id=strategy.social_monitor_id,
-        task_id=None,
+        social_monitor_id=strategy.social_monitor_id,
+        news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.created_by,
         analysis_type=AnalysisType.STRATEGY_PHASE3.value,
         source_count=len(slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
-    ) if strategy.social_monitor_id else None
+    )
 
     start = time.time()
     response = await chain.ainvoke(inputs)
@@ -523,13 +521,12 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
     result = parse_phase3_response(response.content)
     logger.info("Strategy %d Phase 3 生成完成 (%.1fs)", strategy.id, duration)
 
-    if job:
-        now = datetime.now(timezone.utc)
-        job.status = "completed"
-        job.completed_at = now
-        job.analyzed_count = 1
-        job.processing_time = int(duration)
-        job.token_usage = extract_token_usage(response, duration_seconds=duration)
+    now = datetime.now(timezone.utc)
+    job.status = "completed"
+    job.completed_at = now
+    job.analyzed_count = 1
+    job.processing_time = int(duration)
+    job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
     strategy.phase3_result = result
     strategy.status = "completed"
@@ -1170,14 +1167,14 @@ async def _run_probe_review(
 
         job = await create_analysis_job_async(
             db,
-            monitor_id=strategy.social_monitor_id,
-            task_id=None,
+            social_monitor_id=strategy.social_monitor_id,
+            news_monitor_id=strategy.news_monitor_id,
             user_id=strategy.created_by,
             analysis_type=AnalysisType.STRATEGY_PROBE_REVIEW.value,
             source_count=len(ambiguous_summaries),
             status="processing",
             analysis_config={"strategy_id": strategy.id},
-        ) if strategy.social_monitor_id else None
+        )
 
         async def _evaluate_one(task_summary: dict) -> tuple[dict | None, dict | None, float]:
             """评估单个任务，返回 (assessment, token_usage, duration)"""
@@ -1243,15 +1240,14 @@ async def _run_probe_review(
             "call_details": call_details,
         }
 
-        if job:
-            now = datetime.now(timezone.utc)
-            job.status = "completed" if not parse_error else "failed"
-            job.completed_at = now
-            job.analyzed_count = len(llm_assessments)
-            job.processing_time = int(duration)
-            job.token_usage = merged_token_usage
-            if parse_error:
-                job.error_message = parse_error
+        now = datetime.now(timezone.utc)
+        job.status = "completed" if not parse_error else "failed"
+        job.completed_at = now
+        job.analyzed_count = len(llm_assessments)
+        job.processing_time = int(duration)
+        job.token_usage = merged_token_usage
+        if parse_error:
+            job.error_message = parse_error
 
         logger.info(
             "Strategy %d probe review 并行 LLM 完成 (%.1fs, 模糊=%d, 成功=%d)",

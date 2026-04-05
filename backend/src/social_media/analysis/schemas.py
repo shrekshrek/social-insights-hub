@@ -1,6 +1,6 @@
 """分析模块 Pydantic 模型
 
-统一使用 AnalysisJob 模型，通过 task_id 是否为空区分任务级/项目级分析。
+统一使用 AnalysisJob 模型记录所有模块（社媒/新闻/策略）的 LLM 分析调用。
 """
 
 from datetime import datetime
@@ -204,13 +204,11 @@ class PostAnalysisResponse(CustomBaseModel):
 class AnalysisJobCreate(CustomBaseModel):
     """创建分析任务"""
 
-    monitor_id: int = Field(..., gt=0, description="项目ID")
-    task_id: int | None = Field(None, gt=0, description="任务ID（任务级分析时必填）")
-    analysis_type: str = Field(
-        ...,
-        pattern="^(screening_posts|deep_posts|deep_comments|topic_clustering|competitive)$",
-        description="分析类型",
-    )
+    social_monitor_id: int | None = Field(None, gt=0, description="社媒监测项目ID")
+    social_task_id: int | None = Field(None, gt=0, description="社媒采集任务ID")
+    news_monitor_id: int | None = Field(None, gt=0, description="新闻监测项目ID")
+    news_task_id: int | None = Field(None, gt=0, description="新闻采集任务ID")
+    analysis_type: str = Field(..., description="分析类型")
     celery_task_id: str = Field(..., description="Celery任务ID")
     source_count: int = Field(0, ge=0, description="源数据数量")
     analysis_config: dict | None = Field(None, description="分析配置")
@@ -236,8 +234,10 @@ class AnalysisJobResponse(CustomBaseModel):
     """分析任务响应"""
 
     id: int
-    monitor_id: int
-    task_id: int | None
+    social_monitor_id: int | None = None
+    social_task_id: int | None = None
+    news_monitor_id: int | None = None
+    news_task_id: int | None = None
     user_id: int
     analysis_type: str
     celery_task_id: str
@@ -270,8 +270,10 @@ class AnalysisJobResponse(CustomBaseModel):
     updated_at: datetime
 
     # 关联信息（可选，用于列表展示）
-    monitor_name: str | None = None
-    task_name: str | None = None
+    social_monitor_name: str | None = None
+    social_task_name: str | None = None
+    news_monitor_name: str | None = None
+    news_task_name: str | None = None
     slice_id: int | None = None
     slice_name: str | None = None
     user_name: str | None = None

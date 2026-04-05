@@ -130,8 +130,8 @@ def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | N
 
         analysis_job = create_analysis_job_sync(
             db=db,
-            monitor_id=task.monitor_id,
-            task_id=task_id,
+            social_monitor_id=task.monitor_id,
+            social_task_id=task_id,
             user_id=user_id,
             analysis_type="screening_posts",
             source_count=len(post_ids),
@@ -141,7 +141,7 @@ def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | N
         # 启动 Celery 任务
         celery_result = run_screening_task.delay(
             result_id=job_id,
-            task_id=task_id,
+            social_task_id=task_id,
             post_ids=post_ids,
             monitor_keywords=monitor_keywords,
         )
@@ -202,8 +202,8 @@ def _run_deep_posts(
 
         analysis_job = create_analysis_job_sync(
             db=db,
-            monitor_id=task.monitor_id,
-            task_id=task_id,
+            social_monitor_id=task.monitor_id,
+            social_task_id=task_id,
             user_id=user_id,
             analysis_type="deep_posts",
             source_count=len(post_ids),
@@ -213,7 +213,7 @@ def _run_deep_posts(
         # 启动 Celery 任务
         celery_result = run_post_deep_task.delay(
             result_id=job_id,
-            task_id=task_id,
+            social_task_id=task_id,
             post_ids=post_ids,
             analysis_focus=task.keywords,
         )
@@ -275,8 +275,8 @@ def _run_deep_comments(
 
         analysis_job = create_analysis_job_sync(
             db=db,
-            monitor_id=task.monitor_id,
-            task_id=task_id,
+            social_monitor_id=task.monitor_id,
+            social_task_id=task_id,
             user_id=user_id,
             analysis_type="deep_comments",
             source_count=len(posts_with_comments),
@@ -286,7 +286,7 @@ def _run_deep_comments(
         # 启动 Celery 任务
         celery_result = run_comment_deep_task.delay(
             result_id=job_id,
-            task_id=task_id,
+            social_task_id=task_id,
             post_ids=posts_with_comments,
             analysis_focus=task.keywords,
         )
@@ -338,8 +338,8 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         # 创建实体归一化任务（和手动聚合一致）
         entity_job = create_analysis_job_sync(
             db=db,
-            monitor_id=task.monitor_id,
-            task_id=task_id,
+            social_monitor_id=task.monitor_id,
+            social_task_id=task_id,
             user_id=user_id,
             analysis_type="entity_normalization",
             source_count=analyzed_count,
@@ -348,8 +348,8 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
         # 创建观点归一化任务（和手动聚合一致）
         opinion_job = create_analysis_job_sync(
             db=db,
-            monitor_id=task.monitor_id,
-            task_id=task_id,
+            social_monitor_id=task.monitor_id,
+            social_task_id=task_id,
             user_id=user_id,
             analysis_type="opinion_normalization",
             source_count=analyzed_count,
@@ -357,8 +357,8 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
 
         # 启动 Celery 任务，传递预创建的 job_id
         celery_result = run_aggregation_task.delay(
-            task_id=task_id,
-            monitor_id=task.monitor_id,
+            social_task_id=task_id,
+            social_monitor_id=task.monitor_id,
             user_id=user_id,
             entity_job_id=entity_job.id,
             opinion_job_id=opinion_job.id,

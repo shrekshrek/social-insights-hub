@@ -160,7 +160,7 @@ def _run_pipeline_body(
     # 注意：source_count 会在归一化完成后根据实际程序聚类后的数量更新
     entity_job = create_analysis_job_sync(
         db=db,
-        monitor_id=slice_record.monitor_id,
+        social_monitor_id=slice_record.monitor_id,
         task_id=None,
         user_id=slice_record.user_id,
         analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
@@ -176,7 +176,7 @@ def _run_pipeline_body(
 
     opinion_job = create_analysis_job_sync(
         db=db,
-        monitor_id=slice_record.monitor_id,
+        social_monitor_id=slice_record.monitor_id,
         task_id=None,
         user_id=slice_record.user_id,
         analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
@@ -419,7 +419,7 @@ def _run_pipeline_body(
     # ========== Stage3：LLM 报告生成 ==========
     summary_job = create_analysis_job_sync(
         db=db,
-        monitor_id=slice_record.monitor_id,
+        social_monitor_id=slice_record.monitor_id,
         task_id=None,
         user_id=slice_record.user_id,
         analysis_type=AnalysisType.MONITOR_SLICE_SUMMARY.value,

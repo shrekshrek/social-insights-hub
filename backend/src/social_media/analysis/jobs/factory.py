@@ -15,11 +15,13 @@ from src.social_media.analysis.models import AnalysisJob
 
 def create_analysis_job_sync(
     db: Session,
-    monitor_id: int,
-    task_id: int | None,
     user_id: int,
     analysis_type: str,
     source_count: int,
+    social_monitor_id: int | None = None,
+    social_task_id: int | None = None,
+    news_monitor_id: int | None = None,
+    news_task_id: int | None = None,
     celery_task_id: str = "",
     analysis_config: dict | None = None,
     status: str = "pending",
@@ -28,11 +30,13 @@ def create_analysis_job_sync(
 
     Args:
         db: 同步数据库会话
-        monitor_id: 项目ID
-        task_id: 任务ID（任务级分析时填写；项目级分析时可为空）
         user_id: 用户ID
         analysis_type: 分析类型 (AnalysisType 枚举值)
         source_count: 源数据数量
+        social_monitor_id: 社媒监测项目ID
+        social_task_id: 社媒采集任务ID（任务级分析时填写）
+        news_monitor_id: 新闻监测项目ID
+        news_task_id: 新闻采集任务ID（任务级分析时填写）
         celery_task_id: Celery 任务ID，同步任务传空或伪ID
         analysis_config: 分析配置参数
         status: 初始状态，默认 "pending"
@@ -45,8 +49,10 @@ def create_analysis_job_sync(
         celery_task_id = f"sync-{analysis_type}-{uuid.uuid4().hex[:8]}"
 
     job = AnalysisJob(
-        monitor_id=monitor_id,
-        task_id=task_id,
+        social_monitor_id=social_monitor_id,
+        social_task_id=social_task_id,
+        news_monitor_id=news_monitor_id,
+        news_task_id=news_task_id,
         user_id=user_id,
         analysis_type=analysis_type,
         celery_task_id=celery_task_id,
@@ -63,11 +69,13 @@ def create_analysis_job_sync(
 
 async def create_analysis_job_async(
     db: AsyncSession,
-    monitor_id: int,
-    task_id: int | None,
     user_id: int,
     analysis_type: str,
     source_count: int,
+    social_monitor_id: int | None = None,
+    social_task_id: int | None = None,
+    news_monitor_id: int | None = None,
+    news_task_id: int | None = None,
     celery_task_id: str = "",
     analysis_config: dict | None = None,
     status: str = "pending",
@@ -76,11 +84,13 @@ async def create_analysis_job_async(
 
     Args:
         db: 异步数据库会话
-        monitor_id: 项目ID
-        task_id: 任务ID
         user_id: 用户ID
         analysis_type: 分析类型 (AnalysisType 枚举值)
         source_count: 源数据数量
+        social_monitor_id: 社媒监测项目ID
+        social_task_id: 社媒采集任务ID
+        news_monitor_id: 新闻监测项目ID
+        news_task_id: 新闻采集任务ID
         celery_task_id: Celery 任务ID，为空时生成唯一伪 ID（后续可更新为真实 ID）
         analysis_config: 分析配置参数
         status: 初始状态，默认 "pending"
@@ -89,13 +99,14 @@ async def create_analysis_job_async(
         AnalysisJob: 创建的分析任务记录
     """
     # 生成伪 celery_task_id（避免唯一约束冲突）
-    # 格式与同步版本一致：pending-{type}-{uuid}
     if not celery_task_id:
         celery_task_id = f"pending-{analysis_type}-{uuid.uuid4().hex[:8]}"
 
     job = AnalysisJob(
-        monitor_id=monitor_id,
-        task_id=task_id,
+        social_monitor_id=social_monitor_id,
+        social_task_id=social_task_id,
+        news_monitor_id=news_monitor_id,
+        news_task_id=news_task_id,
         user_id=user_id,
         analysis_type=analysis_type,
         celery_task_id=celery_task_id,

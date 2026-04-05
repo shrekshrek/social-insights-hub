@@ -1,6 +1,5 @@
 """新闻媒体 API 路由"""
 
-import asyncio
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, Query, status
@@ -29,7 +28,6 @@ from src.news_media.schemas import (
     NewsTaskReadWithRelations,
 )
 from src.schemas import MessageResponse, PaginatedResponse
-from src.database import AsyncSessionLocal
 
 router = APIRouter(prefix="/news-media", tags=["News Media"])
 
@@ -246,20 +244,45 @@ async def delete_task(
 async def execute_task(
     task: NewsTask = Depends(validate_news_task_access),
     db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
 ):
     if task.phase == "collect":
-        # collect 耗时较长，异步后台执行，立即返回 running 状态
+        # collect 耗时较长，通过 Celery 异步执行，立即返回 running 状态
+        from src.social_media.analysis.jobs.factory import create_analysis_job_async
+        from src.social_media.analysis.models import AnalysisType
+
+        # 预创建两个 AnalysisJob（标注 + 洞察），供 AI 分析板块展示
+        tagging_job = await create_analysis_job_async(
+            db=db,
+            news_monitor_id=task.monitor_id,
+            news_task_id=task.id,
+            user_id=current_user.id,
+            analysis_type=AnalysisType.NEWS_TAGGING.value,
+            source_count=0,  # 文章数量在任务执行后更新
+        )
+        insight_job = await create_analysis_job_async(
+            db=db,
+            news_monitor_id=task.monitor_id,
+            news_task_id=task.id,
+            user_id=current_user.id,
+            analysis_type=AnalysisType.NEWS_INSIGHT.value,
+            source_count=0,
+        )
+
         task.status = "running"
         await db.commit()
         await db.refresh(task)
 
-        async def _run_collect() -> None:
-            async with AsyncSessionLocal() as bg_db:
-                bg_task = await bg_db.get(type(task), task.id)
-                if bg_task:
-                    await service.execute_news_collect(bg_db, bg_task)
+        from src.news_media.celery_tasks import run_news_collect_task
+        celery_result = run_news_collect_task.delay(
+            task_id=task.id,
+            tagging_job_id=tagging_job.id,
+            insight_job_id=insight_job.id,
+        )
 
-        asyncio.create_task(_run_collect())
+        # 将真实 celery_task_id 绑定到 tagging_job（唯一约束限制只能绑一条）
+        tagging_job.celery_task_id = celery_result.id
+        await db.commit()
     else:
         await service.execute_news_probe(db, task)
         await db.commit()

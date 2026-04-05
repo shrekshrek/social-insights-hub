@@ -28,39 +28,21 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   },
   "/profile": { permission: null },
   "/settings": { permission: null },
-  "/users": {
-    permission: PERMISSIONS.USER_MGMT_ACCESS,
-    label: "用户管理",
+  // 策略研究模块
+  "/strategies": {
+    permission: PERMISSIONS.STRATEGY_ACCESS,
+    label: "策略研究",
     showInNav: true,
-    order: 30,
+    order: 20,
   },
-  "/users/create": { permission: PERMISSIONS.USER_WRITE },
-  "/users/[id]": { permission: PERMISSIONS.USER_READ },
-  "/users/[id]/edit": { permission: PERMISSIONS.USER_WRITE },
-  "/users/[id]/roles": { permission: PERMISSIONS.USER_WRITE },
-  "/rbac/roles": {
-    permission: PERMISSIONS.ROLE_MGMT_ACCESS,
-    label: "角色管理",
-    showInNav: true,
-    order: 40,
-  },
-  "/rbac/roles/create": { permission: PERMISSIONS.ROLE_WRITE },
-  "/rbac/roles/[id]": { permission: PERMISSIONS.ROLE_READ },
-  "/rbac/roles/[id]/edit": { permission: PERMISSIONS.ROLE_WRITE },
-  "/rbac/roles/[id]/permissions": { permission: PERMISSIONS.ROLE_WRITE },
-  "/rbac/permissions": {
-    permission: PERMISSIONS.PERM_MGMT_ACCESS,
-    label: "权限管理",
-    showInNav: true,
-    order: 50,
-  },
-  "/rbac/permissions/[id]": { permission: PERMISSIONS.PERMISSION_READ },
+  "/strategies/create": { permission: PERMISSIONS.STRATEGY_WRITE },
+  "/strategies/[id]": { permission: PERMISSIONS.STRATEGY_READ },
   // 社媒监测模块
   "/social-media/monitors": {
     permission: PERMISSIONS.MONITOR_ACCESS,
     label: "社媒监测",
     showInNav: true,
-    order: 60,
+    order: 30,
   },
   "/social-media/monitors/create": { permission: PERMISSIONS.MONITOR_WRITE },
   "/social-media/monitors/[id]": { permission: PERMISSIONS.MONITOR_READ },
@@ -68,7 +50,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
     label: "社媒采集",
     showInNav: true,
-    order: 70,
+    order: 40,
   },
   "/social-media/tasks/create": { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
   "/social-media/tasks/[id]": { permission: PERMISSIONS.SOCIAL_TASK_READ },
@@ -76,28 +58,36 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     permission: PERMISSIONS.SOCIAL_TASK_WRITE,
   },
   "/social-media/posts/[id]": { permission: PERMISSIONS.SOCIAL_TASK_READ },
+  // 新闻监测模块
+  "/news-media": {
+    permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
+    label: "新闻监测",
+    showInNav: true,
+    order: 50,
+  },
+  "/news-media/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
+  "/news-media/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
+  "/news-media/tasks": {
+    permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
+    label: "新闻采集",
+    showInNav: true,
+    order: 60,
+  },
+  "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
+  "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
   // AI 分析模块
   "/social-media/analysis": {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
     label: "AI 分析",
     showInNav: true,
-    order: 80,
+    order: 70,
   },
-  // 策略定义模块
-  "/strategies": {
-    permission: PERMISSIONS.STRATEGY_ACCESS,
-    label: "策略管理",
-    showInNav: true,
-    order: 90,
-  },
-  "/strategies/create": { permission: PERMISSIONS.STRATEGY_WRITE },
-  "/strategies/[id]": { permission: PERMISSIONS.STRATEGY_READ },
   // 知识库模块
   "/knowledge-base": {
     permission: PERMISSIONS.KB_ACCESS,
     label: "市场知识库",
     showInNav: true,
-    order: 95,
+    order: 80,
   },
   "/knowledge-base/upload": {
     permission: PERMISSIONS.KB_WRITE,
@@ -107,23 +97,33 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     permission: PERMISSIONS.KB_READ,
     label: "RAG 检索测试",
   },
-  // 新闻监测模块
-  "/news-media": {
-    permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
-    label: "新闻监测",
+  "/users": {
+    permission: PERMISSIONS.USER_MGMT_ACCESS,
+    label: "用户管理",
+    showInNav: true,
+    order: 90,
+  },
+  "/users/create": { permission: PERMISSIONS.USER_WRITE },
+  "/users/[id]": { permission: PERMISSIONS.USER_READ },
+  "/users/[id]/edit": { permission: PERMISSIONS.USER_WRITE },
+  "/users/[id]/roles": { permission: PERMISSIONS.USER_WRITE },
+  "/rbac/roles": {
+    permission: PERMISSIONS.ROLE_MGMT_ACCESS,
+    label: "角色管理",
     showInNav: true,
     order: 100,
   },
-  "/news-media/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
-  "/news-media/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
-  "/news-media/tasks": {
-    permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
-    label: "新闻采集",
+  "/rbac/roles/create": { permission: PERMISSIONS.ROLE_WRITE },
+  "/rbac/roles/[id]": { permission: PERMISSIONS.ROLE_READ },
+  "/rbac/roles/[id]/edit": { permission: PERMISSIONS.ROLE_WRITE },
+  "/rbac/roles/[id]/permissions": { permission: PERMISSIONS.ROLE_WRITE },
+  "/rbac/permissions": {
+    permission: PERMISSIONS.PERM_MGMT_ACCESS,
+    label: "权限管理",
     showInNav: true,
     order: 110,
   },
-  "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
-  "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
+  "/rbac/permissions/[id]": { permission: PERMISSIONS.PERMISSION_READ },
 };
 
 /**

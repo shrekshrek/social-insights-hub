@@ -2,163 +2,168 @@
  * 路由由配置：集中管理权限与导航元数据
  */
 
-import { PERMISSIONS } from './permissions'
-import type { Permission } from '~/types/permissions'
+import { PERMISSIONS } from "./permissions";
+import type { Permission } from "~/types/permissions";
 
 export interface RouteConfig {
-  permission: Permission | Permission[] | null
-  label?: string
-  showInNav?: boolean
-  order?: number
+  permission: Permission | Permission[] | null;
+  label?: string;
+  showInNav?: boolean;
+  order?: number;
 }
 
 export interface NavigationItem {
-  path: string
-  label: string
-  order: number
+  path: string;
+  label: string;
+  order: number;
 }
 
 // 每个路由集中声明权限与导航元信息，新增模块时只需要在此补充一条记录
 export const ROUTE_CONFIG: Record<string, RouteConfig> = {
-  '/dashboard': {
+  "/dashboard": {
     permission: null,
-    label: '工作台',
+    label: "工作台",
     showInNav: true,
     order: 10,
   },
-  '/profile': { permission: null },
-  '/settings': { permission: null },
-  '/users': {
+  "/profile": { permission: null },
+  "/settings": { permission: null },
+  "/users": {
     permission: PERMISSIONS.USER_MGMT_ACCESS,
-    label: '用户管理',
+    label: "用户管理",
     showInNav: true,
     order: 30,
   },
-  '/users/create': { permission: PERMISSIONS.USER_WRITE },
-  '/users/[id]': { permission: PERMISSIONS.USER_READ },
-  '/users/[id]/edit': { permission: PERMISSIONS.USER_WRITE },
-  '/users/[id]/roles': { permission: PERMISSIONS.USER_WRITE },
-  '/rbac/roles': {
+  "/users/create": { permission: PERMISSIONS.USER_WRITE },
+  "/users/[id]": { permission: PERMISSIONS.USER_READ },
+  "/users/[id]/edit": { permission: PERMISSIONS.USER_WRITE },
+  "/users/[id]/roles": { permission: PERMISSIONS.USER_WRITE },
+  "/rbac/roles": {
     permission: PERMISSIONS.ROLE_MGMT_ACCESS,
-    label: '角色管理',
+    label: "角色管理",
     showInNav: true,
     order: 40,
   },
-  '/rbac/roles/create': { permission: PERMISSIONS.ROLE_WRITE },
-  '/rbac/roles/[id]': { permission: PERMISSIONS.ROLE_READ },
-  '/rbac/roles/[id]/edit': { permission: PERMISSIONS.ROLE_WRITE },
-  '/rbac/roles/[id]/permissions': { permission: PERMISSIONS.ROLE_WRITE },
-  '/rbac/permissions': {
+  "/rbac/roles/create": { permission: PERMISSIONS.ROLE_WRITE },
+  "/rbac/roles/[id]": { permission: PERMISSIONS.ROLE_READ },
+  "/rbac/roles/[id]/edit": { permission: PERMISSIONS.ROLE_WRITE },
+  "/rbac/roles/[id]/permissions": { permission: PERMISSIONS.ROLE_WRITE },
+  "/rbac/permissions": {
     permission: PERMISSIONS.PERM_MGMT_ACCESS,
-    label: '权限管理',
+    label: "权限管理",
     showInNav: true,
     order: 50,
   },
-  '/rbac/permissions/[id]': { permission: PERMISSIONS.PERMISSION_READ },
+  "/rbac/permissions/[id]": { permission: PERMISSIONS.PERMISSION_READ },
   // 社交媒体数据洞察模块
-  '/social-media/monitors': {
+  "/social-media/monitors": {
     permission: PERMISSIONS.MONITOR_ACCESS,
-    label: '社媒监测',
+    label: "社媒监测",
     showInNav: true,
     order: 60,
   },
-  '/social-media/monitors/create': { permission: PERMISSIONS.MONITOR_WRITE },
-  '/social-media/monitors/[id]': { permission: PERMISSIONS.MONITOR_READ },
-  '/social-media/tasks': {
+  "/social-media/monitors/create": { permission: PERMISSIONS.MONITOR_WRITE },
+  "/social-media/monitors/[id]": { permission: PERMISSIONS.MONITOR_READ },
+  "/social-media/tasks": {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
-    label: '数据采集',
+    label: "数据采集",
     showInNav: true,
     order: 70,
   },
-  '/social-media/tasks/create': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
-  '/social-media/tasks/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
-  '/social-media/tasks/[id]/upload': { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
-  '/social-media/posts/[id]': { permission: PERMISSIONS.SOCIAL_TASK_READ },
+  "/social-media/tasks/create": { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
+  "/social-media/tasks/[id]": { permission: PERMISSIONS.SOCIAL_TASK_READ },
+  "/social-media/tasks/[id]/upload": {
+    permission: PERMISSIONS.SOCIAL_TASK_WRITE,
+  },
+  "/social-media/posts/[id]": { permission: PERMISSIONS.SOCIAL_TASK_READ },
   // AI 分析模块
-  '/social-media/analysis': {
+  "/social-media/analysis": {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
-    label: 'AI 分析',
+    label: "AI 分析",
     showInNav: true,
     order: 80,
   },
   // 策略定义模块
-  '/strategies': {
+  "/strategies": {
     permission: PERMISSIONS.STRATEGY_ACCESS,
-    label: '策略管理',
+    label: "策略管理",
     showInNav: true,
     order: 90,
   },
-  '/strategies/create': { permission: PERMISSIONS.STRATEGY_WRITE },
-  '/strategies/[id]': { permission: PERMISSIONS.STRATEGY_READ },
+  "/strategies/create": { permission: PERMISSIONS.STRATEGY_WRITE },
+  "/strategies/[id]": { permission: PERMISSIONS.STRATEGY_READ },
   // 知识库模块
-  '/knowledge-base': {
+  "/knowledge-base": {
     permission: PERMISSIONS.KB_ACCESS,
-    label: '市场知识库',
+    label: "市场知识库",
     showInNav: true,
     order: 95,
   },
-  '/knowledge-base/upload': {
+  "/knowledge-base/upload": {
     permission: PERMISSIONS.KB_WRITE,
-    label: '上传文档',
+    label: "上传文档",
   },
-  '/knowledge-base/search': {
+  "/knowledge-base/search": {
     permission: PERMISSIONS.KB_READ,
-    label: 'RAG 检索测试',
+    label: "RAG 检索测试",
   },
   // 新闻监测模块
-  '/news-media': {
+  "/news-media": {
     permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
-    label: '新闻监测',
+    label: "新闻监测",
     showInNav: true,
     order: 100,
   },
-  '/news-media/create': { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
-  '/news-media/[id]': { permission: PERMISSIONS.NEWS_MEDIA_READ },
-  '/news-media/tasks': {
+  "/news-media/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
+  "/news-media/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
+  "/news-media/tasks": {
     permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
-    label: '新闻采集',
+    label: "新闻采集",
     showInNav: true,
     order: 110,
   },
-  '/news-media/tasks/[id]': { permission: PERMISSIONS.NEWS_MEDIA_READ },
-}
+  "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
+  "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
+};
 
 /**
  * 获取路由所需权限
  */
-export function getRoutePermissions(path: string): Permission | Permission[] | null {
-  const config = getRouteConfig(path)
-  return config?.permission ?? null
+export function getRoutePermissions(
+  path: string,
+): Permission | Permission[] | null {
+  const config = getRouteConfig(path);
+  return config?.permission ?? null;
 }
 
 function getRouteConfig(path: string): RouteConfig | undefined {
   // 精确匹配
   if (ROUTE_CONFIG[path]) {
-    return ROUTE_CONFIG[path]
+    return ROUTE_CONFIG[path];
   }
 
   // 动态路由（[id]等）通过正则方式匹配
   for (const [route, config] of Object.entries(ROUTE_CONFIG)) {
-    if (!route.includes('[')) {
-      continue
+    if (!route.includes("[")) {
+      continue;
     }
-    const pattern = route.replace(/\[.*?\]/g, '[^/]+')
-    const regex = new RegExp(`^${pattern}$`)
+    const pattern = route.replace(/\[.*?\]/g, "[^/]+");
+    const regex = new RegExp(`^${pattern}$`);
     if (regex.test(path)) {
-      return config
+      return config;
     }
   }
 
   // 模块前缀匹配
-  const parts = path.split('/')
+  const parts = path.split("/");
   if (parts.length >= 2) {
-    const prefix = `/${parts[1]}`
+    const prefix = `/${parts[1]}`;
     if (ROUTE_CONFIG[prefix]) {
-      return ROUTE_CONFIG[prefix]
+      return ROUTE_CONFIG[prefix];
     }
   }
 
-  return undefined
+  return undefined;
 }
 
 /**
@@ -173,24 +178,29 @@ export function getNavigationItems(): NavigationItem[] {
       label: config.label as string,
       order: config.order ?? 0,
     }))
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => a.order - b.order);
 }
 
 export function isPublicPage(path: string): boolean {
-  const publicPages = ['/', '/401', '/403', '/404', '/500']
-  return publicPages.includes(path)
+  const publicPages = ["/", "/401", "/403", "/404", "/500"];
+  return publicPages.includes(path);
 }
 
 export function isGuestOnlyPage(path: string): boolean {
-  const guestPages = ['/login', '/register', '/reset-password', '/request-password-reset']
-  return guestPages.some((page) => path.startsWith(page))
+  const guestPages = [
+    "/login",
+    "/register",
+    "/reset-password",
+    "/request-password-reset",
+  ];
+  return guestPages.some((page) => path.startsWith(page));
 }
 
 export interface UserInfo {
-  id: number
-  roles: string[]
-  username: string
-  email: string
-  created_at: string
-  updated_at: string
+  id: number;
+  roles: string[];
+  username: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
 }

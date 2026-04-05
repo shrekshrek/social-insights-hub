@@ -255,7 +255,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
               size: 'xs',
               variant: 'ghost',
               icon: 'i-heroicons-eye',
-              to: `/news-media/tasks/${row.original.id}`,
+              to: `/news-media/tasks/${row.original.id}?from=monitor&monitor_id=${monitorId}`,
             },
             () => '查看',
           ),

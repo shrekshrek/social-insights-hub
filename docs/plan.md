@@ -1,12 +1,263 @@
-# 实施方案：knowledge-base/前端 — 知识库管理界面
+# 实施方案：news_media 模块重设计
 
-> 规划日期：2026-03-29
-> 上游模块：knowledge_base/后端（已完成）
-> 参考文档：`docs/architecture.md`
+> 规划日期：2026-04-05
+> 状态：待实施
+> 参考文档：`docs/channel-architecture-plan.md`，`docs/strategy-multi-source-architecture.md`
 
-## 模块职责
+---
 
-完善知识库管理界面：文档列表/上传/删除、RAG 检索测试、爬虫状态管理。
+## 背景与目标
+
+现有 news_media 模块基于 SerpAPI 实现，已被废弃。新方案：
+
+- 搜索渠道：**百度新闻（Crawl4AI）+ DuckDuckGo（ddgs）**双渠道聚合
+- 架构更简洁：删除 `search_provider` 字段，渠道作为内部实现细节
+- 前端对齐社媒结构：新闻监测（项目）+ 新闻采集（跨项目任务列表）两级导航
+- Monitor 级新增聚合分析视图（统计聚合自动，叙事聚合按需）
+
+---
+
+## 设计决策
+
+| 决策 | 结论 |
+|------|------|
+| probe 渠道 | 仅百度（快速稳定，10条）|
+| collect 渠道 | 百度 + DuckDuckGo 并发（各 50 条，URL 去重合并）|
+| 分析层级 | 任务级内联分析（无独立 AnalysisJob / Slice）|
+| collect 执行 | 异步（`asyncio.create_task`），前端轮询状态 |
+| Monitor 级聚合 | 统计聚合（无 LLM，自动）+ 叙事聚合（news_insight_chain，按需）|
+| DDG 失败处理 | 尽力而为，限速时指数退避，不影响主流程 |
+
+---
+
+## 模块结构变更
+
+### 后端
+
+```
+backend/src/news_media/
+├── __init__.py
+├── models.py           # 删除 search_provider；NewsArticle 新增 search_source；NewsMonitor 新增 aggregated_result
+├── schemas.py          # 同步字段变更
+├── crud.py             # 新增 get_articles_by_monitor
+├── service.py          # _search_and_store_articles 改调 aggregator；collect 改异步；新增 monitor 聚合函数
+├── router.py           # 新增 monitor 聚合端点；collect 改异步触发
+├── dependencies.py     # 不变
+├── news_search/        # 新增，替换 serpapi_client.py
+│   ├── __init__.py
+│   ├── baidu_crawler.py    # Crawl4AI 爬百度新闻搜索页
+│   ├── ddg_searcher.py     # ddgs 封装，含退避重试
+│   └── aggregator.py       # 双渠道并发 → URL 去重 → source_tier 分类
+└── article_crawler.py  # 不变（全文抓取复用）
+```
+
+**删除**：`serpapi_client.py`
+
+### 前端
+
+```
+frontend/layers/news-media/
+├── nuxt.config.ts
+├── types/index.ts           # 删除 search_provider；新增 search_source、MonitorAggregated 类型
+├── composables/
+│   └── useNewsMedia.ts      # 新增 monitor 聚合 API
+└── pages/news-media/
+    ├── index.vue             # 监测项目列表（不变）
+    ├── create.vue            # 创建项目（不变）
+    ├── [id]/
+    │   └── index.vue         # 项目详情（新增统计聚合 + 叙事聚合按钮）
+    └── tasks/
+        ├── index.vue         # 跨项目任务列表（对齐社媒，独立页）
+        └── [id]/
+            └── index.vue     # 任务详情（文章列表新增渠道 badge）
+```
+
+---
+
+## 数据模型变更
+
+### Alembic 迁移内容
+
+```sql
+ALTER TABLE news_monitors DROP COLUMN search_provider;
+ALTER TABLE news_monitors ADD COLUMN aggregated_result JSON;
+ALTER TABLE news_tasks DROP COLUMN search_provider;
+ALTER TABLE news_articles ADD COLUMN search_source VARCHAR(20) NOT NULL DEFAULT 'baidu';
+```
+
+---
+
+## 搜索模块接口
+
+`aggregator.py` 对外暴露唯一接口：
+
+```python
+async def search_news(
+    query: str,
+    max_results: int = 50,
+    channels: list[str] = ("baidu", "duckduckgo"),
+) -> list[dict]
+# 每条含：url, title, snippet, source_name, source_tier, published_at, image_url, raw_data, search_source
+```
+
+---
+
+## 新增 API 端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/news-media/monitors/{id}/aggregated` | 获取 Monitor 统计聚合（自动计算）|
+| POST | `/news-media/monitors/{id}/aggregate` | 触发叙事聚合（运行 news_insight_chain）|
+
+---
+
+## 前端路由结构
+
+```
+导航一级：新闻监测  →  /news-media
+导航二级：新闻采集  →  /news-media/tasks
+
+/news-media              监测项目列表
+/news-media/create       创建项目
+/news-media/[id]         项目详情
+                           ├── 任务列表 + 创建任务 Modal
+                           ├── 统计聚合摘要（自动展示）
+                           └── 叙事聚合报告（「生成聚合报告」按钮）
+/news-media/tasks        跨项目任务列表（筛选：状态、阶段、关键词）
+/news-media/tasks/[id]   任务详情
+                           ├── 文章列表（含搜索渠道 badge：百度 / DuckDuckGo）
+                           └── 分析报告（probe: 摘要 / collect: 完整洞察）
+```
+
+---
+
+## 实施步骤
+
+### Step 1：清理旧代码 + 数据库迁移
+**文件**：`serpapi_client.py`（删除），`models.py`，`schemas.py`，Alembic 迁移
+
+- 删除 `backend/src/news_media/serpapi_client.py`
+- `NewsMonitor`：删除 `search_provider`，新增 `aggregated_result`
+- `NewsTask`：删除 `search_provider`
+- `NewsArticle`：新增 `search_source`
+- `schemas.py` 同步字段
+- 创建并执行 Alembic 迁移
+
+**验证**：`pnpm be:migrate:up` 成功；`pnpm be:lint`
+
+---
+
+### Step 2：实现 news_search 模块
+**文件**：`news_search/` 目录下 4 个文件（新建）
+
+**baidu_crawler.py**：
+- Crawl4AI REST API，目标 URL `https://news.baidu.com/ns?word={query}&rn=50`
+- `fit_markdown` 提取内容，正则解析标题/链接/来源/时间
+- 每条结果含 `search_source="baidu"`
+
+**ddg_searcher.py**：
+- `DDGS().news(query, region="cn-zh", max_results=n)`
+- 指数退避重试 3 次，`RatelimitException` 时返回空列表（不抛异常）
+- 每条含 `search_source="duckduckgo"`
+
+**aggregator.py**：
+- `asyncio.gather` 并发两渠道
+- URL 归一化去重
+- `classify_source_tier()` 分层（逻辑从旧 `serpapi_client.py` 迁移）
+
+**验证**：`pnpm be:lint`
+
+---
+
+### Step 3：更新 crud.py + service.py
+**文件**：`crud.py`，`service.py`
+
+**crud.py**：
+- 新增 `get_articles_by_monitor(db, monitor_id)` —— 查询 monitor 下所有任务的文章
+
+**service.py**：
+- `_search_and_store_articles()` 改调 `aggregator.search_news()`
+- `execute_news_probe()` 中 channels 固定为 `("baidu",)`，`max_results=10`
+- `execute_news_collect()` 中 channels 为 `("baidu", "duckduckgo")`，`max_results=50`
+- 新增 `get_monitor_aggregated_stats(db, monitor_id)` —— 从各 task.analysis_result 统计聚合，无 LLM
+- 新增 `run_monitor_narrative_aggregate(db, monitor, analysis_goal, subject)` —— 合并所有 collect 任务文章跑 `news_insight_chain`，写入 `monitor.aggregated_result`
+
+**验证**：`pnpm be:lint`
+
+---
+
+### Step 4：更新 router.py
+**文件**：`router.py`
+
+- `execute_task` 端点：collect 改为 `asyncio.create_task(...)` 后立即返回 running 状态
+- 新增 `GET /monitors/{id}/aggregated`
+- 新增 `POST /monitors/{id}/aggregate`
+
+**验证**：`pnpm be:lint`；`pnpm be:test`
+
+---
+
+### Step 5：前端 types + composable
+**文件**：`types/index.ts`，`composables/useNewsMedia.ts`
+
+**types/index.ts**：
+- 删除 `search_provider` 字段
+- `NewsArticle` 新增 `search_source: 'baidu' | 'duckduckgo'`
+- 新增 `MonitorAggregatedStats`（统计聚合）、`MonitorNarrativeResult`（叙事聚合）接口
+
+**useNewsMedia.ts**：
+- 删除 `search_provider` 相关参数
+- 新增 `getMonitorAggregated(monitorId)`
+- 新增 `runMonitorAggregate(monitorId)`
+
+**验证**：`pnpm fe:typecheck`
+
+---
+
+### Step 6：前端页面
+**文件**：`pages/news-media/` 各页面
+
+**`[id]/index.vue`（项目详情）**：
+- 保留任务列表 + 创建任务 Modal
+- 新增统计聚合摘要区块（自动加载：文章总数、情感分布、实体 Top5、来源分布）
+- 新增叙事聚合区块（折叠，「生成聚合报告」按钮 → POST → 轮询）
+
+**`tasks/index.vue`（跨项目任务列表，新建）**：
+- 筛选：状态、阶段、关键词
+- 列：任务名、所属项目、关键词、阶段 badge、状态 badge、文章数、创建时间、操作
+- 分页
+
+**`tasks/[id]/index.vue`（任务详情）**：
+- 文章列表新增「搜索渠道」列（百度 / DuckDuckGo badge）
+- 分析报告展示不变
+
+**验证**：`pnpm fe:typecheck`；`pnpm fe:lint`
+
+---
+
+## 边界情况处理
+
+| 场景 | 处理 |
+|------|------|
+| DDG 被限速 | 返回空列表，仅用百度结果，不报错 |
+| 百度爬取失败 | 抛异常，任务标记 failed |
+| collect 后台任务异常 | 捕获后写 `task.status=failed`，`task.error_message` 记录详情 |
+| 叙事聚合无 collect 任务 | 返回 400，前端禁用按钮 |
+| Monitor 无文章 | 统计聚合返回全零，不调 LLM |
+
+---
+
+## 验收标准
+
+- [ ] `pnpm be:lint` 通过
+- [ ] `pnpm be:test` 通过
+- [ ] `pnpm fe:typecheck` 通过
+- [ ] `pnpm fe:lint` 通过
+- [ ] probe 任务执行成功，articles 含 `search_source=baidu`
+- [ ] collect 任务执行成功，articles 含百度和 DuckDuckGo 两种来源
+- [ ] Monitor 详情页展示统计聚合摘要
+- [ ] 跨项目任务列表页正常渲染、筛选可用
+- [ ] 任务详情文章列表展示渠道 badge
 
 ## 架构决策
 

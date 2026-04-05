@@ -15,7 +15,6 @@ class NewsMonitorCreate(CustomBaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
-    search_provider: str = Field(default="serpapi_baidu")
 
 
 class NewsMonitorUpdate(CustomBaseModel):
@@ -32,7 +31,7 @@ class NewsMonitorRead(CustomBaseModel):
     name: str
     description: str | None
     owner_id: int
-    search_provider: str
+    aggregated_result: dict | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -49,7 +48,7 @@ class NewsMonitorReadWithOwner(NewsMonitorRead):
             name=monitor.name,
             description=monitor.description,
             owner_id=monitor.owner_id,
-            search_provider=monitor.search_provider,
+            aggregated_result=monitor.aggregated_result,
             created_at=monitor.created_at,
             updated_at=monitor.updated_at,
             owner_username=monitor.owner.username if monitor.owner else "",
@@ -78,7 +77,6 @@ class NewsTaskRead(CustomBaseModel):
     keywords: str
     phase: str | None
     status: str
-    search_provider: str
     search_params: dict | None
     articles_count: int
     analysis_result: dict | None
@@ -104,7 +102,6 @@ class NewsTaskReadWithRelations(NewsTaskRead):
             keywords=task.keywords,
             phase=task.phase,
             status=task.status,
-            search_provider=task.search_provider,
             search_params=task.search_params,
             articles_count=task.articles_count,
             analysis_result=task.analysis_result,
@@ -133,6 +130,7 @@ class NewsArticleRead(CustomBaseModel):
     author: str | None
     published_at: datetime | None
     image_url: str | None
+    search_source: str = "baidu"
     # 逐篇分析字段
     relevance: str | None
     sentiment: float | None

@@ -27,8 +27,8 @@ class NewsMonitor(Base):
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"
     )
-    search_provider: Mapped[str] = mapped_column(
-        String(50), nullable=False, server_default="serpapi_baidu", comment="搜索提供商"
+    aggregated_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="跨任务叙事聚合分析结果（按需生成）"
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -75,9 +75,6 @@ class NewsTask(Base):
         server_default="pending",
         index=True,
         comment="任务状态: pending / running / completed / failed",
-    )
-    search_provider: Mapped[str] = mapped_column(
-        String(50), nullable=False, server_default="serpapi_baidu", comment="搜索提供商"
     )
     search_params: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="搜索参数（时间范围、地区、最大结果数等）"
@@ -181,6 +178,12 @@ class NewsArticle(Base):
     )
     summary: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="一句话摘要"
+    )
+
+    # 搜索渠道
+    search_source: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="baidu",
+        comment="搜索渠道: baidu / duckduckgo"
     )
 
     # 原始数据

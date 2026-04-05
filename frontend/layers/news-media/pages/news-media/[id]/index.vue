@@ -10,7 +10,7 @@ definePageMeta({
 const route = useRoute()
 const monitorId = Number(route.params.id)
 
-const { getMonitor, deleteMonitor: deleteMonitorApi } = useNewsMonitors()
+const { getMonitor, deleteMonitor: deleteMonitorApi, getMonitorAggregated, runMonitorAggregate } = useNewsMonitors()
 const { getTasks, createTask, deleteTask, executeTask } = useNewsTasks()
 
 const { data: monitor, pending: monitorLoading } = getMonitor(monitorId)
@@ -124,6 +124,50 @@ const handleExecuteTask = async (task: NewsTaskWithRelations) => {
     await handleRefresh()
   } catch {
     // error already handled
+  }
+}
+
+// ========== 统计聚合 ==========
+
+import type { MonitorAggregatedStats } from '../../../types'
+
+const aggregatedStats = ref<MonitorAggregatedStats | null>(null)
+const aggregatedLoading = ref(false)
+
+const loadAggregated = async () => {
+  aggregatedLoading.value = true
+  try {
+    aggregatedStats.value = await getMonitorAggregated(monitorId)
+  } catch {
+    // 无数据时静默失败
+  } finally {
+    aggregatedLoading.value = false
+  }
+}
+
+onMounted(loadAggregated)
+
+// ========== 叙事聚合 ==========
+
+const narrativeResult = ref<Record<string, unknown> | null>(
+  null
+)
+const narrativeLoading = ref(false)
+const showNarrativePanel = ref(false)
+
+const handleRunNarrative = async () => {
+  narrativeLoading.value = true
+  try {
+    const result = await runMonitorAggregate(monitorId, {
+      analysis_goal: monitor.value?.name || '',
+      subject: monitor.value?.name || '',
+    })
+    narrativeResult.value = result as Record<string, unknown>
+    showNarrativePanel.value = true
+  } catch {
+    // error already handled
+  } finally {
+    narrativeLoading.value = false
   }
 }
 
@@ -319,14 +363,10 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
 
       <!-- 项目信息 -->
       <UCard>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
           <div>
             <span class="text-gray-500 dark:text-gray-400">创建者</span>
             <p class="font-medium mt-0.5">{{ monitor.owner_username }}</p>
-          </div>
-          <div>
-            <span class="text-gray-500 dark:text-gray-400">搜索引擎</span>
-            <p class="font-medium mt-0.5">{{ monitor.search_provider }}</p>
           </div>
           <div>
             <span class="text-gray-500 dark:text-gray-400">创建时间</span>
@@ -337,6 +377,132 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             <p class="font-medium mt-0.5">{{ totalTasks }}</p>
           </div>
         </div>
+      </UCard>
+
+      <!-- 统计聚合摘要（自动展示） -->
+      <UCard v-if="aggregatedStats && aggregatedStats.articles_total > 0">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">聚合摘要</h2>
+            <UButton
+              variant="outline"
+              size="sm"
+              icon="i-heroicons-arrow-path"
+              :loading="aggregatedLoading"
+              @click="loadAggregated"
+            >
+              刷新
+            </UButton>
+          </div>
+        </template>
+
+        <ClientOnly>
+          <div class="space-y-4">
+            <!-- 基础指标 -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <span class="text-gray-500">文章总数</span>
+                <p class="text-xl font-bold mt-1">{{ aggregatedStats.articles_total }}</p>
+              </div>
+              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <span class="text-gray-500">相关文章</span>
+                <p class="text-xl font-bold mt-1">{{ aggregatedStats.articles_relevant }}</p>
+              </div>
+              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <span class="text-gray-500">综合情感</span>
+                <p class="text-xl font-bold mt-1">
+                  {{ aggregatedStats.sentiment_overall !== null ? aggregatedStats.sentiment_overall?.toFixed(2) : '-' }}
+                </p>
+              </div>
+              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <span class="text-gray-500">情感分布（正/中/负）</span>
+                <p class="font-medium mt-1 text-sm">
+                  <span class="text-green-600">{{ aggregatedStats.sentiment_distribution.positive }}</span> /
+                  <span class="text-gray-500">{{ aggregatedStats.sentiment_distribution.neutral }}</span> /
+                  <span class="text-red-600">{{ aggregatedStats.sentiment_distribution.negative }}</span>
+                </p>
+              </div>
+            </div>
+
+            <!-- 来源分布 -->
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <span class="text-gray-500">来源等级分布</span>
+                <p class="font-medium mt-1">
+                  权威 {{ aggregatedStats.source_tier_distribution.tier1 }} /
+                  行业 {{ aggregatedStats.source_tier_distribution.tier2 }} /
+                  其他 {{ aggregatedStats.source_tier_distribution.tier3 }}
+                </p>
+              </div>
+              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <span class="text-gray-500">搜索渠道分布</span>
+                <p class="font-medium mt-1">
+                  百度 {{ aggregatedStats.search_source_distribution.baidu }} /
+                  DuckDuckGo {{ aggregatedStats.search_source_distribution.duckduckgo }}
+                </p>
+              </div>
+            </div>
+
+            <!-- 实体 Top5 -->
+            <div v-if="aggregatedStats.top_entities.length > 0">
+              <p class="text-sm text-gray-500 mb-2">高频实体 Top{{ Math.min(aggregatedStats.top_entities.length, 5) }}</p>
+              <div class="flex flex-wrap gap-2">
+                <UBadge
+                  v-for="ent in aggregatedStats.top_entities.slice(0, 5)"
+                  :key="ent.name"
+                  variant="subtle"
+                >
+                  {{ ent.name }} · {{ ent.mention_count }}次
+                </UBadge>
+              </div>
+            </div>
+          </div>
+        </ClientOnly>
+      </UCard>
+
+      <!-- 叙事聚合区块 -->
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">叙事聚合报告</h2>
+            <UButton
+              icon="i-heroicons-sparkles"
+              :loading="narrativeLoading"
+              @click="handleRunNarrative"
+            >
+              生成聚合报告
+            </UButton>
+          </div>
+        </template>
+
+        <ClientOnly>
+          <div v-if="narrativeResult && showNarrativePanel" class="space-y-4 text-sm">
+            <!-- 叙事主题 -->
+            <div v-if="(narrativeResult.narratives as NewsNarrative[] | undefined)?.length">
+              <h3 class="font-semibold mb-2">叙事主题</h3>
+              <div class="space-y-2">
+                <div
+                  v-for="(n, idx) in (narrativeResult.narratives as NewsNarrative[])"
+                  :key="idx"
+                  class="p-3 border border-gray-200 dark:border-gray-700 rounded"
+                >
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="font-medium">{{ n.theme }}</span>
+                    <span class="text-xs text-gray-500">{{ n.article_count }} 篇</span>
+                  </div>
+                  <p class="text-gray-600 dark:text-gray-400">{{ n.summary }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 无数据提示 -->
+            <p v-else class="text-gray-500 text-center py-4">报告生成完成，暂无叙事主题数据</p>
+          </div>
+
+          <div v-else class="text-center py-6 text-gray-400 text-sm">
+            点击「生成聚合报告」分析该项目下所有全量采集任务的叙事主题
+          </div>
+        </ClientOnly>
       </UCard>
 
       <!-- 任务列表 -->

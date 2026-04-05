@@ -135,6 +135,16 @@ const getTierColor = (tier: string) => {
   return map[tier] || 'neutral'
 }
 
+const getSearchSourceText = (source: string) => {
+  const map: Record<string, string> = { baidu: '百度', duckduckgo: 'DDG' }
+  return map[source] || source
+}
+
+const getSearchSourceColor = (source: string) => {
+  const map: Record<string, string> = { baidu: 'info', duckduckgo: 'success' }
+  return map[source] || 'neutral'
+}
+
 const getTypeText = (type: string | null) => {
   const map: Record<string, string> = {
     report: '报道',
@@ -203,6 +213,15 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
             getTierLabel(row.original.source_tier),
           ),
         ]),
+    },
+    {
+      accessorKey: 'search_source',
+      header: '搜索渠道',
+      meta: { class: { th: 'w-[80px]', td: 'w-[80px]' } },
+      cell: ({ row }) =>
+        h(Badge, { color: getSearchSourceColor(row.original.search_source), size: 'xs' }, () =>
+          getSearchSourceText(row.original.search_source),
+        ),
     },
     {
       accessorKey: 'relevance',

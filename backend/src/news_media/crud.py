@@ -277,3 +277,23 @@ async def get_articles_by_urls(
     stmt = select(NewsArticle).where(NewsArticle.url.in_(urls))
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_articles_by_monitor(
+    db: AsyncSession,
+    monitor_id: int,
+    phase: str = "collect",
+) -> list[NewsArticle]:
+    """查询 monitor 下所有指定阶段任务的文章（用于跨任务聚合）"""
+    stmt = (
+        select(NewsArticle)
+        .join(NewsTask, NewsArticle.task_id == NewsTask.id)
+        .where(
+            NewsTask.monitor_id == monitor_id,
+            NewsTask.phase == phase,
+            NewsTask.status == "completed",
+        )
+        .order_by(NewsArticle.published_at.desc().nulls_last())
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

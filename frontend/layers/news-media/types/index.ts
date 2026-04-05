@@ -7,7 +7,7 @@ export interface NewsMonitor {
   name: string
   description: string | null
   owner_id: number
-  search_provider: string
+  aggregated_result: NewsAnalysisResult | null
   created_at: string
   updated_at: string
 }
@@ -24,7 +24,6 @@ export interface NewsTask {
   keywords: string
   phase: string | null
   status: string
-  search_provider: string
   search_params: Record<string, unknown> | null
   articles_count: number
   analysis_result: NewsAnalysisResult | null
@@ -42,7 +41,6 @@ export interface NewsTaskWithRelations extends NewsTask {
 export interface NewsMonitorCreate {
   name: string
   description?: string | null
-  search_provider?: string
 }
 
 export interface NewsMonitorUpdate {
@@ -121,6 +119,18 @@ export interface NewsAnalysisResult {
   key_quotes?: NewsKeyQuote[]
 }
 
+// ==================== Monitor 聚合类型 ====================
+
+export interface MonitorAggregatedStats {
+  articles_total: number
+  articles_relevant: number
+  source_tier_distribution: { tier1: number; tier2: number; tier3: number }
+  sentiment_distribution: { positive: number; neutral: number; negative: number }
+  sentiment_overall: number | null
+  top_entities: Array<{ name: string; mention_count: number }>
+  search_source_distribution: { baidu: number; duckduckgo: number }
+}
+
 // ==================== Article Types ====================
 
 export interface NewsArticle {
@@ -131,6 +141,7 @@ export interface NewsArticle {
   snippet: string | null
   source_name: string
   source_tier: string
+  search_source: 'baidu' | 'duckduckgo'
   author: string | null
   published_at: string | null
   image_url: string | null

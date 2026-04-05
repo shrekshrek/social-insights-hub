@@ -1,8 +1,9 @@
 """新闻媒体 API 路由"""
 
+import asyncio
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
@@ -26,6 +27,7 @@ from src.news_media.schemas import (
     NewsTaskReadWithRelations,
 )
 from src.schemas import MessageResponse, PaginatedResponse
+from src.database import AsyncSessionLocal
 
 router = APIRouter(prefix="/news-media", tags=["News Media"])
 
@@ -213,11 +215,56 @@ async def execute_task(
     db: AsyncSession = Depends(get_async_db),
 ):
     if task.phase == "collect":
-        await service.execute_news_collect(db, task)
+        # collect 耗时较长，异步后台执行，立即返回 running 状态
+        task.status = "running"
+        await db.commit()
+        await db.refresh(task)
+
+        async def _run_collect() -> None:
+            async with AsyncSessionLocal() as bg_db:
+                bg_task = await bg_db.get(type(task), task.id)
+                if bg_task:
+                    await service.execute_news_collect(bg_db, bg_task)
+
+        asyncio.create_task(_run_collect())
     else:
         await service.execute_news_probe(db, task)
-    await db.commit()
+        await db.commit()
     return task
+
+
+# ==================== Monitor 聚合端点 ====================
+
+
+@router.get(
+    "/monitors/{monitor_id}/aggregated",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="获取监测项目统计聚合（自动计算，无 LLM）",
+)
+async def get_monitor_aggregated(
+    monitor: NewsMonitor = Depends(validate_news_monitor_exists),
+    db: AsyncSession = Depends(get_async_db),
+    _current_user: User = Depends(get_current_user),
+):
+    return await service.get_monitor_aggregated_stats(db, monitor.id)
+
+
+@router.post(
+    "/monitors/{monitor_id}/aggregate",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="触发叙事聚合（运行 news_insight_chain，写入 aggregated_result）",
+)
+async def run_monitor_aggregate(
+    monitor: NewsMonitor = Depends(validate_news_monitor_owner),
+    db: AsyncSession = Depends(get_async_db),
+    analysis_goal: str = Body(default="", embed=True),
+    subject: str = Body(default="", embed=True),
+):
+    return await service.run_monitor_narrative_aggregate(
+        db, monitor, analysis_goal=analysis_goal, subject=subject
+    )
 
 
 # ==================== Article Endpoints ====================

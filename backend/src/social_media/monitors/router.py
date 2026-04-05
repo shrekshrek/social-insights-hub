@@ -16,7 +16,8 @@ from .dependencies import (
     validate_monitor_access,
     validate_monitor_owner,
 )
-from .models import Monitor, Platform
+from .models import SocialMonitor, Platform
+
 
 
 router = APIRouter(
@@ -63,7 +64,7 @@ async def get_platform(
     return platform
 
 
-# ==================== Monitor APIs ====================
+# ==================== SocialMonitor APIs ====================
 
 
 @router.post(
@@ -74,7 +75,7 @@ async def get_platform(
     description="创建新的社交媒体数据分析项目（可选同时批量创建任务）",
 )
 async def create_monitor(
-    monitor_in: schemas.MonitorCreate,
+    monitor_in: schemas.SocialMonitorCreate,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -93,11 +94,11 @@ async def create_monitor(
     result = await service.create_monitor(db, monitor_in, current_user.id)
 
     # 转换任务为字典列表
-    from src.social_media.tasks.schemas import DataTaskReadWithRelations
+    from src.social_media.tasks.schemas import SocialTaskReadWithRelations
 
     tasks_list = []
     for task in result["created_tasks"]:
-        task_dict = DataTaskReadWithRelations.model_validate(task).model_dump()
+        task_dict = SocialTaskReadWithRelations.model_validate(task).model_dump()
         task_dict["monitor_name"] = result["monitor"].name
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
@@ -105,7 +106,7 @@ async def create_monitor(
         tasks_list.append(task_dict)
 
     return schemas.MonitorCreateResponse(
-        monitor=schemas.MonitorRead.from_orm_full(result["monitor"]),
+        monitor=schemas.SocialMonitorRead.from_orm_full(result["monitor"]),
         created_tasks=tasks_list,
     )
 
@@ -163,7 +164,7 @@ async def get_monitors(
     )
 
     monitors_with_owner = [
-        schemas.MonitorReadWithOwner.from_orm_full(m) for m in monitors
+        schemas.SocialMonitorReadWithOwner.from_orm_full(m) for m in monitors
     ]
 
     return schemas.MonitorListResponse.create(
@@ -176,13 +177,13 @@ async def get_monitors(
 
 @router.get(
     "/monitors/{monitor_id}",
-    response_model=schemas.MonitorReadWithOwner,
+    response_model=schemas.SocialMonitorReadWithOwner,
     status_code=status.HTTP_200_OK,
     summary="Get monitor by ID",
     description="获取项目详情",
 )
 async def get_monitor(
-    monitor: Monitor = Depends(validate_monitor_access),
+    monitor: SocialMonitor = Depends(validate_monitor_access),
 ):
     """
     获取项目详情。
@@ -191,20 +192,20 @@ async def get_monitor(
     返回包含关联平台和参与者信息。
     """
     # 构建参与者ID列表和用户名列表
-    return schemas.MonitorReadWithOwner.from_orm_full(monitor)
+    return schemas.SocialMonitorReadWithOwner.from_orm_full(monitor)
 
 
 @router.put(
     "/monitors/{monitor_id}",
-    response_model=schemas.MonitorRead,
+    response_model=schemas.SocialMonitorRead,
     status_code=status.HTTP_200_OK,
     summary="Update monitor",
     description="更新项目信息",
 )
 async def update_monitor(
-    monitor_update: schemas.MonitorUpdate,
+    monitor_update: schemas.SocialMonitorUpdate,
     db: AsyncSession = Depends(get_async_db),
-    monitor: Monitor = Depends(validate_monitor_owner),
+    monitor: SocialMonitor = Depends(validate_monitor_owner),
 ):
     """
     更新项目信息。
@@ -213,7 +214,7 @@ async def update_monitor(
     可以更新项目名称、描述、关键词、时间范围等。
     """
     updated_monitor = await service.update_monitor(db, monitor, monitor_update)
-    return schemas.MonitorRead.from_orm_full(updated_monitor)
+    return schemas.SocialMonitorRead.from_orm_full(updated_monitor)
 
 
 @router.delete(
@@ -225,7 +226,7 @@ async def update_monitor(
 )
 async def delete_monitor(
     db: AsyncSession = Depends(get_async_db),
-    monitor: Monitor = Depends(validate_monitor_owner),
+    monitor: SocialMonitor = Depends(validate_monitor_owner),
 ):
     """
     删除项目。
@@ -234,7 +235,7 @@ async def delete_monitor(
     删除项目会级联删除所有关联数据（任务、原文、评论等）。
     """
     await service.delete_monitor(db, monitor)
-    return MessageResponse(message=f"Monitor '{monitor.name}' deleted successfully")
+    return MessageResponse(message=f"SocialMonitor '{monitor.name}' deleted successfully")
 
 
 # ==================== Batch Task Creation ====================
@@ -248,15 +249,15 @@ async def delete_monitor(
     description="为已有项目批量创建任务（支持多平台）",
 )
 async def batch_create_tasks(
-    quick_tasks: schemas.QuickTaskCreate,
+    quick_tasks: schemas.SocialQuickTaskCreate,
     db: AsyncSession = Depends(get_async_db),
-    monitor: Monitor = Depends(validate_monitor_access),
+    monitor: SocialMonitor = Depends(validate_monitor_access),
     current_user: User = Depends(get_current_user),
 ):
     """
     为已有项目批量创建任务。
 
-    复用项目创建时的 QuickTaskCreate 配置，
+    复用项目创建时的 SocialQuickTaskCreate 配置，
     可以一次为多个平台创建相同配置的任务。
     """
     created_tasks = await service.batch_create_tasks_for_monitor(
@@ -264,11 +265,11 @@ async def batch_create_tasks(
     )
 
     # 转换任务为字典列表
-    from src.social_media.tasks.schemas import DataTaskReadWithRelations
+    from src.social_media.tasks.schemas import SocialTaskReadWithRelations
 
     tasks_list = []
     for task in created_tasks:
-        task_dict = DataTaskReadWithRelations.model_validate(task).model_dump()
+        task_dict = SocialTaskReadWithRelations.model_validate(task).model_dump()
         task_dict["monitor_name"] = monitor.name
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
@@ -280,12 +281,12 @@ async def batch_create_tasks(
     return schemas.BatchTasksCreateResponse(created_tasks=tasks_list)
 
 
-# ==================== Monitor-Participant Management ====================
+# ==================== SocialMonitor-Participant Management ====================
 
 
 @router.post(
     "/monitors/{monitor_id}/participants",
-    response_model=schemas.MonitorRead,
+    response_model=schemas.SocialMonitorRead,
     status_code=status.HTTP_200_OK,
     summary="Add participants to monitor",
     description="为项目添加参与者",
@@ -293,7 +294,7 @@ async def batch_create_tasks(
 async def add_participants_to_monitor(
     participant_assignment: schemas.MonitorParticipantAssignment,
     db: AsyncSession = Depends(get_async_db),
-    monitor: Monitor = Depends(validate_monitor_owner),
+    monitor: SocialMonitor = Depends(validate_monitor_owner),
 ):
     """
     为项目添加一个或多个参与者。
@@ -304,12 +305,12 @@ async def add_participants_to_monitor(
     updated_monitor = await service.add_participants(
         db, monitor, participant_assignment.user_ids
     )
-    return schemas.MonitorRead.from_orm_full(updated_monitor)
+    return schemas.SocialMonitorRead.from_orm_full(updated_monitor)
 
 
 @router.delete(
     "/monitors/{monitor_id}/participants/{user_id}",
-    response_model=schemas.MonitorRead,
+    response_model=schemas.SocialMonitorRead,
     status_code=status.HTTP_200_OK,
     summary="Remove participant from project",
     description="从项目移除参与者",
@@ -317,7 +318,7 @@ async def add_participants_to_monitor(
 async def remove_participant_from_monitor(
     user_id: int,
     db: AsyncSession = Depends(get_async_db),
-    monitor: Monitor = Depends(validate_monitor_owner),
+    monitor: SocialMonitor = Depends(validate_monitor_owner),
 ):
     """
     从项目移除指定参与者。
@@ -326,7 +327,7 @@ async def remove_participant_from_monitor(
     不能移除项目owner。
     """
     updated_monitor = await service.remove_participant(db, monitor, user_id)
-    return schemas.MonitorRead.from_orm_full(updated_monitor)
+    return schemas.SocialMonitorRead.from_orm_full(updated_monitor)
 
 
 # ==================== Deep Analysis Settings ====================
@@ -334,7 +335,7 @@ async def remove_participant_from_monitor(
 
 @router.put(
     "/monitors/{monitor_id}/deep-analysis-settings",
-    response_model=schemas.MonitorRead,
+    response_model=schemas.SocialMonitorRead,
     status_code=status.HTTP_200_OK,
     summary="Update deep analysis settings",
     description="更新项目的深度分析阈值配置",
@@ -342,7 +343,7 @@ async def remove_participant_from_monitor(
 async def update_deep_analysis_settings(
     settings_update: schemas.UpdateDeepAnalysisSettings,
     db: AsyncSession = Depends(get_async_db),
-    monitor: Monitor = Depends(validate_monitor_owner),
+    monitor: SocialMonitor = Depends(validate_monitor_owner),
 ):
     """
     更新项目的AI深度分析阈值配置。
@@ -353,7 +354,7 @@ async def update_deep_analysis_settings(
     updated_monitor = await service.update_deep_analysis_settings(
         db, monitor, settings_update.settings
     )
-    return schemas.MonitorRead.from_orm_full(updated_monitor)
+    return schemas.SocialMonitorRead.from_orm_full(updated_monitor)
 
 
 @router.get(
@@ -364,7 +365,7 @@ async def update_deep_analysis_settings(
     description="获取项目的深度分析阈值配置",
 )
 async def get_deep_analysis_settings(
-    monitor: Monitor = Depends(validate_monitor_access),
+    monitor: SocialMonitor = Depends(validate_monitor_access),
 ):
     """
     获取项目的AI深度分析阈值配置。

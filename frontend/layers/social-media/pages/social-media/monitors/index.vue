@@ -35,7 +35,7 @@ const handleRefresh = async () => {
 };
 
 // 删除项目
-const handleDelete = async (monitor: Monitor) => {
+const handleDelete = async (monitor: SocialMonitor) => {
   const { $confirm } = useNuxtApp();
   const confirmed = await $confirm({
     title: "删除监测",
@@ -67,7 +67,7 @@ const formatDate = (dateStr: string) => {
 };
 
 // 表格列定义 - 使用 computed 以避免 SSR 水合问题
-const columns = computed<TableColumn<Monitor>[]>(() => {
+const columns = computed<TableColumn<SocialMonitor>[]>(() => {
   const Button = UButton as Component;
 
   return [

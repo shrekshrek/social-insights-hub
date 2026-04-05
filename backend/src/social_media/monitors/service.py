@@ -6,13 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
 from . import crud
-from .models import Monitor, Platform
+from .models import SocialMonitor, Platform
 from .schemas import (
-    MonitorCreate,
-    MonitorUpdate,
+    SocialMonitorCreate,
+    SocialMonitorUpdate,
     DeepAnalysisSettings,
-    QuickTaskCreate,
+    SocialQuickTaskCreate,
 )
+
+# Aliases for local use
 
 
 # ==================== Platform Service ====================
@@ -32,11 +34,11 @@ async def get_platforms_paginated(
     return await crud.get_platforms(db, skip=skip, limit=page_size)
 
 
-# ==================== Monitor Service ====================
+# ==================== SocialMonitor Service ====================
 
 
-async def create_monitor(
-    db: AsyncSession, monitor_in: MonitorCreate, current_user_id: int
+async def create_social_monitor(
+    db: AsyncSession, monitor_in: SocialMonitorCreate, current_user_id: int
 ) -> dict:
     """创建新项目（可选同时批量创建任务）"""
     # 检查项目名称是否已存在
@@ -44,7 +46,7 @@ async def create_monitor(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Monitor with name '{monitor_in.name}' already exists",
+            detail=f"SocialMonitor with name '{monitor_in.name}' already exists",
         )
 
     # 准备项目数据
@@ -105,10 +107,10 @@ async def create_monitor(
     return {"monitor": monitor, "created_tasks": created_tasks}
 
 
-async def batch_create_tasks_for_monitor(
+async def create_social_monitor_batch_tasks(
     db: AsyncSession,
     monitor_id: int,
-    quick_tasks: QuickTaskCreate,
+    quick_tasks: SocialQuickTaskCreate,
     current_user_id: int,
 ) -> List:
     """为已有项目批量创建任务"""
@@ -154,19 +156,19 @@ async def batch_create_tasks_for_monitor(
     return created_tasks
 
 
-async def get_monitor(db: AsyncSession, monitor_id: int) -> Optional[Monitor]:
+async def get_social_monitor(db: AsyncSession, monitor_id: int) -> Optional[SocialMonitor]:
     """获取项目详情"""
     return await crud.get_monitor_by_id(db, monitor_id, load_relations=True)
 
 
-async def get_monitors_list(
+async def get_social_monitors_list(
     db: AsyncSession,
     page: int = 1,
     page_size: int = 20,
     owner_id: Optional[int] = None,
     participant_id: Optional[int] = None,
     search: Optional[str] = None,
-) -> tuple[List[Monitor], int]:
+) -> tuple[List[SocialMonitor], int]:
     """获取项目列表（带过滤和分页）"""
     skip = (page - 1) * page_size
     return await crud.get_monitors(
@@ -179,9 +181,9 @@ async def get_monitors_list(
     )
 
 
-async def update_monitor(
-    db: AsyncSession, monitor: Monitor, monitor_update: MonitorUpdate
-) -> Monitor:
+async def update_social_monitor(
+    db: AsyncSession, monitor: SocialMonitor, monitor_update: SocialMonitorUpdate
+) -> SocialMonitor:
     """更新项目"""
     # 如果更新名称，检查新名称是否已被占用
     if monitor_update.name and monitor_update.name != monitor.name:
@@ -189,7 +191,7 @@ async def update_monitor(
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Monitor with name '{monitor_update.name}' already exists",
+                detail=f"SocialMonitor with name '{monitor_update.name}' already exists",
             )
 
     # 只更新提供的字段
@@ -197,36 +199,36 @@ async def update_monitor(
     return await crud.update_monitor(db, monitor, update_data)
 
 
-async def delete_monitor(db: AsyncSession, monitor: Monitor) -> None:
+async def delete_social_monitor(db: AsyncSession, monitor: SocialMonitor) -> None:
     """删除项目，并清理策略中的关联引用"""
     monitor_id = monitor.id
 
-    # 先清理策略表中 monitor_id 外键引用，再删除 Monitor
+    # 先清理策略表中 social_monitor_id 外键引用，再删除 SocialMonitor
     from src.strategies.models import Strategy
 
-    stmt = select(Strategy).where(Strategy.monitor_id == monitor_id)
+    stmt = select(Strategy).where(Strategy.social_monitor_id == monitor_id)
     result = await db.execute(stmt)
     for strat in result.scalars().all():
-        strat.monitor_id = None
+        strat.social_monitor_id = None
     await db.flush()
 
     await crud.delete_monitor(db, monitor)
 
 
-# ==================== Monitor-Participant Relations ====================
+# ==================== SocialMonitor-Participant Relations ====================
 
 
 async def add_participants(
-    db: AsyncSession, monitor: Monitor, user_ids: List[int]
-) -> Monitor:
+    db: AsyncSession, monitor: SocialMonitor, user_ids: List[int]
+) -> SocialMonitor:
     """为项目添加参与者"""
     # TODO: 验证用户ID是否存在（需要导入User相关模块）
     return await crud.add_participants_to_monitor(db, monitor, user_ids)
 
 
 async def remove_participant(
-    db: AsyncSession, monitor: Monitor, user_id: int
-) -> Monitor:
+    db: AsyncSession, monitor: SocialMonitor, user_id: int
+) -> SocialMonitor:
     """从项目移除参与者"""
     # 不能移除owner
     if user_id == monitor.owner_id:
@@ -250,8 +252,8 @@ async def remove_participant(
 
 
 async def update_deep_analysis_settings(
-    db: AsyncSession, monitor: Monitor, settings: DeepAnalysisSettings
-) -> Monitor:
+    db: AsyncSession, monitor: SocialMonitor, settings: DeepAnalysisSettings
+) -> SocialMonitor:
     """更新项目的深度分析阈值配置"""
     monitor.deep_analysis_settings = settings.model_dump(exclude_unset=True)
     await db.commit()
@@ -259,7 +261,7 @@ async def update_deep_analysis_settings(
     return monitor
 
 
-async def get_deep_analysis_settings(monitor: Monitor) -> Optional[dict]:
+async def get_deep_analysis_settings(monitor: SocialMonitor) -> Optional[dict]:
     """获取项目的深度分析阈值配置"""
     return monitor.deep_analysis_settings
 
@@ -276,7 +278,7 @@ async def compare_tasks(
 ) -> dict:
     """对比项目内多个任务的数据重合度"""
     from sqlalchemy.orm import selectinload
-    from src.social_media.tasks.models import DataTask, SocialPost, SocialComment
+    from src.social_media.tasks.models import SocialTask, SocialPost, SocialComment
     from src.social_media.monitors import crud as monitor_crud
 
     # 1. 权限校验
@@ -284,11 +286,11 @@ async def compare_tasks(
 
     # 2. 任务校验
     stmt = (
-        select(DataTask)
-        .options(selectinload(DataTask.platform))
-        .where(DataTask.id.in_(task_ids))
-        .where(DataTask.monitor_id == monitor_id)
-        .where(DataTask.is_deleted.is_(False))
+        select(SocialTask)
+        .options(selectinload(SocialTask.platform))
+        .where(SocialTask.id.in_(task_ids))
+        .where(SocialTask.monitor_id == monitor_id)
+        .where(SocialTask.is_deleted.is_(False))
     )
     result = await db.execute(stmt)
     tasks = list(result.scalars().all())
@@ -449,3 +451,13 @@ async def compare_tasks(
         "matrix": matrix,
         "comment_analysis": comment_analysis,
     }
+
+
+# ==================== Backward-compatible aliases ====================
+
+create_monitor = create_social_monitor
+get_monitor = get_social_monitor
+get_monitors_list = get_social_monitors_list
+update_monitor = update_social_monitor
+delete_monitor = delete_social_monitor
+batch_create_tasks_for_monitor = create_social_monitor_batch_tasks

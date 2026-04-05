@@ -2,7 +2,7 @@
 import { computed, ref, h, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
-import type { DataTaskWithRelations } from '../../../../tasks/types'
+import type { SocialTaskWithRelations } from '../../../../tasks/types'
 import type { MonitorSlice } from '../../../../types/monitor-slice'
 import TaskComparisonSlideover from '../../../../monitors/components/TaskComparisonSlideover.vue'
 import QuickTaskForm from '../../../../monitors/components/QuickTaskForm.vue'
@@ -52,7 +52,7 @@ const setTaskSelected = (taskId: number, checked: boolean) => {
   else s.delete(taskId)
   selectedTaskIds.value = Array.from(s)
 }
-const allTaskIds = computed(() => (tasks.value as DataTaskWithRelations[]).map(t => t.id))
+const allTaskIds = computed(() => (tasks.value as SocialTaskWithRelations[]).map(t => t.id))
 const allSelected = computed(() => allTaskIds.value.length > 0 && allTaskIds.value.every(id => selectedTaskIds.value.includes(id)))
 const toggleSelectAll = (checked: boolean) => {
   selectedTaskIds.value = checked ? Array.from(new Set(allTaskIds.value)) : []
@@ -89,7 +89,7 @@ const selectedTasksPlatformCheck = computed(() => {
   }
   const selectedSet = new Set(selectedTaskIds.value)
   const platformIds = new Set<number>()
-  for (const t of tasks.value as DataTaskWithRelations[]) {
+  for (const t of tasks.value as SocialTaskWithRelations[]) {
     if (selectedSet.has(t.id) && t.platform_id) {
       platformIds.add(t.platform_id)
     }
@@ -224,7 +224,7 @@ const parseKeywords = (raw: string | null | undefined): string[] => {
 const keywordCandidates = computed(() => {
   const selected = new Set(selectedTaskIds.value)
   const counts = new Map<string, number>()
-  for (const t of tasks.value as DataTaskWithRelations[]) {
+  for (const t of tasks.value as SocialTaskWithRelations[]) {
     if (!selected.has(t.id)) continue
     for (const kw of parseKeywords(t.keywords)) {
       counts.set(kw, (counts.get(kw) || 0) + 1)
@@ -308,7 +308,7 @@ const handleGenerateSlice = async () => {
 }
 
 const deletingTaskId = ref<number | null>(null)
-const handleDeleteTask = async (task: DataTaskWithRelations) => {
+const handleDeleteTask = async (task: SocialTaskWithRelations) => {
   const { $confirm } = useNuxtApp()
   const confirmed = await $confirm({
     title: '删除任务',
@@ -610,7 +610,7 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
 })
 
 // 表格列定义 - 使用 computed 以避免 SSR 水合问题
-const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
+const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
   const Badge = UBadge as Component
   const Button = UButton as Component
 

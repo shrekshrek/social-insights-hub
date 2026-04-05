@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from src.celery_app import celery_app
 from src.database import SyncSessionLocal
-from src.social_media.tasks.models import DataTask
+from src.social_media.tasks.models import SocialTask as SocialTask
 from .aggregation import aggregate_task_analysis
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def run_aggregation_task(
     本任务接收 job_id 并传递给 orchestrator 更新状态。
 
     Args:
-        task_id: DataTask ID
+        task_id: SocialTask ID
         monitor_id: 项目 ID
         user_id: 用户 ID
         entity_job_id: 预创建的实体归一化 AnalysisJob ID
@@ -90,9 +90,9 @@ def run_aggregation_task(
             # 回填失败不应阻塞聚合落库
             pass
 
-        # 将结果保存到 DataTask.analysis_result
+        # 将结果保存到 SocialTask.analysis_result
         now = datetime.now(timezone.utc)
-        stmt = select(DataTask).where(DataTask.id == task_id)
+        stmt = select(SocialTask).where(SocialTask.id == task_id)
         result = db.execute(stmt)
         data_task = result.scalar_one_or_none()
 

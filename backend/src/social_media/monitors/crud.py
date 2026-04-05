@@ -5,7 +5,7 @@ from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .models import Platform, Monitor, monitor_participants
+from .models import Platform, SocialMonitor, monitor_participants
 from src.auth.models import User
 
 
@@ -50,38 +50,38 @@ async def create_platform(db: AsyncSession, platform_data: dict) -> Platform:
     return platform
 
 
-# ==================== Monitor CRUD ====================
+# ==================== SocialMonitor CRUD ====================
 
 
-async def get_monitor_by_id(
+async def get_social_monitor_by_id(
     db: AsyncSession, monitor_id: int, load_relations: bool = True
-) -> Optional[Monitor]:
+) -> Optional[SocialMonitor]:
     """根据ID获取项目"""
-    query = select(Monitor).where(Monitor.id == monitor_id)
+    query = select(SocialMonitor).where(SocialMonitor.id == monitor_id)
 
     if load_relations:
         query = query.options(
-            selectinload(Monitor.participants), selectinload(Monitor.owner)
+            selectinload(SocialMonitor.participants), selectinload(SocialMonitor.owner)
         )
 
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
-async def get_monitor_by_name(db: AsyncSession, name: str) -> Optional[Monitor]:
+async def get_social_monitor_by_name(db: AsyncSession, name: str) -> Optional[SocialMonitor]:
     """根据名称获取项目"""
-    result = await db.execute(select(Monitor).where(Monitor.name == name))
+    result = await db.execute(select(SocialMonitor).where(SocialMonitor.name == name))
     return result.scalar_one_or_none()
 
 
-async def get_monitors(
+async def get_social_monitors(
     db: AsyncSession,
     skip: int = 0,
     limit: int = 20,
     owner_id: Optional[int] = None,
     participant_id: Optional[int] = None,
     search: Optional[str] = None,
-) -> tuple[List[Monitor], int]:
+) -> tuple[List[SocialMonitor], int]:
     """获取项目列表（带过滤和分页）
 
     Args:
@@ -96,23 +96,23 @@ async def get_monitors(
     conditions = []
 
     if owner_id is not None:
-        conditions.append(Monitor.owner_id == owner_id)
+        conditions.append(SocialMonitor.owner_id == owner_id)
 
     if participant_id is not None:
         # 参与者包括owner和participants
         conditions.append(
             or_(
-                Monitor.owner_id == participant_id,
-                Monitor.participants.any(User.id == participant_id),
+                SocialMonitor.owner_id == participant_id,
+                SocialMonitor.participants.any(User.id == participant_id),
             )
         )
 
     if search:
         search_pattern = f"%{search}%"
-        conditions.append(Monitor.name.ilike(search_pattern))
+        conditions.append(SocialMonitor.name.ilike(search_pattern))
 
     # 构建基础查询
-    base_query = select(Monitor)
+    base_query = select(SocialMonitor)
     if conditions:
         base_query = base_query.where(and_(*conditions))
 
@@ -123,10 +123,10 @@ async def get_monitors(
 
     # 查询数据（加载关联）
     query = (
-        base_query.options(selectinload(Monitor.owner))
+        base_query.options(selectinload(SocialMonitor.owner))
         .offset(skip)
         .limit(limit)
-        .order_by(Monitor.created_at.desc())
+        .order_by(SocialMonitor.created_at.desc())
     )
 
     result = await db.execute(query)
@@ -135,16 +135,16 @@ async def get_monitors(
     return list(monitors_list), total
 
 
-async def create_monitor(
+async def create_social_monitor(
     db: AsyncSession,
     monitor_data: dict,
     owner_id: int,
     participant_ids: List[int] = None,
-) -> Monitor:
+) -> SocialMonitor:
     """创建项目"""
 
     # 创建项目
-    monitor = Monitor(**monitor_data, owner_id=owner_id)
+    monitor = SocialMonitor(**monitor_data, owner_id=owner_id)
     db.add(monitor)
     await db.flush()  # 获取项目ID
 
@@ -160,18 +160,18 @@ async def create_monitor(
     await db.commit()
     # 重新查询以获取完整的关系数据
     result = await db.execute(
-        select(Monitor)
+        select(SocialMonitor)
         .options(
-            selectinload(Monitor.participants), selectinload(Monitor.owner)
+            selectinload(SocialMonitor.participants), selectinload(SocialMonitor.owner)
         )
-        .where(Monitor.id == monitor.id)
+        .where(SocialMonitor.id == monitor.id)
     )
     return result.scalar_one()
 
 
-async def update_monitor(
-    db: AsyncSession, monitor: Monitor, update_data: dict
-) -> Monitor:
+async def update_social_monitor(
+    db: AsyncSession, monitor: SocialMonitor, update_data: dict
+) -> SocialMonitor:
     """更新项目"""
     for key, value in update_data.items():
         if value is not None:
@@ -182,18 +182,18 @@ async def update_monitor(
     return monitor
 
 
-async def delete_monitor(db: AsyncSession, monitor: Monitor) -> None:
+async def delete_social_monitor(db: AsyncSession, monitor: SocialMonitor) -> None:
     """删除项目"""
     await db.delete(monitor)
     await db.commit()
 
 
-# ==================== Monitor-Participant Relations ====================
+# ==================== SocialMonitor-Participant Relations ====================
 
 
 async def add_participants_to_monitor(
-    db: AsyncSession, monitor: Monitor, user_ids: List[int]
-) -> Monitor:
+    db: AsyncSession, monitor: SocialMonitor, user_ids: List[int]
+) -> SocialMonitor:
     """为项目添加参与者"""
     users = await db.execute(select(User).where(User.id.in_(user_ids)))
     new_participants = users.scalars().all()
@@ -210,8 +210,8 @@ async def add_participants_to_monitor(
 
 
 async def remove_participant_from_monitor(
-    db: AsyncSession, monitor: Monitor, user_id: int
-) -> Monitor:
+    db: AsyncSession, monitor: SocialMonitor, user_id: int
+) -> SocialMonitor:
     """从项目移除参与者"""
     monitor.participants = [u for u in monitor.participants if u.id != user_id]
     await db.commit()
@@ -255,7 +255,7 @@ async def check_monitor_access(db: AsyncSession, monitor_id: int, user_id: int) 
         return True
 
     # 获取项目信息
-    monitor = await get_monitor_by_id(db, monitor_id, load_relations=True)
+    monitor = await get_social_monitor_by_id(db, monitor_id, load_relations=True)
     if not monitor:
         return False
 
@@ -268,7 +268,7 @@ async def check_monitor_access(db: AsyncSession, monitor_id: int, user_id: int) 
     return user_id in participant_ids
 
 
-async def assert_monitor_access(
+async def assert_social_monitor_access(
     db: AsyncSession,
     monitor_id: int,
     user_id: int,
@@ -283,3 +283,15 @@ async def assert_monitor_access(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail=detail,
         )
+
+
+# ==================== Backward-compatible aliases ====================
+
+# These aliases keep existing callers working while we migrate all call sites.
+get_monitor_by_id = get_social_monitor_by_id
+get_monitor_by_name = get_social_monitor_by_name
+get_monitors = get_social_monitors
+create_monitor = create_social_monitor
+update_monitor = update_social_monitor
+delete_monitor = delete_social_monitor
+assert_monitor_access = assert_social_monitor_access

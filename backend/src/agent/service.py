@@ -7,7 +7,7 @@ from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
-from src.social_media.tasks.models import DataTask
+from src.social_media.tasks.models import SocialTask
 from src.social_media.tasks.adapters import get_adapter
 from src.social_media.tasks import crud as task_crud
 from .schemas import (
@@ -36,15 +36,15 @@ async def get_pending_tasks(
     """
     # 返回 pending 任务（探测任务和全量采集任务均通过 pending 状态下发）
     stmt = (
-        select(DataTask)
+        select(SocialTask)
         .where(
             and_(
-                DataTask.data_source == "remote_crawler",
-                DataTask.status == "pending",
-                DataTask.is_deleted.is_(False),
+                SocialTask.data_source == "remote_crawler",
+                SocialTask.status == "pending",
+                SocialTask.is_deleted.is_(False),
             )
         )
-        .order_by(DataTask.priority.desc(), DataTask.created_at.asc())
+        .order_by(SocialTask.priority.desc(), SocialTask.created_at.asc())
         .limit(limit)
     )
 
@@ -72,8 +72,8 @@ async def get_task_detail(
     task_id: int,
 ) -> AgentTaskInfo:
     """查询任务详情（供爬虫轮询状态和获取续采参数）"""
-    stmt = select(DataTask).where(
-        and_(DataTask.id == task_id, DataTask.is_deleted.is_(False))
+    stmt = select(SocialTask).where(
+        and_(SocialTask.id == task_id, SocialTask.is_deleted.is_(False))
     )
     result = await db.execute(stmt)
     task = result.scalar_one_or_none()
@@ -113,12 +113,12 @@ async def accept_task(
     # 原子抢占：仅当任务仍为 pending 时才能成功更新为 accepted
     accepted_at = datetime.now(timezone.utc)
     upd = (
-        update(DataTask)
+        update(SocialTask)
         .where(
             and_(
-                DataTask.id == task_id,
-                DataTask.is_deleted.is_(False),
-                DataTask.status == "pending",
+                SocialTask.id == task_id,
+                SocialTask.is_deleted.is_(False),
+                SocialTask.status == "pending",
             )
         )
         .values(
@@ -138,8 +138,8 @@ async def accept_task(
         return
 
     # 未抢占成功：查询当前状态给出幂等/冲突响应
-    stmt = select(DataTask.status).where(
-        and_(DataTask.id == task_id, DataTask.is_deleted.is_(False))
+    stmt = select(SocialTask.status).where(
+        and_(SocialTask.id == task_id, SocialTask.is_deleted.is_(False))
     )
     status_result = await db.execute(stmt)
     current_status = status_result.scalar_one_or_none()
@@ -178,10 +178,10 @@ async def update_progress(
     Raises:
         HTTPException: 任务不存在
     """
-    stmt = select(DataTask).where(
+    stmt = select(SocialTask).where(
         and_(
-            DataTask.id == task_id,
-            DataTask.is_deleted.is_(False),
+            SocialTask.id == task_id,
+            SocialTask.is_deleted.is_(False),
         )
     )
     result = await db.execute(stmt)
@@ -219,7 +219,7 @@ async def update_progress(
 async def _clear_analysis_results(
     db: AsyncSession,
     task_id: int,
-    task: DataTask,
+    task: SocialTask,
 ) -> None:
     """清空任务的分析结果（保留原文/评论数据），用于追加上传前重置"""
     # 清理自动分析幂等锁
@@ -299,10 +299,10 @@ async def upload_result(
     Raises:
         HTTPException: 任务不存在或状态不正确
     """
-    stmt = select(DataTask).where(
+    stmt = select(SocialTask).where(
         and_(
-            DataTask.id == task_id,
-            DataTask.is_deleted.is_(False),
+            SocialTask.id == task_id,
+            SocialTask.is_deleted.is_(False),
         )
     )
     result = await db.execute(stmt)

@@ -68,7 +68,7 @@ class Platform(Base):
         return f"<Platform(id={self.id}, name='{self.name}', code='{self.code}')>"
 
 
-class Monitor(Base):
+class SocialMonitor(Base):
     """社交舆情项目模型
 
     项目是数据管理的基本单位，每个项目可以关联多个平台，
@@ -115,7 +115,7 @@ class Monitor(Base):
     )
 
     # TODO: 添加以下关系（在后续阶段实现）
-    # data_tasks: Mapped[list["DataTask"]] = relationship(back_populates="monitor")
+    # social_tasks: Mapped[list["SocialTask"]] = relationship(back_populates="monitor")
 
     def __repr__(self):
-        return f"<Monitor(id={self.id}, name='{self.name}', owner_id={self.owner_id})>"
+        return f"<SocialMonitor(id={self.id}, name='{self.name}', owner_id={self.owner_id})>"

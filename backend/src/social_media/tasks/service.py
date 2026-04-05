@@ -6,17 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
 from . import crud
-from .models import DataTask, SocialPost, SocialComment
-from .schemas import DataTaskCreate, DataTaskUpdate, JSONUploadData
+from .models import SocialTask, SocialPost, SocialComment
+from .schemas import SocialTaskCreate, SocialTaskUpdate, JSONUploadData
 from .adapters import get_adapter
 
+# Backward-compat aliases for local use
+SocialTaskUpdate = SocialTaskUpdate
 
-# ==================== DataTask Service ====================
+
+# ==================== SocialTask Service ====================
 
 
-async def create_task(
-    db: AsyncSession, task_in: DataTaskCreate, current_user_id: int
-) -> DataTask:
+async def create_social_task(
+    db: AsyncSession, task_in: SocialTaskCreate, current_user_id: int
+) -> SocialTask:
     """创建任务"""
     # 验证项目是否存在
     from src.social_media.monitors import crud as social_crud
@@ -27,7 +30,7 @@ async def create_task(
     if not monitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Monitor with id {task_in.monitor_id} not found",
+            detail=f"SocialMonitor with id {task_in.monitor_id} not found",
         )
 
     # 验证平台是否存在
@@ -52,9 +55,9 @@ async def create_task(
     return task
 
 
-async def get_task(
+async def get_social_task(
     db: AsyncSession, task_id: int, current_user_id: int
-) -> Optional[DataTask]:
+) -> Optional[SocialTask]:
     """获取任务详情"""
     task = await crud.get_task_by_id(db, task_id, load_relations=True)
     if not task:
@@ -68,7 +71,7 @@ async def get_task(
     return task
 
 
-async def get_tasks_list(
+async def get_social_tasks_list(
     db: AsyncSession,
     page: int = 1,
     page_size: int = 20,
@@ -81,7 +84,7 @@ async def get_tasks_list(
     search: Optional[str] = None,
     current_user_id: Optional[int] = None,
     phase: Optional[str] = None,
-) -> tuple[List[DataTask], int]:
+) -> tuple[List[SocialTask], int]:
     """获取任务列表（带过滤和分页）"""
     # 如果指定了monitor_id，验证访问权限
     if monitor_id is not None and current_user_id is not None:
@@ -105,9 +108,9 @@ async def get_tasks_list(
     )
 
 
-async def update_task(
-    db: AsyncSession, task: DataTask, task_update: DataTaskUpdate
-) -> DataTask:
+async def update_social_task(
+    db: AsyncSession, task: SocialTask, task_update: SocialTaskUpdate
+) -> SocialTask:
     """更新任务"""
     update_data = task_update.model_dump(exclude_unset=True)
     updated_task = await crud.update_task(db, task, update_data)
@@ -116,7 +119,7 @@ async def update_task(
     return updated_task
 
 
-async def delete_task(db: AsyncSession, task: DataTask) -> None:
+async def delete_social_task(db: AsyncSession, task: SocialTask) -> None:
     """删除任务（软删除）"""
     await crud.delete_task(db, task)
     await db.commit()
@@ -425,7 +428,7 @@ async def query_cross_task_posts(
     return posts
 
 
-async def clear_task_data(db: AsyncSession, task: DataTask) -> DataTask:
+async def clear_task_data(db: AsyncSession, task: SocialTask) -> SocialTask:
     """
     清空任务的所有数据（软删除原文和评论），重置任务状态
 
@@ -458,3 +461,12 @@ async def clear_task_data(db: AsyncSession, task: DataTask) -> DataTask:
     await db.refresh(task)
 
     return task
+
+
+# ==================== Backward-compatible aliases ====================
+
+create_task = create_social_task
+get_task = get_social_task
+get_tasks_list = get_social_tasks_list
+update_task = update_social_task
+delete_task = delete_social_task

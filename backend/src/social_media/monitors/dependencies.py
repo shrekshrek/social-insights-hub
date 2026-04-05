@@ -9,7 +9,7 @@ from src.auth.dependencies import get_current_user
 from src.database import get_async_db
 from src.rbac.utils import is_admin_or_super_admin
 from . import crud
-from .models import Monitor, Platform
+from .models import SocialMonitor, Platform
 
 
 async def validate_platform_exists(
@@ -27,21 +27,21 @@ async def validate_platform_exists(
 
 async def validate_monitor_exists(
     monitor_id: Annotated[int, Path()], db: AsyncSession = Depends(get_async_db)
-) -> Monitor:
+) -> SocialMonitor:
     """验证项目是否存在"""
     monitor = await crud.get_monitor_by_id(db, monitor_id, load_relations=True)
     if not monitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Monitor with id {monitor_id} not found",
+            detail=f"SocialMonitor with id {monitor_id} not found",
         )
     return monitor
 
 
 async def validate_monitor_access(
-    monitor: Monitor = Depends(validate_monitor_exists),
+    monitor: SocialMonitor = Depends(validate_monitor_exists),
     current_user: User = Depends(get_current_user),
-) -> Monitor:
+) -> SocialMonitor:
     """
     验证用户是否有项目访问权限
 
@@ -70,9 +70,9 @@ async def validate_monitor_access(
 
 
 async def validate_monitor_owner(
-    monitor: Monitor = Depends(validate_monitor_exists),
+    monitor: SocialMonitor = Depends(validate_monitor_exists),
     current_user: User = Depends(get_current_user),
-) -> Monitor:
+) -> SocialMonitor:
     """
     验证用户是否有项目管理权限（修改/删除）
 

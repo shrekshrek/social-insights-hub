@@ -203,7 +203,7 @@ async def create_monitor_slice(
 ) -> AnalysisSlice:
     """手动生成项目级合并分析切片（同步完成，写入 analysis_slices 表）。"""
     from src.social_media.monitors import crud as monitor_crud
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask as SocialTask
 
     # 权限校验
     await monitor_crud.assert_monitor_access(db, monitor_id, current_user_id)
@@ -215,11 +215,11 @@ async def create_monitor_slice(
         )
 
     stmt = (
-        select(DataTask)
-        .options(selectinload(DataTask.platform))
-        .where(DataTask.id.in_(task_ids))
-        .where(DataTask.monitor_id == monitor_id)
-        .where(DataTask.is_deleted.is_(False))
+        select(SocialTask)
+        .options(selectinload(SocialTask.platform))
+        .where(SocialTask.id.in_(task_ids))
+        .where(SocialTask.monitor_id == monitor_id)
+        .where(SocialTask.is_deleted.is_(False))
     )
     result = await db.execute(stmt)
     tasks = list(result.scalars().all())
@@ -831,7 +831,7 @@ async def run_task_aggregation(
     """运行聚合分析，生成任务级分析报告（异步 Celery 任务）
 
     调用 Aggregator 计算聚合数据（NSR、SERP、实体、观点等），
-    结果存储在 DataTask.analysis_result 中。
+    结果存储在 SocialTask.analysis_result 中。
 
     与初筛/深度分析一致，采用 Celery 异步执行，避免阻塞 API。
 
@@ -920,7 +920,7 @@ async def get_task_aggregation(
 ) -> dict[str, Any] | None:
     """获取任务级聚合分析结果
 
-    从 DataTask.analysis_result 中获取聚合数据。
+    从 SocialTask.analysis_result 中获取聚合数据。
 
     Args:
         task_id: 任务ID
@@ -930,7 +930,7 @@ async def get_task_aggregation(
         聚合分析结果，如果没有则返回 None
     """
     from src.social_media.tasks import crud as task_crud
-    from src.social_media.tasks.models import DataTask
+    from src.social_media.tasks.models import SocialTask as SocialTask
     from src.social_media.monitors import crud as monitor_crud
 
     # 验证任务是否存在
@@ -943,8 +943,8 @@ async def get_task_aggregation(
     # 验证用户权限
     await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
 
-    # 从 DataTask 获取 analysis_result
-    stmt = select(DataTask).where(DataTask.id == task_id)
+    # 从 SocialTask 获取 analysis_result
+    stmt = select(SocialTask).where(SocialTask.id == task_id)
     result = await db.execute(stmt)
     data_task = result.scalar_one_or_none()
 

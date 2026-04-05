@@ -11,7 +11,7 @@ const route = useRoute()
 const monitorId = Number(route.params.id)
 
 const { getMonitor, deleteMonitor: deleteMonitorApi, getMonitorAggregated, runMonitorAggregate } = useNewsMonitors()
-const { getTasks, createTask, deleteTask, executeTask } = useNewsTasks()
+const { getTasks, deleteTask, executeTask } = useNewsTasks()
 
 const { data: monitor, pending: monitorLoading } = getMonitor(monitorId)
 
@@ -58,42 +58,6 @@ const handleDeleteMonitor = async () => {
     await navigateTo('/news-media')
   } catch {
     // error already handled
-  }
-}
-
-// ========== 创建任务 Modal ==========
-
-const showCreateModal = ref(false)
-const creatingTask = ref(false)
-const newTaskForm = reactive({
-  name: '',
-  keywords: '',
-  phase: 'probe' as string,
-})
-
-const resetTaskForm = () => {
-  newTaskForm.name = ''
-  newTaskForm.keywords = ''
-  newTaskForm.phase = 'probe'
-}
-
-const handleCreateTask = async () => {
-  if (!newTaskForm.name.trim() || !newTaskForm.keywords.trim()) return
-
-  creatingTask.value = true
-  try {
-    await createTask(monitorId, {
-      name: newTaskForm.name.trim(),
-      keywords: newTaskForm.keywords.trim(),
-      phase: newTaskForm.phase as 'probe' | 'collect',
-    })
-    showCreateModal.value = false
-    resetTaskForm()
-    await handleRefresh()
-  } catch {
-    // error already handled
-  } finally {
-    creatingTask.value = false
   }
 }
 
@@ -535,7 +499,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
               />
               <UButton
                 icon="i-heroicons-plus"
-                @click="showCreateModal = true"
+                :to="`/news-media/tasks/create?monitor_id=${monitorId}`"
               >
                 创建任务
               </UButton>
@@ -596,58 +560,5 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
       <p class="text-gray-500">监测项目不存在</p>
     </div>
 
-    <!-- 创建任务 Modal -->
-    <UModal v-model:open="showCreateModal">
-      <template #header>
-        <h3 class="text-lg font-semibold">创建新闻采集任务</h3>
-      </template>
-      <template #body>
-        <div class="space-y-4">
-          <UFormField label="任务名称" required>
-            <UInput
-              v-model="newTaskForm.name"
-              placeholder="请输入任务名称"
-              class="w-full"
-            />
-          </UFormField>
-          <UFormField label="搜索关键词" required>
-            <UTextarea
-              v-model="newTaskForm.keywords"
-              placeholder="请输入搜索关键词"
-              :rows="2"
-              class="w-full"
-            />
-          </UFormField>
-          <UFormField label="采集阶段">
-            <USelect
-              v-model="newTaskForm.phase"
-              :items="[
-                { label: '探测（快速验证，snippet-only）', value: 'probe' },
-                { label: '全量（完整采集+分析）', value: 'collect' },
-              ]"
-              value-key="value"
-              class="w-full"
-            />
-          </UFormField>
-        </div>
-      </template>
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <UButton
-            variant="outline"
-            @click="showCreateModal = false"
-          >
-            取消
-          </UButton>
-          <UButton
-            :loading="creatingTask"
-            :disabled="!newTaskForm.name.trim() || !newTaskForm.keywords.trim()"
-            @click="handleCreateTask"
-          >
-            创建
-          </UButton>
-        </div>
-      </template>
-    </UModal>
   </div>
 </template>

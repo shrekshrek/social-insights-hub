@@ -1,6 +1,6 @@
 """新闻媒体 CRUD 操作"""
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -314,20 +314,19 @@ async def get_articles_by_task(
     relevance: str | None = None,
     source_tier: str | None = None,
 ) -> tuple[list[NewsArticle], int]:
-    conditions = [NewsArticle.task_id == task_id]
+    conditions: list = [NewsArticle.task_id == task_id]
     if relevance:
         conditions.append(NewsArticle.relevance == relevance)
     if source_tier:
         conditions.append(NewsArticle.source_tier == source_tier)
 
-    where_clause = and_(*conditions)
+    base_stmt = select(NewsArticle).where(and_(*conditions))
 
-    count_stmt = select(func.count()).select_from(NewsArticle).where(where_clause)
+    count_stmt = select(func.count()).select_from(base_stmt.subquery())
     total = (await db.execute(count_stmt)).scalar() or 0
 
     query_stmt = (
-        select(NewsArticle)
-        .where(where_clause)
+        base_stmt
         .offset(skip)
         .limit(limit)
         .order_by(NewsArticle.published_at.desc().nulls_last())
@@ -347,8 +346,14 @@ async def create_article(db: AsyncSession, article_data: dict) -> NewsArticle:
 async def bulk_create_articles(
     db: AsyncSession, articles_data: list[dict]
 ) -> list[NewsArticle]:
-    articles = [NewsArticle(**data) for data in articles_data]
-    db.add_all(articles)
+    """批量创建文章，返回创建的文章列表。每篇文章绑定 task_id，URL 在同一任务内不重复即可。"""
+    if not articles_data:
+        return []
+    articles = []
+    for data in articles_data:
+        article = NewsArticle(**data)
+        db.add(article)
+        articles.append(article)
     await db.flush()
     return articles
 
@@ -378,7 +383,7 @@ async def get_articles_by_monitor(
     monitor_id: int,
     phase: str = "collect",
 ) -> list[NewsArticle]:
-    """查询 monitor 下所有指定阶段任务的文章（用于跨任务聚合）"""
+    """查询 monitor 下所有指定阶段任务关联的文章（用于跨任务聚合）"""
     stmt = (
         select(NewsArticle)
         .join(NewsTask, NewsArticle.task_id == NewsTask.id)

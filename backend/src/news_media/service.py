@@ -183,15 +183,33 @@ async def delete_news_task(db: AsyncSession, task: NewsTask) -> None:
 
 
 def _parse_llm_json(content: str) -> list | dict:
-    """从 LLM 响应��提取 JSON（兼容 markdown code block 包裹）"""
+    """从 LLM 响应中提取 JSON（兼容 markdown code block 包裹）"""
+    # 先尝试提取 markdown code block
+    text = content.strip()
+    if "```json" in text:
+        text = text.split("```json")[1].split("```")[0].strip()
+    elif "```" in text:
+        text = text.split("```")[1].split("```")[0].strip()
+
+    # 尝试直接解析（最优先）
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 尝试提取 JSON 对象（优先于数组，避免误匹配顶层对象内部的数组）
+    obj_match = re.search(r"\{[\s\S]*\}", text)
+    if obj_match:
+        try:
+            return json.loads(obj_match.group())
+        except json.JSONDecodeError:
+            pass
+
     # 尝试提取 JSON 数组
-    array_match = re.search(r"\[[\s\S]*\]", content)
+    array_match = re.search(r"\[[\s\S]*\]", text)
     if array_match:
         return json.loads(array_match.group())
-    # 尝试提取 JSON 对象
-    obj_match = re.search(r"\{[\s\S]*\}", content)
-    if obj_match:
-        return json.loads(obj_match.group())
+
     return json.loads(content)
 
 
@@ -201,7 +219,7 @@ async def _search_and_store_articles(
     max_results: int = 10,
     channels: tuple = ("baidu",),
 ) -> list:
-    """双渠道搜索 + 存入 NewsArticle（去重），返回新建的文章列表"""
+    """双渠道搜索 + 创建 NewsArticle（绑定 task_id），返回本次创建的文章列表"""
     from src.news_media.news_search.aggregator import search_news
 
     search_results = await search_news(
@@ -212,12 +230,8 @@ async def _search_and_store_articles(
     if not search_results:
         return []
 
-    # 按 URL 去重（排除已存在的）
-    urls = [r["url"] for r in search_results]
-    existing = await crud.get_articles_by_urls(db, urls)
-    existing_urls = {a.url for a in existing}
-
-    new_articles_data = [
+    # 构造文章数据（含 task_id，每篇文章属于当前任务）
+    articles_data = [
         {
             "task_id": task.id,
             "url": r["url"],
@@ -231,14 +245,9 @@ async def _search_and_store_articles(
             "raw_data": r.get("raw_data"),
         }
         for r in search_results
-        if r["url"] not in existing_urls
     ]
 
-    if not new_articles_data:
-        return []
-
-    articles = await crud.bulk_create_articles(db, new_articles_data)
-    await db.flush()
+    articles = await crud.bulk_create_articles(db, articles_data)
     return articles
 
 
@@ -278,6 +287,10 @@ async def _tag_articles_batch(
         try:
             tags = _parse_llm_json(response.content)
             if isinstance(tags, list):
+                # 将批内相对索引转为全局索引
+                for tag in tags:
+                    if isinstance(tag, dict) and "article_index" in tag:
+                        tag["article_index"] = i + tag["article_index"]
                 all_tags.extend(tags)
             else:
                 logger.warning("news_tagging_chain returned non-list: %s", type(tags))
@@ -540,13 +553,13 @@ async def execute_news_probe(
         task.analysis_result = {
             "meta": {
                 "keywords": task.keywords,
-                "articles_total": len(articles),
+                "articles_total": task.articles_count,
                 "articles_relevant": relevant_count,
             },
             "articles_summary": articles_summary,
         }
         await db.flush()
-        logger.info("NewsTask %d: probe completed, %d articles", task.id, len(articles))
+        logger.info("NewsTask %d: probe completed, %d articles", task.id, task.articles_count)
 
     except Exception as e:
         task.status = "failed"
@@ -634,12 +647,12 @@ async def execute_news_collect(
             analysis_result.update(insights)
 
         task.status = "completed"
-        task.articles_count = len(all_articles)
+        task.articles_count = len(articles)
         task.analysis_result = analysis_result
         await db.commit()
         logger.info(
             "NewsTask %d: collect completed, %d articles, %d crawled",
-            task.id, len(all_articles), articles_crawled,
+            task.id, task.articles_count, articles_crawled,
         )
 
     except Exception as e:

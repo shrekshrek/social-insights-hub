@@ -63,7 +63,7 @@ interface MonitorSliceListResponse {
   items: MonitorSlice[]
 }
 const { data: slicesData, pending: slicesLoading, refresh: refreshSlices } = useApiData<MonitorSliceListResponse>(
-  computed(() => `/social-media/analysis/monitors/${monitorId.value}/slices`),
+  computed(() => `/analysis/monitors/${monitorId.value}/slices`),
   { key: computed(() => `monitor-slices-${monitorId.value}`), getCachedData: () => undefined }
 )
 const slices = computed<MonitorSlice[]>(() => slicesData.value?.items || [])

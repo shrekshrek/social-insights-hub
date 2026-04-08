@@ -59,14 +59,14 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   },
   "/social-media/posts/[id]": { permission: PERMISSIONS.SOCIAL_TASK_READ },
   // 新闻监测模块
-  "/news-media": {
+  "/news-media/monitors": {
     permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
     label: "新闻监测",
     showInNav: true,
     order: 50,
   },
-  "/news-media/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
-  "/news-media/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
+  "/news-media/monitors/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
+  "/news-media/monitors/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
   "/news-media/tasks": {
     permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
     label: "新闻采集",
@@ -75,10 +75,10 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   },
   "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
   "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
-  // AI 分析模块
-  "/social-media/analysis": {
-    permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
-    label: "AI 分析",
+  // AI 用量统计模块（全局）
+  "/analysis": {
+    permission: null,
+    label: "AI 用量",
     showInNav: true,
     order: 70,
   },

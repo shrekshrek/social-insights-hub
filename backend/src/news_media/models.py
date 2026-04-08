@@ -138,23 +138,20 @@ class NewsArticle(Base):
 
     存储 SerpAPI 搜索到的文章元数据 + Crawl4AI 抓取的全文 + 逐篇轻量分析结果。
     probe 阶段仅有元数据和 snippet；collect 阶段补充 full_text 和分析字段。
+    每篇文章属于一个采集任务，同一 URL 在不同任务下各自独立存储，标注结果互不干扰。
     """
 
     __tablename__ = "news_articles"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-
-    # 任务关联
     task_id: Mapped[int] = mapped_column(
         ForeignKey("news_tasks.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
         comment="所属采集任务ID",
     )
-
-    # 文章元数据（SerpAPI 返回）
     url: Mapped[str] = mapped_column(
-        String(2048), nullable=False, unique=True, index=True, comment="文章链接（去重键）"
+        String(2048), nullable=False, index=True, comment="文章链接"
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False, comment="文章标题")
     snippet: Mapped[str | None] = mapped_column(
@@ -220,5 +217,7 @@ class NewsArticle(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # 关联
-    task: Mapped["NewsTask"] = relationship(back_populates="articles", lazy="selectin")
+    # 关联（多对一，通过 task_id 外键）
+    task: Mapped["NewsTask"] = relationship(
+        back_populates="articles", lazy="select"
+    )

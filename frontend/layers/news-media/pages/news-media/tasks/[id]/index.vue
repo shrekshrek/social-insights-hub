@@ -43,7 +43,7 @@ const backPath = computed(() => {
   const from = route.query.from as string
   const monitorId = route.query.monitor_id as string
   if (from === 'monitor' && monitorId) {
-    return `/news-media/${monitorId}`
+    return `/news-media/monitors/${monitorId}`
   }
   return '/news-media/tasks'
 })

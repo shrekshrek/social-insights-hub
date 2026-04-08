@@ -248,8 +248,8 @@ async def execute_task(
 ):
     if task.phase == "collect":
         # collect 耗时较长，通过 Celery 异步执行，立即返回 running 状态
-        from src.social_media.analysis.jobs.factory import create_analysis_job_async
-        from src.social_media.analysis.models import AnalysisType
+        from src.analysis.jobs.factory import create_analysis_job_async
+        from src.analysis.models import AnalysisType
 
         # 预创建两个 AnalysisJob（标注 + 洞察），供 AI 分析板块展示
         tagging_job = await create_analysis_job_async(

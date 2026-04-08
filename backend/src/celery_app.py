@@ -33,6 +33,7 @@ celery_app = Celery(
         "src.analysis.celery_tasks.monitor_slice_tasks",
         "src.analysis.celery_tasks.auto_analysis_tasks",
         "src.knowledge_base.tasks",
+        "src.news_media.tasks.celery_tasks",
         # Future task modules:
         # "src.analysis.celery_tasks.clustering_tasks",
         # "src.analysis.celery_tasks.competitive_tasks",

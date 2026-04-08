@@ -43,7 +43,8 @@ async def get_analysis_jobs(
     """获取全局分析任务列表（带筛选和关联信息）"""
     from src.social_media.monitors.models import SocialMonitor as SocialMonitor
     from src.social_media.tasks.models import SocialTask as SocialTask
-    from src.news_media.models import NewsMonitor, NewsTask
+    from src.news_media.monitors.models import NewsMonitor
+    from src.news_media.tasks.models import NewsTask
     from src.auth.models import User
     from src.analysis.models import AnalysisSlice
 
@@ -186,7 +187,8 @@ async def get_analysis_job(
     """获取单个分析任务详情（带关联信息）"""
     from src.social_media.monitors.models import SocialMonitor as SocialMonitor
     from src.social_media.tasks.models import SocialTask as SocialTask
-    from src.news_media.models import NewsMonitor, NewsTask
+    from src.news_media.monitors.models import NewsMonitor
+    from src.news_media.tasks.models import NewsTask
     from src.auth.models import User
 
     stmt = (
@@ -258,7 +260,7 @@ async def _assert_job_access(db: AsyncSession, job: AnalysisJob, current_user_id
             detail="You don't have access to this analysis job"
         )
     elif job.news_monitor_id:
-        from src.news_media.crud import get_monitor_by_id as get_news_monitor
+        from src.news_media.monitors.crud import get_monitor_by_id as get_news_monitor
         from src.rbac.utils import is_admin_or_super_admin
         from src.auth.models import User
         from sqlalchemy import select

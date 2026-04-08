@@ -1,7 +1,7 @@
 """测试 analyze_competitor_radar 的 spam 维度筛选功能"""
 
 import pytest
-from src.social_media.analysis.celery_tasks.aggregation.insights import analyze_competitor_radar
+from src.analysis.celery_tasks.aggregation.insights import analyze_competitor_radar
 
 
 def test_competitor_radar_without_spam_map():

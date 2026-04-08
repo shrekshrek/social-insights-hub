@@ -23,7 +23,8 @@ if TYPE_CHECKING:
     from src.analysis.models import AnalysisSlice
     from src.social_media.monitors.models import SocialMonitor
     from src.social_media.tasks.models import SocialTask
-    from src.news_media.models import NewsMonitor, NewsTask
+    from src.news_media.monitors.models import NewsMonitor
+    from src.news_media.tasks.models import NewsTask
 
 
 # 策略-参与者关联表（多对多）
@@ -139,7 +140,7 @@ class Strategy(Base):
         lazy="selectin",
     )
     news_monitor: Mapped["NewsMonitor | None"] = relationship(
-        "src.news_media.models.NewsMonitor",
+        "src.news_media.monitors.models.NewsMonitor",
         foreign_keys=[news_monitor_id],
         lazy="selectin",
     )
@@ -150,7 +151,7 @@ class Strategy(Base):
         lazy="select",
     )
     news_tasks: Mapped[list["NewsTask"]] = relationship(
-        "src.news_media.models.NewsTask",
+        "src.news_media.tasks.models.NewsTask",
         foreign_keys="NewsTask.strategy_id",
         back_populates="strategy",
         lazy="select",

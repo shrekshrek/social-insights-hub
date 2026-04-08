@@ -15,7 +15,7 @@ class TestComputeTimeDistribution:
     """测试 time_distribution 计算"""
 
     def _call(self, post_info_by_key, spam_map_by_key=None):
-        from src.social_media.analysis.monitor_slice import _compute_time_distribution
+        from src.analysis.monitor_slice import _compute_time_distribution
 
         return _compute_time_distribution(
             post_info_by_key=post_info_by_key,
@@ -106,7 +106,7 @@ class TestMergeKolVoices:
     """测试 KOL 声音跨任务合并"""
 
     def _call(self, task_data_list, post_key_by_id=None, spam_map_by_key=None, top_n=10):
-        from src.social_media.analysis.monitor_slice import _merge_kol_voices
+        from src.analysis.monitor_slice import _merge_kol_voices
 
         return _merge_kol_voices(
             task_data_list=task_data_list,

@@ -1,6 +1,6 @@
 """测试 build_context_graph 的 spam 维度筛选功能"""
 
-from src.social_media.analysis.celery_tasks.aggregation.insights import build_context_graph
+from src.analysis.celery_tasks.aggregation.insights import build_context_graph
 
 
 def test_context_graph_without_spam_map():

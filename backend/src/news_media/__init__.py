@@ -1,6 +1,6 @@
 """新闻媒体数据采集模块"""
 
-from .models import NewsArticle, NewsMonitor, NewsTask
-from .router import router
+from src.news_media.monitors.models import NewsMonitor
+from src.news_media.tasks.models import NewsArticle, NewsTask
 
-__all__ = ["NewsArticle", "NewsMonitor", "NewsTask", "router"]
+__all__ = ["NewsArticle", "NewsMonitor", "NewsTask"]

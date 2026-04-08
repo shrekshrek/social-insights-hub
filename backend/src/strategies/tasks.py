@@ -28,7 +28,7 @@ async def check_probing_strategies() -> int:
         _run_probe_review_bg_task,
     )
     from src.social_media.tasks.models import SocialTask
-    from src.news_media.service import get_news_tasks_by_strategy
+    from src.news_media.tasks.service import get_news_tasks_by_strategy
 
     to_review: list[tuple[int, list[dict]]] = []
 
@@ -100,7 +100,7 @@ async def check_collecting_strategies() -> int:
     from src.social_media.tasks.models import SocialTask
     from src.strategies.models import Strategy, StrategySlice
     from src.strategies.service import _create_auto_slices, get_strategy_by_id
-    from src.news_media.service import get_news_tasks_by_strategy
+    from src.news_media.tasks.service import get_news_tasks_by_strategy
 
     triggered = 0
 

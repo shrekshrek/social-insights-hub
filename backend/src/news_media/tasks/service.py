@@ -1,4 +1,4 @@
-"""新闻媒体服务层"""
+"""新闻任务服务层（含执行逻辑与 LLM 辅助函数）"""
 
 import json
 import logging
@@ -7,110 +7,14 @@ import re
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.news_media import crud
-from src.news_media.models import NewsMonitor, NewsTask
-from src.news_media.schemas import NewsMonitorCreate, NewsMonitorUpdate, NewsTaskCreate
+from src.news_media.tasks import crud
+from src.news_media.tasks.models import NewsTask
+from src.news_media.tasks.schemas import NewsTaskCreate
 
 logger = logging.getLogger(__name__)
 
 # 逐篇标注的批次大小
 _TAGGING_BATCH_SIZE = 5
-
-
-# ==================== NewsMonitor Service ====================
-
-
-async def create_news_monitor(
-    db: AsyncSession, data: NewsMonitorCreate, user_id: int
-) -> NewsMonitor:
-    """创建新闻监测项目"""
-    existing = await crud.get_monitor_by_name(db, data.name)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"监测项目名称 '{data.name}' 已存在",
-        )
-    monitor_data = data.model_dump(exclude={"participant_ids"})
-    monitor = await crud.create_monitor(db, monitor_data, user_id, participant_ids=data.participant_ids)
-    await db.commit()
-    await db.refresh(monitor, ["owner", "participants"])
-    return monitor
-
-
-async def get_news_monitors(
-    db: AsyncSession,
-    page: int = 1,
-    page_size: int = 20,
-    owner_id: int | None = None,
-    participant_id: int | None = None,
-    search: str | None = None,
-) -> tuple[list[NewsMonitor], int]:
-    """获取新闻监测项目列表"""
-    skip = (page - 1) * page_size
-    return await crud.get_monitors(
-        db, skip=skip, limit=page_size,
-        owner_id=owner_id, participant_id=participant_id, search=search,
-    )
-
-
-async def get_news_monitor(db: AsyncSession, monitor_id: int) -> NewsMonitor | None:
-    """获取单个新闻监测项目"""
-    return await crud.get_monitor_by_id(db, monitor_id, load_relations=True)
-
-
-async def update_news_monitor(
-    db: AsyncSession, monitor: NewsMonitor, data: NewsMonitorUpdate
-) -> NewsMonitor:
-    """更新新闻监测项目"""
-    update_data = data.model_dump(exclude_unset=True)
-    if "name" in update_data and update_data["name"] != monitor.name:
-        existing = await crud.get_monitor_by_name(db, update_data["name"])
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"监测项目名称 '{update_data['name']}' 已存在",
-            )
-    monitor = await crud.update_monitor(db, monitor, update_data)
-    await db.commit()
-    await db.refresh(monitor, ["owner", "participants"])
-    return monitor
-
-
-async def delete_news_monitor(db: AsyncSession, monitor: NewsMonitor) -> None:
-    """删除新闻监测项目"""
-    await crud.delete_monitor(db, monitor)
-    await db.commit()
-
-
-async def add_participants_to_news_monitor(
-    db: AsyncSession, monitor: NewsMonitor, user_ids: list[int]
-) -> NewsMonitor:
-    """为新闻监测项目添加参与者（owner 不会被加入）"""
-    if monitor.owner_id in user_ids:
-        user_ids = [uid for uid in user_ids if uid != monitor.owner_id]
-    if not user_ids:
-        return monitor
-    return await crud.add_participants_to_news_monitor(db, monitor, user_ids)
-
-
-async def remove_participant_from_news_monitor(
-    db: AsyncSession, monitor: NewsMonitor, user_id: int
-) -> NewsMonitor:
-    """从新闻监测项目移除参与者"""
-    if user_id == monitor.owner_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="不能移除项目所有者",
-        )
-    if user_id not in {p.id for p in monitor.participants}:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"用户 {user_id} 不是该项目的参与者",
-        )
-    return await crud.remove_participant_from_news_monitor(db, monitor, user_id)
-
-
-# ==================== NewsTask Service ====================
 
 
 async def create_news_task(
@@ -122,7 +26,9 @@ async def create_news_task(
     phase: str | None = None,
 ) -> NewsTask:
     """创建新闻任务"""
-    monitor = await crud.get_monitor_by_id(db, monitor_id, load_relations=False)
+    from src.news_media.monitors.crud import get_monitor_by_id
+
+    monitor = await get_monitor_by_id(db, monitor_id, load_relations=False)
     if not monitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -184,20 +90,17 @@ async def delete_news_task(db: AsyncSession, task: NewsTask) -> None:
 
 def _parse_llm_json(content: str) -> list | dict:
     """从 LLM 响应中提取 JSON（兼容 markdown code block 包裹）"""
-    # 先尝试提取 markdown code block
     text = content.strip()
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0].strip()
     elif "```" in text:
         text = text.split("```")[1].split("```")[0].strip()
 
-    # 尝试直接解析（最优先）
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # 尝试提取 JSON 对象（优先于数组，避免误匹配顶层对象内部的数组）
     obj_match = re.search(r"\{[\s\S]*\}", text)
     if obj_match:
         try:
@@ -205,7 +108,6 @@ def _parse_llm_json(content: str) -> list | dict:
         except json.JSONDecodeError:
             pass
 
-    # 尝试提取 JSON 数组
     array_match = re.search(r"\[[\s\S]*\]", text)
     if array_match:
         return json.loads(array_match.group())
@@ -220,7 +122,7 @@ async def _search_and_store_articles(
     channels: tuple = ("baidu",),
 ) -> list:
     """双渠道搜索 + 创建 NewsArticle（绑定 task_id），返回本次创建的文章列表"""
-    from src.news_media.news_search.aggregator import search_news
+    from src.news_media.tasks.news_search.aggregator import search_news
 
     search_results = await search_news(
         query=task.keywords,
@@ -230,7 +132,6 @@ async def _search_and_store_articles(
     if not search_results:
         return []
 
-    # 构造文章数据（含 task_id，每篇文章属于当前任务）
     articles_data = [
         {
             "task_id": task.id,
@@ -287,7 +188,6 @@ async def _tag_articles_batch(
         try:
             tags = _parse_llm_json(response.content)
             if isinstance(tags, list):
-                # 将批内相对索引转为全局索引
                 for tag in tags:
                     if isinstance(tag, dict) and "article_index" in tag:
                         tag["article_index"] = i + tag["article_index"]
@@ -340,7 +240,6 @@ async def _run_insight_analysis(
         format_tagged_articles_for_insight,
     )
 
-    # 只纳入 relevance=high/medium 的文章
     relevant = [
         a for a in articles
         if a.relevance in ("high", "medium") or a.relevance is None
@@ -387,114 +286,6 @@ async def _run_insight_analysis(
         return {"error": str(e)}
 
 
-# ==================== Monitor 聚合分析 ====================
-
-
-async def get_monitor_aggregated_stats(
-    db: AsyncSession,
-    monitor_id: int,
-) -> dict:
-    """统计聚合：从各 collect 任务的 analysis_result 合并统计，无 LLM 调用。
-
-    返回：文章总数、相关文章数、情感分布、实体 Top10、来源分布。
-    Monitor 无文章时返回全零结构。
-    """
-    articles = await crud.get_articles_by_monitor(db, monitor_id, phase="collect")
-
-    if not articles:
-        return {
-            "articles_total": 0,
-            "articles_relevant": 0,
-            "source_tier_distribution": {"tier1": 0, "tier2": 0, "tier3": 0},
-            "sentiment_distribution": {"positive": 0, "neutral": 0, "negative": 0},
-            "sentiment_overall": None,
-            "top_entities": [],
-            "search_source_distribution": {"baidu": 0, "duckduckgo": 0},
-        }
-
-    # 基础统计
-    relevant = [a for a in articles if a.relevance in ("high", "medium")]
-    tier_counts: dict[str, int] = {"tier1": 0, "tier2": 0, "tier3": 0}
-    sentiment_dist = {"positive": 0, "neutral": 0, "negative": 0}
-    source_dist: dict[str, int] = {"baidu": 0, "duckduckgo": 0}
-    sentiment_scores: list[float] = []
-    entity_mentions: dict[str, int] = {}
-
-    for a in articles:
-        # 来源分布
-        tier = a.source_tier or "tier3"
-        tier_counts[tier] = tier_counts.get(tier, 0) + 1
-
-        # 搜索渠道分布
-        src = getattr(a, "search_source", "baidu") or "baidu"
-        source_dist[src] = source_dist.get(src, 0) + 1
-
-    for a in relevant:
-        # 情感
-        if a.sentiment is not None:
-            sentiment_scores.append(a.sentiment)
-            if a.sentiment > 0:
-                sentiment_dist["positive"] += 1
-            elif a.sentiment < 0:
-                sentiment_dist["negative"] += 1
-            else:
-                sentiment_dist["neutral"] += 1
-
-        # 实体统计
-        for ent in (a.mentioned_entities or []):
-            name = ent.get("name", "")
-            if name:
-                entity_mentions[name] = entity_mentions.get(name, 0) + 1
-
-    sentiment_overall = (
-        round(sum(sentiment_scores) / len(sentiment_scores), 3)
-        if sentiment_scores else None
-    )
-    top_entities = sorted(
-        [{"name": k, "mention_count": v} for k, v in entity_mentions.items()],
-        key=lambda x: x["mention_count"],
-        reverse=True,
-    )[:10]
-
-    return {
-        "articles_total": len(articles),
-        "articles_relevant": len(relevant),
-        "source_tier_distribution": tier_counts,
-        "sentiment_distribution": sentiment_dist,
-        "sentiment_overall": sentiment_overall,
-        "top_entities": top_entities,
-        "search_source_distribution": source_dist,
-    }
-
-
-async def run_monitor_narrative_aggregate(
-    db: AsyncSession,
-    monitor: NewsMonitor,
-    analysis_goal: str = "",
-    subject: str = "",
-) -> dict:
-    """叙事聚合：合并 monitor 下所有 collect 任务文章，跑一次 news_insight_chain。
-
-    结果写入 monitor.aggregated_result 并 commit。
-    无 completed collect 任务时抛 HTTPException 400。
-    """
-    articles = await crud.get_articles_by_monitor(db, monitor.id, phase="collect")
-    if not articles:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="该监测项目下没有已完成的全量采集任务，无法生成聚合报告",
-        )
-
-    goal = analysis_goal or monitor.name
-    subj = subject or monitor.name
-    insights = await _run_insight_analysis(articles, analysis_goal=goal, subject=subj)
-
-    monitor.aggregated_result = insights
-    await db.commit()
-    await db.refresh(monitor)
-    return insights
-
-
 # ==================== Task Execution ====================
 
 
@@ -512,7 +303,6 @@ async def execute_news_probe(
         task.status = "running"
         await db.flush()
 
-        # Step 1: 搜索（仅百度）+ 存文章
         articles = await _search_and_store_articles(
             db, task, max_results=10, channels=("baidu",)
         )
@@ -527,12 +317,10 @@ async def execute_news_probe(
             await db.flush()
             return
 
-        # Step 2: 逐篇标注（基于 snippet）
         goal = analysis_goal or task.keywords
         tags = await _tag_articles_batch(articles, analysis_goal=goal, use_full_text=False)
         await _apply_tags_to_articles(db, articles, tags)
 
-        # Step 3: 写 analysis_result
         relevant_count = sum(
             1 for a in articles if a.relevance in ("high", "medium")
         )
@@ -587,7 +375,6 @@ async def execute_news_collect(
         goal = analysis_goal or task.keywords
         subj = subject or task.keywords
 
-        # Step 1: 双渠道搜索扩量 + 存文章
         articles = await _search_and_store_articles(
             db, task, max_results=50, channels=("baidu", "duckduckgo")
         )
@@ -599,8 +386,7 @@ async def execute_news_collect(
             await db.flush()
             return
 
-        # Step 2: Crawl4AI 批量抓全文
-        from src.news_media.article_crawler import crawl_articles
+        from src.news_media.tasks.article_crawler import crawl_articles
 
         urls = [a.url for a in articles]
         crawl_results = await crawl_articles(urls)
@@ -613,18 +399,13 @@ async def execute_news_collect(
                 articles_crawled += 1
         await db.flush()
 
-        # Step 3: 逐篇标注（使用全文）
-        # 重新加载文章以获取 full_text
         all_articles, _ = await crud.get_articles_by_task(db, task.id, limit=100)
         tags = await _tag_articles_batch(all_articles, analysis_goal=goal, use_full_text=True)
         await _apply_tags_to_articles(db, all_articles, tags)
 
-        # Step 4: 整体分析
-        # 再次加载以获取最新标注结果
         all_articles, _ = await crud.get_articles_by_task(db, task.id, limit=100)
         insights = await _run_insight_analysis(all_articles, analysis_goal=goal, subject=subj)
 
-        # 补充 meta 信息
         tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
         for a in all_articles:
             tier = a.source_tier or "tier3"

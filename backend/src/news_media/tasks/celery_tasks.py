@@ -60,7 +60,7 @@ async def _async_run_collect(
 ) -> None:
     """异步执行新闻全量采集流水线（供 Celery task 调用）"""
     from src.database import AsyncSessionLocal
-    from src.news_media.models import NewsTask
+    from src.news_media.tasks.models import NewsTask
     from src.analysis.models import AnalysisJob
     from src.langchain import extract_token_usage
 
@@ -83,8 +83,7 @@ async def _async_run_collect(
                 tagging_job.started_at = datetime.now(timezone.utc)
             await db.commit()
 
-            # Step 1-2: 搜索 + 爬取全文（无 LLM）
-            from src.news_media.service import _search_and_store_articles
+            from src.news_media.tasks.service import _search_and_store_articles
 
             articles = await _search_and_store_articles(
                 db, task, max_results=50, channels=("baidu", "duckduckgo")
@@ -105,13 +104,13 @@ async def _async_run_collect(
                 await db.commit()
                 return
 
-            from src.news_media.article_crawler import crawl_articles
+            from src.news_media.tasks.article_crawler import crawl_articles
 
             urls = [a.url for a in articles]
             crawl_results = await crawl_articles(urls)
 
             articles_crawled = 0
-            from src.news_media import crud
+            from src.news_media.tasks import crud
             for article in articles:
                 full_text = crawl_results.get(article.url)
                 if full_text:
@@ -119,8 +118,7 @@ async def _async_run_collect(
                     articles_crawled += 1
             await db.flush()
 
-            # Step 3: 逐篇标注（NEWS_TAGGING）
-            from src.news_media.service import _tag_articles_batch, _apply_tags_to_articles
+            from src.news_media.tasks.service import _tag_articles_batch, _apply_tags_to_articles
 
             all_articles, _ = await crud.get_articles_by_task(db, task.id, limit=200)
             tag_start = datetime.now(timezone.utc)
@@ -139,7 +137,6 @@ async def _async_run_collect(
 
             await db.flush()
 
-            # Step 4: 整体洞察（NEWS_INSIGHT）
             if insight_job:
                 insight_job.status = "processing"
                 insight_job.started_at = datetime.now(timezone.utc)
@@ -149,7 +146,7 @@ async def _async_run_collect(
             all_articles, _ = await crud.get_articles_by_task(db, task.id, limit=200)
             insight_start = datetime.now(timezone.utc)
 
-            from src.news_media.service import _run_insight_analysis
+            from src.news_media.tasks.service import _run_insight_analysis
             insights = await _run_insight_analysis(all_articles, analysis_goal=goal, subject=subj)
 
             insight_duration = (datetime.now(timezone.utc) - insight_start).total_seconds()
@@ -160,7 +157,6 @@ async def _async_run_collect(
                 insight_job.analyzed_count = 1
                 insight_job.processing_time = int(insight_duration)
 
-            # 更新 NewsTask
             tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
             for a in all_articles:
                 tier = a.source_tier or "tier3"

@@ -273,7 +273,7 @@ async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -
             await db.flush()
 
     if strategy.news_monitor_id:
-        from src.news_media.crud import get_monitor_by_id as get_news_monitor_by_id
+        from src.news_media.monitors.crud import get_monitor_by_id as get_news_monitor_by_id
         from src.auth.models import User
 
         news_monitor = await get_news_monitor_by_id(db, strategy.news_monitor_id, load_relations=True)
@@ -661,7 +661,7 @@ async def reset_to_design(
     # 删除所有新闻任务
     deleted_news_count = 0
     if strategy.news_monitor_id:
-        from src.news_media.service import get_news_tasks_by_strategy, delete_news_task
+        from src.news_media.tasks.service import get_news_tasks_by_strategy, delete_news_task
 
         news_tasks = await get_news_tasks_by_strategy(db, strategy.id)
         for nt in news_tasks:
@@ -801,11 +801,11 @@ async def confirm_research(
 
     if has_news_channel:
         if strategy.news_monitor_id:
-            from src.news_media.models import NewsMonitor
+            from src.news_media.monitors.models import NewsMonitor
             news_monitor = await db.get(NewsMonitor, strategy.news_monitor_id)
         else:
-            from src.news_media.service import create_news_monitor
-            from src.news_media.schemas import NewsMonitorCreate
+            from src.news_media.monitors.service import create_news_monitor
+            from src.news_media.monitors.schemas import NewsMonitorCreate
 
             news_monitor = await create_news_monitor(
                 db,
@@ -845,8 +845,8 @@ async def confirm_research(
                 partial_errors.append(f"新闻渠道缺少 NewsMonitor: {dimension_name}")
                 continue
 
-            from src.news_media.service import create_news_task, execute_news_probe
-            from src.news_media.schemas import NewsTaskCreate
+            from src.news_media.tasks.service import create_news_task, execute_news_probe
+            from src.news_media.tasks.schemas import NewsTaskCreate
 
             for keyword in clean_keywords:
                 try:
@@ -1395,7 +1395,7 @@ async def check_probe_status(
     probe_tasks = list(probe_tasks_result.scalars().all())
 
     # 查询该策略的所有新闻 probe 任务
-    from src.news_media.service import get_news_tasks_by_strategy
+    from src.news_media.tasks.service import get_news_tasks_by_strategy
     news_probe_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="probe")
 
     if not probe_tasks and not news_probe_tasks:
@@ -1480,7 +1480,7 @@ async def approve_probe(
     probe_tasks = list(probe_tasks_result.scalars().all())
 
     # 获取新闻 probe 任务
-    from src.news_media.service import get_news_tasks_by_strategy
+    from src.news_media.tasks.service import get_news_tasks_by_strategy
     news_probe_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="probe")
 
     if not probe_tasks and not news_probe_tasks:
@@ -1546,8 +1546,8 @@ async def approve_probe(
     news_collect_dim_map: dict[str, str] = {}
     news_collect_task_ids: list[int] = []
     if news_probe_tasks:
-        from src.news_media.service import create_news_task
-        from src.news_media.schemas import NewsTaskCreate
+        from src.news_media.tasks.service import create_news_task
+        from src.news_media.tasks.schemas import NewsTaskCreate
 
         news_probe_dim_map = research_design.get("_news_task_dimension_map") or {}
 
@@ -1590,8 +1590,8 @@ async def approve_probe(
 
         async def _bg_news_collect(task_id: int, goal: str, subject: str) -> None:
             from src.database import AsyncSessionLocal
-            from src.news_media.service import execute_news_collect
-            from src.news_media import crud as news_crud
+            from src.news_media.tasks.service import execute_news_collect
+            from src.news_media.tasks import crud as news_crud
 
             async with AsyncSessionLocal() as session:
                 task = await news_crud.get_task_by_id(session, task_id, load_relations=False)
@@ -1762,7 +1762,7 @@ async def check_collection_status(
     tasks = list(result.scalars().all())
 
     # 查询该策略的所有新闻 collect 任务
-    from src.news_media.service import get_news_tasks_by_strategy
+    from src.news_media.tasks.service import get_news_tasks_by_strategy
     news_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="collect")
 
     if not tasks and not news_tasks:

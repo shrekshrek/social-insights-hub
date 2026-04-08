@@ -18,7 +18,8 @@ from src.database import Base
 if TYPE_CHECKING:
     from src.social_media.tasks.models import SocialTask as SocialTask, SocialPost
     from src.social_media.monitors.models import SocialMonitor as SocialMonitor
-    from src.news_media.models import NewsMonitor, NewsTask
+    from src.news_media.monitors.models import NewsMonitor
+    from src.news_media.tasks.models import NewsTask
     from src.auth.models import User
 
 
@@ -289,12 +290,12 @@ class AnalysisJob(Base):
         lazy="selectin",
     )
     news_monitor: Mapped["NewsMonitor | None"] = relationship(
-        "src.news_media.models.NewsMonitor",
+        "src.news_media.monitors.models.NewsMonitor",
         foreign_keys=[news_monitor_id],
         lazy="selectin",
     )
     news_task: Mapped["NewsTask | None"] = relationship(
-        "src.news_media.models.NewsTask",
+        "src.news_media.tasks.models.NewsTask",
         foreign_keys=[news_task_id],
         lazy="selectin",
     )

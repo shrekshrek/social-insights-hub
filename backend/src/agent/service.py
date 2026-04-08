@@ -241,11 +241,11 @@ async def _clear_analysis_results(
     # 撤销/终止旧的分析 Celery 任务
     try:
         from celery import current_app as celery_app  # type: ignore[import-not-found]
-        from src.social_media.analysis.models import AnalysisJob
+        from src.analysis.models import AnalysisJob
 
         jobs_stmt = select(AnalysisJob.celery_task_id).where(
             and_(
-                AnalysisJob.task_id == task_id,
+                AnalysisJob.social_task_id == task_id,
                 AnalysisJob.status.in_(("pending", "processing")),
             )
         )
@@ -273,10 +273,10 @@ async def _clear_analysis_results(
 
     # 清空分析任务记录 + PostAnalysis
     from sqlalchemy import delete as sa_delete
-    from src.social_media.analysis.models import AnalysisJob, PostAnalysis
+    from src.analysis.models import AnalysisJob, PostAnalysis
 
     await db.execute(sa_delete(PostAnalysis).where(PostAnalysis.task_id == task_id))
-    await db.execute(sa_delete(AnalysisJob).where(AnalysisJob.task_id == task_id))
+    await db.execute(sa_delete(AnalysisJob).where(AnalysisJob.social_task_id == task_id))
     await db.flush()
     logger.info("Task %s: Analysis results cleared (posts/comments preserved)", task_id)
 
@@ -477,7 +477,7 @@ async def upload_result(
         # 如果启用了自动分析，触发分析任务链（probe_ready 也需要分析以供审查）
         new_posts_count = len(created_posts)
         if task.auto_analyze and new_posts_count > 0:
-            from src.social_media.analysis.celery_tasks.auto_analysis_tasks import (
+            from src.analysis.celery_tasks.auto_analysis_tasks import (
                 run_auto_analysis,
             )
 

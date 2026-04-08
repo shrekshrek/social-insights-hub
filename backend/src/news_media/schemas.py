@@ -33,6 +33,7 @@ class NewsMonitorRead(CustomBaseModel):
     description: str | None
     owner_id: int
     aggregated_result: dict | None = None
+    participant_ids: list[int] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -160,7 +161,6 @@ class NewsArticleReadWithTask(NewsArticleRead):
 
     @classmethod
     def from_orm_full(cls, article) -> "NewsArticleReadWithTask":
-        task = article.task
         return cls(
             id=article.id,
             task_id=article.task_id,
@@ -172,6 +172,7 @@ class NewsArticleReadWithTask(NewsArticleRead):
             author=article.author,
             published_at=article.published_at,
             image_url=article.image_url,
+            search_source=article.search_source,
             relevance=article.relevance,
             sentiment=article.sentiment,
             article_type=article.article_type,
@@ -180,6 +181,6 @@ class NewsArticleReadWithTask(NewsArticleRead):
             summary=article.summary,
             created_at=article.created_at,
             updated_at=article.updated_at,
-            task_name=task.name if task else None,
-            monitor_name=task.monitor.name if task and task.monitor else None,
+            task_name=article.task.name if article.task else None,
+            monitor_name=article.task.monitor.name if article.task and article.task.monitor else None,
         )

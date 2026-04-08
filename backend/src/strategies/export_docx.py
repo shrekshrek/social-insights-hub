@@ -13,7 +13,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 
-from src.social_media.analysis.export_docx import _setup_styles
+from src.analysis.export_docx import _setup_styles
 
 from .models import Strategy
 

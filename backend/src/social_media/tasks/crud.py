@@ -191,7 +191,7 @@ async def delete_task_posts_and_comments(db: AsyncSession, task_id: int) -> dict
     posts_deleted = posts_result.rowcount
 
     # 同时删除原文分析结果
-    from src.social_media.analysis.models import PostAnalysis
+    from src.analysis.models import PostAnalysis
 
     await db.execute(delete(PostAnalysis).where(PostAnalysis.task_id == task_id))
 

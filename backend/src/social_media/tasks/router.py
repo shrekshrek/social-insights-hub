@@ -101,19 +101,19 @@ async def get_tasks(
 
     # 批量查询各任务最新 LLM 分析 Job 状态（用于判断"分析中"，避免 N+1）
     from sqlalchemy import select as sa_select
-    from src.social_media.analysis.models import AnalysisJob
+    from src.analysis.models import AnalysisJob
 
     task_ids = [t.id for t in tasks]
     latest_job_map: dict[int, str] = {}
     if task_ids:
         job_rows = (await db.execute(
-            sa_select(AnalysisJob.task_id, AnalysisJob.status)
-            .where(AnalysisJob.task_id.in_(task_ids))
+            sa_select(AnalysisJob.social_task_id, AnalysisJob.status)
+            .where(AnalysisJob.social_task_id.in_(task_ids))
             .order_by(AnalysisJob.created_at.desc())
         )).all()
         for row in job_rows:
-            if row.task_id not in latest_job_map:
-                latest_job_map[int(row.task_id)] = row.status
+            if row.social_task_id not in latest_job_map:
+                latest_job_map[int(row.social_task_id)] = row.status
 
     # 转换为带关联信息的response
     tasks_with_relations = []
@@ -156,14 +156,14 @@ async def get_task(
     """
     # analysis_result_at 不为空表示聚合已完成；否则取最新 LLM Job 状态
     from sqlalchemy import select as sa_select
-    from src.social_media.analysis.models import AnalysisJob
+    from src.analysis.models import AnalysisJob
 
     if task.analysis_result_at:
         aggregation_status = "completed"
     else:
         aggregation_status = (await db.execute(
             sa_select(AnalysisJob.status)
-            .where(AnalysisJob.task_id == task.id)
+            .where(AnalysisJob.social_task_id == task.id)
             .order_by(AnalysisJob.created_at.desc())
             .limit(1)
         )).scalar_one_or_none()

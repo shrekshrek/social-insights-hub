@@ -21,7 +21,7 @@ const submitting = ref(false)
 
 const cancelReturnPath = computed(() => {
   if (isFromMonitorDetail.value && preselectedMonitorId) {
-    return `/news-media/${preselectedMonitorId}`
+    return `/news-media/monitors/${preselectedMonitorId}`
   }
   return '/news-media/tasks'
 })

@@ -125,6 +125,7 @@ export default defineNuxtConfig({
     './layers/auth',
     './layers/users',
     './layers/rbac',
+    './layers/analysis',
     './layers/social-media',
     './layers/news-media',
     './layers/strategies',

@@ -49,9 +49,9 @@ from src.langchain.chains.strategy_brief_parser_chain import (
 )
 from src.database import AsyncSessionLocal
 from src.langchain import extract_token_usage
-from src.social_media.analysis.jobs.factory import create_analysis_job_async
-from src.social_media.analysis.models import AnalysisType
-from src.social_media.analysis.models import AnalysisSlice
+from src.analysis.jobs.factory import create_analysis_job_async
+from src.analysis.models import AnalysisType
+from src.analysis.models import AnalysisSlice
 from src.social_media.monitors.crud import assert_social_monitor_access as assert_monitor_access
 from src.social_media.tasks.models import SocialTask as SocialTask
 from .models import Strategy, StrategySlice
@@ -1855,7 +1855,7 @@ async def _create_auto_slices(
     若 blueprint 为空，则将所有任务合并为一个「综合分析」切片。
     建完切片后立即触发 LLM 覆盖度验证并写入 strategy.coverage_check_result。
     """
-    from src.social_media.analysis.service import create_monitor_slice
+    from src.analysis.service import create_monitor_slice
 
     blueprint: list[dict] = []
     research_design = strategy.research_design or {}
@@ -2014,7 +2014,7 @@ async def adjust_slices(
 
     每个 adjustment 格式：{slice_id, name?, subject?, competitors?}
     """
-    from src.social_media.analysis.models import AnalysisSlice
+    from src.analysis.models import AnalysisSlice
 
     # 校验 slice 归属
     strategy_slice_ids = {ss.slice_id for ss in strategy.slices}

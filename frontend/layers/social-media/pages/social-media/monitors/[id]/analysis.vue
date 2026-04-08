@@ -371,7 +371,7 @@ const sliceId = computed(() => route.query.slice_id ? Number(route.query.slice_i
 
 const { useApiData } = useApi()
 const { data: slice, pending: sliceLoading, refresh: refreshSlice } = useApiData<MonitorSlice>(
-  computed(() => sliceId.value ? `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}` : ''),
+  computed(() => sliceId.value ? `/analysis/monitors/${monitorId.value}/slices/${sliceId.value}` : ''),
   {
     key: computed(() => `monitor-slice-detail-${monitorId.value}-${sliceId.value}`),
     silent404: true,
@@ -862,7 +862,7 @@ const pollStatus = async () => {
   try {
     // 使用 apiRequest 获取最新数据（不会触发 useApiData 的响应式更新）
     const freshData = await apiRequest<MonitorSlice>(
-      `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}`
+      `/analysis/monitors/${monitorId.value}/slices/${sliceId.value}`
     )
     if (!freshData) return
 
@@ -1081,7 +1081,7 @@ const handleExport = async () => {
   exporting.value = true
   try {
     await apiDownload(
-      `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}/export`,
+      `/analysis/monitors/${monitorId.value}/slices/${sliceId.value}/export`,
     )
     showSuccess('报告已导出')
   } catch {

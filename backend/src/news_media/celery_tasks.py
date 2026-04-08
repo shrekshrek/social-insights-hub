@@ -61,8 +61,7 @@ async def _async_run_collect(
     """异步执行新闻全量采集流水线（供 Celery task 调用）"""
     from src.database import AsyncSessionLocal
     from src.news_media.models import NewsTask
-    from src.social_media.analysis.models import AnalysisJob
-    from src.social_media.analysis.jobs import complete_analysis_job_sync
+    from src.analysis.models import AnalysisJob
     from src.langchain import extract_token_usage
 
     async with AsyncSessionLocal() as db:

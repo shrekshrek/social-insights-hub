@@ -41,7 +41,7 @@ async def search_ddg_news(query: str, max_results: int = 50) -> list[dict]:
     for attempt in range(_MAX_RETRIES):
         try:
             # 在线程池中运行同步 ddgs 调用（避免阻塞事件循环）
-            results = await asyncio.get_event_loop().run_in_executor(
+            results = await asyncio.get_running_loop().run_in_executor(
                 None,
                 _ddg_news_sync,
                 query,

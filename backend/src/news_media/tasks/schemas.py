@@ -22,6 +22,12 @@ class NewsTaskCreate(CustomBaseModel):
     )
 
 
+class NewsTaskRefine(CustomBaseModel):
+    """refine 一个 probe 任务：替换关键词并创建下一轮 probe"""
+
+    keywords: str = Field(..., min_length=1, description="替换后的搜索关键词")
+
+
 class NewsTaskRead(CustomBaseModel):
     """新闻任务详情"""
 
@@ -31,6 +37,8 @@ class NewsTaskRead(CustomBaseModel):
     strategy_id: int | None
     keywords: str
     phase: str | None
+    probe_round: int
+    parent_probe_id: int | None
     status: str
     search_params: dict | None
     articles_count: int
@@ -57,6 +65,8 @@ class NewsTaskReadWithRelations(NewsTaskRead):
             strategy_id=task.strategy_id,
             keywords=task.keywords,
             phase=task.phase,
+            probe_round=task.probe_round,
+            parent_probe_id=task.parent_probe_id,
             status=task.status,
             search_params=task.search_params,
             articles_count=task.articles_count,

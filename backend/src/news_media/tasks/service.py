@@ -1,4 +1,15 @@
-"""新闻任务服务层（含执行逻辑与 LLM 辅助函数）"""
+"""新闻任务服务层
+
+Phase A 架构（probe/collect 分家）:
+- probe 任务：仅做搜索 + 落库 NewsArticle（无 LLM、无全文抓取），秒级返回
+- collect 任务：全量抓取 + 逐篇标注 + 整体洞察，由 celery 执行
+- probe → collect 通过 approve_probe_task 显式转换（产生新 task，原 probe 保留）
+- probe → probe 通过 refine_probe_task 换关键词（probe_round+1）
+
+collect 阶段的执行流水线位于 src/news_media/tasks/celery_tasks.py，
+本模块内的辅助函数（_tag_articles_batch / _run_insight_analysis）供 celery
+_async_run_collect 直接引用。
+"""
 
 import json
 import logging
@@ -16,6 +27,9 @@ logger = logging.getLogger(__name__)
 # 逐篇标注的批次大小
 _TAGGING_BATCH_SIZE = 5
 
+# probe 搜索返回的最大条数（仅 baidu 渠道）
+_PROBE_MAX_RESULTS = 10
+
 
 async def create_news_task(
     db: AsyncSession,
@@ -24,6 +38,8 @@ async def create_news_task(
     user_id: int,
     strategy_id: int | None = None,
     phase: str | None = None,
+    parent_probe_id: int | None = None,
+    probe_round: int = 1,
 ) -> NewsTask:
     """创建新闻任务"""
     from src.news_media.monitors.crud import get_monitor_by_id
@@ -43,6 +59,8 @@ async def create_news_task(
         "search_params": data.search_params,
         "auto_analyze": data.auto_analyze,
         "created_by": user_id,
+        "probe_round": probe_round,
+        "parent_probe_id": parent_probe_id,
     }
     task = await crud.create_task(db, task_data)
     await db.commit()
@@ -86,7 +104,7 @@ async def delete_news_task(db: AsyncSession, task: NewsTask) -> None:
     await db.commit()
 
 
-# ==================== Internal Helpers ====================
+# ==================== Internal Helpers (shared with celery collect) ====================
 
 
 def _parse_llm_json(content: str) -> list | dict:
@@ -122,7 +140,7 @@ async def _search_and_store_articles(
     max_results: int = 10,
     channels: tuple = ("baidu",),
 ) -> list:
-    """双渠道搜索 + 创建 NewsArticle（绑定 task_id），返回本次创建的文章列表"""
+    """搜索 + 创建 NewsArticle（绑定 task_id），返回本次创建的文章列表"""
     from src.news_media.tasks.news_search.aggregator import search_news
 
     search_results = await search_news(
@@ -149,8 +167,7 @@ async def _search_and_store_articles(
         for r in search_results
     ]
 
-    articles = await crud.bulk_create_articles(db, articles_data)
-    return articles
+    return await crud.bulk_create_articles(db, articles_data)
 
 
 async def _tag_articles_batch(
@@ -158,7 +175,7 @@ async def _tag_articles_batch(
     analysis_goal: str,
     use_full_text: bool = False,
 ) -> list[dict]:
-    """逐篇轻量标注（批量，_TAGGING_BATCH_SIZE 篇一组）"""
+    """逐篇轻量标注（批量，_TAGGING_BATCH_SIZE 篇一组）—— 仅 collect 阶段调用"""
     from src.langchain.chains.news_tagging_chain import (
         create_news_tagging_chain,
         format_articles_for_tagging,
@@ -206,7 +223,7 @@ async def _apply_tags_to_articles(
     articles: list,
     tags: list[dict],
 ) -> None:
-    """将标注结果写回 NewsArticle"""
+    """将标注结果写回 NewsArticle —— 仅 collect 阶段调用"""
     for tag in tags:
         idx = tag.get("article_index")
         if idx is None or idx >= len(articles):
@@ -235,7 +252,7 @@ async def _run_insight_analysis(
     analysis_goal: str,
     subject: str,
 ) -> dict:
-    """整体分析（一次 LLM 调用），返回结构化洞察"""
+    """整体分析（一次 LLM 调用），返回结构化洞察 —— 仅 collect 阶段调用"""
     from src.langchain.chains.news_insight_chain import (
         create_news_insight_chain,
         format_tagged_articles_for_insight,
@@ -293,11 +310,12 @@ async def _run_insight_analysis(
 async def execute_news_probe(
     db: AsyncSession,
     task: NewsTask,
-    analysis_goal: str = "",
 ) -> None:
-    """执行新闻探测：百度新闻搜索 → 存 NewsArticle → 逐篇标注
+    """执行新闻探测：仅搜索 + 落库，不抓全文、不打标。
 
-    Probe 阶段仅用百度渠道，不抓全文，使用 snippet 做轻量标注。
+    语义：让用户/策略快速判断关键词是否合理。用户在前端看 NewsArticle 卡片
+    （title / source_name / source_tier / snippet）决定 approve 或 refine。
+
     调用者负责 commit。
     """
     try:
@@ -305,50 +323,36 @@ async def execute_news_probe(
         await db.flush()
 
         articles = await _search_and_store_articles(
-            db, task, max_results=10, channels=("baidu",)
+            db, task, max_results=_PROBE_MAX_RESULTS, channels=("baidu",)
         )
 
-        if not articles:
-            task.status = "completed"
-            task.articles_count = 0
-            task.analysis_result = {
-                "meta": {"keywords": task.keywords, "articles_total": 0, "articles_relevant": 0},
-                "articles_summary": [],
-            }
-            await db.flush()
-            return
-
-        goal = analysis_goal or task.keywords
-        tags = await _tag_articles_batch(articles, analysis_goal=goal, use_full_text=False)
-        await _apply_tags_to_articles(db, articles, tags)
-
-        relevant_count = sum(
-            1 for a in articles if a.relevance in ("high", "medium")
-        )
-        articles_summary = [
-            {
-                "title": a.title,
-                "source_name": a.source_name,
-                "source_tier": a.source_tier,
-                "relevance": a.relevance,
-                "sentiment": a.sentiment,
-                "summary": a.summary,
-            }
-            for a in articles
-        ]
+        tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
+        source_samples: list[str] = []
+        seen_sources: set[str] = set()
+        for a in articles:
+            tier = a.source_tier or "tier3"
+            tier_counts[tier] = tier_counts.get(tier, 0) + 1
+            if a.source_name and a.source_name not in seen_sources:
+                seen_sources.add(a.source_name)
+                if len(source_samples) < 8:
+                    source_samples.append(a.source_name)
 
         task.status = "completed"
         task.articles_count = len(articles)
         task.analysis_result = {
             "meta": {
                 "keywords": task.keywords,
-                "articles_total": task.articles_count,
-                "articles_relevant": relevant_count,
+                "articles_total": len(articles),
+                "source_tier_distribution": tier_counts,
+                "source_samples": source_samples,
+                "probe_round": task.probe_round,
             },
-            "articles_summary": articles_summary,
         }
         await db.flush()
-        logger.info("NewsTask %d: probe completed, %d articles", task.id, task.articles_count)
+        logger.info(
+            "NewsTask %d: probe completed, %d articles, round=%d",
+            task.id, task.articles_count, task.probe_round,
+        )
 
     except Exception as e:
         task.status = "failed"
@@ -358,87 +362,119 @@ async def execute_news_probe(
         raise
 
 
-async def execute_news_collect(
+# ==================== Approve / Refine ====================
+
+
+async def approve_probe_task(
     db: AsyncSession,
-    task: NewsTask,
-    analysis_goal: str = "",
-    subject: str = "",
-) -> None:
-    """执行新闻全量采集：百度+DuckDuckGo → Crawl4AI → 逐篇标注 → 整体分析
+    probe_task: NewsTask,
+    user_id: int,
+) -> NewsTask:
+    """基于 approved probe task 创建 collect task 并 dispatch celery。
 
-    异步后台执行（调用方通过 asyncio.create_task 触发）。
-    使用独立 db session，执行完毕后自行 commit。
+    规则：
+    - probe_task 必须 phase=="probe" 且 status=="completed"
+    - 继承 keywords / monitor_id / strategy_id / search_params
+    - collect_task.parent_probe_id = probe_task.id
+    - auto_analyze 默认 True（collect 阶段有意义）
+    - 立即 dispatch celery 执行全量流水线
+
+    返回新创建的 collect task。
     """
-    try:
-        task.status = "running"
-        await db.flush()
-
-        goal = analysis_goal or task.keywords
-        subj = subject or task.keywords
-
-        articles = await _search_and_store_articles(
-            db, task, max_results=50, channels=("baidu", "duckduckgo")
+    if probe_task.phase != "probe":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="只能对 probe 任务执行 approve",
+        )
+    if probe_task.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"probe 任务当前状态为 {probe_task.status}，无法 approve",
         )
 
-        if not articles:
-            task.status = "completed"
-            task.articles_count = 0
-            task.analysis_result = {"meta": {"keywords": task.keywords, "articles_total": 0}}
-            await db.flush()
-            return
+    from src.news_media.tasks.celery_tasks import run_news_collect_task
 
-        from src.news_media.tasks.article_crawler import crawl_articles
+    collect_task_data = {
+        "name": f"{probe_task.name} - 全量",
+        "monitor_id": probe_task.monitor_id,
+        "strategy_id": probe_task.strategy_id,
+        "keywords": probe_task.keywords,
+        "phase": "collect",
+        "search_params": probe_task.search_params,
+        "auto_analyze": True,
+        "created_by": user_id,
+        "parent_probe_id": probe_task.id,
+        "probe_round": 1,
+    }
+    collect_task = await crud.create_task(db, collect_task_data)
+    collect_task.status = "running"
+    await db.commit()
+    await db.refresh(collect_task, ["monitor", "creator"])
 
-        urls = [a.url for a in articles]
-        crawl_results = await crawl_articles(urls)
+    tagging_job_id: int | None = None
+    insight_job_id: int | None = None
+    from src.analysis.sources.news import create_news_analysis_jobs
 
-        articles_crawled = 0
-        for article in articles:
-            full_text = crawl_results.get(article.url)
-            if full_text:
-                await crud.update_article(db, article, {"full_text": full_text})
-                articles_crawled += 1
-        await db.flush()
+    tagging_job, insight_job = await create_news_analysis_jobs(
+        db=db, task=collect_task, user_id=user_id
+    )
+    tagging_job_id = tagging_job.id
+    insight_job_id = insight_job.id
 
-        all_articles, _ = await crud.get_articles_by_task(db, task.id, limit=100)
-        tags = await _tag_articles_batch(all_articles, analysis_goal=goal, use_full_text=True)
-        await _apply_tags_to_articles(db, all_articles, tags)
+    celery_result = run_news_collect_task.delay(
+        task_id=collect_task.id,
+        tagging_job_id=tagging_job_id,
+        insight_job_id=insight_job_id,
+    )
 
-        all_articles, _ = await crud.get_articles_by_task(db, task.id, limit=100)
-        insights = await _run_insight_analysis(all_articles, analysis_goal=goal, subject=subj)
-
-        tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
-        for a in all_articles:
-            tier = a.source_tier or "tier3"
-            tier_counts[tier] = tier_counts.get(tier, 0) + 1
-
-        relevant_count = sum(
-            1 for a in all_articles if a.relevance in ("high", "medium")
-        )
-
-        analysis_result = {
-            "meta": {
-                "keywords": task.keywords,
-                "articles_total": len(all_articles),
-                "articles_crawled": articles_crawled,
-                "articles_analyzed": relevant_count,
-                "source_tier_distribution": tier_counts,
-            },
-        }
-        if isinstance(insights, dict) and "error" not in insights:
-            analysis_result.update(insights)
-
-        task.status = "completed"
-        task.articles_count = len(articles)
-        task.analysis_result = analysis_result
+    if tagging_job_id is not None:
+        from src.analysis.jobs import crud as jobs_crud
+        await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
         await db.commit()
-        logger.info(
-            "NewsTask %d: collect completed, %d articles, %d crawled",
-            task.id, task.articles_count, articles_crawled,
+
+    return collect_task
+
+
+async def refine_probe_task(
+    db: AsyncSession,
+    probe_task: NewsTask,
+    new_keywords: str,
+    user_id: int,
+) -> NewsTask:
+    """基于某个 probe task 产生一个新的 probe task（关键词替换，probe_round+1）。
+
+    原 probe task 保留以供审计与对比。新任务立即 dispatch celery 执行。
+    """
+    if probe_task.phase != "probe":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="只能对 probe 任务执行 refine",
+        )
+    keywords = (new_keywords or "").strip()
+    if not keywords:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="refine 必须提供新的关键词",
         )
 
-    except Exception as e:
-        task.status = "failed"
-        task.error_message = str(e)
-        await db.commit()
-        logger.error("NewsTask %d: collect failed: %s", task.id, e, exc_info=True)
+    from src.news_media.tasks.celery_tasks import run_news_probe_task
+
+    new_task_data = {
+        "name": f"{probe_task.name} #{probe_task.probe_round + 1}",
+        "monitor_id": probe_task.monitor_id,
+        "strategy_id": probe_task.strategy_id,
+        "keywords": keywords,
+        "phase": "probe",
+        "search_params": probe_task.search_params,
+        "auto_analyze": False,
+        "created_by": user_id,
+        "parent_probe_id": probe_task.id,
+        "probe_round": probe_task.probe_round + 1,
+    }
+    new_task = await crud.create_task(db, new_task_data)
+    new_task.status = "running"
+    await db.commit()
+    await db.refresh(new_task, ["monitor", "creator"])
+
+    run_news_probe_task.delay(task_id=new_task.id)
+    return new_task

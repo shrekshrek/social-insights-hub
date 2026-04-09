@@ -18,6 +18,7 @@ from src.news_media.tasks.schemas import (
     NewsTaskCreate,
     NewsTaskRead,
     NewsTaskReadWithRelations,
+    NewsTaskRefine,
 )
 from src.schemas import MessageResponse, PaginatedResponse
 
@@ -121,16 +122,38 @@ async def delete_task(
     "/tasks/{task_id}/execute",
     response_model=NewsTaskRead,
     status_code=status.HTTP_200_OK,
-    summary="执行新闻任务",
+    summary="执行新闻任务（probe 或 collect）",
 )
 async def execute_task(
     task: NewsTask = Depends(validate_news_task_access),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
+    """统一的执行入口：根据 task.phase 分发到 probe 或 collect celery。
+
+    - probe：dispatch run_news_probe_task（纯搜索，秒级）
+    - collect：dispatch run_news_collect_task（全量流水线）
+    """
+    from src.news_media.tasks.celery_tasks import (
+        run_news_collect_task,
+        run_news_probe_task,
+    )
+
+    if task.status not in ("pending", "failed"):
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"任务当前状态为 {task.status}，无法执行",
+        )
+
+    task.status = "running"
+    task.error_message = None
+    await db.commit()
+    await db.refresh(task)
+
     if task.phase == "collect":
         from src.analysis.sources.news import create_news_analysis_jobs
-        from src.news_media.tasks.celery_tasks import run_news_collect_task
 
         tagging_job_id: int | None = None
         insight_job_id: int | None = None
@@ -140,10 +163,7 @@ async def execute_task(
             )
             tagging_job_id = tagging_job.id
             insight_job_id = insight_job.id
-
-        task.status = "running"
-        await db.commit()
-        await db.refresh(task)
+            await db.commit()
 
         celery_result = run_news_collect_task.delay(
             task_id=task.id,
@@ -157,10 +177,45 @@ async def execute_task(
             await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
             await db.commit()
     else:
-        await service.execute_news_probe(db, task)
-        await db.commit()
-        await db.refresh(task)
+        # probe（或 phase 未设时按 probe 处理）
+        run_news_probe_task.delay(task_id=task.id)
+
     return task
+
+
+@router.post(
+    "/tasks/{task_id}/approve",
+    response_model=NewsTaskRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="确认 probe 结果并启动 collect 任务",
+)
+async def approve_probe(
+    task: NewsTask = Depends(validate_news_task_access),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """基于已完成的 probe 任务创建 collect 任务并派发 celery 全量流水线。"""
+    collect_task = await service.approve_probe_task(db, task, current_user.id)
+    return collect_task
+
+
+@router.post(
+    "/tasks/{task_id}/refine",
+    response_model=NewsTaskRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="替换关键词并创建新一轮 probe 任务",
+)
+async def refine_probe(
+    payload: NewsTaskRefine,
+    task: NewsTask = Depends(validate_news_task_access),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """基于某个 probe 任务创建下一轮 probe（换关键词，probe_round+1）并派发 celery。"""
+    new_probe = await service.refine_probe_task(
+        db, task, new_keywords=payload.keywords, user_id=current_user.id
+    )
+    return new_probe
 
 
 # ==================== Article Endpoints ====================

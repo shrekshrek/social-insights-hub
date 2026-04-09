@@ -14,6 +14,38 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(
+    name="news_media.run_probe",
+    bind=True,
+    max_retries=0,
+)
+def run_news_probe_task(self, task_id: int) -> None:
+    """执行新闻探测 Celery 任务（仅搜索 + 落库，无 LLM）"""
+    asyncio.run(_async_run_probe(task_id=task_id))
+
+
+async def _async_run_probe(task_id: int) -> None:
+    """异步执行新闻探测（供 Celery task 调用）"""
+    from src.database import AsyncSessionLocal, async_engine
+    from src.news_media.tasks.models import NewsTask
+    from src.news_media.tasks.service import execute_news_probe
+
+    # 见 _async_run_collect 中同类注释：gevent 下新 loop 需拿到干净连接
+    await async_engine.dispose()
+
+    async with AsyncSessionLocal() as db:
+        task = await db.get(NewsTask, task_id)
+        if not task:
+            logger.error("NewsTask %d not found, aborting probe", task_id)
+            return
+        try:
+            await execute_news_probe(db, task)
+            await db.commit()
+        except Exception as exc:
+            logger.error("NewsTask %d: probe celery failed: %s", task_id, exc, exc_info=True)
+            await db.rollback()
+
+
+@celery_app.task(
     name="news_media.run_collect",
     bind=True,
     max_retries=0,

@@ -1,8 +1,7 @@
 # Strategy 模块重构计划
 
 > ⚠️ **此文档为历史规划，已完全实施。当前设计请参考：**
-> - **`docs/strategy-research-engine.md`** — 最终设计方案
-> - **`docs/plan.md`** — 实施步骤（Steps 1-8，已全部完成）
+> - **`backend/src/strategies/CLAUDE.md`** — 策略模块最新约定与实现细节
 > - **`docs/strategy-multi-source-architecture.md`** — 多数据源架构
 
 ---

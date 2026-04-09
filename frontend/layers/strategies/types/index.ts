@@ -247,19 +247,36 @@ export interface ConfirmResearchResponse {
   strategy: Strategy
 }
 
+/**
+ * 社媒 probe 关键词调整项，三种操作：
+ * - 替换：task_id + new_keyword
+ * - 移除：task_id + new_keyword=null
+ * - 新增：task_id=null + new_keyword + dimension
+ */
 export interface RefinementItem {
-  task_id: number
-  new_keyword: string
+  task_id: number | null
+  new_keyword: string | null
   platform: string
+  dimension?: string | null
+}
+
+/** 新闻 probe 关键词调整项（与 RefinementItem 对齐，无 platform 字段） */
+export interface NewsRefinementItem {
+  task_id: number | null
+  new_keyword: string | null
+  dimension?: string | null
 }
 
 export interface RefineProbeRequest {
   refinements: RefinementItem[]
+  news_refinements: NewsRefinementItem[]
 }
 
 export interface RefineProbeResponse {
   removed_task_ids: number[]
   created_task_ids: number[]
+  removed_news_task_ids: number[]
+  created_news_task_ids: number[]
   probe_round: number
   strategy: Strategy
 }

@@ -3,8 +3,8 @@
 独立 news monitor 不再支持 probe/refine 流程，lineage 字段作废。
 strategy 研究场景的 probe 轮次由 strategies.probe_round 表达。
 
-Revision ID: b2c3d4e5f6a7
-Revises: a1b2c3d4e5f6
+Revision ID: b2c3d4e5f6a8
+Revises: a1b2c3d4e5f7
 Create Date: 2026-04-09
 
 """
@@ -14,8 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "b2c3d4e5f6a7"
-down_revision: Union[str, Sequence[str], None] = "a1b2c3d4e5f6"
+revision: str = "b2c3d4e5f6a8"
+down_revision: Union[str, Sequence[str], None] = "a1b2c3d4e5f7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

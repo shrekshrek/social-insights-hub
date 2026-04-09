@@ -10,7 +10,7 @@
 |------|------|------|------|
 | 社交媒体 | `social_media` | ✅ 已有 | 不变 |
 | 市场知识库 | `knowledge_base` | 下一步实现 | 合并了原 `industry_data` |
-| 新闻舆情 | `news_media` | P1 | 较轻，之后实现 |
+| 新闻舆情 | `news_media` | ✅ 已完成 | 百度+DuckDuckGo 双渠道，支持独立监测与 strategy 两段式 probe→collect |
 
 ## knowledge_base 渠道
 

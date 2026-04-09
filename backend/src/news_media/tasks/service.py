@@ -26,8 +26,9 @@ logger = logging.getLogger(__name__)
 # 逐篇标注的批次大小
 _TAGGING_BATCH_SIZE = 5
 
-# probe 搜索返回的最大条数（仅 baidu 渠道）
-_PROBE_MAX_RESULTS = 10
+# probe 搜索每渠道最大条数：baidu 为主力，DDG best-effort 补充样本
+_PROBE_MAX_RESULTS = 25
+_PROBE_CHANNELS: tuple[str, ...] = ("baidu", "duckduckgo")
 
 
 async def create_news_task(
@@ -318,7 +319,7 @@ async def execute_news_probe(
         await db.flush()
 
         articles = await _search_and_store_articles(
-            db, task, max_results=_PROBE_MAX_RESULTS, channels=("baidu",)
+            db, task, max_results=_PROBE_MAX_RESULTS, channels=_PROBE_CHANNELS
         )
 
         tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}

@@ -28,9 +28,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.analysis.models import PostAnalysis, AnalysisType
+from src.analysis.models import PostAnalysis
+from src.jobs.models import AnalysisType
 from src.analysis.constants import SPAM_HIGH_THRESHOLD
-from src.analysis.jobs import (
+from src.jobs import (
     create_analysis_job_sync,
     complete_analysis_job_sync,
     start_analysis_job_sync,

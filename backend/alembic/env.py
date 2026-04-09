@@ -51,6 +51,7 @@ import src.auth.models  # noqa: E402, F401
 import src.rbac.models  # noqa: E402, F401
 import src.social_media.monitors.models  # noqa: E402, F401
 import src.social_media.tasks.models  # noqa: E402, F401
+import src.jobs.models  # noqa: E402, F401
 import src.analysis.models  # noqa: E402, F401
 import src.news_media.monitors.models  # noqa: E402, F401
 import src.news_media.tasks.models  # noqa: E402, F401

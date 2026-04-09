@@ -49,8 +49,8 @@ from src.langchain.chains.strategy_brief_parser_chain import (
 )
 from src.database import AsyncSessionLocal
 from src.langchain import extract_token_usage
-from src.analysis.jobs.factory import create_analysis_job_async
-from src.analysis.models import AnalysisType
+from src.jobs.factory import create_analysis_job_async
+from src.jobs.models import AnalysisType
 from src.analysis.models import AnalysisSlice
 from src.social_media.monitors.crud import assert_social_monitor_access as assert_monitor_access
 from src.social_media.tasks.models import SocialTask as SocialTask
@@ -1742,7 +1742,7 @@ async def approve_probe(
     # 新闻全量采集通过 celery 异步执行（与独立 news_media 流程统一）
     if news_collect_task_ids:
         from src.analysis.sources.news import create_news_analysis_jobs
-        from src.analysis.jobs import crud as jobs_crud
+        from src.jobs import crud as jobs_crud
         from src.news_media.tasks import crud as news_crud
         from src.news_media.tasks.celery_tasks import run_news_collect_task
 

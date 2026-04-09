@@ -9,9 +9,10 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
-from .models import PostAnalysis, AnalysisJob, AnalysisSlice
-from .jobs import create_analysis_job_async
-from .jobs.crud import (  # noqa: F401 - re-exported for router
+from .models import PostAnalysis, AnalysisSlice
+from src.jobs.models import AnalysisJob
+from src.jobs import create_analysis_job_async
+from src.jobs.crud import (  # noqa: F401 - re-exported for router
     get_analysis_jobs,
     get_analysis_job,
     get_analysis_progress,

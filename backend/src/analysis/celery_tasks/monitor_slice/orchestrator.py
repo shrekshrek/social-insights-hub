@@ -6,8 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from src.database import SyncSessionLocal
-from src.analysis.models import AnalysisSlice, AnalysisType
-from src.analysis.jobs import (
+from src.analysis.models import AnalysisSlice
+from src.jobs.models import AnalysisType
+from src.jobs import (
     create_analysis_job_sync,
     complete_analysis_job_sync,
 )

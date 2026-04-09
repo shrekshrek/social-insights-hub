@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.analysis.models import AnalysisJob
+from src.jobs.models import AnalysisJob
 
 
 def create_analysis_job_sync(

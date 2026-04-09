@@ -177,7 +177,7 @@ async def execute_task(
     )
 
     if tagging_job_id is not None:
-        from src.analysis.jobs import crud as jobs_crud
+        from src.jobs import crud as jobs_crud
 
         await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
         await db.commit()

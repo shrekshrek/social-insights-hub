@@ -11,7 +11,7 @@ import pytest_asyncio
 import redis.asyncio as redis
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -59,6 +59,8 @@ def event_loop():
 async def setup_database():
     """创建所有表结构（会话级别，只执行一次）"""
     async with async_engine.begin() as conn:
+        # pgvector 扩展：knowledge_base 模块依赖 Vector 列类型，测试 DB 必须先装
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         # 删除所有表并重新创建
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)

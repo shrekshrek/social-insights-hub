@@ -38,15 +38,6 @@ class NewsTask(Base):
     phase: Mapped[str | None] = mapped_column(
         String(20), nullable=True, index=True, comment="采集阶段: probe / collect"
     )
-    probe_round: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="1",
-        comment="探测轮次（refine 一次 +1，仅 probe 任务有意义）",
-    )
-    parent_probe_id: Mapped[int | None] = mapped_column(
-        ForeignKey("news_tasks.id", ondelete="SET NULL"),
-        nullable=True, index=True,
-        comment="父级 probe 任务 ID（collect 指向 approve 它的 probe；refine 产生的 probe 指向上一轮 probe）",
-    )
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
@@ -92,9 +83,6 @@ class NewsTask(Base):
     )
     articles: Mapped[list["NewsArticle"]] = relationship(
         back_populates="task", cascade="all, delete-orphan", lazy="select"
-    )
-    parent_probe: Mapped["NewsTask | None"] = relationship(
-        "NewsTask", remote_side="NewsTask.id", foreign_keys=[parent_probe_id], lazy="select"
     )
 
 

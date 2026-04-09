@@ -1609,7 +1609,6 @@ async def approve_probe(
                 current_user_id,
                 strategy_id=strategy.id,
                 phase="collect",
-                parent_probe_id=npt.id,
             )
             news_collect_dim_map[str(news_collect_task.id)] = dim
             news_collect_task_ids.append(news_collect_task.id)

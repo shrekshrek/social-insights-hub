@@ -11,11 +11,18 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pathlib import Path
+
 from src.news_media.tasks.news_search.aggregator import (
     _normalize_url,
     classify_source_tier,
     search_news,
 )
+from src.news_media.tasks.news_search.baidu_crawler import (
+    _extract_articles_from_html,
+)
+
+_FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
 
 # ==================== classify_source_tier ====================
@@ -37,6 +44,65 @@ def test_tier3_fallback():
     assert classify_source_tier("百家号") == "tier3"
     assert classify_source_tier("未知来源") == "tier3"
     assert classify_source_tier("") == "tier3"
+
+
+# ==================== baidu_crawler HTML parsing ====================
+
+
+def _load_fixture() -> str:
+    return (_FIXTURE_DIR / "baidu_news_xiaomi_su7.html").read_text(encoding="utf-8")
+
+
+def test_baidu_extract_articles_from_real_html():
+    """真实 cleaned_html 应提取到 >=5 条新闻，每条含核心字段"""
+    html = _load_fixture()
+    articles = _extract_articles_from_html(html, max_results=20)
+
+    assert len(articles) >= 5, f"期望 >=5 条，实际 {len(articles)}"
+
+    for a in articles:
+        assert a["title"] and len(a["title"]) >= 5
+        assert a["url"].startswith("http")
+        assert a["source_name"] and a["source_name"] != "未知来源"
+        assert a["search_source"] == "baidu"
+
+
+def test_baidu_extract_skips_hot_search_widget():
+    """热搜榜 widget 不应被当成新闻结果提取"""
+    html = _load_fixture()
+    articles = _extract_articles_from_html(html, max_results=20)
+
+    titles = [a["title"] for a in articles]
+    # 热搜榜的典型条目（这份 fixture 里确实存在）
+    assert not any("外交部回应特朗普" in t for t in titles)
+    assert not any("奋力谱写服务业高质量" in t for t in titles)
+
+
+def test_baidu_extract_respects_max_results():
+    html = _load_fixture()
+    articles = _extract_articles_from_html(html, max_results=3)
+    assert len(articles) == 3
+
+
+def test_baidu_extract_url_dedup_within_page():
+    """同一 URL 在同一页面出现多次应只保留一条"""
+    html = _load_fixture()
+    articles = _extract_articles_from_html(html, max_results=50)
+    urls = [a["url"] for a in articles]
+    assert len(urls) == len(set(urls))
+
+
+def test_baidu_extract_empty_html():
+    assert _extract_articles_from_html("", max_results=10) == []
+    assert _extract_articles_from_html("<html><body></body></html>", max_results=10) == []
+
+
+def test_baidu_extracted_sources_classify_non_tier3():
+    """提取的来源中至少部分能被 _SOURCE_TIERS 分到 tier2（证明字典不虚设）"""
+    html = _load_fixture()
+    articles = _extract_articles_from_html(html, max_results=20)
+    tiers = {classify_source_tier(a["source_name"]) for a in articles}
+    assert "tier2" in tiers, f"期望至少一条 tier2，实际 tiers={tiers}"
 
 
 # ==================== _normalize_url ====================

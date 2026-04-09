@@ -1,6 +1,6 @@
 """AnalysisJob CRUD 操作
 
-提供 AnalysisJob 的查询、更新、删除等操作。
+提供 AnalysisJob 的查询、更新、删除等操作。跨渠道共用。
 """
 
 from typing import List, Optional, Dict, Any
@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from fastapi import HTTPException, status
 
-from src.analysis.models import AnalysisJob
-from src.analysis.schemas import AnalysisProgressResponse
+from src.jobs.models import AnalysisJob
+from src.jobs.schemas import AnalysisProgressResponse
 
 
 async def _get_job_or_404(db: AsyncSession, job_id: int) -> AnalysisJob:
@@ -55,6 +55,8 @@ async def get_analysis_jobs(
     from src.news_media.monitors.models import NewsMonitor
     from src.news_media.tasks.models import NewsTask
     from src.auth.models import User
+    # NOTE: AnalysisSlice 仍住在 src.analysis.models（社媒专属，P3 会迁往 social_media/analysis/）
+    # 这里 lazy import 是为了避免 jobs → analysis 的顶层循环依赖。
     from src.analysis.models import AnalysisSlice
 
     # 构建基础查询（全部用 outer join，因为各 FK 均为 nullable）

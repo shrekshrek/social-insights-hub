@@ -11,8 +11,8 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.analysis.jobs.factory import create_analysis_job_async
-from src.analysis.models import AnalysisJob, AnalysisType
+from src.jobs.factory import create_analysis_job_async
+from src.jobs.models import AnalysisJob, AnalysisType
 from src.news_media.tasks.models import NewsTask
 
 

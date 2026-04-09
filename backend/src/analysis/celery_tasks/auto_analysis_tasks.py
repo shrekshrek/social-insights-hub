@@ -126,7 +126,7 @@ def _run_screening(task_id: int, user_id: int, monitor_keywords: str) -> int | N
             return None
 
         # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
-        from src.analysis.jobs import create_analysis_job_sync
+        from src.jobs import create_analysis_job_sync
 
         analysis_job = create_analysis_job_sync(
             db=db,
@@ -198,7 +198,7 @@ def _run_deep_posts(
             return None
 
         # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
-        from src.analysis.jobs import create_analysis_job_sync
+        from src.jobs import create_analysis_job_sync
 
         analysis_job = create_analysis_job_sync(
             db=db,
@@ -271,7 +271,7 @@ def _run_deep_comments(
             return None
 
         # 创建分析任务记录（使用工厂函数，会自动生成临时 celery_task_id）
-        from src.analysis.jobs import create_analysis_job_sync
+        from src.jobs import create_analysis_job_sync
 
         analysis_job = create_analysis_job_sync(
             db=db,
@@ -312,7 +312,7 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
     from sqlalchemy import func
     from src.social_media.tasks.models import SocialTask as SocialTask
     from src.analysis.models import PostAnalysis
-    from src.analysis.jobs import create_analysis_job_sync
+    from src.jobs import create_analysis_job_sync
     from .aggregation_tasks import run_aggregation_task
 
     with _get_db_session() as db:

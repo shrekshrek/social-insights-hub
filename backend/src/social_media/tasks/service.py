@@ -18,22 +18,23 @@ SocialTaskUpdate = SocialTaskUpdate
 
 
 async def create_social_task(
-    db: AsyncSession, task_in: SocialTaskCreate, current_user_id: int
+    db: AsyncSession,
+    monitor_id: int,
+    task_in: SocialTaskCreate,
+    current_user_id: int,
 ) -> SocialTask:
-    """创建任务"""
-    # 验证项目是否存在
+    """创建任务（monitor_id 由调用方从 URL 路径提取，不在 body 中）"""
     from src.social_media.monitors import crud as social_crud
 
     monitor = await social_crud.get_monitor_by_id(
-        db, task_in.monitor_id, load_relations=False
+        db, monitor_id, load_relations=False
     )
     if not monitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"SocialMonitor with id {task_in.monitor_id} not found",
+            detail=f"SocialMonitor with id {monitor_id} not found",
         )
 
-    # 验证平台是否存在
     platform = await social_crud.get_platform_by_id(db, task_in.platform_id)
     if not platform:
         raise HTTPException(
@@ -41,13 +42,11 @@ async def create_social_task(
             detail=f"Platform with id {task_in.platform_id} not found",
         )
 
-    # 验证用户是否有项目访问权限
-    await social_crud.assert_monitor_access(db, task_in.monitor_id, current_user_id)
+    await social_crud.assert_monitor_access(db, monitor_id, current_user_id)
 
-    # 准备任务数据
     task_data = task_in.model_dump()
+    task_data["monitor_id"] = monitor_id
 
-    # 创建任务
     task = await crud.create_task(db, task_data=task_data, creator_id=current_user_id)
     await db.commit()
     await db.refresh(task)

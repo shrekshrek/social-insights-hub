@@ -26,9 +26,12 @@ class SocialTaskBase(CustomBaseModel):
 
 
 class SocialTaskCreate(SocialTaskBase):
-    """创建任务"""
+    """创建任务
 
-    monitor_id: int = Field(..., gt=0, description="项目ID")
+    注意：monitor_id 通过 URL 路径传递（POST /social-media/monitors/{monitor_id}/tasks），
+    不在 body 内。请勿在此 schema 中再加 monitor_id。
+    """
+
     data_source: str = Field(
         ...,
         pattern="^(remote_crawler|local_upload)$",

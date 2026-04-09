@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -50,6 +50,10 @@ class NewsTask(Base):
     )
     articles_count: Mapped[int] = mapped_column(
         Integer, server_default="0", comment="采集到的文章数量"
+    )
+    auto_analyze: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False,
+        comment="采集完成后是否自动触发分析链（对标 SocialTask.auto_analyze）",
     )
     analysis_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="任务级聚合分析结果"

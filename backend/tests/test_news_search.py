@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.news_media.news_search.aggregator import (
+from src.news_media.tasks.news_search.aggregator import (
     _normalize_url,
     classify_source_tier,
     search_news,
@@ -81,8 +81,8 @@ async def test_search_news_deduplicates_same_url():
     }]
 
     with (
-        patch("src.news_media.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
+        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
     ):
         results = await search_news("测试", channels=["baidu", "duckduckgo"])
 
@@ -105,8 +105,8 @@ async def test_search_news_merges_unique_articles():
     }]
 
     with (
-        patch("src.news_media.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
+        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
     ):
         results = await search_news("测试", channels=["baidu", "duckduckgo"])
 
@@ -125,7 +125,7 @@ async def test_search_news_adds_source_tier():
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
 
-    with patch("src.news_media.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)):
+    with patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)):
         results = await search_news("测试", channels=["baidu"])
 
     assert results[0]["source_tier"] == "tier1"
@@ -141,8 +141,8 @@ async def test_search_news_ddg_failure_degrades_gracefully():
     }]
 
     with (
-        patch("src.news_media.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(side_effect=Exception("DDG error"))),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
+        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(side_effect=Exception("DDG error"))),
     ):
         results = await search_news("测试", channels=["baidu", "duckduckgo"])
 
@@ -160,8 +160,8 @@ async def test_search_news_baidu_only_channel():
     }]
 
     with (
-        patch("src.news_media.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)) as mock_baidu,
-        patch("src.news_media.news_search.ddg_searcher.search_ddg_news", new=AsyncMock()) as mock_ddg,
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)) as mock_baidu,
+        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock()) as mock_ddg,
     ):
         results = await search_news("测试", channels=["baidu"])
 
@@ -185,8 +185,8 @@ async def test_search_news_url_dedup_with_query_string():
     }]
 
     with (
-        patch("src.news_media.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
+        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
     ):
         results = await search_news("测试", channels=["baidu", "duckduckgo"])
 

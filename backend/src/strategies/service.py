@@ -905,9 +905,9 @@ async def confirm_research(
 
                     task = await create_task(
                         db,
+                        monitor.id,
                         SocialTaskCreate(
                             name=f"{keyword}-{platform.name}",
-                            monitor_id=monitor.id,
                             platform_id=platform.id,
                             task_type="search",
                             keywords=keyword,
@@ -1525,9 +1525,9 @@ async def approve_probe(
 
         collect_task = await create_task(
             db,
+            strategy.social_monitor_id,
             SocialTaskCreate(
                 name=f"{pt.keywords}-{pt.platform.name}",
-                monitor_id=strategy.social_monitor_id,
                 platform_id=pt.platform_id,
                 task_type="search",
                 keywords=pt.keywords,
@@ -1701,9 +1701,9 @@ async def refine_probe(
             max_pages = 2 if code in ("wb", "tieba") else 1
             new_task = await create_task(
                 db,
+                strategy.social_monitor_id,
                 SocialTaskCreate(
                     name=f"{item.new_keyword}-{platform_obj.name}",
-                    monitor_id=strategy.social_monitor_id,
                     platform_id=platform_obj.id,
                     task_type="search",
                     keywords=item.new_keyword,

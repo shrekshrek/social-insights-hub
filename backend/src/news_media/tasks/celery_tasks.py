@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 def run_news_collect_task(
     self,
     task_id: int,
-    tagging_job_id: int,
-    insight_job_id: int,
+    tagging_job_id: int | None,
+    insight_job_id: int | None,
     analysis_goal: str = "",
     subject: str = "",
 ) -> None:
@@ -53,16 +53,20 @@ def run_news_collect_task(
 
 async def _async_run_collect(
     task_id: int,
-    tagging_job_id: int,
-    insight_job_id: int,
+    tagging_job_id: int | None,
+    insight_job_id: int | None,
     analysis_goal: str,
     subject: str,
 ) -> None:
     """异步执行新闻全量采集流水线（供 Celery task 调用）"""
-    from src.database import AsyncSessionLocal
+    from src.database import AsyncSessionLocal, async_engine
     from src.news_media.tasks.models import NewsTask
     from src.analysis.models import AnalysisJob
-    from src.langchain import extract_token_usage
+
+    # Celery gevent worker 下每个任务用 asyncio.run() 新建事件循环，
+    # async_engine 池中残留的 asyncpg 连接绑定的是旧 loop，会触发
+    # "attached to a different loop"。先 dispose 让新 loop 拿到干净连接。
+    await async_engine.dispose()
 
     async with AsyncSessionLocal() as db:
         task = await db.get(NewsTask, task_id)
@@ -70,8 +74,8 @@ async def _async_run_collect(
             logger.error("NewsTask %d not found, aborting", task_id)
             return
 
-        tagging_job = await db.get(AnalysisJob, tagging_job_id)
-        insight_job = await db.get(AnalysisJob, insight_job_id)
+        tagging_job = await db.get(AnalysisJob, tagging_job_id) if tagging_job_id else None
+        insight_job = await db.get(AnalysisJob, insight_job_id) if insight_job_id else None
 
         goal = analysis_goal or task.keywords
         subj = subject or task.keywords

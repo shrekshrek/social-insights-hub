@@ -41,6 +41,7 @@ async def create_news_task(
         "keywords": data.keywords,
         "phase": phase,
         "search_params": data.search_params,
+        "auto_analyze": data.auto_analyze,
         "created_by": user_id,
     }
     task = await crud.create_task(db, task_data)

@@ -2,6 +2,7 @@
 import { h, ref, computed, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UButton, UBadge } from '#components'
+import type { MonitorAggregatedStats } from '../../../../types'
 
 definePageMeta({
   layout: 'default',
@@ -93,8 +94,6 @@ const handleExecuteTask = async (task: NewsTaskWithRelations) => {
 }
 
 // ========== 统计聚合 ==========
-
-import type { MonitorAggregatedStats } from '../../../types'
 
 const aggregatedStats = ref<MonitorAggregatedStats | null>(null)
 const aggregatedLoading = ref(false)

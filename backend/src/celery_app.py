@@ -41,7 +41,7 @@ celery_app = Celery(
 )
 
 # 确保 Strategy 模型注册到 SQLAlchemy（避免 SocialTask 关系配置警告）
-from src.strategies.models import Strategy  # noqa: F401
+from src.strategies.models import Strategy  # noqa: F401, E402
 
 # 详细的Celery配置
 celery_app.conf.update(

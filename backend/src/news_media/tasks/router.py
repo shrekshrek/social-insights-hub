@@ -18,7 +18,6 @@ from src.news_media.tasks.schemas import (
     NewsTaskCreate,
     NewsTaskRead,
     NewsTaskReadWithRelations,
-    NewsTaskRefine,
 )
 from src.schemas import MessageResponse, PaginatedResponse
 
@@ -122,26 +121,33 @@ async def delete_task(
     "/tasks/{task_id}/execute",
     response_model=NewsTaskRead,
     status_code=status.HTTP_200_OK,
-    summary="执行新闻任务（probe 或 collect）",
+    summary="执行新闻任务（collect 全量流水线）",
 )
 async def execute_task(
     task: NewsTask = Depends(validate_news_task_access),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """统一的执行入口：根据 task.phase 分发到 probe 或 collect celery。
+    """独立 news monitor 场景的一步式全量采集入口。
 
-    - probe：dispatch run_news_probe_task（纯搜索，秒级）
-    - collect：dispatch run_news_collect_task（全量流水线）
+    独立场景不走 probe/collect 两段式 —— probe 只在 strategy 研究流程里用，
+    由 strategies 模块内部派发。这里只接受 phase=="collect" 或 phase 未设的任务。
     """
-    from src.news_media.tasks.celery_tasks import (
-        run_news_collect_task,
-        run_news_probe_task,
-    )
+    from fastapi import HTTPException
 
+    from src.news_media.tasks.celery_tasks import run_news_collect_task
+
+    if task.strategy_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="策略任务请通过策略端点执行",
+        )
+    if task.phase == "probe":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="独立场景不支持 probe 任务，请创建 collect 任务",
+        )
     if task.status not in ("pending", "failed"):
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"任务当前状态为 {task.status}，无法执行",
@@ -152,70 +158,31 @@ async def execute_task(
     await db.commit()
     await db.refresh(task)
 
-    if task.phase == "collect":
-        from src.analysis.sources.news import create_news_analysis_jobs
+    from src.analysis.sources.news import create_news_analysis_jobs
 
-        tagging_job_id: int | None = None
-        insight_job_id: int | None = None
-        if task.auto_analyze:
-            tagging_job, insight_job = await create_news_analysis_jobs(
-                db=db, task=task, user_id=current_user.id
-            )
-            tagging_job_id = tagging_job.id
-            insight_job_id = insight_job.id
-            await db.commit()
-
-        celery_result = run_news_collect_task.delay(
-            task_id=task.id,
-            tagging_job_id=tagging_job_id,
-            insight_job_id=insight_job_id,
+    tagging_job_id: int | None = None
+    insight_job_id: int | None = None
+    if task.auto_analyze:
+        tagging_job, insight_job = await create_news_analysis_jobs(
+            db=db, task=task, user_id=current_user.id
         )
+        tagging_job_id = tagging_job.id
+        insight_job_id = insight_job.id
+        await db.commit()
 
-        if tagging_job_id is not None:
-            from src.analysis.jobs import crud as jobs_crud
+    celery_result = run_news_collect_task.delay(
+        task_id=task.id,
+        tagging_job_id=tagging_job_id,
+        insight_job_id=insight_job_id,
+    )
 
-            await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
-            await db.commit()
-    else:
-        # probe（或 phase 未设时按 probe 处理）
-        run_news_probe_task.delay(task_id=task.id)
+    if tagging_job_id is not None:
+        from src.analysis.jobs import crud as jobs_crud
+
+        await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
+        await db.commit()
 
     return task
-
-
-@router.post(
-    "/tasks/{task_id}/approve",
-    response_model=NewsTaskRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="确认 probe 结果并启动 collect 任务",
-)
-async def approve_probe(
-    task: NewsTask = Depends(validate_news_task_access),
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """基于已完成的 probe 任务创建 collect 任务并派发 celery 全量流水线。"""
-    collect_task = await service.approve_probe_task(db, task, current_user.id)
-    return collect_task
-
-
-@router.post(
-    "/tasks/{task_id}/refine",
-    response_model=NewsTaskRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="替换关键词并创建新一轮 probe 任务",
-)
-async def refine_probe(
-    payload: NewsTaskRefine,
-    task: NewsTask = Depends(validate_news_task_access),
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """基于某个 probe 任务创建下一轮 probe（换关键词，probe_round+1）并派发 celery。"""
-    new_probe = await service.refine_probe_task(
-        db, task, new_keywords=payload.keywords, user_id=current_user.id
-    )
-    return new_probe
 
 
 # ==================== Article Endpoints ====================

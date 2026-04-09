@@ -1,10 +1,9 @@
 """新闻任务服务层
 
-Phase A 架构（probe/collect 分家）:
-- probe 任务：仅做搜索 + 落库 NewsArticle（无 LLM、无全文抓取），秒级返回
-- collect 任务：全量抓取 + 逐篇标注 + 整体洞察，由 celery 执行
-- probe → collect 通过 approve_probe_task 显式转换（产生新 task，原 probe 保留）
-- probe → probe 通过 refine_probe_task 换关键词（probe_round+1）
+- 独立 news monitor 场景：一步式采集任务（phase=collect 或 None），走 celery
+- strategy 研究场景：策略侧自己管理 probe/collect 两段式调度，本模块只
+  提供底层 execute_news_probe / celery 任务，approve/refine 入口不对外暴露
+  （策略通过 strategies/service.py 的批量端点处理）
 
 collect 阶段的执行流水线位于 src/news_media/tasks/celery_tasks.py，
 本模块内的辅助函数（_tag_articles_batch / _run_insight_analysis）供 celery
@@ -38,8 +37,6 @@ async def create_news_task(
     user_id: int,
     strategy_id: int | None = None,
     phase: str | None = None,
-    parent_probe_id: int | None = None,
-    probe_round: int = 1,
 ) -> NewsTask:
     """创建新闻任务"""
     from src.news_media.monitors.crud import get_monitor_by_id
@@ -59,8 +56,6 @@ async def create_news_task(
         "search_params": data.search_params,
         "auto_analyze": data.auto_analyze,
         "created_by": user_id,
-        "probe_round": probe_round,
-        "parent_probe_id": parent_probe_id,
     }
     task = await crud.create_task(db, task_data)
     await db.commit()
@@ -345,13 +340,12 @@ async def execute_news_probe(
                 "articles_total": len(articles),
                 "source_tier_distribution": tier_counts,
                 "source_samples": source_samples,
-                "probe_round": task.probe_round,
             },
         }
         await db.flush()
         logger.info(
-            "NewsTask %d: probe completed, %d articles, round=%d",
-            task.id, task.articles_count, task.probe_round,
+            "NewsTask %d: probe completed, %d articles",
+            task.id, task.articles_count,
         )
 
     except Exception as e:
@@ -361,120 +355,3 @@ async def execute_news_probe(
         logger.error("NewsTask %d: probe failed: %s", task.id, e, exc_info=True)
         raise
 
-
-# ==================== Approve / Refine ====================
-
-
-async def approve_probe_task(
-    db: AsyncSession,
-    probe_task: NewsTask,
-    user_id: int,
-) -> NewsTask:
-    """基于 approved probe task 创建 collect task 并 dispatch celery。
-
-    规则：
-    - probe_task 必须 phase=="probe" 且 status=="completed"
-    - 继承 keywords / monitor_id / strategy_id / search_params
-    - collect_task.parent_probe_id = probe_task.id
-    - auto_analyze 默认 True（collect 阶段有意义）
-    - 立即 dispatch celery 执行全量流水线
-
-    返回新创建的 collect task。
-    """
-    if probe_task.phase != "probe":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="只能对 probe 任务执行 approve",
-        )
-    if probe_task.status != "completed":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"probe 任务当前状态为 {probe_task.status}，无法 approve",
-        )
-
-    from src.news_media.tasks.celery_tasks import run_news_collect_task
-
-    collect_task_data = {
-        "name": f"{probe_task.name} - 全量",
-        "monitor_id": probe_task.monitor_id,
-        "strategy_id": probe_task.strategy_id,
-        "keywords": probe_task.keywords,
-        "phase": "collect",
-        "search_params": probe_task.search_params,
-        "auto_analyze": True,
-        "created_by": user_id,
-        "parent_probe_id": probe_task.id,
-        "probe_round": 1,
-    }
-    collect_task = await crud.create_task(db, collect_task_data)
-    collect_task.status = "running"
-    await db.commit()
-    await db.refresh(collect_task, ["monitor", "creator"])
-
-    tagging_job_id: int | None = None
-    insight_job_id: int | None = None
-    from src.analysis.sources.news import create_news_analysis_jobs
-
-    tagging_job, insight_job = await create_news_analysis_jobs(
-        db=db, task=collect_task, user_id=user_id
-    )
-    tagging_job_id = tagging_job.id
-    insight_job_id = insight_job.id
-
-    celery_result = run_news_collect_task.delay(
-        task_id=collect_task.id,
-        tagging_job_id=tagging_job_id,
-        insight_job_id=insight_job_id,
-    )
-
-    if tagging_job_id is not None:
-        from src.analysis.jobs import crud as jobs_crud
-        await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
-        await db.commit()
-
-    return collect_task
-
-
-async def refine_probe_task(
-    db: AsyncSession,
-    probe_task: NewsTask,
-    new_keywords: str,
-    user_id: int,
-) -> NewsTask:
-    """基于某个 probe task 产生一个新的 probe task（关键词替换，probe_round+1）。
-
-    原 probe task 保留以供审计与对比。新任务立即 dispatch celery 执行。
-    """
-    if probe_task.phase != "probe":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="只能对 probe 任务执行 refine",
-        )
-    keywords = (new_keywords or "").strip()
-    if not keywords:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="refine 必须提供新的关键词",
-        )
-
-    from src.news_media.tasks.celery_tasks import run_news_probe_task
-
-    new_task_data = {
-        "name": f"{probe_task.name} #{probe_task.probe_round + 1}",
-        "monitor_id": probe_task.monitor_id,
-        "strategy_id": probe_task.strategy_id,
-        "keywords": keywords,
-        "phase": "probe",
-        "search_params": probe_task.search_params,
-        "auto_analyze": False,
-        "created_by": user_id,
-        "parent_probe_id": probe_task.id,
-        "probe_round": probe_task.probe_round + 1,
-    }
-    new_task = await crud.create_task(db, new_task_data)
-    new_task.status = "running"
-    await db.commit()
-    await db.refresh(new_task, ["monitor", "creator"])
-
-    run_news_probe_task.delay(task_id=new_task.id)
-    return new_task

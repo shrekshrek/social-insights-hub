@@ -46,12 +46,18 @@ backend/src/
 ├── rbac/                    # 角色权限, 代码驱动同步
 ├── users/                   # 用户 CRUD, 角色分配
 ├── social_media/
-│   ├── monitors/            # 监测项目, 平台初始化
-│   ├── tasks/               # 数据采集任务, 多平台适配器
-│   │   └── adapters/        # 抖音/小红书/微博等平台适配
-│   └── analysis/            # LLM 分析编排, 成本追踪
-│       ├── celery_tasks/    # screening, deep, aggregation, slice
-│       └── jobs/            # AnalysisJob CRUD
+│   ├── monitors/            # 社媒监测项目, 平台初始化
+│   └── tasks/               # 社媒数据采集任务, 多平台适配器
+│       └── adapters/        # 抖音/小红书/微博等平台适配
+├── news_media/
+│   ├── monitors/            # 新闻监测项目
+│   └── tasks/               # 新闻采集任务 + celery 任务
+│       └── news_search/     # 百度/DuckDuckGo 双渠道搜索
+├── analysis/                # 全局 LLM 分析编排（社媒/新闻/策略共用）
+│   ├── celery_tasks/        # screening, deep, aggregation, slice
+│   └── jobs/                # AnalysisJob CRUD + factory
+├── knowledge_base/          # 市场知识库 + 文档向量化
+├── strategies/              # 策略研究
 ├── langchain/               # LLM 实例管理, 分析链定义
 │   └── chains/              # 9 条分析链
 ├── agent/                   # 爬虫代理 API, API Key 认证
@@ -73,10 +79,44 @@ backend/src/
 - SQL 优先处理复杂查询，Pydantic 负责 API 边界校验
 - 新模块路由在 `main.py` 中注册
 - 权限在 `rbac/init_data.py` 中用 `create_module_permissions()` 定义
+- **资源型 API 统一使用子资源 URL 风格**：父子关系通过路径表达，例如 `POST /{channel}/monitors/{monitor_id}/tasks`、`/strategies/{id}/participants`、`/news-media/monitors/{id}/participants`。禁止把 parent_id 放 body/query
+
+## 架构约定
+
+### Celery 任务归属
+
+- **分析类 celery 任务**（screening / deep / aggregation / slice / auto_analysis）统一放在 `src/analysis/celery_tasks/`，对所有渠道可用
+- **采集/处理类 celery 任务** 归属各自渠道模块：
+  - `src/news_media/tasks/celery_tasks.py` — 新闻爬取
+  - `src/knowledge_base/tasks.py` — 文档向量化
+  - `src/social_media/` 无采集 celery —— 因为走 agent pull 模型（见下）
+- 所有 celery 模块必须在 `src/celery_app.py` 的 `include` 列表中显式注册
+
+### 任务触发模型
+
+项目有两种任务触发模型，并存且都合理：
+
+| 模型 | 使用者 | 入口 | 状态流转 |
+|---|---|---|---|
+| **Pull (Agent claim)** | `social_media` | 外部爬虫通过 `agent/` API 认领任务 | `agent/service.py` 把 task.status 置为 `running` |
+| **Push (Celery dispatch)** | `news_media` / `knowledge_base` | 后端 router 调 `.delay()` 派发 celery | router 置 status 后派发 celery worker |
+
+→ 因此 social_media 没有、也不需要 `/tasks/{id}/execute` 端点；news_media 必须有。新增渠道时根据数据源特性二选一，不要混用。
+
+### 分析编排（analysis 模块）
+
+`src/analysis/` 是全局分析编排层，目标是上游无渠道耦合。各渠道通过 `src/analysis/sources/{channel}.py` 接入：
+
+- `sources/news.py` — 已实现：封装 NewsTask 的 AnalysisJob 创建（NEWS_TAGGING / NEWS_INSIGHT）
+- `sources/social.py` — **占位**：analysis/service.py 当前仍直接 import 大量 `src.social_media.*`，约 16 处。新增功能必须放在 `sources/social.py`，不得再向 service.py 增加耦合；存量迁移在后续清理 PR 中渐进完成。
+
+约束：
+- 新增渠道时新建一个 `sources/{channel}.py` 即可，不得修改 `analysis/service.py` 顶层逻辑
+- `news_media` 与 `strategies` 的 router/service 不得直接 import `src.analysis.jobs.factory`，必须通过 `sources/news.py` 等渠道适配器
 
 ## 注意事项
 
 - 后端命令在 Docker 容器内执行 (pnpm scripts 自动代理)
-- Celery Worker 使用 gevent pool，LLM 调用走异步；仅负责 AI 分析流水线 + 文档处理
+- Celery Worker 使用 gevent pool，LLM 调用走异步
 - APScheduler 运行在 FastAPI asyncio 事件循环中，负责所有轻量定时任务（策略检测、agent 超时回收、KB 爬虫）；无需 celery-beat 容器
 - 每次 LLM 调用记录 token 用量和费用到 AnalysisJob

@@ -17,6 +17,9 @@ class NewsTaskCreate(CustomBaseModel):
     keywords: str = Field(..., min_length=1)
     phase: str | None = Field(None, pattern=r"^(probe|collect)$")
     search_params: dict | None = None
+    auto_analyze: bool = Field(
+        True, description="collect 阶段采集完成后是否自动触发分析链（NEWS_TAGGING + NEWS_INSIGHT）"
+    )
 
 
 class NewsTaskRead(CustomBaseModel):
@@ -31,6 +34,7 @@ class NewsTaskRead(CustomBaseModel):
     status: str
     search_params: dict | None
     articles_count: int
+    auto_analyze: bool
     analysis_result: dict | None
     error_message: str | None
     created_by: int
@@ -56,6 +60,7 @@ class NewsTaskReadWithRelations(NewsTaskRead):
             status=task.status,
             search_params=task.search_params,
             articles_count=task.articles_count,
+            auto_analyze=task.auto_analyze,
             analysis_result=task.analysis_result,
             error_message=task.error_message,
             created_by=task.created_by,

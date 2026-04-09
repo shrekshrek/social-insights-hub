@@ -110,10 +110,14 @@ export interface SocialTaskWithRelations extends SocialTask {
   aggregation_status: string | null;
 }
 
+/**
+ * 创建社媒任务的 body 载荷。
+ * 注意：monitor_id 通过 URL 路径传递（POST /social-media/monitors/{monitor_id}/tasks），
+ * 不再放在 body 内。
+ */
 export interface SocialTaskCreate {
   name: string;
   description?: string;
-  monitor_id: number;
   platform_id: number;
   task_type: TaskType;
   keywords?: string;
@@ -258,10 +262,4 @@ export interface CommentListResponse {
 
 // ==================== Backward-compatible aliases ====================
 
-export type SocialMonitor = SocialMonitor;
-export type SocialMonitorCreate = SocialMonitorCreate;
-export type SocialMonitorUpdate = SocialMonitorUpdate;
-export type SocialTask = SocialTask;
 export type DataTaskWithRelations = SocialTaskWithRelations;
-export type SocialTaskCreate = SocialTaskCreate;
-export type SocialTaskUpdate = SocialTaskUpdate;

@@ -277,8 +277,8 @@ function toggleSelect(id: number) {
   selectedIds.value = next
 }
 
-function toggleSelectAll(val: boolean) {
-  selectedIds.value = val ? new Set(documents.value.map(d => d.id)) : new Set()
+function toggleSelectAll(val: boolean | 'indeterminate') {
+  selectedIds.value = val === true ? new Set(documents.value.map(d => d.id)) : new Set()
 }
 
 // 批量删除

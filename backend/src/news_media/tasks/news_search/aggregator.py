@@ -69,10 +69,10 @@ async def search_news(
 
     tasks = []
     if "baidu" in channels:
-        from src.news_media.news_search.baidu_crawler import search_baidu_news
+        from src.news_media.tasks.news_search.baidu_crawler import search_baidu_news
         tasks.append(search_baidu_news(query, max_results=max_results))
     if "duckduckgo" in channels:
-        from src.news_media.news_search.ddg_searcher import search_ddg_news
+        from src.news_media.tasks.news_search.ddg_searcher import search_ddg_news
         tasks.append(search_ddg_news(query, max_results=max_results))
 
     if not tasks:

@@ -9,7 +9,6 @@ from src.strategies.service import (
     _create_auto_slices,
     approve_probe,
     check_collection_status,
-    edit_phase_result,
     generate_phase2,
     generate_phase3,
 )
@@ -76,67 +75,6 @@ class TestGeneratePhase3Precondition:
         with pytest.raises(HTTPException) as exc_info:
             await generate_phase3(db, strategy)
         assert exc_info.value.status_code == 409
-
-
-class TestEditPhaseResult:
-    @pytest.mark.asyncio
-    @patch("src.strategies.service.get_strategy_by_id")
-    async def test_edit_phase1_clears_downstream(self, mock_get):
-        """编辑 phase1 清除 phase2/3 结果"""
-        strategy = MagicMock()
-        strategy.id = 1
-        db = AsyncMock()
-        mock_get.return_value = strategy
-
-        result = {"social_tensions": [{"statement": "test"}]}
-        await edit_phase_result(db, strategy, phase=1, result=result)
-
-        assert strategy.phase1_result == result
-        assert strategy.phase2_result is None
-        assert strategy.phase3_result is None
-        assert strategy.status == "phase1_done"
-
-    @pytest.mark.asyncio
-    @patch("src.strategies.service.get_strategy_by_id")
-    async def test_edit_phase2_clears_phase3(self, mock_get):
-        """编辑 phase2 清除 phase3 结果"""
-        strategy = MagicMock()
-        strategy.id = 1
-        db = AsyncMock()
-        mock_get.return_value = strategy
-
-        result = {"brand_social_role": {"statement": "test"}}
-        await edit_phase_result(db, strategy, phase=2, result=result)
-
-        assert strategy.phase2_result == result
-        assert strategy.phase3_result is None
-        assert strategy.status == "phase2_done"
-
-    @pytest.mark.asyncio
-    @patch("src.strategies.service.get_strategy_by_id")
-    async def test_edit_phase3_keeps_status(self, mock_get):
-        """编辑 phase3 保持 completed"""
-        strategy = MagicMock()
-        strategy.id = 1
-        db = AsyncMock()
-        mock_get.return_value = strategy
-
-        result = {"big_idea": {"statement": "test"}}
-        await edit_phase_result(db, strategy, phase=3, result=result)
-
-        assert strategy.phase3_result == result
-
-    @pytest.mark.asyncio
-    async def test_invalid_phase(self):
-        """无效 phase → 400"""
-        strategy = MagicMock()
-        db = AsyncMock()
-
-        from fastapi import HTTPException
-
-        with pytest.raises(HTTPException) as exc_info:
-            await edit_phase_result(db, strategy, phase=4, result={})
-        assert exc_info.value.status_code == 400
 
 
 class TestStrategyDataFlowGuards:

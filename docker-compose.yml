@@ -35,14 +35,16 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - /app/.venv
+      - backend_venv:/app/.venv
+      - uv_cache:/root/.cache/uv
     command: sh -c "uv run alembic upgrade head && uv run uvicorn src.main:app --host 0.0.0.0 --reload"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - UV_HTTP_TIMEOUT=300
       - UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple/
-      - UV_HTTP_TIMEOUT=120
+      - UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple/
     env_file:
       - .env
     dns:
@@ -58,15 +60,17 @@ services:
     # 不使用固定 container_name，让 Docker Compose 基于项目名自动生成
     volumes:
       - ./backend:/app
-      - /app/.venv
+      - backend_venv:/app/.venv
+      - uv_cache:/root/.cache/uv
     # Celery 自动处理 gevent monkey patching（--pool=gevent 触发）
     command: sh -c "uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=100"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - UV_HTTP_TIMEOUT=300
       - UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple/
-      - UV_HTTP_TIMEOUT=120
+      - UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple/
     env_file:
       - .env
     dns:
@@ -87,5 +91,10 @@ services:
 volumes:
   # 数据卷会自动使用项目名前缀: {PROJECT_NAME}_postgres_data
   # Docker Compose 会根据项目名自动为数据卷添加前缀，确保项目间数据隔离
-  postgres_data: 
-  redis_data: 
+  postgres_data:
+  redis_data:
+  # uv 包缓存，避免每次重启容器都重新下载 python 依赖
+  uv_cache:
+  # 后端 .venv 命名卷，跨容器重建持久化（避免每次 compose recreate 时 uv sync 从头装）
+  # backend + celery-worker 共享同一个 .venv，依赖完全一致
+  backend_venv: 

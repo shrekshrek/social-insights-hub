@@ -39,12 +39,15 @@ export const useSocialTasks = () => {
     });
   };
 
-  // 创建任务
-  const createTask = async (data: SocialTaskCreate) => {
-    const result = await apiRequest<SocialTask>("/social-media/tasks", {
-      method: "POST",
-      body: data,
-    });
+  // 创建任务（monitor_id 通过 URL 路径传递）
+  const createTask = async (monitorId: number, data: SocialTaskCreate) => {
+    const result = await apiRequest<SocialTask>(
+      `/social-media/monitors/${monitorId}/tasks`,
+      {
+        method: "POST",
+        body: data,
+      },
+    );
     showSuccess("任务创建成功！");
     return result;
   };

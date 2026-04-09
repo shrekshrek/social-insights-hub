@@ -129,26 +129,17 @@ async def execute_task(
     current_user: User = Depends(get_current_user),
 ):
     if task.phase == "collect":
-        from src.analysis.jobs.factory import create_analysis_job_async
-        from src.analysis.models import AnalysisType
+        from src.analysis.sources.news import create_news_analysis_jobs
         from src.news_media.tasks.celery_tasks import run_news_collect_task
 
-        tagging_job = await create_analysis_job_async(
-            db=db,
-            news_monitor_id=task.monitor_id,
-            news_task_id=task.id,
-            user_id=current_user.id,
-            analysis_type=AnalysisType.NEWS_TAGGING.value,
-            source_count=0,
-        )
-        insight_job = await create_analysis_job_async(
-            db=db,
-            news_monitor_id=task.monitor_id,
-            news_task_id=task.id,
-            user_id=current_user.id,
-            analysis_type=AnalysisType.NEWS_INSIGHT.value,
-            source_count=0,
-        )
+        tagging_job_id: int | None = None
+        insight_job_id: int | None = None
+        if task.auto_analyze:
+            tagging_job, insight_job = await create_news_analysis_jobs(
+                db=db, task=task, user_id=current_user.id
+            )
+            tagging_job_id = tagging_job.id
+            insight_job_id = insight_job.id
 
         task.status = "running"
         await db.commit()
@@ -156,15 +147,19 @@ async def execute_task(
 
         celery_result = run_news_collect_task.delay(
             task_id=task.id,
-            tagging_job_id=tagging_job.id,
-            insight_job_id=insight_job.id,
+            tagging_job_id=tagging_job_id,
+            insight_job_id=insight_job_id,
         )
 
-        tagging_job.celery_task_id = celery_result.id
-        await db.commit()
+        if tagging_job_id is not None:
+            from src.analysis.jobs import crud as jobs_crud
+
+            await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
+            await db.commit()
     else:
         await service.execute_news_probe(db, task)
         await db.commit()
+        await db.refresh(task)
     return task
 
 

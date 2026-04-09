@@ -408,7 +408,6 @@ const handleSubmit = async () => {
     const taskData: SocialTaskCreate = {
       name: state.name,
       description: state.description || undefined,
-      monitor_id: state.monitor_id!,
       platform_id: state.platform_id!,
       task_type: state.task_type,
       data_source: state.data_source,
@@ -418,7 +417,7 @@ const handleSubmit = async () => {
       auto_analyze: state.data_source === 'remote_crawler' ? state.auto_analyze : false,
     }
 
-    const result = await createTask(taskData)
+    const result = await createTask(state.monitor_id!, taskData)
 
     // 如果是本地上传，直接跳转到上传页面
     if (result.data_source === 'local_upload') {

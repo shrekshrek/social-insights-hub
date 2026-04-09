@@ -116,7 +116,6 @@ async def process_document(db: AsyncSession, doc_id: int, embedding_svc: Embeddi
         file_bytes = base64.b64decode(file_bytes_b64)
 
         # 保存原始文件到磁盘（供查看原文使用）
-        import os
         from pathlib import Path
         storage_dir = Path("/app/storage/knowledge_base") / (doc.source_type or "upload")
         storage_dir.mkdir(parents=True, exist_ok=True)

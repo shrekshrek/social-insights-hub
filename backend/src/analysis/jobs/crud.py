@@ -26,6 +26,15 @@ async def _get_job_or_404(db: AsyncSession, job_id: int) -> AnalysisJob:
     return job
 
 
+async def set_celery_task_id(
+    db: AsyncSession, job_id: int, celery_task_id: str
+) -> None:
+    """把真实的 celery task id 回填到 AnalysisJob（取代占位的 pending- 前缀）。"""
+    job = await _get_job_or_404(db, job_id)
+    job.celery_task_id = celery_task_id
+    await db.flush()
+
+
 async def get_analysis_jobs(
     db: AsyncSession,
     current_user_id: int,

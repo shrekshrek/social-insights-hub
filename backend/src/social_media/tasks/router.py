@@ -10,6 +10,9 @@ from src.database import get_async_db
 from src.pagination import get_pagination_params, PaginationParams
 from src.schemas import MessageResponse
 
+from src.social_media.monitors.dependencies import validate_monitor_exists
+from src.social_media.monitors.models import SocialMonitor
+
 from . import schemas, service
 from .dependencies import validate_task_access, validate_task_owner
 from .models import SocialTask
@@ -17,7 +20,7 @@ from .models import SocialTask
 
 
 router = APIRouter(
-    prefix="/social-media/tasks",
+    prefix="/social-media",
     tags=["Social Media - Tasks"],
 )
 
@@ -26,32 +29,33 @@ router = APIRouter(
 
 
 @router.post(
-    "",
+    "/monitors/{monitor_id}/tasks",
     response_model=schemas.SocialTaskRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create new task",
-    description="创建新的社交媒体数据获取任务",
+    summary="Create new task under a monitor",
+    description="在指定监测项目下创建新的社交媒体数据采集任务",
 )
 async def create_task(
     task_in: schemas.SocialTaskCreate,
+    monitor: SocialMonitor = Depends(validate_monitor_exists),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    创建新任务。
+    创建新任务（monitor_id 通过 URL 路径传递）。
 
     支持两种数据源：
-    - remote_crawler: 通过WebSocket与爬虫平台通信
-    - local_upload: 本地JSON文件上传
+    - remote_crawler: 通过 Agent API 由外部爬虫认领并执行
+    - local_upload: 本地 JSON 文件上传
 
-    需要项目访问权限（owner或participant）。
+    需要项目访问权限（owner 或 participant）。
     """
-    task = await service.create_task(db, task_in, current_user.id)
+    task = await service.create_task(db, monitor.id, task_in, current_user.id)
     return task
 
 
 @router.get(
-    "",
+    "/tasks",
     response_model=schemas.DataTaskListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get tasks list",
@@ -139,7 +143,7 @@ async def get_tasks(
 
 
 @router.get(
-    "/{task_id}",
+    "/tasks/{task_id}",
     response_model=schemas.SocialTaskReadWithRelations,
     status_code=status.HTTP_200_OK,
     summary="Get task by ID",
@@ -179,7 +183,7 @@ async def get_task(
 
 
 @router.put(
-    "/{task_id}",
+    "/tasks/{task_id}",
     response_model=schemas.SocialTaskRead,
     status_code=status.HTTP_200_OK,
     summary="Update task",
@@ -200,7 +204,7 @@ async def update_task(
 
 
 @router.delete(
-    "/{task_id}",
+    "/tasks/{task_id}",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
     summary="Delete task",
@@ -221,7 +225,7 @@ async def delete_task(
 
 
 @router.post(
-    "/{task_id}/clear-data",
+    "/tasks/{task_id}/clear-data",
     response_model=schemas.SocialTaskRead,
     status_code=status.HTTP_200_OK,
     summary="Clear task data",
@@ -245,7 +249,7 @@ async def clear_task_data(
 
 
 @router.post(
-    "/{task_id}/upload",
+    "/tasks/{task_id}/upload",
     response_model=schemas.JSONUploadResponse,
     status_code=status.HTTP_200_OK,
     summary="Upload JSON data",
@@ -299,7 +303,7 @@ async def upload_json_data(
 
 
 @router.get(
-    "/{task_id}/posts",
+    "/tasks/{task_id}/posts",
     response_model=schemas.SocialPostListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get task posts",
@@ -337,7 +341,7 @@ async def get_task_posts(
 
 
 @router.get(
-    "/{task_id}/comments",
+    "/tasks/{task_id}/comments",
     response_model=schemas.SocialCommentListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get task comments",
@@ -379,7 +383,7 @@ async def get_task_comments(
 
 
 @router.get(
-    "/posts/{post_id}",
+    "/tasks/posts/{post_id}",
     response_model=schemas.SocialPostWithComments,
     status_code=status.HTTP_200_OK,
     summary="Get post with comments",
@@ -414,7 +418,7 @@ async def get_post_with_comments(
 
 
 @router.get(
-    "/posts/cross-task/{platform_id}/{post_id_on_platform}",
+    "/tasks/posts/cross-task/{platform_id}/{post_id_on_platform}",
     response_model=schemas.PostQueryResponse,
     status_code=status.HTTP_200_OK,
     summary="Query post across tasks",

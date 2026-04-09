@@ -4,10 +4,10 @@ import type {
   AnalysisJob,
   DeepAnalysisPreview,
   TaskAnalysisResultData,
-} from '../../../../../analysis/types'
-import { usePostAnalysisColumns } from '../../../../../analysis/composables/usePostAnalysisColumns'
-import DeepResultModal from '../../../../../analysis/components/deep-result/DeepResultModal.vue'
-import TaskAnalysisReport from '../../../../../analysis/components/task/TaskAnalysisReport.vue'
+} from '../../../../../../analysis/types'
+import { usePostAnalysisColumns } from '../../../../../../analysis/composables/usePostAnalysisColumns'
+import DeepResultModal from '../../../../../../analysis/components/deep-result/DeepResultModal.vue'
+import TaskAnalysisReport from '../../../../../../analysis/components/task/TaskAnalysisReport.vue'
 
 const props = defineProps<{
   taskId: number

@@ -845,8 +845,9 @@ async def confirm_research(
                 partial_errors.append(f"新闻渠道缺少 NewsMonitor: {dimension_name}")
                 continue
 
-            from src.news_media.tasks.service import create_news_task, execute_news_probe
+            from src.news_media.tasks.service import create_news_task
             from src.news_media.tasks.schemas import NewsTaskCreate
+            from src.news_media.tasks.celery_tasks import run_news_probe_task
 
             for keyword in clean_keywords:
                 try:
@@ -857,18 +858,20 @@ async def confirm_research(
                             name=f"{dimension_name} - {keyword}",
                             keywords=keyword,
                             search_params={"max_results": 10},
+                            auto_analyze=False,
                         ),
                         current_user_id,
                         strategy_id=strategy.id,
                         phase="probe",
                     )
+                    # create_news_task 已 commit
+                    news_task.status = "running"
+                    await db.commit()
                     created_news_task_ids.append(news_task.id)
                     news_task_dimension_map[news_task.id] = dimension_name
 
-                    # 立即执行探测（传入研究目标供相关性判断）
-                    brief = strategy.brand_brief or {}
-                    goal = brief.get("analysis_goal", keyword)
-                    await execute_news_probe(db, news_task, analysis_goal=goal)
+                    # 异步派发 probe celery（纯搜索，无 LLM，秒级完成）
+                    run_news_probe_task.delay(task_id=news_task.id)
                 except Exception as e:
                     logger.error(f"创建新闻任务失败: {keyword} - {e}")
                     partial_errors.append(f"创建新闻任务「{keyword}」失败: {e}")
@@ -1075,9 +1078,28 @@ def _auto_verdict_probe_task(summary: dict) -> tuple[str, str] | None:
     return None  # 交 LLM 判断话题相关性
 
 
+_NEWS_PROBE_MIN_ARTICLES = 3  # 新闻 probe 命中数低于此值判 fail
+
+
+def _news_probe_verdict(summary: dict) -> tuple[str, str]:
+    """规则判定新闻 probe 任务 verdict（没有 LLM 打标，只能看命中量）"""
+    n = int(summary.get("posts_count") or 0)
+    if n == 0:
+        return "fail", "搜索无结果，关键词可能过窄或不符合新闻语境"
+    if n < _NEWS_PROBE_MIN_ARTICLES:
+        return "fail", f"仅命中 {n} 条新闻，数据量不足以支撑后续分析"
+    tiers = summary.get("source_tier_distribution") or {}
+    tier1 = int(tiers.get("tier1") or 0)
+    tier2 = int(tiers.get("tier2") or 0)
+    if tier1 + tier2 == 0:
+        return "fail", f"命中 {n} 条但无 tier1/tier2 权威来源，信号较弱"
+    return "pass", f"命中 {n} 条（tier1={tier1}, tier2={tier2}），关键词可用"
+
+
 async def _run_probe_review_bg_task(
     strategy_id: int,
     analyzed_summaries: list[dict],
+    news_probe_summaries: list[dict] | None = None,
 ) -> None:
     """后台任务：运行探测审查，结果写入 DB（不阻塞 HTTP 响应）
 
@@ -1121,6 +1143,26 @@ async def _run_probe_review_bg_task(
                         })
                 else:
                     ambiguous_summaries.append(summary)
+
+            # 新闻 probe：纯规则判定（无 LLM，因为没有逐篇打标）
+            for nps in news_probe_summaries or []:
+                verdict, note = _news_probe_verdict(nps)
+                auto_assessments.append({
+                    "task_id": nps["task_id"],
+                    "keyword": nps["keyword"],
+                    "platform": "news_media",
+                    "entity_match": False,
+                    "verdict": verdict,
+                    "note": note,
+                })
+                if verdict == "fail":
+                    rule_suggestions.append({
+                        "task_id": nps["task_id"],
+                        "original_keyword": nps["keyword"],
+                        "suggested_keyword": None,
+                        "platform": "news_media",
+                        "reason": note,
+                    })
 
             # LLM 层：处理模糊案例（话题相关性判断）
             review_result = await _run_probe_review(
@@ -1411,25 +1453,24 @@ async def check_probe_status(
     news_all_analyzed = all(t.status == "completed" and t.analysis_result for t in news_probe_tasks)
     news_analyzed_count = sum(1 for t in news_probe_tasks if t.status == "completed" and t.analysis_result)
 
-    # 将新闻 probe 结果纳入 analyzed_summaries 供审查
-    for npt in news_probe_tasks:
-        if npt.status == "completed" and npt.analysis_result:
-            ar = npt.analysis_result or {}
-            meta = ar.get("meta") or {}
-            articles_summary = ar.get("articles_summary") or []
-            analyzed_summaries.append({
-                "task_id": npt.id,
-                "keyword": npt.keywords or "",
-                "platform": "news_media",
-                "posts_count": meta.get("articles_total", 0),
-                "deep_analyzed": meta.get("articles_relevant", 0),
-                "entity_match": any(
-                    a.get("relevance") == "high" for a in articles_summary
-                ),
-                "top_topics": [],
-                "promotion_ratio": None,
-                "channel": "news_media",
-            })
+    # 新闻 probe 已是纯搜索结果（无 LLM 打标），不参与 LLM 审查：
+    # 规则层面只判断搜索命中量是否达标（见 _run_probe_review_bg_task 的 news 分支）。
+    news_probe_summaries = [
+        {
+            "task_id": npt.id,
+            "keyword": npt.keywords or "",
+            "posts_count": (npt.analysis_result or {}).get("meta", {}).get("articles_total", 0),
+            "source_tier_distribution": (
+                (npt.analysis_result or {}).get("meta", {}).get("source_tier_distribution") or {}
+            ),
+            "source_samples": (
+                (npt.analysis_result or {}).get("meta", {}).get("source_samples") or []
+            ),
+            "channel": "news_media",
+        }
+        for npt in news_probe_tasks
+        if npt.status == "completed" and npt.analysis_result
+    ]
 
     # 兼容纯新闻策略（无社媒任务时 task_statuses 为空）
     social_all_analyzed = not task_statuses or all(t.has_analysis for t in task_statuses)
@@ -1438,12 +1479,12 @@ async def check_probe_status(
     analyzed_count = sum(1 for t in task_statuses if t.has_analysis) + news_analyzed_count
     total_count = len(task_statuses) + len(news_probe_tasks)
 
-    # 全部分析完成且尚无审查结果 → 触发后台 LLM 审查
+    # 全部分析完成且尚无审查结果 → 触发后台 LLM 审查（仅针对社媒数据）
     if all_analyzed and not strategy.probe_review_result and strategy.id not in _probe_review_in_progress:
         _probe_review_in_progress.add(strategy.id)
         import asyncio
         asyncio.ensure_future(
-            _run_probe_review_bg_task(strategy.id, analyzed_summaries)
+            _run_probe_review_bg_task(strategy.id, analyzed_summaries, news_probe_summaries)
         )
 
     return ProbeStatusResponse(
@@ -1563,10 +1604,12 @@ async def approve_probe(
                     name=f"{npt.name} - 全量",
                     keywords=npt.keywords,
                     search_params={"max_results": 30},
+                    auto_analyze=True,
                 ),
                 current_user_id,
                 strategy_id=strategy.id,
                 phase="collect",
+                parent_probe_id=npt.id,
             )
             news_collect_dim_map[str(news_collect_task.id)] = dim
             news_collect_task_ids.append(news_collect_task.id)
@@ -1580,30 +1623,30 @@ async def approve_probe(
 
     await db.commit()
 
-    # 新闻全量采集在独立 session 中后台执行（避免共享请求级 session）
+    # 新闻全量采集通过 celery 异步执行（与独立 news_media 流程统一）
     if news_collect_task_ids:
-        import asyncio
-
-        brief = strategy.brand_brief or {}
-        _goal = brief.get("analysis_goal", "")
-        _subject = brief.get("subject", "")
-
-        async def _bg_news_collect(task_id: int, goal: str, subject: str) -> None:
-            from src.database import AsyncSessionLocal
-            from src.news_media.tasks.service import execute_news_collect
-            from src.news_media.tasks import crud as news_crud
-
-            async with AsyncSessionLocal() as session:
-                task = await news_crud.get_task_by_id(session, task_id, load_relations=False)
-                if task:
-                    try:
-                        await execute_news_collect(session, task, analysis_goal=goal, subject=subject)
-                        await session.commit()
-                    except Exception as exc:
-                        logger.error("Background news collect failed for task %d: %s", task_id, exc)
+        from src.analysis.sources.news import create_news_analysis_jobs
+        from src.analysis.jobs import crud as jobs_crud
+        from src.news_media.tasks import crud as news_crud
+        from src.news_media.tasks.celery_tasks import run_news_collect_task
 
         for tid in news_collect_task_ids:
-            asyncio.ensure_future(_bg_news_collect(tid, _goal, _subject))
+            collect_task = await news_crud.get_task_by_id(db, tid, load_relations=False)
+            if not collect_task:
+                continue
+            tagging_job, insight_job = await create_news_analysis_jobs(
+                db=db, task=collect_task, user_id=current_user_id
+            )
+            collect_task.status = "running"
+            await db.commit()
+
+            celery_result = run_news_collect_task.delay(
+                task_id=collect_task.id,
+                tagging_job_id=tagging_job.id,
+                insight_job_id=insight_job.id,
+            )
+            await jobs_crud.set_celery_task_id(db, tagging_job.id, celery_result.id)
+            await db.commit()
 
     updated = await get_strategy_by_id(db, strategy.id)
     return ApproveProbeResponse(

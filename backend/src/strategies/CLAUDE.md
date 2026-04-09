@@ -36,7 +36,7 @@
 
 - `strategies`: 顶级实体，含 `brand_brief` / `research_design` / `probe_review_result` / `coverage_check_result` / `phase{1,2,3}_result` (均 JSONB) + `status` + `social_monitor_id` (FK → monitors)
 - `strategy_slices`: 关联表（strategy_id → slice_id），切片由系统自动创建
-- `social_data_tasks`: 通过 `strategy_id` FK 反向关联策略（nullable，策略任务专用）
+- `social_tasks`: 通过 `strategy_id` FK 反向关联策略（nullable，策略任务专用）
 
 ### 状态流转
 

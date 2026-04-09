@@ -626,20 +626,30 @@ const handleRefineProbe = async () => {
   const suggestions = probeData.probeReview?.refinement_suggestions
   if (!suggestions?.length) return
 
+  // 按平台分流：news_media 走 news_refinements，其他走社媒 refinements
+  const socialSuggestions = suggestions.filter(s => s.platform !== 'news_media')
+  const newsSuggestions = suggestions.filter(s => s.platform === 'news_media')
+
   const detail = suggestions
-    .map(s => `${s.original_keyword} → ${s.suggested_keyword}`)
+    .map(s => `${s.original_keyword} → ${s.suggested_keyword ?? '(移除)'}`)
     .join('、')
   const { $confirm } = useNuxtApp()
-  const confirmed = await $confirm(`将替换 ${suggestions.length} 个关键词：${detail}，确定继续？`)
+  const confirmed = await $confirm(
+    `将调整 ${suggestions.length} 个关键词（社媒 ${socialSuggestions.length} / 新闻 ${newsSuggestions.length}）：${detail}，确定继续？`,
+  )
   if (!confirmed) return
 
   refineProbeLoading.value = true
   try {
     const result = await strategiesApi.refineProbe(strategyId.value, {
-      refinements: suggestions.map(s => ({
+      refinements: socialSuggestions.map(s => ({
         task_id: s.task_id,
         new_keyword: s.suggested_keyword,
         platform: s.platform,
+      })),
+      news_refinements: newsSuggestions.map(s => ({
+        task_id: s.task_id,
+        new_keyword: s.suggested_keyword,
       })),
     })
     strategy.value = result.strategy

@@ -103,6 +103,10 @@ backend/src/
 
 → 因此 social_media 没有、也不需要 `/tasks/{id}/execute` 端点；news_media 必须有。新增渠道时根据数据源特性二选一，不要混用。
 
+**news_media 场景区分**：
+- **独立 news monitor**：只支持一步式 collect，`/tasks/{id}/execute` 仅接受 `strategy_id IS NULL` 且 `phase != "probe"`；不提供 approve/refine 探测流程
+- **strategy 研究场景**：两段式 probe → collect，每阶段是**独立的 NewsTask 记录**（不做 phase 迁移），probe 只搜索卡片不抓全文不打标；probe/refine/approve 统一由 `strategies/service.py` 的批量端点编排，news_media router 不对外暴露
+
 ### 分析编排（analysis 模块）
 
 `src/analysis/` 是全局分析编排层，目标是上游无渠道耦合。各渠道通过 `src/analysis/sources/{channel}.py` 接入：

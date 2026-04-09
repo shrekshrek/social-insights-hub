@@ -1,8 +1,8 @@
 # 策略模块多数据源架构方案
 
 > 设计日期：2026-03-26
-> 最后更新：2026-03-30
-> 状态：阶段一/二已完成，阶段三待实施
+> 最后更新：2026-04-09
+> 状态：阶段一/二/三已完成
 
 ---
 
@@ -118,7 +118,8 @@ social_media   → research_design_chain（✅ 已实现）
 knowledge_base → 无独立 design chain（✅ 已接入）
                  通过 `retrieve_market_context()` 在 Phase1/2 生成前注入 RAG 结果
 
-news_media     → news_media_design_chain（⬜ 未来）
+news_media     → 复用 research_design_chain 的 news 分支（✅ 已实现）
+                 probe 与 collect 是独立的 NewsTask 记录，由 strategies/service.py 编排
 ```
 
 **扩展方式**：新增渠道时，只需增加对应的 design chain，channel_plan 路由逻辑不变。
@@ -136,8 +137,9 @@ social_media（✅ 现有，不变）:
 knowledge_base（✅ 已接入）:
   KnowledgeDocument/Chunk（平台公共 + 用户私有）→ 向量检索 → market_context 注入 Phase1/2
 
-news_media（⬜ 未来）:
-  SourceConfig → 新闻检索/抓取 → 结构化摘要
+news_media（✅ 已接入）:
+  NewsTask(probe) → 百度+DDG 双渠道搜索卡片 → LLM probe review
+  → refine/approve → NewsTask(collect) → 全文抓取 + tagging/insight
 ```
 
 `AnalysisSlice` 的现有逻辑完全保留，不做任何修改。
@@ -228,9 +230,12 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 6. ✅ `load_strategy_inputs()` 替换 `load_slice_data()`：当前行为不变，接口已为多数据源就绪
 7. ✅ Knowledge Base：RAG 检索接入，Phase1/2 注入 `market_context`
 
-### 阶段三：新数据源（长期）
+### 阶段三：News Media 数据源 ✅ 已完成
 
-8. ⬜ News Media 数据源：独立模型 + 处理管线 + Layer 3 适配器
+8. ✅ News Media 模块：`news_media/monitors` + `news_media/tasks`，百度+DuckDuckGo 双渠道
+9. ✅ 两段式 probe→collect：各自为独立 NewsTask 记录（硬删除，ondelete CASCADE 到 NewsArticle）
+10. ✅ `news_probe_review_chain` + 并行 LLM 评估，包裹在 STRATEGY_PROBE_REVIEW AnalysisJob 内统一追踪成本
+11. ✅ `refine_probe` 批量端点同时处理 social/news 两路 refinements
 
 ---
 

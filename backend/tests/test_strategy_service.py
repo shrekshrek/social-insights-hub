@@ -171,7 +171,7 @@ class TestStrategyDataFlowGuards:
 
 class TestCheckCollectionStatusSliceTrigger:
     @pytest.mark.asyncio
-    @patch("src.strategies.service._strategy_read", return_value={"id": 1})
+    @patch("src.strategies.service._strategy_read", return_value=None)
     @patch("src.strategies.service._create_auto_slices", new_callable=AsyncMock)
     async def test_trigger_auto_slices_only_when_strategy_has_no_slices(
         self,
@@ -200,7 +200,7 @@ class TestCheckCollectionStatusSliceTrigger:
         mock_create_auto_slices.assert_awaited_once()
 
     @pytest.mark.asyncio
-    @patch("src.strategies.service._strategy_read", return_value={"id": 1})
+    @patch("src.strategies.service._strategy_read", return_value=None)
     @patch("src.strategies.service._create_auto_slices", new_callable=AsyncMock)
     async def test_skip_auto_slices_when_strategy_already_has_slices(
         self,

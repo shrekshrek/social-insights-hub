@@ -5,7 +5,7 @@ Phase A of news_media probe/collect 分家:
 - parent_probe_id: FK → news_tasks.id, SET NULL — collect 指向 approve 它的 probe;
   refine 产生的 probe 指向上一轮 probe
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: a1b2c3d4e5f7
 Revises: f6a7b8c9d0e1
 Create Date: 2026-04-09
 
@@ -16,7 +16,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "a1b2c3d4e5f6"
+revision: str = "a1b2c3d4e5f7"
 down_revision: Union[str, Sequence[str], None] = "f6a7b8c9d0e1"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

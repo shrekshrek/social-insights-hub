@@ -1078,22 +1078,40 @@ def _auto_verdict_probe_task(summary: dict) -> tuple[str, str] | None:
     return None  # 交 LLM 判断话题相关性
 
 
-_NEWS_PROBE_MIN_ARTICLES = 3  # 新闻 probe 命中数低于此值判 fail
+async def _run_news_probe_review_one(
+    chain,
+    research_design: dict,
+    brief: dict | None,
+    task_summary: dict,
+) -> tuple[dict | None, dict | None, float]:
+    """评估单个新闻 probe 任务，返回 (assessment, token_usage, duration_seconds)
 
+    失败时 assessment 为 None，usage 可能为 None（若调用前抛出）。
+    """
+    from src.langchain.chains.news_probe_review_chain import (
+        format_single_news_probe_review_inputs,
+        parse_single_news_probe_review_response,
+    )
 
-def _news_probe_verdict(summary: dict) -> tuple[str, str]:
-    """规则判定新闻 probe 任务 verdict（没有 LLM 打标，只能看命中量）"""
-    n = int(summary.get("posts_count") or 0)
-    if n == 0:
-        return "fail", "搜索无结果，关键词可能过窄或不符合新闻语境"
-    if n < _NEWS_PROBE_MIN_ARTICLES:
-        return "fail", f"仅命中 {n} 条新闻，数据量不足以支撑后续分析"
-    tiers = summary.get("source_tier_distribution") or {}
-    tier1 = int(tiers.get("tier1") or 0)
-    tier2 = int(tiers.get("tier2") or 0)
-    if tier1 + tier2 == 0:
-        return "fail", f"命中 {n} 条但无 tier1/tier2 权威来源，信号较弱"
-    return "pass", f"命中 {n} 条（tier1={tier1}, tier2={tier2}），关键词可用"
+    inputs = format_single_news_probe_review_inputs(
+        research_design=research_design, task=task_summary, brief=brief
+    )
+    t0 = time.time()
+    try:
+        resp = await chain.ainvoke(inputs)
+        dur = time.time() - t0
+        assessment = parse_single_news_probe_review_response(resp.content)
+        assessment.setdefault("task_id", task_summary["task_id"])
+        assessment.setdefault("keyword", task_summary.get("keyword", ""))
+        assessment.setdefault("platform", "news_media")
+        usage = extract_token_usage(resp, duration_seconds=dur)
+        return assessment, usage, dur
+    except Exception as exc:
+        logger.warning(
+            "News probe review failed for task #%s: %s",
+            task_summary.get("task_id"), exc,
+        )
+        return None, None, time.time() - t0
 
 
 async def _run_probe_review_bg_task(
@@ -1144,24 +1162,113 @@ async def _run_probe_review_bg_task(
                 else:
                     ambiguous_summaries.append(summary)
 
-            # 新闻 probe：纯规则判定（无 LLM，因为没有逐篇打标）
-            for nps in news_probe_summaries or []:
-                verdict, note = _news_probe_verdict(nps)
+            # 新闻 probe：LLM 审查（并行每任务一次调用），走 AnalysisJob 记录成本
+            news_llm_assessments: list[dict] = []
+            if news_probe_summaries:
+                from src.langchain.chains.news_probe_review_chain import (
+                    create_single_news_probe_review_chain,
+                )
+
+                news_chain = create_single_news_probe_review_chain()
+                research_design = strategy.research_design or {}
+                brief = strategy.brand_brief
+
+                news_job = await create_analysis_job_async(
+                    db,
+                    news_monitor_id=strategy.news_monitor_id,
+                    user_id=strategy.created_by,
+                    analysis_type=AnalysisType.STRATEGY_PROBE_REVIEW.value,
+                    source_count=len(news_probe_summaries),
+                    status="processing",
+                    analysis_config={"strategy_id": strategy.id, "channel": "news"},
+                )
+
+                start_news = time.time()
+                news_results = await asyncio.gather(*[
+                    _run_news_probe_review_one(news_chain, research_design, brief, nps)
+                    for nps in news_probe_summaries
+                ])
+                duration_news = time.time() - start_news
+
+                total_input = total_output = total_tokens = 0
+                total_cost = 0.0
+                call_details: list[dict] = []
+                failed_calls = 0
+
+                for idx, (nps, (assessment, usage, _dur)) in enumerate(
+                    zip(news_probe_summaries, news_results)
+                ):
+                    if usage:
+                        s = usage.get("summary", {})
+                        total_input += s.get("total_input_tokens", 0)
+                        total_output += s.get("total_output_tokens", 0)
+                        total_tokens += s.get("total_tokens", 0)
+                        total_cost += s.get("total_cost_cny", 0.0)
+                        for detail in usage.get("call_details", []):
+                            call_details.append({**detail, "call_index": idx})
+
+                    if assessment is None:
+                        failed_calls += 1
+                        # LLM 调用失败：保守判 pass 让用户人工把关（不阻塞流程）
+                        auto_assessments.append({
+                            "task_id": nps["task_id"],
+                            "keyword": nps["keyword"],
+                            "platform": "news_media",
+                            "entity_match": False,
+                            "verdict": "pass",
+                            "note": "LLM 审查失败，已默认通过，请人工核查卡片后决定",
+                        })
+                        continue
+                    news_llm_assessments.append(assessment)
+
+                news_total = len(news_probe_summaries)
+                news_job.token_usage = {
+                    "summary": {
+                        "total_calls": news_total,
+                        "total_input_tokens": total_input,
+                        "total_output_tokens": total_output,
+                        "total_tokens": total_tokens,
+                        "total_cost_cny": round(total_cost, 6),
+                        "total_duration_seconds": round(duration_news, 2),
+                        "avg_tokens_per_call": float(total_tokens) / news_total if news_total else 0.0,
+                        "avg_cost_per_call": round(total_cost / news_total, 6) if news_total else 0.0,
+                    },
+                    "call_details": call_details,
+                }
+                news_job.analyzed_count = len(news_llm_assessments)
+                news_job.processing_time = int(duration_news)
+                news_job.completed_at = datetime.now(timezone.utc)
+                if failed_calls and failed_calls == news_total:
+                    news_job.status = "failed"
+                    news_job.error_message = f"全部 {failed_calls} 个新闻 probe LLM 调用失败"
+                else:
+                    news_job.status = "completed"
+                    if failed_calls:
+                        news_job.error_message = f"{failed_calls} 个调用失败（已保守判 pass）"
+                await db.commit()
+
+                logger.info(
+                    "Strategy %d news probe review 完成 (%.1fs, 任务=%d, 成功=%d, 失败=%d)",
+                    strategy.id, duration_news, news_total, len(news_llm_assessments), failed_calls,
+                )
+
+            # 新闻 LLM 结果直接合入 auto_assessments（已是终态，不进二次 LLM）
+            for a in news_llm_assessments:
                 auto_assessments.append({
-                    "task_id": nps["task_id"],
-                    "keyword": nps["keyword"],
+                    "task_id": a.get("task_id"),
+                    "keyword": a.get("keyword", ""),
                     "platform": "news_media",
                     "entity_match": False,
-                    "verdict": verdict,
-                    "note": note,
+                    "verdict": a.get("verdict", "pass"),
+                    "note": a.get("note", ""),
                 })
-                if verdict == "fail":
+                if a.get("verdict") == "fail":
                     rule_suggestions.append({
-                        "task_id": nps["task_id"],
-                        "original_keyword": nps["keyword"],
-                        "suggested_keyword": None,
+                        "task_id": a.get("task_id"),
+                        "original_keyword": a.get("keyword", ""),
+                        "suggested_keyword": a.get("suggested_keyword"),
                         "platform": "news_media",
-                        "reason": note,
+                        "reason": a.get("suggestion_reason") or a.get("note", ""),
                     })
 
             # LLM 层：处理模糊案例（话题相关性判断）
@@ -1453,24 +1560,34 @@ async def check_probe_status(
     news_all_analyzed = all(t.status == "completed" and t.analysis_result for t in news_probe_tasks)
     news_analyzed_count = sum(1 for t in news_probe_tasks if t.status == "completed" and t.analysis_result)
 
-    # 新闻 probe 已是纯搜索结果（无 LLM 打标），不参与 LLM 审查：
-    # 规则层面只判断搜索命中量是否达标（见 _run_probe_review_bg_task 的 news 分支）。
-    news_probe_summaries = [
-        {
+    # 新闻 probe 送 LLM 审查：加载每个任务的文章卡片（title/source/tier/snippet）
+    # 由 news_probe_review_chain 基于搜索结果判断关键词相关性与信号质量
+    from src.news_media.tasks import crud as news_crud
+
+    news_probe_summaries: list[dict] = []
+    for npt in news_probe_tasks:
+        if not (npt.status == "completed" and npt.analysis_result):
+            continue
+        meta = (npt.analysis_result or {}).get("meta", {}) or {}
+        articles, _ = await news_crud.get_articles_by_task(
+            db, task_id=npt.id, skip=0, limit=40
+        )
+        news_probe_summaries.append({
             "task_id": npt.id,
             "keyword": npt.keywords or "",
-            "posts_count": (npt.analysis_result or {}).get("meta", {}).get("articles_total", 0),
-            "source_tier_distribution": (
-                (npt.analysis_result or {}).get("meta", {}).get("source_tier_distribution") or {}
-            ),
-            "source_samples": (
-                (npt.analysis_result or {}).get("meta", {}).get("source_samples") or []
-            ),
+            "articles_total": meta.get("articles_total", 0),
+            "source_tier_distribution": meta.get("source_tier_distribution") or {},
+            "articles": [
+                {
+                    "title": a.title,
+                    "source_name": a.source_name,
+                    "source_tier": a.source_tier,
+                    "snippet": a.snippet,
+                }
+                for a in articles
+            ],
             "channel": "news_media",
-        }
-        for npt in news_probe_tasks
-        if npt.status == "completed" and npt.analysis_result
-    ]
+        })
 
     # 兼容纯新闻策略（无社媒任务时 task_statuses 为空）
     social_all_analyzed = not task_statuses or all(t.has_analysis for t in task_statuses)
@@ -1685,10 +1802,33 @@ async def refine_probe(
     )
     old_tasks_map: dict[int, SocialTask] = {t.id: t for t in old_tasks_result.scalars().all()}
 
-    if not old_tasks_map:
+    # 加载现有 news probe 任务
+    from src.news_media.tasks.models import NewsTask
+    old_news_result = await db.execute(
+        select(NewsTask).where(
+            and_(
+                NewsTask.strategy_id == strategy.id,
+                NewsTask.phase == "probe",
+            )
+        )
+    )
+    old_news_map: dict[int, NewsTask] = {t.id: t for t in old_news_result.scalars().all()}
+
+    if not old_tasks_map and not old_news_map:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="当前没有探测任务，无法调整",
+        )
+
+    if data.refinements and not old_tasks_map:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前没有社媒探测任务，无法调整",
+        )
+    if data.news_refinements and not old_news_map:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前没有新闻探测任务，无法调整",
         )
 
     # 继承现有维度映射，在此基础上增删改
@@ -1766,10 +1906,78 @@ async def refine_probe(
             created_task_ids.append(new_task.id)
             new_task_dim_map[str(new_task.id)] = dimension
 
+    # ---- 新闻 probe 调整分支 ----
+    old_news_dim_map: dict[str, str] = dict(
+        research_design.get("_news_task_dimension_map") or {}
+    )
+    new_news_dim_map = dict(old_news_dim_map)
+    removed_news_task_ids: list[int] = []
+    created_news_task_ids: list[int] = []
+
+    if data.news_refinements:
+        from src.news_media.tasks.crud import delete_task as delete_news_task_crud
+        from src.news_media.tasks.schemas import NewsTaskCreate
+        from src.news_media.tasks.service import create_news_task as create_news_task_svc
+        from src.news_media.tasks.celery_tasks import run_news_probe_task
+
+        if not strategy.news_monitor_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="策略未关联 NewsMonitor，无法调整新闻探测任务",
+            )
+
+        new_news_task_payloads: list[tuple[str, str]] = []  # (keyword, dimension)
+
+        for item in data.news_refinements:
+            # 步骤 1：删除旧任务（替换/移除时）
+            if item.task_id is not None:
+                old_news = old_news_map.get(item.task_id)
+                if old_news:
+                    await delete_news_task_crud(db, old_news)
+                new_news_dim_map.pop(str(item.task_id), None)
+                removed_news_task_ids.append(item.task_id)
+
+            # 步骤 2：记录新任务待创建（替换/新增时）
+            if item.new_keyword is not None:
+                dimension = item.dimension or old_news_dim_map.get(
+                    str(item.task_id) if item.task_id is not None else "", ""
+                )
+                if not dimension:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="创建新闻探测任务必须提供 dimension",
+                    )
+                new_news_task_payloads.append((item.new_keyword, dimension))
+
+        # 先 commit 删除
+        await db.flush()
+
+        # 创建新任务（create_news_task 内部会 commit）
+        for keyword, dimension in new_news_task_payloads:
+            news_task = await create_news_task_svc(
+                db,
+                strategy.news_monitor_id,
+                NewsTaskCreate(
+                    name=f"{dimension} - {keyword}",
+                    keywords=keyword,
+                    search_params={"max_results": 25},
+                    auto_analyze=False,
+                ),
+                current_user_id,
+                strategy_id=strategy.id,
+                phase="probe",
+            )
+            news_task.status = "running"
+            await db.commit()
+            created_news_task_ids.append(news_task.id)
+            new_news_dim_map[str(news_task.id)] = dimension
+            run_news_probe_task.delay(task_id=news_task.id)
+
     # 重置审查结果，确保新一轮探测完成后重新触发审查
     strategy.probe_review_result = None
     strategy.probe_round = (strategy.probe_round or 0) + 1
     research_design["_task_dimension_map"] = new_task_dim_map
+    research_design["_news_task_dimension_map"] = new_news_dim_map
     strategy.research_design = research_design
     flag_modified(strategy, "probe_review_result")
     flag_modified(strategy, "research_design")
@@ -1780,6 +1988,8 @@ async def refine_probe(
     return RefineProbeResponse(
         removed_task_ids=removed_task_ids,
         created_task_ids=created_task_ids,
+        removed_news_task_ids=removed_news_task_ids,
+        created_news_task_ids=created_news_task_ids,
         probe_round=updated.probe_round,
         strategy=_strategy_read(updated),
     )

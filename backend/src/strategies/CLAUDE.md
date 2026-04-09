@@ -57,14 +57,21 @@ draft → planned → probing → collecting → ready → phase1_done → phase
 
 1. `design-research`: research_design_chain 基于 Brief 生成研究问题 + 数据采集方案 + 切片蓝图 + 产出类型
 2. 用户可编辑 data_plan（关键词/平台）和 slice_blueprint（切片名/主体）
-3. `confirm-research`: 创建一个 Monitor + 所有 keyword×platform 的 phase="probe" 任务（设置 max_pages 限制翻页），状态 → probing
+3. `confirm-research`: 根据 data_plan 的渠道分别创建 SocialMonitor / NewsMonitor + 对应 phase="probe" 任务，状态 → probing
+   - 社媒：每个 keyword×platform 一个 SocialTask，max_pages 限制翻页
+   - 新闻：每个 keyword 一个 NewsTask，celery `run_news_probe_task` 异步派发（纯搜索）
 
 ### ② 探测验证 (probing → collecting)
 
-1. 前端轮询 `probe-status`，爬虫采集约 20 条（受 max_pages 限制），跳过评论
-2. 所有任务分析完成后自动运行 probe_review_chain
-3. `all_pass` → 自动调用 approve_probe，为每个探测任务创建 phase="collect" 全量任务，策略 → collecting
-4. `partial_pass/fail` → 用户可 `approve-probe`（跳过审查直接全量）或 `refine-probe`（替换关键词，probe_round++，最多 3 轮）
+1. 前端轮询 `probe-status`
+   - 社媒：爬虫采集约 20 条，跳过评论，LLM 打标（NEWS/POST 分析链）
+   - 新闻：`run_news_probe_task` 双渠道搜索（baidu 主力 + duckduckgo 补充），各 25 条元数据落库，不抓全文、不打标
+2. 所有任务准备就绪后后台自动运行 probe 审查
+   - 社媒：规则分流 + `strategy_probe_review_chain`（LLM 判定模糊案例）
+   - 新闻：`news_probe_review_chain` 对每个任务并行 LLM 评估（基于卡片 title/source/tier/snippet + 维度→研究问题映射）
+   - 两个渠道各自创建 `STRATEGY_PROBE_REVIEW` AnalysisJob，独立记录 token/cost；LLM 失败时保守判 pass + 人工核查提示
+3. `all_pass` → 自动调用 approve_probe，为每个探测任务创建 phase="collect" 全量任务（社媒 + 新闻），策略 → collecting
+4. `partial_pass/fail` → 用户可 `approve-probe`（跳过审查直接全量）或 `refine-probe`（batch 替换/新增/移除关键词，`refinements` 调社媒、`news_refinements` 调新闻，两个列表至少填一个，probe_round++，最多 3 轮）
 
 ### ③ 数据就绪 (collecting → ready)
 
@@ -86,7 +93,8 @@ Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
 |-------|------|---------|
 | brief_parser_chain | Brief 摄入 + 渠道分发判断 | 新建策略时（`parse-brief` 端点） |
 | research_design_chain | 研究规划师（接收社媒 channel_brief） | ① |
-| probe_review_chain | 数据质检员 | ② |
+| strategy_probe_review_chain | 社媒数据质检员 | ② |
+| news_probe_review_chain | 新闻数据质检员（单任务并行） | ② |
 | coverage_check_chain | 覆盖度验证 | ③ |
 | phase1_chain | 洞察分析师 | ④ |
 | phase2_chain | 策略师 | ④ |
@@ -112,7 +120,7 @@ Phase 1/2/3 Chain 均注入 `research_design` 中的 research_questions 作为�
 ## Important Notes
 
 - Strategy 通过 `strategy_slices` 关联切片，切片由 `_create_auto_slices` 按 `slice_blueprint` 自动创建
-- `confirm_research` 为每个策略创建一个 Monitor，所有任务放同一 Monitor
-- `_task_dimension_map` 存在 `research_design` 中，记录 task_id → dimension_name 映射，供自动建切片使用
+- `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor，同渠道所有任务共享一个 Monitor
+- `_task_dimension_map` / `_news_task_dimension_map` 存在 `research_design` 中，分别记录社媒 / 新闻 task_id → dimension_name 映射，供 probe 审查注入研究问题 + 自动建切片使用
 - `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）
 - Word 导出依赖 `python-docx`

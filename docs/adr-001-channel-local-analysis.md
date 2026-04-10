@@ -3,7 +3,7 @@
 - **状态**：Accepted
 - **日期**：2026-04-10
 - **决策者**：@shrekwang
-- **相关**：`backend/CLAUDE.md` 架构约定、`docs/channel-architecture-plan.md`、`docs/strategy-multi-source-architecture.md`
+- **相关**：`backend/CLAUDE.md` 架构约定、`docs/strategy-multi-source-architecture.md`
 
 ---
 

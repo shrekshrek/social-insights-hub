@@ -53,18 +53,20 @@ backend/
 │   ├── rbac/                # 权限管理模块
 │   ├── users/               # 用户管理模块
 │   ├── social_media/        # 社交媒体业务核心
-│   │   ├── projects/        # 监控项目管理
+│   │   ├── monitors/        # 监测项目管理
 │   │   ├── tasks/           # 数据采集任务
 │   │   │   └── adapters/    # 多平台适配器 (抖音/小红书/微博等)
-│   │   └── analysis/        # LLM 分析编排
-│   │       ├── celery_tasks/ # 分析管线 Celery 任务
-│   │       │   ├── screening/       # Stage 1: 初筛
-│   │       │   ├── deep_analysis/   # Stage 2: 深度分析
-│   │       │   ├── aggregation/     # Stage 3: 聚合计算
-│   │       │   └── project_slice/   # 项目级切片分析
-│   │       └── jobs/        # AnalysisJob CRUD
-│   ├── langchain/           # LLM 引擎 (无 API 路由)
-│   │   └── chains/          # 9 条分析链
+│   │   └── analysis/        # 社媒 LLM 分析编排
+│   │       └── celery_tasks/ # 分析管线 Celery 任务
+│   ├── news_media/          # 新闻舆情
+│   │   ├── monitors/        # 新闻监测项目
+│   │   ├── tasks/           # 新闻采集任务
+│   │   └── analysis/        # 新闻分析编排
+│   ├── strategies/          # 策略研究引擎
+│   ├── knowledge_base/      # 市场知识库 + 文档向量化
+│   ├── jobs/                # 跨渠道 AnalysisJob 管理
+│   ├── llm/                 # LLM 引擎 (无 API 路由)
+│   │   └── chains/          # 分析链
 │   ├── agent/               # 爬虫代理 API (API Key 认证)
 │   ├── main.py              # FastAPI应用入口
 │   ├── config.py            # 全局配置
@@ -142,22 +144,22 @@ backend/
 - 用户列表和分页
 - 当前用户信息获取
 
-### 3.4 社交媒体项目模块 (social_media/projects/)
-**职责**: 监控项目管理、社交平台初始化、项目参与者管理
+### 3.4 社交媒体监测模块 (social_media/monitors/)
+**职责**: 监测项目管理、社交平台初始化、项目参与者管理
 
 **主要组件**:
-- `models.py`: `SocialProject`, `Platform`, `SocialProjectParticipant` 数据模型
-- `router.py`: 项目 CRUD、平台查询、参与者管理 API 端点
+- `models.py`: `SocialMonitor`, `Platform`, `social_monitor_participants` 数据模型
+- `router.py`: 监测项目 CRUD、平台查询、参与者管理 API 端点
 - `service.py`: 项目创建/更新/删除、平台初始化等业务逻辑
-- `dependencies.py`: `check_project_access()` — 所有后续模块共用的项目访问权限检查
+- `dependencies.py`: `check_monitor_access()` — 所有后续模块共用的项目访问权限检查
 
 **核心功能**:
-- 多平台项目创建（关联 1 个或多个社交平台）
+- 多平台监测项目创建（关联 1 个或多个社交平台）
 - 项目参与者（协作者）管理
 - 项目访问控制（owner + participants）
 
 **被依赖**:
-- `tasks`, `analysis`, `agent` 模块均通过 `check_project_access()` 进行项目级权限校验
+- `tasks`, `analysis`, `agent` 模块均通过 `check_monitor_access()` 进行项目级权限校验
 
 ---
 
@@ -165,7 +167,7 @@ backend/
 **职责**: 数据采集任务管理、多平台原文/评论存储、平台适配器
 
 **主要组件**:
-- `models.py`: `DataTask`, `SocialPost`, `SocialComment` 数据模型
+- `models.py`: `SocialTask`, `SocialPost`, `SocialComment` 数据模型
 - `adapters/`: 各平台适配器，将平台特定数据格式转换为统一内部格式
 - `router.py`: 任务 CRUD、原文/评论查询 API 端点
 - `service.py`: 任务状态管理、批量数据写入、CII 预计算
@@ -187,8 +189,8 @@ backend/
 ```
 Stage 1 screening/   → LLM 初筛: spam/value/relevance/sentiment → PostAnalysis
 Stage 2 deep_analysis/ → LLM 深度: 实体/观点/摘要 → PostAnalysis.post/comment_deep_result
-Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → DataTask.analysis_result
-        project_slice/ → 项目切片: 跨任务合并 + LLM 报告 → ProjectAnalysisSlice.result_data
+Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → SocialTask.analysis_result
+        monitor_slice/ → 监测切片: 跨任务合并 + LLM 报告 → AnalysisSlice.result_data
 ```
 
 **关键指标体系**:
@@ -203,14 +205,15 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 - 微观指标（实体/话题）: 深度分析情感 -1 ~ +1
 
 **主要组件**:
-- `models.py`: `PostAnalysis`, `AnalysisJob`, `ProjectAnalysisSlice`
-- `jobs/`: `AnalysisJob` CRUD 工具函数（同步/异步双版本）
-- `celery_tasks/`: 四阶段分析管线 Celery 任务
+- `models.py`: `PostAnalysis`, `AnalysisSlice`（社媒专属模型）
+- `celery_tasks/`: 分析管线 Celery 任务（screening/deep/aggregation/monitor_slice）
+
+> 跨渠道 `AnalysisJob` 已迁至 `src/jobs/` 模块统一管理。
 
 ---
 
-### 3.7 LangChain LLM 引擎 (langchain/)
-**职责**: DeepSeek LLM 实例管理、9 条分析链定义
+### 3.7 LLM 引擎 (llm/)
+**职责**: DeepSeek LLM 实例管理、分析链定义
 
 **无独立 API 路由**，由 `analysis/` 模块通过函数调用使用。
 
@@ -269,16 +272,31 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 
 **社交媒体模块**:
 - `platforms`: 社交平台定义（7 个平台）
-- `social_projects`: 监控项目
-- `social_project_participants`: 项目参与者关联表
-- `data_tasks`: 数据采集任务
+- `social_monitors`: 社媒监测项目
+- `social_monitor_participants`: 项目参与者关联表
+- `social_tasks`: 数据采集任务
 - `social_posts`: 原文数据
 - `social_comments`: 评论数据
+- `post_analysis`: 原文分析结果（1:1 对应 SocialPost）
+- `analysis_slices`: 项目级分析切片
 
-**分析模块**:
-- `post_analyses`: 原文分析结果（1:1 对应 SocialPost）
-- `analysis_jobs`: 分析任务状态 + LLM 成本记录
-- `project_analysis_slices`: 项目级分析切片（不可变快照）
+**新闻媒体模块**:
+- `news_monitors`: 新闻监测项目
+- `news_monitor_participants`: 参与者关联表
+- `news_tasks`: 新闻采集任务
+- `news_articles`: 新闻文章
+
+**策略模块**:
+- `strategies`: 策略研究
+- `strategy_slices`: 策略-切片关联
+- `strategy_participants`: 策略参与者
+
+**知识库模块**:
+- `knowledge_documents`: 知识文档
+- `knowledge_chunks`: 文档向量嵌入
+
+**跨渠道模块**:
+- `analysis_jobs`: 分析任务状态 + LLM 成本记录（跨社媒/新闻/策略）
 
 ### 4.2 表结构详情
 
@@ -373,14 +391,14 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → D
 
 ### 5.5 社交媒体端点 (/api/v1/social-media)
 
-**项目** (`/projects`):
+**监测项目** (`/monitors`):
 - `GET /`: 项目列表
 - `POST /`: 创建项目
 - `GET /{id}`: 项目详情
 - `PUT /{id}`: 更新项目
 - `DELETE /{id}`: 删除项目
 - `POST /{id}/participants`: 添加参与者
-- `POST /{id}/batch-tasks`: 批量创建任务（复用 QuickTaskCreate）
+- `POST /{id}/tasks`: 批量创建任务
 
 **任务** (`/tasks`):
 - `GET /`: 任务列表

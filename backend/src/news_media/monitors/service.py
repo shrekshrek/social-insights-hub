@@ -123,13 +123,13 @@ async def get_monitor_aggregated_stats(
             "sentiment_distribution": {"positive": 0, "neutral": 0, "negative": 0},
             "sentiment_overall": None,
             "top_entities": [],
-            "search_source_distribution": {"baidu": 0, "duckduckgo": 0},
+            "search_source_distribution": {"baidu": 0, "sogou": 0, "duckduckgo": 0},
         }
 
     relevant = [a for a in articles if a.relevance in ("high", "medium")]
     tier_counts: dict[str, int] = {"tier1": 0, "tier2": 0, "tier3": 0}
     sentiment_dist = {"positive": 0, "neutral": 0, "negative": 0}
-    source_dist: dict[str, int] = {"baidu": 0, "duckduckgo": 0}
+    source_dist: dict[str, int] = {"baidu": 0, "sogou": 0, "duckduckgo": 0}
     sentiment_scores: list[float] = []
     entity_mentions: dict[str, int] = {}
 

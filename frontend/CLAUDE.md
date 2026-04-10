@@ -44,27 +44,23 @@ frontend/
 │   │   └── route-guard.global.ts
 │   ├── plugins/
 │   │   └── auth-init.client.ts
-│   ├── server/api/v1/[...].ts   # API 代理 (JWT 注入)
-│   └── config/
-│       ├── routes.ts            # 路由权限配置
-│       └── permissions.ts       # 权限常量 (与后端一致)
+├── config/
+│   ├── routes.ts                # 路由权限配置
+│   └── permissions.ts           # 权限常量 (与后端一致)
+├── server/api/v1/[...].ts       # API 代理 (JWT 注入)
 ├── layers/
 │   ├── ui-kit/                  # 共享 UI 组件 (无业务)
 │   ├── auth/                    # 登录, 注册, 认证状态
-│   ├── rbac/                    # 角色/权限管理界面
 │   ├── users/                   # 用户管理界面
-│   └── social-media/            # 核心业务
-│       ├── monitors/            # 监测项目管理
-│       ├── tasks/               # 任务管理, 数据上传
-│       └── analysis/            # 分析报告, 图表可视化
-│           ├── components/
-│           │   ├── task/        # 任务级报告组件
-│           │   ├── slice/       # 监测级切片洞察组件
-│           │   ├── shared/      # SpamRatioBar, TabSwitch 等
-│           │   ├── deep-result/ # 深度分析结果
-│           │   └── cost/        # Token 用量/成本
-│           ├── composables/     # useAnalysis, useTokenUsage 等
-│           └── types/           # 60+ 分析数据接口
+│   ├── rbac/                    # 角色/权限管理界面
+│   ├── jobs/                    # 跨渠道分析任务列表
+│   ├── social-media/            # 社媒监测/任务/分析
+│   │   ├── monitors/            # 监测项目管理
+│   │   ├── tasks/               # 任务管理, 数据上传
+│   │   └── analysis/            # 分析报告, 图表可视化
+│   ├── news-media/              # 新闻监测/任务/分析
+│   ├── strategies/              # 策略研究全流程
+│   └── knowledge-base/          # 市场知识库管理
 └── nuxt.config.ts               # 主配置 (extends 注册所有 Layers)
 ```
 

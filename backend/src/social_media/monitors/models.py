@@ -19,6 +19,7 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from src.auth.models import User
+    from src.social_media.tasks.models import SocialTask
 
 
 # 项目-参与者关联表（多对多）
@@ -114,8 +115,12 @@ class SocialMonitor(Base):
         "src.auth.models.User", secondary=social_monitor_participants, lazy="selectin"
     )
 
-    # TODO: 添加以下关系（在后续阶段实现）
-    # social_tasks: Mapped[list["SocialTask"]] = relationship(back_populates="monitor")
+    social_tasks: Mapped[list["SocialTask"]] = relationship(
+        "src.social_media.tasks.models.SocialTask",
+        back_populates="monitor",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     def __repr__(self):
         return f"<SocialMonitor(id={self.id}, name='{self.name}', owner_id={self.owner_id})>"

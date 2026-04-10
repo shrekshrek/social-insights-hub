@@ -1,12 +1,12 @@
-"""新闻搜索双渠道聚合器
+"""新闻搜索多渠道聚合器
 
-并发调用百度新闻（Crawl4AI）和 DuckDuckGo，按 URL 去重合并，
+并发调用百度新闻、搜狗新闻（Crawl4AI）和 DuckDuckGo，按 URL 去重合并，
 返回统一结构的文章列表（含 source_tier 分类）。
 """
 
 import asyncio
 import logging
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse, urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +41,38 @@ def classify_source_tier(source_name: str) -> str:
     return "tier3"
 
 
+# 这些 query 参数是文章的唯一标识符，去重时必须保留
+_IDENTITY_PARAMS: set[str] = {"id", "url", "docid", "nid", "aid", "artid", "newsid"}
+
+# 常见追踪参数，去重时应剥离
+_TRACKING_PARAMS: set[str] = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+    "from", "wfr", "for", "spider", "isappinstalled", "scene", "clicktime",
+    "enterid", "spm", "share_token", "tt_from", "channel",
+}
+
+
 def _normalize_url(url: str) -> str:
-    """URL 归一化，去除常见追踪参数，用于去重"""
+    """URL 归一化，去除追踪参数但保留文章标识参数，用于去重
+
+    baijiahao.baidu.com/s?id=xxx 和 news.sogou.com/link?url=xxx 中的
+    id/url 参数是文章唯一标识，不能去掉。
+    """
     try:
         parsed = urlparse(url)
-        # 去除 query string 中的追踪参数
-        if parsed.query:
-            # 保留路径，去掉 query（百度新闻文章 URL 通常 path 就够去重）
+        if not parsed.query:
+            return url.rstrip("/")
+        params = parse_qs(parsed.query, keep_blank_values=False)
+        # 只保留身份参数和非追踪参数
+        filtered = {
+            k: v for k, v in params.items()
+            if k.lower() in _IDENTITY_PARAMS or k.lower() not in _TRACKING_PARAMS
+        }
+        if not filtered:
             return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
-        return url.rstrip("/")
+        # 排序保证同参数不同顺序的 URL 归一化结果一致
+        sorted_qs = urlencode(filtered, doseq=True)
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{sorted_qs}".rstrip("/")
     except Exception:
         return url
 
@@ -59,24 +82,26 @@ async def search_news(
     max_results: int = 50,
     channels: list[str] | None = None,
 ) -> list[dict]:
-    """双渠道并发搜索，URL 去重合并，附加 source_tier
+    """多渠道并发搜索，URL 去重合并，附加 source_tier
 
     Args:
         query: 搜索关键词
         max_results: 每个渠道的最大结果数
-        channels: 启用的渠道列表，默认 ["baidu", "duckduckgo"]
-                  probe 阶段传 ["baidu"]，collect 阶段传 ["baidu", "duckduckgo"]
+        channels: 启用的渠道列表，默认 ["baidu", "sogou", "duckduckgo"]
 
     Returns:
         去重后的文章列表，每条含标准字段 + source_tier + search_source
     """
     if channels is None:
-        channels = ["baidu", "duckduckgo"]
+        channels = ["baidu", "sogou", "duckduckgo"]
 
     tasks = []
     if "baidu" in channels:
         from src.news_media.tasks.news_search.baidu_crawler import search_baidu_news
         tasks.append(search_baidu_news(query, max_results=max_results))
+    if "sogou" in channels:
+        from src.news_media.tasks.news_search.sogou_crawler import search_sogou_news
+        tasks.append(search_sogou_news(query, max_results=max_results))
     if "duckduckgo" in channels:
         from src.news_media.tasks.news_search.ddg_searcher import search_ddg_news
         tasks.append(search_ddg_news(query, max_results=max_results))

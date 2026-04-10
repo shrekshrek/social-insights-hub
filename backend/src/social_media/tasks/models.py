@@ -142,6 +142,7 @@ class SocialTask(Base):
     monitor: Mapped["SocialMonitor"] = relationship(
         "src.social_media.monitors.models.SocialMonitor",
         foreign_keys=[monitor_id],
+        back_populates="social_tasks",
         lazy="selectin",
     )
     platform: Mapped["Platform"] = relationship(

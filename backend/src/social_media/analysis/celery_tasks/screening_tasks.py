@@ -29,7 +29,8 @@ from src.celery_app import celery_app
 from src.config import get_settings
 from src.social_media.analysis.base_task import AnalysisTaskBase
 from src.database import SyncSessionLocal
-from src.social_media.analysis.models import PostAnalysis, AnalysisJob
+from src.jobs.models import AnalysisJob
+from src.social_media.analysis.models import PostAnalysis
 from src.social_media.tasks.models import SocialPost
 from src.social_media.analysis.celery_tasks.progress_manager import (
     AnalysisProgressManager,

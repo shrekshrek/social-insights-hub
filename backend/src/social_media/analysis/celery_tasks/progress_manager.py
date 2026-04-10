@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from src.redis_sync_client import get_sync_redis
 from src.database import SyncSessionLocal
-from src.social_media.analysis.models import AnalysisJob
+from src.jobs.models import AnalysisJob
 from src.config import get_settings
 from sqlalchemy import select
 

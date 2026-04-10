@@ -60,9 +60,13 @@
 |-------|------|
 | ui-kit/ | 共享 UI 基础组件 |
 | auth/ | 登录注册、认证状态管理 |
-| rbac/ | 角色权限管理界面 |
 | users/ | 用户管理界面 |
-| social-media/ | 监测/任务/分析界面 (含 monitors/, tasks/, analysis/, types/) |
+| rbac/ | 角色权限管理界面 |
+| jobs/ | 跨渠道分析任务列表 |
+| social-media/ | 社媒监测/任务/分析界面 (含 monitors/, tasks/, analysis/) |
+| news-media/ | 新闻监测/任务/分析界面 |
+| strategies/ | 策略研究全流程界面 |
+| knowledge-base/ | 市场知识库管理界面 |
 
 ### 前端核心文件
 

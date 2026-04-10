@@ -64,7 +64,7 @@ def _wait_for_analysis_job(job_id: int, timeout: int = TASK_WAIT_TIMEOUT) -> boo
     Returns:
         bool: 任务是否成功完成
     """
-    from src.social_media.analysis.models import AnalysisJob
+    from src.jobs.models import AnalysisJob
 
     start_time = time.time()
 

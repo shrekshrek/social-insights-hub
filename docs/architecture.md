@@ -12,14 +12,17 @@
 ┌───────────────────────────────────────────────────────┐
 │  Frontend (Nuxt 4 + Vue 3 + TypeScript)               │
 │                                                       │
-│  Layers: auth | rbac | users | social-media | ui-kit  │
+│  Layers: ui-kit | auth | users | rbac | jobs |         │
+│          social-media | news-media | strategies |       │
+│          knowledge-base                                │
 │  全局: useApi, usePermissions, route-guard, API Proxy  │
 └──────────────────────┬────────────────────────────────┘
                        │ REST API (JWT in Authorization header)
 ┌──────────────────────▼────────────────────────────────┐
 │  Backend (FastAPI + Python 3.11+)                      │
 │                                                       │
-│  模块: auth | rbac | users | social_media | langchain  │
+│  模块: auth | rbac | users | social_media | news_media │
+│       | strategies | knowledge_base | jobs | llm |     │
 │       | agent                                         │
 │  异步: Celery Workers (LLM 分析管线)                    │
 │  存储: PostgreSQL | Redis                              │
@@ -69,8 +72,8 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
           ┌───────────┘    │    │    │    └───────────┐
           ▼                ▼    ▼    ▼                ▼
    ┌────────────┐  ┌──────────┐ ┌──────────┐  ┌───────────┐
-   │  langchain  │  │ projects │ │  tasks   │  │   agent   │
-   │ (LLM 引擎)  │  │ (项目)    │ │ (任务)    │  │ (爬虫代理) │
+   │    llm     │  │ monitors │ │  tasks   │  │   agent   │
+   │ (LLM 引擎)  │  │ (监测)    │ │ (任务)    │  │ (爬虫代理) │
    └──────┬─────┘  └────┬─────┘ └────┬─────┘  └─────┬─────┘
           │              │            │              │
           │         ┌────┘      ┌─────┘         ┌────┘
@@ -96,13 +99,17 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 | auth | JWT 认证, 登录注册, 令牌黑名单 | `users` | `get_current_user()`, `User` 模型 | `/api/v1/auth` | 基础设施 |
 | rbac | 角色权限 CRUD, 代码驱动同步 | `roles`, `permissions`, 关联表 | `require_permission()`, `create_module_permissions()` | `/api/v1/rbac` | auth |
 | users | 用户 CRUD, 角色分配 | — (操作 auth.users) | — | `/api/v1/users` | auth, rbac |
-| projects | 项目管理, 平台初始化 | `social_projects`, `platforms` | `check_project_access()`, 模型 | `/api/v1/social-media/projects` | auth, rbac |
-| tasks | 任务管理, 多平台适配器, 原文/评论存储 | `data_tasks`, `social_posts`, `social_comments` | 模型, `task_crud`, `adapters` | `/api/v1/social-media/tasks` | auth, rbac, projects |
-| analysis | LLM 分析编排, 批处理, 成本追踪 | `post_analyses`, `analysis_jobs`, `project_analysis_slices` | — (终端模块) | `/api/v1/social-media/analysis` | auth, rbac, projects, tasks, langchain |
-| langchain | DeepSeek LLM 实例, 分析链 | — (纯计算) | `get_deepseek_chat()`, 各 chain | — (无 API) | 基础设施 (config) |
+| monitors | 监测项目管理, 平台初始化 | `social_monitors`, `platforms` | `check_monitor_access()`, 模型 | `/api/v1/social-media/monitors` | auth, rbac |
+| tasks | 任务管理, 多平台适配器, 原文/评论存储 | `social_tasks`, `social_posts`, `social_comments` | 模型, `task_crud`, `adapters` | `/api/v1/social-media/tasks` | auth, rbac, monitors |
+| analysis | LLM 分析编排, 批处理, 成本追踪 | `post_analysis`, `analysis_jobs`, `analysis_slices` | — (终端模块) | `/api/v1/social-media/analysis` | auth, rbac, monitors, tasks, llm |
+| jobs | 跨渠道 AnalysisJob 管理 | `analysis_jobs` | CRUD, factory | `/api/v1/jobs` | auth |
+| llm | DeepSeek LLM 实例, 分析链 | — (纯计算) | `get_deepseek_chat()`, 各 chain | — (无 API) | 基础设施 (config) |
 | agent | 爬虫代理 API, 数据上传 | — (操作 tasks 数据) | — (面向爬虫) | `/api/v1/agent` | tasks |
+| news_media | 新闻监测与采集 | `news_monitors`, `news_tasks`, `news_articles` | 模型, service | `/api/v1/news-media` | auth, rbac, jobs, llm |
+| strategies | 策略研究引擎 | `strategies`, `strategy_slices` | 模型, service | `/api/v1/strategies` | auth, social_media, news_media |
+| knowledge_base | 市场知识库, 文档向量化 | `knowledge_documents`, `knowledge_chunks` | 模型, service | `/api/v1/knowledge-base` | auth |
 
-### 3.3 LangChain 链清单
+### 3.3 LLM 分析链清单
 
 | 链 | 输入 | 输出 | 调用方 |
 |----|------|------|--------|
@@ -140,15 +147,19 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 | rbac | 角色/权限管理界面 | `useRbacApi.ts`, RoleForm/Detail 组件 |
 | users | 用户管理界面 | `useUsersApi.ts`, UserForm/Detail 组件 |
 | ui-kit | 共享 UI 组件 (无业务) | — |
-| social-media | 项目/任务/分析全流程 | 见下表 |
+| jobs | 跨渠道分析任务列表 | `useJobs.ts` |
+| social-media | 社媒监测/任务/分析 | 见下表 |
+| news-media | 新闻监测/任务/分析 | `useNewsMonitors.ts`, `useNewsTasks.ts` |
+| strategies | 策略研究全流程 | `useStrategies.ts` |
+| knowledge-base | 市场知识库管理 | `useKnowledgeBase.ts` |
 
 ### 4.3 social-media Layer 子模块
 
 | 子模块 | 页面 | Composables | 关键组件 |
 |--------|------|-------------|----------|
-| projects/ | 列表, 创建, 详情, 切片洞察 | usePlatforms, useSocialProjects | TaskComparisonSlideover |
+| monitors/ | 列表, 创建, 详情, 切片洞察 | usePlatforms, useMonitors | TaskComparisonSlideover |
 | tasks/ | 列表, 创建, 详情, 数据上传 | useTasks, usePosts, useJSONUpload | — |
-| analysis/ | — (嵌入 task/project 详情页) | useAnalysis, useAnalysisStats, useTokenUsage | TaskAnalysisReport, IpaChart, ContextGraphChart, CompetitorRadarChart, TimeDistributionChart, SpamRatioBar, PostListModal 等 |
+| analysis/ | — (嵌入 task/monitor 详情页) | useAnalysis, useAnalysisStats, useTokenUsage | TaskAnalysisReport, IpaChart, ContextGraphChart, CompetitorRadarChart, TimeDistributionChart, SpamRatioBar, PostListModal 等 |
 
 ---
 
@@ -159,20 +170,24 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 ```
 User ──1:N──▶ UserRole ◀──N:1── Role ──1:N──▶ RolePermission ◀──N:1── Permission
 
-User ──1:N──▶ SocialProject (owner)
-User ──M:N──▶ SocialProject (participants)
+User ──1:N──▶ SocialMonitor (owner)
+User ──M:N──▶ SocialMonitor (participants)
 
-Platform ──1:N──▶ SocialProject
-SocialProject ──1:N──▶ DataTask
-Platform ──1:N──▶ DataTask
+Platform ──1:N──▶ SocialTask
+SocialMonitor ──1:N──▶ SocialTask
 
-DataTask ──1:N──▶ SocialPost ──1:1──▶ PostAnalysis
+SocialTask ──1:N──▶ SocialPost ──1:1──▶ PostAnalysis
 SocialPost ──1:N──▶ SocialComment
 
-SocialProject ──1:N──▶ AnalysisJob ◀──N:1── DataTask (可 NULL)
-User ──1:N──▶ AnalysisJob
+SocialMonitor ──1:N──▶ AnalysisSlice
+AnalysisJob ──N:1──▶ SocialMonitor (可 NULL)
+AnalysisJob ──N:1──▶ SocialTask (可 NULL)
+AnalysisJob ──N:1──▶ NewsMonitor (可 NULL)
+AnalysisJob ──N:1──▶ NewsTask (可 NULL)
 
-SocialProject ──1:N──▶ ProjectAnalysisSlice
+NewsMonitor ──1:N──▶ NewsTask ──1:N──▶ NewsArticle
+Strategy ──1:1──▶ SocialMonitor (可 NULL)
+Strategy ──1:1──▶ NewsMonitor (可 NULL)
 ```
 
 ### 5.2 核心表
@@ -181,13 +196,18 @@ SocialProject ──1:N──▶ ProjectAnalysisSlice
 |----|----------|------|
 | users | auth | 用户基础信息 |
 | roles, permissions, role_permissions, user_roles | rbac | RBAC 权限体系 |
-| platforms | projects | 社交平台定义 (7 个平台) |
-| social_projects, social_project_participants | projects | 监控项目 |
-| data_tasks | tasks | 数据采集任务 |
+| platforms | monitors | 社交平台定义 (7 个平台) |
+| social_monitors, social_monitor_participants | monitors | 社媒监测项目 |
+| social_tasks | tasks | 社媒数据采集任务 |
 | social_posts, social_comments | tasks | 原文/评论数据 |
-| post_analyses | analysis | 原文分析结果 (1:1 SocialPost) |
-| analysis_jobs | analysis | 分析任务状态+成本记录 |
-| project_analysis_slices | analysis | 项目级分析切片 (不可变) |
+| post_analysis | analysis | 原文分析结果 (1:1 SocialPost) |
+| analysis_slices | analysis | 项目级分析切片 |
+| analysis_jobs | jobs | 跨渠道分析任务状态+成本记录 |
+| news_monitors, news_monitor_participants | news_media | 新闻监测项目 |
+| news_tasks | news_media | 新闻采集任务 |
+| news_articles | news_media | 新闻文章 |
+| strategies, strategy_slices, strategy_participants | strategies | 策略研究 |
+| knowledge_documents, knowledge_chunks | knowledge_base | 知识文档+向量嵌入 |
 
 ---
 
@@ -207,17 +227,17 @@ Stage 2: 深度分析 (deep_analysis_tasks)  ← LLM: deepseek-chat/reasoner
 Stage 3: 聚合 (aggregation_tasks)       ← LLM: 归一化
          实体/观点归一化, NSR, SERP, 四象限, IPA, 竞品, 时间分布
       ▼
-写入 DataTask.analysis_result (JSON)
+写入 SocialTask.analysis_result (JSON)
 ```
 
 ### 6.2 项目级分析
 
 ```
-选择多个 DataTask
-  → Stage 1 (同步): 统计聚合 + spam 分布计算 → 创建 ProjectAnalysisSlice
+选择多个 SocialTask
+  → Stage 1 (同步): 统计聚合 + spam 分布计算 → 创建 AnalysisSlice
   → Stage 2 (Celery): 跨任务实体/观点合并 (LLM)，传递 spam_distribution
   → Stage 3 (Celery): 项目级报告摘要 (LLM)
-  → 更新 ProjectAnalysisSlice.result_data
+  → 更新 AnalysisSlice.result_data
 ```
 
 Stage 1 通过 outerjoin PostAnalysis 获取 spam_score，构建 `spam_map_by_key`（post_key → high/low），为每个实体/话题计算 4D spam 分布（`high_spam/low_spam × post/comment`）。Stage 2 归一化时累加传递该分布。
@@ -244,9 +264,9 @@ Agent 上传数据 → auto_analyze=True → screening → deep → aggregation 
                       │ auto_analyze
                       ▼
           analysis/celery_tasks (screening → deep → aggregation)
-                      │ langchain/chains/* (LLM)
+                      │ llm/chains/* (LLM)
                       ▼
-               DataTask.analysis_result
+               SocialTask.analysis_result
                       │ 前端读取
                       ▼
                TaskAnalysisReport.vue
@@ -261,7 +281,7 @@ server/api/v1/[...].ts → 注入 Authorization header
       ↓
 后端 router → Depends(get_current_user) + Depends(require_permission())
       ↓
-service → check_project_access(user_id, project_id)
+service → check_monitor_access(user_id, monitor_id)
 ```
 
 ---
@@ -274,7 +294,7 @@ service → check_project_access(user_id, project_id)
 | Dependency Injection | FastAPI `Depends()` 管理 DB session, 当前用户, 权限 |
 | Adapter Pattern | `tasks/adapters/` 处理各平台数据格式差异 |
 | Async Task Chain | Celery 编排多阶段分析管线 |
-| Slice Pattern | `ProjectAnalysisSlice` 保存不可变报告历史 |
+| Slice Pattern | `AnalysisSlice` 保存不可变报告历史 |
 | Cost Tracking | 每次 LLM 调用记录 token 用量+费用 |
 | Code-Driven RBAC | 权限在代码中定义, 启动时自动同步到数据库 |
 | API Proxy | 前端统一注入 JWT, 转发到后端 |

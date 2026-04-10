@@ -52,17 +52,14 @@ frontend/
 │   ├── rbac/                 # 角色权限管理模块
 │   ├── users/                # 用户管理模块
 │   ├── ui-kit/               # 共享UI组件库
-│   └── social-media/         # 社交媒体核心业务 Layer
-│       ├── projects/         # 项目管理、切片洞察页面
-│       ├── tasks/            # 任务管理、数据上传页面
-│       └── analysis/         # 分析报告组件、图表、类型定义
-│           ├── components/
-│           │   ├── task/     # 任务级报告 (TaskAnalysisReport等)
-│           │   ├── project/  # 项目级切片 (ProjectSlice相关)
-│           │   ├── shared/   # SpamRatioBar, TabSwitch, PostListModal 等
-│           │   └── cost/     # Token 用量/成本面板
-│           ├── composables/  # useAnalysis, useTokenUsage 等
-│           └── types/        # 60+ 分析数据接口定义
+│   ├── jobs/                 # 跨渠道分析任务列表
+│   ├── social-media/         # 社交媒体核心业务 Layer
+│   │   ├── monitors/         # 监测项目管理、切片洞察页面
+│   │   ├── tasks/            # 任务管理、数据上传页面
+│   │   └── analysis/         # 分析报告组件、图表、类型定义
+│   ├── news-media/           # 新闻监测/任务/分析
+│   ├── strategies/           # 策略研究全流程
+│   └── knowledge-base/       # 市场知识库管理
 ├── app/                       # Nuxt 4 主应用目录
 │   ├── pages/                # 全局页面
 │   ├── components/           # 全局通用组件
@@ -118,25 +115,23 @@ frontend/
     -   **职责**: 提供用户管理界面。
     -   **内容**: 包含用户列表、用户详情、用户表单等组件，以及封装用户管理 API 的 `useUsersApi.ts`。
 -   **`social-media` Layer**（核心业务）:
-    -   **职责**: 社交媒体监控的完整业务流程——项目管理、数据采集任务、LLM 分析报告展示。
+    -   **职责**: 社交媒体监控的完整业务流程——监测项目管理、数据采集任务、LLM 分析报告展示。
     -   **子模块**:
 
         | 子模块 | 关键页面/组件 | 核心 Composables |
         |--------|--------------|-----------------|
-        | `projects/` | 项目列表/创建/详情、切片洞察对比、`QuickTaskForm`（批量创建任务表单） | `useSocialProjects`, `usePlatforms` |
+        | `monitors/` | 监测项目列表/创建/详情、切片洞察对比 | `useMonitors`, `usePlatforms` |
         | `tasks/` | 任务列表/创建/详情、JSON 数据上传 | `useTasks`, `usePosts`, `useJSONUpload` |
-        | `analysis/` | 分析报告（嵌入 task/project 详情页）、切片重命名 | `useAnalysis`, `useAnalysisStats`, `useTokenUsage` |
+        | `analysis/` | 分析报告（嵌入 task/monitor 详情页）、切片重命名 | `useAnalysis`, `useAnalysisStats`, `useTokenUsage` |
 
-    -   **分析组件层次**:
-        - `TaskAnalysisReport.vue`: 任务级完整分析报告（NSR/CII/SERP/四象限/话题/实体/KOL）
-        - `IpaChart.vue`, `ContextGraphChart.vue`, `CompetitorRadarChart.vue`, `TimeDistributionChart.vue`: ECharts 图表
-        - `SpamRatioBar.vue`, `TabSwitch.vue`, `PostListModal.vue`, `ClickableCount.vue`: 共享 UI 工具组件
-        - `analysis/types/`: 60+ TypeScript 接口，覆盖 `TaskAnalysisResultData`, `ProjectSliceResultData` 等全部数据结构
-
-    -   **Spam 维度可视化** (重要约定):
-        - **列表类** (实体/话题): 4D SpamDistribution (high/low × post/comment) + TabSwitch 排序控件
-        - **图表类** (IPA/竞品/关联网络): 2D 预计算 (all/organic/promo) + TabSwitch 维度筛选
-        - `SpamRatioBar`: 展示 high_spam/low_spam 原始帖数 + 评论数，不显示百分比
+-   **`news-media` Layer**:
+    -   **职责**: 新闻舆情监测——新闻监测项目管理、新闻采集任务、文章列表与分析。
+-   **`strategies` Layer**:
+    -   **职责**: 策略研究全流程——策略创建、probe/collect 两段式采集编排、多数据源分析报告。
+-   **`knowledge-base` Layer**:
+    -   **职责**: 市场知识库管理——文档上传、爬虫数据管理、RAG 检索。
+-   **`jobs` Layer**:
+    -   **职责**: 跨渠道 LLM 分析任务的统一查看——社媒/新闻/策略的 AnalysisJob 列表与状态追踪。
 
 ---
 

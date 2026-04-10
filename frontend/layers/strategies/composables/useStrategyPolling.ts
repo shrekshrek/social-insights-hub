@@ -126,6 +126,12 @@ export const useStrategyPolling = (
       if (result.all_analyzed && result.coverage_check_result) {
         stopCollectionPolling()
       }
+
+      // 兜底：状态已推进到 ready 或更后阶段 → 停止轮询
+      const currentStatus = strategy.value?.status
+      if (currentStatus && (STATUS_ORDER[currentStatus as keyof typeof STATUS_ORDER] ?? 0) >= STATUS_ORDER.ready) {
+        stopCollectionPolling()
+      }
     } catch {
       // 静默失败，下次轮询重试
     }

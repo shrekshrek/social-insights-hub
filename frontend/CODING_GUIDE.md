@@ -9,7 +9,7 @@
 1. [核心架构：Nuxt Layers](#1-核心架构nuxt-layers)
 2. [项目结构](#2-项目结构-project-structure)
 3. [Layer 开发规范](#3-layer-开发规范)
-4. [UI 与样式](#4-ui-与样式-nuxtui-v3)
+4. [UI 与样式](#4-ui-与样式-nuxtui-v4)
 5. [状态管理](#5-状态管理-pinia)
 6. [认证与权限](#6-认证与权限-nuxt-auth-utils--rbac)
 7. [SSR 渲染与数据获取 ⚠️](#7-ssr-渲染与数据获取-⚠️)
@@ -55,31 +55,31 @@ frontend/
 │   └── ui-kit/              # UI组件库 (推荐)
 │       ├── components/      # 可复用的基础组件
 │       └── nuxt.config.ts   # UI层配置
-├── pages/                   # 全局页面 (必需: index.vue)
-├── layouts/                 # 全局布局 (推荐: default.vue)
-├── components/              # 全局组件 (可选)
-├── composables/             # 全局组合式函数 (核心)
-│   ├── useApi.ts           # 统一API请求 (必需)
-│   ├── useCharts.ts        # 图表组合函数 (可选)
-│   ├── useLoading.ts       # 加载状态管理 (推荐)
-│   └── useFormValidation.ts # 表单验证 (推荐)
-├── config/                  # 配置文件 (推荐)
-│   ├── routes.ts           # 统一路由权限配置（页面约定+功能配置）(必需)
-│   └── permissions.ts      # 权限常量定义 (必需)
-├── middleware/              # 全局中间件 (推荐)
-│   └── route-guard.global.ts # 统一路由守卫 (必需)
-├── plugins/                 # 插件 (按需)
-│   ├── auth-init.client.ts # 认证初始化 (必需)
-│   └── error-handler.client.ts # 全局错误处理 (推荐)
-├── server/                  # 全局服务端API (可选)
-│   └── api/v1/[...].ts     # API代理中间件 (必需)
+├── app/                     # 全局基础设施 (Nuxt 自动发现目录)
+│   ├── pages/               # 全局页面 (必需: index.vue)
+│   ├── layouts/             # 全局布局 (推荐: default.vue)
+│   ├── components/          # 全局组件 (可选)
+│   ├── composables/         # 全局组合式函数 (核心)
+│   │   ├── useApi.ts        # 统一API请求 (必需)
+│   │   ├── usePermissions.ts # RBAC 权限检查 (必需)
+│   │   └── useCharts.ts     # 图表组合函数 (可选)
+│   ├── middleware/          # 全局中间件
+│   │   └── route-guard.global.ts # 统一路由守卫 (必需)
+│   ├── plugins/             # 插件 (按需)
+│   │   ├── auth-init.client.ts # 认证初始化 (必需)
+│   │   └── error-handler.client.ts # 全局错误处理 (推荐)
+│   ├── assets/              # 编译时资源 (可选)
+│   ├── app.config.ts        # 应用配置 (推荐)
+│   └── error.vue            # 全局错误页面 (推荐)
+├── config/                  # 配置文件 (根级)
+│   ├── routes.ts            # 统一路由权限配置 (必需)
+│   └── permissions.ts       # 权限常量定义 (必需)
+├── server/                  # 全局服务端API (根级)
+│   └── api/v1/[...].ts      # API代理中间件 (必需)
 ├── types/                   # TypeScript 类型定义 (推荐)
-├── assets/                  # 编译时资源 (可选)
 ├── public/                  # 静态资源 (可选)
-├── nuxt.config.ts          # 主配置文件 (必需)
-├── app.config.ts           # 应用配置 (推荐)
-├── error.vue               # 全局错误页面 (推荐)
-└── package.json            # 依赖配置 (必需)
+├── nuxt.config.ts           # 主配置文件 (必需)
+└── package.json             # 依赖配置 (必需)
 ```
 
 **架构演进指导**：
@@ -492,6 +492,6 @@ export default defineEventHandler(async (event) => {
    - 后端 API 文档位于 [http://localhost:8000/docs](http://localhost:8000/docs)
 
 4. **开发流程**:
-   - 使用统一处理工具（`useApi`, `useFormValidation` 等）进行开发
+   - 使用统一处理工具（`useApi`, `usePermissions` 等）进行开发
    - 遵循 Layer 架构，将业务逻辑封装在对应的 Layer 中
    - 使用 `@nuxt/ui` 组件库构建界面

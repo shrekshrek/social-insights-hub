@@ -11,7 +11,7 @@
 
 from .models import (
     PostAnalysis,
-    AnalysisJob,
+    AnalysisSlice,
 )
 from .schemas import (
     PostAnalysisCreate,
@@ -24,7 +24,7 @@ from .base_task import AnalysisTaskBase
 __all__ = [
     # Models
     "PostAnalysis",
-    "AnalysisJob",
+    "AnalysisSlice",
     # Schemas
     "PostAnalysisCreate",
     "PostAnalysisResponse",

@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 # 逐篇标注的批次大小
 _TAGGING_BATCH_SIZE = 5
 
-# probe 搜索每渠道最大条数：baidu 为主力，DDG best-effort 补充样本
+# probe 搜索每渠道最大条数
 _PROBE_MAX_RESULTS = 25
-_PROBE_CHANNELS: tuple[str, ...] = ("baidu", "duckduckgo")
+_PROBE_CHANNELS: tuple[str, ...] = ("baidu", "sogou", "duckduckgo")
 
 
 async def create_news_task(

@@ -100,7 +100,7 @@ class AnalysisTaskBase(Task):
         async with AsyncSessionLocal() as db:
             try:
                 from sqlalchemy import update
-                from src.social_media.analysis.models import AnalysisJob
+                from src.jobs.models import AnalysisJob
 
                 # 构建更新数据
                 update_data = {
@@ -161,7 +161,7 @@ class AnalysisTaskBase(Task):
         async with AsyncSessionLocal() as db:
             try:
                 from sqlalchemy import update
-                from src.social_media.analysis.models import AnalysisJob
+                from src.jobs.models import AnalysisJob
 
                 # 构建更新数据
                 update_data = {

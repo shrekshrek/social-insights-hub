@@ -1,11 +1,9 @@
-"""分析模块数据模型（社媒专属残留）
+"""社媒专属分析数据模型
 
-本文件残留的是社媒专属的数据模型：
 - PostAnalysis: 社媒原文级分析结果（初筛 + 原文深度 + 评论深度）
 - AnalysisSlice: 社媒项目级手动合并分析切片
 
-跨渠道的 AnalysisJob / AnalysisType / AnalysisStatus 已迁至 `src/jobs/`。
-见 docs/adr-001-channel-local-analysis.md P1。
+跨渠道的 AnalysisJob / AnalysisType / AnalysisStatus 定义在 `src/jobs/models.py`。
 """
 
 from datetime import datetime
@@ -26,13 +24,6 @@ from sqlalchemy.sql import func
 
 from src.database import Base
 
-# 跨渠道 AnalysisJob/AnalysisType/AnalysisStatus 已迁至 src/jobs/models.py（P1, ADR-001）。
-# 这里 re-export 以便旧调用方过渡；新代码请直接 `from src.jobs.models import ...`。
-from src.jobs.models import (  # noqa: F401
-    AnalysisJob,
-    AnalysisStatus,
-    AnalysisType,
-)
 
 if TYPE_CHECKING:
     from src.auth.models import User

@@ -93,7 +93,7 @@ async def _async_run_collect(
     """异步执行新闻全量采集流水线（供 Celery task 调用）"""
     from src.database import AsyncSessionLocal, async_engine
     from src.news_media.tasks.models import NewsTask
-    from src.social_media.analysis.models import AnalysisJob
+    from src.jobs.models import AnalysisJob
 
     # Celery gevent worker 下每个任务用 asyncio.run() 新建事件循环，
     # async_engine 池中残留的 asyncpg 连接绑定的是旧 loop，会触发
@@ -122,7 +122,7 @@ async def _async_run_collect(
             from src.news_media.tasks.service import _search_and_store_articles
 
             articles = await _search_and_store_articles(
-                db, task, max_results=50, channels=("baidu", "duckduckgo")
+                db, task, max_results=50, channels=("baidu", "sogou", "duckduckgo")
             )
 
             if not articles:

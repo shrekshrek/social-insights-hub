@@ -241,7 +241,7 @@ async def _clear_analysis_results(
     # 撤销/终止旧的分析 Celery 任务
     try:
         from celery import current_app as celery_app  # type: ignore[import-not-found]
-        from src.social_media.analysis.models import AnalysisJob
+        from src.jobs.models import AnalysisJob
 
         jobs_stmt = select(AnalysisJob.celery_task_id).where(
             and_(
@@ -273,7 +273,8 @@ async def _clear_analysis_results(
 
     # 清空分析任务记录 + PostAnalysis
     from sqlalchemy import delete as sa_delete
-    from src.social_media.analysis.models import AnalysisJob, PostAnalysis
+    from src.jobs.models import AnalysisJob
+    from src.social_media.analysis.models import PostAnalysis
 
     await db.execute(sa_delete(PostAnalysis).where(PostAnalysis.task_id == task_id))
     await db.execute(sa_delete(AnalysisJob).where(AnalysisJob.social_task_id == task_id))

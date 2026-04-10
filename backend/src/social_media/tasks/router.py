@@ -105,7 +105,7 @@ async def get_tasks(
 
     # 批量查询各任务最新 LLM 分析 Job 状态（用于判断"分析中"，避免 N+1）
     from sqlalchemy import select as sa_select
-    from src.analysis.models import AnalysisJob
+    from src.social_media.analysis.models import AnalysisJob
 
     task_ids = [t.id for t in tasks]
     latest_job_map: dict[int, str] = {}
@@ -160,7 +160,7 @@ async def get_task(
     """
     # analysis_result_at 不为空表示聚合已完成；否则取最新 LLM Job 状态
     from sqlalchemy import select as sa_select
-    from src.analysis.models import AnalysisJob
+    from src.social_media.analysis.models import AnalysisJob
 
     if task.analysis_result_at:
         aggregation_status = "completed"

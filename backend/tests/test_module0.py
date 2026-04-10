@@ -116,7 +116,7 @@ class TestLangChainModule:
     def test_langchain_module_import(self):
         """测试LangChain模块导入"""
         try:
-            from src.langchain import (  # noqa: F401
+            from src.llm import (  # noqa: F401
                 get_deepseek_chat,
                 get_deepseek_reasoner,
                 calculate_cost,
@@ -136,7 +136,7 @@ class TestLangChainModule:
             return
 
         try:
-            from src.langchain import get_deepseek_chat
+            from src.llm import get_deepseek_chat
             from langchain_core.language_models.chat_models import BaseChatModel
 
             llm = get_deepseek_chat()
@@ -156,7 +156,7 @@ class TestLangChainModule:
             return
 
         try:
-            from src.langchain import get_deepseek_reasoner
+            from src.llm import get_deepseek_reasoner
             from langchain_core.language_models.chat_models import BaseChatModel
 
             llm = get_deepseek_reasoner()
@@ -171,7 +171,7 @@ class TestLangChainModule:
 
     def test_calculate_cost_chat(self):
         """测试Chat模型成本计算"""
-        from src.langchain import calculate_cost
+        from src.llm import calculate_cost
 
         # Test chat model: 1000 input + 500 output tokens
         cost = calculate_cost(input_tokens=1000, output_tokens=500, model_type="chat")
@@ -181,7 +181,7 @@ class TestLangChainModule:
 
     def test_calculate_cost_reasoner(self):
         """测试Reasoner模型成本计算"""
-        from src.langchain import calculate_cost
+        from src.llm import calculate_cost
 
         # Test reasoner model: 2000 input + 1000 output tokens
         cost = calculate_cost(
@@ -193,7 +193,7 @@ class TestLangChainModule:
 
     def test_utility_functions(self):
         """测试工具函数"""
-        from src.langchain import (
+        from src.llm import (
             truncate_text,
             format_keywords_for_prompt,
         )
@@ -222,7 +222,7 @@ class TestDeepSeekAPI:
     )
     def test_api_connectivity_chat(self):
         """测试Chat模型API连通性 (LangChain 1.0)"""
-        from src.langchain_module import get_deepseek_chat, extract_token_usage
+        from src.llm_module import get_deepseek_chat, extract_token_usage
         from langchain_core.messages import HumanMessage
 
         try:
@@ -253,7 +253,7 @@ class TestDeepSeekAPI:
     )
     def test_api_connectivity_reasoner(self):
         """测试Reasoner模型API连通性 (LangChain 1.0)"""
-        from src.langchain_module import get_deepseek_reasoner, extract_token_usage
+        from src.llm_module import get_deepseek_reasoner, extract_token_usage
         from langchain_core.messages import HumanMessage
 
         try:

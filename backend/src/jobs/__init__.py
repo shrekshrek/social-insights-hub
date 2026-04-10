@@ -4,7 +4,7 @@
 
 依赖方向：
 - src/jobs/ 不依赖任何渠道模块（TYPE_CHECKING 下的 relationship hint 除外）
-- src/analysis, src/social_media, src/news_media, src/strategies 等均可 from src.jobs import
+- src/social_media, src/news_media, src/strategies, src/knowledge_base 等渠道模块均可 from src.jobs import
 
 参见 docs/adr-001-channel-local-analysis.md。
 """

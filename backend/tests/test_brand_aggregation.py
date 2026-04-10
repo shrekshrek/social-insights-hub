@@ -1,6 +1,6 @@
 """Tests for _aggregate_entities_by_parent source ID collection."""
 
-from src.analysis.celery_tasks.aggregation.insights import (
+from src.social_media.analysis.celery_tasks.aggregation.insights import (
     _aggregate_entities_by_parent,
 )
 

@@ -21,7 +21,7 @@ load_dotenv(".env.test")
 import pytest
 
 from src.config import settings
-from src.langchain.chains.entity_normalization_chain import (
+from src.llm.chains.entity_normalization_chain import (
     create_entity_clustering_chain,
     format_entities_for_clustering,
     parse_clustering_response,
@@ -185,7 +185,7 @@ def test_llm_clustering():
 
 def test_aggregated_entities_clustering():
     """测试 aggregate_entities 的完整流程（包含 LLM 聚类与打标、属性清洗）"""
-    from src.analysis.celery_tasks.aggregation.entity_aggregation import (
+    from src.social_media.analysis.celery_tasks.aggregation.entity_aggregation import (
         aggregate_entities,
     )
 

@@ -158,7 +158,7 @@ async def execute_task(
     await db.commit()
     await db.refresh(task)
 
-    from src.analysis.sources.news import create_news_analysis_jobs
+    from src.news_media.analysis.jobs import create_news_analysis_jobs
 
     tagging_job_id: int | None = None
     insight_job_id: int | None = None

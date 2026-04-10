@@ -20,7 +20,7 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from src.auth.models import User
-    from src.analysis.models import AnalysisSlice
+    from src.social_media.analysis.models import AnalysisSlice
     from src.social_media.monitors.models import SocialMonitor
     from src.social_media.tasks.models import SocialTask
     from src.news_media.monitors.models import NewsMonitor
@@ -193,7 +193,7 @@ class StrategySlice(Base):
         back_populates="slices",
     )
     slice: Mapped["AnalysisSlice"] = relationship(
-        "src.analysis.models.AnalysisSlice",
+        "src.social_media.analysis.models.AnalysisSlice",
         lazy="selectin",
     )
 

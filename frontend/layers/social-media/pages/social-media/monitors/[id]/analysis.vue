@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import SOVRankingChart from '../../../../../analysis/components/slice/SOVRankingChart.vue'
-import GroupShareTable from '../../../../../analysis/components/slice/GroupShareTable.vue'
-import PlatformDNAChart from '../../../../../analysis/components/slice/PlatformDNAChart.vue'
-import IndustryQuadrantChart from '../../../../../analysis/components/slice/IndustryQuadrantChart.vue'
-import TopicRadarChart from '../../../../../analysis/components/slice/TopicRadarChart.vue'
-import SWOTMatrixChart from '../../../../../analysis/components/slice/SWOTMatrixChart.vue'
-import ProductLineHealthTable from '../../../../../analysis/components/slice/ProductLineHealthTable.vue'
-import PlatformScissorsChart from '../../../../../analysis/components/slice/PlatformScissorsChart.vue'
-import GapAnalysisChart from '../../../../../analysis/components/slice/GapAnalysisChart.vue'
-import PostListModal from '../../../../../analysis/components/shared/PostListModal.vue'
-import SpamRatioBar from '../../../../../analysis/components/shared/SpamRatioBar.vue'
-import MarkdownRenderer from '../../../../../analysis/components/shared/MarkdownRenderer.vue'
-import type { SpamDistribution } from '../../../../../analysis/types'
+import SOVRankingChart from '../../../../analysis/components/slice/SOVRankingChart.vue'
+import GroupShareTable from '../../../../analysis/components/slice/GroupShareTable.vue'
+import PlatformDNAChart from '../../../../analysis/components/slice/PlatformDNAChart.vue'
+import IndustryQuadrantChart from '../../../../analysis/components/slice/IndustryQuadrantChart.vue'
+import TopicRadarChart from '../../../../analysis/components/slice/TopicRadarChart.vue'
+import SWOTMatrixChart from '../../../../analysis/components/slice/SWOTMatrixChart.vue'
+import ProductLineHealthTable from '../../../../analysis/components/slice/ProductLineHealthTable.vue'
+import PlatformScissorsChart from '../../../../analysis/components/slice/PlatformScissorsChart.vue'
+import GapAnalysisChart from '../../../../analysis/components/slice/GapAnalysisChart.vue'
+import PostListModal from '../../../../analysis/components/shared/PostListModal.vue'
+import SpamRatioBar from '../../../../analysis/components/shared/SpamRatioBar.vue'
+import MarkdownRenderer from '../../../../analysis/components/shared/MarkdownRenderer.vue'
+import type { SpamDistribution } from '../../../../analysis/types'
 
 definePageMeta({ layout: 'default' })
 
@@ -371,7 +371,7 @@ const sliceId = computed(() => route.query.slice_id ? Number(route.query.slice_i
 
 const { useApiData } = useApi()
 const { data: slice, pending: sliceLoading, refresh: refreshSlice } = useApiData<MonitorSlice>(
-  computed(() => sliceId.value ? `/analysis/monitors/${monitorId.value}/slices/${sliceId.value}` : ''),
+  computed(() => sliceId.value ? `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}` : ''),
   {
     key: computed(() => `monitor-slice-detail-${monitorId.value}-${sliceId.value}`),
     silent404: true,
@@ -862,7 +862,7 @@ const pollStatus = async () => {
   try {
     // 使用 apiRequest 获取最新数据（不会触发 useApiData 的响应式更新）
     const freshData = await apiRequest<MonitorSlice>(
-      `/analysis/monitors/${monitorId.value}/slices/${sliceId.value}`
+      `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}`
     )
     if (!freshData) return
 
@@ -1081,7 +1081,7 @@ const handleExport = async () => {
   exporting.value = true
   try {
     await apiDownload(
-      `/analysis/monitors/${monitorId.value}/slices/${sliceId.value}/export`,
+      `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}/export`,
     )
     showSuccess('报告已导出')
   } catch {

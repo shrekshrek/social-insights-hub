@@ -17,8 +17,8 @@ const { data: platforms } = getPlatforms()
 const currentPage = ref(1)
 const pageSize = ref(20)
 const searchQuery = ref('')
-const selectedPlatformId = ref<number | undefined>()
-const selectedStatus = ref<string | undefined>()
+const selectedPlatformId = ref<number | string>('all')
+const selectedStatus = ref('all')
 const selectedDataSource = ref<string | undefined>()
 const refreshing = ref(false)
 
@@ -27,8 +27,8 @@ const params = computed(() => ({
   page: currentPage.value,
   page_size: pageSize.value,
   search: searchQuery.value || undefined,
-  platform_id: selectedPlatformId.value,
-  status: selectedStatus.value,
+  ...(selectedPlatformId.value !== 'all' ? { platform_id: selectedPlatformId.value } : {}),
+  ...(selectedStatus.value !== 'all' ? { status: selectedStatus.value } : {}),
   data_source: selectedDataSource.value,
 }))
 
@@ -130,7 +130,7 @@ const getAnalysisText = (status: string | null) => {
 
 // 过滤选项
 const statusOptions = [
-  { label: '全部', value: undefined },
+  { label: '全部状态', value: 'all' },
   { label: '待处理', value: 'pending' },
   { label: '已接单', value: 'accepted' },
   { label: '运行中', value: 'running' },
@@ -147,19 +147,30 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'id',
       header: 'ID',
-      meta: { class: { th: 'w-14', td: 'w-14' } },
+      meta: { class: { th: 'w-12', td: 'w-12' } },
       cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.id),
     },
     {
       accessorKey: 'name',
       header: '任务名称',
-      meta: { class: { th: 'w-[200px]', td: 'w-[200px] whitespace-normal' } },
+      meta: { class: { th: 'w-[158px]', td: 'w-[158px] whitespace-normal' } },
       cell: ({ row }) => h('div', { class: 'font-medium leading-snug line-clamp-2', title: row.original.name }, row.original.name),
+    },
+    {
+      accessorKey: 'keywords',
+      header: '关键词',
+      meta: { class: { th: 'w-[130px]', td: 'w-[130px] whitespace-normal' } },
+      cell: ({ row }) =>
+        h(
+          'div',
+          { class: 'text-sm text-gray-600 dark:text-gray-400 leading-snug line-clamp-2', title: row.original.keywords || '' },
+          row.original.keywords || '-',
+        ),
     },
     {
       accessorKey: 'monitor_name',
       header: '所属项目',
-      meta: { class: { th: 'w-[144px]', td: 'w-[144px] whitespace-normal' } },
+      meta: { class: { th: 'w-[124px]', td: 'w-[124px] whitespace-normal' } },
       cell: ({ row }) => {
         if (!row.original.monitor_name || !row.original.monitor_id) {
           return h('span', { class: 'text-gray-400' }, '-')
@@ -176,13 +187,24 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'platform_name',
       header: '平台',
-      meta: { class: { th: 'w-[72px]', td: 'w-[72px]' } },
+      meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
       cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
+    },
+    {
+      accessorKey: 'phase',
+      header: '阶段',
+      meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
+      cell: ({ row }) => {
+        const phase = row.original.phase
+        const text = phase === 'probe' ? '探测' : phase === 'collect' ? '全量' : '-'
+        const color = phase === 'probe' ? 'info' : phase === 'collect' ? 'warning' : 'neutral'
+        return h(Badge, { color, size: 'xs', variant: 'subtle' }, () => text)
+      },
     },
     {
       accessorKey: 'status',
       header: '状态',
-      meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
+      meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
       cell: ({ row }) => {
         const collectBadge = h(Badge, {
           color: getStatusColor(row.original.status),
@@ -204,10 +226,12 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     },
     {
       accessorKey: 'stats',
-      header: '数据统计',
-      meta: { class: { th: 'w-[140px]', td: 'w-[140px] overflow-hidden' } },
-      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap' },
-        `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
+      header: '采集量',
+      meta: { class: { th: 'w-[100px]', td: 'w-[100px] overflow-hidden' } },
+      cell: ({ row }) => h(
+        'span',
+        { class: 'text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap' },
+        `${row.original.posts_count} 原 / ${row.original.comments_count} 评`,
       ),
     },
     {
@@ -219,8 +243,8 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
     {
       accessorKey: 'actions',
       header: '操作',
-      meta: { class: { th: 'w-[128px]', td: 'w-[128px]' } },
-      cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
+      meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
+      cell: ({ row }) => h('div', { class: 'flex items-center gap-1' }, [
         h(Button, {
           size: 'xs',
           variant: 'ghost',
@@ -270,7 +294,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
           新建任务
         </UButton>
         <UButton
-          variant="outline"
+          variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="refreshing"
           @click="handleRefresh"
@@ -299,7 +323,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
             <USelect
               v-model="selectedPlatformId"
               :items="[
-                { label: '全部平台', value: undefined },
+                { label: '全部平台', value: 'all' },
                 ...(platforms?.map(p => ({ label: p.name, value: p.id })) || [])
               ]"
               value-key="value"

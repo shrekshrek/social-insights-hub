@@ -14,7 +14,7 @@
 
       <div class="flex items-center gap-3">
         <UButton
-          variant="outline"
+          variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="refreshing"
           @click="handleRefresh"
@@ -242,17 +242,18 @@ const columns: TableColumn<Permission>[] = [
   {
     accessorKey: "display_name",
     header: "权限信息",
+    meta: { class: { th: "w-[200px]", td: "w-[200px] whitespace-normal" } },
     cell: ({ row }) => {
       const displayName = row.getValue("display_name") as string;
-      return h("div", { class: "flex flex-col" }, [
+      return h("div", { class: "flex flex-col leading-snug" }, [
         h(
           "span",
-          { class: "font-medium text-gray-900 dark:text-white" },
+          { class: "font-medium text-gray-900 dark:text-white line-clamp-1" },
           displayName || "-"
         ),
         h(
           "span",
-          { class: "text-sm text-gray-500 dark:text-gray-400" },
+          { class: "text-xs text-gray-500 dark:text-gray-400 line-clamp-1" },
           `${row.original.target}:${row.original.action}`
         ),
       ]);
@@ -261,6 +262,7 @@ const columns: TableColumn<Permission>[] = [
   {
     accessorKey: "target",
     header: "目标:操作",
+    meta: { class: { th: "w-[200px]", td: "w-[200px]" } },
     cell: ({ row }) => {
       const target = row.getValue("target") as string;
       const action = row.original.action as string;
@@ -282,17 +284,19 @@ const columns: TableColumn<Permission>[] = [
   {
     accessorKey: "description",
     header: "描述",
+    meta: { class: { th: "w-[280px]", td: "w-[280px] whitespace-normal" } },
     cell: ({ row }) => {
       return h(
         "span",
-        { class: "text-gray-600 dark:text-gray-300" },
-        row.getValue("description") || "-"
+        { class: "text-sm text-gray-600 dark:text-gray-300 line-clamp-2 leading-snug" },
+        (row.getValue("description") as string) || "-"
       );
     },
   },
   {
     accessorKey: "resource",
     header: "权限类型",
+    meta: { class: { th: "w-[110px]", td: "w-[110px]" } },
     cell: ({ row }) => {
       const permission = row.original;
       const { label, color } = getPermissionCategory(permission);
@@ -308,16 +312,16 @@ const columns: TableColumn<Permission>[] = [
     },
   },
   {
-    id: "view",
-    header: "查看详情",
+    id: "actions",
+    header: "操作",
+    meta: { class: { th: "w-[100px]", td: "w-[100px]" } },
     cell: ({ row }) => {
       return h(UButton, {
-        color: "neutral",
+        size: "xs",
         variant: "ghost",
-        size: "sm",
         icon: "i-heroicons-eye",
         to: `/rbac/permissions/${row.original.id}`,
-      });
+      }, () => "查看");
     },
   },
 ];

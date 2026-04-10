@@ -267,6 +267,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
     {
       accessorKey: 'social_monitor_name',
       header: '项目',
+      meta: { class: { th: 'w-[160px]', td: 'w-[160px] whitespace-normal' } },
       cell: ({ row }) => {
         const job = row.original
         // 优先展示社媒监测，兜底展示新闻监测
@@ -279,22 +280,21 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
         if (!monitorId) {
           return h('span', { class: 'text-gray-400' }, '-')
         }
-        return h('div', { class: 'flex items-center gap-1' }, [
-          h('span', { class: 'text-xs text-gray-400 font-mono' }, `#${monitorId}`),
-          monitorName
-            ? h(Button, {
-                variant: 'link',
-                size: 'xs',
-                class: 'p-0 font-normal truncate max-w-24',
-                to: link,
-              }, () => monitorName)
-            : null,
+        return h(Button, {
+          variant: 'link',
+          size: 'xs',
+          class: 'p-0 font-normal text-left whitespace-normal leading-snug line-clamp-2',
+          to: link,
+        }, () => [
+          h('span', { class: 'text-gray-400 font-mono mr-1' }, `#${monitorId}`),
+          monitorName || '-',
         ])
       },
     },
     {
       accessorKey: 'social_task_name',
       header: '任务',
+      meta: { class: { th: 'w-[180px]', td: 'w-[180px] whitespace-normal' } },
       cell: ({ row }) => {
         const job = row.original
         // 优先展示社媒任务，兜底展示新闻任务
@@ -305,18 +305,16 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           ? `/news-media/tasks/${taskId}`
           : `/social-media/tasks/${taskId}`
 
-        // 任务级：显示 ID + 任务名
+        // 任务级：显示 ID + 任务名（允许换行）
         if (taskId) {
-          return h('div', { class: 'flex items-center gap-1' }, [
-            h('span', { class: 'text-xs text-gray-400 font-mono' }, `#${taskId}`),
-            taskName
-              ? h(Button, {
-                  variant: 'link',
-                  size: 'xs',
-                  class: 'p-0 font-normal truncate max-w-24',
-                  to: taskLink,
-                }, () => taskName)
-              : null,
+          return h(Button, {
+            variant: 'link',
+            size: 'xs',
+            class: 'p-0 font-normal text-left whitespace-normal leading-snug line-clamp-2',
+            to: taskLink,
+          }, () => [
+            h('span', { class: 'text-gray-400 font-mono mr-1' }, `#${taskId}`),
+            taskName || '-',
           ])
         }
 
@@ -337,14 +335,14 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
     },
     {
       accessorKey: 'api_calls',
-      header: () => h('span', { class: 'whitespace-nowrap' }, 'API'),
+      header: () => h('span', { class: 'whitespace-nowrap' }, 'API 调用'),
       cell: ({ row }) => {
         const usage = row.original.token_usage?.summary
         const calls = usage?.total_calls || 0
-        return h('span', { class: 'text-xs text-gray-600 dark:text-gray-400' }, `${calls}次`)
+        return h('span', { class: 'text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap' }, `${calls} 次`)
       },
-      footer: () => h('span', { class: 'text-xs font-semibold text-gray-700 dark:text-gray-300' },
-        `${pageStats.value.totalCalls.toLocaleString()}次`
+      footer: () => h('span', { class: 'text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap' },
+        `${pageStats.value.totalCalls.toLocaleString()} 次`
       ),
     },
     {
@@ -365,10 +363,10 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
     {
       accessorKey: 'processing_time',
       header: '耗时',
-      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
+      cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap' },
         formatDuration(row.original.processing_time)
       ),
-      footer: () => h('span', { class: 'text-xs font-semibold text-gray-700 dark:text-gray-300' },
+      footer: () => h('span', { class: 'text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap' },
         formatDuration(pageStats.value.totalTime)
       ),
     },
@@ -423,7 +421,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       </div>
 
       <UButton
-        variant="outline"
+        variant="ghost"
         icon="i-heroicons-arrow-path"
         :loading="refreshing"
         @click="handleRefresh"

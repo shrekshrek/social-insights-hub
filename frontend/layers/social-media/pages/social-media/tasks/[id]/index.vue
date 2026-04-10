@@ -562,7 +562,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
             上传数据
           </UButton>
           <UButton
-            variant="outline"
+            variant="ghost"
             icon="i-heroicons-arrow-path"
             :loading="refreshing"
             @click="handleRefresh"

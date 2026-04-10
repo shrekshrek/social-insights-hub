@@ -581,7 +581,7 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
                 class="w-32"
               />
               <UButton
-                variant="outline"
+                variant="ghost"
                 icon="i-heroicons-arrow-path"
                 @click="refreshArticles()"
               >

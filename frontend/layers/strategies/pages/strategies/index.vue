@@ -17,7 +17,7 @@
           新建策略
         </UButton>
         <UButton
-          variant="outline"
+          variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="refreshing"
           @click="handleRefresh"
@@ -155,13 +155,14 @@ const columns: TableColumn<StrategyListItem>[] = [
   {
     accessorKey: 'name',
     header: '策略名称',
+    meta: { class: { th: 'w-[260px]', td: 'w-[260px] whitespace-normal' } },
     cell: ({ row }) => {
       return h(
         UButton as Component,
         {
           variant: 'link',
           to: `/strategies/${row.original.id}`,
-          class: 'font-medium',
+          class: 'p-0 font-medium text-left whitespace-normal leading-snug line-clamp-2',
         },
         () => row.getValue('name')
       )
@@ -170,6 +171,7 @@ const columns: TableColumn<StrategyListItem>[] = [
   {
     accessorKey: 'status',
     header: '状态',
+    meta: { class: { th: 'w-[100px]', td: 'w-[100px]' } },
     cell: ({ row }) => {
       const status = row.getValue('status') as StrategyStatus
       const info = STATUS_MAP[status] || { label: status, color: 'neutral' as const }
@@ -183,6 +185,7 @@ const columns: TableColumn<StrategyListItem>[] = [
   {
     accessorKey: 'slice_count',
     header: '关联切片',
+    meta: { class: { th: 'w-[100px]', td: 'w-[100px]' } },
     cell: ({ row }) => {
       return h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, `${row.getValue('slice_count')} 个`)
     },
@@ -190,10 +193,12 @@ const columns: TableColumn<StrategyListItem>[] = [
   {
     accessorKey: 'creator_name',
     header: '创建人',
+    meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
   },
   {
     accessorKey: 'created_at',
     header: '创建时间',
+    meta: { class: { th: 'w-[160px]', td: 'w-[160px] whitespace-nowrap' } },
     cell: ({ row }) => {
       return h(
         'span',
@@ -205,22 +210,22 @@ const columns: TableColumn<StrategyListItem>[] = [
   {
     id: 'actions',
     header: '操作',
+    meta: { class: { th: 'w-[140px]', td: 'w-[140px]' } },
     cell: ({ row }) => {
       return h('div', { class: 'flex items-center gap-2' }, [
         h(UButton as Component, {
-          color: 'neutral',
+          size: 'xs',
           variant: 'ghost',
-          size: 'sm',
           icon: 'i-heroicons-eye',
           to: `/strategies/${row.original.id}`,
-        }),
+        }, () => '查看'),
         h(UButton as Component, {
-          color: 'error',
+          size: 'xs',
           variant: 'ghost',
-          size: 'sm',
+          color: 'error',
           icon: 'i-heroicons-trash',
           onClick: () => confirmDelete(row.original),
-        }),
+        }, () => '删除'),
       ])
     },
   },

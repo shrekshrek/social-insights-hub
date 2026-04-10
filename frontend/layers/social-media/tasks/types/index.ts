@@ -124,6 +124,7 @@ export interface SocialTaskCreate {
   task_params?: Record<string, unknown>;
   data_source: DataSource;
   auto_analyze?: boolean;
+  phase?: 'probe' | 'collect';
 }
 
 export interface SocialTaskUpdate {

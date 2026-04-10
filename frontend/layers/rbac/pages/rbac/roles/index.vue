@@ -20,7 +20,7 @@
           新增角色
         </UButton>
         <UButton
-          variant="outline"
+          variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="refreshing"
           @click="handleRefresh"
@@ -212,17 +212,18 @@ const columns: TableColumn<Role>[] = [
   {
     accessorKey: "display_name",
     header: "角色信息",
+    meta: { class: { th: "w-[200px]", td: "w-[200px] whitespace-normal" } },
     cell: ({ row }) => {
       const displayName = row.getValue("display_name") as string;
-      return h("div", { class: "flex flex-col" }, [
+      return h("div", { class: "flex flex-col leading-snug" }, [
         h(
           "span",
-          { class: "font-medium text-gray-900 dark:text-white" },
+          { class: "font-medium text-gray-900 dark:text-white line-clamp-1" },
           displayName || "-"
         ),
         h(
           "span",
-          { class: "text-sm text-gray-500 dark:text-gray-400" },
+          { class: "text-xs text-gray-500 dark:text-gray-400 line-clamp-1" },
           row.original.name || "-"
         ),
       ]);
@@ -231,29 +232,32 @@ const columns: TableColumn<Role>[] = [
   {
     accessorKey: "description",
     header: "描述",
+    meta: { class: { th: "w-[280px]", td: "w-[280px] whitespace-normal" } },
     cell: ({ row }) => {
       return h(
         "span",
-        { class: "text-gray-600 dark:text-gray-300" },
-        row.getValue("description") || "-"
+        { class: "text-sm text-gray-600 dark:text-gray-300 line-clamp-2 leading-snug" },
+        (row.getValue("description") as string) || "-"
       );
     },
   },
   {
     accessorKey: "permissions",
     header: "权限数量",
+    meta: { class: { th: "w-[100px]", td: "w-[100px]" } },
     cell: ({ row }) => {
       const permissions = row.getValue("permissions") as Permission[] || [];
       return h(
         UBadge as Component,
         { color: "primary", variant: "soft" },
-        () => `${permissions.length} 个权限`
+        () => `${permissions.length} 个`
       );
     },
   },
   {
     accessorKey: "is_system",
     header: "类型",
+    meta: { class: { th: "w-[100px]", td: "w-[100px]" } },
     cell: ({ row }) => {
       const isSystem = row.getValue("is_system") as boolean;
       return h(
@@ -269,40 +273,39 @@ const columns: TableColumn<Role>[] = [
   {
     id: "actions",
     header: "操作",
+    meta: { class: { th: "w-[220px]", td: "w-[220px]" } },
     cell: ({ row }) => {
       const isCore = isCoreRole(row.original.name);
 
       return h("div", { class: "flex items-center gap-2" }, [
         h(UButton as Component, {
-          color: "neutral",
+          size: "xs",
           variant: "ghost",
-          size: "sm",
           icon: "i-heroicons-eye",
           to: `/rbac/roles/${row.original.id}`,
-        }),
+        }, () => "查看"),
         h(UButton as Component, {
-          color: "primary",
+          size: "xs",
           variant: "ghost",
-          size: "sm",
+          color: "primary",
           icon: "i-heroicons-key",
           to: `/rbac/roles/${row.original.id}/permissions`,
-        }),
+        }, () => "权限"),
         !isCore &&
           h(UButton as Component, {
-            color: "neutral",
+            size: "xs",
             variant: "ghost",
-            size: "sm",
             icon: "i-heroicons-pencil-square",
             to: `/rbac/roles/${row.original.id}/edit`,
-          }),
+          }, () => "编辑"),
         !isCore &&
           h(UButton as Component, {
-            color: "error",
+            size: "xs",
             variant: "ghost",
-            size: "sm",
+            color: "error",
             icon: "i-heroicons-trash",
             onClick: () => confirmDeleteRole(row.original),
-          }),
+          }, () => "删除"),
       ].filter(Boolean));
     },
   },

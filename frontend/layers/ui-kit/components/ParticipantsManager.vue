@@ -92,7 +92,7 @@ const availableUsers = computed(() =>
 async function loadUsers() {
   loadingUsers.value = true;
   try {
-    const res = await apiRequest<{ items: UserOption[] }>("/users/?page_size=200");
+    const res = await apiRequest<{ items: UserOption[] }>("/users/?page_size=100");
     allUsers.value = res.items || [];
   } catch {
     // ignore

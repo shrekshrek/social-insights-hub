@@ -17,7 +17,7 @@
           新增用户
         </UButton>
         <UButton
-          variant="outline"
+          variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="refreshing"
           @click="handleRefresh"
@@ -207,6 +207,7 @@ const columns: TableColumn<User>[] = [
   {
     accessorKey: "username",
     header: "用户信息",
+    meta: { class: { th: "w-[220px]", td: "w-[220px] whitespace-normal" } },
     cell: ({ row }) => {
       const username = row.getValue("username") as string;
       return h("div", { class: "flex items-center space-x-3" }, [
@@ -232,6 +233,7 @@ const columns: TableColumn<User>[] = [
   {
     accessorKey: "roles",
     header: "角色",
+    meta: { class: { th: "w-[260px]", td: "w-[260px] whitespace-normal" } },
     cell: ({ row }) => {
       const roles = row.getValue("roles") as string[];
 
@@ -260,6 +262,7 @@ const columns: TableColumn<User>[] = [
   {
     accessorKey: "created_at",
     header: "创建时间",
+    meta: { class: { th: "w-[160px]", td: "w-[160px] whitespace-nowrap" } },
     cell: ({ row }) => {
       return h(
         "span",
@@ -271,36 +274,35 @@ const columns: TableColumn<User>[] = [
   {
     id: "actions",
     header: "操作",
+    meta: { class: { th: "w-[260px]", td: "w-[260px]" } },
     cell: ({ row }) => {
       return h("div", { class: "flex items-center gap-2" }, [
         h(UButton as Component, {
-          color: "neutral",
+          size: "xs",
           variant: "ghost",
-          size: "sm",
           icon: "i-heroicons-eye",
           to: `/users/${row.original.id}`,
-        }),
+        }, () => "查看"),
         h(UButton as Component, {
-          color: "primary",
+          size: "xs",
           variant: "ghost",
-          size: "sm",
+          color: "primary",
           icon: "i-heroicons-user-group",
           to: `/users/${row.original.id}/roles`,
-        }),
+        }, () => "角色"),
         h(UButton as Component, {
-          color: "neutral",
+          size: "xs",
           variant: "ghost",
-          size: "sm",
           icon: "i-heroicons-pencil-square",
           to: `/users/${row.original.id}/edit`,
-        }),
+        }, () => "编辑"),
         h(UButton as Component, {
-          color: "error",
+          size: "xs",
           variant: "ghost",
-          size: "sm",
+          color: "error",
           icon: "i-heroicons-trash",
           onClick: () => confirmDeleteUser(row.original),
-        }),
+        }, () => "删除"),
       ]);
     },
   },

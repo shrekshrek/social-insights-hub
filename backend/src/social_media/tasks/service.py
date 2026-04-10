@@ -434,7 +434,7 @@ async def clear_task_data(db: AsyncSession, task: SocialTask) -> SocialTask:
     用于重新上传或重新采集数据
     """
     from sqlalchemy import delete
-    from src.analysis.models import PostAnalysis
+    from src.social_media.analysis.models import PostAnalysis
 
     # 先删除分析结果（因为原文是软删除，CASCADE 不会触发）
     await db.execute(delete(PostAnalysis).where(PostAnalysis.task_id == task.id))

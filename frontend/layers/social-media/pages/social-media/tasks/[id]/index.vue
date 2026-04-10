@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, h, type Component, defineAsyncComponent } from 'vue'
 import { UButton } from '#components'
-import ExpandableText from '../../../../../analysis/components/shared/ExpandableText.vue'
+import ExpandableText from '../../../../analysis/components/shared/ExpandableText.vue'
 
 definePageMeta({
   layout: "default",

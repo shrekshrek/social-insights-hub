@@ -75,10 +75,10 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   },
   "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
   "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
-  // AI 用量统计模块（全局）
-  "/analysis": {
+  // AI 任务模块（跨渠道 AnalysisJob）
+  "/jobs": {
     permission: null,
-    label: "AI 用量",
+    label: "AI 任务",
     showInNav: true,
     order: 70,
   },

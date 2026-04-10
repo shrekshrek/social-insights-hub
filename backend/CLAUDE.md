@@ -47,19 +47,20 @@ backend/src/
 ├── users/                   # 用户 CRUD, 角色分配
 ├── social_media/
 │   ├── monitors/            # 社媒监测项目, 平台初始化
-│   └── tasks/               # 社媒数据采集任务, 多平台适配器
-│       └── adapters/        # 抖音/小红书/微博等平台适配
+│   ├── tasks/               # 社媒数据采集任务, 多平台适配器
+│   │   └── adapters/        # 抖音/小红书/微博等平台适配
+│   └── analysis/            # 社媒本地分析（screening / deep / aggregation / slice）
+│       └── celery_tasks/    # 社媒 LLM 分析链编排
 ├── news_media/
 │   ├── monitors/            # 新闻监测项目
-│   └── tasks/               # 新闻采集任务 + celery 任务
-│       └── news_search/     # 百度/DuckDuckGo 双渠道搜索
-├── analysis/                # 全局 LLM 分析编排（社媒/新闻/策略共用）
-│   ├── celery_tasks/        # screening, deep, aggregation, slice
-│   └── jobs/                # AnalysisJob CRUD + factory
+│   ├── tasks/               # 新闻采集任务 + celery 任务
+│   │   └── news_search/     # 百度/DuckDuckGo 双渠道搜索
+│   └── analysis/            # 新闻本地分析（tagging / insight AnalysisJob 封装）
+├── jobs/                    # 跨渠道 AnalysisJob: models, schemas, crud, factory, router
+├── llm/                     # LLM 实例管理 + 分析链定义（原 langchain/）
+│   └── chains/              # 9 条分析链
 ├── knowledge_base/          # 市场知识库 + 文档向量化
 ├── strategies/              # 策略研究
-├── langchain/               # LLM 实例管理, 分析链定义
-│   └── chains/              # 9 条分析链
 ├── agent/                   # 爬虫代理 API, API Key 认证
 ├── config.py, database.py, redis_client.py, celery_app.py
 ├── middleware.py, exceptions.py, pagination.py, schemas.py
@@ -83,14 +84,21 @@ backend/src/
 
 ## 架构约定
 
-### Celery 任务归属
+### 模块边界（ADR-001 channel-local analysis）
 
-- **分析类 celery 任务**（screening / deep / aggregation / slice / auto_analysis）统一放在 `src/analysis/celery_tasks/`，对所有渠道可用
-- **采集/处理类 celery 任务** 归属各自渠道模块：
+严格单向依赖：`strategies → {social_media, news_media, knowledge_base} → {jobs, llm}`。
+
+- `src/jobs/` — 跨渠道 AnalysisJob 的唯一归属地（models/schemas/crud/factory/router）。任何渠道创建/查询/取消 AnalysisJob 都通过这里
+- `src/llm/` — LLM 实例管理与分析链（原 `src/langchain/`，因与 pypi 包同名而重命名）
+- 各渠道的 **analysis celery 任务** 与 **分析编排** 归本渠道：
+  - `src/social_media/analysis/celery_tasks/` — 社媒 screening/deep/aggregation/slice
+  - `src/news_media/analysis/jobs.py` — 新闻 tagging/insight AnalysisJob 封装
+- **采集/处理类 celery 任务** 归各自渠道模块：
   - `src/news_media/tasks/celery_tasks.py` — 新闻爬取
   - `src/knowledge_base/tasks.py` — 文档向量化
-  - `src/social_media/` 无采集 celery —— 因为走 agent pull 模型（见下）
+  - `src/social_media/` 无采集 celery —— 走 agent pull 模型（见下）
 - 所有 celery 模块必须在 `src/celery_app.py` 的 `include` 列表中显式注册
+- 禁止反向依赖：`src/jobs/` 和 `src/llm/` 不得 import 任何渠道模块
 
 ### 任务触发模型
 
@@ -107,16 +115,15 @@ backend/src/
 - **独立 news monitor**：只支持一步式 collect，`/tasks/{id}/execute` 仅接受 `strategy_id IS NULL` 且 `phase != "probe"`；不提供 approve/refine 探测流程
 - **strategy 研究场景**：两段式 probe → collect，每阶段是**独立的 NewsTask 记录**（不做 phase 迁移），probe 只搜索卡片不抓全文不打标；probe/refine/approve 统一由 `strategies/service.py` 的批量端点编排，news_media router 不对外暴露
 
-### 分析编排（analysis 模块）
+### 分析编排（channel-local）
 
-`src/analysis/` 是全局分析编排层，目标是上游无渠道耦合。各渠道通过 `src/analysis/sources/{channel}.py` 接入：
+分析逻辑归属于所属渠道，没有全局 `analysis/` 模块：
 
-- `sources/news.py` — 已实现：封装 NewsTask 的 AnalysisJob 创建（NEWS_TAGGING / NEWS_INSIGHT）
-- `sources/social.py` — **占位**：analysis/service.py 当前仍直接 import 大量 `src.social_media.*`，约 16 处。新增功能必须放在 `sources/social.py`，不得再向 service.py 增加耦合；存量迁移在后续清理 PR 中渐进完成。
-
-约束：
-- 新增渠道时新建一个 `sources/{channel}.py` 即可，不得修改 `analysis/service.py` 顶层逻辑
-- `news_media` 与 `strategies` 的 router/service 不得直接 import `src.analysis.jobs.factory`，必须通过 `sources/news.py` 等渠道适配器
+- 社媒分析 → `src/social_media/analysis/`（含 service、router、celery_tasks、models）
+- 新闻分析 → `src/news_media/analysis/`（目前是 `jobs.py`：封装 NEWS_TAGGING / NEWS_INSIGHT AnalysisJob 创建）
+- 新增渠道时在 `src/{channel}/analysis/` 下新建本渠道的 service/celery_tasks 即可
+- 所有渠道通过 `src/jobs/` 创建和管理 AnalysisJob，通过 `src/llm/` 调用 LLM
+- 跨渠道 AnalysisJob 查询/取消/删除端点由 `src/jobs/router.py` 暴露（`/jobs`），前端通过这个统一入口查看所有渠道的分析任务
 
 ## 注意事项
 

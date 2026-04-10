@@ -46,8 +46,10 @@
 | users/ | 用户 CRUD、角色分配 |
 | social_media/monitors/ | 监测项目管理，平台初始化 |
 | social_media/tasks/ | 数据采集任务管理，多平台适配器 |
-| social_media/analysis/ | LLM 分析链、批处理、成本追踪 |
-| langchain/ | DeepSeek LLM 集成，筛选/提取/归一化/情感分析链 |
+| social_media/analysis/ | 社媒 LLM 分析链、批处理 |
+| news_media/analysis/ | 新闻 tagging/insight 分析封装 |
+| jobs/ | 跨渠道 AnalysisJob（models/schemas/crud/factory/router） |
+| llm/ | DeepSeek LLM 集成，筛选/提取/归一化/情感分析链 |
 | agent/ | 外部爬虫代理 API，API Key 认证 |
 
 每个模块标准结构: `models.py` -> `schemas.py` -> `service.py` -> `router.py` (按需 `dependencies.py`, `tasks.py`, `utils.py`)

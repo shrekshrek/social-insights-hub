@@ -172,7 +172,7 @@ async def _tag_articles_batch(
     use_full_text: bool = False,
 ) -> list[dict]:
     """逐篇轻量标注（批量，_TAGGING_BATCH_SIZE 篇一组）—— 仅 collect 阶段调用"""
-    from src.langchain.chains.news_tagging_chain import (
+    from src.llm.chains.news_tagging_chain import (
         create_news_tagging_chain,
         format_articles_for_tagging,
     )
@@ -249,7 +249,7 @@ async def _run_insight_analysis(
     subject: str,
 ) -> dict:
     """整体分析（一次 LLM 调用），返回结构化洞察 —— 仅 collect 阶段调用"""
-    from src.langchain.chains.news_insight_chain import (
+    from src.llm.chains.news_insight_chain import (
         create_news_insight_chain,
         format_tagged_articles_for_insight,
     )

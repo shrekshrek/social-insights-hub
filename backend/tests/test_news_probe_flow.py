@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from src.langchain.chains.news_probe_review_chain import (
+from src.llm.chains.news_probe_review_chain import (
     format_single_news_probe_review_inputs,
     parse_single_news_probe_review_response,
 )

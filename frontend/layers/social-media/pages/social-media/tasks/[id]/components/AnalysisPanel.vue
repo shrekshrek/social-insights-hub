@@ -4,10 +4,10 @@ import type {
   AnalysisJob,
   DeepAnalysisPreview,
   TaskAnalysisResultData,
-} from '../../../../../../analysis/types'
-import { usePostAnalysisColumns } from '../../../../../../analysis/composables/usePostAnalysisColumns'
-import DeepResultModal from '../../../../../../analysis/components/deep-result/DeepResultModal.vue'
-import TaskAnalysisReport from '../../../../../../analysis/components/task/TaskAnalysisReport.vue'
+} from '../../../../../analysis/types'
+import { usePostAnalysisColumns } from '../../../../../analysis/composables/usePostAnalysisColumns'
+import DeepResultModal from '../../../../../analysis/components/deep-result/DeepResultModal.vue'
+import TaskAnalysisReport from '../../../../../analysis/components/task/TaskAnalysisReport.vue'
 
 const props = defineProps<{
   taskId: number
@@ -19,8 +19,8 @@ const emit = defineEmits<{
 
 const toast = useToast()
 
+const { getAnalysisJobs } = useJobs()
 const {
-  getAnalysisJobs,
   getTaskPostAnalyses,
   getDeepAnalysisPreview,
   runPostScreening,
@@ -33,7 +33,7 @@ const {
 
 /** 任务历史（用于运行中状态提示，按 task_id 筛选） */
 const analysisJobsParams = computed(() => ({
-  task_id: props.taskId,
+  social_task_id: props.taskId,
   page_size: 50,
 }))
 

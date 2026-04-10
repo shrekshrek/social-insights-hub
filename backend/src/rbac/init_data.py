@@ -15,7 +15,7 @@ from src.rbac.models import SystemRoles
 from src.rbac.utils import create_module_permissions
 
 # 导入模块权限定义
-from src.analysis.permissions_def import (
+from src.social_media.analysis.permissions_def import (
     ALL_PERMISSIONS as ANALYSIS_PERMISSIONS,
 )
 

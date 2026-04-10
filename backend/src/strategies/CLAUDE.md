@@ -87,7 +87,7 @@ Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
 
 ## LLM Chain
 
-7 条 Chain 位于 `langchain/chains/strategy_*_chain.py`。
+7 条 Chain 位于 `llm/chains/strategy_*_chain.py`。
 
 | Chain | 角色 | 触发时机 |
 |-------|------|---------|

@@ -2,15 +2,15 @@
 
 import json
 
-from src.langchain.chains.strategy_phase1_chain import (
+from src.llm.chains.strategy_phase1_chain import (
     format_slice_data_for_phase1,
     parse_phase1_response,
 )
-from src.langchain.chains.strategy_phase2_chain import (
+from src.llm.chains.strategy_phase2_chain import (
     format_data_for_phase2,
     parse_phase2_response,
 )
-from src.langchain.chains.strategy_phase3_chain import (
+from src.llm.chains.strategy_phase3_chain import (
     format_data_for_phase3,
     parse_phase3_response,
 )

@@ -13,45 +13,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
-from src.langchain.chains.strategy_research_design_chain import (
+from src.llm.chains.strategy_research_design_chain import (
     create_research_design_chain,
     format_research_design_inputs,
     parse_research_design_response,
 )
-from src.langchain.chains.strategy_probe_review_chain import (
+from src.llm.chains.strategy_probe_review_chain import (
     create_single_task_probe_review_chain,
     format_single_task_probe_review_inputs,
     parse_single_task_probe_review_response,
 )
-from src.langchain.chains.strategy_coverage_check_chain import (
+from src.llm.chains.strategy_coverage_check_chain import (
     create_coverage_check_chain,
     format_coverage_check_inputs,
     parse_coverage_check_response,
 )
-from src.langchain.chains.strategy_phase1_chain import (
+from src.llm.chains.strategy_phase1_chain import (
     create_strategy_phase1_chain,
     format_slice_data_for_phase1,
     parse_phase1_response,
 )
-from src.langchain.chains.strategy_phase2_chain import (
+from src.llm.chains.strategy_phase2_chain import (
     create_strategy_phase2_chain,
     format_data_for_phase2,
     parse_phase2_response,
 )
-from src.langchain.chains.strategy_phase3_chain import (
+from src.llm.chains.strategy_phase3_chain import (
     create_strategy_phase3_chain,
     format_data_for_phase3,
     parse_phase3_response,
 )
-from src.langchain.chains.strategy_brief_parser_chain import (
+from src.llm.chains.strategy_brief_parser_chain import (
     create_strategy_brief_parser_chain,
     parse_brief_parser_response,
 )
 from src.database import AsyncSessionLocal
-from src.langchain import extract_token_usage
+from src.llm import extract_token_usage
 from src.jobs.factory import create_analysis_job_async
 from src.jobs.models import AnalysisType
-from src.analysis.models import AnalysisSlice
+from src.social_media.analysis.models import AnalysisSlice
 from src.social_media.monitors.crud import assert_social_monitor_access as assert_monitor_access
 from src.social_media.tasks.models import SocialTask as SocialTask
 from .models import Strategy, StrategySlice
@@ -1088,7 +1088,7 @@ async def _run_news_probe_review_one(
 
     失败时 assessment 为 None，usage 可能为 None（若调用前抛出）。
     """
-    from src.langchain.chains.news_probe_review_chain import (
+    from src.llm.chains.news_probe_review_chain import (
         format_single_news_probe_review_inputs,
         parse_single_news_probe_review_response,
     )
@@ -1165,7 +1165,7 @@ async def _run_probe_review_bg_task(
             # 新闻 probe：LLM 审查（并行每任务一次调用），走 AnalysisJob 记录成本
             news_llm_assessments: list[dict] = []
             if news_probe_summaries:
-                from src.langchain.chains.news_probe_review_chain import (
+                from src.llm.chains.news_probe_review_chain import (
                     create_single_news_probe_review_chain,
                 )
 
@@ -1741,7 +1741,7 @@ async def approve_probe(
 
     # 新闻全量采集通过 celery 异步执行（与独立 news_media 流程统一）
     if news_collect_task_ids:
-        from src.analysis.sources.news import create_news_analysis_jobs
+        from src.news_media.analysis.jobs import create_news_analysis_jobs
         from src.jobs import crud as jobs_crud
         from src.news_media.tasks import crud as news_crud
         from src.news_media.tasks.celery_tasks import run_news_collect_task
@@ -2107,7 +2107,7 @@ async def _create_auto_slices(
     若 blueprint 为空，则将所有任务合并为一个「综合分析」切片。
     建完切片后立即触发 LLM 覆盖度验证并写入 strategy.coverage_check_result。
     """
-    from src.analysis.service import create_monitor_slice
+    from src.social_media.analysis.service import create_monitor_slice
 
     blueprint: list[dict] = []
     research_design = strategy.research_design or {}
@@ -2266,7 +2266,7 @@ async def adjust_slices(
 
     每个 adjustment 格式：{slice_id, name?, subject?, competitors?}
     """
-    from src.analysis.models import AnalysisSlice
+    from src.social_media.analysis.models import AnalysisSlice
 
     # 校验 slice 归属
     strategy_slice_ids = {ss.slice_id for ss in strategy.slices}

@@ -13,7 +13,8 @@ from src.users.router import router as users_router
 from src.rbac.router import router as rbac_router
 from src.social_media.monitors.router import router as monitors_router
 from src.social_media.tasks.router import router as tasks_router
-from src.analysis.router import router as analysis_router
+from src.social_media.analysis.router import router as analysis_router
+from src.jobs.router import router as jobs_router
 from src.agent.router import router as agent_router
 from src.strategies.router import router as strategies_router
 from src.knowledge_base.router import router as knowledge_base_router
@@ -205,6 +206,7 @@ app.include_router(rbac_router, prefix=settings.API_PREFIX)
 app.include_router(monitors_router, prefix=settings.API_PREFIX)
 app.include_router(tasks_router, prefix=settings.API_PREFIX)
 app.include_router(analysis_router, prefix=settings.API_PREFIX)
+app.include_router(jobs_router, prefix=settings.API_PREFIX)
 app.include_router(agent_router, prefix=settings.API_PREFIX)
 app.include_router(strategies_router, prefix=settings.API_PREFIX)
 app.include_router(knowledge_base_router, prefix=settings.API_PREFIX)

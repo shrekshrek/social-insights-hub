@@ -131,8 +131,8 @@ const handleDelete = async () => {
   try {
     await deleteTask(task.value.id);
     await navigateTo("/social-media/tasks");
-  } catch (error) {
-    console.error("删除任务失败:", error);
+  } catch {
+    // error handled by apiRequest
   }
 };
 
@@ -153,8 +153,8 @@ const handleClearData = async () => {
   try {
     await clearTaskData(task.value.id);
     await handleRefresh();
-  } catch (error) {
-    console.error("清空任务数据失败:", error);
+  } catch {
+    // error handled by apiRequest
   }
 };
 
@@ -548,7 +548,9 @@ const AnalysisPanel = defineAsyncComponent(() =>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
             {{ task?.name || "加载中..." }}
           </h1>
-          <p class="text-gray-600 dark:text-gray-400 mt-1">任务详情</p>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">
+            任务详情
+          </p>
         </div>
       </div>
 
@@ -592,236 +594,197 @@ const AnalysisPanel = defineAsyncComponent(() =>
 
     <!-- 任务信息卡片 -->
     <UCard v-if="task">
-            <template #header>
-              <h2 class="text-lg font-semibold">任务信息</h2>
-            </template>
+      <template #header>
+        <h2 class="text-lg font-semibold">
+          任务信息
+        </h2>
+      </template>
 
-            <div class="space-y-4">
-              <!-- 第一行：核心标识（4列） -->
-              <div class="grid grid-cols-4 gap-4">
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    任务名称
-                  </h3>
-                  <p
-                    class="mt-1 text-sm text-gray-900 dark:text-white truncate"
-                    :title="task.name"
-                  >
-                    {{ task.name }}
-                  </p>
-                </div>
+      <dl class="space-y-2 text-sm">
+        <!-- 任务名称 -->
+        <div class="flex gap-3">
+          <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+            任务名称
+          </dt>
+          <dd class="text-gray-900 dark:text-white font-medium" :title="task.name">
+            {{ task.name }}
+          </dd>
+        </div>
 
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    所属项目
-                  </h3>
-                  <UButton
-                    v-if="task.monitor_id"
-                    variant="link"
-                    size="sm"
-                    class="mt-1 p-0 font-normal"
-                    :to="`/social-media/monitors/${task.monitor_id}`"
-                    :title="task.monitor_name || '-'"
-                  >
-                    {{ task.monitor_name || "-" }}
-                  </UButton>
-                  <p
-                    v-else
-                    class="mt-1 text-sm text-gray-900 dark:text-white truncate"
-                  >
-                    -
-                  </p>
-                </div>
+        <!-- 所属项目 -->
+        <div class="flex gap-3">
+          <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+            所属项目
+          </dt>
+          <dd>
+            <UButton
+              v-if="task.monitor_id"
+              variant="link"
+              size="sm"
+              class="p-0 font-normal"
+              :to="`/social-media/monitors/${task.monitor_id}`"
+            >
+              {{ task.monitor_name || '-' }}
+            </UButton>
+            <span v-else class="text-gray-900 dark:text-white">-</span>
+          </dd>
+        </div>
 
-                <div v-if="task.description" class="col-span-2">
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    任务描述
-                  </h3>
-                  <p
-                    class="mt-1 text-sm text-gray-900 dark:text-white line-clamp-3"
-                    :title="task.description"
-                  >
-                    {{ task.description }}
-                  </p>
-                </div>
+        <!-- 描述 -->
+        <div v-if="task.description" class="flex gap-3">
+          <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+            任务描述
+          </dt>
+          <dd
+            class="text-gray-900 dark:text-white line-clamp-2 flex-1"
+            :title="task.description"
+          >
+            {{ task.description }}
+          </dd>
+        </div>
+
+        <!-- 搜索关键词（仅 search 类型） -->
+        <div v-if="task.task_type === 'search' && task.keywords" class="flex gap-3">
+          <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+            关键词
+          </dt>
+          <dd class="text-gray-900 dark:text-white flex-1">
+            {{ task.keywords }}
+          </dd>
+        </div>
+
+        <!-- 任务参数（detail/creator 类型） -->
+        <div
+          v-if="(task.task_type === 'detail' || task.task_type === 'creator') && task.task_params && Object.keys(task.task_params).length > 0"
+          class="flex gap-3"
+        >
+          <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+            任务参数
+          </dt>
+          <dd class="flex-1 space-y-1.5">
+            <div
+              v-for="(value, key) in task.task_params"
+              :key="key"
+              class="bg-gray-50 dark:bg-gray-800 rounded-md px-2 py-1.5"
+            >
+              <div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                {{ key }}
               </div>
-
-              <!-- 第二行：描述和关键词（条件显示，整合到网格） -->
-              <div class="grid grid-cols-4 gap-4">
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    平台
-                  </h3>
-                  <div class="mt-1">
-                    <UBadge variant="subtle" size="sm">
-                      {{ task.platform_name || "-" }}
-                    </UBadge>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    任务类型
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ task.task_type }}
-                  </p>
-                </div>
-
-                <!-- 搜索关键词（仅 search 类型） -->
+              <div v-if="Array.isArray(value)" class="space-y-0.5">
                 <div
-                  v-if="task.task_type === 'search' && task.keywords"
-                  class="col-span-2"
+                  v-for="(item, index) in value"
+                  :key="index"
+                  class="text-xs font-mono text-gray-900 dark:text-white break-all"
                 >
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    搜索关键词
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ task.keywords }}
-                  </p>
-                </div>
-
-                <!-- 任务参数（detail/creator 类型） -->
-                <div
-                  v-else-if="(task.task_type === 'detail' || task.task_type === 'creator') && task.task_params && Object.keys(task.task_params).length > 0"
-                  class="col-span-2"
-                >
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                    任务参数
-                  </h3>
-                  <div class="space-y-1.5">
-                    <div
-                      v-for="(value, key) in task.task_params"
-                      :key="key"
-                      class="bg-gray-50 dark:bg-gray-800 rounded-md px-2 py-1.5"
-                    >
-                      <div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        {{ key }}
-                      </div>
-                      <div v-if="Array.isArray(value)" class="space-y-0.5">
-                        <div
-                          v-for="(item, index) in value"
-                          :key="index"
-                          class="text-xs font-mono text-gray-900 dark:text-white break-all"
-                        >
-                          {{ item }}
-                        </div>
-                      </div>
-                      <div
-                        v-else
-                        class="text-xs font-mono text-gray-900 dark:text-white break-all"
-                      >
-                        {{ value }}
-                      </div>
-                    </div>
-                  </div>
+                  {{ item }}
                 </div>
               </div>
-
-              <!-- 分隔线 -->
-              <div class="border-t border-gray-200 dark:border-gray-700" />
-
-              <!-- 第三行：配置和归属（4列） -->
-              <div class="grid grid-cols-4 gap-4">
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    数据源
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{
-                      task.data_source === "local_upload" ? "本地上传" : "远程爬虫"
-                    }}
-                  </p>
-                </div>
-
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    状态
-                  </h3>
-                  <div class="mt-1 flex items-center gap-2">
-                    <UBadge
-                      :color="getStatusColor(task.status)"
-                      variant="solid"
-                      size="sm"
-                    >
-                      {{ getStatusText(task.status) }}
-                    </UBadge>
-                    <UBadge
-                      v-if="task.aggregation_status"
-                      :color="getAnalysisColor(task.aggregation_status)"
-                      variant="subtle"
-                      size="sm"
-                    >
-                      {{ getAnalysisText(task.aggregation_status) }}
-                    </UBadge>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    原文数量
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ task.posts_count }}
-                  </p>
-                </div>
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    评论数量
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ task.comments_count }}
-                  </p>
-                </div>
+              <div
+                v-else
+                class="text-xs font-mono text-gray-900 dark:text-white break-all"
+              >
+                {{ value }}
               </div>
-
-              <!-- 第四行：人员和时间（4列） -->
-              <div class="grid grid-cols-4 gap-4">
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    创建者
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ task.creator_username || "-" }}
-                  </p>
-                </div>
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    创建时间
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ formatFullDateTime(task.created_at) }}
-                  </p>
-                </div>
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    开始时间
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ formatFullDateTime(task.started_at) }}
-                  </p>
-                </div>
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    完成时间
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-900 dark:text-white">
-                    {{ formatFullDateTime(task.completed_at) }}
-                  </p>
-                </div>
-              </div>
-
-              <!-- 错误信息（失败时显示） -->
-              <UAlert
-                v-if="task.status === 'failed' && task.error_message"
-                color="error"
-                variant="soft"
-                title="任务执行失败"
-                :description="task.error_message"
-                icon="i-heroicons-exclamation-triangle"
-              />
             </div>
-          </UCard>
+          </dd>
+        </div>
+
+        <!-- 元信息 -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-x-6 gap-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              平台
+            </dt>
+            <dd>
+              <UBadge variant="subtle" size="sm">
+                {{ task.platform_name || '-' }}
+              </UBadge>
+            </dd>
+          </div>
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              状态
+            </dt>
+            <dd class="flex items-center gap-1">
+              <UBadge :color="getStatusColor(task.status)" variant="solid" size="sm">
+                {{ getStatusText(task.status) }}
+              </UBadge>
+              <UBadge
+                v-if="task.aggregation_status"
+                :color="getAnalysisColor(task.aggregation_status)"
+                variant="subtle"
+                size="sm"
+              >
+                {{ getAnalysisText(task.aggregation_status) }}
+              </UBadge>
+            </dd>
+          </div>
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              数据源
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
+              {{ task.data_source === 'local_upload' ? '本地上传' : '远程爬虫' }}
+            </dd>
+          </div>
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              采集量
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
+              {{ task.posts_count }} 原 / {{ task.comments_count }} 评
+            </dd>
+          </div>
+        </div>
+
+        <!-- 时间信息 -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-x-6 gap-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              创建者
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
+              {{ task.creator_username || '-' }}
+            </dd>
+          </div>
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              创建时间
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
+              {{ formatFullDateTime(task.created_at) }}
+            </dd>
+          </div>
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              开始时间
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
+              {{ formatFullDateTime(task.started_at) }}
+            </dd>
+          </div>
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              完成时间
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
+              {{ formatFullDateTime(task.completed_at) }}
+            </dd>
+          </div>
+        </div>
+      </dl>
+
+      <!-- 错误信息 -->
+      <UAlert
+        v-if="task.status === 'failed' && task.error_message"
+        color="error"
+        variant="soft"
+        title="任务执行失败"
+        :description="task.error_message"
+        icon="i-heroicons-exclamation-triangle"
+        class="mt-4"
+      />
+    </UCard>
 
           <!-- 双栏数据展示 - 响应式布局 -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -878,6 +841,13 @@ const AnalysisPanel = defineAsyncComponent(() =>
 
               <template #footer>
                 <ClientOnly>
+                  <template #fallback>
+                    <div class="flex justify-between items-center">
+                      <div class="h-4 bg-gray-200 rounded w-32 animate-pulse" />
+                      <div class="h-8 bg-gray-200 rounded w-64 animate-pulse" />
+                    </div>
+                  </template>
+
                   <div class="flex justify-between items-center">
                     <div class="text-sm text-gray-500 dark:text-gray-400">
                       显示 {{ (postPage - 1) * postPageSize + 1 }} 到
@@ -952,6 +922,13 @@ const AnalysisPanel = defineAsyncComponent(() =>
 
               <template #footer>
                 <ClientOnly>
+                  <template #fallback>
+                    <div class="flex justify-between items-center">
+                      <div class="h-4 bg-gray-200 rounded w-32 animate-pulse" />
+                      <div class="h-8 bg-gray-200 rounded w-64 animate-pulse" />
+                    </div>
+                  </template>
+
                   <div class="flex justify-between items-center">
                     <div class="text-sm text-gray-500 dark:text-gray-400">
                       显示 {{ (commentPage - 1) * commentPageSize + 1 }} 到

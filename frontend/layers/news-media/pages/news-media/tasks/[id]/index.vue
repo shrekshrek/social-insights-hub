@@ -10,22 +10,23 @@ definePageMeta({
 const route = useRoute()
 const taskId = Number(route.params.id)
 
-const { getTask, executeTask, getTaskArticles } = useNewsTasks()
+const { getTask, executeTask, deleteTask, getTaskArticles } = useNewsTasks()
 
 const { data: task, pending: taskLoading, refresh: refreshTask } = getTask(taskId)
 
 const executing = ref(false)
+const refreshing = ref(false)
 
 const currentPage = ref(1)
 const pageSize = ref(20)
-const relevanceFilter = ref<string>()
-const tierFilter = ref<string>()
+const relevanceFilter = ref('all')
+const tierFilter = ref('all')
 
 const articleParams = computed(() => ({
   page: currentPage.value,
   page_size: pageSize.value,
-  relevance: relevanceFilter.value || undefined,
-  source_tier: tierFilter.value || undefined,
+  ...(relevanceFilter.value !== 'all' ? { relevance: relevanceFilter.value } : {}),
+  ...(tierFilter.value !== 'all' ? { source_tier: tierFilter.value } : {}),
 }))
 
 const {
@@ -60,6 +61,34 @@ const handleExecute = async () => {
     // error already handled
   } finally {
     executing.value = false
+  }
+}
+
+const handleRefresh = async () => {
+  refreshing.value = true
+  await Promise.all([refreshTask(), refreshArticles()])
+  refreshing.value = false
+}
+
+const handleDelete = async () => {
+  if (!task.value) return
+
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '删除任务',
+    message: `确定要删除任务 "${task.value.name}" 吗？所有相关文章数据也将被删除。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'error',
+  })
+
+  if (!confirmed) return
+
+  try {
+    await deleteTask(task.value.id)
+    await navigateTo(backPath.value)
+  } catch {
+    // error handled by apiRequest
   }
 }
 
@@ -294,58 +323,240 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
               {{ task.name }}
             </h1>
             <p class="text-gray-600 dark:text-gray-400 mt-1">
-              关键词: {{ task.keywords }} | 来源: {{ task.monitor_name || '-' }}
+              任务详情
             </p>
           </div>
         </div>
 
-        <div class="flex items-center gap-3">
-          <UButton
-            v-if="task.status === 'pending'"
-            icon="i-heroicons-play"
-            :loading="executing"
-            @click="handleExecute"
-          >
-            执行任务
-          </UButton>
-        </div>
+        <ClientOnly>
+          <div class="flex items-center gap-3">
+            <UButton
+              v-if="task.status === 'pending'"
+              icon="i-heroicons-play"
+              :loading="executing"
+              @click="handleExecute"
+            >
+              执行任务
+            </UButton>
+            <UButton
+              variant="ghost"
+              icon="i-heroicons-arrow-path"
+              :loading="refreshing"
+              @click="handleRefresh"
+            >
+              刷新
+            </UButton>
+            <UButton
+              variant="outline"
+              icon="i-heroicons-trash"
+              color="error"
+              @click="handleDelete"
+            >
+              删除
+            </UButton>
+          </div>
+        </ClientOnly>
       </div>
 
       <!-- 任务信息卡片 -->
       <UCard>
-        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
-          <div>
-            <span class="text-gray-500 dark:text-gray-400">阶段</span>
-            <p class="mt-0.5">
-              <UBadge :color="getPhaseColor(task.phase)" size="sm">
-                {{ getPhaseText(task.phase) }}
-              </UBadge>
-            </p>
+        <template #header>
+          <h2 class="text-lg font-semibold">
+            任务信息
+          </h2>
+        </template>
+
+        <dl class="space-y-2 text-sm">
+          <!-- 任务名称 -->
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              任务名称
+            </dt>
+            <dd class="text-gray-900 dark:text-white font-medium">
+              {{ task.name }}
+            </dd>
           </div>
-          <div>
-            <span class="text-gray-500 dark:text-gray-400">状态</span>
-            <p class="mt-0.5">
-              <UBadge :color="getStatusColor(task.status)" size="sm">
-                {{ getStatusText(task.status) }}
-              </UBadge>
-            </p>
+
+          <!-- 关键词 -->
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              关键词
+            </dt>
+            <dd class="text-gray-900 dark:text-white flex-1" :title="task.keywords">
+              {{ task.keywords || '-' }}
+            </dd>
           </div>
-          <div>
-            <span class="text-gray-500 dark:text-gray-400">文章数</span>
-            <p class="font-medium mt-0.5">{{ task.articles_count }}</p>
+
+          <!-- 所属项目 -->
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+              所属项目
+            </dt>
+            <dd>
+              <UButton
+                v-if="task.monitor_id"
+                variant="link"
+                size="sm"
+                class="p-0 font-normal"
+                :to="`/news-media/monitors/${task.monitor_id}`"
+              >
+                {{ task.monitor_name || '-' }}
+              </UButton>
+              <span v-else class="text-gray-900 dark:text-white">-</span>
+            </dd>
           </div>
-          <div>
-            <span class="text-gray-500 dark:text-gray-400">创建者</span>
-            <p class="font-medium mt-0.5">{{ task.creator_username || '-' }}</p>
+
+          <!-- 元信息 -->
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-x-6 gap-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+            <div class="flex gap-3">
+              <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+                阶段
+              </dt>
+              <dd>
+                <UBadge :color="getPhaseColor(task.phase)" size="sm" variant="subtle">
+                  {{ getPhaseText(task.phase) }}
+                </UBadge>
+              </dd>
+            </div>
+            <div class="flex gap-3">
+              <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+                状态
+              </dt>
+              <dd>
+                <UBadge :color="getStatusColor(task.status)" size="sm" variant="solid">
+                  {{ getStatusText(task.status) }}
+                </UBadge>
+              </dd>
+            </div>
+            <div class="flex gap-3">
+              <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+                文章数
+              </dt>
+              <dd class="text-gray-900 dark:text-white">
+                {{ task.articles_count }}
+              </dd>
+            </div>
+            <div class="flex gap-3">
+              <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+                创建者
+              </dt>
+              <dd class="text-gray-900 dark:text-white">
+                {{ task.creator_username || '-' }}
+              </dd>
+            </div>
           </div>
-          <div>
-            <span class="text-gray-500 dark:text-gray-400">创建时间</span>
-            <p class="font-medium mt-0.5">{{ formatFullDate(task.created_at) }}</p>
+
+          <!-- 时间信息 -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+            <div class="flex gap-3">
+              <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+                创建时间
+              </dt>
+              <dd class="text-gray-900 dark:text-white">
+                {{ formatFullDate(task.created_at) }}
+              </dd>
+            </div>
           </div>
-        </div>
-        <div v-if="task.error_message" class="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded text-sm text-red-600 dark:text-red-400">
-          {{ task.error_message }}
-        </div>
+        </dl>
+
+        <!-- 错误信息 -->
+        <UAlert
+          v-if="task.status === 'failed' && task.error_message"
+          color="error"
+          variant="soft"
+          title="任务执行失败"
+          :description="task.error_message"
+          icon="i-heroicons-exclamation-triangle"
+          class="mt-4"
+        />
+      </UCard>
+
+      <!-- 文章列表 -->
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">
+              文章列表
+              <span class="text-sm font-normal text-gray-500 ml-2">
+                共 {{ totalArticles }} 篇
+              </span>
+            </h2>
+
+            <div class="flex items-center gap-3">
+              <USelect
+                v-model="relevanceFilter"
+                :items="[
+                  { label: '全部相关性', value: 'all' },
+                  { label: '高', value: 'high' },
+                  { label: '中', value: 'medium' },
+                  { label: '低', value: 'low' },
+                ]"
+                value-key="value"
+                class="w-32"
+              />
+              <USelect
+                v-model="tierFilter"
+                :items="[
+                  { label: '全部来源', value: 'all' },
+                  { label: '权威央媒', value: 'tier1' },
+                  { label: '行业门户', value: 'tier2' },
+                  { label: '其他来源', value: 'tier3' },
+                ]"
+                value-key="value"
+                class="w-32"
+              />
+            </div>
+          </div>
+        </template>
+
+        <ClientOnly>
+          <template #fallback>
+            <div class="text-center py-8">
+              <p class="text-gray-600 dark:text-gray-400">加载文章列表中...</p>
+            </div>
+          </template>
+
+          <UTable
+            v-if="!articlesLoading && articles.length > 0"
+            :data="articles"
+            :columns="columns"
+            class="w-full"
+            :ui="{ base: 'w-full table-fixed' }"
+          />
+
+          <div v-else-if="articlesLoading" class="text-center py-8">
+            <p class="text-gray-600 dark:text-gray-400">加载中...</p>
+          </div>
+
+          <div v-else class="text-center py-8">
+            <p class="text-gray-600 dark:text-gray-400">暂无文章数据</p>
+          </div>
+        </ClientOnly>
+
+        <template #footer>
+          <ClientOnly>
+            <template #fallback>
+              <div class="flex justify-between items-center">
+                <div class="h-4 bg-gray-200 rounded w-32 animate-pulse" />
+                <div class="h-8 bg-gray-200 rounded w-64 animate-pulse" />
+              </div>
+            </template>
+
+            <div class="flex justify-between items-center">
+              <div class="text-sm text-gray-500 dark:text-gray-400">
+                显示 {{ (currentPage - 1) * pageSize + 1 }} 到
+                {{ Math.min(currentPage * pageSize, totalArticles) }} 共
+                {{ totalArticles }} 条记录
+              </div>
+              <UPagination
+                v-model:page="currentPage"
+                :total="totalArticles"
+                :items-per-page="pageSize"
+                :sibling-count="2"
+              />
+            </div>
+          </ClientOnly>
+        </template>
       </UCard>
 
       <!-- 分析报告（Probe 摘要 / Collect 完整洞察） -->
@@ -544,91 +755,6 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
             </div>
           </div>
         </ClientOnly>
-      </UCard>
-
-      <!-- 文章列表 -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">
-              文章列表
-              <span class="text-sm font-normal text-gray-500 ml-2">
-                共 {{ totalArticles }} 篇
-              </span>
-            </h2>
-
-            <div class="flex items-center gap-3">
-              <USelect
-                v-model="relevanceFilter"
-                :items="[
-                  { label: '全部相关性', value: undefined },
-                  { label: '高', value: 'high' },
-                  { label: '中', value: 'medium' },
-                  { label: '低', value: 'low' },
-                ]"
-                value-key="value"
-                class="w-32"
-              />
-              <USelect
-                v-model="tierFilter"
-                :items="[
-                  { label: '全部来源', value: undefined },
-                  { label: '权威央媒', value: 'tier1' },
-                  { label: '行业门户', value: 'tier2' },
-                  { label: '其他来源', value: 'tier3' },
-                ]"
-                value-key="value"
-                class="w-32"
-              />
-              <UButton
-                variant="ghost"
-                icon="i-heroicons-arrow-path"
-                @click="refreshArticles()"
-              >
-                刷新
-              </UButton>
-            </div>
-          </div>
-        </template>
-
-        <ClientOnly>
-          <template #fallback>
-            <div class="text-center py-8">
-              <p class="text-gray-600 dark:text-gray-400">加载文章列表中...</p>
-            </div>
-          </template>
-
-          <UTable
-            :data="articles"
-            :columns="columns"
-            :loading="articlesLoading"
-            class="w-full"
-            :ui="{ base: 'w-full table-fixed' }"
-          />
-        </ClientOnly>
-
-        <template #footer>
-          <ClientOnly>
-            <template #fallback>
-              <div class="flex justify-between items-center">
-                <div class="h-4 bg-gray-200 rounded w-32 animate-pulse" />
-                <div class="h-8 bg-gray-200 rounded w-64 animate-pulse" />
-              </div>
-            </template>
-
-            <div class="flex justify-between items-center">
-              <div class="text-sm text-gray-500 dark:text-gray-400">
-                共 {{ totalArticles }} 篇文章
-              </div>
-              <UPagination
-                v-model:page="currentPage"
-                :total="totalArticles"
-                :items-per-page="pageSize"
-                :sibling-count="2"
-              />
-            </div>
-          </ClientOnly>
-        </template>
       </UCard>
     </template>
 

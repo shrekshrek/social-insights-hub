@@ -14,7 +14,7 @@ definePageMeta({
 const route = useRoute()
 const monitorId = computed(() => Number(route.params.id))
 
-const { getMonitor, deleteMonitor, batchCreateTasks, addParticipant, removeParticipant } = useMonitors()
+const { getMonitor, deleteMonitor, batchCreateTasks, addParticipant, removeParticipant, updateMonitor } = useMonitors()
 const { getTasks, deleteTask } = useTasks()
 const { createMonitorSlice, deleteMonitorSlice } = useAnalysis()
 const { useApiData } = useApi()
@@ -31,17 +31,22 @@ const phaseItems = [
   { label: '全量', value: 'collect' },
 ]
 
+// 分页
+const currentPage = ref(1)
+const pageSize = ref(10)
+
 // 获取项目下的任务列表
 const taskParams = computed(() => ({
   monitor_id: monitorId.value,
-  page: 1,
-  page_size: 100,
+  page: currentPage.value,
+  page_size: pageSize.value,
   ...(phaseFilter.value !== 'all' ? { phase: phaseFilter.value } : {}),
 }))
 
 const { data: tasksData, pending: tasksLoading, refresh: refreshTasks } = await getTasks(taskParams)
 
 const tasks = computed(() => tasksData.value?.items || [])
+const totalTasks = computed(() => tasksData.value?.total || 0)
 
 // ==================== 项目切片（Phase 1）====================
 
@@ -204,6 +209,47 @@ const openSliceModal = () => {
 }
 
 const toast = useToast()
+
+// ==================== 编辑项目 ====================
+const showEditModal = ref(false)
+const editSubmitting = ref(false)
+const editState = reactive({
+  name: '',
+  description: '',
+  start_date: '',
+  end_date: '',
+})
+
+const openEditModal = () => {
+  if (!monitor.value) return
+  editState.name = monitor.value.name || ''
+  editState.description = monitor.value.description || ''
+  editState.start_date = monitor.value.start_date ? monitor.value.start_date.slice(0, 10) : ''
+  editState.end_date = monitor.value.end_date ? monitor.value.end_date.slice(0, 10) : ''
+  showEditModal.value = true
+}
+
+const handleUpdateMonitor = async () => {
+  if (!editState.name.trim()) {
+    toast.add({ title: '项目名称不能为空', color: 'warning' })
+    return
+  }
+  editSubmitting.value = true
+  try {
+    await updateMonitor(monitorId.value, {
+      name: editState.name.trim(),
+      description: editState.description || undefined,
+      start_date: editState.start_date || undefined,
+      end_date: editState.end_date || undefined,
+    })
+    showEditModal.value = false
+    await refreshMonitor()
+  } catch {
+    // apiRequest 已处理错误 toast
+  } finally {
+    editSubmitting.value = false
+  }
+}
 
 const parseCompetitors = (raw: string): string[] => {
   const items = (raw || '')
@@ -645,13 +691,13 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
     },
     {
       accessorKey: 'platform_name',
-      meta: { class: { th: 'w-20', td: 'w-20 whitespace-nowrap' } },
+      meta: { class: { th: 'w-18', td: 'w-18 whitespace-nowrap' } },
       header: '平台',
       cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
     },
     {
       accessorKey: 'task_type',
-      meta: { class: { th: 'w-20', td: 'w-20 whitespace-nowrap' } },
+      meta: { class: { th: 'w-18', td: 'w-18 whitespace-nowrap' } },
       header: '类型',
       cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.task_type),
     },
@@ -665,13 +711,13 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
         return h(Badge, {
           size: 'xs',
           variant: 'subtle',
-          color: phase === 'probe' ? 'warning' : 'primary',
+          color: phase === 'probe' ? 'info' : 'warning',
         }, () => phase === 'probe' ? '探测' : '全量')
       },
     },
     {
       accessorKey: 'status',
-      meta: { class: { th: 'w-[96px]', td: 'w-[96px] whitespace-nowrap' } },
+      meta: { class: { th: 'w-18', td: 'w-18 whitespace-nowrap' } },
       header: '状态',
       cell: ({ row }) => {
         const collectBadge = h(Badge, {
@@ -694,10 +740,10 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
     },
     {
       accessorKey: 'stats',
-      meta: { class: { th: 'w-[140px]', td: 'w-[140px] whitespace-nowrap overflow-hidden' } },
+      meta: { class: { th: 'w-[100px]', td: 'w-[100px] whitespace-nowrap overflow-hidden' } },
       header: '数据统计',
       cell: ({ row }) => h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' },
-        `${row.original.posts_count} 原文 / ${row.original.comments_count} 评论`
+        `${row.original.posts_count} 原 / ${row.original.comments_count} 评`
       ),
     },
     {
@@ -708,7 +754,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
     },
     {
       accessorKey: 'actions',
-      meta: { class: { th: 'w-[128px]', td: 'w-[128px] whitespace-nowrap' } },
+      meta: { class: { th: 'w-[120px]', td: 'w-[120px] whitespace-nowrap' } },
       header: '操作',
       cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
         h(Button, {
@@ -751,47 +797,21 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
             icon="i-heroicons-arrow-left"
             to="/social-media/monitors"
           />
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-              {{ monitor?.name || '加载中...' }}
-            </h1>
-            <p class="text-gray-600 dark:text-gray-400 mt-1">
-              项目详情
-            </p>
-          </div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+            项目详情
+          </h1>
         </div>
       </div>
 
       <ClientOnly>
         <div v-if="monitor" class="flex items-center gap-3">
           <UButton
-            icon="i-heroicons-plus"
-            :to="`/social-media/tasks/create?monitor_id=${monitorId}`"
-          >
-            新建任务
-          </UButton>
-          <UButton
-            variant="outline"
-            icon="i-heroicons-squares-plus"
-            @click="openBatchTaskModal"
-          >
-            批量创建
-          </UButton>
-          <UButton
-            variant="outline"
-            icon="i-heroicons-arrow-path"
-            :loading="refreshing"
-            @click="handleRefresh"
-          >
-            刷新
-          </UButton>
-          <UButton
             variant="outline"
             icon="i-heroicons-trash"
             color="error"
             @click="handleDelete"
           >
-            删除
+            删除项目
           </UButton>
         </div>
       </ClientOnly>
@@ -800,82 +820,102 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
     <!-- 项目信息卡片 -->
     <UCard v-if="monitor">
       <template #header>
-        <h2 class="text-lg font-semibold">
-          项目信息
-        </h2>
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">
+            项目信息
+          </h2>
+          <ClientOnly>
+            <UButton
+              v-if="monitor.owner_id === currentUserId"
+              size="sm"
+              variant="outline"
+              icon="i-heroicons-pencil-square"
+              @click="openEditModal"
+            >
+              编辑
+            </UButton>
+          </ClientOnly>
+        </div>
       </template>
 
-      <div class="space-y-4">
-        <!-- 第一行：项目名称和描述 -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-              项目名称
-            </h3>
-            <p class="mt-1 text-sm text-gray-900 dark:text-white">
-              {{ monitor.name }}
-            </p>
-          </div>
-
-          <div v-if="monitor.description">
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-              项目描述
-            </h3>
-            <p
-              class="mt-1 text-sm text-gray-900 dark:text-white line-clamp-2"
-              :title="monitor.description"
-            >
-              {{ monitor.description }}
-            </p>
-          </div>
+      <dl class="space-y-2 text-sm">
+        <!-- 名称 -->
+        <div class="flex gap-3">
+          <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+            项目名称
+          </dt>
+          <dd class="text-gray-900 dark:text-white font-medium">
+            {{ monitor.name }}
+          </dd>
         </div>
 
-        <!-- 第二行：其他信息（自适应2-4列） -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+        <!-- 描述 -->
+        <div class="flex gap-3">
+          <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
+            项目描述
+          </dt>
+          <dd
+            class="text-gray-900 dark:text-white line-clamp-2 flex-1"
+            :title="monitor.description || undefined"
+          >
+            {{ monitor.description || '-' }}
+          </dd>
+        </div>
+
+        <!-- 元信息（3 列） -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
               创建者
-            </h3>
-            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
               {{ monitor.owner_username || '-' }}
-            </p>
+            </dd>
           </div>
-
-          <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-              参与者
-            </h3>
-            <ClientOnly fallback="...">
-              <ParticipantsManager
-                class="mt-1"
-                :participants="(monitor?.participant_ids || []).map((id: number, i: number) => ({ id, username: monitor?.participant_usernames?.[i] || String(id) }))"
-                :owner-id="monitor?.owner_id || 0"
-                :can-manage="monitor?.owner_id === currentUserId"
-                :on-add="async (ids: number[]) => { await addParticipant(monitorId, ids); await refreshMonitor() }"
-                :on-remove="async (uid: number) => { await removeParticipant(monitorId, uid); await refreshMonitor() }"
-              />
-            </ClientOnly>
-          </div>
-
-          <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
               项目时间
-            </h3>
-            <p class="mt-1 text-sm text-gray-900 dark:text-white">
-              {{ formatDate(monitor.start_date) }} - {{ formatDate(monitor.end_date) }}
-            </p>
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
+              <template v-if="monitor.start_date || monitor.end_date">
+                {{ formatDate(monitor.start_date) }} - {{ formatDate(monitor.end_date) }}
+              </template>
+              <span v-else class="text-gray-400">未设置</span>
+            </dd>
           </div>
-
-          <div>
-            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+          <div class="flex gap-3">
+            <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400">
               创建时间
-            </h3>
-            <p class="mt-1 text-sm text-gray-900 dark:text-white">
+            </dt>
+            <dd class="text-gray-900 dark:text-white">
               {{ formatDateTime(monitor.created_at) }}
-            </p>
+            </dd>
           </div>
         </div>
-      </div>
+
+        <!-- 参与者（只读 chip 列表） -->
+        <div class="flex gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+          <dt class="w-16 shrink-0 text-gray-500 dark:text-gray-400 pt-0.5">
+            参与者
+          </dt>
+          <dd class="flex-1">
+            <ClientOnly fallback="...">
+              <div v-if="monitor.participant_ids?.length" class="flex flex-wrap gap-1.5">
+                <UBadge
+                  v-for="(pid, i) in monitor.participant_ids"
+                  :key="pid"
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                >
+                  {{ monitor.participant_usernames?.[i] || pid }}
+                </UBadge>
+              </div>
+              <span v-else class="text-gray-400">暂无参与者</span>
+            </ClientOnly>
+          </dd>
+        </div>
+      </dl>
     </UCard>
 
     <!-- 任务列表卡片 -->
@@ -884,7 +924,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
             <h2 class="text-lg font-semibold">
-              任务列表 ({{ tasks.length }})
+              任务列表
             </h2>
             <ClientOnly>
               <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
@@ -926,6 +966,30 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
               >
                 生成切片
               </UButton>
+              <UButton
+                size="sm"
+                icon="i-heroicons-plus"
+                :to="`/social-media/tasks/create?monitor_id=${monitorId}`"
+              >
+                创建任务
+              </UButton>
+              <UButton
+                size="sm"
+                variant="outline"
+                icon="i-heroicons-squares-plus"
+                @click="openBatchTaskModal"
+              >
+                批量创建
+              </UButton>
+              <UButton
+                size="sm"
+                variant="ghost"
+                icon="i-heroicons-arrow-path"
+                :loading="refreshing"
+                @click="handleRefresh"
+              >
+                刷新
+              </UButton>
             </div>
           </ClientOnly>
         </div>
@@ -962,6 +1026,22 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
           />
         </div>
       </ClientOnly>
+
+      <template #footer>
+        <ClientOnly>
+          <div class="flex justify-between items-center">
+            <div class="text-sm text-gray-500 dark:text-gray-400">
+              共 {{ totalTasks }} 个任务
+            </div>
+            <UPagination
+              v-model:page="currentPage"
+              :total="totalTasks"
+              :items-per-page="pageSize"
+              :sibling-count="2"
+            />
+          </div>
+        </ClientOnly>
+      </template>
     </UCard>
 
     <!-- 项目切片列表 -->
@@ -1140,6 +1220,78 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
             @click="handleBatchCreateTasks"
           >
             创建
+          </UButton>
+        </template>
+      </UModal>
+    </ClientOnly>
+
+    <!-- 编辑项目弹窗 -->
+    <ClientOnly>
+      <UModal
+        v-model:open="showEditModal"
+        title="编辑项目"
+        :ui="{ footer: 'justify-end' }"
+      >
+        <template #body>
+          <div class="space-y-4">
+            <UFormField label="项目名称" required>
+              <UInput
+                v-model="editState.name"
+                placeholder="请输入项目名称"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="项目描述">
+              <UTextarea
+                v-model="editState.description"
+                :rows="3"
+                placeholder="请输入项目描述"
+                class="w-full"
+              />
+            </UFormField>
+            <div class="grid grid-cols-2 gap-4">
+              <UFormField label="开始日期">
+                <UInput
+                  v-model="editState.start_date"
+                  type="date"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="结束日期">
+                <UInput
+                  v-model="editState.end_date"
+                  type="date"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+            <UFormField
+              label="参与者"
+              help="参与者变更会立即生效，无需点保存"
+            >
+              <ParticipantsManager
+                :participants="(monitor?.participant_ids || []).map((id: number, i: number) => ({ id, username: monitor?.participant_usernames?.[i] || String(id) }))"
+                :owner-id="monitor?.owner_id || 0"
+                :can-manage="true"
+                :on-add="async (ids: number[]) => { await addParticipant(monitorId, ids); await refreshMonitor() }"
+                :on-remove="async (uid: number) => { await removeParticipant(monitorId, uid); await refreshMonitor() }"
+              />
+            </UFormField>
+          </div>
+        </template>
+        <template #footer>
+          <UButton
+            variant="outline"
+            :disabled="editSubmitting"
+            @click="showEditModal = false"
+          >
+            取消
+          </UButton>
+          <UButton
+            :loading="editSubmitting"
+            @click="handleUpdateMonitor"
+          >
+            保存
           </UButton>
         </template>
       </UModal>

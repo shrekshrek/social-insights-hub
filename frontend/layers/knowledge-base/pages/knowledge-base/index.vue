@@ -33,7 +33,7 @@
             </UButton>
             <USelect v-model="sourceTypeFilter" :items="sourceTypeOptions" class="w-40" />
             <UButton
-              variant="outline"
+              variant="ghost"
               icon="i-heroicons-arrow-path"
               @click="handleRefresh"
             >

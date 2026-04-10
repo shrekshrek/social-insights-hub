@@ -166,7 +166,7 @@ const columns = computed<TableColumn<SocialMonitor>[]>(() => {
           新建项目
         </UButton>
         <UButton
-          variant="outline"
+          variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="refreshing"
           @click="handleRefresh"

@@ -12,16 +12,16 @@ const { getAllTasks, deleteTask } = useNewsTasks()
 const currentPage = ref(1)
 const pageSize = ref(10)
 const searchQuery = ref('')
-const statusFilter = ref<string>()
-const phaseFilter = ref<string>()
+const statusFilter = ref('all')
+const phaseFilter = ref('all')
 const refreshing = ref(false)
 
 const params = computed(() => ({
   page: currentPage.value,
   page_size: pageSize.value,
   search: searchQuery.value || undefined,
-  status: statusFilter.value || undefined,
-  phase: phaseFilter.value || undefined,
+  ...(statusFilter.value !== 'all' ? { status: statusFilter.value } : {}),
+  ...(phaseFilter.value !== 'all' ? { phase: phaseFilter.value } : {}),
 }))
 
 const { data: tasksData, pending: loading, refresh } = getAllTasks(params)
@@ -102,58 +102,73 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
     {
       accessorKey: 'id',
       header: 'ID',
-      meta: { class: { th: 'w-14', td: 'w-14' } },
+      meta: { class: { th: 'w-12', td: 'w-12' } },
       cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.id),
     },
     {
       accessorKey: 'name',
       header: '任务名称',
-      meta: { class: { th: 'w-[160px]', td: 'w-[160px] whitespace-normal' } },
+      meta: { class: { th: 'w-[130px]', td: 'w-[130px] whitespace-normal' } },
       cell: ({ row }) =>
-        h('div', { class: 'font-medium leading-snug line-clamp-2' }, row.original.name),
+        h('div', { class: 'font-medium leading-snug line-clamp-2', title: row.original.name }, row.original.name),
     },
     {
       accessorKey: 'keywords',
       header: '关键词',
-      meta: { class: { th: 'w-[140px]', td: 'w-[140px] whitespace-normal' } },
+      meta: { class: { th: 'w-[130px]', td: 'w-[130px] whitespace-normal' } },
       cell: ({ row }) =>
-        h('div', { class: 'text-sm text-gray-600 dark:text-gray-400 line-clamp-2' }, row.original.keywords),
+        h('div', { class: 'text-sm text-gray-600 dark:text-gray-400 leading-snug line-clamp-2', title: row.original.keywords || '' }, row.original.keywords || '-'),
     },
     {
       accessorKey: 'monitor_name',
       header: '所属项目',
-      meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
-      cell: ({ row }) =>
-        h('span', { class: 'text-sm truncate' }, row.original.monitor_name || '-'),
+      meta: { class: { th: 'w-[130px]', td: 'w-[130px] whitespace-normal' } },
+      cell: ({ row }) => {
+        if (!row.original.monitor_name || !row.original.monitor_id) {
+          return h('span', { class: 'text-gray-400' }, '-')
+        }
+        return h(
+          Button,
+          {
+            variant: 'link',
+            size: 'xs',
+            class: 'p-0 font-normal w-full text-left whitespace-normal leading-snug line-clamp-2',
+            title: row.original.monitor_name,
+            to: `/news-media/monitors/${row.original.monitor_id}`,
+          },
+          () => row.original.monitor_name,
+        )
+      },
     },
     {
       accessorKey: 'phase',
       header: '阶段',
-      meta: { class: { th: 'w-[70px]', td: 'w-[70px]' } },
+      meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
       cell: ({ row }) =>
-        h(Badge, { color: getPhaseColor(row.original.phase), size: 'sm' }, () =>
+        h(Badge, { color: getPhaseColor(row.original.phase), size: 'xs', variant: 'subtle' }, () =>
           getPhaseText(row.original.phase),
         ),
     },
     {
       accessorKey: 'status',
       header: '状态',
-      meta: { class: { th: 'w-[80px]', td: 'w-[80px]' } },
+      meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
       cell: ({ row }) =>
-        h(Badge, { color: getStatusColor(row.original.status), size: 'sm' }, () =>
+        h(Badge, { color: getStatusColor(row.original.status), size: 'xs', variant: 'solid' }, () =>
           getStatusText(row.original.status),
         ),
     },
     {
       accessorKey: 'articles_count',
-      header: '文章数',
+      header: '采集量',
       meta: { class: { th: 'w-[70px]', td: 'w-[70px]' } },
-      cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.articles_count),
+      cell: ({ row }) =>
+        h('span', { class: 'text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap' }, `${row.original.articles_count} 文章`),
     },
     {
       accessorKey: 'created_at',
       header: '创建时间',
-      meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
+      meta: { class: { th: 'w-[112px]', td: 'w-[112px]' } },
       cell: ({ row }) =>
         h('span', { class: 'text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap' }, formatDate(row.original.created_at)),
     },
@@ -210,7 +225,7 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
           新建任务
         </UButton>
         <UButton
-          variant="outline"
+          variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="refreshing"
           @click="handleRefresh"
@@ -234,7 +249,7 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             <USelect
               v-model="phaseFilter"
               :items="[
-                { label: '全部阶段', value: undefined },
+                { label: '全部阶段', value: 'all' },
                 { label: '探测', value: 'probe' },
                 { label: '全量', value: 'collect' },
               ]"
@@ -244,7 +259,7 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             <USelect
               v-model="statusFilter"
               :items="[
-                { label: '全部状态', value: undefined },
+                { label: '全部状态', value: 'all' },
                 { label: '等待中', value: 'pending' },
                 { label: '运行中', value: 'running' },
                 { label: '已完成', value: 'completed' },

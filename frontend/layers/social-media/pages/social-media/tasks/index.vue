@@ -15,7 +15,7 @@ const { data: platforms } = getPlatforms()
 
 // 分页和过滤
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(10)
 const searchQuery = ref('')
 const selectedPlatformId = ref<number | string>('all')
 const selectedStatus = ref('all')
@@ -60,8 +60,8 @@ const handleDelete = async (task: DataTaskWithRelations) => {
   try {
     await deleteTask(task.id)
     await handleRefresh()
-  } catch (error) {
-    console.error('删除任务失败:', error)
+  } catch {
+    // error handled by apiRequest
   }
 }
 
@@ -312,12 +312,12 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
             任务列表
           </h2>
 
-          <div class="flex items-center gap-3 flex-1 max-w-3xl">
+          <div class="flex items-center gap-3">
             <UInput
               v-model="searchQuery"
               placeholder="搜索任务名称或关键词..."
               icon="i-heroicons-magnifying-glass"
-              class="flex-1"
+              class="w-60"
             />
 
             <USelect
@@ -364,6 +364,13 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       <!-- 分页 -->
       <template #footer>
         <ClientOnly>
+          <template #fallback>
+            <div class="flex justify-between items-center">
+              <div class="h-4 bg-gray-200 rounded w-32 animate-pulse" />
+              <div class="h-8 bg-gray-200 rounded w-64 animate-pulse" />
+            </div>
+          </template>
+
           <div class="flex justify-between items-center">
             <div class="text-sm text-gray-500 dark:text-gray-400">
               显示 {{ (currentPage - 1) * pageSize + 1 }} 到

@@ -130,6 +130,12 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **实体角色**：新闻中的实体角色（target/competitor/context）代表媒体视角的竞争定位，与社媒 SOV 排名可能不同
 - 新闻数据作为**补充证据**使用，evidence 中标明 source 为"新闻媒体数据"以区分
 - 不要仅凭新闻数据得出 Tension 结论——Tension 的核心依据应来自消费者真实声音（社媒切片），新闻数据用于验证或补充
+
+## 市场背景数据（market_context）使用指南
+
+- 知识库内容以宏观互联网/经济/政策统计为主，可能与本次研究主题不直接相关
+- 如 `{{market_context}}` 段落为空或内容与 brief 主题无明显关联，**必须忽略**该部分，仅基于切片和新闻数据进行分析
+- 仅当知识库内容与研究主题直接相关时，才可作为宏观背景引用，且不应成为 Tension 或 Opportunity 的核心依据
 """
 
 USER_TEMPLATE = """{brief_section}

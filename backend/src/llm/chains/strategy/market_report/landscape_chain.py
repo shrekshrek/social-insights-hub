@@ -122,6 +122,11 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - 禁止改判 NewsSlice.entities.role（target/competitor/context 以输入为准）
 - 禁止脱离 agenda_map 议程图单独产生新的 battle
 - 禁止在 evidence_quote 中编造未出现的原文
+
+## 市场背景数据（market_context）使用指南
+- 知识库内容以宏观互联网/经济/政策统计为主，可能与本次研究主题不直接相关
+- 如 `{{market_context}}` 段落为空或内容与 brief 主题无明显关联，**必须忽略**该部分，players / positioning_map / discourse_battles 只基于 agenda_map 和新闻切片
+- 仅当知识库内容与研究主题直接相关时，才可在 market_dynamics.structural_shifts 中作为宏观参照引用
 """
 
 

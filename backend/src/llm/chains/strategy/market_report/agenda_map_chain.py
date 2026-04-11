@@ -128,6 +128,11 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 - 禁止虚构未出现在数据中的引述或来源
 - 禁止把"消费者认为"作为论据——该路径只分析媒体视角，消费者声音走 brand_strategy 路径
 - 禁止输出与 research_questions 无关的通用媒体观察
+
+## 市场背景数据（market_context）使用指南
+- 知识库内容以宏观互联网/经济/政策统计为主，可能与本次研究主题不直接相关
+- 如 `{{market_context}}` 段落为空或内容与 brief 主题无明显关联，**必须忽略**该部分，narrative_map / agenda_battles 只基于新闻切片数据
+- 仅当知识库内容与研究主题直接相关时，才可在 attention_gaps 中作为宏观参照引用
 """
 
 

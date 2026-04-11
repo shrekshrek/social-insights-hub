@@ -23,6 +23,11 @@ _MAX_FILE_SIZE = 50 * 1024 * 1024
 _CHUNK_SIZE = 400
 _CHUNK_OVERLAP = 50
 
+# RAG 相似度阈值：低于此分数的 chunk 视为不相关，不注入 prompt
+# 依据：当前 KB 以宏观统计/政策为主，品牌/品类 query 极易召回弱相关结果，
+# 无阈值过滤会让 LLM 把噪声当背景引用
+_RAG_MIN_SCORE = 0.5
+
 
 def parse_text(file_bytes: bytes, filename: str) -> str:
     """从文件字节提取纯文本
@@ -227,11 +232,18 @@ async def retrieve_market_context(
         result = await db.execute(stmt)
         rows = result.all()
 
-        if not rows:
+        filtered = [r for r in rows if (r.score or 0) >= _RAG_MIN_SCORE]
+        if not filtered:
+            if rows:
+                top_score = max((r.score or 0) for r in rows)
+                logger.info(
+                    "retrieve_market_context: top_score=%.3f 未达阈值 %.2f，降级为空",
+                    top_score, _RAG_MIN_SCORE,
+                )
             return ""
 
         parts = ["## 市场背景参考资料\n"]
-        for row in rows:
+        for row in filtered:
             parts.append(f"**来源：{row.title}**\n{row.content}\n")
 
         return "\n".join(parts)

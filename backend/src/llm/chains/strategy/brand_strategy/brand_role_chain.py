@@ -102,6 +102,12 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 新闻中的竞品格局（competitive_landscape）提供媒体视角的竞争定位，与社媒 SOV 互为补充
 - Social Strategy 可参考新闻中的关键引述（key_quotes）作为行业话语锚点
 - 新闻数据作为补充参考，evidence 中标明 source 为"新闻媒体数据"以区分
+
+## 市场背景数据（market_context）使用指南
+
+- 知识库内容以宏观互联网/经济/政策统计为主，可能与本次研究主题不直接相关
+- 如 `{{market_context}}` 段落为空或内容与 brief 主题无明显关联，**必须忽略**该部分，仅基于洞察层结果和补充数据推导角色
+- 仅当知识库内容与研究主题直接相关时，才可作为宏观背景引用，不应成为角色定位或策略推导的核心依据
 """
 
 USER_TEMPLATE = """{brief_section}

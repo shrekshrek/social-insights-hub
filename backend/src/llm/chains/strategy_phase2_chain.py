@@ -92,6 +92,14 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 以 Phase 1 中最具反直觉性的 Tension 作为切入点，而非最显眼的那条
 - 说明竞品为何无法或不愿占据此角色（结构性原因，不是品牌自夸）
 - elaboration 中明确"我们不是 X（品类惯常角色），我们是 Y（数据揭示的差异化角色）"
+
+## 新闻媒体数据使用指南
+
+如果输入包含"新闻媒体视角"数据，请注意：
+- 新闻叙事聚类（narratives）反映媒体如何定义品类议题和品牌定位，可作为 Brand Social Role 的**外部锚点**——如果媒体已形成某种品牌叙事，角色定位需考虑是顺势强化还是主动打破
+- 新闻中的竞品格局（competitive_landscape）提供媒体视角的竞争定位，与社媒 SOV 互为补充
+- Social Strategy 可参考新闻中的关键引述（key_quotes）作为行业话语锚点
+- 新闻数据作为补充参考，evidence 中标明 source 为"新闻媒体数据"以区分
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -106,7 +114,9 @@ USER_TEMPLATE = """{brief_section}
 
 ## 补充数据
 
-{supplementary_data}"""
+{supplementary_data}
+
+{news_media_section}"""
 
 
 def create_strategy_phase2_chain() -> Runnable:
@@ -125,9 +135,13 @@ def format_data_for_phase2(
     brief: dict | None = None,
     research_design: dict | None = None,
     market_context: str = "",
+    news_slices: list[dict] | None = None,
 ) -> dict[str, Any]:
     """将 Phase 1 结果 + 补充数据格式化为 Phase 2 输入"""
-    from src.llm.chains.strategy_phase1_chain import _build_research_context_section
+    from src.llm.chains.strategy_phase1_chain import (
+        _build_research_context_section,
+        _format_news_media_section,
+    )
 
     brief_section = ""
     if brief:
@@ -194,6 +208,8 @@ def format_data_for_phase2(
 
         supplementary_parts.append(part)
 
+    news_media_section = _format_news_media_section(news_slices or [])
+
     return {
         "brief_section": brief_section,
         "research_context_section": research_context_section,
@@ -202,6 +218,7 @@ def format_data_for_phase2(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
         "market_context": market_context,
+        "news_media_section": news_media_section,
     }
 
 

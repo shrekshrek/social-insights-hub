@@ -117,6 +117,16 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **大盘分析切片**（无 subject）：关键词为品类词/场景词，SOV 排名更接近真实市场声量分布，**竞品格局分析以大盘切片的 SOV 为准**
 - 同一品牌在品牌聚焦切片里热度高，在大盘切片里 SOV 不高，属正常现象，不构成矛盾
 - Brand Opportunity 中的竞品空白区判断，优先引用大盘切片的 sov_gap 或 quadrant_position，而非品牌聚焦切片的实体热度排名
+
+## 新闻媒体数据使用指南
+
+如果输入包含"新闻媒体视角"数据，请注意：
+- 新闻数据来自搜索引擎聚合（百度/搜狗/DuckDuckGo）和微信公众号，反映**媒体/行业视角**，与社媒切片中的**消费者视角**互为补充
+- **交叉验证**：当社媒消费者声音与新闻媒体报道出现矛盾时（如消费者负面但媒体正面），这本身就是高价值的 Tension 线索
+- **叙事聚类**（narratives）反映媒体如何定义和包装品类议题，可能与消费者实际关注点存在偏差
+- **实体角色**：新闻中的实体角色（target/competitor/context）代表媒体视角的竞争定位，与社媒 SOV 排名可能不同
+- 新闻数据作为**补充证据**使用，evidence 中标明 source 为"新闻媒体数据"以区分
+- 不要仅凭新闻数据得出 Tension 结论——Tension 的核心依据应来自消费者真实声音（社媒切片），新闻数据用于验证或补充
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -127,7 +137,9 @@ USER_TEMPLATE = """{brief_section}
 
 ## 切片数据
 
-{slice_data}"""
+{slice_data}
+
+{news_media_section}"""
 
 
 def create_strategy_phase1_chain() -> Runnable:
@@ -206,11 +218,49 @@ def _build_research_context_section(
     return "\n".join(lines)
 
 
+def _format_news_media_section(news_slices: list[dict]) -> str:
+    """从 NewsSlice 数据格式化新闻媒体视角补充段落。
+
+    news_slices 结构：每项为一个 NewsSlice 的数据：
+    name / result_data（insight 分析结果）/ stats（文章统计）。
+    """
+    all_insights: list[dict] = []
+    for ns in news_slices:
+        rd = ns.get("result_data")
+        if not rd or isinstance(rd, str) or rd.get("error"):
+            continue
+        stats = ns.get("stats") or {}
+        all_insights.append({
+            "slice_name": ns.get("name", ""),
+            "article_count": stats.get("articles_total", 0),
+            "source_tier_distribution": stats.get("source_tier_distribution"),
+            "sentiment_overall": stats.get("sentiment_overall"),
+            "top_entities": (stats.get("top_entities") or [])[:8],
+            "coverage": rd.get("coverage"),
+            "sentiment": rd.get("sentiment"),
+            "narratives": (rd.get("narratives") or [])[:5],
+            "entities": (rd.get("entities") or [])[:8],
+            "competitive_landscape": rd.get("competitive_landscape"),
+            "key_quotes": (rd.get("key_quotes") or [])[:5],
+        })
+
+    if not all_insights:
+        return ""
+
+    return (
+        "## 新闻媒体视角（补充数据）\n\n"
+        "以下数据来自新闻媒体渠道（搜索引擎聚合 + 微信公众号），反映媒体/行业对相关话题的报道视角，"
+        "与社媒切片中的消费者声音互为补充。\n\n"
+        + json.dumps(all_insights, ensure_ascii=False, indent=2)
+    )
+
+
 def format_slice_data_for_phase1(
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
     market_context: str = "",
+    news_slices: list[dict] | None = None,
 ) -> dict[str, Any]:
     """将切片 result_data 格式化为 Phase 1 输入
 
@@ -432,11 +482,14 @@ def format_slice_data_for_phase1(
             + json.dumps(cross_slice_anomalies, ensure_ascii=False, indent=2)
         )
 
+    news_media_section = _format_news_media_section(news_slices or [])
+
     return {
         "brief_section": brief_section,
         "research_context_section": research_context_section,
         "slice_data": slice_data,
         "market_context": market_context,
+        "news_media_section": news_media_section,
     }
 
 

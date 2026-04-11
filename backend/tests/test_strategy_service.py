@@ -195,6 +195,7 @@ class TestCheckCollectionStatusSliceTrigger:
         strategy.id = 1
         strategy.task_ids = [1]
         strategy.slices = []
+        strategy.coverage_check_result = None
 
         await check_collection_status(db, strategy, current_user_id=1)
         mock_create_auto_slices.assert_awaited_once()
@@ -224,6 +225,7 @@ class TestCheckCollectionStatusSliceTrigger:
         strategy.id = 1
         strategy.task_ids = [1]
         strategy.slices = [MagicMock()]
+        strategy.coverage_check_result = None
 
         await check_collection_status(db, strategy, current_user_id=1)
         mock_create_auto_slices.assert_not_awaited()

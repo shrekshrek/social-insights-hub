@@ -28,6 +28,8 @@ NEWS_INSIGHT_SYSTEM = """你是资深媒体分析师，擅长从新闻报道中�
 
 ## 输出格式（严格 JSON）
 
+注意：标注阶段的 sentiment 使用 -2 到 2 五级整数量表，请据此计算加权平均。
+
 {{
   "coverage": {{
     "media_coverage_index": <float, 综合评分 0-100, 考虑文章数量和来源权威度>,
@@ -36,17 +38,17 @@ NEWS_INSIGHT_SYSTEM = """你是资深媒体分析师，擅长从新闻报道中�
     "summary": "<一句话描述报道整体态势>"
   }},
   "sentiment": {{
-    "overall": <float, -1~1 加权平均>,
+    "overall": <float, -2~2 加权平均>,
     "distribution": {{"positive": <int>, "neutral": <int>, "negative": <int>}},
-    "by_source_tier": {{"tier1": <float>, "tier2": <float>, "tier3": <float>}}
+    "by_source_tier": {{"tier1": <float>, "tier2": <float>, "tier3": <float>, "wechat_mp": <float>}}
   }},
   "narratives": [
     {{
       "theme": "<叙事主题名>",
       "article_count": <int>,
-      "sentiment": <float, -1~1>,
+      "sentiment": <float, -2~2>,
       "summary": "<50-100字概述>",
-      "representative_titles": ["<代表性文章标题1>", "<代表性文章标题2>"]
+      "representative_titles": ["<代表性文章标题>"]
     }}
   ],
   "entities": [
@@ -54,9 +56,9 @@ NEWS_INSIGHT_SYSTEM = """你是资深媒体分析师，擅长从新闻报道中�
       "name": "<实体名>",
       "role": "<target/competitor/context>",
       "mention_count": <int>,
-      "sentiment": <float>,
+      "sentiment": <float, -2~2>,
       "source_count": <int, 提及该实体的不同来源数>,
-      "key_claims": ["<关于该实体的关键论述1>", "<关键论述2>"]
+      "key_claims": ["<关于该实体的关键论述>"]
     }}
   ],
   "competitive_landscape": {{
@@ -70,6 +72,14 @@ NEWS_INSIGHT_SYSTEM = """你是资深媒体分析师，擅长从新闻报道中�
   ]
 }}
 
+## 数量限制
+- narratives: 最多 5 个主题，按 article_count 降序，相似主题需合并
+- entities: 最多 15 个实体，按 mention_count 降序
+- key_claims: 每个 entity 最多 3 条
+- representative_titles: 每个 narrative 最多 3 条
+- key_quotes: 最多 5 条，选择最具代表性的引述
+- competitive_landscape: 仅当存在 role=competitor 的实体时才输出此字段，否则设为 null
+
 只输出JSON，无额外文本。"""
 
 
@@ -81,6 +91,7 @@ NEWS_INSIGHT_USER = """以下是 {article_count} 篇相关新闻的标注结果�
 - tier1（权威央媒）: {tier1_count} 篇
 - tier2（行业门户）: {tier2_count} 篇
 - tier3（其他来源）: {tier3_count} 篇
+- wechat_mp（微信公众号）: {wechat_mp_count} 篇
 
 请进行整体分析并输出JSON。"""
 

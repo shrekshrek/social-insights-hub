@@ -106,6 +106,14 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 **Content Strategy** 中的支柱须包含至少 1 个"品类颠覆型支柱"——内容方向挑战该品类的惯常做法，而非在品类既有框架内执行。具体要求：
 - 在该支柱的 description 中注明"品类通常如何做 X，我们反其道而行的逻辑是什么"
 - reference_examples 可以借鉴**其他品类**的内容形式，不限于本品类 KOL
+
+## 新闻媒体数据使用指南
+
+如果输入包含"新闻媒体视角"数据，请注意：
+- 新闻叙事聚类（narratives）揭示媒体如何定义品类议题，Big Idea 可以**借势或颠覆**媒体已有的叙事框架
+- 关键引述（key_quotes）中的行业权威发言可作为 Content Strategy 的话题锚点
+- Content Strategy 的支柱可考虑"媒体议题再造"——将新闻中的行业话题转化为社媒可传播的消费者语言
+- 新闻数据作为补充创意灵感，evidence 中标明 source 为"新闻媒体数据"以区分
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -122,7 +130,9 @@ USER_TEMPLATE = """{brief_section}
 
 ## 补充数据（高互动内容 + KOL 生态）
 
-{supplementary_data}"""
+{supplementary_data}
+
+{news_media_section}"""
 
 
 def create_strategy_phase3_chain() -> Runnable:
@@ -181,13 +191,17 @@ def format_data_for_phase3(
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
+    news_slices: list[dict] | None = None,
 ) -> dict[str, Any]:
     """将 Phase 1+2 结果 + 补充数据格式化为 Phase 3 输入
 
     Phase 1/2 只传结论字段，剔除 evidence 数组——Phase 3 只需知道
     「得出了什么结论」，不需要重新审阅推理链，可节省约 30-50% 输入 token。
     """
-    from src.llm.chains.strategy_phase1_chain import _build_research_context_section
+    from src.llm.chains.strategy_phase1_chain import (
+        _build_research_context_section,
+        _format_news_media_section,
+    )
 
     brief_section = ""
     if brief:
@@ -267,6 +281,8 @@ def format_data_for_phase3(
 
         supplementary_parts.append(part)
 
+    news_media_section = _format_news_media_section(news_slices or [])
+
     return {
         "brief_section": brief_section,
         "research_context_section": research_context_section,
@@ -275,6 +291,7 @@ def format_data_for_phase3(
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
+        "news_media_section": news_media_section,
     }
 
 

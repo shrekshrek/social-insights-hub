@@ -27,10 +27,12 @@ NEWS_TAGGING_SYSTEM = """你是新闻分析助手，负责对新闻文章进行�
    - medium：有涉及但非核心
    - low：仅顺带提及或不相关
 
-2. **sentiment**：文章对研究目标的情感/立场
-   - 1：正面（积极评价、利好报道）
-   - 0：中性（客观陈述）
-   - -1：负面（批评、风险、利空报道）
+2. **sentiment**：文章对研究目标的情感/立场（-2 到 2 整数）
+   - 2：强烈正面（重大利好、高度肯定）
+   - 1：轻度正面（一般性积极评价、温和利好）
+   - 0：中性（客观陈述、无明显倾向）
+   - -1：轻度负面（一般性批评、轻微风险提示）
+   - -2：强烈负面（重大利空、严厉批评、丑闻危机）
 
 3. **article_type**：文章类型
    - report：新闻报道（事实为主）
@@ -51,7 +53,7 @@ NEWS_TAGGING_SYSTEM = """你是新闻分析助手，负责对新闻文章进行�
 
 ## 输出格式
 返回JSON数组，每篇文章一个对象：
-[{{"article_index": 0, "relevance": "high", "sentiment": 1, "article_type": "report", "mentioned_entities": [{{"name": "品牌A", "role": "target"}}], "key_quotes": [{{"speaker": "某高管", "quote": "..."}}], "summary": "..."}}, ...]
+[{{"article_index": 0, "relevance": "high", "sentiment": 2, "article_type": "report", "mentioned_entities": [{{"name": "品牌A", "role": "target"}}], "key_quotes": [{{"speaker": "某高管", "quote": "..."}}], "summary": "..."}}, ...]
 
 只输出JSON，无额外文本。"""
 

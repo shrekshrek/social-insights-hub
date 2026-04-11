@@ -22,7 +22,7 @@ async def get_task_by_id(
     if load_relations:
         stmt = stmt.options(
             selectinload(NewsTask.monitor),
-            selectinload(NewsTask.creator),
+            selectinload(NewsTask.user),
         )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
@@ -65,7 +65,7 @@ async def get_tasks(
         base_stmt
         .options(
             selectinload(NewsTask.monitor),
-            selectinload(NewsTask.creator),
+            selectinload(NewsTask.user),
         )
         .offset(skip)
         .limit(limit)

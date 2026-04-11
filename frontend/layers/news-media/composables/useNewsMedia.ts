@@ -11,8 +11,9 @@ import type {
   NewsTask,
   NewsTaskWithRelations,
   NewsTaskCreate,
-  MonitorAggregatedStats,
-  NewsAnalysisResult,
+  NewsSlice,
+  NewsSliceCreate,
+  NewsSliceWithRelations,
 } from '../types'
 
 export const useNewsMonitors = () => {
@@ -60,20 +61,6 @@ export const useNewsMonitors = () => {
     return true
   }
 
-  const getMonitorAggregated = async (monitorId: number): Promise<MonitorAggregatedStats> => {
-    return apiRequest<MonitorAggregatedStats>(`/news-media/monitors/${monitorId}/aggregated`)
-  }
-
-  const runMonitorAggregate = async (
-    monitorId: number,
-    params?: { analysis_goal?: string; subject?: string },
-  ): Promise<NewsAnalysisResult> => {
-    return apiRequest<NewsAnalysisResult>(`/news-media/monitors/${monitorId}/aggregate`, {
-      method: 'POST',
-      body: params || {},
-    })
-  }
-
   const addParticipant = async (monitorId: number, userIds: number[]) => {
     const result = await apiRequest<NewsMonitorWithOwner>(
       `/news-media/monitors/${monitorId}/participants`,
@@ -98,8 +85,6 @@ export const useNewsMonitors = () => {
     createMonitor,
     updateMonitor,
     deleteMonitor,
-    getMonitorAggregated,
-    runMonitorAggregate,
     addParticipant,
     removeParticipant,
   }
@@ -186,5 +171,58 @@ export const useNewsTasks = () => {
     deleteTask,
     executeTask,
     getTaskArticles,
+  }
+}
+
+export const useNewsSlices = () => {
+  const { apiRequest, useApiData, showSuccess } = useApi()
+
+  const getSlices = (monitorId: number) => {
+    return useApiData<NewsSlice[]>(`/news-media/monitors/${monitorId}/slices`, {
+      key: `news-slices-${monitorId}`,
+    })
+  }
+
+  const getSlice = (sliceId: number) => {
+    return useApiData<NewsSliceWithRelations>(`/news-media/slices/${sliceId}`, {
+      key: `news-slice-${sliceId}`,
+    })
+  }
+
+  const createSlice = async (monitorId: number, data: NewsSliceCreate) => {
+    const result = await apiRequest<NewsSlice>(
+      `/news-media/monitors/${monitorId}/slices`,
+      { method: 'POST', body: data },
+    )
+    showSuccess('切片创建成功！')
+    return result
+  }
+
+  const analyzeSlice = async (
+    sliceId: number,
+    params?: { analysis_goal?: string; subject?: string },
+  ) => {
+    const result = await apiRequest<NewsSlice>(`/news-media/slices/${sliceId}/analyze`, {
+      method: 'POST',
+      body: params || {},
+    })
+    showSuccess('切片分析已完成')
+    return result
+  }
+
+  const deleteSlice = async (sliceId: number) => {
+    await apiRequest(`/news-media/slices/${sliceId}`, {
+      method: 'DELETE',
+    })
+    showSuccess('切片已删除')
+    return true
+  }
+
+  return {
+    getSlices,
+    getSlice,
+    createSlice,
+    analyzeSlice,
+    deleteSlice,
   }
 }

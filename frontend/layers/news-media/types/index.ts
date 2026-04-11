@@ -7,7 +7,6 @@ export interface NewsMonitor {
   name: string
   description: string | null
   owner_id: number
-  aggregated_result: NewsAnalysisResult | null
   participant_ids: number[]
   created_at: string
   updated_at: string
@@ -30,14 +29,14 @@ export interface NewsTask {
   articles_count: number
   analysis_result: NewsAnalysisResult | null
   error_message: string | null
-  created_by: number
+  user_id: number
   created_at: string
   updated_at: string
 }
 
 export interface NewsTaskWithRelations extends NewsTask {
   monitor_name: string | null
-  creator_username: string | null
+  user_username: string | null
 }
 
 export interface NewsMonitorCreate {
@@ -66,7 +65,7 @@ export interface NewsAnalysisMeta {
   articles_relevant?: number
   articles_crawled?: number
   articles_analyzed?: number
-  source_tier_distribution?: { tier1: number; tier2: number; tier3: number }
+  source_tier_distribution?: { tier1: number; tier2: number; tier3: number; wechat_mp: number }
 }
 
 export interface NewsAnalysisCoverage {
@@ -79,7 +78,7 @@ export interface NewsAnalysisCoverage {
 export interface NewsAnalysisSentiment {
   overall?: number
   distribution?: { positive: number; neutral: number; negative: number }
-  by_source_tier?: { tier1: number; tier2: number; tier3: number }
+  by_source_tier?: { tier1: number; tier2: number; tier3: number; wechat_mp: number }
 }
 
 export interface NewsNarrative {
@@ -122,16 +121,30 @@ export interface NewsAnalysisResult {
   key_quotes?: NewsKeyQuote[]
 }
 
-// ==================== Monitor 聚合类型 ====================
+// ==================== Slice Types ====================
 
-export interface MonitorAggregatedStats {
-  articles_total: number
-  articles_relevant: number
-  source_tier_distribution: { tier1: number; tier2: number; tier3: number }
-  sentiment_distribution: { positive: number; neutral: number; negative: number }
-  sentiment_overall: number | null
-  top_entities: Array<{ name: string; mention_count: number }>
-  search_source_distribution: { baidu: number; duckduckgo: number }
+export interface NewsSlice {
+  id: number
+  name: string
+  monitor_id: number
+  included_task_ids: number[]
+  status: string
+  result_data: Record<string, unknown> | null
+  stats: Record<string, unknown> | null
+  error_message: string | null
+  user_id: number
+  created_at: string
+  updated_at: string
+}
+
+export interface NewsSliceCreate {
+  name: string
+  included_task_ids: number[]
+}
+
+export interface NewsSliceWithRelations extends NewsSlice {
+  monitor_name: string | null
+  user_username: string | null
 }
 
 // ==================== Article Types ====================
@@ -144,7 +157,7 @@ export interface NewsArticle {
   snippet: string | null
   source_name: string
   source_tier: string
-  search_source: 'baidu' | 'duckduckgo'
+  search_source: 'baidu' | 'sogou' | 'duckduckgo' | 'wechat_mp'
   author: string | null
   published_at: string | null
   image_url: string | null

@@ -1,6 +1,6 @@
 """新闻监测项目 API 路由"""
 
-from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
@@ -9,7 +9,6 @@ from src.database import get_async_db
 from src.news_media.monitors import service
 from src.news_media.monitors.dependencies import (
     validate_news_monitor_access,
-    validate_news_monitor_exists,
     validate_news_monitor_owner,
 )
 from src.news_media.monitors.models import NewsMonitor
@@ -133,37 +132,3 @@ async def remove_participant(
 ):
     updated = await service.remove_participant_from_news_monitor(db, monitor, user_id)
     return NewsMonitorReadWithOwner.from_orm_full(updated)
-
-
-# ==================== Monitor 聚合端点 ====================
-
-
-@router.get(
-    "/monitors/{monitor_id}/aggregated",
-    response_model=dict,
-    status_code=status.HTTP_200_OK,
-    summary="获取监测项目统计聚合（自动计算，无 LLM）",
-)
-async def get_monitor_aggregated(
-    monitor: NewsMonitor = Depends(validate_news_monitor_exists),
-    db: AsyncSession = Depends(get_async_db),
-    _current_user: User = Depends(get_current_user),
-):
-    return await service.get_monitor_aggregated_stats(db, monitor.id)
-
-
-@router.post(
-    "/monitors/{monitor_id}/aggregate",
-    response_model=dict,
-    status_code=status.HTTP_200_OK,
-    summary="触发叙事聚合（运行 news_insight_chain，写入 aggregated_result）",
-)
-async def run_monitor_aggregate(
-    monitor: NewsMonitor = Depends(validate_news_monitor_owner),
-    db: AsyncSession = Depends(get_async_db),
-    analysis_goal: str = Body(default="", embed=True),
-    subject: str = Body(default="", embed=True),
-):
-    return await service.run_monitor_narrative_aggregate(
-        db, monitor, analysis_goal=analysis_goal, subject=subject
-    )

@@ -147,8 +147,33 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
     return articles
 
 
+_PAGE_SIZE = 10  # 百度新闻每页实际返回约 10 条
+
+
+async def _fetch_one_page(client: httpx.AsyncClient, url: str, headers: dict) -> str:
+    """抓取单页并返回 cleaned_html，失败返回空字符串"""
+    payload: dict = {
+        "urls": [url],
+        "crawler_config": {
+            "cache_mode": "bypass",
+            "scan_full_page": True,
+            "page_timeout": 20000,
+        },
+    }
+    resp = await client.post(
+        f"{settings.CRAWL4AI_BASE_URL}/crawl",
+        json=payload,
+        headers=headers,
+    )
+    resp.raise_for_status()
+    results = resp.json().get("results", [])
+    if not results:
+        return ""
+    return results[0].get("cleaned_html", "")
+
+
 async def search_baidu_news(query: str, max_results: int = 10) -> list[dict]:
-    """通过 Crawl4AI 爬取百度新闻搜索结果
+    """通过 Crawl4AI 爬取百度新闻搜索结果（自动分页）
 
     Args:
         query: 搜索关键词
@@ -159,44 +184,41 @@ async def search_baidu_news(query: str, max_results: int = 10) -> list[dict]:
         image_url, raw_data, search_source="baidu"
     """
     encoded_query = quote(query)
-    target_url = f"{_BAIDU_NEWS_URL}?word={encoded_query}&rn={min(max_results, 50)}&tn=news&cl=2&ie=utf-8"
-
-    payload: dict = {
-        "urls": [target_url],
-        "crawler_config": {
-            "cache_mode": "bypass",
-            "scan_full_page": True,
-            "page_timeout": 20000,
-        },
-    }
-
     headers: dict[str, str] = {}
     if settings.CRAWL4AI_TOKEN:
         headers["Authorization"] = f"Bearer {settings.CRAWL4AI_TOKEN}"
 
+    all_articles: list[dict] = []
+    seen_urls: set[str] = set()
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{settings.CRAWL4AI_BASE_URL}/crawl",
-                json=payload,
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            page = 0
+            while len(all_articles) < max_results:
+                pn = page * _PAGE_SIZE
+                target_url = (
+                    f"{_BAIDU_NEWS_URL}?word={encoded_query}"
+                    f"&rn={_PAGE_SIZE}&pn={pn}&tn=news&cl=2&ie=utf-8"
+                )
 
-        results = data.get("results", [])
-        if not results:
-            logger.warning("Crawl4AI: 百度新闻爬取返回空结果, query=%r", query)
-            return []
+                cleaned_html = await _fetch_one_page(client, target_url, headers)
+                if not cleaned_html.strip():
+                    logger.warning("百度新闻: 第 %d 页 cleaned_html 为空, query=%r", page + 1, query)
+                    break
 
-        cleaned_html = results[0].get("cleaned_html", "")
-        if not cleaned_html.strip():
-            logger.warning("Crawl4AI: 百度新闻 cleaned_html 为空, query=%r", query)
-            return []
+                page_articles = _extract_articles_from_html(cleaned_html, _PAGE_SIZE)
+                if not page_articles:
+                    break
 
-        articles = _extract_articles_from_html(cleaned_html, max_results)
-        logger.info("百度新闻: query=%r, 提取文章数=%d", query, len(articles))
-        return articles
+                for a in page_articles:
+                    if a["url"] not in seen_urls and len(all_articles) < max_results:
+                        seen_urls.add(a["url"])
+                        all_articles.append(a)
+
+                page += 1
+
+        logger.info("百度新闻: query=%r, 提取文章数=%d (翻页=%d)", query, len(all_articles), page)
+        return all_articles
 
     except httpx.HTTPError as e:
         logger.error("Crawl4AI 请求失败: %s", e)

@@ -1,9 +1,8 @@
-"""Strategy Research Design Chain — 社媒研究设计
+"""Strategy Research Design Chain — 多渠道研究设计
 
-接收社媒渠道专属的 channel_brief（由 strategy_brief_parser_chain 生成），
-将研究方向分解为结构化的社媒研究计划：
-研究问题 → 数据采集方案 → 切片蓝图 → 产出类型建议。
-替代原有 strategy_consult_chain。
+接收各渠道的 channel_brief（由 strategy_brief_parser_chain 生成），
+将研究方向分解为结构化的研究计划：
+研究问题 → 数据采集方案（社媒 + 新闻） → 切片蓝图 → 产出类型建议。
 """
 
 from __future__ import annotations
@@ -19,12 +18,12 @@ from src.llm.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助品牌团队设计数据驱动的研究计划。
+SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队设计数据驱动的多渠道研究计划。
 
 ## 任务
-根据社媒渠道研究方向，输出结构化的社媒研究计划：研究问题 → 数据采集方案 → 切片蓝图 → 产出类型建议。不需要追问，用你的专业判断补全细节。
+根据输入的渠道研究方向，输出结构化的研究计划：研究问题 → 数据采集方案 → 切片蓝图 → 产出类型建议。不需要追问，用你的专业判断补全细节。
 
-输入的“社媒渠道研究方向”已由上游渠道分发层筛选确认适合社媒研究，无需重新评估适配度。
+输入可能包含"社媒渠道研究方向"和/或"新闻渠道研究方向"——**只为输入中出现的渠道生成对应的 data_plan 维度**。如果只有社媒方向则只生成 social_media 维度；如果只有新闻方向则只生成 news_media 维度；两者都有则两种都生成。渠道分配已由上游确认，无需重新评估适配度。
 
 ## 研究设计原则
 
@@ -35,7 +34,12 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
 - **competitive**: 竞品格局（竞品声量、差异化、定位对比）
 - **industry**: 行业/品类趋势（大盘热度、新兴话题、消费趋势）
 
-### 2. 关键词质量要求
+### 2. 数据源与关键词质量
+
+数据采集方案支持两种渠道，每个维度通过 `channel` 字段指定：
+
+**社交媒体（channel = "social_media"，默认）**：
+- 需指定 `platforms`（1-2 个，最多 3 个）
 - 每个数据维度 1-3 个关键词（关键词在平台上按 OR 组合搜索）
 - 品牌维度只用品牌专属词，不混入品类通用词或竞品词
 - 竞品维度只放竞品品牌词，不和自有品牌混在一起
@@ -52,13 +56,23 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
   - 抖音：简短品牌名 + 场景词/评测词适合大众消费品；B2B话题不推荐
   - B站：内容深度优于抖音，消费品/科技产品用场景词/评测词；专业话题可用行业分析型词（"行业趋势/技术对比"）
 
+**新闻媒体（channel = "news_media"）**：
+- **不需要** `platforms` 字段（系统自动通过百度+搜狗+DuckDuckGo 搜索引擎检索）
+- 可选启用微信公众号搜索（通过搜狗微信专用入口），适合行业分析、企业深度报道、品牌自媒体内容
+- 每个维度 1-2 个关键词，面向搜索引擎优化（与社媒平台搜索习惯不同）
+- 关键词应偏向新闻报道视角：品牌动态、行业趋势、市场分析、政策影响等
+- 适合场景：品牌媒体曝光监测、行业新闻动态追踪、竞品公关/融资/战略动向、市场趋势的媒体视角
+- 不适合场景：消费者个人体验和评价（这是社媒的强项）
+- 新闻维度数量控制在 1-2 个，每个维度 1-2 个关键词
+
 ### 3. 控制采集规模
 每个关键词在每个平台的采集量约 50 条，分析耗时适中。方案必须精简：
-- 总数据维度 2-4 个
-- 每个维度 **1-2 个关键词**，最多 3 个（超过 2 个需有充分理由）
-- 每个维度选 **1-2 个平台**，最多 3 个（质量优先，宁精不滥）
-- **总任务数 = Σ(各维度关键词数 × 平台数)，目标 8-12 个；生成后自行验算，超过则删减关键词或平台**
-- **平台选择必须同时考虑品类特点和关键词适配性**（优先从以下 5 个主力平台中选择）：
+- 总维度 2-6 个，按输入的渠道分配：社媒维度 2-4 个（如有社媒方向），新闻维度 1-2 个（如有新闻方向）
+- 每个社媒维度 **1-2 个关键词**，最多 3 个（超过 2 个需有充分理由）
+- 每个社媒维度选 **1-2 个平台**，最多 3 个（质量优先，宁精不滥）
+- 每个新闻维度 **1-2 个关键词**（无需选平台）
+- **社媒总任务数 = Σ(各社媒维度关键词数 × 平台数)，目标 8-12 个；生成后自行验算，超过则删减关键词或平台**
+- **社媒平台选择必须同时考虑品类特点和关键词适配性**（优先从以下主力平台中选择）：
   - 知乎：专业讨论、行业分析、深度评价（适合 B2B、技术、专业领域；B2B 研究首选）
   - 微博：新闻热点、品牌公关、大众舆论（适合有公众讨论度的消费品话题；B2B 仅限舆情事件监测，不适合深度洞察）
   - 小红书：消费体验、生活方式、种草测评（适合 B2C 消费品，**不适合 B2B 专业话题**）
@@ -72,6 +86,9 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
 通常包含 1 个品牌聚焦切片 + 1 个大盘分析切片。
 - 品牌聚焦切片的 subject 必须是 Brief 中**用户最关心的分析主体**（通常是 subject 或其核心竞品），而非随意选择数据中出现的某个实体
 - 如果 Brief 涉及多个赛道，每个赛道需要独立切片（不同赛道的实体不应混在同一个切片中进行对比）
+- 切片的 `source_dimensions` 可以同时引用社媒和新闻维度——系统会按渠道分别创建独立切片（社媒 SocialSlice + 新闻 NewsSlice），最终 Phase 报告合并两方数据
+- 每个切片建议同时引用社媒和新闻维度，让两个渠道的分析结果能在报告中交叉验证
+- 纯新闻切片（无社媒维度）和纯社媒切片（无新闻维度）都是允许的
 
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记：
@@ -88,9 +105,17 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
   "data_plan": [
     {{
       "dimension_name": "品牌声量",
+      "channel": "social_media",
       "keywords": ["关键词1", "关键词2"],
       "platforms": ["xiaohongshu", "douyin"],
       "rationale": "设置理由（一句话）",
+      "question_ids": ["rq1"]
+    }},
+    {{
+      "dimension_name": "品牌媒体报道",
+      "channel": "news_media",
+      "keywords": ["品牌名 行业动态", "品牌名 市场分析"],
+      "rationale": "追踪品牌在新闻媒体中的曝光与行业定位",
       "question_ids": ["rq1"]
     }}
   ],
@@ -108,7 +133,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体研究策略顾问，帮助�
   "output_type_rationale": "选择理由（一句话）"
 }}
 
-platforms 可选值（优先前 5 个）: douyin / weibo / bilibili / xiaohongshu / zhihu / kuaishou / tieba
+channel 可选值: social_media（默认，需 platforms）/ news_media（无 platforms）
+platforms 可选值（仅 social_media）: douyin / weibo / bilibili / xiaohongshu / zhihu / kuaishou / tieba
 dimension 可选值: brand_voice / consumer_voice / competitive / industry
 priority 可选值: high / medium / low
 mode 可选值: 品牌聚焦 / 大盘分析
@@ -116,8 +142,9 @@ output_type 可选值: brand_strategy / insight_report
 
 ## 要求
 - understanding_summary: 必填
-- research_questions: 2-4 个，覆盖社媒渠道研究方向中的核心分析目标
-- data_plan: 2-4 个维度，每个维度 1-2 个关键词（最多 3 个）+ 1-2 个平台（最多 3 个），总任务数目标 8-12 个
+- research_questions: 2-4 个，覆盖所有渠道研究方向中的核心分析目标
+- data_plan: 只为输入中出现的渠道生成维度。社媒维度（如有）2-4 个，每个 1-2 关键词 + 1-2 平台，社媒总任务数目标 8-12；新闻维度（如有）1-2 个，每个 1-2 关键词，无 platforms
+- data_plan 中每个条目必须包含 `channel` 字段（"social_media" 或 "news_media"）
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
@@ -144,16 +171,23 @@ def format_research_design_inputs(
     channel_brief: str,
     subject: str = "",
     constraints: str = "",
+    news_channel_brief: str = "",
 ) -> dict[str, Any]:
     """格式化研究设计链输入
 
-    channel_brief 是社媒渠道专属描述（1-2句），提供研究方向。
+    channel_brief 是社媒渠道专属描述（1-2句），提供社媒研究方向。
+    news_channel_brief 是新闻渠道专属描述（1-2句），提供新闻研究方向。
     subject / constraints 作为补充上下文，帮助链生成精确的关键词和平台选择。
     """
+    lines: list[str] = []
+
     if channel_brief:
-        lines = [f"## 社媒渠道研究方向\n{channel_brief}"]
+        lines.append(f"## 社媒渠道研究方向\n{channel_brief}")
     else:
-        lines = ["## 社媒渠道研究方向\n用户未提供渠道描述，请根据背景信息推断研究方向。"]
+        lines.append("## 社媒渠道研究方向\n用户未提供渠道描述，请根据背景信息推断研究方向。")
+
+    if news_channel_brief:
+        lines.append(f"\n## 新闻渠道研究方向\n{news_channel_brief}")
 
     if subject or constraints:
         lines.append("\n## 研究背景（供参考）")

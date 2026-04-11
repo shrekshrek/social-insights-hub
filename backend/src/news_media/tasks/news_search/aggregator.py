@@ -105,6 +105,9 @@ async def search_news(
     if "duckduckgo" in channels:
         from src.news_media.tasks.news_search.ddg_searcher import search_ddg_news
         tasks.append(search_ddg_news(query, max_results=max_results))
+    if "wechat_mp" in channels:
+        from src.news_media.tasks.news_search.wechat_mp_crawler import search_wechat_mp
+        tasks.append(search_wechat_mp(query, max_results=max_results))
 
     if not tasks:
         return []
@@ -128,8 +131,11 @@ async def search_news(
             continue
         seen_normalized.add(norm)
 
-        # 补充 source_tier
-        article["source_tier"] = classify_source_tier(article.get("source_name", ""))
+        # 补充 source_tier（公众号文章使用独立分层标识）
+        if article.get("search_source") == "wechat_mp":
+            article["source_tier"] = "wechat_mp"
+        else:
+            article["source_tier"] = classify_source_tier(article.get("source_name", ""))
         deduped.append(article)
 
     logger.info(

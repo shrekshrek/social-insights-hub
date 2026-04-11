@@ -155,22 +155,22 @@ const getSentimentText = (sentiment: number | null) => {
 }
 
 const getTierLabel = (tier: string) => {
-  const map: Record<string, string> = { tier1: '权威', tier2: '行业', tier3: '其他' }
+  const map: Record<string, string> = { tier1: '权威', tier2: '行业', tier3: '其他', wechat_mp: '公众号' }
   return map[tier] || tier
 }
 
 const getTierColor = (tier: string) => {
-  const map: Record<string, string> = { tier1: 'error', tier2: 'warning', tier3: 'neutral' }
+  const map: Record<string, string> = { tier1: 'error', tier2: 'warning', tier3: 'neutral', wechat_mp: 'success' }
   return map[tier] || 'neutral'
 }
 
 const getSearchSourceText = (source: string) => {
-  const map: Record<string, string> = { baidu: '百度', duckduckgo: 'DDG' }
+  const map: Record<string, string> = { baidu: '百度', sogou: '搜狗', duckduckgo: 'DDG', wechat_mp: '公众号' }
   return map[source] || source
 }
 
 const getSearchSourceColor = (source: string) => {
-  const map: Record<string, string> = { baidu: 'info', duckduckgo: 'success' }
+  const map: Record<string, string> = { baidu: 'info', sogou: 'warning', duckduckgo: 'success', wechat_mp: 'success' }
   return map[source] || 'neutral'
 }
 
@@ -441,7 +441,7 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
                 创建者
               </dt>
               <dd class="text-gray-900 dark:text-white">
-                {{ task.creator_username || '-' }}
+                {{ task.user_username || '-' }}
               </dd>
             </div>
           </div>
@@ -501,6 +501,7 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
                   { label: '权威央媒', value: 'tier1' },
                   { label: '行业门户', value: 'tier2' },
                   { label: '其他来源', value: 'tier3' },
+                  { label: '微信公众号', value: 'wechat_mp' },
                 ]"
                 value-key="value"
                 class="w-32"
@@ -585,7 +586,8 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
               <p class="text-sm font-medium mt-1">
                 权威 {{ analysisResult.meta.source_tier_distribution.tier1 ?? 0 }} /
                 行业 {{ analysisResult.meta.source_tier_distribution.tier2 ?? 0 }} /
-                其他 {{ analysisResult.meta.source_tier_distribution.tier3 ?? 0 }}
+                其他 {{ analysisResult.meta.source_tier_distribution.tier3 ?? 0 }} /
+                公众号 {{ analysisResult.meta.source_tier_distribution.wechat_mp ?? 0 }}
               </p>
             </div>
           </div>

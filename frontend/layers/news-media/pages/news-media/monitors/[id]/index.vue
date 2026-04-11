@@ -2,7 +2,6 @@
 import { h, ref, reactive, computed, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UButton, UBadge } from '#components'
-import type { MonitorAggregatedStats } from '../../../../types'
 
 definePageMeta({
   layout: 'default',
@@ -11,8 +10,9 @@ definePageMeta({
 const route = useRoute()
 const monitorId = Number(route.params.id)
 
-const { getMonitor, deleteMonitor: deleteMonitorApi, getMonitorAggregated, runMonitorAggregate, addParticipant, removeParticipant, updateMonitor } = useNewsMonitors()
+const { getMonitor, deleteMonitor: deleteMonitorApi, addParticipant, removeParticipant, updateMonitor } = useNewsMonitors()
 const { getTasks, deleteTask, executeTask } = useNewsTasks()
+const { getSlices, createSlice, deleteSlice: deleteSliceApi } = useNewsSlices()
 const { currentUserId } = usePermissions()
 
 const { data: monitor, pending: monitorLoading, refresh: refreshMonitor } = getMonitor(monitorId)
@@ -137,46 +137,108 @@ const handleExecuteTask = async (task: NewsTaskWithRelations) => {
   }
 }
 
-// ========== 统计聚合 ==========
+// ========== 任务选择（生成切片用） ==========
 
-const aggregatedStats = ref<MonitorAggregatedStats | null>(null)
-const aggregatedLoading = ref(false)
+const selectedTaskIds = ref<number[]>([])
 
-const loadAggregated = async () => {
-  aggregatedLoading.value = true
-  try {
-    aggregatedStats.value = await getMonitorAggregated(monitorId)
-  } catch {
-    // 无数据时静默失败
-  } finally {
-    aggregatedLoading.value = false
+const completedCollectTasks = computed(() =>
+  tasks.value.filter(t => t.status === 'completed' && t.phase === 'collect'),
+)
+
+const isTaskSelected = (taskId: number) => selectedTaskIds.value.includes(taskId)
+
+const toggleTaskSelection = (taskId: number) => {
+  if (isTaskSelected(taskId)) {
+    selectedTaskIds.value = selectedTaskIds.value.filter(id => id !== taskId)
+  } else {
+    selectedTaskIds.value = [...selectedTaskIds.value, taskId]
   }
 }
 
-onMounted(loadAggregated)
+const toggleSelectAll = () => {
+  if (selectedTaskIds.value.length === completedCollectTasks.value.length) {
+    selectedTaskIds.value = []
+  } else {
+    selectedTaskIds.value = completedCollectTasks.value.map(t => t.id)
+  }
+}
 
-// ========== 叙事聚合 ==========
+// ========== 生成切片弹窗 ==========
 
-const narrativeResult = ref<Record<string, unknown> | null>(
-  (monitor.value?.aggregated_result as Record<string, unknown> | undefined) ?? null
-)
-const narrativeLoading = ref(false)
-const showNarrativePanel = ref(!!narrativeResult.value)
+const showSliceModal = ref(false)
+const sliceNameInput = ref('')
+const generatingSlice = ref(false)
 
-const handleRunNarrative = async () => {
-  narrativeLoading.value = true
+const openSliceModal = () => {
+  sliceNameInput.value = ''
+  showSliceModal.value = true
+}
+
+const handleCreateSlice = async () => {
+  if (!sliceNameInput.value.trim()) {
+    toast.add({ title: '请输入切片名称', color: 'warning' })
+    return
+  }
+  generatingSlice.value = true
   try {
-    const result = await runMonitorAggregate(monitorId, {
-      analysis_goal: monitor.value?.name || '',
-      subject: monitor.value?.name || '',
+    const created = await createSlice(monitorId, {
+      name: sliceNameInput.value.trim(),
+      included_task_ids: selectedTaskIds.value,
     })
-    narrativeResult.value = result as Record<string, unknown>
-    showNarrativePanel.value = true
+    showSliceModal.value = false
+    selectedTaskIds.value = []
+    await navigateTo(`/news-media/slices/${created.id}`)
   } catch {
     // error already handled
   } finally {
-    narrativeLoading.value = false
+    generatingSlice.value = false
   }
+}
+
+// ========== 切片列表 ==========
+
+const { data: slicesData, pending: slicesLoading, refresh: refreshSlices } = getSlices(monitorId)
+const slices = computed(() => slicesData.value || [])
+
+const handleDeleteSlice = async (slice: NewsSlice) => {
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '删除切片',
+    message: `确定要删除切片 "${slice.name}" 吗？`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'error',
+  })
+  if (!confirmed) return
+
+  try {
+    await deleteSliceApi(slice.id)
+    await refreshSlices()
+  } catch {
+    // error already handled
+  }
+}
+
+type BadgeColor = 'neutral' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error'
+
+const getSliceStatusColor = (status: string): BadgeColor => {
+  const map: Record<string, BadgeColor> = {
+    pending: 'neutral',
+    analyzing: 'info',
+    completed: 'success',
+    failed: 'error',
+  }
+  return map[status] || 'neutral'
+}
+
+const getSliceStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    pending: '待分析',
+    analyzing: '分析中',
+    completed: '已完成',
+    failed: '失败',
+  }
+  return map[status] || status
 }
 
 // ========== 辅助函数 ==========
@@ -228,6 +290,22 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
   const Badge = UBadge as Component
 
   return [
+    {
+      accessorKey: 'select',
+      header: '',
+      meta: { class: { th: 'w-10', td: 'w-10' } },
+      cell: ({ row }) => {
+        const task = row.original
+        const selectable = task.status === 'completed' && task.phase === 'collect'
+        if (!selectable) return null
+        return h('input', {
+          type: 'checkbox',
+          checked: isTaskSelected(task.id),
+          class: 'rounded border-gray-300 cursor-pointer',
+          onChange: () => toggleTaskSelection(task.id),
+        })
+      },
+    },
     {
       accessorKey: 'id',
       header: 'ID',
@@ -500,6 +578,15 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
               />
               <UButton
                 size="sm"
+                icon="i-heroicons-sparkles"
+                :disabled="!selectedTaskIds.length"
+                :loading="generatingSlice"
+                @click="openSliceModal"
+              >
+                生成切片
+              </UButton>
+              <UButton
+                size="sm"
                 icon="i-heroicons-plus"
                 :to="`/news-media/tasks/create?monitor_id=${monitorId}`"
               >
@@ -524,6 +611,19 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
               <p class="text-gray-600 dark:text-gray-400">加载任务列表中...</p>
             </div>
           </template>
+
+          <!-- 选中提示 -->
+          <div
+            v-if="selectedTaskIds.length > 0"
+            class="mb-3 flex items-center justify-between px-3 py-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg text-sm"
+          >
+            <span>
+              已选 {{ selectedTaskIds.length }} 个任务
+              <button class="text-primary-600 dark:text-primary-400 underline ml-2" @click="toggleSelectAll">
+                {{ selectedTaskIds.length === completedCollectTasks.length ? '取消全选' : '全选已完成' }}
+              </button>
+            </span>
+          </div>
 
           <UTable
             :data="tasks"
@@ -558,17 +658,17 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
         </template>
       </UCard>
 
-      <!-- 统计聚合摘要 -->
-      <UCard v-if="aggregatedStats && aggregatedStats.articles_total > 0">
+      <!-- 切片列表 -->
+      <UCard>
         <template #header>
           <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">聚合摘要</h2>
+            <h2 class="text-lg font-semibold">分析切片</h2>
             <UButton
-              variant="ghost"
               size="sm"
+              variant="ghost"
               icon="i-heroicons-arrow-path"
-              :loading="aggregatedLoading"
-              @click="loadAggregated"
+              :loading="slicesLoading"
+              @click="refreshSlices()"
             >
               刷新
             </UButton>
@@ -576,104 +676,57 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
         </template>
 
         <ClientOnly>
-          <div class="space-y-4">
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
-              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <span class="text-gray-500">文章总数</span>
-                <p class="text-xl font-bold mt-1">{{ aggregatedStats.articles_total }}</p>
-              </div>
-              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <span class="text-gray-500">相关文章</span>
-                <p class="text-xl font-bold mt-1">{{ aggregatedStats.articles_relevant }}</p>
-              </div>
-              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <span class="text-gray-500">综合情感</span>
-                <p class="text-xl font-bold mt-1">
-                  {{ aggregatedStats.sentiment_overall !== null ? aggregatedStats.sentiment_overall?.toFixed(2) : '-' }}
-                </p>
-              </div>
-              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <span class="text-gray-500">情感分布（正/中/负）</span>
-                <p class="font-medium mt-1 text-sm">
-                  <span class="text-green-600">{{ aggregatedStats.sentiment_distribution.positive }}</span> /
-                  <span class="text-gray-500">{{ aggregatedStats.sentiment_distribution.neutral }}</span> /
-                  <span class="text-red-600">{{ aggregatedStats.sentiment_distribution.negative }}</span>
-                </p>
-              </div>
+          <template #fallback>
+            <div class="text-center py-6">
+              <p class="text-gray-600 dark:text-gray-400">加载切片列表中...</p>
             </div>
+          </template>
 
-            <div class="grid grid-cols-2 gap-3 text-sm">
-              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <span class="text-gray-500">来源等级分布</span>
-                <p class="font-medium mt-1">
-                  权威 {{ aggregatedStats.source_tier_distribution.tier1 }} /
-                  行业 {{ aggregatedStats.source_tier_distribution.tier2 }} /
-                  其他 {{ aggregatedStats.source_tier_distribution.tier3 }}
-                </p>
-              </div>
-              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <span class="text-gray-500">搜索渠道分布</span>
-                <p class="font-medium mt-1">
-                  百度 {{ aggregatedStats.search_source_distribution.baidu }} /
-                  DuckDuckGo {{ aggregatedStats.search_source_distribution.duckduckgo }}
-                </p>
-              </div>
-            </div>
-
-            <div v-if="aggregatedStats.top_entities.length > 0">
-              <p class="text-sm text-gray-500 mb-2">高频实体 Top{{ Math.min(aggregatedStats.top_entities.length, 5) }}</p>
-              <div class="flex flex-wrap gap-2">
-                <UBadge
-                  v-for="ent in aggregatedStats.top_entities.slice(0, 5)"
-                  :key="ent.name"
-                  variant="subtle"
-                >
-                  {{ ent.name }} · {{ ent.mention_count }}次
-                </UBadge>
-              </div>
-            </div>
-          </div>
-        </ClientOnly>
-      </UCard>
-
-      <!-- 叙事聚合报告 -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">叙事聚合报告</h2>
-            <UButton
-              icon="i-heroicons-sparkles"
-              :loading="narrativeLoading"
-              @click="handleRunNarrative"
+          <div v-if="slices.length > 0" class="space-y-3">
+            <div
+              v-for="slice in slices"
+              :key="slice.id"
+              class="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
-              生成聚合报告
-            </UButton>
-          </div>
-        </template>
-
-        <ClientOnly>
-          <div v-if="narrativeResult && showNarrativePanel" class="space-y-4 text-sm">
-            <div v-if="(narrativeResult.narratives as NewsNarrative[] | undefined)?.length">
-              <h3 class="font-semibold mb-2">叙事主题</h3>
-              <div class="space-y-2">
-                <div
-                  v-for="(n, idx) in (narrativeResult.narratives as NewsNarrative[])"
-                  :key="idx"
-                  class="p-3 border border-gray-200 dark:border-gray-700 rounded"
-                >
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="font-medium">{{ n.theme }}</span>
-                    <span class="text-xs text-gray-500">{{ n.article_count }} 篇</span>
-                  </div>
-                  <p class="text-gray-600 dark:text-gray-400">{{ n.summary }}</p>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="font-medium text-sm truncate">{{ slice.name }}</span>
+                  <UBadge
+                    :color="getSliceStatusColor(slice.status)"
+                    size="xs"
+                    variant="subtle"
+                  >
+                    {{ getSliceStatusText(slice.status) }}
+                  </UBadge>
                 </div>
+                <p class="text-xs text-gray-500">
+                  包含 {{ slice.included_task_ids.length }} 个任务 · {{ formatDate(slice.created_at) }}
+                </p>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  icon="i-heroicons-eye"
+                  :to="`/news-media/slices/${slice.id}`"
+                >
+                  查看
+                </UButton>
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  icon="i-heroicons-trash"
+                  color="error"
+                  @click="handleDeleteSlice(slice)"
+                >
+                  删除
+                </UButton>
               </div>
             </div>
-            <p v-else class="text-gray-500 text-center py-4">报告生成完成，暂无叙事主题数据</p>
           </div>
 
           <div v-else class="text-center py-6 text-gray-400 text-sm">
-            点击「生成聚合报告」分析该项目下所有全量采集任务的叙事主题
+            暂无分析切片，请在任务列表中勾选已完成任务后点击「生成切片」
           </div>
         </ClientOnly>
       </UCard>
@@ -734,6 +787,44 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             @click="handleUpdateMonitor"
           >
             保存
+          </UButton>
+        </template>
+      </UModal>
+
+      <!-- 生成切片弹窗 -->
+      <UModal
+        v-model:open="showSliceModal"
+        title="生成分析切片"
+        :ui="{ footer: 'justify-end' }"
+      >
+        <template #body>
+          <div class="space-y-4">
+            <p class="text-sm text-gray-500">
+              将基于已选 {{ selectedTaskIds.length }} 个任务（ID: {{ selectedTaskIds.join(', ') }}）生成一份合并分析切片，创建后自动运行 insight 分析。
+            </p>
+            <UFormField label="切片名称" required>
+              <UInput
+                v-model="sliceNameInput"
+                placeholder="例如：品牌声量总览、竞品对比分析"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
+        </template>
+        <template #footer>
+          <UButton
+            variant="outline"
+            :disabled="generatingSlice"
+            @click="showSliceModal = false"
+          >
+            取消
+          </UButton>
+          <UButton
+            :loading="generatingSlice"
+            :disabled="!sliceNameInput.trim()"
+            @click="handleCreateSlice"
+          >
+            开始生成
           </UButton>
         </template>
       </UModal>

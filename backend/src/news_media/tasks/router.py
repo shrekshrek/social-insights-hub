@@ -158,22 +158,19 @@ async def execute_task(
     await db.commit()
     await db.refresh(task)
 
-    from src.news_media.analysis.jobs import create_news_analysis_jobs
+    from src.news_media.analysis.jobs import create_news_tagging_job
 
     tagging_job_id: int | None = None
-    insight_job_id: int | None = None
     if task.auto_analyze:
-        tagging_job, insight_job = await create_news_analysis_jobs(
+        tagging_job = await create_news_tagging_job(
             db=db, task=task, user_id=current_user.id
         )
         tagging_job_id = tagging_job.id
-        insight_job_id = insight_job.id
         await db.commit()
 
     celery_result = run_news_collect_task.delay(
         task_id=task.id,
         tagging_job_id=tagging_job_id,
-        insight_job_id=insight_job_id,
     )
 
     if tagging_job_id is not None:
@@ -199,7 +196,7 @@ async def list_task_articles(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     relevance: Literal["high", "medium", "low"] | None = Query(default=None),
-    source_tier: Literal["tier1", "tier2", "tier3"] | None = Query(default=None),
+    source_tier: Literal["tier1", "tier2", "tier3", "wechat_mp"] | None = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
     _current_user: User = Depends(get_current_user),
 ):

@@ -114,7 +114,7 @@ const selectedMonitorCache = ref<{ id: number; name: string } | null>(null)
 const monitorSearchParams = computed(() => {
   const params: Record<string, unknown> = {
     page: 1,
-    page_size: 50,
+    page_size: 10,
   }
   if (monitorSearchQuery.value.trim()) {
     params.search = monitorSearchQuery.value.trim()

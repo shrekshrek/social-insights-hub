@@ -1,11 +1,17 @@
 """策略定义业务逻辑"""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
+
+if TYPE_CHECKING:
+    from src.news_media.analysis.models import NewsSlice
 from sqlalchemy import select, func, update, and_
 from src.utils import run_cpu_bound_task
 from src.knowledge_base.service import parse_text as _extract_text_from_bytes
@@ -285,11 +291,7 @@ async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -
 
 
 async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dict]:
-    """加载策略输入数据，屏蔽数据来源差异
-
-    当前支持：社媒切片（SocialSlice.result_data）。
-    未来扩展点：知识库摘要、网络搜索摘要通过此函数统一接入。
-    """
+    """加载策略社媒切片数据（SocialSlice.result_data）"""
     slice_ids = [s.slice_id for s in strategy.slices]
     if not slice_ids:
         return []
@@ -298,6 +300,35 @@ async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dic
     result = await db.execute(query)
     slices = result.scalars().all()
     return [s.result_data for s in slices if s.result_data]
+
+
+async def load_strategy_news_inputs(
+    db: AsyncSession, strategy: Strategy
+) -> list[dict]:
+    """加载策略关联的 NewsSlice 数据，供 Phase chains 使用。
+
+    通过 strategy.news_monitor_id → NewsSlice.monitor_id 隐式关联。
+    """
+    if not strategy.news_monitor_id:
+        return []
+
+    from src.news_media.analysis.models import NewsSlice
+
+    stmt = (
+        select(NewsSlice)
+        .where(
+            NewsSlice.monitor_id == strategy.news_monitor_id,
+            NewsSlice.status == "completed",
+        )
+        .order_by(NewsSlice.created_at)
+    )
+    result = await db.execute(stmt)
+    slices = result.scalars().all()
+    return [
+        {"name": s.name, "result_data": s.result_data, "stats": s.stats}
+        for s in slices
+        if s.result_data
+    ]
 
 
 async def load_strategy_inputs_with_names(
@@ -342,9 +373,13 @@ def _validate_has_slices(strategy: Strategy) -> None:
         )
 
 
-def _validate_slices_have_data(slices_data: list[dict], strategy: Strategy) -> None:
-    """校验切片是否有分析数据"""
-    if not slices_data:
+def _validate_slices_have_data(
+    slices_data: list[dict],
+    strategy: Strategy,
+    news_slices_data: list[dict] | None = None,
+) -> None:
+    """校验切片是否有分析数据（社媒或新闻至少有一种）"""
+    if not slices_data and not news_slices_data:
         slice_ids = [s.slice_id for s in strategy.slices]
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -368,7 +403,8 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
             )
 
     slices_data = await load_strategy_inputs(db, strategy)
-    _validate_slices_have_data(slices_data, strategy)
+    news_slices_data = await load_strategy_news_inputs(db, strategy)
+    _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
     # RAG 注入（有 brief 时执行，无数据时优雅降级为 ""）
     market_context = ""
@@ -391,6 +427,7 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
         strategy.brand_brief,
         research_design=strategy.research_design,
         market_context=market_context,
+        news_slices=news_slices_data,
     )
 
     job = await create_analysis_job_async(
@@ -436,7 +473,8 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
         )
 
     slices_data = await load_strategy_inputs(db, strategy)
-    _validate_slices_have_data(slices_data, strategy)
+    news_slices_data = await load_strategy_news_inputs(db, strategy)
+    _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
     # RAG 注入（有 brief 时执行，无数据时优雅降级为 ""）
     market_context = ""
@@ -460,6 +498,7 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
         strategy.brand_brief,
         research_design=strategy.research_design,
         market_context=market_context,
+        news_slices=news_slices_data,
     )
 
     job = await create_analysis_job_async(
@@ -504,7 +543,8 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
         )
 
     slices_data = await load_strategy_inputs(db, strategy)
-    _validate_slices_have_data(slices_data, strategy)
+    news_slices_data = await load_strategy_news_inputs(db, strategy)
+    _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
     chain = create_strategy_phase3_chain()
     inputs = format_data_for_phase3(
@@ -513,6 +553,7 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
+        news_slices=news_slices_data,
     )
 
     job = await create_analysis_job_async(
@@ -561,17 +602,28 @@ PLATFORM_NAME_TO_CODE = {
 # ==================== ① 研究设计 ====================
 
 
-def _extract_social_media_channel_brief(brand_brief: dict | None) -> str:
-    """从 brand_brief 中提取社媒渠道专属描述，兼容旧格式（无 channel_plan 的记录）"""
+def _extract_channel_brief(brand_brief: dict | None, channel_type: str) -> str:
+    """从 brand_brief 中提取指定渠道的 channel_brief"""
     if not brand_brief:
         return ""
     channel_plan = brand_brief.get("channel_plan") or []
     for item in channel_plan:
-        if item.get("type") == "social_media":
-            brief = item.get("channel_brief", "")
-            if brief:
-                return brief
-    # 兜底：从 brief 字段构建描述（旧格式或 channel_brief 为空时）
+        if item.get("type") == channel_type:
+            return item.get("channel_brief", "")
+    return ""
+
+
+def _extract_social_media_channel_brief(brand_brief: dict | None) -> str:
+    """从 brand_brief 中提取社媒渠道专属描述，兼容旧格式（无 channel_plan 的记录）"""
+    if not brand_brief:
+        return ""
+    brief = _extract_channel_brief(brand_brief, "social_media")
+    if brief:
+        return brief
+    # 有 channel_plan 但无 social_media 条目 → 上游有意排除，不兜底
+    if brand_brief.get("channel_plan"):
+        return ""
+    # 旧格式（无 channel_plan）→ 从 brief 字段构建描述
     parts = []
     if subject := brand_brief.get("subject"):
         parts.append(f"研究主体：{subject}")
@@ -587,9 +639,9 @@ async def design_research(
     strategy: Strategy,
     user_input: str,
 ) -> DesignResearchResponse:
-    """AI 研究设计：基于社媒 channel_brief 生成结构化研究计划
+    """AI 研究设计：基于各渠道 channel_brief 生成结构化研究计划
 
-    输出研究问题、数据采集方案、切片蓝图、产出类型建议。
+    输出研究问题、数据采集方案（社媒+新闻）、切片蓝图、产出类型建议。
     每次调用覆盖上一次结果。
     LLM 解析失败时抛出 HTTPException(500)，strategy 不更新。
     """
@@ -600,6 +652,7 @@ async def design_research(
         channel_brief=_extract_social_media_channel_brief(brand_brief),
         subject=brand_brief.get("subject", ""),
         constraints=brand_brief.get("constraints") or "",
+        news_channel_brief=_extract_channel_brief(brand_brief, "news_media"),
     )
 
     start = time.time()
@@ -757,8 +810,9 @@ async def confirm_research(
         )
 
     # 预估总任务数，超过 20 个视为异常（提示用户精简，而非静默创建大量任务）
+    # 社媒: keywords × platforms；新闻: keywords（每个关键词 1 个任务，无 platforms）
     estimated_tasks = sum(
-        len(dp.get("keywords") or []) * len(dp.get("platforms") or [])
+        len(dp.get("keywords") or []) * max(len(dp.get("platforms") or []), 1)
         for dp in data_plan
     )
     if estimated_tasks > 20:
@@ -1732,7 +1786,7 @@ async def approve_probe(
                 NewsTaskCreate(
                     name=f"{npt.name} - 全量",
                     keywords=npt.keywords,
-                    search_params={"max_results": 30},
+                    search_params=None,
                     auto_analyze=True,
                 ),
                 current_user_id,
@@ -1753,7 +1807,7 @@ async def approve_probe(
 
     # 新闻全量采集通过 celery 异步执行（与独立 news_media 流程统一）
     if news_collect_task_ids:
-        from src.news_media.analysis.jobs import create_news_analysis_jobs
+        from src.news_media.analysis.jobs import create_news_tagging_job
         from src.jobs import crud as jobs_crud
         from src.news_media.tasks import crud as news_crud
         from src.news_media.tasks.celery_tasks import run_news_collect_task
@@ -1762,7 +1816,7 @@ async def approve_probe(
             collect_task = await news_crud.get_task_by_id(db, tid, load_relations=False)
             if not collect_task:
                 continue
-            tagging_job, insight_job = await create_news_analysis_jobs(
+            tagging_job = await create_news_tagging_job(
                 db=db, task=collect_task, user_id=current_user_id
             )
             collect_task.status = "running"
@@ -1771,7 +1825,6 @@ async def approve_probe(
             celery_result = run_news_collect_task.delay(
                 task_id=collect_task.id,
                 tagging_job_id=tagging_job.id,
-                insight_job_id=insight_job.id,
             )
             await jobs_crud.set_celery_task_id(db, tagging_job.id, celery_result.id)
             await db.commit()
@@ -2115,6 +2168,87 @@ async def check_collection_status(
     )
 
 
+async def _create_strategy_news_slice(
+    db: AsyncSession,
+    strategy: Strategy,
+    name: str,
+    news_task_ids: list[int],
+    keywords: list[str],
+    user_id: int,
+) -> "NewsSlice | None":
+    """为策略创建 NewsSlice 并运行 inline insight 分析。
+
+    不调用 news_media.analysis.service.create_slice（它有中间 commit），
+    改为 inline 创建 + 分析，与策略事务管理一致（最终由调用方统一 commit）。
+    """
+    from src.news_media.analysis.models import NewsSlice
+    from src.news_media.analysis.service import _compute_stats
+    from src.news_media.tasks.models import NewsArticle
+    from src.news_media.tasks.service import _run_insight_analysis
+
+    ns = NewsSlice(
+        name=name,
+        monitor_id=strategy.news_monitor_id,
+        included_task_ids=news_task_ids,
+        user_id=user_id,
+    )
+    db.add(ns)
+    await db.flush()
+
+    # 查询文章
+    stmt = (
+        select(NewsArticle)
+        .where(NewsArticle.task_id.in_(news_task_ids))
+        .order_by(NewsArticle.published_at.desc().nulls_last())
+    )
+    rows = await db.execute(stmt)
+    all_articles = list(rows.scalars().all())
+
+    # URL 去重
+    seen_urls: set[str] = set()
+    deduped: list = []
+    for a in all_articles:
+        if a.url not in seen_urls:
+            seen_urls.add(a.url)
+            deduped.append(a)
+
+    # 过滤低相关
+    filtered = [a for a in deduped if a.relevance != "low"]
+    ns.stats = _compute_stats(filtered)
+
+    if not filtered:
+        ns.result_data = {"meta": {"articles_total": 0}}
+        ns.status = "completed"
+        logger.info("NewsSlice「%s」无有效文章，跳过 insight", name)
+        return ns
+
+    brand_brief = strategy.brand_brief or {}
+    goal = f"{name}（关键词：{', '.join(keywords)}）" if keywords else name
+    subj = brand_brief.get("subject", name)
+
+    try:
+        insights, _token_usage = await _run_insight_analysis(
+            filtered, analysis_goal=goal, subject=subj,
+        )
+        ns.result_data = (
+            insights
+            if isinstance(insights, dict) and "error" not in insights
+            else {"meta": ns.stats, "error": str(insights)}
+        )
+    except Exception as e:
+        logger.error("NewsSlice「%s」insight 分析失败: %s", name, e, exc_info=True)
+        ns.result_data = {"meta": ns.stats, "error": str(e)[:500]}
+        ns.status = "failed"
+        return ns
+
+    ns.status = "completed"
+    logger.info(
+        "NewsSlice「%s」insight 完成：%d 篇文章（去重前 %d）",
+        name, len(filtered), len(all_articles),
+    )
+    return ns
+
+
 async def _create_auto_slices(
     db: AsyncSession,
     strategy: Strategy,
@@ -2122,10 +2256,12 @@ async def _create_auto_slices(
     current_user_id: int,
     news_tasks: list = None,
 ) -> None:
-    """按 slice_blueprint 自动创建 SocialSlice，并关联到策略。
+    """按 slice_blueprint 自动创建 SocialSlice + NewsSlice，并关联到策略。
 
-    每个 blueprint 条目对应一个切片，将该维度下的所有任务 ID 合并进去。
-    若 blueprint 为空，则将所有任务合并为一个「综合分析」切片。
+    社媒维度 → SocialSlice（Stage1/2/3 流水线）
+    新闻维度 → NewsSlice（独立 insight 分析）
+
+    每个 blueprint 条目可产生 0-1 个 SocialSlice + 0-1 个 NewsSlice。
     建完切片后立即触发 LLM 覆盖度验证并写入 strategy.coverage_check_result。
     """
     from src.social_media.analysis.service import create_monitor_slice
@@ -2135,19 +2271,18 @@ async def _create_auto_slices(
     if isinstance(research_design, dict):
         blueprint = research_design.get("slice_blueprint") or []
 
-    # 按维度分组任务
     if blueprint:
-        # blueprint 条目示例: {name, subject, competitors, source_dimensions: [...]} 
-        # 维度映射唯一来源：research_design._task_dimension_map
-        task_dim_map = research_design.get("_task_dimension_map")
+        task_dim_map = research_design.get("_task_dimension_map") or {}
         news_task_dim_map = research_design.get("_news_task_dimension_map") or {}
-        if not isinstance(task_dim_map, dict) or not task_dim_map:
+
+        # 有社媒采集任务时必须有维度映射
+        if collect_tasks and (not isinstance(task_dim_map, dict) or not task_dim_map):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="缺少 collect 任务维度映射，无法自动建切片",
             )
 
-        # 社媒任务按维度分组（只有 SocialTask 可传入 create_monitor_slice）
+        # 社媒任务按维度分组
         dimension_to_social: dict[str, list] = {}
         for task in collect_tasks:
             dim = task_dim_map.get(str(task.id))
@@ -2158,7 +2293,7 @@ async def _create_auto_slices(
                 )
             dimension_to_social.setdefault(dim, []).append(task)
 
-        # 新闻任务单独分组（不混入 social，避免 create_monitor_slice 查 SocialTask 表失败）
+        # 新闻任务按维度分组
         dimension_to_news: dict[str, list] = {}
         if news_tasks:
             for task in news_tasks:
@@ -2166,8 +2301,8 @@ async def _create_auto_slices(
                 if dim:
                     dimension_to_news.setdefault(dim, []).append(task)
 
-        slice_objs: list = []
-        slice_news_map: list[list[dict]] = []  # 与 slice_objs 一一对应
+        slice_objs: list = []  # 社媒 SocialSlice
+        news_slice_objs: list = []  # 新闻 NewsSlice
 
         for bp in blueprint:
             bp_name: str = bp.get("name") or "综合分析"
@@ -2175,74 +2310,60 @@ async def _create_auto_slices(
             bp_subject: str | None = bp.get("subject")
             bp_competitors: list[str] | None = bp.get("competitors")
 
-            # 收集属于该切片的社媒任务
+            # 社媒任务匹配
             matched_task_ids: list[int] = []
             for dim_key, dim_tasks in dimension_to_social.items():
                 if not bp_dims or dim_key in bp_dims:
                     matched_task_ids.extend(t.id for t in dim_tasks)
 
-            # 收集属于该切片的新闻分析数据
-            matched_news: list[dict] = []
-            for dim_key, dim_news in dimension_to_news.items():
+            # 新闻任务匹配
+            matched_news_task_ids: list[int] = []
+            matched_news_keywords: list[str] = []
+            for dim_key, dim_tasks in dimension_to_news.items():
                 if not bp_dims or dim_key in bp_dims:
-                    for nt in dim_news:
-                        if nt.analysis_result:
-                            matched_news.append({
-                                "task_id": nt.id,
-                                "keyword": nt.keywords or "",
-                                "dimension": dim_key,
-                                "analysis_result": nt.analysis_result,
-                            })
+                    matched_news_task_ids.extend(t.id for t in dim_tasks)
+                    matched_news_keywords.extend(
+                        t.keywords for t in dim_tasks if t.keywords
+                    )
 
-            if not matched_task_ids and not matched_news:
+            if not matched_task_ids and not matched_news_task_ids:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"切片「{bp_name}」未匹配到任何任务，请检查 source_dimensions 配置",
                 )
 
-            # 纯新闻切片（无社媒任务）：跳过 create_monitor_slice，创建空壳切片
-            if not matched_task_ids:
-                from src.social_media.analysis.models import SocialSlice as _SliceModel
-
-                empty_slice = _SliceModel(
+            # 创建社媒 SocialSlice
+            if matched_task_ids:
+                slice_obj = await create_monitor_slice(
+                    db,
                     monitor_id=strategy.social_monitor_id,
+                    task_ids=matched_task_ids,
+                    current_user_id=current_user_id,
                     name=bp_name,
-                    user_id=current_user_id,
-                    result_data={"meta": {"subject": bp_subject, "competitors": bp_competitors}},
+                    subject=bp_subject,
+                    competitors=bp_competitors,
                 )
-                db.add(empty_slice)
-                await db.flush()
-                slice_objs.append(empty_slice)
-                slice_news_map.append(matched_news)
-                continue
+                slice_objs.append(slice_obj)
 
-            slice_obj = await create_monitor_slice(
-                db,
-                monitor_id=strategy.social_monitor_id,
-                task_ids=matched_task_ids,
-                current_user_id=current_user_id,
-                name=bp_name,
-                subject=bp_subject,
-                competitors=bp_competitors,
-            )
-            slice_objs.append(slice_obj)
-            slice_news_map.append(matched_news)
+            # 创建新闻 NewsSlice
+            if matched_news_task_ids and strategy.news_monitor_id:
+                ns = await _create_strategy_news_slice(
+                    db,
+                    strategy=strategy,
+                    name=bp_name,
+                    news_task_ids=matched_news_task_ids,
+                    keywords=matched_news_keywords,
+                    user_id=current_user_id,
+                )
+                if ns:
+                    news_slice_objs.append(ns)
     else:
-        # 无 blueprint：全部社媒任务合并为一个综合切片
-        all_task_ids = [t.id for t in collect_tasks]
-        all_news: list[dict] = []
-        if news_tasks:
-            for nt in news_tasks:
-                if nt.analysis_result:
-                    dim = news_task_dim_map.get(str(nt.id), "")
-                    all_news.append({
-                        "task_id": nt.id,
-                        "keyword": nt.keywords or "",
-                        "dimension": dim,
-                        "analysis_result": nt.analysis_result,
-                    })
+        # 无 blueprint：合并为综合切片
+        slice_objs = []
+        news_slice_objs = []
 
-        if all_task_ids:
+        if collect_tasks:
+            all_task_ids = [t.id for t in collect_tasks]
             slice_obj = await create_monitor_slice(
                 db,
                 monitor_id=strategy.social_monitor_id,
@@ -2250,32 +2371,23 @@ async def _create_auto_slices(
                 current_user_id=current_user_id,
                 name="综合分析",
             )
-        else:
-            # 纯新闻策略：创建空壳切片
-            from src.social_media.analysis.models import SocialSlice as _SliceModel
+            slice_objs = [slice_obj]
 
-            slice_obj = _SliceModel(
-                monitor_id=strategy.social_monitor_id,
+        if news_tasks and strategy.news_monitor_id:
+            all_news_ids = [t.id for t in news_tasks]
+            all_keywords = [t.keywords for t in news_tasks if t.keywords]
+            ns = await _create_strategy_news_slice(
+                db,
+                strategy=strategy,
                 name="综合分析",
+                news_task_ids=all_news_ids,
+                keywords=all_keywords,
                 user_id=current_user_id,
-                result_data={},
             )
-            db.add(slice_obj)
-            await db.flush()
+            if ns:
+                news_slice_objs = [ns]
 
-        slice_objs = [slice_obj]
-        slice_news_map = [all_news]
-
-    # 将新闻分析数据注入对应切片的 result_data
-    for s_obj, news_data in zip(slice_objs, slice_news_map):
-        if news_data:
-            rd = dict(s_obj.result_data or {})
-            rd["news_insights"] = news_data
-            s_obj.result_data = rd
-            flag_modified(s_obj, "result_data")
-
-    # 为有 Stage1 数据的社媒切片预写 pipeline 状态（Phase chains 依赖 Stage2 产出的 intent/focus 层）
-    # 注意：celery .delay() 必须在最终 db.commit() 之后调用，避免 celery worker 读到未提交的 result_data
+    # 社媒切片 Stage2/Stage3 pipeline 设置
     now_iso = datetime.now(timezone.utc).isoformat()
     pipeline_slice_ids: list[int] = []
 
@@ -2285,7 +2397,7 @@ async def _create_auto_slices(
             continue
         pipeline = rd.get("pipeline")
         if not isinstance(pipeline, dict) or pipeline.get("stage1", {}).get("status") != "completed":
-            continue  # 空壳切片（纯新闻），跳过社媒流水线
+            continue
 
         rd = dict(rd)
         rd["pipeline"] = {
@@ -2308,19 +2420,23 @@ async def _create_auto_slices(
         flag_modified(s_obj, "result_data")
         pipeline_slice_ids.append(s_obj.id)
 
-    # 关联切片到策略
+    # 关联社媒切片到策略
     for s in slice_objs:
         existing = await db.get(StrategySlice, (strategy.id, s.id))
         if existing is None:
             db.add(StrategySlice(strategy_id=strategy.id, slice_id=s.id))
     await db.flush()
 
-    # 触发覆盖度 LLM 验证
+    # 覆盖度 LLM 验证（社媒 + 新闻切片）
     try:
         research_questions = research_design.get("research_questions") or []
         slices_data = [
             (s.name or f"切片{s.id}", s.result_data or {}) for s in slice_objs
         ]
+        for ns in news_slice_objs:
+            slices_data.append(
+                (f"[新闻] {ns.name}", ns.result_data or {})
+            )
         chain = create_coverage_check_chain()
         inputs = format_coverage_check_inputs(
             brief=strategy.brand_brief,
@@ -2333,7 +2449,6 @@ async def _create_auto_slices(
         )
         strategy.coverage_check_result = coverage_result
 
-        # 若覆盖度通过，推进状态到 ready
         if coverage_result.get("overall_ready"):
             strategy.status = "ready"
             logger.info("Strategy %s: 覆盖度验证通过，状态推进到 ready", strategy.id)
@@ -2346,11 +2461,10 @@ async def _create_auto_slices(
         logger.error(
             "Strategy %s: 覆盖度 LLM 验证失败: %s", strategy.id, e, exc_info=True
         )
-        # 不阻塞，切片已建，用户可手动查看
 
     await db.commit()
 
-    # commit 之后触发 Stage2/Stage3 celery 任务（确保 celery worker 读到完整的 result_data）
+    # commit 之后触发 Stage2/Stage3 celery 任务
     if pipeline_slice_ids:
         from src.social_media.analysis.celery_tasks.monitor_slice_tasks import (
             run_monitor_slice_task,

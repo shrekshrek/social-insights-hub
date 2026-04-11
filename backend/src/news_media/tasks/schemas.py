@@ -18,7 +18,7 @@ class NewsTaskCreate(CustomBaseModel):
     phase: str | None = Field(None, pattern=r"^(probe|collect)$")
     search_params: dict | None = None
     auto_analyze: bool = Field(
-        True, description="collect 阶段采集完成后是否自动触发分析链（NEWS_TAGGING + NEWS_INSIGHT）"
+        True, description="collect 阶段采集完成后是否自动触发逐篇标注（NEWS_TAGGING）"
     )
 
 
@@ -37,7 +37,7 @@ class NewsTaskRead(CustomBaseModel):
     auto_analyze: bool
     analysis_result: dict | None
     error_message: str | None
-    created_by: int
+    user_id: int
     created_at: datetime
     updated_at: datetime
 
@@ -46,7 +46,7 @@ class NewsTaskReadWithRelations(NewsTaskRead):
     """新闻任务详情（含关联信息）"""
 
     monitor_name: str | None = None
-    creator_username: str | None = None
+    user_username: str | None = None
 
     @classmethod
     def from_orm_full(cls, task) -> "NewsTaskReadWithRelations":
@@ -63,11 +63,11 @@ class NewsTaskReadWithRelations(NewsTaskRead):
             auto_analyze=task.auto_analyze,
             analysis_result=task.analysis_result,
             error_message=task.error_message,
-            created_by=task.created_by,
+            user_id=task.user_id,
             created_at=task.created_at,
             updated_at=task.updated_at,
             monitor_name=task.monitor.name if task.monitor else None,
-            creator_username=task.creator.username if task.creator else None,
+            user_username=task.user.username if task.user else None,
         )
 
 

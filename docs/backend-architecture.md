@@ -5,6 +5,8 @@
 - **状态**: `完成`
 
 > 高级架构总览见 [`docs/architecture.md`](./architecture.md)，本文档聚焦后端各模块的实现细节。
+>
+> ⚠️ **模块细节以各模块 CLAUDE.md 为权威源**（`src/*/CLAUDE.md`，会被 AI 助手自动加载）。本文档仅维护稳定的拓扑、项目结构和跨模块约定。变动频繁的内容（链清单、API 清单等）已瘦身为索引。
 
 ---
 
@@ -215,21 +217,9 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → S
 ### 3.7 LLM 引擎 (llm/)
 **职责**: DeepSeek LLM 实例管理、分析链定义
 
-**无独立 API 路由**，由 `analysis/` 模块通过函数调用使用。
+**无独立 API 路由**，由各渠道 `analysis/` 模块通过函数调用使用。分析链按渠道分目录组织（`chains/social_media/` / `chains/news/` / `chains/strategy/`），每次调用自动记录 token 用量和费用到 `AnalysisJob`（由 `src/jobs/` 统一管理）。
 
-| 链 | 输入 | 输出 |
-|----|------|------|
-| `screening_chain` | 原文内容+关键词 | spam/value/relevance/sentiment 分数 |
-| `post_extraction_chain` | 原文内容 | 实体+观点+摘要 |
-| `comment_extraction_chain` | 评论内容 | 评论实体+观点 |
-| `entity_normalization_chain` | 实体列表 | 去重归一化实体 |
-| `opinion_normalization_chain` | 观点列表 | 去重归一化观点 |
-| `category_normalization_chain` | 观点分类 | 归一化分类 |
-| `attribute_normalization_chain` | 实体属性 | 归一化属性 |
-| `project_entity_merge_chain` | 多任务实体 | 项目级合并实体 |
-| `project_slice_reports_chain` | 聚合数据 | Landscape/Topic/Focus 三份报告 |
-
-每次调用自动记录 token 用量和费用到 `AnalysisJob`。
+> 链数量与职责变动较频繁。权威清单见 [`backend/CLAUDE.md`](../backend/CLAUDE.md) 和 [`backend/src/strategies/CLAUDE.md`](../backend/src/strategies/CLAUDE.md)。
 
 ---
 
@@ -362,69 +352,12 @@ Stage 3 aggregation/  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → S
 
 ## 5. API 概览
 
-### 5.1 API 前缀
-所有API都使用统一前缀: `/api/v1`
+所有 API 统一前缀: `/api/v1`。完整、实时的端点清单由 FastAPI 自动生成：
 
-### 5.2 认证端点 (/api/v1/auth)
-- `POST /register`: 用户注册
-- `POST /token`: 用户登录，获取访问令牌
-- `POST /token/refresh`: 刷新访问令牌
-- `POST /logout`: 用户登出
+- **交互式文档**: `http://localhost:8000/docs` (Swagger UI)
+- **OpenAPI Schema**: `http://localhost:8000/openapi.json`
 
-### 5.3 用户管理端点 (/api/v1/users)
-- `GET /me`: 获取当前用户信息
-- `PUT /me`: 更新当前用户信息
-- `GET /`: 获取用户列表 (需要权限)
-- `GET /{user_id}`: 获取特定用户信息 (需要权限)
-- `PUT /{user_id}`: 更新用户信息 (需要权限)
-- `DELETE /{user_id}`: 删除用户 (需要权限)
-
-### 5.4 权限管理端点 (/api/v1/rbac)
-- `GET /permissions`: 获取权限列表
-- `POST /permissions`: 创建新权限
-- `GET /roles`: 获取角色列表
-- `POST /roles`: 创建新角色
-- `PUT /roles/{role_id}`: 更新角色
-- `DELETE /roles/{role_id}`: 删除角色
-- `POST /users/{user_id}/roles`: 为用户分配角色
-- `DELETE /users/{user_id}/roles/{role_id}`: 移除用户角色
-
-### 5.5 社交媒体端点 (/api/v1/social-media)
-
-**监测项目** (`/monitors`):
-- `GET /`: 项目列表
-- `POST /`: 创建项目
-- `GET /{id}`: 项目详情
-- `PUT /{id}`: 更新项目
-- `DELETE /{id}`: 删除项目
-- `POST /{id}/participants`: 添加参与者
-- `POST /{id}/tasks`: 批量创建任务
-
-**任务** (`/tasks`):
-- `GET /`: 任务列表
-- `POST /`: 创建任务
-- `GET /{id}`: 任务详情（含原文统计）
-- `GET /{id}/posts`: 原文列表
-- `POST /{id}/upload-json`: 上传 JSON 数据
-
-**分析** (`/analysis`):
-- `POST /screening`: 启动初筛分析
-- `POST /deep-posts`: 启动原文深度分析
-- `POST /deep-comments`: 启动评论深度分析
-- `POST /aggregation`: 执行聚合（同步返回结果）
-- `GET /task/{task_id}/result`: 获取任务分析结果
-- `POST /slices`: 创建项目级切片
-- `GET /slices`: 获取切片列表
-- `GET /slices/{slice_id}`: 获取切片详情
-- `PATCH /slices/{slice_id}`: 重命名切片
-- `DELETE /slices/{slice_id}`: 删除切片
-- `GET /jobs/`: 分析任务列表（含成本统计）
-
-### 5.6 爬虫代理端点 (/api/v1/agent)
-- `POST /upload`: 上传爬虫采集数据（API Key 认证）
-
-### 5.7 系统端点
-- `GET /health`: 健康检查
+各模块的端点汇总见对应模块 CLAUDE.md（`src/auth/`、`src/rbac/`、`src/users/`、`src/social_media/{monitors,tasks,analysis}/`、`src/news_media/`、`src/strategies/`、`src/knowledge_base/`、`src/jobs/`、`src/agent/`）。
 
 ---
 

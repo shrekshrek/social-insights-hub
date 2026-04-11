@@ -47,7 +47,7 @@
 | social_media/monitors/ | 监测项目管理，平台初始化 |
 | social_media/tasks/ | 数据采集任务管理，多平台适配器 |
 | social_media/analysis/ | 社媒 LLM 分析链、批处理 |
-| news_media/analysis/ | 新闻 tagging/insight 分析封装 |
+| news_media/analysis/ | 新闻切片分析（NewsSlice）+ tagging/insight AnalysisJob 封装 |
 | jobs/ | 跨渠道 AnalysisJob（models/schemas/crud/factory/router） |
 | llm/ | DeepSeek LLM 集成，筛选/提取/归一化/情感分析链 |
 | agent/ | 外部爬虫代理 API，API Key 认证 |

@@ -113,6 +113,7 @@ async def create_analysis_job_async(
         status=status,
         source_count=source_count,
         analysis_config=analysis_config,
+        started_at=datetime.now(timezone.utc) if status == "processing" else None,
     )
     db.add(job)
     await db.commit()
@@ -164,6 +165,50 @@ def complete_analysis_job_sync(
     return job
 
 
+async def complete_analysis_job_async(
+    db: AsyncSession,
+    job: AnalysisJob,
+    analyzed_count: int = 0,
+    token_usage: dict[str, Any] | None = None,
+    result_data: dict | None = None,
+    error_message: str | None = None,
+) -> AnalysisJob:
+    """异步完成 AnalysisJob
+
+    Args:
+        db: 异步数据库会话
+        job: 要更新的任务
+        analyzed_count: 成功分析数量
+        token_usage: Token 使用统计
+        result_data: 结果数据
+        error_message: 错误信息（如果失败）
+
+    Returns:
+        AnalysisJob: 更新后的任务
+    """
+    job.completed_at = datetime.now(timezone.utc)
+
+    if error_message:
+        job.status = "failed"
+        job.error_message = error_message
+    else:
+        job.status = "completed"
+
+    job.analyzed_count = analyzed_count
+
+    if job.started_at:
+        job.processing_time = int((job.completed_at - job.started_at).total_seconds())
+
+    if token_usage:
+        job.token_usage = token_usage
+
+    if result_data:
+        job.result_data = result_data
+
+    await db.commit()
+    return job
+
+
 def start_analysis_job_sync(
     db: Session, job_or_id: AnalysisJob | int
 ) -> AnalysisJob | None:
@@ -190,4 +235,33 @@ def start_analysis_job_sync(
     job.status = "processing"
     job.started_at = datetime.now(timezone.utc)
     db.commit()
+    return job
+
+
+async def start_analysis_job_async(
+    db: AsyncSession, job_or_id: AnalysisJob | int
+) -> AnalysisJob | None:
+    """异步标记任务开始处理
+
+    Args:
+        db: 异步数据库会话
+        job_or_id: AnalysisJob 对象或 job_id
+
+    Returns:
+        AnalysisJob: 更新后的任务，如果找不到则返回 None
+    """
+    if isinstance(job_or_id, int):
+        from sqlalchemy import select
+
+        stmt = select(AnalysisJob).where(AnalysisJob.id == job_or_id)
+        result = await db.execute(stmt)
+        job = result.scalar_one_or_none()
+        if not job:
+            return None
+    else:
+        job = job_or_id
+
+    job.status = "processing"
+    job.started_at = datetime.now(timezone.utc)
+    await db.commit()
     return job

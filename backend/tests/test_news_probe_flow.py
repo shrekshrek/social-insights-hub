@@ -228,7 +228,7 @@ class TestSearchAndStoreArticlesDualChannel:
             db = AsyncMock()
             await news_service.execute_news_probe(db, task)
 
-        assert captured["max_results"] == 25
+        assert captured["max_results"] == 20
         assert "baidu" in captured["channels"]
         assert "duckduckgo" in captured["channels"]
 

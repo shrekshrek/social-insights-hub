@@ -13,7 +13,9 @@ from .factory import (
     create_analysis_job_sync,
     create_analysis_job_async,
     complete_analysis_job_sync,
+    complete_analysis_job_async,
     start_analysis_job_sync,
+    start_analysis_job_async,
 )
 from .crud import (
     get_analysis_jobs,
@@ -44,7 +46,9 @@ __all__ = [
     "create_analysis_job_sync",
     "create_analysis_job_async",
     "complete_analysis_job_sync",
+    "complete_analysis_job_async",
     "start_analysis_job_sync",
+    "start_analysis_job_async",
     # CRUD
     "get_analysis_jobs",
     "get_analysis_job",

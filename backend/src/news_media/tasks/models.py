@@ -59,7 +59,7 @@ class NewsTask(Base):
         JSON, nullable=True, comment="任务级聚合分析结果"
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by: Mapped[int] = mapped_column(
+    user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"
     )
 
@@ -75,8 +75,8 @@ class NewsTask(Base):
         back_populates="tasks",
         lazy="selectin",
     )
-    creator: Mapped["User"] = relationship(
-        "src.auth.models.User", foreign_keys=[created_by], lazy="selectin"
+    user: Mapped["User"] = relationship(
+        "src.auth.models.User", foreign_keys=[user_id], lazy="selectin"
     )
     strategy: Mapped["Strategy | None"] = relationship(
         "Strategy", foreign_keys=[strategy_id], lazy="select", back_populates="news_tasks"
@@ -115,7 +115,7 @@ class NewsArticle(Base):
     )
     source_tier: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="tier3",
-        comment="来源等级: tier1(权威央媒) / tier2(行业门户) / tier3(其他)",
+        comment="来源等级: tier1(权威央媒) / tier2(行业门户) / tier3(其他) / wechat_mp(微信公众号)",
     )
     author: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="作者"
@@ -137,7 +137,7 @@ class NewsArticle(Base):
         String(20), nullable=True, comment="与研究目标的相关程度: high / medium / low"
     )
     sentiment: Mapped[float | None] = mapped_column(
-        Float, nullable=True, comment="情感分 -1 ~ 1"
+        Float, nullable=True, comment="情感分 -2 ~ 2: -2强烈负面 / -1轻度负面 / 0中性 / 1轻度正面 / 2强烈正面"
     )
     article_type: Mapped[str | None] = mapped_column(
         String(50), nullable=True, comment="文章类型: report / opinion / pr / analysis"
@@ -155,7 +155,7 @@ class NewsArticle(Base):
     # 搜索渠道
     search_source: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="baidu",
-        comment="搜索渠道: baidu / sogou / duckduckgo"
+        comment="搜索渠道: baidu / sogou / duckduckgo / wechat_mp"
     )
 
     # 原始数据

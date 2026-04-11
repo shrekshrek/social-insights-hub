@@ -1,7 +1,7 @@
 # 策略模块多数据源架构方案
 
 > 设计日期：2026-03-26
-> 最后更新：2026-04-09
+> 最后更新：2026-04-10
 > 状态：阶段一/二/三已完成
 
 ---
@@ -38,8 +38,8 @@
       不能解决：市场规模等结构化数据
    ✅ 市场知识库（当前可用）
       能解决：行业背景、政策信息、公共统计数据、内部资料补充
-   🔒 新闻媒体（未开通）
-      若开通可补充：近期舆情事件、PR 传播动态...
+   ✅ 新闻媒体（当前可用）
+      能解决：媒体报道态势、行业叙事、竞品媒体定位、权威引述...
 
 ③ 确认并创建策略（channel_plan 存入 brand_brief）
 
@@ -88,10 +88,10 @@
         },
         {
             "type": "news_media",
-            "available": False,          # 未来接入
-            "solvable": ["近期舆情事件", "媒体传播动态"],
-            "unsolvable": [],
-            "channel_brief": "跟踪[subject]相关新闻与报道，补充事件脉络与舆情语境。"
+            "available": True,
+            "solvable": ["媒体报道态势", "行业叙事聚类", "竞品媒体定位", "权威引述"],
+            "unsolvable": ["实时用户互动数据"],
+            "channel_brief": "跟踪[subject]相关新闻与公众号报道，补充媒体视角与行业叙事。"
         }
     ]
 }
@@ -106,7 +106,7 @@
 
 ---
 
-### Layer 1：研究设计（按渠道分路）✅ 社媒已完成 / 其他渠道待实现
+### Layer 1：研究设计（按渠道分路）✅ 社媒 + 新闻已完成
 
 各渠道接收各自的 `channel_brief`，由对应的 design chain 生成研究计划：
 
@@ -128,7 +128,7 @@ news_media     → 复用 research_design_chain 的 news 分支（✅ 已实现�
 
 ---
 
-### Layer 2：数据采集与处理（按渠道分路）✅ 社媒已完成 / 其他渠道待实现
+### Layer 2：数据采集与处理（按渠道分路）✅ 三渠道均已完成
 
 ```
 social_media（✅ 现有，不变）:
@@ -137,9 +137,14 @@ social_media（✅ 现有，不变）:
 knowledge_base（✅ 已接入）:
   KnowledgeDocument/Chunk（平台公共 + 用户私有）→ 向量检索 → market_context 注入 Phase1/2
 
-news_media（✅ 已接入）:
-  NewsTask(probe) → 百度+DDG 双渠道搜索卡片 → LLM probe review
-  → refine/approve → NewsTask(collect) → 全文抓取 + tagging/insight
+news_media（✅ 已完成）:
+  NewsTask(probe) → baidu+sogou+duckduckgo 三渠道搜索卡片 → LLM probe review
+  → refine/approve → NewsTask(collect) → 全文抓取(Crawl4AI) + tagging + insight
+  → 策略建切片时：按 _news_task_dimension_map 分维度 → 跨任务文章 URL 去重 + relevance 筛选
+    → 每维度一次 news_insight_chain → 维度级 insight 注入 slice result_data["news_insights"]
+
+  搜索渠道: baidu / sogou / duckduckgo（默认） + wechat_mp（可选，搜狗微信入口）
+  来源分层: tier1(权威央媒) / tier2(行业门户) / tier3(其他) / wechat_mp(微信公众号)
 ```
 
 `AnalysisSlice` 的现有逻辑完全保留，不做任何修改。
@@ -180,7 +185,12 @@ async def load_strategy_inputs(
 
 ### Layer 4：Phase 生成 ✅ 已完成
 
-Phase 1/2/3 chain 消费 `list[dict]`，与数据来源完全解耦，无需改动。
+Phase 1/2/3 chain 消费社媒切片数据（`meta/foundation/layers`）+ 新闻媒体视角（`news_insights`），通过 `_format_news_media_section` 格式化后作为 `{news_media_section}` 注入 USER_TEMPLATE。
+
+SYSTEM_TEMPLATE 中包含"新闻媒体数据使用指南"，指导 LLM 交叉验证消费者声音与媒体报道：
+- Phase 1：消费者-媒体矛盾→Tension 线索；新闻仅作补充证据
+- Phase 2：媒体叙事作为品牌角色外部锚点；竞品格局互为补充
+- Phase 3：借势/颠覆媒体叙事；引述作为话题锚点
 
 ---
 
@@ -232,10 +242,13 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 
 ### 阶段三：News Media 数据源 ✅ 已完成
 
-8. ✅ News Media 模块：`news_media/monitors` + `news_media/tasks`，百度+DuckDuckGo 双渠道
+8. ✅ News Media 模块：`news_media/monitors` + `news_media/tasks`，baidu+sogou+duckduckgo+wechat_mp 多渠道
 9. ✅ 两段式 probe→collect：各自为独立 NewsTask 记录（硬删除，ondelete CASCADE 到 NewsArticle）
 10. ✅ `news_probe_review_chain` + 并行 LLM 评估，包裹在 STRATEGY_PROBE_REVIEW AnalysisJob 内统一追踪成本
 11. ✅ `refine_probe` 批量端点同时处理 social/news 两路 refinements
+12. ✅ 维度级 news insight：`_run_dimension_news_insights` 按维度合并文章（去重+筛选）→ 每维度一次 insight chain
+13. ✅ Phase 1/2/3 Chain 新增 `_format_news_media_section` 注入新闻媒体视角，SYSTEM_TEMPLATE 新增交叉分析指南
+14. ✅ 微信公众号搜索（wechat_mp）：通过搜狗微信入口 + Crawl4AI 抓取，source_tier 独立为 "wechat_mp"
 
 ---
 
@@ -254,7 +267,7 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 | 组件 | 状态 | 说明 |
 |------|------|------|
 | `AnalysisSlice` 及聚合管线 | ✅ 不变 | |
-| Phase 1/2/3 chain | ✅ 不变 | |
+| Phase 1/2/3 chain | ✅ 已改 | USER_TEMPLATE 新增 `{news_media_section}`；SYSTEM_TEMPLATE 新增新闻媒体数据使用指南 |
 | `strategy_brief_parser_chain` | ✅ 已改 | 升级为渠道分发判断，输出 `channel_plan` |
 | `strategy_research_design_chain` | ✅ 已改 | 接收 `channel_brief`，移除课题适配度评估 |
 | `service.py` Phase 生成函数 | ✅ 已改 | `load_slice_data()` → `load_strategy_inputs()` |

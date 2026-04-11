@@ -65,7 +65,7 @@ draft → planned → probing → collecting → ready → phase1_done → phase
 
 1. 前端轮询 `probe-status`
    - 社媒：爬虫采集约 20 条，跳过评论，LLM 打标（NEWS/POST 分析链）
-   - 新闻：`run_news_probe_task` 双渠道搜索（baidu 主力 + duckduckgo 补充），各 25 条元数据落库，不抓全文、不打标
+   - 新闻：`run_news_probe_task` 三渠道搜索（baidu + sogou + duckduckgo），各 25 条元数据落库，不抓全文、不打标
 2. 所有任务准备就绪后后台自动运行 probe 审查
    - 社媒：规则分流 + `strategy_probe_review_chain`（LLM 判定模糊案例）
    - 新闻：`news_probe_review_chain` 对每个任务并行 LLM 评估（基于卡片 title/source/tier/snippet + 维度→研究问题映射）
@@ -77,17 +77,21 @@ draft → planned → probing → collecting → ready → phase1_done → phase
 
 1. 前端轮询 `collection-status`，爬虫采集全量数据（50 条 + 评论）
 2. 所有全量任务分析完成后自动按 slice_blueprint 创建切片
-3. 切片就绪后自动运行 coverage_check_chain 验证覆盖度
+   - 社媒：按维度分组任务 → `create_monitor_slice` → SocialSlice（Stage1/2/3 流水线）
+   - 新闻：按维度分组任务 → `_create_strategy_news_slice` → NewsSlice（独立 insight 分析）
+   - 每个 blueprint 条目可产生 0-1 个 SocialSlice + 0-1 个 NewsSlice
+3. 切片就绪后自动运行 coverage_check_chain 验证覆盖度（社媒 + 新闻切片一起验证）
 4. `overall_ready=true` → 状态 → ready
 5. 用户可 `adjust-slices` 微调切片配置（触发重新验证）
 
 ### ④ 产出生成 (ready → completed)
 
 Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
+Phase 1/2/3 Chain 分别加载社媒切片数据（`load_strategy_inputs`）和新闻切片数据（`load_strategy_news_inputs`），通过 `_format_news_media_section` 将 NewsSlice 数据格式化为媒体视角补充段落，LLM 交叉验证消费者声音与媒体报道。
 
 ## LLM Chain
 
-7 条 Chain 位于 `llm/chains/strategy_*_chain.py`。
+8 条 Chain 位于 `llm/chains/strategy_*_chain.py`。
 
 | Chain | 角色 | 触发时机 |
 |-------|------|---------|
@@ -101,6 +105,7 @@ Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
 | phase3_chain | 创意总监 | ④ |
 
 Phase 1/2/3 Chain 均注入 `research_design` 中的 research_questions 作为分析上下文。
+Phase 1/2/3 Chain 均通过 `_format_news_media_section` 从独立的 NewsSlice 数据（`load_strategy_news_inputs` 加载）格式化新闻媒体补充段落，作为 `{news_media_section}` 注入 USER_TEMPLATE，LLM 获得媒体视角补充数据。
 
 ## Agent 协议
 
@@ -119,8 +124,11 @@ Phase 1/2/3 Chain 均注入 `research_design` 中的 research_questions 作为�
 
 ## Important Notes
 
-- Strategy 通过 `strategy_slices` 关联切片，切片由 `_create_auto_slices` 按 `slice_blueprint` 自动创建
+- Strategy 通过 `strategy_slices` 关联社媒切片（SocialSlice），新闻切片（NewsSlice）通过 `news_monitor_id` 隐式关联
+- `_create_auto_slices` 按 `slice_blueprint` 自动创建：社媒维度 → SocialSlice，新闻维度 → NewsSlice，互不侵入
 - `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor，同渠道所有任务共享一个 Monitor
 - `_task_dimension_map` / `_news_task_dimension_map` 存在 `research_design` 中，分别记录社媒 / 新闻 task_id → dimension_name 映射，供 probe 审查注入研究问题 + 自动建切片使用
 - `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）
+- 新闻 insight 粒度：独立监测和策略研究都通过 NewsSlice 切片触发 insight（按 blueprint 条目分组新闻任务创建切片），采集阶段仅做 tagging 不做 insight
+- 新闻搜索渠道：baidu / sogou / duckduckgo（默认三渠道）+ wechat_mp（可选，通过搜狗微信专用入口）；source_tier 分层：tier1(权威) / tier2(行业) / tier3(其他) / wechat_mp(公众号)
 - Word 导出依赖 `python-docx`

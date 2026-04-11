@@ -41,6 +41,8 @@ const schema = z.object({
   phase: z.enum(['probe', 'collect']).optional(),
 })
 
+const includeWechatMp = ref(false)
+
 const state = reactive<{
   name: string
   keywords: string
@@ -61,7 +63,7 @@ const selectedMonitorCache = ref<{ id: number; name: string } | null>(null)
 
 const monitorSearchParams = computed(() => ({
   page: 1,
-  page_size: 50,
+  page_size: 10,
   ...(monitorSearchQuery.value.trim() ? { search: monitorSearchQuery.value.trim() } : {}),
 }))
 
@@ -108,6 +110,11 @@ const handleMonitorInputBlur = () => {
 
 // ========== 提交 ==========
 
+const buildSearchParams = () => {
+  if (!includeWechatMp.value) return null
+  return { channels: ['baidu', 'sogou', 'duckduckgo', 'wechat_mp'] }
+}
+
 const handleSubmit = async () => {
   submitting.value = true
   try {
@@ -115,6 +122,7 @@ const handleSubmit = async () => {
       name: state.name,
       keywords: state.keywords,
       phase: state.phase || null,
+      search_params: buildSearchParams(),
     })
     await navigateTo(`/news-media/tasks/${result.id}`)
   } catch {
@@ -125,8 +133,8 @@ const handleSubmit = async () => {
 }
 
 const phaseOptions = [
-  { label: '探测 (快速，百度 10 条)', value: 'probe' },
-  { label: '全量 (双渠道，各 50 条)', value: 'collect' },
+  { label: '探测 (快速，每渠道 20 条摘要)', value: 'probe' },
+  { label: '全量 (每渠道 20 条 + 全文抓取 + 分析)', value: 'collect' },
 ]
 </script>
 
@@ -301,6 +309,40 @@ const phaseOptions = [
                 >
                 <div class="ml-3 flex-1 text-sm">
                   {{ opt.label }}
+                </div>
+              </label>
+            </div>
+          </UFormField>
+
+          <!-- 搜索渠道 -->
+          <UFormField
+            label="搜索渠道"
+          >
+            <div class="space-y-3">
+              <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <UIcon name="i-lucide-check-circle" class="text-green-500" />
+                <span>网页新闻搜索（百度 + 搜狗 + DuckDuckGo，默认开启）</span>
+              </div>
+              <label
+                class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors"
+                :class="
+                  includeWechatMp
+                    ? 'ring-2 ring-primary-500 border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                    : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                "
+              >
+                <input
+                  v-model="includeWechatMp"
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                >
+                <div class="flex-1">
+                  <div class="text-sm font-medium">
+                    微信公众号
+                  </div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    额外搜索微信公众号文章（通过搜狗微信入口）
+                  </div>
                 </div>
               </label>
             </div>

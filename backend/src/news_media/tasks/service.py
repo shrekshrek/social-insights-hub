@@ -27,8 +27,19 @@ logger = logging.getLogger(__name__)
 _TAGGING_BATCH_SIZE = 5
 
 # probe 搜索每渠道最大条数
-_PROBE_MAX_RESULTS = 25
-_PROBE_CHANNELS: tuple[str, ...] = ("baidu", "sogou", "duckduckgo")
+_PROBE_MAX_RESULTS = 20
+_DEFAULT_CHANNELS: tuple[str, ...] = ("baidu", "sogou", "duckduckgo")
+_ALL_VALID_CHANNELS = {"baidu", "sogou", "duckduckgo", "wechat_mp"}
+
+
+def _resolve_channels(task: "NewsTask") -> tuple[str, ...]:
+    """从 task.search_params 读取用户选择的搜索渠道，fallback 到默认三渠道。"""
+    params = task.search_params or {}
+    raw = params.get("channels")
+    if not raw or not isinstance(raw, list):
+        return _DEFAULT_CHANNELS
+    valid = tuple(ch for ch in raw if ch in _ALL_VALID_CHANNELS)
+    return valid or _DEFAULT_CHANNELS
 
 
 async def create_news_task(
@@ -56,11 +67,11 @@ async def create_news_task(
         "phase": phase,
         "search_params": data.search_params,
         "auto_analyze": data.auto_analyze,
-        "created_by": user_id,
+        "user_id": user_id,
     }
     task = await crud.create_task(db, task_data)
     await db.commit()
-    await db.refresh(task, ["monitor", "creator"])
+    await db.refresh(task, ["monitor", "user"])
     return task
 
 
@@ -170,8 +181,12 @@ async def _tag_articles_batch(
     articles: list,
     analysis_goal: str,
     use_full_text: bool = False,
-) -> list[dict]:
-    """逐篇轻量标注（批量，_TAGGING_BATCH_SIZE 篇一组）—— 仅 collect 阶段调用"""
+) -> tuple[list[dict], dict | None]:
+    """逐篇轻量标注（批量，_TAGGING_BATCH_SIZE 篇一组）—— 仅 collect 阶段调用
+
+    Returns:
+        (tags_list, token_usage) — token_usage 为累加后的 LLM 用量统计
+    """
     from src.llm.chains.news_tagging_chain import (
         create_news_tagging_chain,
         format_articles_for_tagging,
@@ -179,6 +194,8 @@ async def _tag_articles_batch(
 
     chain = create_news_tagging_chain()
     all_tags: list[dict] = []
+    total_input_tokens = 0
+    total_output_tokens = 0
 
     for i in range(0, len(articles), _TAGGING_BATCH_SIZE):
         batch = articles[i:i + _TAGGING_BATCH_SIZE]
@@ -199,6 +216,11 @@ async def _tag_articles_batch(
             "articles_content": articles_content,
         })
 
+        # 累加 token 用量
+        usage = (response.response_metadata or {}).get("token_usage") or {}
+        total_input_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
+        total_output_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
+
         try:
             tags = _parse_llm_json(response.content)
             if isinstance(tags, list):
@@ -211,7 +233,13 @@ async def _tag_articles_batch(
         except (json.JSONDecodeError, ValueError) as e:
             logger.error("Failed to parse tagging response: %s", e)
 
-    return all_tags
+    token_usage = {
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "total_tokens": total_input_tokens + total_output_tokens,
+    } if (total_input_tokens or total_output_tokens) else None
+
+    return all_tags, token_usage
 
 
 async def _apply_tags_to_articles(
@@ -247,8 +275,11 @@ async def _run_insight_analysis(
     articles: list,
     analysis_goal: str,
     subject: str,
-) -> dict:
-    """整体分析（一次 LLM 调用），返回结构化洞察 —— 仅 collect 阶段调用"""
+) -> tuple[dict, dict | None]:
+    """整体分析（一次 LLM 调用），返回 (结构化洞察, token_usage)。
+
+    token_usage 来自 LLM response_metadata，可能为 None。
+    """
     from src.llm.chains.news_insight_chain import (
         create_news_insight_chain,
         format_tagged_articles_for_insight,
@@ -275,7 +306,7 @@ async def _run_insight_analysis(
         for a in relevant
     ]
 
-    tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
+    tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
     for a in relevant:
         tier = a.source_tier or "tier3"
         tier_counts[tier] = tier_counts.get(tier, 0) + 1
@@ -291,13 +322,16 @@ async def _run_insight_analysis(
         "tier1_count": tier_counts["tier1"],
         "tier2_count": tier_counts["tier2"],
         "tier3_count": tier_counts["tier3"],
+        "wechat_mp_count": tier_counts["wechat_mp"],
     })
 
+    token_usage = (response.response_metadata or {}).get("token_usage")
+
     try:
-        return _parse_llm_json(response.content)
+        return _parse_llm_json(response.content), token_usage
     except (json.JSONDecodeError, ValueError) as e:
         logger.error("Failed to parse insight response: %s", e)
-        return {"error": str(e)}
+        return {"error": str(e)}, token_usage
 
 
 # ==================== Task Execution ====================
@@ -319,10 +353,10 @@ async def execute_news_probe(
         await db.flush()
 
         articles = await _search_and_store_articles(
-            db, task, max_results=_PROBE_MAX_RESULTS, channels=_PROBE_CHANNELS
+            db, task, max_results=_PROBE_MAX_RESULTS, channels=_resolve_channels(task)
         )
 
-        tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
+        tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
         source_samples: list[str] = []
         seen_sources: set[str] = set()
         for a in articles:

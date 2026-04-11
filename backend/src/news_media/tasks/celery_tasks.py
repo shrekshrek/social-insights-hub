@@ -1,12 +1,12 @@
 """新闻媒体 Celery 任务
 
-将新闻全量采集（爬取 + 逐篇标注 + 整体洞察）转为异步 Celery 任务，
-保持与社媒模块一致的架构：router 创建 AnalysisJob → Celery 执行 → 更新 job 状态。
+将新闻全量采集（爬取 + 逐篇标注）转为异步 Celery 任务，
+���持与社媒��块一致的架构：router 创建 AnalysisJob �� Celery 执行 → 更新 job 状态。
+insight 分析由切片（NewsSlice）按需触发，不在采集阶段执行。
 """
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 
 from src.celery_app import celery_app
 
@@ -54,43 +54,40 @@ def run_news_collect_task(
     self,
     task_id: int,
     tagging_job_id: int | None,
-    insight_job_id: int | None,
     analysis_goal: str = "",
-    subject: str = "",
 ) -> None:
     """执行新闻全量采集 Celery 任务
 
     流程：
-    1. 双渠道搜索 + 存文章
+    1. 多渠道搜索 + 存文章
     2. Crawl4AI 抓全文
     3. 逐篇标注（NEWS_TAGGING job）
-    4. 整体洞察（NEWS_INSIGHT job）
-    5. 更新 NewsTask 状态
+    4. 更新 NewsTask 状态
+
+    insight 分析由 NewsSlice 按需触发，不在采集阶段执行。
 
     Args:
         task_id: NewsTask ID
         tagging_job_id: 逐篇标注的 AnalysisJob ID
-        insight_job_id: 整体洞察的 AnalysisJob ID
         analysis_goal: 分析目标（可选，默认用任务关键词）
-        subject: 分析主体（可选，默认用任务关键词）
     """
     asyncio.run(_async_run_collect(
         task_id=task_id,
         tagging_job_id=tagging_job_id,
-        insight_job_id=insight_job_id,
         analysis_goal=analysis_goal,
-        subject=subject,
     ))
 
 
 async def _async_run_collect(
     task_id: int,
     tagging_job_id: int | None,
-    insight_job_id: int | None,
     analysis_goal: str,
-    subject: str,
 ) -> None:
-    """异步执行新闻全量采集流水线（供 Celery task 调用）"""
+    """异步执行新闻全量采集流水线（供 Celery task 调用）
+
+    流程：搜索 → 存文章 → 抓全文 → 逐篇标注 → 更新统计。
+    insight 分析由 NewsSlice 按需触发。
+    """
     from src.database import AsyncSessionLocal, async_engine
     from src.news_media.tasks.models import NewsTask
     from src.jobs.models import AnalysisJob
@@ -107,22 +104,22 @@ async def _async_run_collect(
             return
 
         tagging_job = await db.get(AnalysisJob, tagging_job_id) if tagging_job_id else None
-        insight_job = await db.get(AnalysisJob, insight_job_id) if insight_job_id else None
 
         goal = analysis_goal or task.keywords
-        subj = subject or task.keywords
 
         try:
+            from src.jobs.factory import start_analysis_job_async, complete_analysis_job_async
+
             task.status = "running"
             if tagging_job:
-                tagging_job.status = "processing"
-                tagging_job.started_at = datetime.now(timezone.utc)
-            await db.commit()
+                await start_analysis_job_async(db, tagging_job)
+            else:
+                await db.commit()
 
-            from src.news_media.tasks.service import _search_and_store_articles
+            from src.news_media.tasks.service import _resolve_channels, _search_and_store_articles
 
             articles = await _search_and_store_articles(
-                db, task, max_results=50, channels=("baidu", "sogou", "duckduckgo")
+                db, task, max_results=20, channels=_resolve_channels(task)
             )
 
             if not articles:
@@ -130,14 +127,9 @@ async def _async_run_collect(
                 task.articles_count = 0
                 task.analysis_result = {"meta": {"keywords": task.keywords, "articles_total": 0}}
                 if tagging_job:
-                    tagging_job.status = "completed"
-                    tagging_job.completed_at = datetime.now(timezone.utc)
-                    tagging_job.analyzed_count = 0
-                if insight_job:
-                    insight_job.status = "completed"
-                    insight_job.completed_at = datetime.now(timezone.utc)
-                    insight_job.analyzed_count = 0
-                await db.commit()
+                    await complete_analysis_job_async(db, tagging_job, analyzed_count=0)
+                else:
+                    await db.commit()
                 return
 
             from src.news_media.tasks.article_crawler import crawl_articles
@@ -157,43 +149,21 @@ async def _async_run_collect(
             from src.news_media.tasks.service import _tag_articles_batch, _apply_tags_to_articles
 
             all_articles, _ = await crud.get_articles_by_task(db, task.id, limit=200)
-            tag_start = datetime.now(timezone.utc)
 
-            tags = await _tag_articles_batch(all_articles, analysis_goal=goal, use_full_text=True)
+            tags, tag_token_usage = await _tag_articles_batch(all_articles, analysis_goal=goal, use_full_text=True)
             await _apply_tags_to_articles(db, all_articles, tags)
 
-            tag_duration = (datetime.now(timezone.utc) - tag_start).total_seconds()
-
             if tagging_job:
-                tagging_job.status = "completed"
-                tagging_job.completed_at = datetime.now(timezone.utc)
-                tagging_job.analyzed_count = len(all_articles)
-                tagging_job.processing_time = int(tag_duration)
                 tagging_job.source_count = len(all_articles)
+                await complete_analysis_job_async(
+                    db, tagging_job,
+                    analyzed_count=len(all_articles),
+                    token_usage=tag_token_usage,
+                )
+            else:
+                await db.flush()
 
-            await db.flush()
-
-            if insight_job:
-                insight_job.status = "processing"
-                insight_job.started_at = datetime.now(timezone.utc)
-                insight_job.source_count = len(all_articles)
-            await db.flush()
-
-            all_articles, _ = await crud.get_articles_by_task(db, task.id, limit=200)
-            insight_start = datetime.now(timezone.utc)
-
-            from src.news_media.tasks.service import _run_insight_analysis
-            insights = await _run_insight_analysis(all_articles, analysis_goal=goal, subject=subj)
-
-            insight_duration = (datetime.now(timezone.utc) - insight_start).total_seconds()
-
-            if insight_job:
-                insight_job.status = "completed"
-                insight_job.completed_at = datetime.now(timezone.utc)
-                insight_job.analyzed_count = 1
-                insight_job.processing_time = int(insight_duration)
-
-            tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
+            tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
             for a in all_articles:
                 tier = a.source_tier or "tier3"
                 tier_counts[tier] = tier_counts.get(tier, 0) + 1
@@ -202,7 +172,9 @@ async def _async_run_collect(
                 1 for a in all_articles if a.relevance in ("high", "medium")
             )
 
-            analysis_result = {
+            task.status = "completed"
+            task.articles_count = len(all_articles)
+            task.analysis_result = {
                 "meta": {
                     "keywords": task.keywords,
                     "articles_total": len(all_articles),
@@ -211,12 +183,6 @@ async def _async_run_collect(
                     "source_tier_distribution": tier_counts,
                 },
             }
-            if isinstance(insights, dict) and "error" not in insights:
-                analysis_result.update(insights)
-
-            task.status = "completed"
-            task.articles_count = len(all_articles)
-            task.analysis_result = analysis_result
             await db.commit()
 
             logger.info(
@@ -229,11 +195,8 @@ async def _async_run_collect(
             task.status = "failed"
             task.error_message = str(e)
             if tagging_job and tagging_job.status == "processing":
-                tagging_job.status = "failed"
-                tagging_job.error_message = str(e)
-                tagging_job.completed_at = datetime.now(timezone.utc)
-            if insight_job and insight_job.status == "processing":
-                insight_job.status = "failed"
-                insight_job.error_message = str(e)
-                insight_job.completed_at = datetime.now(timezone.utc)
-            await db.commit()
+                await complete_analysis_job_async(
+                    db, tagging_job, error_message=str(e),
+                )
+            else:
+                await db.commit()

@@ -109,19 +109,15 @@ Nuxt SSR (Port 3000)  ──HTTP──▶  FastAPI (Port 8000)
 | strategies | 策略研究引擎 | `strategies`, `strategy_slices` | 模型, service | `/api/v1/strategies` | auth, social_media, news_media |
 | knowledge_base | 市场知识库, 文档向量化 | `knowledge_documents`, `knowledge_chunks` | 模型, service | `/api/v1/knowledge-base` | auth |
 
-### 3.3 LLM 分析链清单
+### 3.3 LLM 分析链
 
-| 链 | 输入 | 输出 | 调用方 |
-|----|------|------|--------|
-| screening_chain | 原文内容+关键词 | spam/value/relevance/sentiment 分数 | screening_tasks |
-| post_extraction_chain | 原文内容+关键词 | 实体+观点+摘要 | deep_analysis_tasks |
-| comment_extraction_chain | 评论内容+关键词 | 评论实体+观点 | deep_analysis_tasks |
-| entity_normalization_chain | 实体列表 | 去重+归一化实体 | aggregation/entity |
-| opinion_normalization_chain | 观点列表 | 去重+归一化观点 | aggregation/opinion |
-| category_normalization_chain | 观点分类 | 归一化分类 | aggregation/opinion |
-| attribute_normalization_chain | 实体属性 | 归一化属性 | aggregation/entity |
-| project_entity_merge_chain | 多任务实体 | 项目级实体合并 | project_slice |
-| project_slice_reports_chain | 聚合数据 | 项目级报告摘要 | project_slice |
+所有分析链位于 `backend/src/llm/chains/`，按渠道分目录组织（`social_media/` / `news/` / `strategy/`）。链的数量与职责变动较频繁，权威清单见各模块 CLAUDE.md：
+
+- 社媒链（screening / 深度抽取 / 归一化 / 监测切片聚合）→ `backend/CLAUDE.md`
+- 新闻链（tagging / insight）→ `backend/src/news_media/analysis/` 内源码
+- 策略链（研究设计 / 探测审查 / 覆盖度 / brand_strategy 三层 / market_report 三层）→ `backend/src/strategies/CLAUDE.md`
+
+每次 LLM 调用自动记录 token 用量和费用到 `AnalysisJob`（由 `src/jobs/` 统一管理）。
 
 ---
 
@@ -252,7 +248,7 @@ Agent 上传数据 → auto_analyze=True → screening → deep → aggregation 
 
 ## 7. 跨模块数据流
 
-### 7.1 采集到报告
+### 7.1 采集到报告（以社媒为例）
 
 ```
 外部爬虫 ──POST──▶ agent/router
@@ -271,6 +267,8 @@ Agent 上传数据 → auto_analyze=True → screening → deep → aggregation 
                       ▼
                TaskAnalysisReport.vue
 ```
+
+news_media / strategies / knowledge_base 各有独立编排流程，详见对应模块 CLAUDE.md（`src/news_media/`、`src/strategies/`、`src/knowledge_base/`）。
 
 ### 7.2 权限贯穿
 

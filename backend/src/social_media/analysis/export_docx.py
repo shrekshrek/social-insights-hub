@@ -1,6 +1,6 @@
 """切片报告 Word 导出服务
 
-将 AnalysisSlice 中的 AI 报告（Markdown）转换为格式化的 Word 文档。
+将 SocialSlice 中的 AI 报告（Markdown）转换为格式化的 Word 文档。
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 
-from .models import AnalysisSlice
+from .models import SocialSlice
 
 
-def generate_slice_report_docx(slice_record: AnalysisSlice) -> BytesIO:
+def generate_slice_report_docx(slice_record: SocialSlice) -> BytesIO:
     """从切片记录生成 Word 文档并返回 BytesIO 流。"""
     result_data = slice_record.result_data or {}
     reports = result_data.get("reports") or {}

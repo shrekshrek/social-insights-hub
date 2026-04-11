@@ -244,7 +244,10 @@ class ProjectSliceResponse(CustomBaseModel):
     monitor_id: int
     user_id: int
     included_task_ids: list[int]
-    result_data: dict
+    status: str
+    result_data: dict | None = None
+    stats: dict | None = None
+    error_message: str | None = None
     created_at: datetime
     updated_at: datetime
 

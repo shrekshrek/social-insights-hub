@@ -202,8 +202,8 @@ export interface Strategy {
   participant_usernames: string[]
 
   // 元信息
-  created_by: number
-  creator_name: string
+  user_id: number
+  user_username: string
   created_at: string
   updated_at: string
 }
@@ -213,8 +213,8 @@ export interface StrategyListItem {
   name: string
   status: StrategyStatus
   slice_count: number
-  created_by: number
-  creator_name: string
+  user_id: number
+  user_username: string
   created_at: string
   updated_at: string
 }

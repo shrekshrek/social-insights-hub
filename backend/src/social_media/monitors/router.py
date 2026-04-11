@@ -102,7 +102,7 @@ async def create_monitor(
         task_dict["monitor_name"] = result["monitor"].name
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
-        task_dict["creator_username"] = task.creator.username if task.creator else None
+        task_dict["user_username"] = task.user.username if task.user else None
         tasks_list.append(task_dict)
 
     return schemas.MonitorCreateResponse(
@@ -273,8 +273,8 @@ async def batch_create_tasks(
         task_dict["monitor_name"] = monitor.name
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
-        task_dict["creator_username"] = (
-            task.creator.username if task.creator else None
+        task_dict["user_username"] = (
+            task.user.username if task.user else None
         )
         tasks_list.append(task_dict)
 

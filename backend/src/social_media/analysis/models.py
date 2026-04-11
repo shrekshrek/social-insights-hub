@@ -1,7 +1,7 @@
 """社媒专属分析数据模型
 
 - PostAnalysis: 社媒原文级分析结果（初筛 + 原文深度 + 评论深度）
-- AnalysisSlice: 社媒项目级手动合并分析切片
+- SocialSlice: 社媒项目级手动合并分析切片
 
 跨渠道的 AnalysisJob / AnalysisType / AnalysisStatus 定义在 `src/jobs/models.py`。
 """
@@ -132,15 +132,15 @@ class PostAnalysis(Base):
         return f"<PostAnalysis(id={self.id}, post_id={self.post_id})>"
 
 
-class AnalysisSlice(Base):
-    """项目级手动合并分析切片
+class SocialSlice(Base):
+    """社媒项目级合并分析切片
 
     设计意图：
     - 与 AnalysisJob（LLM/Celery 任务流水）分离
     - 专门用于保存"勾选多个任务 -> 生成一份合并报告"的历史切片
     """
 
-    __tablename__ = "analysis_slices"
+    __tablename__ = "social_slices"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -169,12 +169,30 @@ class AnalysisSlice(Base):
         comment="参与合并的任务ID列表",
     )
 
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+        comment="pending | analyzing | completed | failed",
+    )
+
     # 注意：result_data 会在 Celery 流水线中被逐步"原地更新"（stage2/stage3/reports 等）。
     # 使用 MutableDict 以确保 SQLAlchemy 能追踪变更并正确落库。
-    result_data: Mapped[dict] = mapped_column(
+    result_data: Mapped[dict | None] = mapped_column(
         MutableDict.as_mutable(JSON),
-        nullable=False,
-        comment="切片结果数据",
+        nullable=True,
+        comment="切片结果数据（流水线各阶段原地更新）",
+    )
+
+    stats: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="统计摘要（任务数/原文数/评论数/情感分布等）",
+    )
+
+    error_message: Mapped[str | None] = mapped_column(
+        String(1000), nullable=True, comment="失败原因"
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -199,6 +217,5 @@ class AnalysisSlice(Base):
     )
 
     __table_args__ = (
-        Index("idx_monitor_slices_project", "monitor_id"),
-        Index("idx_monitor_slices_created_at", "created_at"),
+        Index("idx_social_slices_created_at", "created_at"),
     )

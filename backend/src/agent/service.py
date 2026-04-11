@@ -483,7 +483,7 @@ async def upload_result(
             )
 
             # 获取任务创建者ID作为分析任务的用户ID
-            user_id = task.creator_id
+            user_id = task.user_id
             monitor_keywords = task.keywords or ""
 
             # 幂等锁（触发侧）：避免同一 task 并发 upload_result 时重复触发

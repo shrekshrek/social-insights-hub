@@ -106,7 +106,7 @@ export interface SocialTaskWithRelations extends SocialTask {
   monitor_name: string | null;
   platform_name: string | null;
   platform_code: string | null;
-  creator_username: string | null;
+  user_username: string | null;
   aggregation_status: string | null;
 }
 

@@ -281,8 +281,8 @@ class StrategyListItem(CustomBaseModel):
     name: str
     status: str
     slice_count: int
-    created_by: int
-    creator_name: str
+    user_id: int
+    user_username: str
     created_at: datetime
     updated_at: datetime
 
@@ -293,8 +293,8 @@ class StrategyListItem(CustomBaseModel):
             name=strategy.name,
             status=strategy.status,
             slice_count=len(strategy.slices),
-            created_by=strategy.created_by,
-            creator_name=strategy.creator.username if strategy.creator else "",
+            user_id=strategy.user_id,
+            user_username=strategy.user.username if strategy.user else "",
             created_at=strategy.created_at,
             updated_at=strategy.updated_at,
         )
@@ -334,8 +334,8 @@ class StrategyRead(CustomBaseModel):
     participant_usernames: list[str] = Field(default_factory=list)
 
     # 元信息
-    created_by: int
-    creator_name: str
+    user_id: int
+    user_username: str
     created_at: datetime
     updated_at: datetime
 
@@ -374,8 +374,8 @@ class StrategyRead(CustomBaseModel):
             slices=slices,
             participant_ids=[p.id for p in participants],
             participant_usernames=[p.username for p in participants],
-            created_by=strategy.created_by,
-            creator_name=strategy.creator.username if strategy.creator else "",
+            user_id=strategy.user_id,
+            user_username=strategy.user.username if strategy.user else "",
             created_at=strategy.created_at,
             updated_at=strategy.updated_at,
         )

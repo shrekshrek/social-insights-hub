@@ -25,7 +25,7 @@ async def get_social_task_by_id(
         query = query.options(
             selectinload(SocialTask.monitor),
             selectinload(SocialTask.platform),
-            selectinload(SocialTask.creator),
+            selectinload(SocialTask.user),
         )
 
     result = await db.execute(query)
@@ -41,7 +41,7 @@ async def get_social_tasks(
     task_type: Optional[str] = None,
     status: Optional[str] = None,
     data_source: Optional[str] = None,
-    creator_id: Optional[int] = None,
+    user_id: Optional[int] = None,
     search: Optional[str] = None,
     phase: Optional[str] = None,
 ) -> tuple[List[SocialTask], int]:
@@ -64,8 +64,8 @@ async def get_social_tasks(
     if data_source:
         conditions.append(SocialTask.data_source == data_source)
 
-    if creator_id is not None:
-        conditions.append(SocialTask.creator_id == creator_id)
+    if user_id is not None:
+        conditions.append(SocialTask.user_id == user_id)
 
     if phase:
         conditions.append(SocialTask.phase == phase)
@@ -92,7 +92,7 @@ async def get_social_tasks(
         .options(
             selectinload(SocialTask.monitor),
             selectinload(SocialTask.platform),
-            selectinload(SocialTask.creator),
+            selectinload(SocialTask.user),
         )
         .offset(skip)
         .limit(limit)
@@ -105,12 +105,12 @@ async def get_social_tasks(
     return list(tasks), total
 
 
-async def create_social_task(db: AsyncSession, task_data: dict, creator_id: int) -> SocialTask:
+async def create_social_task(db: AsyncSession, task_data: dict, user_id: int) -> SocialTask:
     """创建任务"""
-    task = SocialTask(**task_data, creator_id=creator_id)
+    task = SocialTask(**task_data, user_id=user_id)
     db.add(task)
     await db.flush()  # 获取任务ID
-    await db.refresh(task, ["monitor", "platform", "creator"])
+    await db.refresh(task, ["monitor", "platform", "user"])
     return task
 
 
@@ -492,7 +492,7 @@ async def bulk_create_tasks(
     platform_ids: List[int],
     task_type: str,
     data_source: str,
-    creator_id: int,
+    user_id: int,
     keywords: Optional[str] = None,
     task_params: Optional[dict] = None,
     auto_analyze: bool = False,
@@ -505,7 +505,7 @@ async def bulk_create_tasks(
         platform_ids: 平台ID列表
         task_type: 任务类型（search/homefeed）
         data_source: 数据源
-        creator_id: 创建者ID
+        user_id: 创建者ID
         keywords: 关键词（search类型必填）
         task_params: 任务参数（爬虫高级选项等）
         auto_analyze: 是否自动分析
@@ -563,7 +563,7 @@ async def bulk_create_tasks(
             "auto_analyze": auto_analyze,
         }
 
-        task = SocialTask(**task_data, creator_id=creator_id)
+        task = SocialTask(**task_data, user_id=user_id)
         tasks.append(task)
 
     db.add_all(tasks)
@@ -576,7 +576,7 @@ async def bulk_create_tasks(
         .options(
             selectinload(SocialTask.monitor),
             selectinload(SocialTask.platform),
-            selectinload(SocialTask.creator),
+            selectinload(SocialTask.user),
         )
         .where(SocialTask.id.in_(task_ids))
     )

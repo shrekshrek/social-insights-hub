@@ -20,7 +20,7 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from src.auth.models import User
-    from src.social_media.analysis.models import AnalysisSlice
+    from src.social_media.analysis.models import SocialSlice
     from src.social_media.monitors.models import SocialMonitor
     from src.social_media.tasks.models import SocialTask
     from src.news_media.monitors.models import NewsMonitor
@@ -59,7 +59,7 @@ class Strategy(Base):
     name: Mapped[str] = mapped_column(
         String(255), nullable=False, comment="策略名称"
     )
-    created_by: Mapped[int] = mapped_column(
+    user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"
     )
     status: Mapped[str] = mapped_column(
@@ -124,9 +124,9 @@ class Strategy(Base):
     )
 
     # 关系
-    creator: Mapped["User"] = relationship(
+    user: Mapped["User"] = relationship(
         "src.auth.models.User",
-        foreign_keys=[created_by],
+        foreign_keys=[user_id],
         lazy="selectin",
     )
     participants: Mapped[list["User"]] = relationship(
@@ -184,7 +184,7 @@ class StrategySlice(Base):
         primary_key=True,
     )
     slice_id: Mapped[int] = mapped_column(
-        ForeignKey("analysis_slices.id", ondelete="CASCADE"),
+        ForeignKey("social_slices.id", ondelete="CASCADE"),
         primary_key=True,
     )
 
@@ -192,8 +192,8 @@ class StrategySlice(Base):
     strategy: Mapped["Strategy"] = relationship(
         back_populates="slices",
     )
-    slice: Mapped["AnalysisSlice"] = relationship(
-        "src.social_media.analysis.models.AnalysisSlice",
+    slice: Mapped["SocialSlice"] = relationship(
+        "src.social_media.analysis.models.SocialSlice",
         lazy="selectin",
     )
 

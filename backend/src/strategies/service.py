@@ -51,7 +51,7 @@ from src.database import AsyncSessionLocal
 from src.llm import extract_token_usage
 from src.jobs.factory import create_analysis_job_async
 from src.jobs.models import AnalysisType
-from src.social_media.analysis.models import AnalysisSlice
+from src.social_media.analysis.models import SocialSlice
 from src.social_media.monitors.crud import assert_social_monitor_access as assert_monitor_access
 from src.social_media.tasks.models import SocialTask as SocialTask
 from .models import Strategy, StrategySlice
@@ -93,7 +93,7 @@ async def create_strategy(
     """
     # 校验每个 slice
     for sid in data.slice_ids:
-        slice_obj = await db.get(AnalysisSlice, sid)
+        slice_obj = await db.get(SocialSlice, sid)
         if not slice_obj:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -105,7 +105,7 @@ async def create_strategy(
     brief_dict = data.brand_brief.model_dump() if data.brand_brief else None
     strategy = Strategy(
         name=data.name,
-        created_by=user_id,
+        user_id=user_id,
         brand_brief=brief_dict,
     )
     db.add(strategy)
@@ -154,7 +154,7 @@ async def get_strategies(
             .scalar_subquery()
         )
         query = query.where(
-            (Strategy.created_by == user_id) | Strategy.id.in_(participated_subq)
+            (Strategy.user_id == user_id) | Strategy.id.in_(participated_subq)
         )
 
     if search:
@@ -178,11 +178,11 @@ async def get_strategy_by_id(db: AsyncSession, strategy_id: int) -> Strategy | N
         select(Strategy)
         .where(Strategy.id == strategy_id)
         .options(
-            selectinload(Strategy.creator),
+            selectinload(Strategy.user),
             selectinload(Strategy.participants),
             selectinload(Strategy.slices)
             .selectinload(StrategySlice.slice)
-            .selectinload(AnalysisSlice.monitor),
+            .selectinload(SocialSlice.monitor),
         )
     )
     result = await db.execute(query)
@@ -215,7 +215,7 @@ async def add_participants_to_strategy(
     from src.auth.models import User
 
     # 过滤 owner 自身
-    filtered_ids = [uid for uid in user_ids if uid != strategy.created_by]
+    filtered_ids = [uid for uid in user_ids if uid != strategy.user_id]
     if not filtered_ids:
         return strategy
 
@@ -236,7 +236,7 @@ async def remove_participant_from_strategy(
     db: AsyncSession, strategy: Strategy, user_id: int
 ) -> Strategy:
     """从策略移除参与者，并同步到关联的 SocialMonitor / NewsMonitor"""
-    if user_id == strategy.created_by:
+    if user_id == strategy.user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="不能移除策略创建者",
@@ -287,14 +287,14 @@ async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -
 async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dict]:
     """加载策略输入数据，屏蔽数据来源差异
 
-    当前支持：社媒切片（AnalysisSlice.result_data）。
+    当前支持：社媒切片（SocialSlice.result_data）。
     未来扩展点：知识库摘要、网络搜索摘要通过此函数统一接入。
     """
     slice_ids = [s.slice_id for s in strategy.slices]
     if not slice_ids:
         return []
 
-    query = select(AnalysisSlice).where(AnalysisSlice.id.in_(slice_ids))
+    query = select(SocialSlice).where(SocialSlice.id.in_(slice_ids))
     result = await db.execute(query)
     slices = result.scalars().all()
     return [s.result_data for s in slices if s.result_data]
@@ -308,7 +308,7 @@ async def load_strategy_inputs_with_names(
     if not slice_ids:
         return []
 
-    query = select(AnalysisSlice).where(AnalysisSlice.id.in_(slice_ids))
+    query = select(SocialSlice).where(SocialSlice.id.in_(slice_ids))
     result = await db.execute(query)
     slices = result.scalars().all()
     return [(s.name, s.result_data) for s in slices if s.result_data]
@@ -380,7 +380,7 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
             query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
             if query:
                 market_context = await retrieve_market_context(
-                    db, query, user_id=strategy.created_by, top_k=6
+                    db, query, user_id=strategy.user_id, top_k=6
                 )
         except Exception as e:
             logger.warning("Phase1 RAG 检索失败，降级为空: %s", e)
@@ -397,7 +397,7 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
         db,
         social_monitor_id=strategy.social_monitor_id,
         news_monitor_id=strategy.news_monitor_id,
-        user_id=strategy.created_by,
+        user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_PHASE1.value,
         source_count=len(slices_data),
         status="processing",
@@ -448,7 +448,7 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
             query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
             if query:
                 market_context = await retrieve_market_context(
-                    db, query, user_id=strategy.created_by, top_k=6
+                    db, query, user_id=strategy.user_id, top_k=6
                 )
         except Exception as e:
             logger.warning("Phase2 RAG 检索失败，降级为空: %s", e)
@@ -466,7 +466,7 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
         db,
         social_monitor_id=strategy.social_monitor_id,
         news_monitor_id=strategy.news_monitor_id,
-        user_id=strategy.created_by,
+        user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_PHASE2.value,
         source_count=len(slices_data),
         status="processing",
@@ -519,7 +519,7 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
         db,
         social_monitor_id=strategy.social_monitor_id,
         news_monitor_id=strategy.news_monitor_id,
-        user_id=strategy.created_by,
+        user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_PHASE3.value,
         source_count=len(slices_data),
         status="processing",
@@ -1188,7 +1188,7 @@ async def _run_probe_review_bg_task(
                 news_job = await create_analysis_job_async(
                     db,
                     news_monitor_id=strategy.news_monitor_id,
-                    user_id=strategy.created_by,
+                    user_id=strategy.user_id,
                     analysis_type=AnalysisType.STRATEGY_PROBE_REVIEW.value,
                     source_count=len(news_probe_summaries),
                     status="processing",
@@ -1293,7 +1293,7 @@ async def _run_probe_review_bg_task(
             )
 
             if review_result.get("overall_verdict") == "all_pass":
-                await approve_probe(db, strategy, current_user_id=strategy.created_by)
+                await approve_probe(db, strategy, current_user_id=strategy.user_id)
     except Exception as e:
         logger.error(
             "Strategy %d probe review background task failed: %s", strategy_id, e, exc_info=True
@@ -1330,7 +1330,7 @@ async def _run_probe_review(
             db,
             social_monitor_id=strategy.social_monitor_id,
             news_monitor_id=strategy.news_monitor_id,
-            user_id=strategy.created_by,
+            user_id=strategy.user_id,
             analysis_type=AnalysisType.STRATEGY_PROBE_REVIEW.value,
             source_count=len(ambiguous_summaries),
             status="processing",
@@ -2122,7 +2122,7 @@ async def _create_auto_slices(
     current_user_id: int,
     news_tasks: list = None,
 ) -> None:
-    """按 slice_blueprint 自动创建 AnalysisSlice，并关联到策略。
+    """按 slice_blueprint 自动创建 SocialSlice，并关联到策略。
 
     每个 blueprint 条目对应一个切片，将该维度下的所有任务 ID 合并进去。
     若 blueprint 为空，则将所有任务合并为一个「综合分析」切片。
@@ -2202,12 +2202,12 @@ async def _create_auto_slices(
 
             # 纯新闻切片（无社媒任务）：跳过 create_monitor_slice，创建空壳切片
             if not matched_task_ids:
-                from src.social_media.analysis.models import AnalysisSlice as _SliceModel
+                from src.social_media.analysis.models import SocialSlice as _SliceModel
 
                 empty_slice = _SliceModel(
                     monitor_id=strategy.social_monitor_id,
                     name=bp_name,
-                    created_by=current_user_id,
+                    user_id=current_user_id,
                     result_data={"meta": {"subject": bp_subject, "competitors": bp_competitors}},
                 )
                 db.add(empty_slice)
@@ -2252,12 +2252,12 @@ async def _create_auto_slices(
             )
         else:
             # 纯新闻策略：创建空壳切片
-            from src.social_media.analysis.models import AnalysisSlice as _SliceModel
+            from src.social_media.analysis.models import SocialSlice as _SliceModel
 
             slice_obj = _SliceModel(
                 monitor_id=strategy.social_monitor_id,
                 name="综合分析",
-                created_by=current_user_id,
+                user_id=current_user_id,
                 result_data={},
             )
             db.add(slice_obj)
@@ -2403,7 +2403,7 @@ async def adjust_slices(
 
     每个 adjustment 格式：{slice_id, name?, subject?, competitors?}
     """
-    from src.social_media.analysis.models import AnalysisSlice
+    from src.social_media.analysis.models import SocialSlice
 
     # 校验 slice 归属
     strategy_slice_ids = {ss.slice_id for ss in strategy.slices}
@@ -2416,7 +2416,7 @@ async def adjust_slices(
                 detail=f"切片 {sid} 不属于该策略",
             )
 
-        slice_obj = await db.get(AnalysisSlice, sid)
+        slice_obj = await db.get(SocialSlice, sid)
         if slice_obj is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -2447,7 +2447,7 @@ async def adjust_slices(
 
         # 重新加载所有切片
         slice_ids = list(strategy_slice_ids)
-        stmt = select(AnalysisSlice).where(AnalysisSlice.id.in_(slice_ids))
+        stmt = select(SocialSlice).where(SocialSlice.id.in_(slice_ids))
         result = await db.execute(stmt)
         updated_slices = list(result.scalars().all())
 

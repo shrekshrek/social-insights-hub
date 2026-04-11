@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from src.database import SyncSessionLocal
-from src.social_media.analysis.models import AnalysisSlice
+from src.social_media.analysis.models import SocialSlice
 from src.jobs.models import AnalysisType
 from src.jobs import (
     create_analysis_job_sync,
@@ -40,8 +40,8 @@ def run_monitor_slice_pipeline_sync(
     """
     db = SyncSessionLocal()
     try:
-        stmt = select(AnalysisSlice).where(
-            AnalysisSlice.id == slice_id
+        stmt = select(SocialSlice).where(
+            SocialSlice.id == slice_id
         )
         slice_record = db.execute(stmt).scalar_one_or_none()
         if not slice_record:
@@ -83,7 +83,7 @@ def run_monitor_slice_pipeline_sync(
                 top_terms_for_llm=top_terms_for_llm,
                 min_cell_mentions=min_cell_mentions,
             )
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 "[项目切片] 流水线异常中止: slice_id=%s", slice_id
             )
@@ -96,6 +96,8 @@ def run_monitor_slice_pipeline_sync(
                 stage3["status"] = "failed"
                 stage3["error"] = "pipeline_exception"
                 stage3["updated_at"] = now_iso()
+            slice_record.status = "failed"
+            slice_record.error_message = f"pipeline_exception: {exc}"[:1000]
             try:
                 commit_result()
             except Exception:
@@ -140,6 +142,13 @@ def _run_pipeline_body(
                 "generated_at": now_iso(),
             }
         )
+        slice_record.status = "completed"
+        slice_record.stats = {
+            "task_count": len(slice_record.included_task_ids or []),
+            "stage2_status": "skipped",
+            "stage3_status": "skipped",
+            "reason": "no_top_entities",
+        }
         commit_result()
         return {"status": "skipped", "slice_id": slice_id}
 
@@ -482,6 +491,28 @@ def _run_pipeline_body(
         if stage3.get("status") == "completed"
         else (stage3.get("error") or "reports_failed"),
     )
+
+    # 汇总 status / stats / error_message 到 SocialSlice 列（与 NewsSlice 对称）
+    stage3_status = stage3.get("status")
+    if stage3_status == "completed":
+        slice_record.status = "completed"
+        slice_record.error_message = None
+    else:
+        slice_record.status = "failed"
+        slice_record.error_message = (
+            stage3.get("error") or "reports_failed"
+        )[:1000]
+
+    data_volume = (meta.get("data_volume") or {}) if isinstance(meta, dict) else {}
+    scope = (meta.get("scope") or {}) if isinstance(meta, dict) else {}
+    slice_record.stats = {
+        "task_count": len(slice_record.included_task_ids or []),
+        "post_total": data_volume.get("total"),
+        "platforms": scope.get("platforms") or [],
+        "keywords": scope.get("keywords") or [],
+        "stage2_status": stage2.get("status"),
+        "stage3_status": stage3_status,
+    }
     commit_result()
 
     return {

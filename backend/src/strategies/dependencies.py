@@ -36,7 +36,7 @@ async def validate_strategy_owner(
     if is_admin_or_super_admin(current_user):
         return strategy
 
-    if strategy.created_by != current_user.id:
+    if strategy.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="只有策略创建者或管理员可以执行此操作",

@@ -153,7 +153,7 @@ async def check_collecting_strategies() -> int:
             try:
                 full_strategy = await get_strategy_by_id(db, strategy.id)
                 await _create_auto_slices(
-                    db, full_strategy, tasks, current_user_id=strategy.created_by,
+                    db, full_strategy, tasks, current_user_id=strategy.user_id,
                     news_tasks=news_tasks,
                 )
                 triggered += 1

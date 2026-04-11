@@ -28,15 +28,15 @@
               </UBadge>
             </div>
             <div v-if="strategy" class="flex items-center gap-2 mt-1 text-sm text-gray-500">
-              <span>{{ strategy.creator_name }}</span>
+              <span>{{ strategy.user_username }}</span>
               <span>|</span>
               <span>{{ formatDate(strategy.created_at) }}</span>
             </div>
             <div v-if="strategy" class="mt-2">
               <ParticipantsManager
                 :participants="(strategy!.participant_ids || []).map((id: number, i: number) => ({ id, username: strategy!.participant_usernames?.[i] || String(id) }))"
-                :owner-id="strategy.created_by"
-                :can-manage="strategy.created_by === currentUserId"
+                :owner-id="strategy.user_id"
+                :can-manage="strategy.user_id === currentUserId"
                 :on-add="async (ids: number[]) => { await strategiesApi.addParticipant(strategyId, ids); await refreshStrategy() }"
                 :on-remove="async (uid: number) => { await strategiesApi.removeParticipant(strategyId, uid); await refreshStrategy() }"
               />

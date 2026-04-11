@@ -56,7 +56,7 @@ class SocialTaskRead(SocialTaskBase):
 
     id: int
     monitor_id: int
-    creator_id: int
+    user_id: int
     data_source: str
     status: str
     phase: Optional[str] = None
@@ -77,7 +77,7 @@ class SocialTaskReadWithRelations(SocialTaskRead):
     monitor_name: Optional[str] = None
     platform_name: Optional[str] = None
     platform_code: Optional[str] = None
-    creator_username: Optional[str] = None
+    user_username: Optional[str] = None
     aggregation_status: Optional[str] = None
 
 

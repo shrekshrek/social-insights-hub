@@ -45,7 +45,7 @@ async def validate_task_owner(
 ) -> SocialTask:
     """验证用户是否是任务创建者或项目owner"""
     # 检查是否是任务创建者
-    if task.creator_id == current_user.id:
+    if task.user_id == current_user.id:
         return task
 
     # 检查是否是项目owner

@@ -70,7 +70,7 @@ async def get_tasks(
     task_type: Optional[str] = Query(None, description="按任务类型过滤"),
     status: Optional[str] = Query(None, description="按状态过滤"),
     data_source: Optional[str] = Query(None, description="按数据源过滤"),
-    creator_id: Optional[int] = Query(None, description="按创建者过滤"),
+    user_id: Optional[int] = Query(None, description="按创建者过滤"),
     search: Optional[str] = Query(None, description="搜索关键词"),
     phase: Optional[str] = Query(None, description="按采集阶段过滤: probe / collect"),
 ):
@@ -83,7 +83,7 @@ async def get_tasks(
     - task_type: search/detail/creator/homefeed
     - status: pending/running/completed/failed
     - data_source: remote_crawler/local_upload
-    - creator_id: 按创建者过滤
+    - user_id: 按创建者过滤
     - search: 搜索任务名称、描述或关键词
 
     返回分页结果，包含项目、平台和创建者信息。
@@ -97,7 +97,7 @@ async def get_tasks(
         task_type=task_type,
         status=status,
         data_source=data_source,
-        creator_id=creator_id,
+        user_id=user_id,
         search=search,
         current_user_id=current_user.id,
         phase=phase,
@@ -126,7 +126,7 @@ async def get_tasks(
         task_dict["monitor_name"] = task.monitor.name if task.monitor else None
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
-        task_dict["creator_username"] = task.creator.username if task.creator else None
+        task_dict["user_username"] = task.user.username if task.user else None
         # analysis_result_at 不为空表示聚合已完成；否则取最新 LLM Job 状态
         if task.analysis_result_at:
             task_dict["aggregation_status"] = "completed"
@@ -177,7 +177,7 @@ async def get_task(
     task_dict["monitor_name"] = task.monitor.name if task.monitor else None
     task_dict["platform_name"] = task.platform.name if task.platform else None
     task_dict["platform_code"] = task.platform.code if task.platform else None
-    task_dict["creator_username"] = task.creator.username if task.creator else None
+    task_dict["user_username"] = task.user.username if task.user else None
     task_dict["aggregation_status"] = aggregation_status
     return schemas.SocialTaskReadWithRelations(**task_dict)
 

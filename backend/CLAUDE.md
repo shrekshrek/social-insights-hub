@@ -54,11 +54,11 @@ backend/src/
 ├── news_media/
 │   ├── monitors/            # 新闻监测项目
 │   ├── tasks/               # 新闻采集任务 + celery 任务
-│   │   └── news_search/     # 百度/DuckDuckGo 双渠道搜索
-│   └── analysis/            # 新闻本地分析（tagging / insight AnalysisJob 封装）
+│   │   └── news_search/     # 百度/搜狗/DuckDuckGo/微信公众号 多渠道搜索
+│   └── analysis/            # 新闻切片分析（NewsSlice 模型/CRUD/service + tagging job 封装）
 ├── jobs/                    # 跨渠道 AnalysisJob: models, schemas, crud, factory, router
 ├── llm/                     # LLM 实例管理 + 分析链定义（原 langchain/）
-│   └── chains/              # 9 条分析链
+│   └── chains/              # 19 条分析链
 ├── knowledge_base/          # 市场知识库 + 文档向量化
 ├── strategies/              # 策略研究
 ├── agent/                   # 爬虫代理 API, API Key 认证
@@ -76,6 +76,7 @@ backend/src/
 - API 端点**必须**包含 `response_model`, `status_code`, `tags`, `summary`
 - 外键**必须**建立双向 ORM 关系 (`back_populates`)
 - 表名小写蛇形复数，时间戳 `_at` 后缀，日期 `_date` 后缀
+- **语义字段强制一致**：创建者外键用 `user_id`、状态用 `status`、错误用 `error_message`、流水线结果 JSON 用 `result_data`、统计 JSON 用 `stats`、软删除用 `is_deleted`。新增表若有同语义字段必须沿用此命名，不要自创变体。详见 `CODING_GUIDE.md §2` 语义字段命名表
 - 使用 `HTTPException` 处理业务错误
 - SQL 优先处理复杂查询，Pydantic 负责 API 边界校验
 - 新模块路由在 `main.py` 中注册
@@ -92,7 +93,7 @@ backend/src/
 - `src/llm/` — LLM 实例管理与分析链（原 `src/langchain/`，因与 pypi 包同名而重命名）
 - 各渠道的 **analysis celery 任务** 与 **分析编排** 归本渠道：
   - `src/social_media/analysis/celery_tasks/` — 社媒 screening/deep/aggregation/slice
-  - `src/news_media/analysis/jobs.py` — 新闻 tagging/insight AnalysisJob 封装
+  - `src/news_media/analysis/` — 新闻切片（NewsSlice models/crud/service/router）+ tagging job 封装（jobs.py）
 - **采集/处理类 celery 任务** 归各自渠道模块：
   - `src/news_media/tasks/celery_tasks.py` — 新闻爬取
   - `src/knowledge_base/tasks.py` — 文档向量化
@@ -120,7 +121,7 @@ backend/src/
 分析逻辑归属于所属渠道，没有全局 `analysis/` 模块：
 
 - 社媒分析 → `src/social_media/analysis/`（含 service、router、celery_tasks、models）
-- 新闻分析 → `src/news_media/analysis/`（目前是 `jobs.py`：封装 NEWS_TAGGING / NEWS_INSIGHT AnalysisJob 创建）
+- 新闻分析 → `src/news_media/analysis/`（NewsSlice 切片分析 + NEWS_TAGGING / NEWS_INSIGHT AnalysisJob 封装）
 - 新增渠道时在 `src/{channel}/analysis/` 下新建本渠道的 service/celery_tasks 即可
 - 所有渠道通过 `src/jobs/` 创建和管理 AnalysisJob，通过 `src/llm/` 调用 LLM
 - 跨渠道 AnalysisJob 查询/取消/删除端点由 `src/jobs/router.py` 暴露（`/jobs`），前端通过这个统一入口查看所有渠道的分析任务

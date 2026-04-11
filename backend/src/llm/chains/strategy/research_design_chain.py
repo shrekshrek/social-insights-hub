@@ -111,7 +111,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 - 每个社媒维度选 **1-2 个平台**，最多 3 个（质量优先，宁精不滥）
 - 每个新闻维度 **1-2 个关键词**（无需选平台）
 - **社媒总任务数 = Σ(各社媒维度关键词数 × 平台数)，目标 8-12 个；生成后自行验算，超过则删减关键词或平台**
-- **社媒平台选择必须同时考虑品类特点和关键词适配性**（优先从以下主力平台中选择）：
+- **社媒平台选择必须同时考虑品类特点和关键词适配性**（只能从以下 5 个平台中选择，策略研究不使用 kuaishou / tieba）：
   - 知乎：专业讨论、行业分析、深度评价（适合 B2B、技术、专业领域；B2B 研究首选）
   - 微博：新闻热点、品牌公关、大众舆论（适合有公众讨论度的消费品话题；B2B 仅限舆情事件监测，不适合深度洞察）
   - 小红书：消费体验、生活方式、种草测评（适合 B2C 消费品，**不适合 B2B 专业话题**）
@@ -125,7 +125,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 通常包含 1 个品牌聚焦切片 + 1 个大盘分析切片。
 - 品牌聚焦切片的 subject 必须是 Brief 中**用户最关心的分析主体**（通常是 subject 或其核心竞品），而非随意选择数据中出现的某个实体
 - 如果 Brief 涉及多个赛道，每个赛道需要独立切片（不同赛道的实体不应混在同一个切片中进行对比）
-- 切片的 `source_dimensions` 可以同时引用社媒和新闻维度——系统会按渠道分别创建独立切片（社媒 SocialSlice + 新闻 NewsSlice），最终 Phase 报告合并两方数据
+- 切片的 `source_dimensions` 可以同时引用社媒和新闻维度——系统会按渠道分别创建独立切片（社媒 SocialSlice + 新闻 NewsSlice），最终在 brand_strategy / market_report 两条路径的三层产出中合并两方数据
 - 每个切片建议同时引用社媒和新闻维度，让两个渠道的分析结果能在报告中交叉验证
 - 纯新闻切片（无社媒维度）和纯社媒切片（无新闻维度）都是允许的
 
@@ -174,7 +174,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 }}
 
 channel 可选值: social_media（默认，需 platforms）/ news_media（无 platforms）
-platforms 可选值（仅 social_media）: douyin / weibo / bilibili / xiaohongshu / zhihu / kuaishou / tieba
+platforms 可选值（仅 social_media）: douyin / weibo / bilibili / xiaohongshu / zhihu
 dimension 可选值: brand_voice / consumer_voice / competitive / industry
 priority 可选值: high / medium / low
 mode 可选值: 品牌聚焦 / 大盘分析

@@ -36,7 +36,7 @@ class SocialTask(Base):
     platform_id: Mapped[int] = mapped_column(
         ForeignKey("platforms.id"), nullable=False, index=True
     )
-    creator_id: Mapped[int] = mapped_column(
+    user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True
     )
 
@@ -150,8 +150,8 @@ class SocialTask(Base):
         foreign_keys=[platform_id],
         lazy="selectin",
     )
-    creator: Mapped["User"] = relationship(
-        "src.auth.models.User", foreign_keys=[creator_id], lazy="selectin"
+    user: Mapped["User"] = relationship(
+        "src.auth.models.User", foreign_keys=[user_id], lazy="selectin"
     )
     strategy: Mapped["Strategy | None"] = relationship(
         "Strategy",

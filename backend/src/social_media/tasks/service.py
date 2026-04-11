@@ -47,7 +47,7 @@ async def create_social_task(
     task_data = task_in.model_dump()
     task_data["monitor_id"] = monitor_id
 
-    task = await crud.create_task(db, task_data=task_data, creator_id=current_user_id)
+    task = await crud.create_task(db, task_data=task_data, user_id=current_user_id)
     await db.commit()
     await db.refresh(task)
 
@@ -79,7 +79,7 @@ async def get_social_tasks_list(
     task_type: Optional[str] = None,
     status: Optional[str] = None,
     data_source: Optional[str] = None,
-    creator_id: Optional[int] = None,
+    user_id: Optional[int] = None,
     search: Optional[str] = None,
     current_user_id: Optional[int] = None,
     phase: Optional[str] = None,
@@ -101,7 +101,7 @@ async def get_social_tasks_list(
         task_type=task_type,
         status=status,
         data_source=data_source,
-        creator_id=creator_id,
+        user_id=user_id,
         search=search,
         phase=phase,
     )

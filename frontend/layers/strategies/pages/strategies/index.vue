@@ -191,7 +191,7 @@ const columns: TableColumn<StrategyListItem>[] = [
     },
   },
   {
-    accessorKey: 'creator_name',
+    accessorKey: 'user_username',
     header: '创建人',
     meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
   },

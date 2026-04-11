@@ -744,7 +744,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
               创建者
             </dt>
             <dd class="text-gray-900 dark:text-white">
-              {{ task.creator_username || '-' }}
+              {{ task.user_username || '-' }}
             </dd>
           </div>
           <div class="flex gap-3">

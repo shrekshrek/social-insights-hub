@@ -24,7 +24,7 @@
 from src.knowledge_base.service import retrieve_market_context
 
 market_context = await retrieve_market_context(
-    db, query="小米SU7 品牌口碑", user_id=strategy.created_by, top_k=6
+    db, query="小米SU7 品牌口碑", user_id=strategy.user_id, top_k=6
 )
 # 返回格式化 markdown 字符串，或 "" (无结果/出错时)
 ```

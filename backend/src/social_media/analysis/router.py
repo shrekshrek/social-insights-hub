@@ -29,7 +29,7 @@ from src.auth.dependencies import get_current_user
 from src.auth.models import User
 
 from . import service
-from .models import AnalysisSlice
+from .models import SocialSlice
 from .schemas import (
     RunScreeningRequest,
     RunDeepAnalysisRequest,
@@ -369,6 +369,7 @@ async def create_monitor_slice(
     }
     slice_record.result_data = result_data
     flag_modified(slice_record, "result_data")
+    slice_record.status = "analyzing"
     await db.commit()
     await db.refresh(slice_record)
     return ProjectSliceResponse.model_validate(slice_record)
@@ -379,15 +380,15 @@ async def _get_slice_or_403(
     monitor_id: int,
     slice_id: int,
     current_user: User,
-) -> AnalysisSlice:
+) -> SocialSlice:
     """验证访问权限并返回切片，无权或不存在时抛出对应 HTTP 异常。"""
     from src.social_media.monitors import crud as monitor_crud
 
     await monitor_crud.assert_monitor_access(db, monitor_id, current_user.id)
     stmt = (
-        select(AnalysisSlice)
-        .where(AnalysisSlice.id == slice_id)
-        .where(AnalysisSlice.monitor_id == monitor_id)
+        select(SocialSlice)
+        .where(SocialSlice.id == slice_id)
+        .where(SocialSlice.monitor_id == monitor_id)
     )
     result = await db.execute(stmt)
     slice_record = result.scalar_one_or_none()
@@ -413,9 +414,9 @@ async def list_monitor_slices(
 
     await monitor_crud.assert_monitor_access(db, monitor_id, current_user.id)
     stmt = (
-        select(AnalysisSlice)
-        .where(AnalysisSlice.monitor_id == monitor_id)
-        .order_by(AnalysisSlice.created_at.desc())
+        select(SocialSlice)
+        .where(SocialSlice.monitor_id == monitor_id)
+        .order_by(SocialSlice.created_at.desc())
     )
     result = await db.execute(stmt)
     items = list(result.scalars().all())

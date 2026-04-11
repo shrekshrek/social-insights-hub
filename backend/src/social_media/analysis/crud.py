@@ -3,7 +3,7 @@
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import AnalysisSlice
+from .models import SocialSlice
 
 
 async def check_slice_exists(db: AsyncSession, monitor_id: int) -> bool:
@@ -11,7 +11,7 @@ async def check_slice_exists(db: AsyncSession, monitor_id: int) -> bool:
 
     用于 check_collection_status 中判断是否需要触发自动建切片。
     """
-    stmt = select(func.count()).where(AnalysisSlice.monitor_id == monitor_id)
+    stmt = select(func.count()).where(SocialSlice.monitor_id == monitor_id)
     result = await db.execute(stmt)
     count = result.scalar_one()
     return count > 0

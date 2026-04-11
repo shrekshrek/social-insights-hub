@@ -9,7 +9,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
-from .models import PostAnalysis, AnalysisSlice
+from .models import PostAnalysis, SocialSlice
 from src.jobs.models import AnalysisJob
 from src.jobs import create_analysis_job_async
 from src.jobs.crud import (  # noqa: F401 - re-exported for router
@@ -201,8 +201,8 @@ async def create_monitor_slice(
     subject: str | None = None,
     competitors: list[str] | None = None,
     platform_weights: dict[str, float] | None = None,
-) -> AnalysisSlice:
-    """手动生成项目级合并分析切片（同步完成，写入 analysis_slices 表）。"""
+) -> SocialSlice:
+    """手动生成项目级合并分析切片（同步完成，写入 social_slices 表）。"""
     from src.social_media.monitors import crud as monitor_crud
     from src.social_media.tasks.models import SocialTask as SocialTask
 
@@ -373,7 +373,7 @@ async def create_monitor_slice(
         spam_threshold=SPAM_HIGH_THRESHOLD,
     )
 
-    slice_record = AnalysisSlice(
+    slice_record = SocialSlice(
         name=name,
         monitor_id=monitor_id,
         user_id=current_user_id,

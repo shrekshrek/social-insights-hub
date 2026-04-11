@@ -227,6 +227,21 @@ async def get_user(user_id: int):
   - 日期 (`date`) 字段使用 `_date` 后缀 (e.g., `start_date`)。
 - **索引/约束**: 配置 Alembic 和 SQLAlchemy 使用统一的命名约定，如 `ix_%(column_0_label)s`。
 
+#### 语义字段命名（强制一致）
+
+为避免跨表同义字段出现多种命名（历史上曾出现 `creator_id` / `created_by` / `owner_id` 同指"创建者"的情况），下列语义字段在**所有表**中必须使用规定的字段名；新增表时**如果有同语义字段，必须沿用下表字段名，不要自创新名**。
+
+| 语义 | 字段名 | 类型 | 备注 |
+|------|-------|------|------|
+| 创建者/归属用户外键 | `user_id` | `ForeignKey("users.id")` | 禁止 `creator_id` / `created_by` / `owner_id` 等变体。**例外**：非系统用户的"内容作者"（如微博 UID、新闻记者名）用 `author_id` / `author`，不关联 `users` 表 |
+| 任务/作业状态 | `status` | `String(20)`, `server_default="pending"` | 值域：`pending` / `running` / `analyzing` / `completed` / `failed`。禁止用 `state` 代替 |
+| 失败原因 | `error_message` | `String(1000)`, nullable | 禁止 `error` / `err_msg` / `failure_reason` 等变体 |
+| 流水线结果 JSON | `result_data` | `JSON`, nullable | 需要原地更新时用 `MutableDict.as_mutable(JSON)`。禁止 `result` / `data` / `payload` 等变体 |
+| 统计摘要 JSON | `stats` | `JSON`, nullable | 任务数 / 数据量 / 情感分布等聚合快照 |
+| 软删除标记 | `is_deleted` | `Boolean`, `server_default=false` | 禁止 `deleted` / `is_removed` 变体 |
+
+**Slice 类模型的标准字段集**（`SocialSlice` / `NewsSlice` 对称）：`name`, `monitor_id`, `user_id`, `included_task_ids(JSON)`, `status`, `result_data`, `stats`, `error_message`, `created_at`, `updated_at`。新增渠道的 Slice 模型必须保持此字段集一致。
+
 ---
 
 ### 3. 统一处理系统 (Unified Handling System)

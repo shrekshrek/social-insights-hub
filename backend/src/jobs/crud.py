@@ -55,9 +55,9 @@ async def get_analysis_jobs(
     from src.news_media.monitors.models import NewsMonitor
     from src.news_media.tasks.models import NewsTask
     from src.auth.models import User
-    # NOTE: AnalysisSlice 仍住在 src.social_media.analysis.models（社媒专属，P3 会迁往 social_media/analysis/）
+    # NOTE: SocialSlice 仍住在 src.social_media.analysis.models（社媒专属，P3 会迁往 social_media/analysis/）
     # 这里 lazy import 是为了避免 jobs → analysis 的顶层循环依赖。
-    from src.social_media.analysis.models import AnalysisSlice
+    from src.social_media.analysis.models import SocialSlice
 
     # 构建基础查询（全部用 outer join，因为各 FK 均为 nullable）
     stmt = (
@@ -139,8 +139,8 @@ async def get_analysis_jobs(
     slice_name_by_id: dict[int, str | None] = {}
     if slice_ids:
         snap_stmt = select(
-            AnalysisSlice.id, AnalysisSlice.name
-        ).where(AnalysisSlice.id.in_(list(slice_ids)))
+            SocialSlice.id, SocialSlice.name
+        ).where(SocialSlice.id.in_(list(slice_ids)))
         snap_rows = (await db.execute(snap_stmt)).all()
         slice_name_by_id = {int(r[0]): r[1] for r in snap_rows}
 

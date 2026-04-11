@@ -92,7 +92,7 @@ async def create_social_monitor(
             platform_ids=monitor_in.quick_tasks.platform_ids,
             task_type=monitor_in.quick_tasks.task_type,
             data_source=monitor_in.quick_tasks.data_source,
-            creator_id=current_user_id,
+            user_id=current_user_id,
             keywords=monitor_in.quick_tasks.keywords,
             task_params=task_params,
             auto_analyze=(
@@ -142,7 +142,7 @@ async def create_social_monitor_batch_tasks(
         platform_ids=quick_tasks.platform_ids,
         task_type=quick_tasks.task_type,
         data_source=quick_tasks.data_source,
-        creator_id=current_user_id,
+        user_id=current_user_id,
         keywords=quick_tasks.keywords,
         task_params=task_params,
         auto_analyze=(

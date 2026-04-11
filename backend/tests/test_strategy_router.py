@@ -76,23 +76,23 @@ async def test_create_strategy_with_brand_brief(
     assert data["brand_brief"]["analysis_goal"] == "提升品牌认知"
 
 
-# ── Phase 1 前置检查 ─────────────────────────────────────────────────────────
+# ── Insight 前置检查 ─────────────────────────────────────────────────────────
 
 
-async def test_generate_phase1_without_slices_returns_400(
+async def test_generate_insight_without_slices_returns_400(
     async_client: AsyncClient, auth_headers: dict
 ):
-    """Phase 1 生成时若无切片关联 → 400 Bad Request"""
+    """Insight 生成时若无切片关联 → 400 Bad Request"""
     create_resp = await async_client.post(
         f"{BASE}/strategies",
-        json={"name": "无切片 Phase1 测试"},
+        json={"name": "无切片 Insight 测试"},
         headers=auth_headers,
     )
     assert create_resp.status_code == 201
     strategy_id = create_resp.json()["id"]
 
     resp = await async_client.post(
-        f"{BASE}/strategies/{strategy_id}/generate/phase1",
+        f"{BASE}/strategies/{strategy_id}/generate/insight",
         headers=auth_headers,
     )
     assert resp.status_code == 400

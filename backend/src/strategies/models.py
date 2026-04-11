@@ -63,10 +63,14 @@ class Strategy(Base):
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"
     )
     status: Mapped[str] = mapped_column(
-        String(20),
+        String(32),
         nullable=False,
         server_default="draft",
-        comment="状态: draft / planned / probing / collecting / ready / phase1_done / phase2_done / completed",
+        comment=(
+            "状态: draft / planned / probing / collecting / ready / "
+            "insight_done / brand_role_done / "
+            "agenda_map_done / landscape_done / completed"
+        ),
     )
     brand_brief: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="结构化 Brand Brief"
@@ -91,18 +95,36 @@ class Strategy(Base):
     )
 
     # ④ 产出生成
+    # output_type 决定走哪条产出路径（两条路径都是 3 层递进）：
+    #   - brand_strategy: 填充 insight_result → brand_role_result → big_idea_result
+    #   - market_report:  填充 agenda_map_result → landscape_result → strategic_brief_result
     output_type: Mapped[str | None] = mapped_column(
         String(30), nullable=True,
-        comment="产出类型: brand_strategy / insight_report",
+        comment="产出类型: brand_strategy / market_report",
     )
-    phase1_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="Phase 1: Tension + Opportunity"
+    insight_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True,
+        comment="brand_strategy 第 1 层 Insight: Tension + Opportunity",
     )
-    phase2_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="Phase 2: Role + Strategy"
+    brand_role_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True,
+        comment="brand_strategy 第 2 层 Brand Role: Role + Strategy",
     )
-    phase3_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="Phase 3: Big Idea + Content Strategy"
+    big_idea_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True,
+        comment="brand_strategy 第 3 层 Big Idea: Big Idea + Content Strategy",
+    )
+    agenda_map_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True,
+        comment="market_report 第 1 层 Agenda Map: 媒体议程图",
+    )
+    landscape_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True,
+        comment="market_report 第 2 层 Landscape: 竞争格局 + 话语权",
+    )
+    strategic_brief_result: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True,
+        comment="market_report 第 3 层 Strategic Brief: 战略简报",
     )
 
     # 关联
@@ -165,7 +187,8 @@ class Strategy(Base):
     __table_args__ = (
         CheckConstraint(
             "status IN ('draft', 'planned', 'probing', 'collecting', 'ready', "
-            "'phase1_done', 'phase2_done', 'completed')",
+            "'insight_done', 'brand_role_done', "
+            "'agenda_map_done', 'landscape_done', 'completed')",
             name="valid_status",
         ),
     )

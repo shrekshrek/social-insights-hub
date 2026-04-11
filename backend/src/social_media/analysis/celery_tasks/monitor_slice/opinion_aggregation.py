@@ -16,12 +16,12 @@ from src.social_media.analysis.celery_tasks.aggregation.utils import (
     calculate_score,
     are_similar,
 )
-from src.llm.chains.category_normalization_chain import (
+from src.llm.chains.social.category_normalization_chain import (
     create_category_normalization_chain,
     format_categories_for_normalization,
     parse_category_normalization_response,
 )
-from src.llm.chains.opinion_normalization_chain import (
+from src.llm.chains.social.opinion_normalization_chain import (
     create_opinion_normalization_chain,
     parse_normalization_response as parse_opinion_normalization_response,
 )

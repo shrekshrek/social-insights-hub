@@ -187,12 +187,12 @@ async def _tag_articles_batch(
     Returns:
         (tags_list, token_usage) — token_usage 为累加后的 LLM 用量统计
     """
-    from src.llm.chains.news_tagging_chain import (
-        create_news_tagging_chain,
+    from src.llm.chains.news.tagging_chain import (
+        create_tagging_chain,
         format_articles_for_tagging,
     )
 
-    chain = create_news_tagging_chain()
+    chain = create_tagging_chain()
     all_tags: list[dict] = []
     total_input_tokens = 0
     total_output_tokens = 0
@@ -280,8 +280,8 @@ async def _run_insight_analysis(
 
     token_usage 来自 LLM response_metadata，可能为 None。
     """
-    from src.llm.chains.news_insight_chain import (
-        create_news_insight_chain,
+    from src.llm.chains.news.insight_chain import (
+        create_insight_chain as create_news_insight_chain,
         format_tagged_articles_for_insight,
     )
 

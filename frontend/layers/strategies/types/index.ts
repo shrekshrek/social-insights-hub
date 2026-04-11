@@ -14,9 +14,44 @@ export type StrategyStatus =
   | 'probing'
   | 'collecting'
   | 'ready'
-  | 'phase1_done'
-  | 'phase2_done'
+  // brand_strategy 产出路径
+  | 'insight_done'
+  | 'brand_role_done'
+  // market_report 产出路径
+  | 'agenda_map_done'
+  | 'landscape_done'
   | 'completed'
+
+// ==================== 产出类型 ====================
+
+/**
+ * 产出路径（两条独立路径）
+ * - brand_strategy: 消费者洞察主导（依赖 social_media 主源）
+ *     → 第 1 层 Insight → 第 2 层 Brand Role → 第 3 层 Big Idea
+ * - market_report:  媒体视角主导（依赖 news_media 主源）
+ *     → 第 1 层 Agenda Map → 第 2 层 Landscape → 第 3 层 Strategic Brief
+ */
+export type OutputType = 'brand_strategy' | 'market_report'
+
+/** 主数据源：两层模型中的"直接输入层"，knowledge_base 属于背景层不在此 */
+export type PrimarySource = 'social_media' | 'news_media'
+
+// ==================== 数据来源（两层模型）====================
+
+/**
+ * Phase 结果中的 data_provenance 字段，记录本次生成实际使用的数据来源。
+ * 两层模型：primary 是直接输入到 prompt 的主数据，background 是 RAG 补充背景。
+ */
+export interface DataProvenance {
+  primary: {
+    channel: PrimarySource
+    social_media_slice_count: number
+    news_media_slice_count: number
+  }
+  background: {
+    knowledge_base: boolean
+  }
+}
 
 // ==================== Brand Brief ====================
 
@@ -57,6 +92,8 @@ export interface DataPlanItem {
   dimension_name: string
   keywords: string[]
   platforms: string[]
+  /** 数据渠道：social_media（默认）| news_media */
+  channel?: 'social_media' | 'news_media'
   rationale?: string
 }
 
@@ -74,7 +111,8 @@ export interface ResearchDesign {
   research_questions: ResearchQuestion[]
   data_plan: DataPlanItem[]
   slice_blueprint: SliceBlueprintItem[]
-  output_type: string
+  primary_sources: PrimarySource[]
+  output_type: OutputType
   output_type_rationale: string
 }
 
@@ -187,10 +225,15 @@ export interface Strategy {
   coverage_check_result: CoverageCheckResult | null
 
   // ④ 产出生成
-  output_type: string | null
-  phase1_result: Record<string, unknown> | null
-  phase2_result: Record<string, unknown> | null
-  phase3_result: Record<string, unknown> | null
+  output_type: OutputType | null
+  // brand_strategy 路径：第 1 层 → 第 2 层 → 第 3 层
+  insight_result: Record<string, unknown> | null
+  brand_role_result: Record<string, unknown> | null
+  big_idea_result: Record<string, unknown> | null
+  // market_report 路径：第 1 层 → 第 2 层 → 第 3 层
+  agenda_map_result: Record<string, unknown> | null
+  landscape_result: Record<string, unknown> | null
+  strategic_brief_result: Record<string, unknown> | null
 
   // 关联
   social_monitor_id: number | null
@@ -236,6 +279,8 @@ export interface StrategyUpdate {
 
 export interface ConfirmResearchRequest {
   research_design: Record<string, unknown>
+  /** 用户显式选择的产出路径（brand_strategy 需含 social_media 维度，market_report 需含 news_media 维度） */
+  output_type: OutputType
   notes_per_task?: number
 }
 
@@ -297,9 +342,9 @@ export interface AdjustSlicesRequest {
   adjustments: AdjustSliceItem[]
 }
 
-// ==================== Phase 结果类型 ====================
+// ==================== brand_strategy 路径结果类型 ====================
 
-export interface PhaseEvidence {
+export interface StageEvidence {
   type: string
   description: string
   source?: string
@@ -310,44 +355,48 @@ export interface SocialTension {
   conventional_wisdom?: string
   data_reality?: string
   confidence?: string
-  evidence?: PhaseEvidence[]
+  evidence?: StageEvidence[]
 }
 
 export interface BrandOpportunity {
   statement: string
   why_non_obvious?: string
   related_tensions?: number[]
-  evidence?: PhaseEvidence[]
+  evidence?: StageEvidence[]
 }
 
-export interface Phase1Result {
+/** brand_strategy 第 1 层 Insight: Social Tension + Brand Opportunity */
+export interface InsightResult {
   social_tensions: SocialTension[]
   brand_opportunities: BrandOpportunity[]
+  data_provenance?: DataProvenance
 }
 
 export interface BrandSocialRole {
   statement: string
   elaboration?: string
-  evidence?: PhaseEvidence[]
+  evidence?: StageEvidence[]
 }
 
 export interface SocialStrategy {
   statement: string
   core_message?: string
   rhythm?: string
-  evidence?: PhaseEvidence[]
+  evidence?: StageEvidence[]
 }
 
-export interface Phase2Result {
+/** brand_strategy 第 2 层 Brand Role: Brand Social Role + Social Strategy */
+export interface BrandRoleResult {
   brand_social_role: BrandSocialRole
   social_strategy: SocialStrategy
+  data_provenance?: DataProvenance
 }
 
 export interface BigIdea {
   statement: string
   elaboration?: string
   tension_echo?: string
-  evidence?: PhaseEvidence[]
+  evidence?: StageEvidence[]
 }
 
 export interface ContentPillar {
@@ -358,12 +407,163 @@ export interface ContentPillar {
 
 export interface ContentStrategy {
   pillars: ContentPillar[]
-  evidence?: PhaseEvidence[]
+  evidence?: StageEvidence[]
 }
 
-export interface Phase3Result {
+/** brand_strategy 第 3 层 Big Idea: Big Idea + Content Strategy */
+export interface BigIdeaResult {
   big_idea: BigIdea
   content_strategy: ContentStrategy
+  data_provenance?: DataProvenance
+}
+
+// ==================== market_report 路径结果类型 ====================
+
+// —— 第 1 层 Agenda Map: 媒体议程图 ——
+
+export interface NarrativeSupportingSources {
+  tier1?: number
+  tier2?: number
+  tier3?: number
+  wechat_mp?: number
+}
+
+export interface NarrativeRepresentativeVoice {
+  source_name: string
+  tier: string
+  quote: string
+}
+
+export interface NarrativeMapItem {
+  theme: string
+  framing: string
+  sentiment: 'positive' | 'neutral' | 'negative' | string
+  heat_rank: number
+  supporting_sources: NarrativeSupportingSources
+  representative_voices: NarrativeRepresentativeVoice[]
+  credibility: 'high' | 'medium' | 'low' | string
+}
+
+export interface AgendaBattle {
+  topic: string
+  sides: Array<{
+    stance: string
+    supporters_brief: string
+  }>
+  dominant_side?: string
+  note?: string
+}
+
+export interface MediaVoicePatterns {
+  authoritative_consensus: string[]
+  industry_debate: string[]
+  emerging_narratives: string[]
+}
+
+/** market_report 第 1 层 Agenda Map: 媒体议程图 */
+export interface AgendaMapResult {
+  media_landscape_summary: string
+  narrative_map: NarrativeMapItem[]
+  agenda_battles: AgendaBattle[]
+  media_voice_patterns: MediaVoicePatterns
+  attention_gaps: string[]
+  data_provenance?: DataProvenance
+}
+
+// —— 第 2 层 Landscape: 竞争格局 ——
+
+export interface CompetitivePlayer {
+  name: string
+  role: 'target' | 'competitor' | 'context' | string
+  media_sov_pct: number
+  media_sentiment: 'positive' | 'neutral' | 'negative' | string
+  source_count: number
+  narrative_position: string
+  evidence_quote?: string
+}
+
+export interface PositioningMap {
+  x_axis: string
+  y_axis: string
+  rationale: string
+  placements: Array<{
+    name: string
+    x: string
+    y: string
+  }>
+}
+
+export interface DiscourseBattle {
+  topic: string
+  agenda_map_battle_ref?: string
+  players_involved: string[]
+  winner?: string
+  note?: string
+}
+
+export interface MarketDynamics {
+  momentum_gainers: string[]
+  momentum_losers: string[]
+  structural_shifts: string[]
+}
+
+/** market_report 第 2 层 Landscape: 竞争格局 + 话语权 */
+export interface LandscapeResult {
+  competitive_summary: string
+  players: CompetitivePlayer[]
+  positioning_map: PositioningMap
+  discourse_battles: DiscourseBattle[]
+  market_dynamics: MarketDynamics
+  data_provenance?: DataProvenance
+}
+
+// —— 第 3 层 Strategic Brief: 战略简报 ——
+
+export interface StrategicPriority {
+  priority: string
+  rationale: string
+  answers_questions: string[]
+  evidence_refs: string[]
+  actions: string[]
+  success_metric?: string
+}
+
+export interface MarketOpportunity {
+  opportunity: string
+  why_now: string
+  entry_path: string
+  evidence_refs: string[]
+}
+
+export interface RiskAndThreat {
+  risk: string
+  likelihood: 'high' | 'medium' | 'low' | string
+  source: string
+  mitigation: string
+}
+
+export interface RecommendedPositioning {
+  statement: string
+  target_position: {
+    x_axis: string
+    y_axis: string
+    direction: string
+  }
+  differentiation_logic: string
+  proof_points: Array<{
+    claim: string
+    agenda_map_narrative_ref: string
+  }>
+}
+
+/** market_report 第 3 层 Strategic Brief: 战略简报（只消费 Agenda Map + Landscape） */
+export interface StrategicBriefResult {
+  executive_summary: string
+  strategic_priorities: StrategicPriority[]
+  market_opportunities: MarketOpportunity[]
+  risks_and_threats: RiskAndThreat[]
+  recommended_positioning: RecommendedPositioning
+  data_provenance?: DataProvenance
 }
 
 // ==================== Brief 文档解析 ====================

@@ -21,7 +21,7 @@ load_dotenv(".env.test")
 import pytest
 
 from src.config import settings
-from src.llm.chains.entity_normalization_chain import (
+from src.llm.chains.social.entity_normalization_chain import (
     create_entity_clustering_chain,
     format_entities_for_clustering,
     parse_clustering_response,

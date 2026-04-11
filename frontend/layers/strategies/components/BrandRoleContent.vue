@@ -37,9 +37,9 @@
 </template>
 
 <script setup lang="ts">
-import type { Phase2Result } from '../types'
+import type { BrandRoleResult } from '../types'
 
 defineProps<{
-  result: Phase2Result | null
+  result: BrandRoleResult | null
 }>()
 </script>

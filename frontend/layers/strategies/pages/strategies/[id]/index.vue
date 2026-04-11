@@ -214,27 +214,34 @@
             :research-questions="researchDesign?.research_questions || []"
             :data-plan="editableDataPlan"
             :slice-blueprint="editableBlueprint"
-            :output-type="researchDesign?.output_type"
+            :output-type="selectedOutputType"
             :output-type-rationale="researchDesign?.output_type_rationale"
             :editing="editingPlan"
             :notes-per-task="notesPerTask"
             @update:data-plan="editableDataPlan = $event"
             @update:slice-blueprint="editableBlueprint = $event"
             @update:notes-per-task="notesPerTask = $event"
+            @update:output-type="selectedOutputType = $event"
           />
 
-          <div class="mt-4 flex items-center gap-3">
-            <UButton
-              :loading="confirmResearchLoading"
-              icon="i-heroicons-check-circle"
-              :disabled="!editableDataPlan.length || isPollingActive"
-              @click="handleConfirmResearch"
-            >
-              {{ currentStatusOrder >= STATUS_ORDER.probing ? '重新确认并采集' : '确认并开始采集' }}
-            </UButton>
-            <UButton variant="outline" :loading="designLoading" icon="i-heroicons-arrow-path" @click="handleDesignResearch">
-              重新生成计划
-            </UButton>
+          <div class="mt-4 flex flex-col gap-2">
+            <div class="flex items-center gap-3">
+              <UButton
+                :loading="confirmResearchLoading"
+                icon="i-heroicons-check-circle"
+                :disabled="!!confirmResearchIssue || isPollingActive"
+                @click="handleConfirmResearch"
+              >
+                {{ currentStatusOrder >= STATUS_ORDER.probing ? '重新确认并采集' : '确认并开始采集' }}
+              </UButton>
+              <UButton variant="outline" :loading="designLoading" icon="i-heroicons-arrow-path" @click="handleDesignResearch">
+                重新生成计划
+              </UButton>
+            </div>
+            <p v-if="confirmResearchIssue" class="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <UIcon name="i-heroicons-exclamation-triangle" class="size-3.5" />
+              {{ confirmResearchIssue }}
+            </p>
           </div>
         </div>
 
@@ -340,34 +347,76 @@
         <div class="flex items-center gap-2">
           <span class="font-bold text-primary-600">④</span>
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">产出生成</h2>
+          <UBadge variant="soft" size="xs" :color="isBrandStrategyPath ? 'primary' : 'warning'">
+            {{ isBrandStrategyPath ? '品牌策略路径' : '市场分析报告路径' }}
+          </UBadge>
         </div>
 
-        <StrategyPhaseCard
-          :phase="1" title="洞察层"
-          :has-result="!!strategy.phase1_result" :can-generate="true" :can-edit="true"
-          :generating="generatingPhase === 1" :saving="savingPhase === 1" :result="strategy.phase1_result"
-          @generate="handleGenerate(1)" @save="(r: Record<string, unknown>) => handleSavePhase(1, r)"
-        >
-          <Phase1Content :result="phase1Data" />
-        </StrategyPhaseCard>
+        <!-- brand_strategy 路径：Insight → Brand Role → Big Idea -->
+        <template v-if="isBrandStrategyPath">
+          <BrandStrategyStageCard
+            stage="insight" title="Insight 洞察"
+            :has-result="!!strategy.insight_result" :can-generate="true" :can-edit="true"
+            :generating="generatingBrandStrategyStage === 'insight'" :saving="savingBrandStrategyStage === 'insight'"
+            :result="strategy.insight_result"
+            @generate="handleGenerateBrandStrategyStage('insight')"
+            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('insight', r)"
+          >
+            <InsightContent :result="insightData" />
+          </BrandStrategyStageCard>
 
-        <StrategyPhaseCard
-          :phase="2" title="策略层"
-          :has-result="!!strategy.phase2_result" :can-generate="canGeneratePhase2" :can-edit="true"
-          :generating="generatingPhase === 2" :saving="savingPhase === 2" :result="strategy.phase2_result"
-          @generate="handleGenerate(2)" @save="(r: Record<string, unknown>) => handleSavePhase(2, r)"
-        >
-          <Phase2Content :result="phase2Data" />
-        </StrategyPhaseCard>
+          <BrandStrategyStageCard
+            stage="brand_role" title="Brand Role 品牌角色"
+            :has-result="!!strategy.brand_role_result" :can-generate="canGenerateBrandRole" :can-edit="true"
+            :generating="generatingBrandStrategyStage === 'brand_role'" :saving="savingBrandStrategyStage === 'brand_role'"
+            :result="strategy.brand_role_result"
+            @generate="handleGenerateBrandStrategyStage('brand_role')"
+            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('brand_role', r)"
+          >
+            <BrandRoleContent :result="brandRoleData" />
+          </BrandStrategyStageCard>
 
-        <StrategyPhaseCard
-          :phase="3" title="创意层"
-          :has-result="!!strategy.phase3_result" :can-generate="canGeneratePhase3" :can-edit="true"
-          :generating="generatingPhase === 3" :saving="savingPhase === 3" :result="strategy.phase3_result"
-          @generate="handleGenerate(3)" @save="(r: Record<string, unknown>) => handleSavePhase(3, r)"
-        >
-          <Phase3Content :result="phase3Data" />
-        </StrategyPhaseCard>
+          <BrandStrategyStageCard
+            stage="big_idea" title="Big Idea 创意"
+            :has-result="!!strategy.big_idea_result" :can-generate="canGenerateBigIdea" :can-edit="true"
+            :generating="generatingBrandStrategyStage === 'big_idea'" :saving="savingBrandStrategyStage === 'big_idea'"
+            :result="strategy.big_idea_result"
+            @generate="handleGenerateBrandStrategyStage('big_idea')"
+            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('big_idea', r)"
+          >
+            <BigIdeaContent :result="bigIdeaData" />
+          </BrandStrategyStageCard>
+        </template>
+
+        <!-- market_report 路径：Agenda Map → Landscape → Strategic Brief -->
+        <template v-else-if="isMarketReportPath">
+          <MarketReportStageCard
+            stage="agenda_map" title="Agenda Map 媒体议程图"
+            :has-result="!!strategy.agenda_map_result" :can-generate="true"
+            :generating="generatingMarketReportStage === 'agenda_map'" :result="strategy.agenda_map_result"
+            @generate="handleGenerateMarketReportStage('agenda_map')"
+          >
+            <AgendaMapContent :result="agendaMapData" />
+          </MarketReportStageCard>
+
+          <MarketReportStageCard
+            stage="landscape" title="Landscape 竞争格局"
+            :has-result="!!strategy.landscape_result" :can-generate="canGenerateLandscape"
+            :generating="generatingMarketReportStage === 'landscape'" :result="strategy.landscape_result"
+            @generate="handleGenerateMarketReportStage('landscape')"
+          >
+            <LandscapeContent :result="landscapeData" />
+          </MarketReportStageCard>
+
+          <MarketReportStageCard
+            stage="strategic_brief" title="Strategic Brief 战略简报"
+            :has-result="!!strategy.strategic_brief_result" :can-generate="canGenerateStrategicBrief"
+            :generating="generatingMarketReportStage === 'strategic_brief'" :result="strategy.strategic_brief_result"
+            @generate="handleGenerateMarketReportStage('strategic_brief')"
+          >
+            <StrategicBriefContent :result="strategicBriefData" />
+          </MarketReportStageCard>
+        </template>
       </div>
     </ClientOnly>
   </div>
@@ -376,13 +425,18 @@
 <script setup lang="ts">
 import type {
   StrategyStatus,
-  Phase1Result,
-  Phase2Result,
-  Phase3Result,
+  InsightResult,
+  BrandRoleResult,
+  BigIdeaResult,
+  AgendaMapResult,
+  LandscapeResult,
+  StrategicBriefResult,
   DataPlanItem,
   SliceBlueprintItem,
   AdjustSliceItem,
+  OutputType,
 } from '../../../types'
+import type { BrandStrategyStage, MarketReportStage } from '../../../composables/useStrategies'
 import { STATUS_MAP, STATUS_ORDER, formatDate, CHANNEL_LABELS } from '../../../composables/useStrategyConstants'
 import { useStrategyPolling } from '../../../composables/useStrategyPolling'
 
@@ -435,11 +489,23 @@ const currentStageIndex = computed(() => {
   if (o <= 1) return 0   // draft, planned → ①
   if (o === 2) return 1   // probing → ②
   if (o <= 3) return 2   // collecting → ③
-  return 3               // ready, phase1_done, phase2_done, completed → ④
+  return 3               // ready, insight_done, brand_role_done, agenda_map_done, landscape_done, completed → ④
 })
 
-const canGeneratePhase2 = computed(() => currentStatusOrder.value >= STATUS_ORDER.phase1_done)
-const canGeneratePhase3 = computed(() => currentStatusOrder.value >= STATUS_ORDER.phase2_done)
+// brand_strategy 路径门控：Insight → Brand Role → Big Idea
+const canGenerateBrandRole = computed(() => currentStatusOrder.value >= STATUS_ORDER.insight_done)
+const canGenerateBigIdea = computed(() => currentStatusOrder.value >= STATUS_ORDER.brand_role_done)
+
+// market_report 路径门控：Agenda Map → Landscape → Strategic Brief
+const canGenerateLandscape = computed(() => currentStatusOrder.value >= STATUS_ORDER.agenda_map_done)
+const canGenerateStrategicBrief = computed(() => currentStatusOrder.value >= STATUS_ORDER.landscape_done)
+
+/** 策略实际的产出路径（以 strategy.output_type 为准；编辑研究计划时以用户选择为准） */
+const effectivePathType = computed<OutputType>(() =>
+  strategy.value?.output_type ?? selectedOutputType.value,
+)
+const isBrandStrategyPath = computed(() => effectivePathType.value === 'brand_strategy')
+const isMarketReportPath = computed(() => effectivePathType.value === 'market_report')
 
 const taskDimensionMap = computed(() => {
   const rd = strategy.value?.research_design as Record<string, unknown> | null | undefined
@@ -449,9 +515,13 @@ const dimensionNames = computed(() =>
   strategy.value?.research_design?.data_plan?.map(d => d.dimension_name) ?? []
 )
 
-const phase1Data = computed(() => (strategy.value?.phase1_result || null) as Phase1Result | null)
-const phase2Data = computed(() => (strategy.value?.phase2_result || null) as Phase2Result | null)
-const phase3Data = computed(() => (strategy.value?.phase3_result || null) as Phase3Result | null)
+const insightData = computed(() => (strategy.value?.insight_result || null) as InsightResult | null)
+const brandRoleData = computed(() => (strategy.value?.brand_role_result || null) as BrandRoleResult | null)
+const bigIdeaData = computed(() => (strategy.value?.big_idea_result || null) as BigIdeaResult | null)
+
+const agendaMapData = computed(() => (strategy.value?.agenda_map_result || null) as AgendaMapResult | null)
+const landscapeData = computed(() => (strategy.value?.landscape_result || null) as LandscapeResult | null)
+const strategicBriefData = computed(() => (strategy.value?.strategic_brief_result || null) as StrategicBriefResult | null)
 
 // 初始化轮询（页面加载时策略已处于 probing/collecting 状态）
 // immediate: true 确保 SSR payload 已有数据时也能触发
@@ -481,6 +551,23 @@ const editingPlan = ref(false)
 const editableDataPlan = ref<DataPlanItem[]>([])
 const editableBlueprint = ref<SliceBlueprintItem[]>([])
 const notesPerTask = ref(50)
+const selectedOutputType = ref<OutputType>('brand_strategy')
+
+/** 确认研究计划的前置校验：output_type 必须与 data_plan 包含的渠道匹配 */
+const confirmResearchIssue = computed<string | null>(() => {
+  if (!editableDataPlan.value.length) return '请先生成研究计划'
+  const hasSocial = editableDataPlan.value.some(
+    dp => (dp.channel || 'social_media') === 'social_media',
+  )
+  const hasNews = editableDataPlan.value.some(dp => dp.channel === 'news_media')
+  if (selectedOutputType.value === 'brand_strategy' && !hasSocial) {
+    return '品牌策略路径需要至少一个 social_media 维度'
+  }
+  if (selectedOutputType.value === 'market_report' && !hasNews) {
+    return '市场分析报告路径需要至少一个 news_media 维度'
+  }
+  return null
+})
 
 // 深拷贝研究计划（确保嵌套数组不共享引用）
 const deepCopyDataPlan = (items: DataPlanItem[]): DataPlanItem[] =>
@@ -501,6 +588,9 @@ watch(researchDesign, (rd) => {
     }
     if (rd.slice_blueprint?.length && !editableBlueprint.value.length) {
       editableBlueprint.value = deepCopyBlueprint(rd.slice_blueprint)
+    }
+    if (rd.output_type) {
+      selectedOutputType.value = rd.output_type
     }
   }
 }, { immediate: true })
@@ -586,6 +676,7 @@ const handleConfirmResearch = async () => {
         data_plan: editableDataPlan.value,
         slice_blueprint: editableBlueprint.value,
       },
+      output_type: selectedOutputType.value,
       notes_per_task: notesPerTask.value,
     })
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
@@ -682,32 +773,51 @@ const handleAdjustSlices = async (adjustments: AdjustSliceItem[]) => {
   }
 }
 
-// ── ④ Phase 生成 ────────────────────────────────────────────────────────────
+// ── ④ Brand Strategy 生成（Insight → Brand Role → Big Idea）──────────────────
 
-const generatingPhase = ref<1 | 2 | 3 | null>(null)
-const savingPhase = ref<1 | 2 | 3 | null>(null)
+const generatingBrandStrategyStage = ref<BrandStrategyStage | null>(null)
+const savingBrandStrategyStage = ref<BrandStrategyStage | null>(null)
 
-const handleGenerate = async (phase: 1 | 2 | 3) => {
-  generatingPhase.value = phase
+const handleGenerateBrandStrategyStage = async (stage: BrandStrategyStage) => {
+  generatingBrandStrategyStage.value = stage
   try {
-    await strategiesApi.generatePhase(strategyId.value, phase)
+    await strategiesApi.generateBrandStrategyStage(strategyId.value, stage)
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
   } finally {
-    generatingPhase.value = null
+    generatingBrandStrategyStage.value = null
   }
 }
 
-const handleSavePhase = async (phase: 1 | 2 | 3, result: Record<string, unknown>) => {
-  savingPhase.value = phase
+const handleSaveBrandStrategyStage = async (
+  stage: BrandStrategyStage,
+  result: Record<string, unknown>,
+) => {
+  savingBrandStrategyStage.value = stage
   try {
-    await strategiesApi.editPhase(strategyId.value, phase, result)
+    await strategiesApi.editBrandStrategyStage(strategyId.value, stage, result)
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
   } finally {
-    savingPhase.value = null
+    savingBrandStrategyStage.value = null
+  }
+}
+
+// ── ④ Market Report 生成（Agenda Map → Landscape → Strategic Brief）─────────
+
+const generatingMarketReportStage = ref<MarketReportStage | null>(null)
+
+const handleGenerateMarketReportStage = async (stage: MarketReportStage) => {
+  generatingMarketReportStage.value = stage
+  try {
+    await strategiesApi.generateMarketReportStage(strategyId.value, stage)
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+  } catch {
+    // 错误已由 useApi 处理
+  } finally {
+    generatingMarketReportStage.value = null
   }
 }
 

@@ -54,14 +54,14 @@
 </template>
 
 <script setup lang="ts">
-import type { Phase1Result } from '../types'
+import type { InsightResult } from '../types'
 import { UTextarea, USelect } from '#components'
 
 const props = defineProps<{
-  result: Phase1Result
+  result: InsightResult
 }>()
 
-const localData = ref<Phase1Result>(JSON.parse(JSON.stringify(props.result)))
+const localData = ref<InsightResult>(JSON.parse(JSON.stringify(props.result)))
 
 const confidenceOptions = [
   { label: 'High', value: 'high' },

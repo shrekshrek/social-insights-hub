@@ -65,7 +65,7 @@ NEWS_TAGGING_USER = """请对以下 {article_count} 篇新闻文章进行标注�
 请以JSON数组格式返回结果（按文章顺序），每篇包含 article_index、relevance、sentiment、article_type、mentioned_entities、key_quotes、summary 字段。"""
 
 
-def create_news_tagging_chain() -> Runnable:
+def create_tagging_chain() -> Runnable:
     """创建新闻逐篇标注链"""
     llm = get_llm(llm_type="chat")
     prompt = ChatPromptTemplate.from_messages([

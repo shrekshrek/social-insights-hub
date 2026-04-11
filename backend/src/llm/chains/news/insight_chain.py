@@ -96,7 +96,7 @@ NEWS_INSIGHT_USER = """以下是 {article_count} 篇相关新闻的标注结果�
 请进行整体分析并输出JSON。"""
 
 
-def create_news_insight_chain() -> Runnable:
+def create_insight_chain() -> Runnable:
     """创建新闻整体分析链"""
     llm = get_llm(llm_type="chat")
     prompt = ChatPromptTemplate.from_messages([

@@ -49,11 +49,15 @@ class AnalysisType(str, Enum):
     MONITOR_SLICE_SUMMARY = "monitor_slice_summary"  # 监测切片整体总结（Stage3）
 
     # 策略链（关联 strategy.social_monitor_id 或 strategy.news_monitor_id）
-    STRATEGY_PROBE_REVIEW = "strategy_probe_review"  # 探测审查
+    STRATEGY_SOCIAL_PROBE_REVIEW = "strategy_social_probe_review"  # 社媒探测审查
+    STRATEGY_NEWS_PROBE_REVIEW = "strategy_news_probe_review"  # 新闻探测审查
     STRATEGY_COVERAGE_CHECK = "strategy_coverage_check"  # 覆盖度验证
-    STRATEGY_PHASE1 = "strategy_phase1"  # Phase 1 洞察层
-    STRATEGY_PHASE2 = "strategy_phase2"  # Phase 2 策略层
-    STRATEGY_PHASE3 = "strategy_phase3"  # Phase 3 创意层
+    STRATEGY_INSIGHT = "strategy_insight"  # brand_strategy 路径 - 第 1 层 洞察
+    STRATEGY_BRAND_ROLE = "strategy_brand_role"  # brand_strategy 路径 - 第 2 层 品牌角色
+    STRATEGY_BIG_IDEA = "strategy_big_idea"  # brand_strategy 路径 - 第 3 层 创意
+    STRATEGY_AGENDA_MAP = "strategy_agenda_map"  # market_report 路径 - 第 1 层 媒体议程图
+    STRATEGY_LANDSCAPE = "strategy_landscape"  # market_report 路径 - 第 2 层 竞争格局
+    STRATEGY_STRATEGIC_BRIEF = "strategy_strategic_brief"  # market_report 路径 - 第 3 层 战略简报
 
     # 新闻媒体分析（关联 news_monitor_id / news_task_id）
     NEWS_TAGGING = "news_tagging"  # 逐篇标注（news_tagging_chain）

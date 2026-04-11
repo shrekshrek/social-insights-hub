@@ -7,7 +7,7 @@ from typing import Any
 from src.social_media.analysis.celery_tasks.llm_utils import (
     invoke_chain_with_stats_sync,
 )
-from src.llm.chains.attribute_normalization_chain import (
+from src.llm.chains.social.attribute_normalization_chain import (
     create_attribute_normalization_chain,
     parse_normalization_response,
 )

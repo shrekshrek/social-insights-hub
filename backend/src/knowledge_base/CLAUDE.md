@@ -1,7 +1,7 @@
 # Knowledge Base 模块
 
 市场知识库：文档上传 → 解析 → 分块 → 向量化（pgvector）→ RAG 检索。
-策略模块通过 `retrieve_market_context()` 在 Phase1/2 生成前注入市场背景。
+策略模块通过 `_retrieve_strategy_market_context()` 在各产出 stage 生成前注入市场背景（brand_strategy: Insight/Brand Role/Big Idea；market_report: Agenda Map/Landscape/Strategic Brief）。
 
 ## Public Interface
 

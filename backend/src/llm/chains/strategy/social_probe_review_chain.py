@@ -1,5 +1,6 @@
-"""Strategy Probe Review Chain — 探测数据质量审查
+"""Strategy Social Probe Review Chain — 社媒探测数据质量审查
 
+与 `news_probe_review_chain` 对称，专门审查策略研究流程中 social_media 渠道的 probe 任务。
 基于探测采集（≈20 条）的分析结果，评估每个关键词×平台任务的话题相关性：
 - 客观规则（代码层）：数量、广告占比 → 明确 pass/fail（由调用方处理）
 - 语义判断（LLM 层）：话题是否对应研究维度的研究问题（模糊案例）

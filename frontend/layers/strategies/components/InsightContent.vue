@@ -62,10 +62,10 @@
 </template>
 
 <script setup lang="ts">
-import type { Phase1Result } from '../types'
+import type { InsightResult } from '../types'
 import { UBadge } from '#components'
 
 defineProps<{
-  result: Phase1Result | null
+  result: InsightResult | null
 }>()
 </script>

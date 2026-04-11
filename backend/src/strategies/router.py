@@ -26,7 +26,7 @@ from .schemas import (
     DesignResearchRequest,
     DesignResearchResponse,
     ParseBriefResponse,
-    PhaseResultEdit,
+    StageResultEdit,
     ProbeStatusResponse,
     RefineProbeRequest,
     RefineProbeResponse,
@@ -207,6 +207,7 @@ async def confirm_research(
     """确认研究计划，一键创建 SocialMonitor 和探测任务，状态推进到 probing"""
     return await service.confirm_research(
         db, strategy, data.research_design, current_user.id,
+        output_type=data.output_type,
         notes_per_task=data.notes_per_task,
         probe_notes=data.probe_notes,
     )
@@ -325,100 +326,215 @@ async def adjust_slices(
 
 # ==================== 生成端点 ====================
 
+# ---- brand_strategy 路径产出生成（insight → brand_role → big_idea，三层递进） ----
+
 
 @router.post(
-    "/{strategy_id}/generate/phase1",
+    "/{strategy_id}/generate/insight",
     response_model=StrategyRead,
     status_code=status.HTTP_200_OK,
-    summary="生成 Phase 1 洞察层",
+    summary="生成 brand_strategy 第 1 层: Insight (洞察)",
 )
-async def generate_phase1(
+async def generate_insight(
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """AI 生成 Phase 1: Social Tension + Brand Opportunity"""
-    updated = await service.generate_phase1(db, strategy)
+    """AI 生成 Insight: Social Tension + Brand Opportunity"""
+    updated = await service.generate_insight(db, strategy)
     return StrategyRead.from_orm_full(updated)
 
 
 @router.post(
-    "/{strategy_id}/generate/phase2",
+    "/{strategy_id}/generate/brand-role",
     response_model=StrategyRead,
     status_code=status.HTTP_200_OK,
-    summary="生成 Phase 2 策略层",
+    summary="生成 brand_strategy 第 2 层: Brand Role (品牌角色)",
 )
-async def generate_phase2(
+async def generate_brand_role(
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """AI 生成 Phase 2: Brand Social Role + Social Strategy"""
-    updated = await service.generate_phase2(db, strategy)
+    """AI 生成 Brand Role: Brand Social Role + Social Strategy"""
+    updated = await service.generate_brand_role(db, strategy)
     return StrategyRead.from_orm_full(updated)
 
 
 @router.post(
-    "/{strategy_id}/generate/phase3",
+    "/{strategy_id}/generate/big-idea",
     response_model=StrategyRead,
     status_code=status.HTTP_200_OK,
-    summary="生成 Phase 3 创意层",
+    summary="生成 brand_strategy 第 3 层: Big Idea (创意)",
 )
-async def generate_phase3(
+async def generate_big_idea(
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """AI 生成 Phase 3: Big Idea + Content Strategy"""
-    updated = await service.generate_phase3(db, strategy)
+    """AI 生成 Big Idea: Big Idea + Content Strategy"""
+    updated = await service.generate_big_idea(db, strategy)
+    return StrategyRead.from_orm_full(updated)
+
+
+# ---- market_report 路径产出生成（agenda_map → landscape → strategic_brief，三层递进） ----
+
+
+@router.post(
+    "/{strategy_id}/generate/agenda-map",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="生成 market_report 第 1 层: Agenda Map (媒体议程图)",
+)
+async def generate_agenda_map(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """AI 生成 Agenda Map: 媒体议程图"""
+    updated = await service.generate_agenda_map(db, strategy)
+    return StrategyRead.from_orm_full(updated)
+
+
+@router.post(
+    "/{strategy_id}/generate/landscape",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="生成 market_report 第 2 层: Landscape (竞争格局)",
+)
+async def generate_landscape(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """AI 生成 Landscape: 竞争格局"""
+    updated = await service.generate_landscape(db, strategy)
+    return StrategyRead.from_orm_full(updated)
+
+
+@router.post(
+    "/{strategy_id}/generate/strategic-brief",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="生成 market_report 第 3 层: Strategic Brief (战略简报)",
+)
+async def generate_strategic_brief(
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """AI 生成 Strategic Brief: 战略简报"""
+    updated = await service.generate_strategic_brief(db, strategy)
     return StrategyRead.from_orm_full(updated)
 
 
 # ==================== 编辑端点 ====================
 
+# ---- brand_strategy 路径编辑端点 ----
+
 
 @router.put(
-    "/{strategy_id}/phase1",
+    "/{strategy_id}/insight",
     response_model=StrategyRead,
     status_code=status.HTTP_200_OK,
-    summary="编辑 Phase 1 结果",
+    summary="编辑 Insight 结果",
 )
-async def edit_phase1(
-    data: PhaseResultEdit,
+async def edit_insight(
+    data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """编辑 Phase 1 结果（自动清除 Phase 2/3）"""
-    updated = await service.edit_phase_result(db, strategy, phase=1, result=data.result)
+    """编辑 Insight 结果（自动清除 brand_role/big_idea）"""
+    updated = await service.edit_brand_strategy_result(
+        db, strategy, stage="insight", result=data.result
+    )
     return StrategyRead.from_orm_full(updated)
 
 
 @router.put(
-    "/{strategy_id}/phase2",
+    "/{strategy_id}/brand-role",
     response_model=StrategyRead,
     status_code=status.HTTP_200_OK,
-    summary="编辑 Phase 2 结果",
+    summary="编辑 Brand Role 结果",
 )
-async def edit_phase2(
-    data: PhaseResultEdit,
+async def edit_brand_role(
+    data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """编辑 Phase 2 结果（自动清除 Phase 3）"""
-    updated = await service.edit_phase_result(db, strategy, phase=2, result=data.result)
+    """编辑 Brand Role 结果（自动清除 big_idea）"""
+    updated = await service.edit_brand_strategy_result(
+        db, strategy, stage="brand_role", result=data.result
+    )
     return StrategyRead.from_orm_full(updated)
 
 
 @router.put(
-    "/{strategy_id}/phase3",
+    "/{strategy_id}/big-idea",
     response_model=StrategyRead,
     status_code=status.HTTP_200_OK,
-    summary="编辑 Phase 3 结果",
+    summary="编辑 Big Idea 结果",
 )
-async def edit_phase3(
-    data: PhaseResultEdit,
+async def edit_big_idea(
+    data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """编辑 Phase 3 结果"""
-    updated = await service.edit_phase_result(db, strategy, phase=3, result=data.result)
+    """编辑 Big Idea 结果"""
+    updated = await service.edit_brand_strategy_result(
+        db, strategy, stage="big_idea", result=data.result
+    )
+    return StrategyRead.from_orm_full(updated)
+
+
+# ---- market_report 路径编辑端点 ----
+
+
+@router.put(
+    "/{strategy_id}/agenda-map",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="编辑 Agenda Map 结果",
+)
+async def edit_agenda_map(
+    data: StageResultEdit,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """编辑 Agenda Map 结果（自动清除 landscape/strategic_brief）"""
+    updated = await service.edit_market_report_result(
+        db, strategy, stage="agenda_map", result=data.result
+    )
+    return StrategyRead.from_orm_full(updated)
+
+
+@router.put(
+    "/{strategy_id}/landscape",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="编辑 Landscape 结果",
+)
+async def edit_landscape(
+    data: StageResultEdit,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """编辑 Landscape 结果（自动清除 strategic_brief）"""
+    updated = await service.edit_market_report_result(
+        db, strategy, stage="landscape", result=data.result
+    )
+    return StrategyRead.from_orm_full(updated)
+
+
+@router.put(
+    "/{strategy_id}/strategic-brief",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="编辑 Strategic Brief 结果",
+)
+async def edit_strategic_brief(
+    data: StageResultEdit,
+    strategy: Strategy = Depends(validate_strategy_owner),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """编辑 Strategic Brief 结果"""
+    updated = await service.edit_market_report_result(
+        db, strategy, stage="strategic_brief", result=data.result
+    )
     return StrategyRead.from_orm_full(updated)
 
 

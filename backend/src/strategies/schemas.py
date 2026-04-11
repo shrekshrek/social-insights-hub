@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -11,6 +11,15 @@ from src.schemas import CustomBaseModel, PaginatedResponse
 
 if TYPE_CHECKING:
     from src.strategies.models import Strategy
+
+
+# 产出路径：
+#   brand_strategy 填充 insight_result / brand_role_result / big_idea_result（三层递进）
+#   market_report  填充 agenda_map_result / landscape_result / strategic_brief_result（三层递进）
+OutputType = Literal["brand_strategy", "market_report"]
+
+# 数据来源层级：primary = 直接输入，background = RAG 补充背景
+PrimarySource = Literal["social_media", "news_media"]
 
 
 # ==================== Brand Brief ====================
@@ -54,7 +63,7 @@ class StrategyUpdate(CustomBaseModel):
     brand_brief: BrandBrief | None = None
 
 
-class PhaseResultEdit(CustomBaseModel):
+class StageResultEdit(CustomBaseModel):
     """编辑阶段结果请求"""
 
     result: dict = Field(..., description="阶段结果 JSON")
@@ -70,21 +79,38 @@ class DesignResearchRequest(CustomBaseModel):
 
 
 class DesignResearchResponse(CustomBaseModel):
-    """AI 研究设计响应"""
+    """AI 研究设计响应
+
+    primary_sources / output_type 由 research_design_chain 根据决策表硬性推导：
+    - 含 social_media 维度 → primary_sources 含 social_media；默认 output_type=brand_strategy
+    - 仅含 news_media 维度 → primary_sources=[news_media]；强制 output_type=market_report
+    """
 
     understanding_summary: str = Field("", description="AI 对分析需求的理解")
     research_questions: list[dict[str, Any]] = Field(default_factory=list)
     data_plan: list[dict[str, Any]] = Field(default_factory=list)
     slice_blueprint: list[dict[str, Any]] = Field(default_factory=list)
-    output_type: str = Field("brand_strategy")
+    primary_sources: list[PrimarySource] = Field(
+        default_factory=list,
+        description="本次研究计划的主数据源（按 data_plan 维度推导），brand_strategy 必须含 social_media",
+    )
+    output_type: OutputType = Field("brand_strategy")
     output_type_rationale: str = Field("")
 
 
 class ConfirmResearchRequest(CustomBaseModel):
-    """确认研究计划，创建 SocialMonitor + 探测任务"""
+    """确认研究计划，创建 SocialMonitor + 探测任务
+
+    output_type 由用户在前端显式选择并回传，后端校验其是否满足决策表：
+    - brand_strategy 要求 research_design.primary_sources 包含 social_media
+    - market_report 无社媒硬性要求，news_media-only 场景下会被前端强制选中
+    """
 
     research_design: dict[str, Any] = Field(
         ..., description="用户编辑后的研究计划（完整 JSON）"
+    )
+    output_type: OutputType = Field(
+        ..., description="用户显式选择的产出路径，后端会校验与 primary_sources 的一致性"
     )
     notes_per_task: int = Field(
         50, ge=10, le=100, description="每个任务的全量采集数量"
@@ -319,10 +345,15 @@ class StrategyRead(CustomBaseModel):
     coverage_check_result: dict | None = None
 
     # ④ 产出生成
-    output_type: str | None = None
-    phase1_result: dict | None = None
-    phase2_result: dict | None = None
-    phase3_result: dict | None = None
+    output_type: OutputType | None = None
+    # brand_strategy 路径（insight → brand_role → big_idea）
+    insight_result: dict | None = None
+    brand_role_result: dict | None = None
+    big_idea_result: dict | None = None
+    # market_report 路径（agenda_map → landscape → strategic_brief）
+    agenda_map_result: dict | None = None
+    landscape_result: dict | None = None
+    strategic_brief_result: dict | None = None
 
     # 关联
     social_monitor_id: int | None = None
@@ -365,10 +396,13 @@ class StrategyRead(CustomBaseModel):
             probe_review_result=strategy.probe_review_result,
             probe_round=strategy.probe_round,
             coverage_check_result=strategy.coverage_check_result,
-            output_type=strategy.output_type,
-            phase1_result=strategy.phase1_result,
-            phase2_result=strategy.phase2_result,
-            phase3_result=strategy.phase3_result,
+            output_type=strategy.output_type,  # type: ignore[arg-type]
+            insight_result=strategy.insight_result,
+            brand_role_result=strategy.brand_role_result,
+            big_idea_result=strategy.big_idea_result,
+            agenda_map_result=strategy.agenda_map_result,
+            landscape_result=strategy.landscape_result,
+            strategic_brief_result=strategy.strategic_brief_result,
             social_monitor_id=strategy.social_monitor_id,
             news_monitor_id=strategy.news_monitor_id,
             slices=slices,

@@ -14,12 +14,12 @@ import time
 from collections import defaultdict, Counter
 from typing import Any, Dict
 
-from src.llm.chains.category_normalization_chain import (
+from src.llm.chains.social.category_normalization_chain import (
     create_category_normalization_chain,
     format_categories_for_normalization,
     parse_category_normalization_response,
 )
-from src.llm.chains.opinion_normalization_chain import (
+from src.llm.chains.social.opinion_normalization_chain import (
     create_opinion_normalization_chain,
     format_opinions_for_normalization,
     parse_normalization_response,

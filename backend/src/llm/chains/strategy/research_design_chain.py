@@ -1,8 +1,25 @@
 """Strategy Research Design Chain — 多渠道研究设计
 
-接收各渠道的 channel_brief（由 strategy_brief_parser_chain 生成），
+接收各渠道的 channel_brief（由 brief_parser_chain 生成），
 将研究方向分解为结构化的研究计划：
-研究问题 → 数据采集方案（社媒 + 新闻） → 切片蓝图 → 产出类型建议。
+研究问题 → 数据采集方案（社媒 + 新闻） → 切片蓝图 → 主数据源判定 → 产出类型建议。
+
+## 两条产出路径（核心架构）
+
+本模块不再把三个渠道（social_media / news_media / knowledge_base）视为平级，
+而是按"主数据源"划分两条独立产出路径：
+
+| 数据形态 (primary_sources)                  | 产出路径 (output_type) | 后续链                                               |
+|----------------------------------------------|-----------------------|------------------------------------------------------|
+| 含 social_media (有/无 news_media)           | brand_strategy (默认) | insight → brand_role → big_idea (Tension→Role→Idea)  |
+| 仅 news_media（无 social_media）             | market_report (强制)  | agenda_map → landscape → strategic_brief             |
+
+- brand_strategy 的 insight/brand_role/big_idea prompt 结构性依赖消费者声音（KOL/topic_aspects/pains/gains），
+  纯新闻无法跑通——因此仅 news_media 时必须强制走 market_report 路径。
+- knowledge_base 不是第三条路径，它只作为 insight / brand_role 层的补充背景（RAG 注入 `{market_context}`）。
+
+本链的 `primary_sources` / `output_type` 字段是下游 service.confirm_research
+校验的硬性依据，不能由 LLM 自由发挥。
 """
 
 from __future__ import annotations
@@ -21,9 +38,31 @@ logger = logging.getLogger(__name__)
 SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队设计数据驱动的多渠道研究计划。
 
 ## 任务
-根据输入的渠道研究方向，输出结构化的研究计划：研究问题 → 数据采集方案 → 切片蓝图 → 产出类型建议。不需要追问，用你的专业判断补全细节。
+根据输入的渠道研究方向，输出结构化的研究计划：研究问题 → 数据采集方案 → 切片蓝图 → 主数据源判定 → 产出类型建议。不需要追问，用你的专业判断补全细节。
 
 输入可能包含"社媒渠道研究方向"和/或"新闻渠道研究方向"——**只为输入中出现的渠道生成对应的 data_plan 维度**。如果只有社媒方向则只生成 social_media 维度；如果只有新闻方向则只生成 news_media 维度；两者都有则两种都生成。渠道分配已由上游确认，无需重新评估适配度。
+
+## 产出路径决策表（硬性规则，不可自由发挥）
+
+`primary_sources` 字段枚举本次研究计划实际使用的主数据源（仅看 data_plan 维度），
+`output_type` 字段严格按下表推导：
+
+| data_plan 维度组合                      | primary_sources                   | output_type          |
+|-----------------------------------------|-----------------------------------|----------------------|
+| 同时含 social_media 和 news_media 维度  | ["social_media", "news_media"]    | brand_strategy       |
+| 仅含 social_media 维度                  | ["social_media"]                  | brand_strategy       |
+| 仅含 news_media 维度                    | ["news_media"]                    | market_report        |
+
+**推导原则**：
+- 只要 data_plan 中有任何 social_media 维度，primary_sources 就必须包含 "social_media"
+- 只要 data_plan 中有任何 news_media 维度，primary_sources 就必须包含 "news_media"
+- 若 primary_sources 包含 social_media → output_type 必须是 brand_strategy（insight/brand_role/big_idea 的 prompt 结构性依赖消费者声音，brand_strategy 是它的承载路径）
+- 若 primary_sources 仅有 news_media（不含 social_media）→ output_type 必须是 market_report（insight/brand_role/big_idea 的消费者声音输入为空，跑不出 Social Tension / Brand Social Role / Big Idea，必须走 market_report 路径）
+
+**严禁**：
+- 把 knowledge_base 写进 primary_sources（知识库只是 brand_strategy/market_report 三阶段的 RAG 补充背景，不是主数据源）
+- 在 data_plan 里只有 news_media 维度的情况下却输出 output_type=brand_strategy
+- 在 primary_sources 没有 social_media 的情况下却输出 output_type=brand_strategy
 
 ## 研究设计原则
 
@@ -129,8 +168,9 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
       "serves_questions": ["rq1"]
     }}
   ],
+  "primary_sources": ["social_media"],
   "output_type": "brand_strategy",
-  "output_type_rationale": "选择理由（一句话）"
+  "output_type_rationale": "选择理由（一句话，必须说明为何依据决策表推导出该 output_type）"
 }}
 
 channel 可选值: social_media（默认，需 platforms）/ news_media（无 platforms）
@@ -138,7 +178,8 @@ platforms 可选值（仅 social_media）: douyin / weibo / bilibili / xiaohongs
 dimension 可选值: brand_voice / consumer_voice / competitive / industry
 priority 可选值: high / medium / low
 mode 可选值: 品牌聚焦 / 大盘分析
-output_type 可选值: brand_strategy / insight_report
+primary_sources 可选值（数组，按决策表推导）: social_media / news_media
+output_type 可选值（按决策表推导）: brand_strategy / market_report
 
 ## 要求
 - understanding_summary: 必填
@@ -149,6 +190,9 @@ output_type 可选值: brand_strategy / insight_report
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
 - 每个 data_plan 条目的 question_ids 必须引用 research_questions 中存在的 id（该维度的数据采集服务哪些研究问题）
+- primary_sources: 按上文"产出路径决策表"从 data_plan 的 channel 分布推导，非空数组
+- output_type: 按上文"产出路径决策表"从 primary_sources 推导，不得违反决策表
+- output_type_rationale: 必须引用决策表说明为何是 brand_strategy 或 market_report
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -204,8 +248,44 @@ def format_research_design_inputs(
     }
 
 
+def _derive_primary_sources_and_output_type(
+    data_plan: list[dict[str, Any]],
+) -> tuple[list[str], str]:
+    """根据决策表从 data_plan 的 channel 分布推导 primary_sources + output_type。
+
+    这是硬性规则，不依赖 LLM 的自我申报——LLM 可能写错，后端必须能单独基于 data_plan
+    复核，防止 brand_strategy 路径（Insight/Brand Role/Big Idea）在纯新闻数据上跑。
+    """
+    has_social = any(
+        (dp.get("channel") or "social_media") == "social_media"
+        for dp in data_plan
+    )
+    has_news = any((dp.get("channel") == "news_media") for dp in data_plan)
+
+    primary_sources: list[str] = []
+    if has_social:
+        primary_sources.append("social_media")
+    if has_news:
+        primary_sources.append("news_media")
+
+    # 决策表：含 social_media → brand_strategy；否则 market_report
+    if has_social:
+        output_type = "brand_strategy"
+    elif has_news:
+        output_type = "market_report"
+    else:
+        # 空 data_plan 的兜底值，实际会被上游校验拦截
+        output_type = "brand_strategy"
+
+    return primary_sources, output_type
+
+
 def parse_research_design_response(response_text: str) -> dict[str, Any]:
-    """解析研究设计 Chain 输出，失败时抛出 ValueError"""
+    """解析研究设计 Chain 输出，失败时抛出 ValueError
+
+    primary_sources / output_type 不信任 LLM 自报值，统一由 data_plan 的 channel
+    分布按决策表推导覆盖——即使 LLM 写错也不影响下游路径判定。
+    """
     text = response_text.strip()
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0]
@@ -222,7 +302,20 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
     result.setdefault("research_questions", [])
     result.setdefault("data_plan", [])
     result.setdefault("slice_blueprint", [])
-    result.setdefault("output_type", "brand_strategy")
     result.setdefault("output_type_rationale", "")
+
+    # 硬性覆盖 primary_sources + output_type（不信任 LLM 自报）
+    derived_sources, derived_type = _derive_primary_sources_and_output_type(
+        result["data_plan"]
+    )
+    llm_reported_type = result.get("output_type")
+    if llm_reported_type and llm_reported_type != derived_type:
+        logger.warning(
+            "Research Design Chain 输出 output_type=%s 与决策表推导 %s 不一致，已强制修正",
+            llm_reported_type,
+            derived_type,
+        )
+    result["primary_sources"] = derived_sources
+    result["output_type"] = derived_type
 
     return result

@@ -184,10 +184,43 @@
       </div>
     </div>
 
-    <!-- 产出类型 -->
-    <div v-if="outputType" class="text-sm text-gray-500">
-      <span class="font-medium">产出类型：</span>{{ outputType }}
-      <span v-if="outputTypeRationale" class="text-gray-400 ml-1">— {{ outputTypeRationale }}</span>
+    <!-- 产出类型（用户显式选择；决策表见 research_design_chain） -->
+    <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-gray-600 dark:text-gray-400">产出路径</span>
+        <UBadge
+          v-if="outputTypeLocked"
+          variant="soft"
+          color="warning"
+          size="xs"
+        >
+          当前数据计划仅支持 {{ OUTPUT_TYPE_LABELS[effectiveOutputType] }}
+        </UBadge>
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <label
+          v-for="opt in OUTPUT_TYPE_OPTIONS"
+          :key="opt.value"
+          class="flex items-start gap-2 text-sm cursor-pointer"
+          :class="{ 'opacity-40 cursor-not-allowed': !isOptionAvailable(opt.value) }"
+        >
+          <input
+            type="radio"
+            class="mt-0.5"
+            :value="opt.value"
+            :checked="effectiveOutputType === opt.value"
+            :disabled="!editing || !isOptionAvailable(opt.value)"
+            @change="handleOutputTypeChange(opt.value)"
+          >
+          <div class="flex-1 min-w-0">
+            <div class="font-medium">{{ OUTPUT_TYPE_LABELS[opt.value] }}</div>
+            <div class="text-xs text-gray-500">{{ opt.hint }}</div>
+          </div>
+        </label>
+      </div>
+      <p v-if="outputTypeRationale" class="text-xs text-gray-400">
+        AI 建议理由：{{ outputTypeRationale }}
+      </p>
     </div>
 
     <!-- 采集参数 -->
@@ -217,17 +250,32 @@
 </template>
 
 <script setup lang="ts">
-import type { DataPlanItem, SliceBlueprintItem, ResearchQuestion } from '../types'
-import { PLATFORM_OPTIONS, platformLabel } from '../composables/useStrategyConstants'
+import type { DataPlanItem, OutputType, SliceBlueprintItem, ResearchQuestion } from '../types'
+import {
+  OUTPUT_TYPE_LABELS,
+  PLATFORM_OPTIONS,
+  platformLabel,
+} from '../composables/useStrategyConstants'
 
 const NOTES_OPTIONS = [50, 100] as const
+
+const OUTPUT_TYPE_OPTIONS: ReadonlyArray<{ value: OutputType; hint: string }> = [
+  {
+    value: 'brand_strategy',
+    hint: '消费者洞察主导：Social Tension → Brand Social Role → Big Idea（要求研究计划含 social_media 维度）',
+  },
+  {
+    value: 'market_report',
+    hint: '媒体视角主导：媒体议程图 → 竞争格局 → 战略简报（要求研究计划含 news_media 维度）',
+  },
+] as const
 
 const props = defineProps<{
   understandingSummary?: string
   researchQuestions: ResearchQuestion[]
   dataPlan: DataPlanItem[]
   sliceBlueprint: SliceBlueprintItem[]
-  outputType?: string
+  outputType?: OutputType
   outputTypeRationale?: string
   editing: boolean
   notesPerTask: number
@@ -237,7 +285,48 @@ const emit = defineEmits<{
   'update:dataPlan': [value: DataPlanItem[]]
   'update:sliceBlueprint': [value: SliceBlueprintItem[]]
   'update:notesPerTask': [value: number]
+  'update:outputType': [value: OutputType]
 }>()
+
+const channelAvailability = computed(() => {
+  const hasSocial = props.dataPlan.some(dp => (dp.channel || 'social_media') === 'social_media')
+  const hasNews = props.dataPlan.some(dp => dp.channel === 'news_media')
+  return { hasSocial, hasNews }
+})
+
+const isOptionAvailable = (opt: OutputType): boolean => {
+  const { hasSocial, hasNews } = channelAvailability.value
+  if (opt === 'brand_strategy') return hasSocial
+  if (opt === 'market_report') return hasNews
+  return false
+}
+
+// 当仅一种路径可选时锁定；优先 brand_strategy（若两者都可选则尊重 props.outputType）
+const effectiveOutputType = computed<OutputType>(() => {
+  const brandOk = isOptionAvailable('brand_strategy')
+  const marketOk = isOptionAvailable('market_report')
+  if (brandOk && !marketOk) return 'brand_strategy'
+  if (!brandOk && marketOk) return 'market_report'
+  return props.outputType ?? 'brand_strategy'
+})
+
+const outputTypeLocked = computed(() => {
+  const brandOk = isOptionAvailable('brand_strategy')
+  const marketOk = isOptionAvailable('market_report')
+  return brandOk !== marketOk
+})
+
+// 当锁定或 data_plan 变化时同步回父组件
+watch(effectiveOutputType, (next, prev) => {
+  if (next !== prev && next !== props.outputType) {
+    emit('update:outputType', next)
+  }
+}, { immediate: true })
+
+const handleOutputTypeChange = (value: OutputType) => {
+  if (!isOptionAvailable(value)) return
+  emit('update:outputType', value)
+}
 
 const keywordInputRefs = ref<Record<number, HTMLInputElement | null>>({})
 

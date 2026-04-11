@@ -87,7 +87,12 @@ draft → planned → probing → collecting → ready → phase1_done → phase
 ### ④ 产出生成 (ready → completed)
 
 Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
-Phase 1/2/3 Chain 分别加载社媒切片数据（`load_strategy_inputs`）和新闻切片数据（`load_strategy_news_inputs`），通过 `_format_news_media_section` 将 NewsSlice 数据格式化为媒体视角补充段落，LLM 交叉验证消费者声音与媒体报道。
+Phase 1/2/3 Chain 三源数据统一消费：
+1. **社媒切片**（`load_strategy_inputs`）→ 消费者声音主轴
+2. **新闻切片**（`load_strategy_news_inputs`）→ 媒体视角补充（通过 `_format_news_media_section`）
+3. **知识库背景**（`_retrieve_strategy_market_context`）→ 市场/行业结构化背景（RAG 注入 `{market_context}` 占位符，失败时优雅降级为 ""）
+
+每个 Phase 生成后，`phase{1,2,3}_result.data_sources` 会记录本次实际消费的三渠道布尔标记（`social_media` / `news_media` / `knowledge_base`），前端据此展示"基于 X 渠道的分析"。`AnalysisJob.source_count` 取社媒切片 + 新闻切片总数（KB 不计入，它是补充背景而非分析输入单元）。
 
 ## LLM Chain
 

@@ -78,7 +78,7 @@ draft → planned → probing → collecting → ready ┬─ [brand_strategy] �
 
 1. 前端轮询 `probe-status`
    - 社媒：爬虫采集约 20 条，跳过评论，LLM 打标（NEWS/POST 分析链）
-   - 新闻：`run_news_probe_task` 三渠道搜索（baidu + sogou + duckduckgo），各 25 条元数据落库，不抓全文、不打标
+   - 新闻：`run_news_probe_task` 三渠道搜索（baidu + sogou + duckduckgo），每渠道上限 20 条，URL 去重后落库元数据，不抓全文、不打标
 2. 所有任务准备就绪后后台自动运行 probe 审查
    - 社媒：规则分流 + `strategy_social_probe_review_chain`（LLM 判定模糊案例）
    - 新闻：`strategy_news_probe_review_chain` 对每个任务并行 LLM 评估（基于卡片 title/source/tier/snippet + 维度→研究问题映射）

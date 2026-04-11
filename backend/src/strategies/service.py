@@ -986,7 +986,13 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         slices_data, news_slices_data, market_context="",
         primary_channel="news_media",
     )
-    logger.info("Strategy %d Strategic Brief 生成完成 (%.1fs)", strategy.id, duration)
+    # 埋点：观察 evidence_refs 实际产出规模，为后续决定是否需要路径校验提供数据
+    priorities = result.get("strategic_priorities") or []
+    total_refs = sum(len(sp.get("evidence_refs") or []) for sp in priorities)
+    logger.info(
+        "Strategy %d Strategic Brief 生成完成 (%.1fs): %d priorities, %d evidence_refs",
+        strategy.id, duration, len(priorities), total_refs,
+    )
 
     now = datetime.now(timezone.utc)
     job.status = "completed"

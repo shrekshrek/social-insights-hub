@@ -1,6 +1,7 @@
 """策略报告 Word 导出
 
-生成包含 3 个阶段结果的 Word 文档。
+生成 brand_strategy 路径 3 个递进层结果的 Word 文档
+（insight → brand_role → big_idea）。
 复用 analysis/export_docx 的样式设置和 Markdown 渲染。
 """
 
@@ -26,14 +27,14 @@ def generate_strategy_docx(strategy: Strategy) -> BytesIO:
     # 封面
     _add_cover(doc, strategy)
 
-    # Phase 1
-    _add_phase1_section(doc, strategy.phase1_result)
+    # 洞察层
+    _add_insight_section(doc, strategy.insight_result)
 
-    # Phase 2
-    _add_phase2_section(doc, strategy.phase2_result)
+    # 品牌角色层
+    _add_brand_role_section(doc, strategy.brand_role_result)
 
-    # Phase 3
-    _add_phase3_section(doc, strategy.phase3_result)
+    # 创意层
+    _add_big_idea_section(doc, strategy.big_idea_result)
 
     buf = BytesIO()
     doc.save(buf)
@@ -65,16 +66,16 @@ def _add_cover(doc: Document, strategy: Strategy) -> None:
     doc.add_page_break()
 
 
-def _add_phase1_section(doc: Document, phase1: dict | None) -> None:
-    """Phase 1: Social Tension + Brand Opportunity"""
-    doc.add_heading("Phase 1: 洞察层", level=1)
+def _add_insight_section(doc: Document, insight: dict | None) -> None:
+    """第 1 层 Insight (洞察): Social Tension + Brand Opportunity"""
+    doc.add_heading("第 1 层 Insight: 洞察", level=1)
 
-    if not phase1:
+    if not insight:
         doc.add_paragraph("（未完成）")
         return
 
     # Social Tensions
-    tensions = phase1.get("social_tensions", [])
+    tensions = insight.get("social_tensions", [])
     if tensions:
         doc.add_heading("Social Tension", level=2)
         for i, t in enumerate(tensions):
@@ -86,7 +87,7 @@ def _add_phase1_section(doc: Document, phase1: dict | None) -> None:
             _add_evidence_list(doc, t.get("evidence", []))
 
     # Brand Opportunities
-    opportunities = phase1.get("brand_opportunities", [])
+    opportunities = insight.get("brand_opportunities", [])
     if opportunities:
         doc.add_heading("Brand Opportunity", level=2)
         for i, o in enumerate(opportunities):
@@ -98,16 +99,16 @@ def _add_phase1_section(doc: Document, phase1: dict | None) -> None:
             _add_evidence_list(doc, o.get("evidence", []))
 
 
-def _add_phase2_section(doc: Document, phase2: dict | None) -> None:
-    """Phase 2: Brand Social Role + Social Strategy"""
-    doc.add_heading("Phase 2: 策略层", level=1)
+def _add_brand_role_section(doc: Document, brand_role: dict | None) -> None:
+    """第 2 层 Brand Role (品牌角色): Brand Social Role + Social Strategy"""
+    doc.add_heading("第 2 层 Brand Role: 品牌角色", level=1)
 
-    if not phase2:
+    if not brand_role:
         doc.add_paragraph("（未完成）")
         return
 
     # Brand Social Role
-    role = phase2.get("brand_social_role", {})
+    role = brand_role.get("brand_social_role", {})
     if role:
         doc.add_heading("Brand Social Role", level=2)
         if role.get("statement"):
@@ -120,31 +121,31 @@ def _add_phase2_section(doc: Document, phase2: dict | None) -> None:
         _add_evidence_list(doc, role.get("evidence", []))
 
     # Social Strategy
-    strategy = phase2.get("social_strategy", {})
-    if strategy:
+    social_strategy = brand_role.get("social_strategy", {})
+    if social_strategy:
         doc.add_heading("Social Strategy", level=2)
-        if strategy.get("statement"):
+        if social_strategy.get("statement"):
             p = doc.add_paragraph()
-            run = p.add_run(strategy["statement"])
+            run = p.add_run(social_strategy["statement"])
             run.bold = True
             run.font.size = Pt(12)
-        if strategy.get("core_message"):
-            doc.add_paragraph(f"核心信息: {strategy['core_message']}")
-        if strategy.get("rhythm"):
-            doc.add_paragraph(f"传播节奏: {strategy['rhythm']}")
-        _add_evidence_list(doc, strategy.get("evidence", []))
+        if social_strategy.get("core_message"):
+            doc.add_paragraph(f"核心信息: {social_strategy['core_message']}")
+        if social_strategy.get("rhythm"):
+            doc.add_paragraph(f"传播节奏: {social_strategy['rhythm']}")
+        _add_evidence_list(doc, social_strategy.get("evidence", []))
 
 
-def _add_phase3_section(doc: Document, phase3: dict | None) -> None:
-    """Phase 3: Big Idea + Content Strategy"""
-    doc.add_heading("Phase 3: 创意层", level=1)
+def _add_big_idea_section(doc: Document, big_idea: dict | None) -> None:
+    """第 3 层 Big Idea (创意): Big Idea + Content Strategy"""
+    doc.add_heading("第 3 层 Big Idea: 创意", level=1)
 
-    if not phase3:
+    if not big_idea:
         doc.add_paragraph("（未完成）")
         return
 
     # Big Idea
-    idea = phase3.get("big_idea", {})
+    idea = big_idea.get("big_idea", {})
     if idea:
         doc.add_heading("Big Idea", level=2)
         if idea.get("statement"):
@@ -159,7 +160,7 @@ def _add_phase3_section(doc: Document, phase3: dict | None) -> None:
         _add_evidence_list(doc, idea.get("evidence", []))
 
     # Content Strategy
-    content = phase3.get("content_strategy", {})
+    content = big_idea.get("content_strategy", {})
     if content:
         doc.add_heading("Content Strategy", level=2)
         pillars = content.get("pillars", [])

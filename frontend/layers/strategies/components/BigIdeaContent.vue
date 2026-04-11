@@ -48,9 +48,9 @@
 </template>
 
 <script setup lang="ts">
-import type { Phase3Result } from '../types'
+import type { BigIdeaResult } from '../types'
 
 defineProps<{
-  result: Phase3Result | null
+  result: BigIdeaResult | null
 }>()
 </script>

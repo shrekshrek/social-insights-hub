@@ -26,15 +26,15 @@
 </template>
 
 <script setup lang="ts">
-import type { PhaseEvidence } from '../types'
+import type { StageEvidence } from '../types'
 import { UBadge, UTextarea } from '#components'
 
 const props = defineProps<{
-  modelValue?: PhaseEvidence[]
+  modelValue?: StageEvidence[]
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: PhaseEvidence[]): void
+  (e: 'update:modelValue', value: StageEvidence[]): void
 }>()
 
 const updateDescription = (idx: number, value: string) => {

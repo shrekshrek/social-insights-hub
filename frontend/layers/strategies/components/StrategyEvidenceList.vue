@@ -24,10 +24,10 @@
 </template>
 
 <script setup lang="ts">
-import type { PhaseEvidence } from '../types'
+import type { StageEvidence } from '../types'
 import { UBadge } from '#components'
 
 defineProps<{
-  evidence?: PhaseEvidence[]
+  evidence?: StageEvidence[]
 }>()
 </script>

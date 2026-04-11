@@ -1,21 +1,22 @@
-"""Strategy Phase 3 Chain — 创意层: Big Idea + Content Strategy
+"""Strategy Big Idea Chain — 创意层: Big Idea + Content Strategy
 
-基于 Phase 1+2 的洞察和策略结果，推导创意概念和内容策略。
+brand_strategy 三阶段递进分析的**第 3 层（终层）**：insight → brand_role → big_idea。
+基于 insight 层的洞察和 brand_role 层的策略结果，推导创意概念和内容策略。
 
 ## 输入上下文（USER_TEMPLATE 的占位符）
 
-- brief_section  : 品牌 Brief，与前两个 Phase 一致
+- brief_section  : 品牌 Brief，与前两层一致
 - research_context_section: 研究问题 + 需求理解摘要
-- phase1_result  : Phase 1 完整 JSON（social_tensions + brand_opportunities）
-- phase2_result  : Phase 2 完整 JSON（brand_social_role + social_strategy）
-- slice_data     : 切片数据（与 Phase 1 相同来源，但仅提取 Phase 3 所需字段）
-                   包含高互动内容特征、KOL 生态、受众画像、topic_aspects
+- insight_result    : insight 层完整 JSON（social_tensions + brand_opportunities）
+- brand_role_result : brand_role 层完整 JSON（brand_social_role + social_strategy）
+- slice_data        : 切片数据（与 insight 层相同来源，但仅提取 big_idea 层所需字段）
+                      包含高互动内容特征、KOL 生态、受众画像、topic_aspects
 
 ## 关键设计决策
 
-1. **Phase 1+2 同时传入，而非仅传入 Phase 2**
-   - Big Idea 需直接"回应核心 Social Tension"，evidence 引用 phase1:tension:X
-   - 仅传入 Phase 2 会导致 LLM 产出的 Big Idea 与原始矛盾脱节，只是策略的复述
+1. **insight + brand_role 同时传入，而非仅传入 brand_role**
+   - Big Idea 需直接"回应核心 Social Tension"，evidence 引用 insight:tension:X
+   - 仅传入 brand_role 会导致 LLM 产出的 Big Idea 与原始矛盾脱节，只是策略的复述
 
 2. **"反常规要求"约束 Big Idea 和 Content Strategy**
    - Big Idea: 须先想象"最平庸的创意概念"，再确认与之有本质差异（"没想到"感而非"嗯对"感）
@@ -31,10 +32,10 @@
    - chat 模型偶尔在 JSON 前后输出额外说明文字
    - 解析逻辑：先尝试全文 json.loads，失败后用 text.find("{") / text.rfind("}") 提取块
    - 两次均失败才返回 fallback（空字符串 / 空列表）并记录 ERROR 日志
-   - 避免因模型格式抖动导致整个 Phase 3 结果清空
+   - 避免因模型格式抖动导致整个 big_idea 结果清空
 
 5. **模型选用 chat（非 reasoner）**
-   - Phase 3 输入最大（含 Phase 1+2 全量 JSON + 切片数据）
+   - big_idea 层输入最大（含 insight + brand_role 全量 JSON + 切片数据）
    - reasoner 在此输入规模下思考 token 消耗殆尽，JSON 输出截断
    - 早期版本因此出现 Big Idea 只显示"（"的问题（截断后 JSON 解析失败返回空字符串）
 """
@@ -55,7 +56,7 @@ logger = logging.getLogger(__name__)
 SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察推导创意概念和内容方向。
 
 ## 任务
-基于已确认的 Phase 1（洞察层）和 Phase 2（策略层）结果，推导：
+基于已确认的洞察层（insight）和策略层（brand_role）结果，推导：
 1. **Big Idea（创意概念）**：用一个创意概念统领整个传播。
 2. **Content Strategy（内容策略）**：具体的内容支柱和方向。
 
@@ -72,8 +73,8 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
     "elaboration": "概念阐释（2-3句）",
     "tension_echo": "这个创意如何回应核心社会矛盾",
     "evidence": [
-      {{"type": "tension_ref", "description": "回应了哪个 tension", "source": "phase1:tension:0"}},
-      {{"type": "role_alignment", "description": "如何体现品牌角色", "source": "phase2:role"}}
+      {{"type": "tension_ref", "description": "回应了哪个 tension", "source": "insight:tension:0"}},
+      {{"type": "role_alignment", "description": "如何体现品牌角色", "source": "brand_role:role"}}
     ]
   }},
   "content_strategy": {{
@@ -114,29 +115,19 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - 关键引述（key_quotes）中的行业权威发言可作为 Content Strategy 的话题锚点
 - Content Strategy 的支柱可考虑"媒体议题再造"——将新闻中的行业话题转化为社媒可传播的消费者语言
 - 新闻数据作为补充创意灵感，evidence 中标明 source 为"新闻媒体数据"以区分
-
-## 市场知识库背景使用指南
-
-如果输入包含"市场知识库背景"段落，请注意：
-- 知识库提供品类 / 行业 / 竞争格局的结构化背景，用于约束 Big Idea 不脱离行业现状
-- Big Idea 自检时应确认创意**不违背**知识库中的硬约束（监管/品类客观规律），但允许**挑战**其中的行业惯例
-- Content Strategy 的"品类颠覆型支柱"可直接对照知识库中"品类通常做法"这一段推导反向逻辑
-- 知识库背景作为约束性参考，不强制引用；若无相关段落则忽略即可
 """
 
 USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
-{market_context}
+## 洞察层 (Insight) 结果
 
-## Phase 1 洞察结果
+{insight_result}
 
-{phase1_result}
+## 策略层 (Brand Role) 结果
 
-## Phase 2 策略结果
-
-{phase2_result}
+{brand_role_result}
 
 ## 补充数据（高互动内容 + KOL 生态）
 
@@ -145,8 +136,8 @@ USER_TEMPLATE = """{brief_section}
 {news_media_section}"""
 
 
-def create_strategy_phase3_chain() -> Runnable:
-    """创建 Phase 3 (创意层) LLM 链"""
+def create_big_idea_chain() -> Runnable:
+    """创建 Big Idea (创意层) LLM 链 — brand_strategy 三阶段第 3 层"""
     # 创意生成任务不需要 CoT 推理，chat 模型 token 预算更稳定
     llm = get_llm(llm_type="chat")
     prompt = ChatPromptTemplate.from_messages([
@@ -156,8 +147,8 @@ def create_strategy_phase3_chain() -> Runnable:
     return prompt | llm
 
 
-def _slim_phase1(phase1_result: dict) -> dict:
-    """Phase 1 结论精简：剔除 evidence（Phase 3 只需结论，不需要推理链）"""
+def _slim_insight(insight_result: dict) -> dict:
+    """insight 结论精简：剔除 evidence（big_idea 层只需结论，不需要推理链）"""
     tensions = [
         {
             "statement": t.get("statement"),
@@ -165,7 +156,7 @@ def _slim_phase1(phase1_result: dict) -> dict:
             "data_reality": t.get("data_reality"),
             "confidence": t.get("confidence"),
         }
-        for t in (phase1_result.get("social_tensions") or [])
+        for t in (insight_result.get("social_tensions") or [])
     ]
     opportunities = [
         {
@@ -173,15 +164,15 @@ def _slim_phase1(phase1_result: dict) -> dict:
             "why_non_obvious": o.get("why_non_obvious"),
             "related_tensions": o.get("related_tensions"),
         }
-        for o in (phase1_result.get("brand_opportunities") or [])
+        for o in (insight_result.get("brand_opportunities") or [])
     ]
     return {"social_tensions": tensions, "brand_opportunities": opportunities}
 
 
-def _slim_phase2(phase2_result: dict) -> dict:
-    """Phase 2 结论精简：剔除 evidence"""
-    role = phase2_result.get("brand_social_role") or {}
-    strategy = phase2_result.get("social_strategy") or {}
+def _slim_brand_role(brand_role_result: dict) -> dict:
+    """brand_role 结论精简：剔除 evidence"""
+    role = brand_role_result.get("brand_social_role") or {}
+    strategy = brand_role_result.get("social_strategy") or {}
     return {
         "brand_social_role": {
             "statement": role.get("statement"),
@@ -195,21 +186,20 @@ def _slim_phase2(phase2_result: dict) -> dict:
     }
 
 
-def format_data_for_phase3(
-    phase1_result: dict,
-    phase2_result: dict,
+def format_data_for_big_idea(
+    insight_result: dict,
+    brand_role_result: dict,
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
-    market_context: str = "",
     news_slices: list[dict] | None = None,
 ) -> dict[str, Any]:
-    """将 Phase 1+2 结果 + 补充数据格式化为 Phase 3 输入
+    """将 insight + brand_role 结果 + 补充数据格式化为 big_idea 层输入
 
-    Phase 1/2 只传结论字段，剔除 evidence 数组——Phase 3 只需知道
+    insight / brand_role 只传结论字段，剔除 evidence 数组——big_idea 层只需知道
     「得出了什么结论」，不需要重新审阅推理链，可节省约 30-50% 输入 token。
     """
-    from src.llm.chains.strategy_phase1_chain import (
+    from src.llm.chains.strategy.brand_strategy.insight_chain import (
         _build_research_context_section,
         _format_news_media_section,
     )
@@ -297,9 +287,8 @@ def format_data_for_phase3(
     return {
         "brief_section": brief_section,
         "research_context_section": research_context_section,
-        "market_context": market_context,
-        "phase1_result": json.dumps(_slim_phase1(phase1_result), ensure_ascii=False, indent=2),
-        "phase2_result": json.dumps(_slim_phase2(phase2_result), ensure_ascii=False, indent=2),
+        "insight_result": json.dumps(_slim_insight(insight_result), ensure_ascii=False, indent=2),
+        "brand_role_result": json.dumps(_slim_brand_role(brand_role_result), ensure_ascii=False, indent=2),
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
@@ -307,8 +296,8 @@ def format_data_for_phase3(
     }
 
 
-def parse_phase3_response(response_text: str) -> dict[str, Any]:
-    """解析 Phase 3 LLM 输出"""
+def parse_big_idea_response(response_text: str) -> dict[str, Any]:
+    """解析 Big Idea (创意层) LLM 输出"""
     text = response_text.strip()
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0]
@@ -327,7 +316,7 @@ def parse_phase3_response(response_text: str) -> dict[str, Any]:
             except json.JSONDecodeError:
                 pass
             else:
-                logger.warning("Phase 3 JSON 从 {...} 块中提取成功（原响应有额外内容）")
+                logger.warning("Big Idea JSON 从 {...} 块中提取成功（原响应有额外内容）")
                 # 跳到字段补全逻辑
                 if "big_idea" not in result:
                     result["big_idea"] = {
@@ -339,7 +328,7 @@ def parse_phase3_response(response_text: str) -> dict[str, Any]:
                 if "content_strategy" not in result:
                     result["content_strategy"] = {"pillars": [], "evidence": []}
                 return result
-        logger.error("Phase 3 JSON 解析失败，原始响应前 500 字符: %s", text[:500])
+        logger.error("Big Idea JSON 解析失败，原始响应前 500 字符: %s", text[:500])
         return {
             "big_idea": {
                 "statement": "",

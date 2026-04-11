@@ -21,8 +21,10 @@
 | GET | `/strategies/{id}/collection-status` | 全量采集进度 + 自动建切片 |
 | GET | `/strategies/{id}/data-overview` | 数据全景（切片 + 覆盖度） |
 | POST | `/strategies/{id}/adjust-slices` | 微调切片配置 |
-| POST | `/strategies/{id}/generate/phase{1,2,3}` | 生成对应阶段 |
-| PUT | `/strategies/{id}/phase{1,2,3}` | 编辑对应阶段结果 |
+| POST | `/strategies/{id}/generate/{insight,brand-role,big-idea}` | brand_strategy 路径：生成对应阶段 |
+| PUT | `/strategies/{id}/{insight,brand-role,big-idea}` | brand_strategy 路径：编辑阶段结果 |
+| POST | `/strategies/{id}/generate/{agenda-map,landscape,strategic-brief}` | market_report 路径：生成对应阶段 |
+| PUT | `/strategies/{id}/{agenda-map,landscape,strategic-brief}` | market_report 路径：编辑阶段结果 |
 | GET | `/strategies/{id}/export` | 导出 Word 文档 |
 | POST | `/strategies/parse-brief` | 上传 Brief 文档 AI 解析 |
 
@@ -34,14 +36,22 @@
 
 ### 核心表
 
-- `strategies`: 顶级实体，含 `brand_brief` / `research_design` / `probe_review_result` / `coverage_check_result` / `phase{1,2,3}_result` (均 JSONB) + `status` + `social_monitor_id` (FK → monitors)
+- `strategies`: 顶级实体，核心 JSONB 字段：
+  - 阶段结果：`brand_brief` / `research_design` / `probe_review_result` / `coverage_check_result`
+  - brand_strategy 路径：`insight_result` / `brand_role_result` / `big_idea_result`
+  - market_report 路径：`agenda_map_result` / `landscape_result` / `strategic_brief_result`
+  - 路由字段：`status` / `output_type`（`brand_strategy` | `market_report`，用户在 confirm-research 时显式选择）
+  - 监测关联：`social_monitor_id` / `news_monitor_id`（两条路径分别对应）
 - `strategy_slices`: 关联表（strategy_id → slice_id），切片由系统自动创建
-- `social_tasks`: 通过 `strategy_id` FK 反向关联策略（nullable，策略任务专用）
+- `social_tasks` / `news_tasks`: 通过 `strategy_id` FK 反向关联策略（nullable，策略任务专用）
 
 ### 状态流转
 
+两条独立路径共享前置阶段，在 `ready` 之后按 `output_type` 分叉。`STATUS_ORDER` 中 `agenda_map_done` 与 `insight_done` 共享 order 值，`landscape_done` 与 `brand_role_done` 共享 order 值，确保 `>= ready` 等通用比较仍然有效。
+
 ```
-draft → planned → probing → collecting → ready → phase1_done → phase2_done → completed
+draft → planned → probing → collecting → ready ┬─ [brand_strategy] → insight_done → brand_role_done → completed
+                                                 └─ [market_report]  → agenda_map_done → landscape_done → completed
 ```
 
 - `draft`: 初始状态，有 Brief 但未生成研究计划
@@ -49,7 +59,10 @@ draft → planned → probing → collecting → ready → phase1_done → phase
 - `probing`: 用户确认计划，探测任务已创建，等待数据
 - `collecting`: 探测通过，全量采集进行中
 - `ready`: 切片已创建且覆盖度验证通过
-- `phase1_done` / `phase2_done` / `completed`: 策略生成各阶段
+- brand_strategy 分支：`insight_done` → `brand_role_done` → `completed`
+- market_report 分支：`agenda_map_done` → `landscape_done` → `completed`
+
+> 三阶段在这两条路径下都是**层层递进**（第 N 层消费第 N-1 层的结果），但每条路径用领域术语命名，不再保留 phase 数字后缀。文档中描述"第 1/2/3 层"时指的是此递进顺序，对应字段名见上。
 
 ## 4 阶段流程
 
@@ -67,9 +80,9 @@ draft → planned → probing → collecting → ready → phase1_done → phase
    - 社媒：爬虫采集约 20 条，跳过评论，LLM 打标（NEWS/POST 分析链）
    - 新闻：`run_news_probe_task` 三渠道搜索（baidu + sogou + duckduckgo），各 25 条元数据落库，不抓全文、不打标
 2. 所有任务准备就绪后后台自动运行 probe 审查
-   - 社媒：规则分流 + `strategy_probe_review_chain`（LLM 判定模糊案例）
-   - 新闻：`news_probe_review_chain` 对每个任务并行 LLM 评估（基于卡片 title/source/tier/snippet + 维度→研究问题映射）
-   - 两个渠道各自创建 `STRATEGY_PROBE_REVIEW` AnalysisJob，独立记录 token/cost；LLM 失败时保守判 pass + 人工核查提示
+   - 社媒：规则分流 + `strategy_social_probe_review_chain`（LLM 判定模糊案例）
+   - 新闻：`strategy_news_probe_review_chain` 对每个任务并行 LLM 评估（基于卡片 title/source/tier/snippet + 维度→研究问题映射）
+   - 社媒创建 `STRATEGY_SOCIAL_PROBE_REVIEW` AnalysisJob、新闻创建 `STRATEGY_NEWS_PROBE_REVIEW` AnalysisJob，独立记录 token/cost；LLM 失败时保守判 pass + 人工核查提示
 3. `all_pass` → 自动调用 approve_probe，为每个探测任务创建 phase="collect" 全量任务（社媒 + 新闻），策略 → collecting
 4. `partial_pass/fail` → 用户可 `approve-probe`（跳过审查直接全量）或 `refine-probe`（batch 替换/新增/移除关键词，`refinements` 调社媒、`news_refinements` 调新闻，两个列表至少填一个，probe_round++，最多 3 轮）
 
@@ -86,31 +99,61 @@ draft → planned → probing → collecting → ready → phase1_done → phase
 
 ### ④ 产出生成 (ready → completed)
 
-Phase 1 → Phase 2 → Phase 3，层层递进，每步需上一步完成。
-Phase 1/2/3 Chain 三源数据统一消费：
-1. **社媒切片**（`load_strategy_inputs`）→ 消费者声音主轴
-2. **新闻切片**（`load_strategy_news_inputs`）→ 媒体视角补充（通过 `_format_news_media_section`）
-3. **知识库背景**（`_retrieve_strategy_market_context`）→ 市场/行业结构化背景（RAG 注入 `{market_context}` 占位符，失败时优雅降级为 ""）
+两条独立路径，由 `strategy.output_type` 决定（用户在 confirm-research 时显式选择）。两条路径都基于**两层数据模型**：
 
-每个 Phase 生成后，`phase{1,2,3}_result.data_sources` 会记录本次实际消费的三渠道布尔标记（`social_media` / `news_media` / `knowledge_base`），前端据此展示"基于 X 渠道的分析"。`AnalysisJob.source_count` 取社媒切片 + 新闻切片总数（KB 不计入，它是补充背景而非分析输入单元）。
+- **主数据源（primary）**：直接注入 prompt 的切片数据
+  - brand_strategy 路径：`social_media`（SocialSlice，消费者声音主轴）
+  - market_report 路径：`news_media`（NewsSlice，媒体视角主轴）
+- **背景数据源（background）**：`knowledge_base` RAG 注入 `{market_context}` 占位符（可选，失败时优雅降级为 ""）
+
+#### brand_strategy 路径（Insight → Brand Role → Big Idea）
+
+Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数据源 = social_media（`load_strategy_inputs`），同时通过 `_format_news_media_section` 将新闻切片作为补充段落注入 `{news_media_section}`（可选上下文，不是主数据）。知识库通过 `_retrieve_strategy_market_context` RAG 检索。
+
+#### market_report 路径（Agenda Map → Landscape → Strategic Brief）
+
+- **Agenda Map（媒体议程图，第 1 层）**：主数据源 = news_media（`load_strategy_news_inputs`）。基于 NewsSlice 的 tagging/insight 产出 narrative_map / agenda_battles / media_voice_patterns / attention_gaps。credibility=high 必须有 tier1+tier2 支撑。禁止引入消费者声音（那是 brand_strategy 路径）。
+- **Landscape（竞争格局，第 2 层）**：输入 = Agenda Map 结果 + 原始 news slices。产出 players（role: target/competitor/context，media_sov_pct, media_sentiment）/ positioning_map（LLM 自选 x/y 轴）/ discourse_battles（必须 ref `agenda_map_battle_ref`）/ market_dynamics。
+- **Strategic Brief（战略简报，第 3 层）**：输入 = Agenda Map + Landscape（**禁止引入新数据**）。产出 executive_summary / strategic_priorities（每条必须 answer ≥1 research_question + evidence_refs 指向 agenda_map/landscape 字段）/ market_opportunities / risks_and_threats / recommended_positioning（proof_points 通过 `agenda_map_narrative_ref` 回链上游叙事）。
+
+#### data_provenance 记录
+
+每个 stage 生成后，结果 JSONB 的 `data_provenance` 字段按两层结构记录实际消费来源：
+
+```json
+{
+  "primary": {
+    "channel": "social_media" | "news_media",
+    "social_media_slice_count": <int>,
+    "news_media_slice_count": <int>
+  },
+  "background": {
+    "knowledge_base": <bool>
+  }
+}
+```
+
+前端 `DataProvenanceBadge` 组件据此展示"社媒/新闻主源 · N 切片 + 知识库背景"。`AnalysisJob.source_count` 取主数据源对应的切片数（brand_strategy → social 切片数；market_report → news 切片数）。
 
 ## LLM Chain
 
-8 条 Chain 位于 `llm/chains/strategy_*_chain.py`。
+11 条 Chain 位于 `llm/chains/strategy/`（按路径分 `shared/` / `brand_strategy/` / `market_report/` 三个子目录）。
 
-| Chain | 角色 | 触发时机 |
-|-------|------|---------|
-| brief_parser_chain | Brief 摄入 + 渠道分发判断 | 新建策略时（`parse-brief` 端点） |
-| research_design_chain | 研究规划师（接收社媒 channel_brief） | ① |
-| strategy_probe_review_chain | 社媒数据质检员 | ② |
-| news_probe_review_chain | 新闻数据质检员（单任务并行） | ② |
-| coverage_check_chain | 覆盖度验证 | ③ |
-| phase1_chain | 洞察分析师 | ④ |
-| phase2_chain | 策略师 | ④ |
-| phase3_chain | 创意总监 | ④ |
+| Chain | 角色 | 触发时机 | 路径 |
+|-------|------|---------|------|
+| brief_parser_chain | Brief 摄入 + 渠道分发判断 | 新建策略时（`parse-brief` 端点） | shared |
+| research_design_chain | 研究规划师（产出 data_plan 含 channel 字段） | ① | shared |
+| strategy_social_probe_review_chain | 社媒数据质检员 | ② | shared |
+| strategy_news_probe_review_chain | 新闻数据质检员（单任务并行） | ② | shared |
+| coverage_check_chain | 覆盖度验证 | ③ | shared |
+| insight_chain | 洞察分析师（第 1 层） | ④ | brand_strategy |
+| brand_role_chain | 品牌角色策略师（第 2 层） | ④ | brand_strategy |
+| big_idea_chain | 创意总监（第 3 层） | ④ | brand_strategy |
+| agenda_map_chain | 媒体议程图（第 1 层） | ④ | market_report |
+| landscape_chain | 竞争格局（第 2 层） | ④ | market_report |
+| strategic_brief_chain | 战略简报（第 3 层，只消费前两层） | ④ | market_report |
 
-Phase 1/2/3 Chain 均注入 `research_design` 中的 research_questions 作为分析上下文。
-Phase 1/2/3 Chain 均通过 `_format_news_media_section` 从独立的 NewsSlice 数据（`load_strategy_news_inputs` 加载）格式化新闻媒体补充段落，作为 `{news_media_section}` 注入 USER_TEMPLATE，LLM 获得媒体视角补充数据。
+所有 stage chain 都注入 `research_design` 中的 research_questions 作为分析上下文。brand_strategy chain 通过 `_format_news_media_section` 把新闻切片作为补充段落注入；market_report Agenda Map chain 直接消费 `load_strategy_news_inputs` 加载的 NewsSlice 作为主数据源。
 
 ## Agent 协议
 
@@ -136,4 +179,7 @@ Phase 1/2/3 Chain 均通过 `_format_news_media_section` 从独立的 NewsSlice 
 - `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）
 - 新闻 insight 粒度：独立监测和策略研究都通过 NewsSlice 切片触发 insight（按 blueprint 条目分组新闻任务创建切片），采集阶段仅做 tagging 不做 insight
 - 新闻搜索渠道：baidu / sogou / duckduckgo（默认三渠道）+ wechat_mp（可选，通过搜狗微信专用入口）；source_tier 分层：tier1(权威) / tier2(行业) / tier3(其他) / wechat_mp(公众号)
+- `output_type` 由用户在 confirm-research 时**显式选择**，前端 `ResearchPlanEditor` 根据 data_plan 的渠道组成阻塞不合法的组合（brand_strategy 需含 social_media 维度；market_report 需含 news_media 维度）。后端 `_validate_market_report_output_type` 在生成时二次校验
+- `generate_brand_strategy_stage` 和 `generate_market_report_stage` 都遵循**下游级联清空**语义：重新生成 Insight / Agenda Map 会清空下游结果 + 回退状态到 `ready`；重新生成 Brand Role / Landscape 会清空 Big Idea / Strategic Brief
+- `edit_brand_strategy_stage` 和 `edit_market_report_stage` 同样会级联清空下游结果，避免上下游不一致
 - Word 导出依赖 `python-docx`

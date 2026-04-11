@@ -9,8 +9,8 @@ from src.strategies.service import (
     _create_auto_slices,
     approve_probe,
     check_collection_status,
-    generate_phase2,
-    generate_phase3,
+    generate_brand_role,
+    generate_big_idea,
 )
 
 
@@ -24,20 +24,33 @@ class TestStatusOrder:
     def test_probing_after_planned(self):
         assert STATUS_ORDER["probing"] > STATUS_ORDER["planned"]
 
-    def test_phase1_done_before_phase2_done(self):
-        assert STATUS_ORDER["phase1_done"] < STATUS_ORDER["phase2_done"]
+    def test_insight_done_before_brand_role_done(self):
+        assert STATUS_ORDER["insight_done"] < STATUS_ORDER["brand_role_done"]
 
     def test_completed_is_highest(self):
         assert STATUS_ORDER["completed"] == max(STATUS_ORDER.values())
 
-    def test_all_8_statuses(self):
-        assert len(STATUS_ORDER) == 8
+    def test_all_statuses_present(self):
+        # 10 个状态：brand_strategy 路径 8 个 + market_report 路径新增 2 个
+        # (agenda_map_done 与 insight_done 共享 order，landscape_done 与 brand_role_done 共享 order)
+        expected = {
+            "draft", "planned", "probing", "collecting", "ready",
+            "insight_done", "brand_role_done",
+            "agenda_map_done", "landscape_done",
+            "completed",
+        }
+        assert set(STATUS_ORDER.keys()) == expected
+
+    def test_market_report_path_shares_order_with_brand_strategy(self):
+        """两条路径在同层级共享 order 值，使 `>= ready` 等通用比较仍然有效"""
+        assert STATUS_ORDER["agenda_map_done"] == STATUS_ORDER["insight_done"]
+        assert STATUS_ORDER["landscape_done"] == STATUS_ORDER["brand_role_done"]
 
 
-class TestGeneratePhase2Precondition:
+class TestGenerateBrandRolePrecondition:
     @pytest.mark.asyncio
     async def test_rejects_draft_status(self):
-        """generate_phase2 在 status=draft 时 → 409"""
+        """generate_brand_role 在 status=draft 时 → 409"""
         strategy = MagicMock()
         strategy.status = "draft"
         db = AsyncMock()
@@ -45,27 +58,27 @@ class TestGeneratePhase2Precondition:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await generate_phase2(db, strategy)
+            await generate_brand_role(db, strategy)
         assert exc_info.value.status_code == 409
 
 
-class TestGeneratePhase3Precondition:
+class TestGenerateBigIdeaPrecondition:
     @pytest.mark.asyncio
-    async def test_rejects_phase1_done(self):
-        """generate_phase3 在 status=phase1_done 时 → 409"""
+    async def test_rejects_insight_done(self):
+        """generate_big_idea 在 status=insight_done 时 → 409（需要 brand_role_done 以上）"""
         strategy = MagicMock()
-        strategy.status = "phase1_done"
+        strategy.status = "insight_done"
         db = AsyncMock()
 
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await generate_phase3(db, strategy)
+            await generate_big_idea(db, strategy)
         assert exc_info.value.status_code == 409
 
     @pytest.mark.asyncio
     async def test_rejects_draft(self):
-        """generate_phase3 在 status=draft 时 → 409"""
+        """generate_big_idea 在 status=draft 时 → 409"""
         strategy = MagicMock()
         strategy.status = "draft"
         db = AsyncMock()
@@ -73,7 +86,7 @@ class TestGeneratePhase3Precondition:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await generate_phase3(db, strategy)
+            await generate_big_idea(db, strategy)
         assert exc_info.value.status_code == 409
 
 

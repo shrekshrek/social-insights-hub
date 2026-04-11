@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.strategies.schemas import BrandBrief, StrategyCreate, StrategyUpdate, PhaseResultEdit
+from src.strategies.schemas import BrandBrief, StrategyCreate, StrategyUpdate, StageResultEdit
 
 
 class TestStrategyCreate:
@@ -67,13 +67,13 @@ class TestStrategyUpdate:
             StrategyUpdate(name="")
 
 
-class TestPhaseResultEdit:
-    """PhaseResultEdit 校验"""
+class TestStageResultEdit:
+    """StageResultEdit 校验"""
 
     def test_valid_result(self):
-        data = PhaseResultEdit(result={"key": "value"})
+        data = StageResultEdit(result={"key": "value"})
         assert data.result == {"key": "value"}
 
     def test_result_required(self):
         with pytest.raises(ValidationError):
-            PhaseResultEdit()
+            StageResultEdit()

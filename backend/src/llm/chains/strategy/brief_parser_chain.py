@@ -120,7 +120,7 @@ USER_TEMPLATE = """以下是用户上传的 Brief 文档内容：
 请提取 strategy_name、subject、analysis_goal、constraints 字段，并完成渠道分发判断（channel_plan）。"""
 
 
-def create_strategy_brief_parser_chain() -> Runnable:
+def create_brief_parser_chain() -> Runnable:
     """创建 Brief 解析 Chain"""
     llm = get_llm("chat")
     prompt = ChatPromptTemplate.from_messages([

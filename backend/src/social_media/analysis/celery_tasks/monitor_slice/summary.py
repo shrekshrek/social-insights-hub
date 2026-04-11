@@ -7,7 +7,7 @@ from typing import Any
 from src.social_media.analysis.celery_tasks.llm_utils import (
     invoke_chain_with_stats_sync,
 )
-from src.llm.chains.monitor_slice_reports_chain import (
+from src.llm.chains.social.monitor_slice_reports_chain import (
     create_monitor_slice_focus_report_chain,
     create_monitor_slice_landscape_report_chain,
     create_monitor_slice_topic_report_chain,

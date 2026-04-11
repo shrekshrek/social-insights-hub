@@ -2,24 +2,24 @@
 
 import json
 
-from src.llm.chains.strategy_phase1_chain import (
-    format_slice_data_for_phase1,
-    parse_phase1_response,
+from src.llm.chains.strategy.brand_strategy.insight_chain import (
+    format_slice_data_for_insight,
+    parse_insight_response,
 )
-from src.llm.chains.strategy_phase2_chain import (
-    format_data_for_phase2,
-    parse_phase2_response,
+from src.llm.chains.strategy.brand_strategy.brand_role_chain import (
+    format_data_for_brand_role,
+    parse_brand_role_response,
 )
-from src.llm.chains.strategy_phase3_chain import (
-    format_data_for_phase3,
-    parse_phase3_response,
+from src.llm.chains.strategy.brand_strategy.big_idea_chain import (
+    format_data_for_big_idea,
+    parse_big_idea_response,
 )
 
 
-# ==================== Phase 1 ====================
+# ==================== Insight (brand_strategy 第 1 层) ====================
 
 
-class TestParsePhase1:
+class TestParseInsight:
     def test_valid_json(self):
         raw = json.dumps({
             "social_tensions": [
@@ -37,28 +37,28 @@ class TestParsePhase1:
                 }
             ],
         })
-        result = parse_phase1_response(raw)
+        result = parse_insight_response(raw)
         assert len(result["social_tensions"]) == 1
         assert result["social_tensions"][0]["confidence"] == "high"
         assert len(result["brand_opportunities"]) == 1
 
     def test_json_in_code_block(self):
         raw = '```json\n{"social_tensions": [], "brand_opportunities": []}\n```'
-        result = parse_phase1_response(raw)
+        result = parse_insight_response(raw)
         assert result["social_tensions"] == []
 
     def test_invalid_json(self):
-        result = parse_phase1_response("这不是JSON")
+        result = parse_insight_response("这不是JSON")
         assert result["social_tensions"] == []
         assert result["brand_opportunities"] == []
 
     def test_missing_fields(self):
-        result = parse_phase1_response('{"foo": "bar"}')
+        result = parse_insight_response('{"foo": "bar"}')
         assert "social_tensions" in result
         assert "brand_opportunities" in result
 
 
-class TestFormatPhase1:
+class TestFormatInsight:
     def test_basic_format(self):
         slices = [
             {
@@ -74,7 +74,7 @@ class TestFormatPhase1:
                 "reports": {"landscape_report": "报告内容"},
             }
         ]
-        result = format_slice_data_for_phase1(slices, brief={"brand": "test"}, research_design=None)
+        result = format_slice_data_for_insight(slices, brief={"brand": "test"}, research_design=None)
         assert "Brand Brief" in result["brief_section"]
         data = json.loads(result["slice_data"])
         assert len(data) == 1
@@ -82,14 +82,14 @@ class TestFormatPhase1:
         assert data[0]["mode"] == "品牌聚焦"
 
     def test_no_brief(self):
-        result = format_slice_data_for_phase1([{"meta": {}}], research_design=None)
+        result = format_slice_data_for_insight([{"meta": {}}], research_design=None)
         assert result["brief_section"] == ""
 
 
-# ==================== Phase 2 ====================
+# ==================== Brand Role (brand_strategy 第 2 层) ====================
 
 
-class TestParsePhase2:
+class TestParseBrandRole:
     def test_valid_json(self):
         raw = json.dumps({
             "brand_social_role": {
@@ -104,35 +104,35 @@ class TestParsePhase2:
                 "evidence": [],
             },
         })
-        result = parse_phase2_response(raw)
+        result = parse_brand_role_response(raw)
         assert result["brand_social_role"]["statement"] == "行业教育者"
         assert result["social_strategy"]["rhythm"] == "日常种草"
 
     def test_invalid_json(self):
-        result = parse_phase2_response("not json")
+        result = parse_brand_role_response("not json")
         assert result["brand_social_role"]["statement"] == ""
         assert result["social_strategy"]["statement"] == ""
 
     def test_missing_fields(self):
-        result = parse_phase2_response("{}")
+        result = parse_brand_role_response("{}")
         assert "brand_social_role" in result
         assert "social_strategy" in result
 
 
-class TestFormatPhase2:
+class TestFormatBrandRole:
     def test_basic_format(self):
-        result = format_data_for_phase2(
-            phase1_result={"social_tensions": []},
+        result = format_data_for_brand_role(
+            insight_result={"social_tensions": []},
             slices=[{"layers": {"focus": {"kol_voices": [{"text": "hi"}]}}}],
             brief=None,
         )
-        assert "social_tensions" in result["phase1_result"]
+        assert "social_tensions" in result["insight_result"]
 
 
-# ==================== Phase 3 ====================
+# ==================== Big Idea (brand_strategy 第 3 层) ====================
 
 
-class TestParsePhase3:
+class TestParseBigIdea:
     def test_valid_json(self):
         raw = json.dumps({
             "big_idea": {
@@ -146,22 +146,22 @@ class TestParsePhase3:
                 "evidence": [],
             },
         })
-        result = parse_phase3_response(raw)
+        result = parse_big_idea_response(raw)
         assert result["big_idea"]["tension_echo"] == "回应矛盾"
         assert len(result["content_strategy"]["pillars"]) == 1
 
     def test_invalid_json(self):
-        result = parse_phase3_response("broken")
+        result = parse_big_idea_response("broken")
         assert result["big_idea"]["statement"] == ""
         assert result["content_strategy"]["pillars"] == []
 
 
-class TestFormatPhase3:
+class TestFormatBigIdea:
     def test_basic_format(self):
-        result = format_data_for_phase3(
-            phase1_result={"social_tensions": []},
-            phase2_result={"brand_social_role": {}},
+        result = format_data_for_big_idea(
+            insight_result={"social_tensions": []},
+            brand_role_result={"brand_social_role": {}},
             slices=[{"layers": {}, "foundation": {}}],
         )
-        assert "phase1_result" in result
-        assert "phase2_result" in result
+        assert "insight_result" in result
+        assert "brand_role_result" in result

@@ -10,21 +10,41 @@ from src.strategies.export_docx import generate_strategy_docx
 
 def _make_strategy(
     name: str = "测试策略",
-    phase1: dict | None = None,
-    phase2: dict | None = None,
-    phase3: dict | None = None,
+    insight: dict | None = None,
+    brand_role: dict | None = None,
+    big_idea: dict | None = None,
 ) -> MagicMock:
-    strategy = MagicMock()
+    # spec 限定属性，避免 MagicMock 对未知字段自动产生 truthy 属性掩盖重构错误
+    strategy = MagicMock(
+        spec=[
+            "name",
+            "insight_result",
+            "brand_role_result",
+            "big_idea_result",
+            "agenda_map_result",
+            "landscape_result",
+            "strategic_brief_result",
+            "output_type",
+            "brand_brief",
+            "research_design",
+        ]
+    )
     strategy.name = name
-    strategy.phase1_result = phase1
-    strategy.phase2_result = phase2
-    strategy.phase3_result = phase3
+    strategy.insight_result = insight
+    strategy.brand_role_result = brand_role
+    strategy.big_idea_result = big_idea
+    strategy.agenda_map_result = None
+    strategy.landscape_result = None
+    strategy.strategic_brief_result = None
+    strategy.output_type = "brand_strategy"
+    strategy.brand_brief = None
+    strategy.research_design = None
     return strategy
 
 
 class TestGenerateStrategyDocx:
-    def test_empty_phases(self):
-        """所有 phase 为空时不报错，返回有效 docx"""
+    def test_empty_stages(self):
+        """所有 stage 为空时不报错，返回有效 docx"""
         strategy = _make_strategy()
         buf = generate_strategy_docx(strategy)
         assert isinstance(buf, BytesIO)
@@ -32,10 +52,10 @@ class TestGenerateStrategyDocx:
         content = buf.read()
         assert content[:2] == b"PK"
 
-    def test_full_phases(self):
+    def test_full_stages(self):
         """三个阶段都有数据时正常生成"""
         strategy = _make_strategy(
-            phase1={
+            insight={
                 "social_tensions": [
                     {
                         "statement": "价格矛盾",
@@ -53,7 +73,7 @@ class TestGenerateStrategyDocx:
                     }
                 ],
             },
-            phase2={
+            brand_role={
                 "brand_social_role": {
                     "statement": "行业教育者",
                     "elaboration": "阐释内容",
@@ -66,7 +86,7 @@ class TestGenerateStrategyDocx:
                     "evidence": [],
                 },
             },
-            phase3={
+            big_idea={
                 "big_idea": {
                     "statement": "真实生活实验室",
                     "elaboration": "创意阐释",
@@ -90,10 +110,10 @@ class TestGenerateStrategyDocx:
         assert len(content) > 0
         assert content[:2] == b"PK"
 
-    def test_partial_phases(self):
-        """只有 Phase 1 有数据"""
+    def test_partial_stages(self):
+        """只有 Insight 层有数据"""
         strategy = _make_strategy(
-            phase1={
+            insight={
                 "social_tensions": [],
                 "brand_opportunities": [],
             },

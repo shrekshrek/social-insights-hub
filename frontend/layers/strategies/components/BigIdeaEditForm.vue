@@ -75,14 +75,14 @@
 </template>
 
 <script setup lang="ts">
-import type { Phase3Result } from '../types'
+import type { BigIdeaResult } from '../types'
 import { UInput, UTextarea, UFormField } from '#components'
 
 const props = defineProps<{
-  result: Phase3Result
+  result: BigIdeaResult
 }>()
 
-const localData = ref<Phase3Result>(JSON.parse(JSON.stringify(props.result)))
+const localData = ref<BigIdeaResult>(JSON.parse(JSON.stringify(props.result)))
 
 defineExpose({
   getResult: () => JSON.parse(JSON.stringify(localData.value)),

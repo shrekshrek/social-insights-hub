@@ -1,4 +1,4 @@
-import type { StrategyStatus } from '../types'
+import type { OutputType, StrategyStatus } from '../types'
 
 export const STATUS_MAP: Record<StrategyStatus, { label: string; color: 'neutral' | 'info' | 'warning' | 'success' }> = {
   draft: { label: '草稿', color: 'neutral' },
@@ -6,14 +6,31 @@ export const STATUS_MAP: Record<StrategyStatus, { label: string; color: 'neutral
   probing: { label: '探测中', color: 'info' },
   collecting: { label: '采集中', color: 'info' },
   ready: { label: '数据就绪', color: 'warning' },
-  phase1_done: { label: '洞察完成', color: 'warning' },
-  phase2_done: { label: '策略完成', color: 'warning' },
+  // brand_strategy 路径
+  insight_done: { label: '洞察完成 (Insight)', color: 'warning' },
+  brand_role_done: { label: '品牌角色完成 (Brand Role)', color: 'warning' },
+  // market_report 路径
+  agenda_map_done: { label: '媒体议程图完成 (Agenda Map)', color: 'warning' },
+  landscape_done: { label: '竞争格局完成 (Landscape)', color: 'warning' },
   completed: { label: '已完成', color: 'success' },
 }
 
+/**
+ * 状态顺序（两条产出路径共享同一 STATUS_ORDER 数值，便于"≥ready"等通用比较）。
+ * brand_strategy: insight_done=5 → brand_role_done=6 → completed=7
+ * market_report:  agenda_map_done=5 → landscape_done=6 → completed=7
+ */
 export const STATUS_ORDER: Record<StrategyStatus, number> = {
   draft: 0, planned: 1, probing: 2, collecting: 3,
-  ready: 4, phase1_done: 5, phase2_done: 6, completed: 7,
+  ready: 4,
+  insight_done: 5, brand_role_done: 6,
+  agenda_map_done: 5, landscape_done: 6,
+  completed: 7,
+}
+
+export const OUTPUT_TYPE_LABELS: Record<OutputType, string> = {
+  brand_strategy: '品牌策略 (Insight → Brand Role → Big Idea)',
+  market_report: '市场分析报告 (Agenda Map → Landscape → Strategic Brief)',
 }
 
 const PLATFORM_OPTIONS = [

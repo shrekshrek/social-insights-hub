@@ -1,6 +1,6 @@
-"""News Probe Review Chain — 新闻探测数据质量审查
+"""Strategy News Probe Review Chain — 新闻探测数据质量审查
 
-对应 strategy_probe_review_chain 的新闻媒体版本：基于 probe 阶段纯搜索
+对应 social_probe_review_chain 的新闻媒体版本：基于 probe 阶段纯搜索
 落库的 25-35 条文章卡片（title / source_name / source_tier / snippet），
 判断关键词是否能召回与研究问题相关的新闻内容。
 

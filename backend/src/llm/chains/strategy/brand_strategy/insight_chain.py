@@ -1,4 +1,7 @@
-"""Strategy Phase 1 Chain — 洞察层: Social Tension + Brand Opportunity
+"""Strategy Insight Chain — 洞察层: Social Tension + Brand Opportunity
+
+brand_strategy 三阶段递进分析的**第 1 层**：insight → brand_role → big_idea。
+本层消费切片原始数据，产出 tensions / opportunities 供下游 brand_role 层使用。
 
 从切片数据中提取社会矛盾/未满足需求，及品牌可切入的机会。
 
@@ -6,7 +9,7 @@
 
 - brief_section     : 品牌 Brief（目标/竞品/关注维度），来自 strategy.brand_brief
 - research_context_section: 研究问题 + 需求理解摘要，来自 strategy.research_design
-- slice_data        : 所有关联切片的聚合分析数据，由 format_slice_data_for_phase1() 构建
+- slice_data        : 所有关联切片的聚合分析数据，由 format_slice_data_for_insight() 构建
 
 ## 关键设计决策
 
@@ -142,8 +145,8 @@ USER_TEMPLATE = """{brief_section}
 {news_media_section}"""
 
 
-def create_strategy_phase1_chain() -> Runnable:
-    """创建 Phase 1 (洞察层) LLM 链"""
+def create_insight_chain() -> Runnable:
+    """创建 Insight (洞察层) LLM 链 — brand_strategy 三阶段第 1 层"""
     llm = get_llm(llm_type="chat")
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_TEMPLATE),
@@ -255,14 +258,14 @@ def _format_news_media_section(news_slices: list[dict]) -> str:
     )
 
 
-def format_slice_data_for_phase1(
+def format_slice_data_for_insight(
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
     market_context: str = "",
     news_slices: list[dict] | None = None,
 ) -> dict[str, Any]:
-    """将切片 result_data 格式化为 Phase 1 输入
+    """将切片 result_data 格式化为 Insight (洞察层) 输入
 
     从每个切片提取关键维度，严格控制总输入 ~30K tokens。
     结构化数据优先，按 Tension/Opportunity 两个产出目标精选字段。
@@ -493,8 +496,8 @@ def format_slice_data_for_phase1(
     }
 
 
-def parse_phase1_response(response_text: str) -> dict[str, Any]:
-    """解析 Phase 1 LLM 输出"""
+def parse_insight_response(response_text: str) -> dict[str, Any]:
+    """解析 Insight (洞察层) LLM 输出"""
     text = response_text.strip()
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0]
@@ -504,7 +507,7 @@ def parse_phase1_response(response_text: str) -> dict[str, Any]:
     try:
         result = json.loads(text.strip())
     except json.JSONDecodeError:
-        logger.error("Phase 1 JSON 解析失败: %s...", text[:200])
+        logger.error("Insight JSON 解析失败: %s...", text[:200])
         return {"social_tensions": [], "brand_opportunities": []}
 
     # 确保字段存在

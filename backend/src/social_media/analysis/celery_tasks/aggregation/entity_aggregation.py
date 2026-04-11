@@ -19,11 +19,11 @@ import math
 from typing import Any
 from collections import defaultdict, Counter
 
-from src.llm.chains.entity_normalization_chain import (
+from src.llm.chains.social.entity_normalization_chain import (
     format_entities_for_clustering,
     cluster_entities_with_review_sync,
 )
-from src.llm.chains.attribute_normalization_chain import (
+from src.llm.chains.social.attribute_normalization_chain import (
     create_attribute_normalization_chain,
     format_attributes_for_normalization,
     parse_normalization_response,

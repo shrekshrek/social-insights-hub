@@ -10,7 +10,7 @@ from src.social_media.analysis.celery_tasks.aggregation.utils import (
     calculate_score,
     are_similar,
 )
-from src.llm.chains.entity_normalization_chain import (
+from src.llm.chains.social.entity_normalization_chain import (
     format_entities_for_clustering,
 )
 
@@ -211,7 +211,7 @@ def normalize_entity_aliases(
         formatted = format_entities_for_clustering(ent_inputs_program)
         if formatted.strip():
             # 项目级：使用专用 merge chain（支持 subject/competitors 仲裁）
-            from src.llm.chains.monitor_entity_merge_chain import (
+            from src.llm.chains.social.monitor_entity_merge_chain import (
                 merge_monitor_entities_with_review_sync,
             )
 

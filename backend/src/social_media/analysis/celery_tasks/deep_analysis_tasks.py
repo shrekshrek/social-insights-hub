@@ -31,8 +31,8 @@ from src.social_media.analysis.celery_tasks.progress_manager import (
 from src.social_media.analysis.celery_tasks.llm_utils import (
     invoke_chain_with_stats_sync,
 )
-from src.llm.chains.post_extraction_chain import create_post_extraction_chain
-from src.llm.chains.comment_extraction_chain import (
+from src.llm.chains.social.post_extraction_chain import create_post_extraction_chain
+from src.llm.chains.social.comment_extraction_chain import (
     create_comment_extraction_chain,
 )
 

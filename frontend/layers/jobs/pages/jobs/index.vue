@@ -94,11 +94,15 @@ const typeOptions = [
   { label: '实体归一化', value: 'entity_normalization' },
   { label: '观点归一化', value: 'opinion_normalization' },
   { label: '监测切片总分析', value: 'monitor_slice_summary' },
-  { label: '策略·探测审查', value: 'strategy_probe_review' },
+  { label: '策略·社媒探测审查', value: 'strategy_social_probe_review' },
+  { label: '策略·新闻探测审查', value: 'strategy_news_probe_review' },
   { label: '策略·覆盖度验证', value: 'strategy_coverage_check' },
-  { label: '策略·洞察层', value: 'strategy_phase1' },
-  { label: '策略·策略层', value: 'strategy_phase2' },
-  { label: '策略·创意层', value: 'strategy_phase3' },
+  { label: '策略·洞察 (Insight)', value: 'strategy_insight' },
+  { label: '策略·品牌角色 (Brand Role)', value: 'strategy_brand_role' },
+  { label: '策略·创意 (Big Idea)', value: 'strategy_big_idea' },
+  { label: '策略·媒体议程图 (Agenda Map)', value: 'strategy_agenda_map' },
+  { label: '策略·竞争格局 (Landscape)', value: 'strategy_landscape' },
+  { label: '策略·战略简报 (Strategic Brief)', value: 'strategy_strategic_brief' },
 ]
 
 // 状态选项
@@ -149,11 +153,15 @@ const getAnalysisTypeLabel = (type: string) => {
     entity_normalization: '实体归一化',
     opinion_normalization: '观点归一化',
     monitor_slice_summary: '监测切片总分析',
-    strategy_probe_review: '策略·探测审查',
+    strategy_social_probe_review: '策略·社媒探测审查',
+    strategy_news_probe_review: '策略·新闻探测审查',
     strategy_coverage_check: '策略·覆盖度验证',
-    strategy_phase1: '策略·洞察层',
-    strategy_phase2: '策略·策略层',
-    strategy_phase3: '策略·创意层',
+    strategy_insight: '策略·洞察 (Insight)',
+    strategy_brand_role: '策略·品牌角色 (Brand Role)',
+    strategy_big_idea: '策略·创意 (Big Idea)',
+    strategy_agenda_map: '策略·媒体议程图 (Agenda Map)',
+    strategy_landscape: '策略·竞争格局 (Landscape)',
+    strategy_strategic_brief: '策略·战略简报 (Strategic Brief)',
   }
   return labels[type] || type
 }

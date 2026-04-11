@@ -16,6 +16,32 @@ import type {
   ParseBriefResponse,
 } from '../types'
 
+/**
+ * brand_strategy 路径三个递进层：
+ *   insight → brand_role → big_idea
+ */
+export type BrandStrategyStage = 'insight' | 'brand_role' | 'big_idea'
+
+/**
+ * market_report 路径三个递进层：
+ *   agenda_map → landscape → strategic_brief
+ */
+export type MarketReportStage = 'agenda_map' | 'landscape' | 'strategic_brief'
+
+const BRAND_STRATEGY_STAGE_LABELS: Record<BrandStrategyStage, string> = {
+  insight: 'Insight 洞察',
+  brand_role: 'Brand Role 品牌角色',
+  big_idea: 'Big Idea 创意',
+}
+
+const MARKET_REPORT_STAGE_LABELS: Record<MarketReportStage, string> = {
+  agenda_map: 'Agenda Map 媒体议程图',
+  landscape: 'Landscape 竞争格局',
+  strategic_brief: 'Strategic Brief 战略简报',
+}
+
+const toKebab = (stage: string) => stage.replace(/_/g, '-')
+
 export const useStrategies = () => {
   const { apiRequest, useApiData, apiDownload, showSuccess } = useApi()
 
@@ -182,20 +208,51 @@ export const useStrategies = () => {
 
   // ==================== ④ 产出生成 ====================
 
-  // 生成 Phase
-  const generatePhase = async (id: number, phase: 1 | 2 | 3) => {
+  // 生成 brand_strategy 路径的某一层
+  const generateBrandStrategyStage = async (id: number, stage: BrandStrategyStage) => {
     const result = await apiRequest<Strategy>(
-      `/strategies/${id}/generate/phase${phase}`,
+      `/strategies/${id}/generate/${toKebab(stage)}`,
       { method: 'POST' }
     )
-    showSuccess(`Phase ${phase} 生成完成`)
+    showSuccess(`${BRAND_STRATEGY_STAGE_LABELS[stage]} 生成完成`)
     return result
   }
 
-  // 编辑 Phase 结果
-  const editPhase = async (id: number, phase: 1 | 2 | 3, result: Record<string, unknown>) => {
+  // 编辑 brand_strategy 路径的某一层结果
+  const editBrandStrategyStage = async (
+    id: number,
+    stage: BrandStrategyStage,
+    result: Record<string, unknown>,
+  ) => {
     const updated = await apiRequest<Strategy>(
-      `/strategies/${id}/phase${phase}`,
+      `/strategies/${id}/${toKebab(stage)}`,
+      {
+        method: 'PUT',
+        body: { result },
+      }
+    )
+    showSuccess('已保存修改')
+    return updated
+  }
+
+  // 生成 market_report 路径的某一层
+  const generateMarketReportStage = async (id: number, stage: MarketReportStage) => {
+    const result = await apiRequest<Strategy>(
+      `/strategies/${id}/generate/${toKebab(stage)}`,
+      { method: 'POST' }
+    )
+    showSuccess(`${MARKET_REPORT_STAGE_LABELS[stage]} 生成完成`)
+    return result
+  }
+
+  // 编辑 market_report 路径的某一层结果
+  const editMarketReportStage = async (
+    id: number,
+    stage: MarketReportStage,
+    result: Record<string, unknown>,
+  ) => {
+    const updated = await apiRequest<Strategy>(
+      `/strategies/${id}/${toKebab(stage)}`,
       {
         method: 'PUT',
         body: { result },
@@ -265,8 +322,10 @@ export const useStrategies = () => {
     getCollectionStatus,
     getDataOverview,
     adjustSlices,
-    generatePhase,
-    editPhase,
+    generateBrandStrategyStage,
+    editBrandStrategyStage,
+    generateMarketReportStage,
+    editMarketReportStage,
     exportStrategy,
     parseBrief,
     parseBriefText,

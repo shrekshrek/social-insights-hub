@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, status
 
@@ -19,38 +19,53 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
-from src.llm.chains.strategy_research_design_chain import (
+from src.llm.chains.strategy.research_design_chain import (
     create_research_design_chain,
     format_research_design_inputs,
     parse_research_design_response,
 )
-from src.llm.chains.strategy_probe_review_chain import (
+from src.llm.chains.strategy.social_probe_review_chain import (
     create_single_task_probe_review_chain,
     format_single_task_probe_review_inputs,
     parse_single_task_probe_review_response,
 )
-from src.llm.chains.strategy_coverage_check_chain import (
+from src.llm.chains.strategy.coverage_check_chain import (
     create_coverage_check_chain,
     format_coverage_check_inputs,
     parse_coverage_check_response,
 )
-from src.llm.chains.strategy_phase1_chain import (
-    create_strategy_phase1_chain,
-    format_slice_data_for_phase1,
-    parse_phase1_response,
+from src.llm.chains.strategy.brand_strategy.insight_chain import (
+    create_insight_chain,
+    format_slice_data_for_insight,
+    parse_insight_response,
 )
-from src.llm.chains.strategy_phase2_chain import (
-    create_strategy_phase2_chain,
-    format_data_for_phase2,
-    parse_phase2_response,
+from src.llm.chains.strategy.brand_strategy.brand_role_chain import (
+    create_brand_role_chain,
+    format_data_for_brand_role,
+    parse_brand_role_response,
 )
-from src.llm.chains.strategy_phase3_chain import (
-    create_strategy_phase3_chain,
-    format_data_for_phase3,
-    parse_phase3_response,
+from src.llm.chains.strategy.brand_strategy.big_idea_chain import (
+    create_big_idea_chain,
+    format_data_for_big_idea,
+    parse_big_idea_response,
 )
-from src.llm.chains.strategy_brief_parser_chain import (
-    create_strategy_brief_parser_chain,
+from src.llm.chains.strategy.market_report.agenda_map_chain import (
+    create_agenda_map_chain,
+    format_inputs_for_agenda_map,
+    parse_agenda_map_response,
+)
+from src.llm.chains.strategy.market_report.landscape_chain import (
+    create_landscape_chain,
+    format_inputs_for_landscape,
+    parse_landscape_response,
+)
+from src.llm.chains.strategy.market_report.strategic_brief_chain import (
+    create_strategic_brief_chain,
+    format_inputs_for_strategic_brief,
+    parse_strategic_brief_response,
+)
+from src.llm.chains.strategy.brief_parser_chain import (
+    create_brief_parser_chain,
     parse_brief_parser_response,
 )
 from src.database import AsyncSessionLocal
@@ -351,21 +366,30 @@ async def load_strategy_inputs_with_names(
 
 # ==================== 生成 + 编辑 ====================
 
-# 状态流转顺序
+# 状态流转顺序（含两条产出路径）
+#
+# brand_strategy 路径：ready → insight_done → brand_role_done → completed
+# market_report 路径：  ready → agenda_map_done → landscape_done → completed
+#
+# 同层级共享 order，使 "至少完成某步" 的比较仍然有效：
+# insight_done ≡ agenda_map_done（两条路径的第 1 层），
+# brand_role_done ≡ landscape_done（两条路径的第 2 层）。
 STATUS_ORDER = {
     "draft": 0,
     "planned": 1,
     "probing": 2,
     "collecting": 3,
     "ready": 4,
-    "phase1_done": 5,
-    "phase2_done": 6,
+    "insight_done": 5,
+    "brand_role_done": 6,
+    "agenda_map_done": 5,
+    "landscape_done": 6,
     "completed": 7,
 }
 
 
 def _validate_has_slices(strategy: Strategy) -> None:
-    """校验策略已关联切片（phase1 前置条件）"""
+    """校验策略已关联切片（insight 层前置条件）"""
     if not strategy.slices:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -374,12 +398,12 @@ def _validate_has_slices(strategy: Strategy) -> None:
 
 
 async def _retrieve_strategy_market_context(
-    db: AsyncSession, strategy: Strategy, phase_label: str
+    db: AsyncSession, strategy: Strategy, stage_label: str
 ) -> str:
     """从知识库检索市场背景（RAG），失败时优雅降级为空字符串。
 
-    Phase 1/2/3 共用：三个阶段都以 brief.subject + analysis_goal 为查询，
-    无 brief 或查询为空时返回 ""，RAG 异常不中断主流程。
+    brand_strategy 三层（insight/brand_role/big_idea）共用：都以 brief.subject + analysis_goal
+    为查询，无 brief 或查询为空时返回 ""，RAG 异常不中断主流程。
     """
     if not strategy.brand_brief:
         return ""
@@ -394,36 +418,8 @@ async def _retrieve_strategy_market_context(
             db, query, user_id=strategy.user_id, top_k=6
         )
     except Exception as e:
-        logger.warning("%s RAG 检索失败，降级为空: %s", phase_label, e)
+        logger.warning("%s RAG 检索失败，降级为空: %s", stage_label, e)
         return ""
-
-
-def _compute_phase_source_count(
-    slices_data: list[dict],
-    news_slices_data: list[dict],
-) -> int:
-    """Phase 1/2/3 的 AnalysisJob.source_count：社媒切片 + 新闻切片总数。
-
-    市场知识库背景不计入 source_count（它是补充上下文，不是"分析输入单元"），
-    但会在 phase_result.data_sources.knowledge_base 中单独标注。
-    """
-    return len(slices_data) + len(news_slices_data)
-
-
-def _build_phase_data_sources(
-    slices_data: list[dict],
-    news_slices_data: list[dict],
-    market_context: str,
-) -> dict[str, bool]:
-    """记录本次 Phase 生成实际消费了哪些数据渠道，写入 phase_result.data_sources。
-
-    前端据此展示"基于 X 渠道的分析"，避免"有数据没用上 / 没数据强行引用"歧义。
-    """
-    return {
-        "social_media": bool(slices_data),
-        "news_media": bool(news_slices_data),
-        "knowledge_base": bool(market_context),
-    }
 
 
 def _validate_slices_have_data(
@@ -431,7 +427,37 @@ def _validate_slices_have_data(
     strategy: Strategy,
     news_slices_data: list[dict] | None = None,
 ) -> None:
-    """校验切片是否有分析数据（社媒或新闻至少有一种）"""
+    """校验切片是否有分析数据
+
+    brand_strategy 路径强制要求 social_media 作为主源——insight/brand_role/big_idea 的 prompt
+    结构性依赖消费者声音（KOL/topic_aspects/pains/gains 等），纯新闻数据跑不出
+    Tension / Brand Social Role / Big Idea。news_media 只作为补充视角存在。
+
+    market_report 路径以 news_media 为主源，social_media 为可选补充。
+    """
+    output_type = strategy.output_type or "brand_strategy"
+
+    if output_type == "brand_strategy":
+        if not slices_data:
+            slice_ids = [s.slice_id for s in strategy.slices]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"brand_strategy 产出路径依赖社媒切片作为消费者声音主源，"
+                    f"但切片 {slice_ids} 尚无社媒分析数据。"
+                ),
+            )
+        return
+
+    if output_type == "market_report":
+        if not news_slices_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="market_report 产出路径依赖新闻切片作为主源，但新闻切片尚无分析数据。",
+            )
+        return
+
+    # 未知 output_type：按旧的宽松校验兜底
     if not slices_data and not news_slices_data:
         slice_ids = [s.slice_id for s in strategy.slices]
         raise HTTPException(
@@ -440,11 +466,36 @@ def _validate_slices_have_data(
         )
 
 
-async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
-    """生成 Phase 1 (洞察层): Social Tension + Brand Opportunity"""
+def _build_data_provenance(
+    slices_data: list[dict],
+    news_slices_data: list[dict],
+    market_context: str,
+    *,
+    primary_channel: str,
+) -> dict[str, Any]:
+    """构造本次 Phase 生成的数据来源记录，采用"两层模型"：
+
+    - primary: 本次分析的主数据输入（直接进入 prompt 的切片结果）
+    - background: 补充背景（知识库 RAG 注入的市场背景）
+
+    前端据此显示"基于 X 渠道的分析 + Y 背景"，而不是把知识库当第三条平行渠道。
+    """
+    primary: dict[str, Any] = {
+        "channel": primary_channel,
+        "social_media_slice_count": len(slices_data),
+        "news_media_slice_count": len(news_slices_data),
+    }
+    background: dict[str, Any] = {
+        "knowledge_base": bool(market_context and market_context.strip()),
+    }
+    return {"primary": primary, "background": background}
+
+
+async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
+    """生成 brand_strategy 第 1 层 (洞察): Social Tension + Brand Opportunity"""
     _validate_has_slices(strategy)
 
-    # 校验切片 Stage2 流水线已完成（Phase chains 依赖 intent/focus 层数据）
+    # 校验切片 Stage2 流水线已完成（brand_strategy 三层都依赖 intent/focus 层数据）
     for ss in strategy.slices:
         rd = (ss.slice.result_data or {}) if ss.slice else {}
         pipeline = rd.get("pipeline") or {}
@@ -452,17 +503,17 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
         if stage2.get("status") and stage2["status"] != "completed":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="切片分析流水线尚未完成，请稍后再生成 Phase 1",
+                detail="切片分析流水线尚未完成，请稍后再生成洞察层",
             )
 
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    market_context = await _retrieve_strategy_market_context(db, strategy, "Phase1")
+    market_context = await _retrieve_strategy_market_context(db, strategy, "Insight")
 
-    chain = create_strategy_phase1_chain()
-    inputs = format_slice_data_for_phase1(
+    chain = create_insight_chain()
+    inputs = format_slice_data_for_insight(
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
@@ -475,8 +526,8 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
         social_monitor_id=strategy.social_monitor_id,
         news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.user_id,
-        analysis_type=AnalysisType.STRATEGY_PHASE1.value,
-        source_count=_compute_phase_source_count(slices_data, news_slices_data),
+        analysis_type=AnalysisType.STRATEGY_INSIGHT.value,
+        source_count=len(slices_data) + len(news_slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
     )
@@ -485,11 +536,12 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     response = await chain.ainvoke(inputs)
     duration = time.time() - start
 
-    result = parse_phase1_response(response.content)
-    result["data_sources"] = _build_phase_data_sources(
-        slices_data, news_slices_data, market_context
+    result = parse_insight_response(response.content)
+    result["data_provenance"] = _build_data_provenance(
+        slices_data, news_slices_data, market_context,
+        primary_channel="social_media",
     )
-    logger.info("Strategy %d Phase 1 生成完成 (%.1fs)", strategy.id, duration)
+    logger.info("Strategy %d Insight 生成完成 (%.1fs)", strategy.id, duration)
 
     now = datetime.now(timezone.utc)
     job.status = "completed"
@@ -498,32 +550,32 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     job.processing_time = int(duration)
     job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.phase1_result = result
-    strategy.phase2_result = None
-    strategy.phase3_result = None
-    strategy.status = "phase1_done"
+    strategy.insight_result = result
+    strategy.brand_role_result = None
+    strategy.big_idea_result = None
+    strategy.status = "insight_done"
 
     await db.commit()
     return await get_strategy_by_id(db, strategy.id)
 
 
-async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
-    """生成 Phase 2 (策略层): Brand Social Role + Social Strategy"""
-    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["phase1_done"]:
+async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
+    """生成 brand_strategy 第 2 层 (策略): Brand Social Role + Social Strategy"""
+    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["insight_done"]:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="请先完成并确认 Phase 1",
+            detail="请先完成并确认洞察层",
         )
 
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    market_context = await _retrieve_strategy_market_context(db, strategy, "Phase2")
+    market_context = await _retrieve_strategy_market_context(db, strategy, "BrandRole")
 
-    chain = create_strategy_phase2_chain()
-    inputs = format_data_for_phase2(
-        strategy.phase1_result,
+    chain = create_brand_role_chain()
+    inputs = format_data_for_brand_role(
+        strategy.insight_result,
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
@@ -536,8 +588,8 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
         social_monitor_id=strategy.social_monitor_id,
         news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.user_id,
-        analysis_type=AnalysisType.STRATEGY_PHASE2.value,
-        source_count=_compute_phase_source_count(slices_data, news_slices_data),
+        analysis_type=AnalysisType.STRATEGY_BRAND_ROLE.value,
+        source_count=len(slices_data) + len(news_slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
     )
@@ -546,11 +598,12 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
     response = await chain.ainvoke(inputs)
     duration = time.time() - start
 
-    result = parse_phase2_response(response.content)
-    result["data_sources"] = _build_phase_data_sources(
-        slices_data, news_slices_data, market_context
+    result = parse_brand_role_response(response.content)
+    result["data_provenance"] = _build_data_provenance(
+        slices_data, news_slices_data, market_context,
+        primary_channel="social_media",
     )
-    logger.info("Strategy %d Phase 2 生成完成 (%.1fs)", strategy.id, duration)
+    logger.info("Strategy %d Brand Role 生成完成 (%.1fs)", strategy.id, duration)
 
     now = datetime.now(timezone.utc)
     job.status = "completed"
@@ -559,36 +612,33 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
     job.processing_time = int(duration)
     job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.phase2_result = result
-    strategy.phase3_result = None
-    strategy.status = "phase2_done"
+    strategy.brand_role_result = result
+    strategy.big_idea_result = None
+    strategy.status = "brand_role_done"
 
     await db.commit()
     return await get_strategy_by_id(db, strategy.id)
 
 
-async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
-    """生成 Phase 3 (创意层): Big Idea + Content Strategy"""
-    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["phase2_done"]:
+async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
+    """生成 brand_strategy 第 3 层 (创意): Big Idea + Content Strategy"""
+    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["brand_role_done"]:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="请先完成并确认 Phase 2",
+            detail="请先完成并确认策略层",
         )
 
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    market_context = await _retrieve_strategy_market_context(db, strategy, "Phase3")
-
-    chain = create_strategy_phase3_chain()
-    inputs = format_data_for_phase3(
-        strategy.phase1_result,
-        strategy.phase2_result,
+    chain = create_big_idea_chain()
+    inputs = format_data_for_big_idea(
+        strategy.insight_result,
+        strategy.brand_role_result,
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
-        market_context=market_context,
         news_slices=news_slices_data,
     )
 
@@ -597,8 +647,8 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
         social_monitor_id=strategy.social_monitor_id,
         news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.user_id,
-        analysis_type=AnalysisType.STRATEGY_PHASE3.value,
-        source_count=_compute_phase_source_count(slices_data, news_slices_data),
+        analysis_type=AnalysisType.STRATEGY_BIG_IDEA.value,
+        source_count=len(slices_data) + len(news_slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
     )
@@ -607,11 +657,13 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
     response = await chain.ainvoke(inputs)
     duration = time.time() - start
 
-    result = parse_phase3_response(response.content)
-    result["data_sources"] = _build_phase_data_sources(
-        slices_data, news_slices_data, market_context
+    result = parse_big_idea_response(response.content)
+    # big_idea 层不注入 knowledge_base（token 预算原因，见 big_idea_chain.py 头注）
+    result["data_provenance"] = _build_data_provenance(
+        slices_data, news_slices_data, market_context="",
+        primary_channel="social_media",
     )
-    logger.info("Strategy %d Phase 3 生成完成 (%.1fs)", strategy.id, duration)
+    logger.info("Strategy %d Big Idea 生成完成 (%.1fs)", strategy.id, duration)
 
     now = datetime.now(timezone.utc)
     job.status = "completed"
@@ -620,7 +672,330 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
     job.processing_time = int(duration)
     job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.phase3_result = result
+    strategy.big_idea_result = result
+    strategy.status = "completed"
+
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+# ==================== market_report 路径 agenda_map / landscape / strategic_brief ====================
+
+
+def _validate_market_report_output_type(strategy: Strategy) -> None:
+    """防御性校验：market_report 层只能在 output_type=market_report 的策略上生成"""
+    if strategy.output_type != "market_report":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"当前策略产出路径为 {strategy.output_type or 'brand_strategy'}，"
+                "无法生成 market_report 层。请在研究计划确认时选择 market_report 路径。"
+            ),
+        )
+
+
+_BRAND_STRATEGY_STAGES: tuple[str, ...] = ("insight", "brand_role", "big_idea")
+_MARKET_REPORT_STAGES: tuple[str, ...] = ("agenda_map", "landscape", "strategic_brief")
+
+
+async def edit_brand_strategy_result(
+    db: AsyncSession,
+    strategy: Strategy,
+    *,
+    stage: str,
+    result: dict[str, Any],
+) -> Strategy:
+    """编辑 brand_strategy 路径的 insight / brand_role / big_idea 结果。
+
+    编辑上游层会级联清除下游层（避免陈旧结果与新修改冲突），
+    并根据 stage 把 strategy.status 回退到对应节点。
+    """
+    if strategy.output_type and strategy.output_type != "brand_strategy":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"当前策略产出路径为 {strategy.output_type}，"
+                "无法编辑 brand_strategy 结果"
+            ),
+        )
+
+    if stage not in _BRAND_STRATEGY_STAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"stage 必须为 insight/brand_role/big_idea，收到 {stage}",
+        )
+
+    if stage == "insight":
+        if not strategy.insight_result:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="insight 层尚未生成，无法编辑",
+            )
+        strategy.insight_result = result
+        strategy.brand_role_result = None
+        strategy.big_idea_result = None
+        strategy.status = "insight_done"
+    elif stage == "brand_role":
+        if not strategy.brand_role_result:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="brand_role 层尚未生成，无法编辑",
+            )
+        strategy.brand_role_result = result
+        strategy.big_idea_result = None
+        strategy.status = "brand_role_done"
+    else:  # stage == "big_idea"
+        if not strategy.big_idea_result:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="big_idea 层尚未生成，无法编辑",
+            )
+        strategy.big_idea_result = result
+        strategy.status = "completed"
+
+    flag_modified(strategy, f"{stage}_result")
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def edit_market_report_result(
+    db: AsyncSession,
+    strategy: Strategy,
+    *,
+    stage: str,
+    result: dict[str, Any],
+) -> Strategy:
+    """编辑 market_report 路径的 agenda_map / landscape / strategic_brief 结果
+    （级联清除下游）。"""
+    if strategy.output_type != "market_report":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"当前策略产出路径为 {strategy.output_type or 'brand_strategy'}，"
+                "无法编辑 market_report 结果"
+            ),
+        )
+
+    if stage not in _MARKET_REPORT_STAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"stage 必须为 agenda_map/landscape/strategic_brief，收到 {stage}"
+            ),
+        )
+
+    if stage == "agenda_map":
+        if not strategy.agenda_map_result:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="agenda_map 层尚未生成，无法编辑",
+            )
+        strategy.agenda_map_result = result
+        strategy.landscape_result = None
+        strategy.strategic_brief_result = None
+        strategy.status = "agenda_map_done"
+    elif stage == "landscape":
+        if not strategy.landscape_result:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="landscape 层尚未生成，无法编辑",
+            )
+        strategy.landscape_result = result
+        strategy.strategic_brief_result = None
+        strategy.status = "landscape_done"
+    else:  # stage == "strategic_brief"
+        if not strategy.strategic_brief_result:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="strategic_brief 层尚未生成，无法编辑",
+            )
+        strategy.strategic_brief_result = result
+        strategy.status = "completed"
+
+    flag_modified(strategy, f"{stage}_result")
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
+    """生成 Market Report 第 1 层：媒体议程图 (Agenda Map)"""
+    _validate_market_report_output_type(strategy)
+
+    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["ready"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="数据尚未就绪，无法生成媒体议程图",
+        )
+
+    slices_data = await load_strategy_inputs(db, strategy)
+    news_slices_data = await load_strategy_news_inputs(db, strategy)
+    _validate_slices_have_data(slices_data, strategy, news_slices_data)
+
+    market_context = await _retrieve_strategy_market_context(db, strategy, "AgendaMap")
+
+    chain = create_agenda_map_chain()
+    inputs = format_inputs_for_agenda_map(
+        news_slices=news_slices_data,
+        brief=strategy.brand_brief,
+        research_design=strategy.research_design,
+        market_context=market_context,
+    )
+
+    job = await create_analysis_job_async(
+        db,
+        social_monitor_id=strategy.social_monitor_id,
+        news_monitor_id=strategy.news_monitor_id,
+        user_id=strategy.user_id,
+        analysis_type=AnalysisType.STRATEGY_AGENDA_MAP.value,
+        source_count=len(news_slices_data),
+        status="processing",
+        analysis_config={"strategy_id": strategy.id},
+    )
+
+    start = time.time()
+    response = await chain.ainvoke(inputs)
+    duration = time.time() - start
+
+    result = parse_agenda_map_response(response.content)
+    result["data_provenance"] = _build_data_provenance(
+        slices_data, news_slices_data, market_context,
+        primary_channel="news_media",
+    )
+    logger.info("Strategy %d Agenda Map 生成完成 (%.1fs)", strategy.id, duration)
+
+    now = datetime.now(timezone.utc)
+    job.status = "completed"
+    job.completed_at = now
+    job.analyzed_count = 1
+    job.processing_time = int(duration)
+    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+
+    strategy.agenda_map_result = result
+    # 重新生成 agenda_map 时，landscape/strategic_brief 必须作废
+    strategy.landscape_result = None
+    strategy.strategic_brief_result = None
+    strategy.status = "agenda_map_done"
+
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
+    """生成 Market Report 第 2 层：竞争格局 (Landscape)"""
+    _validate_market_report_output_type(strategy)
+
+    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["agenda_map_done"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="请先完成并确认 Agenda Map",
+        )
+
+    slices_data = await load_strategy_inputs(db, strategy)
+    news_slices_data = await load_strategy_news_inputs(db, strategy)
+    _validate_slices_have_data(slices_data, strategy, news_slices_data)
+
+    market_context = await _retrieve_strategy_market_context(db, strategy, "Landscape")
+
+    chain = create_landscape_chain()
+    inputs = format_inputs_for_landscape(
+        agenda_map_result=strategy.agenda_map_result,
+        news_slices=news_slices_data,
+        brief=strategy.brand_brief,
+        research_design=strategy.research_design,
+        market_context=market_context,
+    )
+
+    job = await create_analysis_job_async(
+        db,
+        social_monitor_id=strategy.social_monitor_id,
+        news_monitor_id=strategy.news_monitor_id,
+        user_id=strategy.user_id,
+        analysis_type=AnalysisType.STRATEGY_LANDSCAPE.value,
+        source_count=len(news_slices_data),
+        status="processing",
+        analysis_config={"strategy_id": strategy.id},
+    )
+
+    start = time.time()
+    response = await chain.ainvoke(inputs)
+    duration = time.time() - start
+
+    result = parse_landscape_response(response.content)
+    result["data_provenance"] = _build_data_provenance(
+        slices_data, news_slices_data, market_context,
+        primary_channel="news_media",
+    )
+    logger.info("Strategy %d Landscape 生成完成 (%.1fs)", strategy.id, duration)
+
+    now = datetime.now(timezone.utc)
+    job.status = "completed"
+    job.completed_at = now
+    job.analyzed_count = 1
+    job.processing_time = int(duration)
+    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+
+    strategy.landscape_result = result
+    strategy.strategic_brief_result = None
+    strategy.status = "landscape_done"
+
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Strategy:
+    """生成 Market Report 第 3 层（终层）：战略简报 (Strategic Brief)"""
+    _validate_market_report_output_type(strategy)
+
+    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["landscape_done"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="请先完成并确认 Landscape",
+        )
+
+    # strategic_brief 不加载切片数据（纯 agenda_map + landscape 合成），
+    # 但仍记录 provenance 便于前端展示
+    slices_data = await load_strategy_inputs(db, strategy)
+    news_slices_data = await load_strategy_news_inputs(db, strategy)
+
+    chain = create_strategic_brief_chain()
+    inputs = format_inputs_for_strategic_brief(
+        agenda_map_result=strategy.agenda_map_result,
+        landscape_result=strategy.landscape_result,
+        brief=strategy.brand_brief,
+        research_design=strategy.research_design,
+        market_context="",  # strategic_brief 不注入 KB，避免稀释前两层已经收敛的结论
+    )
+
+    job = await create_analysis_job_async(
+        db,
+        social_monitor_id=strategy.social_monitor_id,
+        news_monitor_id=strategy.news_monitor_id,
+        user_id=strategy.user_id,
+        analysis_type=AnalysisType.STRATEGY_STRATEGIC_BRIEF.value,
+        source_count=len(news_slices_data),
+        status="processing",
+        analysis_config={"strategy_id": strategy.id},
+    )
+
+    start = time.time()
+    response = await chain.ainvoke(inputs)
+    duration = time.time() - start
+
+    result = parse_strategic_brief_response(response.content)
+    result["data_provenance"] = _build_data_provenance(
+        slices_data, news_slices_data, market_context="",
+        primary_channel="news_media",
+    )
+    logger.info("Strategy %d Strategic Brief 生成完成 (%.1fs)", strategy.id, duration)
+
+    now = datetime.now(timezone.utc)
+    job.status = "completed"
+    job.completed_at = now
+    job.analyzed_count = 1
+    job.processing_time = int(duration)
+    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+
+    strategy.strategic_brief_result = result
     strategy.status = "completed"
 
     await db.commit()
@@ -711,6 +1086,7 @@ async def design_research(
         research_questions=parsed["research_questions"],
         data_plan=parsed["data_plan"],
         slice_blueprint=parsed["slice_blueprint"],
+        primary_sources=parsed.get("primary_sources", []),
         output_type=parsed["output_type"],
         output_type_rationale=parsed.get("output_type_rationale", ""),
     )
@@ -802,13 +1178,15 @@ async def confirm_research(
     research_design: dict,
     current_user_id: int,
     *,
+    output_type: str,
     notes_per_task: int = 50,
     probe_notes: int = 20,
 ) -> ConfirmResearchResponse:
-    """确认研究计划，创建一个 SocialMonitor + 探测任务
+    """确认研究计划，创建 SocialMonitor/NewsMonitor + 探测任务
 
-    遍历 data_plan 中每个维度的关键词×平台组合创建 SocialTask，
-    task_params 包含 max_pages 用于控制翻页数量（探测任务：1页或2页）。
+    output_type 由用户在前端显式选择并回传，后端按决策表校验：
+    - brand_strategy 必须要求 data_plan 里至少一个 social_media 维度（否则 Insight/Brand Role/Big Idea 跑不通）
+    - market_report 必须要求 data_plan 里至少一个 news_media 维度
     """
     from src.social_media.monitors.crud import get_monitor_by_name, get_platform_by_code
     from src.social_media.monitors.schemas import SocialMonitorCreate
@@ -848,6 +1226,41 @@ async def confirm_research(
             detail="研究计划中无数据采集方案",
         )
 
+    # 按决策表校验 output_type 与 data_plan 的匹配关系
+    if output_type not in ("brand_strategy", "market_report"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"非法的 output_type: {output_type}",
+        )
+    has_social_dim = any(
+        (dp.get("channel") or "social_media") == "social_media" for dp in data_plan
+    )
+    has_news_dim = any(dp.get("channel") == "news_media" for dp in data_plan)
+    if output_type == "brand_strategy" and not has_social_dim:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "brand_strategy 产出路径依赖社媒作为主数据源，但研究计划中无 social_media 维度。"
+                "请修改研究计划加入社媒维度，或将产出路径切换为 market_report。"
+            ),
+        )
+    if output_type == "market_report" and not has_news_dim:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "market_report 产出路径依赖新闻作为主数据源，但研究计划中无 news_media 维度。"
+                "请修改研究计划加入新闻维度，或将产出路径切换为 brand_strategy。"
+            ),
+        )
+
+    # 同步把 primary_sources 写入 research_design，供前端展示和下游读取
+    primary_sources: list[str] = []
+    if has_social_dim:
+        primary_sources.append("social_media")
+    if has_news_dim:
+        primary_sources.append("news_media")
+    research_design["primary_sources"] = primary_sources
+
     # 预估总任务数，超过 20 个视为异常（提示用户精简，而非静默创建大量任务）
     # 社媒: keywords × platforms；新闻: keywords（每个关键词 1 个任务，无 platforms）
     estimated_tasks = sum(
@@ -860,10 +1273,11 @@ async def confirm_research(
             detail=f"研究计划预估任务数（{estimated_tasks}）过多，请精简关键词或平台（建议 6-10 个任务）",
         )
 
-    # 保存用户编辑后的研究计划
+    # 保存用户编辑后的研究计划 + 用户显式选择的 output_type（覆盖 LLM 建议值）
+    research_design["output_type"] = output_type
     strategy.research_design = research_design
     flag_modified(strategy, "research_design")
-    strategy.output_type = research_design.get("output_type", "brand_strategy")
+    strategy.output_type = output_type
 
     # 复用已有 SocialMonitor 或创建新的
     if strategy.social_monitor_id:
@@ -1193,7 +1607,7 @@ async def _run_news_probe_review_one(
 
     失败时 assessment 为 None，usage 可能为 None（若调用前抛出）。
     """
-    from src.llm.chains.news_probe_review_chain import (
+    from src.llm.chains.strategy.news_probe_review_chain import (
         format_single_news_probe_review_inputs,
         parse_single_news_probe_review_response,
     )
@@ -1270,7 +1684,7 @@ async def _run_probe_review_bg_task(
             # 新闻 probe：LLM 审查（并行每任务一次调用），走 AnalysisJob 记录成本
             news_llm_assessments: list[dict] = []
             if news_probe_summaries:
-                from src.llm.chains.news_probe_review_chain import (
+                from src.llm.chains.strategy.news_probe_review_chain import (
                     create_single_news_probe_review_chain,
                 )
 
@@ -1282,7 +1696,7 @@ async def _run_probe_review_bg_task(
                     db,
                     news_monitor_id=strategy.news_monitor_id,
                     user_id=strategy.user_id,
-                    analysis_type=AnalysisType.STRATEGY_PROBE_REVIEW.value,
+                    analysis_type=AnalysisType.STRATEGY_NEWS_PROBE_REVIEW.value,
                     source_count=len(news_probe_summaries),
                     status="processing",
                     analysis_config={"strategy_id": strategy.id, "channel": "news"},
@@ -1424,7 +1838,7 @@ async def _run_probe_review(
             social_monitor_id=strategy.social_monitor_id,
             news_monitor_id=strategy.news_monitor_id,
             user_id=strategy.user_id,
-            analysis_type=AnalysisType.STRATEGY_PROBE_REVIEW.value,
+            analysis_type=AnalysisType.STRATEGY_SOCIAL_PROBE_REVIEW.value,
             source_count=len(ambiguous_summaries),
             status="processing",
             analysis_config={"strategy_id": strategy.id},
@@ -1579,7 +1993,7 @@ async def parse_brief_from_file(content: bytes, filename: str) -> ParseBriefResp
 
     document_text = raw_text[:_MAX_BRIEF_TEXT_CHARS]
 
-    chain = create_strategy_brief_parser_chain()
+    chain = create_brief_parser_chain()
     try:
         response = await chain.ainvoke({"document_text": document_text})
         response_text = (
@@ -1611,7 +2025,7 @@ async def parse_brief_from_text(text: str) -> ParseBriefResponse:
 
     document_text = text[:_MAX_BRIEF_TEXT_CHARS]
 
-    chain = create_strategy_brief_parser_chain()
+    chain = create_brief_parser_chain()
     try:
         response = await chain.ainvoke({"document_text": document_text})
         response_text = (
@@ -1666,7 +2080,7 @@ async def check_probe_status(
     news_analyzed_count = sum(1 for t in news_probe_tasks if t.status == "completed" and t.analysis_result)
 
     # 新闻 probe 送 LLM 审查：加载每个任务的文章卡片（title/source/tier/snippet）
-    # 由 news_probe_review_chain 基于搜索结果判断关键词相关性与信号质量
+    # 由 strategy_news_probe_review_chain 基于搜索结果判断关键词相关性与信号质量
     from src.news_media.tasks import crud as news_crud
 
     news_probe_summaries: list[dict] = []

@@ -38,7 +38,7 @@ from src.social_media.analysis.celery_tasks.progress_manager import (
 from src.social_media.analysis.celery_tasks.llm_utils import (
     invoke_chain_with_stats_sync,
 )
-from src.llm.chains.screening_chain import (
+from src.llm.chains.social.screening_chain import (
     create_screening_chain,
     format_posts_for_screening,
 )

@@ -2,7 +2,7 @@
 
 覆盖范围：
 1. RefineProbeRequest / NewsRefinementItem schema 校验
-2. news_probe_review_chain 的 format/parse 辅助函数
+2. strategy_news_probe_review_chain 的 format/parse 辅助函数
 3. news_media service._search_and_store_articles 的双渠道参数传递
 4. strategies service._run_news_probe_review_one 的 (assessment, usage, duration) 返回契约
 """
@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from src.llm.chains.news_probe_review_chain import (
+from src.llm.chains.strategy.news_probe_review_chain import (
     format_single_news_probe_review_inputs,
     parse_single_news_probe_review_response,
 )
@@ -90,7 +90,7 @@ class TestRefineProbeRequest:
         assert len(req.news_refinements) == 1
 
 
-# ==================== news_probe_review_chain 辅助函数 ====================
+# ==================== strategy_news_probe_review_chain 辅助函数 ====================
 
 
 class TestFormatSingleNewsProbeReviewInputs:

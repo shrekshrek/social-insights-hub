@@ -32,11 +32,11 @@
 | 代码命名/snapshot→slice/全栈 | 已完成 | 后端文件/目录重命名 + DB migration + 前端类型/API 路径全部更新为 slice |
 | 文档补全/architecture | 已完成 | backend-architecture.md 补充 social_media/langchain/agent 模块；frontend-architecture.md 补充 social-media Layer 及 spam 可视化约定 |
 | 部署配置 | 已完成 | Docker Compose 开发/生产双配置；celery-beat 容器已删除，定时任务迁移至 APScheduler（在 FastAPI asyncio 事件循环中运行） |
-| strategies/后端 | 已完成 | 策略定义模块：3 阶段 AI 生成（洞察→策略→创意），Phase 1/2/3 Chain + CRUD API + Word 导出 |
+| strategies/后端 | 已完成 | 策略定义模块：3 阶段 AI 生成（Insight → Brand Role → Big Idea），对应 chain + CRUD API + Word 导出 |
 | strategies/前端 | 已完成 | 策略列表/创建/详情页，3 阶段结果展示与编辑，跨项目切片选择器 |
 | analysis/slice_enrichment/后端 | 已完成 | 切片流水线数据补全：time_distribution(Stage1) + kol_voices(Stage1) + ipa_analysis(Stage2) |
 | strategy-research-engine/全栈 | 已完成 | 策略模块重构为智能研究编排者：4 阶段自动化（研究设计→探测验证→数据就绪→产出生成）+ 增量采集协议 + 6 条 LLM Chain + 前端 4 阶段面板 |
-| knowledge_base/全栈 | 已完成 | 市场知识库：文档上传/解析/向量化/RAG 检索；策略 Phase1/2 注入 market_context；渠道架构同步（合并 industry_data、删除 ecommerce）；postgres 迁移至 pgvector/pgvector:pg16 |
+| knowledge_base/全栈 | 已完成 | 市场知识库：文档上传/解析/向量化/RAG 检索；策略各产出 stage 注入 market_context；渠道架构同步（合并 industry_data、删除 ecommerce）；postgres 迁移至 pgvector/pgvector:pg16 |
 | knowledge_base/crawlers/全栈 | 已完成 | Crawl4AI + APScheduler 定时爬取 CNNIC/NBS/gov.cn；admin GET /crawlers/status + POST /crawlers/{source_type}/run；Embedding API 迁移至 SiliconFlow |
 | knowledge_base/前端 | 已完成 | 文档列表/上传/删除、RAG 检索测试、爬虫状态管理 |
 | news_media/后端 | 已完成 | 双渠道聚合（百度 Crawl4AI + DuckDuckGo ddgs）；probe=百度 10 条，collect=双渠道各 50 条+URL 去重；monitor 级统计聚合（无 LLM）+ 叙事聚合（news_insight_chain）；asyncio.create_task 异步后台 collect；Alembic 迁移（删除 search_provider，新增 aggregated_result/search_source） |

@@ -11,7 +11,7 @@
 原有数据流强依赖社媒单一管线：
 
 ```
-社媒 DataTask → AnalysisSlice（Celery 聚合）→ Phase 1/2/3 Chain
+社媒 DataTask → AnalysisSlice（Celery 聚合）→ Insight/Brand Role/Big Idea Chain
 ```
 
 未来需要接入知识库、网络搜索等数据源，这些无法走社媒聚合管线，需要从架构层面解耦。
@@ -22,7 +22,7 @@
 
 1. **Brief 摄入时就做渠道分发**：创建策略时判断哪些渠道适合，明确研究边界，用户在提交前就知道系统能解决什么、不能解决什么
 2. **各渠道独立处理**：研究设计、数据采集按渠道分路，互不干扰，新增渠道不影响已有逻辑
-3. **单一归一化边界**：所有渠道的数据在进入 Phase 链之前统一格式，Phase 链不感知数据来源
+3. **单一归一化边界**：所有渠道的数据在进入产出 chain 之前统一格式，产出 chain 不感知数据来源
 
 ---
 
@@ -49,7 +49,7 @@
 
 ⑤ 各渠道数据采集
 
-⑥ 数据归一化 → Phase 1/2/3 最终分析
+⑥ 数据归一化 → 产出生成（brand_strategy: Insight/Brand Role/Big Idea · market_report: Agenda Map/Landscape/Strategic Brief）
 ```
 
 > ✅ 步骤②（创建页展示 channel_plan）已实现，用户可在创建前看到可用/未开通渠道与能力边界。
@@ -116,7 +116,7 @@ social_media   → research_design_chain（✅ 已实现）
                  输出：keywords / platforms / slice_blueprint
 
 knowledge_base → 无独立 design chain（✅ 已接入）
-                 通过 `retrieve_market_context()` 在 Phase1/2 生成前注入 RAG 结果
+                 通过 `_retrieve_strategy_market_context()` 在 stage 生成前注入 RAG 结果
 
 news_media     → 复用 research_design_chain 的 news 分支（✅ 已实现）
                  probe 与 collect 是独立的 NewsTask 记录，由 strategies/service.py 编排
@@ -135,7 +135,7 @@ social_media（✅ 现有，不变）:
   Monitor → DataTask → probe → 全量采集 → AnalysisSlice
 
 knowledge_base（✅ 已接入）:
-  KnowledgeDocument/Chunk（平台公共 + 用户私有）→ 向量检索 → market_context 注入 Phase1/2
+  KnowledgeDocument/Chunk（平台公共 + 用户私有）→ 向量检索 → market_context 注入产出 stage
 
 news_media（✅ 已完成）:
   NewsTask(probe) → baidu+sogou+duckduckgo 三渠道搜索卡片 → LLM probe review
@@ -153,7 +153,7 @@ news_media（✅ 已完成）:
 
 ### Layer 3：策略输入归一化 ✅ 已实现
 
-这是唯一的抽象边界，Phase chain 不感知数据来源。
+这是唯一的抽象边界，产出 chain 不感知数据来源。
 
 ```python
 async def load_strategy_inputs(
@@ -183,14 +183,16 @@ async def load_strategy_inputs(
 
 ---
 
-### Layer 4：Phase 生成 ✅ 已完成
+### Layer 4：产出生成 ✅ 已完成
 
-Phase 1/2/3 chain 消费社媒切片数据（`meta/foundation/layers`）+ 新闻媒体视角（`news_insights`），通过 `_format_news_media_section` 格式化后作为 `{news_media_section}` 注入 USER_TEMPLATE。
+brand_strategy 路径的 Insight / Brand Role / Big Idea chain 消费社媒切片数据（`meta/foundation/layers`）+ 新闻媒体视角（`news_insights`），通过 `_format_news_media_section` 格式化后作为 `{news_media_section}` 注入 USER_TEMPLATE。
 
 SYSTEM_TEMPLATE 中包含"新闻媒体数据使用指南"，指导 LLM 交叉验证消费者声音与媒体报道：
-- Phase 1：消费者-媒体矛盾→Tension 线索；新闻仅作补充证据
-- Phase 2：媒体叙事作为品牌角色外部锚点；竞品格局互为补充
-- Phase 3：借势/颠覆媒体叙事；引述作为话题锚点
+- Insight（第 1 层）：消费者-媒体矛盾→Tension 线索；新闻仅作补充证据
+- Brand Role（第 2 层）：媒体叙事作为品牌角色外部锚点；竞品格局互为补充
+- Big Idea（第 3 层）：借势/颠覆媒体叙事；引述作为话题锚点
+
+market_report 路径的 Agenda Map / Landscape / Strategic Brief chain 以 news_media 为主数据源（`load_strategy_news_inputs`），同样层层递进：Agenda Map 负责议程聚类，Landscape 在其上叠加竞品/定位分析，Strategic Brief 只消费前两层的结构化结论不得引入新数据。
 
 ---
 
@@ -215,10 +217,11 @@ class ChannelPlanItem:
 
 ### 状态流
 
-当前状态流按单渠道设计，满足现阶段需求：
+当前状态流按单渠道设计，满足现阶段需求（按 `output_type` 在 `ready` 之后分叉为两条三阶段路径）：
 
 ```
-draft → planned → probing → collecting → ready → phase1_done → phase2_done → completed
+draft → planned → probing → collecting → ready ┬─ [brand_strategy] insight_done → brand_role_done → completed
+                                                 └─ [market_report]  agenda_map_done → landscape_done → completed
 ```
 
 Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
@@ -238,16 +241,16 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 
 5. ✅ 新建策略页：AI 解析后展示 channel_plan，标注可用/未开通渠道及能力边界
 6. ✅ `load_strategy_inputs()` 替换 `load_slice_data()`：当前行为不变，接口已为多数据源就绪
-7. ✅ Knowledge Base：RAG 检索接入，Phase1/2 注入 `market_context`
+7. ✅ Knowledge Base：RAG 检索接入，产出 stage 注入 `market_context`
 
 ### 阶段三：News Media 数据源 ✅ 已完成
 
 8. ✅ News Media 模块：`news_media/monitors` + `news_media/tasks`，baidu+sogou+duckduckgo+wechat_mp 多渠道
 9. ✅ 两段式 probe→collect：各自为独立 NewsTask 记录（硬删除，ondelete CASCADE 到 NewsArticle）
-10. ✅ `news_probe_review_chain` + 并行 LLM 评估，包裹在 STRATEGY_PROBE_REVIEW AnalysisJob 内统一追踪成本
+10. ✅ `strategy_news_probe_review_chain` + 并行 LLM 评估，包裹在 STRATEGY_NEWS_PROBE_REVIEW AnalysisJob 内统一追踪成本（社媒对应 STRATEGY_SOCIAL_PROBE_REVIEW / `strategy_social_probe_review_chain`）
 11. ✅ `refine_probe` 批量端点同时处理 social/news 两路 refinements
 12. ✅ 维度级 news insight：`_run_dimension_news_insights` 按维度合并文章（去重+筛选）→ 每维度一次 insight chain
-13. ✅ Phase 1/2/3 Chain 新增 `_format_news_media_section` 注入新闻媒体视角，SYSTEM_TEMPLATE 新增交叉分析指南
+13. ✅ brand_strategy 三阶段 chain（Insight/Brand Role/Big Idea）新增 `_format_news_media_section` 注入新闻媒体视角，SYSTEM_TEMPLATE 新增交叉分析指南
 14. ✅ 微信公众号搜索（wechat_mp）：通过搜狗微信入口 + Crawl4AI 抓取，source_tier 独立为 "wechat_mp"
 
 ---
@@ -267,11 +270,11 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 | 组件 | 状态 | 说明 |
 |------|------|------|
 | `AnalysisSlice` 及聚合管线 | ✅ 不变 | |
-| Phase 1/2/3 chain | ✅ 已改 | USER_TEMPLATE 新增 `{news_media_section}`；SYSTEM_TEMPLATE 新增新闻媒体数据使用指南 |
+| brand_strategy 三阶段 chain（Insight/Brand Role/Big Idea） | ✅ 已改 | USER_TEMPLATE 新增 `{news_media_section}`；SYSTEM_TEMPLATE 新增新闻媒体数据使用指南 |
 | `strategy_brief_parser_chain` | ✅ 已改 | 升级为渠道分发判断，输出 `channel_plan` |
 | `strategy_research_design_chain` | ✅ 已改 | 接收 `channel_brief`，移除课题适配度评估 |
-| `service.py` Phase 生成函数 | ✅ 已改 | `load_slice_data()` → `load_strategy_inputs()` |
-| `service.py` 市场背景注入 | ✅ 已改 | Phase1/2 前调用 `retrieve_market_context()` 注入 `market_context` |
+| `service.py` stage 生成函数 | ✅ 已改 | `load_slice_data()` → `load_strategy_inputs()` |
+| `service.py` 市场背景注入 | ✅ 已改 | stage 生成前调用 `_retrieve_strategy_market_context()` 注入 `market_context` |
 | `Strategy` 模型 | ✅ 已改 | `channel_plan` 存于 `brand_brief` JSON |
 | 新建策略前端 | ✅ 已改 | AI 解析后展示 channel_plan，策略详情页 brief 区也展示 |
 

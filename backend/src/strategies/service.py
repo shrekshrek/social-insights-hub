@@ -373,6 +373,59 @@ def _validate_has_slices(strategy: Strategy) -> None:
         )
 
 
+async def _retrieve_strategy_market_context(
+    db: AsyncSession, strategy: Strategy, phase_label: str
+) -> str:
+    """从知识库检索市场背景（RAG），失败时优雅降级为空字符串。
+
+    Phase 1/2/3 共用：三个阶段都以 brief.subject + analysis_goal 为查询，
+    无 brief 或查询为空时返回 ""，RAG 异常不中断主流程。
+    """
+    if not strategy.brand_brief:
+        return ""
+    try:
+        from src.knowledge_base.service import retrieve_market_context
+
+        brief = strategy.brand_brief
+        query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
+        if not query:
+            return ""
+        return await retrieve_market_context(
+            db, query, user_id=strategy.user_id, top_k=6
+        )
+    except Exception as e:
+        logger.warning("%s RAG 检索失败，降级为空: %s", phase_label, e)
+        return ""
+
+
+def _compute_phase_source_count(
+    slices_data: list[dict],
+    news_slices_data: list[dict],
+) -> int:
+    """Phase 1/2/3 的 AnalysisJob.source_count：社媒切片 + 新闻切片总数。
+
+    市场知识库背景不计入 source_count（它是补充上下文，不是"分析输入单元"），
+    但会在 phase_result.data_sources.knowledge_base 中单独标注。
+    """
+    return len(slices_data) + len(news_slices_data)
+
+
+def _build_phase_data_sources(
+    slices_data: list[dict],
+    news_slices_data: list[dict],
+    market_context: str,
+) -> dict[str, bool]:
+    """记录本次 Phase 生成实际消费了哪些数据渠道，写入 phase_result.data_sources。
+
+    前端据此展示"基于 X 渠道的分析"，避免"有数据没用上 / 没数据强行引用"歧义。
+    """
+    return {
+        "social_media": bool(slices_data),
+        "news_media": bool(news_slices_data),
+        "knowledge_base": bool(market_context),
+    }
+
+
 def _validate_slices_have_data(
     slices_data: list[dict],
     strategy: Strategy,
@@ -406,20 +459,7 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    # RAG 注入（有 brief 时执行，无数据时优雅降级为 ""）
-    market_context = ""
-    if strategy.brand_brief:
-        try:
-            from src.knowledge_base.service import retrieve_market_context
-
-            brief = strategy.brand_brief
-            query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
-            if query:
-                market_context = await retrieve_market_context(
-                    db, query, user_id=strategy.user_id, top_k=6
-                )
-        except Exception as e:
-            logger.warning("Phase1 RAG 检索失败，降级为空: %s", e)
+    market_context = await _retrieve_strategy_market_context(db, strategy, "Phase1")
 
     chain = create_strategy_phase1_chain()
     inputs = format_slice_data_for_phase1(
@@ -436,7 +476,7 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
         news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_PHASE1.value,
-        source_count=len(slices_data),
+        source_count=_compute_phase_source_count(slices_data, news_slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
     )
@@ -446,6 +486,9 @@ async def generate_phase1(db: AsyncSession, strategy: Strategy) -> Strategy:
     duration = time.time() - start
 
     result = parse_phase1_response(response.content)
+    result["data_sources"] = _build_phase_data_sources(
+        slices_data, news_slices_data, market_context
+    )
     logger.info("Strategy %d Phase 1 生成完成 (%.1fs)", strategy.id, duration)
 
     now = datetime.now(timezone.utc)
@@ -476,20 +519,7 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    # RAG 注入（有 brief 时执行，无数据时优雅降级为 ""）
-    market_context = ""
-    if strategy.brand_brief:
-        try:
-            from src.knowledge_base.service import retrieve_market_context
-
-            brief = strategy.brand_brief
-            query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
-            if query:
-                market_context = await retrieve_market_context(
-                    db, query, user_id=strategy.user_id, top_k=6
-                )
-        except Exception as e:
-            logger.warning("Phase2 RAG 检索失败，降级为空: %s", e)
+    market_context = await _retrieve_strategy_market_context(db, strategy, "Phase2")
 
     chain = create_strategy_phase2_chain()
     inputs = format_data_for_phase2(
@@ -507,7 +537,7 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
         news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_PHASE2.value,
-        source_count=len(slices_data),
+        source_count=_compute_phase_source_count(slices_data, news_slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
     )
@@ -517,6 +547,9 @@ async def generate_phase2(db: AsyncSession, strategy: Strategy) -> Strategy:
     duration = time.time() - start
 
     result = parse_phase2_response(response.content)
+    result["data_sources"] = _build_phase_data_sources(
+        slices_data, news_slices_data, market_context
+    )
     logger.info("Strategy %d Phase 2 生成完成 (%.1fs)", strategy.id, duration)
 
     now = datetime.now(timezone.utc)
@@ -546,6 +579,8 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
+    market_context = await _retrieve_strategy_market_context(db, strategy, "Phase3")
+
     chain = create_strategy_phase3_chain()
     inputs = format_data_for_phase3(
         strategy.phase1_result,
@@ -553,6 +588,7 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
+        market_context=market_context,
         news_slices=news_slices_data,
     )
 
@@ -562,7 +598,7 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
         news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_PHASE3.value,
-        source_count=len(slices_data),
+        source_count=_compute_phase_source_count(slices_data, news_slices_data),
         status="processing",
         analysis_config={"strategy_id": strategy.id},
     )
@@ -572,6 +608,9 @@ async def generate_phase3(db: AsyncSession, strategy: Strategy) -> Strategy:
     duration = time.time() - start
 
     result = parse_phase3_response(response.content)
+    result["data_sources"] = _build_phase_data_sources(
+        slices_data, news_slices_data, market_context
+    )
     logger.info("Strategy %d Phase 3 生成完成 (%.1fs)", strategy.id, duration)
 
     now = datetime.now(timezone.utc)

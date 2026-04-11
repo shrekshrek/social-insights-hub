@@ -114,11 +114,21 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - 关键引述（key_quotes）中的行业权威发言可作为 Content Strategy 的话题锚点
 - Content Strategy 的支柱可考虑"媒体议题再造"——将新闻中的行业话题转化为社媒可传播的消费者语言
 - 新闻数据作为补充创意灵感，evidence 中标明 source 为"新闻媒体数据"以区分
+
+## 市场知识库背景使用指南
+
+如果输入包含"市场知识库背景"段落，请注意：
+- 知识库提供品类 / 行业 / 竞争格局的结构化背景，用于约束 Big Idea 不脱离行业现状
+- Big Idea 自检时应确认创意**不违背**知识库中的硬约束（监管/品类客观规律），但允许**挑战**其中的行业惯例
+- Content Strategy 的"品类颠覆型支柱"可直接对照知识库中"品类通常做法"这一段推导反向逻辑
+- 知识库背景作为约束性参考，不强制引用；若无相关段落则忽略即可
 """
 
 USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
+
+{market_context}
 
 ## Phase 1 洞察结果
 
@@ -191,6 +201,7 @@ def format_data_for_phase3(
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
+    market_context: str = "",
     news_slices: list[dict] | None = None,
 ) -> dict[str, Any]:
     """将 Phase 1+2 结果 + 补充数据格式化为 Phase 3 输入
@@ -286,6 +297,7 @@ def format_data_for_phase3(
     return {
         "brief_section": brief_section,
         "research_context_section": research_context_section,
+        "market_context": market_context,
         "phase1_result": json.dumps(_slim_phase1(phase1_result), ensure_ascii=False, indent=2),
         "phase2_result": json.dumps(_slim_phase2(phase2_result), ensure_ascii=False, indent=2),
         "supplementary_data": json.dumps(

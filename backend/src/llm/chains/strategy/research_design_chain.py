@@ -2,21 +2,28 @@
 
 接收各渠道的 channel_brief（由 brief_parser_chain 生成），
 将研究方向分解为结构化的研究计划：
-研究问题 → 数据采集方案（社媒 + 新闻） → 切片蓝图 → 主数据源判定 → 产出类型建议。
+研究问题 → 数据采集方案（社媒 + 新闻） → 行业研究计划 → 切片蓝图 → 主数据源判定 → 产出类型建议。
 
-## 两条产出路径（核心架构）
+## 三渠道架构
 
-本模块不再把三个渠道（social_media / news_media / knowledge_base）视为平级，
-而是按"主数据源"划分两条独立产出路径：
+三个数据渠道各代表一种独立视角：
+- social_media：消费者声音（UGC）→ SocialSlice
+- news_media：媒体报道（新闻）→ NewsSlice
+- research_agent：专家/行业报告（分析层）→ 结构化研究报告
 
-| 数据形态 (primary_sources)                  | 产出路径 (output_type) | 后续链                                               |
-|----------------------------------------------|-----------------------|------------------------------------------------------|
-| 含 social_media (有/无 news_media)           | brand_strategy (默认) | insight → brand_role → big_idea (Tension→Role→Idea)  |
-| 仅 news_media（无 social_media）             | market_report (强制)  | agenda_map → landscape → strategic_brief             |
+## 两条产出路径
+
+产出路径由 social_media / news_media 的维度组合决定（research_agent 不影响路径选择）：
+
+| data_plan 维度组合                      | primary_sources                   | output_type          |
+|-----------------------------------------|-----------------------------------|----------------------|
+| 含 social_media (有/无 news_media)      | ["social_media", "news_media"]    | brand_strategy       |
+| 仅 news_media（无 social_media）        | ["news_media"]                    | market_report        |
 
 - brand_strategy 的 insight/brand_role/big_idea prompt 结构性依赖消费者声音（KOL/topic_aspects/pains/gains），
   纯新闻无法跑通——因此仅 news_media 时必须强制走 market_report 路径。
-- knowledge_base 不是第三条路径，它只作为 insight / brand_role 层的补充背景（RAG 注入 `{market_context}`）。
+- Research Agent（行业研究）在 confirm_research 时按 plan 条件创建，其结果通过
+  `{research_findings}` 注入各 stage chain，代表专家/行业视角的第三数据源。
 
 本链的 `primary_sources` / `output_type` 字段是下游 service.confirm_research
 校验的硬性依据，不能由 LLM 自由发挥。
@@ -38,9 +45,9 @@ logger = logging.getLogger(__name__)
 SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队设计数据驱动的多渠道研究计划。
 
 ## 任务
-根据输入的渠道研究方向，输出结构化的研究计划：研究问题 → 数据采集方案 → 切片蓝图 → 主数据源判定 → 产出类型建议。不需要追问，用你的专业判断补全细节。
+根据输入的渠道研究方向，输出结构化的研究计划：研究问题 → 数据采集方案 → 行业研究计划（可选） → 切片蓝图 → 主数据源判定 → 产出类型建议。不需要追问，用你的专业判断补全细节。
 
-输入可能包含"社媒渠道研究方向"和/或"新闻渠道研究方向"——**只为输入中出现的渠道生成对应的 data_plan 维度**。如果只有社媒方向则只生成 social_media 维度；如果只有新闻方向则只生成 news_media 维度；两者都有则两种都生成。渠道分配已由上游确认，无需重新评估适配度。
+输入可能包含"社媒渠道研究方向"、"新闻渠道研究方向"和/或"行业研究方向"——**只为输入中出现的渠道生成对应部分**。社媒/新闻方向生成 data_plan 维度；行业研究方向生成 research_agent 字段。渠道分配已由上游确认，无需重新评估适配度。
 
 ## 产出路径决策表（硬性规则，不可自由发挥）
 
@@ -59,8 +66,10 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 - 若 primary_sources 包含 social_media → output_type 必须是 brand_strategy（insight/brand_role/big_idea 的 prompt 结构性依赖消费者声音，brand_strategy 是它的承载路径）
 - 若 primary_sources 仅有 news_media（不含 social_media）→ output_type 必须是 market_report（insight/brand_role/big_idea 的消费者声音输入为空，跑不出 Social Tension / Brand Social Role / Big Idea，必须走 market_report 路径）
 
+注意：primary_sources 只包含 social_media / news_media（决定产出路径）。research_agent 是独立的行业研究渠道，其结果通过 `{{research_findings}}` 注入产出各阶段，不影响路径选择。
+
 **严禁**：
-- 把 knowledge_base 写进 primary_sources（知识库只是 brand_strategy/market_report 三阶段的 RAG 补充背景，不是主数据源）
+- 把 research_agent 写进 primary_sources（它不驱动产出路径）
 - 在 data_plan 里只有 news_media 维度的情况下却输出 output_type=brand_strategy
 - 在 primary_sources 没有 social_media 的情况下却输出 output_type=brand_strategy
 
@@ -168,6 +177,18 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
       "serves_questions": ["rq1"]
     }}
   ],
+  "research_agent": {{
+    "research_questions": [
+      "面向行业报告的具体研究问题1",
+      "面向行业报告的具体研究问题2"
+    ],
+    "research_scope": {{
+      "industry": "行业/品类",
+      "geography": "地域范围",
+      "time_range": "时间范围（如 2024-2025）"
+    }},
+    "focus_domains": ["deloitte.com", "mckinsey.com"]
+  }},
   "primary_sources": ["social_media"],
   "output_type": "brand_strategy",
   "output_type_rationale": "选择理由（一句话，必须说明为何依据决策表推导出该 output_type）"
@@ -184,8 +205,9 @@ output_type 可选值（按决策表推导）: brand_strategy / market_report
 ## 要求
 - understanding_summary: 必填
 - research_questions: 2-4 个，覆盖所有渠道研究方向中的核心分析目标
-- data_plan: 只为输入中出现的渠道生成维度。社媒维度（如有）2-4 个，每个 1-2 关键词 + 1-2 平台，社媒总任务数目标 8-12；新闻维度（如有）1-2 个，每个 1-2 关键词，无 platforms
+- data_plan: 只为输入中出现的社媒/新闻渠道生成维度。社媒维度（如有）2-4 个，每个 1-2 关键词 + 1-2 平台，社媒总任务数目标 8-12；新闻维度（如有）1-2 个，每个 1-2 关键词，无 platforms
 - data_plan 中每个条目必须包含 `channel` 字段（"social_media" 或 "news_media"）
+- research_agent: 仅在输入包含"行业研究方向"时输出。research_questions 应面向行业报告（市场格局/份额/趋势），与 data_plan 的社媒/新闻关键词不重复；research_scope 提供搜索范围约束；focus_domains 可选，建议 2-4 个权威机构域名。**输入中无行业研究方向时不输出此字段**
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
@@ -212,26 +234,27 @@ def create_research_design_chain() -> Runnable:
 
 def format_research_design_inputs(
     user_input: str,
-    channel_brief: str,
+    social_channel_brief: str = "",
     subject: str = "",
     constraints: str = "",
     news_channel_brief: str = "",
+    research_channel_brief: str = "",
 ) -> dict[str, Any]:
     """格式化研究设计链输入
 
-    channel_brief 是社媒渠道专属描述（1-2句），提供社媒研究方向。
-    news_channel_brief 是新闻渠道专属描述（1-2句），提供新闻研究方向。
-    subject / constraints 作为补充上下文，帮助链生成精确的关键词和平台选择。
+    三个 channel_brief 分别对应 brief_parser 的 channel_plan 中各渠道的定制化描述，
+    只有被推荐的渠道才会传入非空值。subject / constraints 作为补充上下文。
     """
     lines: list[str] = []
 
-    if channel_brief:
-        lines.append(f"## 社媒渠道研究方向\n{channel_brief}")
-    else:
-        lines.append("## 社媒渠道研究方向\n用户未提供渠道描述，请根据背景信息推断研究方向。")
+    if social_channel_brief:
+        lines.append(f"## 社媒渠道研究方向\n{social_channel_brief}")
 
     if news_channel_brief:
         lines.append(f"\n## 新闻渠道研究方向\n{news_channel_brief}")
+
+    if research_channel_brief:
+        lines.append(f"\n## 行业研究方向\n{research_channel_brief}")
 
     if subject or constraints:
         lines.append("\n## 研究背景（供参考）")
@@ -317,5 +340,19 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
         )
     result["primary_sources"] = derived_sources
     result["output_type"] = derived_type
+
+    # research_agent 字段校验：确保结构正确（可选字段，LLM 可能不输出）
+    ra = result.get("research_agent")
+    if ra and isinstance(ra, dict):
+        ra.setdefault("research_questions", [])
+        ra.setdefault("research_scope", {})
+        ra.setdefault("focus_domains", [])
+        # 过滤空问题
+        ra["research_questions"] = [
+            q for q in ra["research_questions"] if isinstance(q, str) and q.strip()
+        ]
+        if not ra["research_questions"]:
+            # 无有效研究问题则移除整个字段
+            del result["research_agent"]
 
     return result

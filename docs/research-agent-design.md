@@ -1,20 +1,20 @@
 # Research Agent 设计方案
 
-> 状态：Phase 1-3 已实现，策略集成待实施
-> 日期：2026-04-12（更新：2026-04-12）
+> 状态：Phase 1-3 已实现，Phase 4（策略集成）进行中
+> 日期：2026-04-12（更新：2026-04-13）
 
 ## 背景与动机
 
 ### 现状问题
 
-当前策略研究的市场背景注入（`_retrieve_strategy_market_context`）采用单步 RAG：query → pgvector → chunks → done。
+策略研究此前通过知识库（KB）单步 RAG 注入市场背景（`_retrieve_strategy_market_context`：query → pgvector → chunks → done），存在以下问题：
 
-知识库（KB）采用 firehose 模式：定期爬取 → 分块 → 向量化 → 等待检索。这对 cnnic/nbs/govsite 等少量权威政府数据源合理，但对四大咨询/麦肯锡等大量专业报告源存在问题：
-
-- 预存 350-500 篇/年，大部分 chunks 永远不会被命中
+- KB 预存模式对四大咨询/麦肯锡等大量专业报告源不可扩展（350-500 篇/年，大部分 chunks 永远不命中）
 - 爬取 + 解析 + embedding + 存储成本固定，不管用不用都付
 - 无法覆盖所有潜在相关源（源太多、更新太快）
 - RAG 返回的 chunks 缺乏上下文，分析深度不足
+
+KB 模块已从策略产出流程中移除（模块本身保留，作为独立的私有文档管理工具）。
 
 ### 目标
 
@@ -40,29 +40,29 @@
 
 独立模式下无 Monitor 概念——每次是一次性研究任务，不做长期跟踪。
 
-### 三渠道数据层次
+### 三渠道架构
+
+策略产出基于三个数据渠道，各自代表一种独立视角：
 
 ```
-┌─────────────────────────────────────────────────┐
-│                 策略产出生成                       │
-├───────────┬───────────┬───────────┬──────────────┤
-│ 消费者声音  │ 媒体报道   │ 专业报告   │ 基础统计      │
-│ (UGC 层)  │ (事实层)   │ (分析层)   │ (数据层)      │
-├───────────┼───────────┼───────────┼──────────────┤
-│social_media│news_media │research_  │knowledge_    │
-│            │           │agent      │base          │
-│ 爬虫采集   │ 搜索引擎   │ Tavily+   │ 定期爬取      │
-│ tagging    │ tagging   │ 深度阅读   │ 向量化        │
-│ 人工审核   │ 人工审核   │ 自动循环   │ 自动          │
-└───────────┴───────────┴───────────┴──────────────┘
-  抖音/微博      百度/搜狗    四大/麦肯锡   cnnic/nbs
-  小红书等       DDG/微信     社科院等      govsite
+┌──────────────────────────────────────────────┐
+│                策略产出生成                      │
+├────────────┬────────────┬────────────────────┤
+│  消费者声音   │  媒体报道    │  专业报告/行业研究   │
+│  (UGC 层)   │  (事实层)   │  (分析层)           │
+├────────────┼────────────┼────────────────────┤
+│social_media │ news_media │ research_agent     │
+│ 爬虫采集     │ 搜索引擎    │ Tavily 定向搜索     │
+│ probe→collect│ probe→collect│ 自动循环，无探测    │
+│→ SocialSlice│→ NewsSlice │→ 结构化研究报告      │
+└────────────┴────────────┴────────────────────┘
+  抖音/微博       百度/搜狗     四大/麦肯锡
+  小红书等        DDG/微信      社科院等
 ```
 
-- **social_media**：消费者怎么说（UGC）
-- **news_media**：媒体怎么报（新闻）
-- **research_agent**：专家怎么分析（报告）— 替代 KB 在策略中的"背景注入"角色
-- **knowledge_base**：基础统计数据预存 + 私有文档管理（独立工具，不参与策略产出）
+- **social_media**：消费者怎么说（UGC）— probe → collect → SocialSlice
+- **news_media**：媒体怎么报（新闻）— probe → collect → NewsSlice
+- **research_agent**：专家怎么分析（报告）— 全自动循环 → 结构化研究报告（无探测/审核阶段）
 
 ### 目录结构
 
@@ -71,7 +71,7 @@ src/
 ├── strategies/          → 策略流水线，research_agent 作为第三渠道
 ├── social_media/        → 消费者数据（UGC 层），不变
 ├── news_media/          → 新闻数据（事实层），不变
-├── knowledge_base/      → 私有文档管理 + 基础统计预存（cnnic/nbs/govsite 3 个爬虫冻结）
+├── knowledge_base/      → 独立模块：私有文档管理 + 基础统计预存（不参与策略产出）
 ├── research_agent/      → 新模块：agentic 搜索分析引擎（LangGraph）
 │   ├── graph.py         → LangGraph 状态图定义（sync invoke）
 │   ├── nodes/           → 各节点实现
@@ -97,7 +97,7 @@ src/
 └── jobs/                → 共享 AnalysisJob（research_agent 每任务创建一个）
 ```
 
-依赖方向：`strategies → {social_media, news_media, research_agent} → {jobs, llm}`。research_agent 与 social_media / news_media 同层。knowledge_base 独立运行，不参与策略产出。
+依赖方向：`strategies → {social_media, news_media, research_agent} → {jobs, llm}`。research_agent 与 social_media / news_media 同层。knowledge_base 独立运行，不参与策略产出流程。
 
 ### API 端点
 
@@ -118,86 +118,121 @@ src/
 
 ## 策略集成流程
 
-### brief 阶段：渠道判断
+### ① brief 阶段：渠道分发判断
 
-`brief_parser_chain` 判断需要哪些渠道：
+`brief_parser_chain` 的 `channel_plan` 输出三种渠道类型：`social_media` / `news_media` / `research_agent`。
 
-```python
-# 当前输出
-channels: { social_media: available, news_media: available, knowledge_base: available }
-
-# 修改后：knowledge_base 位置替换为 research_agent
-channels: { social_media: available, news_media: available, research_agent: available }
-```
-
-AI 根据 brief 内容判断——"小米 SU7 品牌策略"需要行业报告研究，"某美妆 KOL 粉丝画像"可能不需要。
-
-### 研究设计：data_plan 扩展
-
-`research_design_chain` 产出**具体研究问题**（不是模糊"角度"），由 LLM 基于 brief 生成。
-plan 节点负责将研究问题转化为搜索关键词——**分工：research_design_chain = 研究什么，plan 节点 = 怎么搜**。
-
-```python
-# research_design_chain 产出的 data_plan 新增 research_agent 部分
+```json
 {
-    "social_media": [{"keyword": "小米SU7", "platforms": ["douyin", "weibo"]}],
-    "news_media": [{"keyword": "小米汽车 行业"}],
-    "research_agent": {
-        "research_questions": [
-            "中国新能源汽车 2024-2025 市场份额格局如何？头部玩家排名？",
-            "新能源汽车消费者购买决策的关键因素有哪些变化？",
-            "小米 SU7 所在的 20-30 万价格带竞争态势？",
-        ],
-        "research_scope": {
-            "industry": "新能源汽车",
-            "geography": "中国",
-            "time_range": "2024-2025",
-        },
-        "focus_domains": ["deloitte.com", "mckinsey.com", "kpmg.com"],  # 可选，AI 建议
+  "channel_plan": [
+    {
+      "type": "social_media",
+      "available": true,
+      "solvable": ["消费者对品牌的情感态度", "用户讨论的核心话题"],
+      "unsolvable": ["市场规模等结构化行业数据"],
+      "channel_brief": "聚焦小米SU7在社媒平台的用户讨论..."
+    },
+    {
+      "type": "news_media",
+      "available": true,
+      "solvable": ["行业动态与竞品媒体曝光", "品牌相关新闻报道"],
+      "unsolvable": [],
+      "channel_brief": "搜索小米汽车及竞品的新闻报道与行业资讯..."
+    },
+    {
+      "type": "research_agent",
+      "available": true,
+      "solvable": ["行业市场格局与份额数据", "专业机构的竞争分析与趋势预测"],
+      "unsolvable": ["实时消费者声音"],
+      "channel_brief": "聚焦新能源汽车行业竞争格局、价格带分析与市场趋势..."
     }
+  ]
 }
 ```
 
-用户可在研究计划编辑器中调整 research_questions、research_scope 和 focus_domains。
+AI 根据 brief 内容按需分配渠道——简单口碑分析可能只推荐 social_media；行业格局分析推荐全部三个。不强制全开。
 
-### confirm-research：三渠道并行启动
+### ② 研究设计：data_plan + research_agent
+
+`research_design_chain` 产出 `data_plan`（social_media / news_media 维度）和独立的 `research_agent` 字段。
+
+`research_agent` 不放进 `data_plan` 数组——因为它不产出维度/关键词/平台，数据结构与采集维度不同。它是顶层独立字段，包含面向行业报告搜索的研究问题和范围。
+
+Research Agent 的 plan 节点负责将研究问题转化为搜索关键词——**分工：research_design_chain = 研究什么，plan 节点 = 怎么搜**。
+
+```json
+{
+  "research_questions": [
+    {"id": "rq1", "question": "小米SU7的消费者认知如何？", "dimension": "brand_voice", "priority": "high"},
+    {"id": "rq2", "question": "新能源汽车行业竞争格局？", "dimension": "competitive", "priority": "high"}
+  ],
+  "data_plan": [
+    {"dimension_name": "品牌声量", "channel": "social_media", "keywords": ["小米SU7"], "platforms": ["douyin", "weibo"]},
+    {"dimension_name": "行业报道", "channel": "news_media", "keywords": ["小米汽车 行业动态"]}
+  ],
+  "research_agent": {
+    "research_questions": [
+      "中国新能源汽车 2024-2025 市场份额格局如何？头部玩家排名？",
+      "新能源汽车消费者购买决策的关键因素有哪些变化？",
+      "小米 SU7 所在的 20-30 万价格带竞争态势？"
+    ],
+    "research_scope": {
+      "industry": "新能源汽车",
+      "geography": "中国",
+      "time_range": "2024-2025"
+    },
+    "focus_domains": ["deloitte.com", "mckinsey.com", "kpmg.com"]
+  },
+  "slice_blueprint": [...],
+  "primary_sources": ["social_media", "news_media"],
+  "output_type": "brand_strategy"
+}
+```
+
+- `primary_sources` 仍然只含 `social_media` / `news_media`（决定产出路径），research_agent 不影响路径选择
+- 用户在 ResearchPlanEditor 中可编辑 research_questions、scope、domains，或整体关闭 research_agent
+- 若 brief_parser 未推荐 research_agent，research_design 不输出 `research_agent` 字段
+
+### ③ confirm-research：按 plan 条件创建
 
 ```
 confirm-research:
-  social_media 维度 → 创建 SocialMonitor + probe 任务（等爬虫）
-  news_media 维度   → 创建 NewsMonitor + probe 任务（Celery 搜索）
-  research_agent    → 创建 ResearchTask（Celery 立即启动 LangGraph）
+  有 social_media 维度 → 创建 SocialMonitor + probe 任务（等爬虫）
+  有 news_media 维度   → 创建 NewsMonitor + probe 任务（Celery 搜索）
+  有 research_agent    → 创建 ResearchTask（Celery 立即启动 LangGraph）
 ```
+
+Research Agent **不是每次都创建**——只有 research_design 中包含 `research_agent` 字段时才创建。
 
 Research Agent **没有探测/审核阶段**——内部 evaluate 节点自动循环，全自动完成。因此它通常比社媒/新闻更快完成。
 
-### 状态流转
+### ④ 状态流转
 
 ```
                     social_media:   probing → collecting → done
 planned → confirm → news_media:     probing → collecting → done    → 全部 done → ready → 产出
-                    research_agent: running → done
+                    research_agent: running → done（无 probe）
 ```
 
-`collection-status` 端点同时检查三个渠道的完成状态。
+`collection-status` 端点同时检查三个渠道的完成状态。Research Agent 无 probe 阶段，但若未完成也不阻塞——产出生成时无结果则优雅降级。
 
-### 产出生成
+### ⑤ 产出生成（已实现）
 
 ```
-当前：
-  primary: social_media slices / news_media slices
-  background: knowledge_base RAG → {market_context}
-
-修改后：
-  primary: social_media slices / news_media slices（不变）
-  background: research_agent → {market_context}（替代 KB RAG）
+primary: social_media slices / news_media slices（驱动产出路径选择）
+research: research_agent → {research_findings}（第三视角，与 primary 分析权重平等）
 ```
 
-`_retrieve_strategy_market_context` 改为读 ResearchTask 的结构化结果：
-- `{market_context}` 注入 synthesis（完整 markdown 报告）
-- 策略 chain 可选择性消费 `findings_by_question` 中与当前 stage 相关的发现
-- `coverage.source_quality` 记入 `data_provenance`（"基于 N 份四大报告 + M 份行业报告"）
-- `information_gaps` 可被策略产出引用（"此维度缺乏第三方数据支撑"）
+`_retrieve_research_findings` 加载策略关联的最新已完成 ResearchTask 的 result_data，per-stage formatter 按 token 预算注入 `{research_findings}`：
+
+| 层级 | Stage | Token 预算 | 注入内容 |
+|------|-------|-----------|---------|
+| 第 1 层 | Insight / Agenda Map | ~1.5K | 完整 findings_by_question + data_points + information_gaps |
+| 第 2 层 | Brand Role / Landscape | ~800 | synthesis + 高置信度 data_points |
+| 第 3 层 | Big Idea / Strategic Brief | ~400 | 压缩后的关键要点 |
+
+- 无研究结果时所有 formatter 返回空字符串，chain 正常运行
+- `data_provenance` 记录实际数据来源：`{primary: {channel, slice_counts}, research: {research_agent: bool}}`
 
 ## LangGraph 状态图
 
@@ -433,12 +468,10 @@ Token 用量通过 AnalysisJob 记录和追踪，不在 LangGraph State 中管�
 
 ### 6. 与 knowledge_base 的关系
 
-- **Research Agent 不检索本地 KB**：Tavily 实时搜索已覆盖公开报告和统计数据，KB 预存的 chunks 对 Agent 无增量价值
-- **KB 不参与策略产出**：原来的 KB RAG 背景注入角色完全被 Research Agent 替代
-- **KB 保留现状**：cnnic/nbs/govsite 三个爬虫继续运行，用户上传功能不变
+- **KB 已从策略产出流程中完全移除**：原有的 `_retrieve_strategy_market_context`（KB RAG 背景注入）、`market_context` 模板变量、`data_provenance.background` 层级均已删除
+- **KB 模块独立保留**：cnnic/nbs/govsite 三个爬虫继续运行，用户上传功能不变，作为独立的私有文档管理工具
+- **Research Agent 不检索本地 KB**：Tavily 实时搜索已覆盖公开报告和统计数据
 - **不做自动入库**：研究结果存在 ResearchTask.result_data 中，不回写 KB
-
-KB 演化后的角色：**独立的私有文档管理工具 + 基础统计数据预存（3 个爬虫）**，与策略产出解耦。
 
 ### 7. 与 news_media 的关系
 
@@ -451,7 +484,7 @@ Research Agent 与 news_media **互不冲突**，搜索不同层次的信息：
 | 分析方式 | tagging（实体/情感/tier）→ 切片 insight | 逐篇深度阅读 → 跨报告综合 |
 | 人工介入 | probe_review → approve/refine | 全自动循环（内部 evaluate） |
 | 独立使用 | 有（独立新闻监测项目） | 有（独立研究任务） |
-| 策略中角色 | Agenda Map 主数据源（不可替代） | 市场背景增强（替代 KB RAG） |
+| 策略中角色 | Agenda Map 主数据源（不可替代） | 行业研究第三视角（与 primary 分析权重平等） |
 
 在策略产出各 stage 中的定位：
 
@@ -469,27 +502,28 @@ Research Agent 与 news_media **互不冲突**，搜索不同层次的信息：
 策略："小米 SU7 品牌策略"，output_type: brand_strategy
 
 ```
-brief_parser_chain → channels: { social_media: true, news_media: true, research_agent: true }
+① brief_parser_chain → channel_plan:
+  [
+    {"type": "social_media", "solvable": ["消费者口碑", "购买体验"], "channel_brief": "..."},
+    {"type": "news_media", "solvable": ["行业动态", "竞品报道"], "channel_brief": "..."},
+    {"type": "research_agent", "solvable": ["市场份额格局", "价格带竞争分析"], "channel_brief": "..."}
+  ]
 
-research_design_chain → data_plan:
-  social_media: [{"keyword": "小米SU7", "platforms": ["douyin", "weibo"]}]
-  news_media: [{"keyword": "小米汽车 行业"}]
-  research_agent: {
-    "research_questions": [
-      "中国新能源汽车 2024-2025 市场份额格局？头部玩家排名？",
-      "消费者购买决策关键因素变化？",
-      "小米 SU7 所在 20-30 万价格带竞争态势？"
-    ],
-    "research_scope": {"industry": "新能源汽车", "geography": "中国", "time_range": "2024-2025"},
-    "focus_domains": ["deloitte.com", "mckinsey.com", "kpmg.com"]
-  }
+② research_design_chain → data_plan + research_agent:
+  data_plan:
+    [{"dimension_name": "品牌声量", "channel": "social_media", "keywords": ["小米SU7"], "platforms": ["douyin", "weibo"]},
+     {"dimension_name": "行业报道", "channel": "news_media", "keywords": ["小米汽车 行业"]}]
+  research_agent:
+    {"research_questions": ["中国新能源汽车市场份额格局？", "20-30万价格带竞争态势？", ...],
+     "research_scope": {"industry": "新能源汽车", "geography": "中国", "time_range": "2024-2025"},
+     "focus_domains": ["deloitte.com", "mckinsey.com", "kpmg.com"]}
 
-confirm-research → 三渠道并行：
-  SocialMonitor + probe 任务
-  NewsMonitor + probe 任务
-  ResearchTask（Celery 立即开始，research_questions 直接传入）
+③ confirm-research → 三渠道条件并行：
+  SocialMonitor + probe 任务（social_media 维度存在）
+  NewsMonitor + probe 任务（news_media 维度存在）
+  ResearchTask（research_agent 字段存在，Celery 立即开始）
 
-Research Agent 执行（Phase 1 线性图，Phase 3 才有 evaluate 循环）：
+④ Research Agent 执行：
 
   plan    → LLM 基于 3 个研究问题 + scope 生成搜索关键词
             关键词 = ["小米汽车 行业分析 2025", "新能源汽车 品牌格局 市场份额", "20万 新能源 竞争"]
@@ -535,6 +569,11 @@ Research Agent 执行（Phase 1 线性图，Phase 3 才有 evaluate 循环）：
     },
     "information_gaps": ["小米 SU7 价格带竞争数据不足——建议参考社媒/新闻渠道"]
   }
+
+⑤ 产出生成时 per-stage formatter 按 token 预算注入：
+  Insight 层 → format_research_for_insight(result_data) → 完整 findings + data_points（~1.5K tokens）
+  Brand Role 层 → format_research_for_brand_role(result_data) → synthesis + 高置信度 data_points（~800 tokens）
+  Big Idea 层 → format_research_for_big_idea(result_data) → 压缩关键要点（~400 tokens）
 ```
 
 ### 场景 B：独立研究模式
@@ -619,22 +658,37 @@ MAX_CONCURRENT_TASKS = 3
 
 ## 对现有模块的改动
 
+### 已完成
+
+| 文件 | 改动 | 状态 |
+|------|------|------|
+| `llm/chains/strategy/research_findings.py` | 新建 per-stage formatter 模块（6 个函数，按 token 预算格式化研究数据） | ✅ |
+| `llm/chains/strategy/brand_strategy/*.py` | `{market_context}` → `{research_findings}`，SYSTEM_TEMPLATE 更新研究数据使用指南 | ✅ |
+| `llm/chains/strategy/market_report/*.py` | 同上 | ✅ |
+| `strategies/service.py` | `_retrieve_strategy_market_context` → `_retrieve_research_findings`；6 个 generate 函数注入 research_findings；`_build_data_provenance` 改为 `{primary, research}` 两层 | ✅ |
+| `strategies/schemas.py` | 移除 KB 相关描述 | ✅ |
+| `celery_app.py` | `include` 列表新增 `src.research_agent.tasks` | ✅ |
+| `main.py` | 注册 research_agent router | ✅ |
+| `config.py` | 新增 Tavily / research agent 配置项 | ✅ |
+| `jobs/` | 新增 `RESEARCH` job_type | ✅ |
+
+### 待实施
+
 | 文件 | 改动 |
 |------|------|
-| `llm/chains/strategy/brief_parser_chain.py` | `knowledge_base` 渠道替换为 `research_agent`（KB 不再参与策略） |
-| `llm/chains/strategy/research_design_chain.py` | data_plan 新增 `research_agent` 部分 |
-| `strategies/service.py` | `confirm_research` 新增 ResearchTask 创建；`_retrieve_strategy_market_context` 改为读 ResearchTask 结果；`collection-status` 检查三渠道状态 |
-| `celery_app.py` | `include` 列表新增 `src.research_agent.tasks` |
-| `main.py` | 注册 research_agent router |
-| `config.py` | 新增 Tavily / research agent 配置项 |
-| `jobs/` | 新增 `RESEARCH` job_type |
+| `llm/chains/strategy/brief_parser_chain.py` | channel_plan 新增 `research_agent` 渠道类型 + prompt 描述 |
+| `llm/chains/strategy/research_design_chain.py` | 新增 `research_agent` 顶层输出字段（research_questions / scope / domains） |
+| `strategies/service.py confirm_research` | 条件创建 ResearchTask（research_design 含 research_agent 时才创建） |
+| `strategies/service.py collection-status` | 加入 ResearchTask 完成状态检查 |
+| `strategies/schemas.py` | ChannelPlanItem.type 描述更新、ConfirmResearchRequest/Response 适配 |
+| `strategies/CLAUDE.md` | 更新流程文档 |
 
 ## 前端改动
 
-- 策略研究计划编辑器：展示/编辑 research_agent 的 research_angles 和 focus_domains
+- 策略研究计划编辑器（ResearchPlanEditor）：展示/编辑 research_agent 的 research_questions、scope 和 focus_domains，支持整体开关
 - 策略数据采集状态页：显示研究任务进度（与社媒/新闻探测进度并列）
-- 策略产出页：展示研究报告引用源列表 + key findings 摘要
-- 独立研究页面：创建研究任务、查看结果（新 layer: `research/`）
+- 策略产出页：DataProvenanceBadge 展示 research_agent 数据来源
+- 独立研究页面：创建研究任务、查看结果（已有 layer: `research/`）
 
 ## 实施顺序
 
@@ -662,9 +716,18 @@ MAX_CONCURRENT_TASKS = 3
 - max_rounds=3 控制最大循环次数
 - E2E 验证：78 data points，5 tier1 sources，1574 字综合报告，288s 完成
 
-### Phase 4: 策略集成（待实施）
+### Phase 4: 策略集成（进行中）
 
-- brief_parser_chain / research_design_chain 改动（KB 渠道替换为 research_agent）
-- confirm-research 三渠道并行启动 ResearchTask
-- `_retrieve_strategy_market_context` 切换到 ResearchTask 结果（替代 KB RAG）
-- 前端策略集成界面（研究计划编辑器、采集状态、产出引用）
+**已完成**：
+- KB RAG 从策略产出流程中完全移除（`market_context` → `research_findings`）
+- `_retrieve_research_findings` 读取 ResearchTask 结构化结果
+- per-stage formatter 模块（`research_findings.py`，6 个函数，分层 token 预算）
+- 6 条 stage chain 的 prompt 更新（research_findings 使用指南 + 三位一体交叉验证）
+- `data_provenance` 重构为 `{primary, research}` 两层
+
+**待实施**：
+- brief_parser_chain：channel_plan 新增 research_agent 渠道
+- research_design_chain：新增 research_agent 顶层字段
+- confirm-research：条件创建 ResearchTask（plan 里有才创建）
+- collection-status：加入 ResearchTask 完成状态检查
+- 前端：ResearchPlanEditor 适配、采集状态页三渠道并列

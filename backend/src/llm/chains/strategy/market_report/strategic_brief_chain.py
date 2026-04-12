@@ -10,7 +10,7 @@ market_report 三层分析的**第 3 层（终层）**：agenda_map → landscap
 - research_context_section : 研究问题 + 需求理解
 - agenda_map_section       : 上游 agenda_map 层产出（必需）
 - landscape_section        : 上游 landscape 层产出（必需）
-- market_context           : 知识库 RAG 背景（可选）
+- research_findings        : Research Agent 行业研究发现（自动注入，仅高置信度）
 
 ## 输出结构
 
@@ -127,7 +127,7 @@ USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
-{market_context}
+{research_findings}
 
 ## 媒体议程图 (Agenda Map)
 
@@ -168,7 +168,7 @@ def format_inputs_for_strategic_brief(
     landscape_result: dict | None,
     brief: dict | None = None,
     research_design: dict | None = None,
-    market_context: str = "",
+    research_findings: str = "",
 ) -> dict[str, Any]:
     """构建 Strategic Brief chain 的输入参数字典。"""
     brief_section = ""
@@ -187,7 +187,7 @@ def format_inputs_for_strategic_brief(
     return {
         "brief_section": brief_section,
         "research_context_section": _build_research_context_section(research_design),
-        "market_context": market_context or "",
+        "research_findings": research_findings,
         "agenda_map_section": agenda_map_section,
         "landscape_section": landscape_section,
     }

@@ -9,7 +9,7 @@ market_report 三层分析的**第 1 层**：agenda_map → landscape → strate
 - brief_section       : Brand Brief（主体 + 分析目标）
 - research_context_section : 研究问题 + 需求理解
 - news_slice_data     : 所有 NewsSlice 的 insight 数据聚合（coverage/narratives/entities/key_quotes）
-- market_context      : 知识库 RAG 注入的市场背景（可选）
+- research_findings   : Research Agent 行业研究发现（自动注入）
 
 ## 输出结构
 
@@ -129,10 +129,12 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 - 禁止把"消费者认为"作为论据——该路径只分析媒体视角，消费者声音走 brand_strategy 路径
 - 禁止输出与 research_questions 无关的通用媒体观察
 
-## 市场背景数据（market_context）使用指南
-- 知识库内容以宏观互联网/经济/政策统计为主，可能与本次研究主题不直接相关
-- 如 `{{market_context}}` 段落为空或内容与 brief 主题无明显关联，**必须忽略**该部分，narrative_map / agenda_battles 只基于新闻切片数据
-- 仅当知识库内容与研究主题直接相关时，才可在 attention_gaps 中作为宏观参照引用
+## 行业研究数据（research_findings）使用指南
+- 行业研究数据来自自动化搜索引擎 + 行业报告 + 公开数据的综合分析，代表**专家/行业视角**
+- **交叉验证**：研究数据反映行业实际趋势，可校验媒体叙事是否与行业现实一致——若出现偏差，即为高价值 attention_gap
+- 研究数据中的置信度标记（high/medium/low）反映证据充分程度
+- 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，narrative_map / agenda_battles 只基于新闻切片数据
+- 研究数据可在 attention_gaps 中作为行业事实参照引用
 """
 
 
@@ -140,7 +142,7 @@ USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
-{market_context}
+{research_findings}
 
 ## 新闻切片数据
 
@@ -216,7 +218,7 @@ def format_inputs_for_agenda_map(
     news_slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
-    market_context: str = "",
+    research_findings: str = "",
 ) -> dict[str, Any]:
     """构建 Agenda Map chain 的输入参数字典。"""
     brief_section = ""
@@ -226,7 +228,7 @@ def format_inputs_for_agenda_map(
     return {
         "brief_section": brief_section,
         "research_context_section": _build_research_context_section(research_design),
-        "market_context": market_context or "",
+        "research_findings": research_findings,
         "news_slice_data": _format_news_slices_for_agenda(news_slices),
     }
 

@@ -103,18 +103,20 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - Social Strategy 可参考新闻中的关键引述（key_quotes）作为行业话语锚点
 - 新闻数据作为补充参考，evidence 中标明 source 为"新闻媒体数据"以区分
 
-## 市场背景数据（market_context）使用指南
+## 行业研究数据（research_findings）使用指南
 
-- 知识库内容以宏观互联网/经济/政策统计为主，可能与本次研究主题不直接相关
-- 如 `{{market_context}}` 段落为空或内容与 brief 主题无明显关联，**必须忽略**该部分，仅基于洞察层结果和补充数据推导角色
-- 仅当知识库内容与研究主题直接相关时，才可作为宏观背景引用，不应成为角色定位或策略推导的核心依据
+- 行业研究数据来自自动化搜索引擎 + 行业报告 + 公开数据的综合分析，代表**专家/行业视角**
+- 可为 Brand Social Role 的差异化定位提供**行业事实锚点**——确保角色不违背行业趋势
+- 研究数据中的**置信度**标记（high/medium/low）反映证据充分程度
+- 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，仅基于洞察层结果和补充数据推导角色
+- evidence 中引用研究数据时标明 source 为"行业研究数据"以区分
 """
 
 USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
-{market_context}
+{research_findings}
 
 ## 洞察层 (Insight) 结果
 
@@ -142,8 +144,8 @@ def format_data_for_brand_role(
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
-    market_context: str = "",
     news_slices: list[dict] | None = None,
+    research_findings: str = "",
 ) -> dict[str, Any]:
     """将 insight 结果 + 补充数据格式化为 brand_role 层输入"""
     from src.llm.chains.strategy.brand_strategy.insight_chain import (
@@ -225,7 +227,7 @@ def format_data_for_brand_role(
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
-        "market_context": market_context,
+        "research_findings": research_findings,
         "news_media_section": news_media_section,
     }
 

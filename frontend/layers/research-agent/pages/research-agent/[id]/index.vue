@@ -218,11 +218,11 @@
                 <div v-if="finding.source_refs?.length" class="flex items-center gap-1.5 text-sm text-gray-500">
                   <span>来源：</span>
                   <a
-                    v-for="ref in finding.source_refs"
-                    :key="ref"
-                    :href="`#source-${ref}`"
+                    v-for="srcRef in finding.source_refs"
+                    :key="srcRef"
+                    :href="`#source-${srcRef}`"
                     class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
-                  >{{ sourceDisplayIndex(ref) }}</a>
+                  >{{ sourceDisplayIndex(srcRef) }}</a>
                 </div>
               </div>
             </div>
@@ -397,7 +397,7 @@ const synthesisWithRefs = computed(() => {
   const raw = result.value?.synthesis
   if (!raw) return ''
   const map = sourceIndexMap.value
-  return raw.replace(/[(\[（【]*\s*\bsrc_\d+\b\s*[)\]）】]*/g, (match) => {
+  return raw.replace(/[([（【]*\s*\bsrc_\d+\b\s*[)\]）】]*/g, (match) => {
     const srcId = match.match(/src_\d+/)?.[0]
     if (!srcId) return match
     const idx = map[srcId]

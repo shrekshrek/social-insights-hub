@@ -20,6 +20,7 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from src.auth.models import User
+    from src.research_agent.models import ResearchTask
     from src.social_media.analysis.models import SocialSlice
     from src.social_media.monitors.models import SocialMonitor
     from src.social_media.tasks.models import SocialTask
@@ -182,6 +183,12 @@ class Strategy(Base):
         back_populates="strategy",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    research_tasks: Mapped[list["ResearchTask"]] = relationship(
+        "src.research_agent.models.ResearchTask",
+        foreign_keys="ResearchTask.strategy_id",
+        back_populates="strategy",
+        lazy="select",
     )
 
     __table_args__ = (

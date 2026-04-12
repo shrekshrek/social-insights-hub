@@ -1,0 +1,670 @@
+# Research Agent 设计方案
+
+> 状态：Phase 1-3 已实现，策略集成待实施
+> 日期：2026-04-12（更新：2026-04-12）
+
+## 背景与动机
+
+### 现状问题
+
+当前策略研究的市场背景注入（`_retrieve_strategy_market_context`）采用单步 RAG：query → pgvector → chunks → done。
+
+知识库（KB）采用 firehose 模式：定期爬取 → 分块 → 向量化 → 等待检索。这对 cnnic/nbs/govsite 等少量权威政府数据源合理，但对四大咨询/麦肯锡等大量专业报告源存在问题：
+
+- 预存 350-500 篇/年，大部分 chunks 永远不会被命中
+- 爬取 + 解析 + embedding + 存储成本固定，不管用不用都付
+- 无法覆盖所有潜在相关源（源太多、更新太快）
+- RAG 返回的 chunks 缺乏上下文，分析深度不足
+
+### 目标
+
+构建一个 **agentic 搜索分析引擎**，作为策略研究的第三数据渠道（与 social_media / news_media 平级），能够：
+
+1. 根据研究需求自主规划搜索策略
+2. 多源搜索，筛选高相关性行业报告
+3. 下载全文（PDF/HTML），深度阅读分析
+4. 评估覆盖度，发现信息缺口，迭代补充
+5. 跨报告综合分析，输出结构化市场背景
+6. 既可作为策略渠道自动触发，也可独立创建研究任务
+
+## 模块定位
+
+### 双模式使用
+
+与 social_media / news_media 一致，Research Agent 支持两种使用模式：
+
+| 模式 | 入口 | 触发方式 | 关联 |
+|------|------|---------|------|
+| **独立研究** | `POST /research/tasks` | 用户手动创建 | 无 strategy 关联 |
+| **策略渠道** | `confirm-research` 自动创建 | brief 判断需要 → 研究设计纳入 → confirm 时并行启动 | `strategy_id` FK |
+
+独立模式下无 Monitor 概念——每次是一次性研究任务，不做长期跟踪。
+
+### 三渠道数据层次
+
+```
+┌─────────────────────────────────────────────────┐
+│                 策略产出生成                       │
+├───────────┬───────────┬───────────┬──────────────┤
+│ 消费者声音  │ 媒体报道   │ 专业报告   │ 基础统计      │
+│ (UGC 层)  │ (事实层)   │ (分析层)   │ (数据层)      │
+├───────────┼───────────┼───────────┼──────────────┤
+│social_media│news_media │research_  │knowledge_    │
+│            │           │agent      │base          │
+│ 爬虫采集   │ 搜索引擎   │ Tavily+   │ 定期爬取      │
+│ tagging    │ tagging   │ 深度阅读   │ 向量化        │
+│ 人工审核   │ 人工审核   │ 自动循环   │ 自动          │
+└───────────┴───────────┴───────────┴──────────────┘
+  抖音/微博      百度/搜狗    四大/麦肯锡   cnnic/nbs
+  小红书等       DDG/微信     社科院等      govsite
+```
+
+- **social_media**：消费者怎么说（UGC）
+- **news_media**：媒体怎么报（新闻）
+- **research_agent**：专家怎么分析（报告）— 替代 KB 在策略中的"背景注入"角色
+- **knowledge_base**：基础统计数据预存 + 私有文档管理（独立工具，不参与策略产出）
+
+### 目录结构
+
+```
+src/
+├── strategies/          → 策略流水线，research_agent 作为第三渠道
+├── social_media/        → 消费者数据（UGC 层），不变
+├── news_media/          → 新闻数据（事实层），不变
+├── knowledge_base/      → 私有文档管理 + 基础统计预存（cnnic/nbs/govsite 3 个爬虫冻结）
+├── research_agent/      → 新模块：agentic 搜索分析引擎（LangGraph）
+│   ├── graph.py         → LangGraph 状态图定义（sync invoke）
+│   ├── nodes/           → 各节点实现
+│   │   ├── planner.py       → 搜索策略规划
+│   │   ├── searcher.py      → 多源搜索执行
+│   │   ├── filter.py        → 候选结果批量筛选
+│   │   ├── fetcher.py       → 全文获取（PDF/HTML），含超时控制
+│   │   ├── analyzer.py      → 逐篇深度阅读（智能截取）
+│   │   ├── evaluator.py     → 覆盖度评估 + 缺口发现
+│   │   └── synthesizer.py   → 跨报告综合分析
+│   ├── tools/           → 搜索工具集（全部同步实现）
+│   │   ├── web_search.py    → Tavily 包装（include_domains 定向搜索）
+│   │   ├── web_fetch.py     → Crawl4AI HTML 抓取
+│   │   └── pdf_fetch.py     → httpx PDF 下载 + pdfplumber 解析
+│   ├── models.py        → ResearchTask 模型（独立表）
+│   ├── state.py         → TypedDict 状态定义（含 reducer 注解）
+│   ├── schemas.py       → Pydantic 模型（继承 CustomBaseModel）
+│   ├── service.py       → 对外接口
+│   ├── router.py        → API 端点
+│   ├── tasks.py         → Celery 任务
+│   └── config.py        → 源配置、搜索参数
+├── llm/                 → 共享 LLM 实例
+└── jobs/                → 共享 AnalysisJob（research_agent 每任务创建一个）
+```
+
+依赖方向：`strategies → {social_media, news_media, research_agent} → {jobs, llm}`。research_agent 与 social_media / news_media 同层。knowledge_base 独立运行，不参与策略产出。
+
+### API 端点
+
+独立使用：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/research/tasks` | 创建研究任务（输入：研究主题 + 可选研究问题） |
+| GET | `/research/tasks` | 研究任务列表 |
+| GET | `/research/tasks/{id}` | 任务详情（状态、进度、引用源列表） |
+| GET | `/research/tasks/{id}/result` | 研究结果（synthesis + findings） |
+| POST | `/research/tasks/{id}/rerun` | 重新研究 |
+| DELETE | `/research/tasks/{id}` | 删除 |
+
+策略内使用（由 strategies 模块内部调用 service，不单独暴露端点）：
+- `confirm-research` 时通过 `research_agent.service.create_strategy_research()` 创建
+- `collection-status` 轮询时检查 ResearchTask 完成状态
+
+## 策略集成流程
+
+### brief 阶段：渠道判断
+
+`brief_parser_chain` 判断需要哪些渠道：
+
+```python
+# 当前输出
+channels: { social_media: available, news_media: available, knowledge_base: available }
+
+# 修改后：knowledge_base 位置替换为 research_agent
+channels: { social_media: available, news_media: available, research_agent: available }
+```
+
+AI 根据 brief 内容判断——"小米 SU7 品牌策略"需要行业报告研究，"某美妆 KOL 粉丝画像"可能不需要。
+
+### 研究设计：data_plan 扩展
+
+`research_design_chain` 产出**具体研究问题**（不是模糊"角度"），由 LLM 基于 brief 生成。
+plan 节点负责将研究问题转化为搜索关键词——**分工：research_design_chain = 研究什么，plan 节点 = 怎么搜**。
+
+```python
+# research_design_chain 产出的 data_plan 新增 research_agent 部分
+{
+    "social_media": [{"keyword": "小米SU7", "platforms": ["douyin", "weibo"]}],
+    "news_media": [{"keyword": "小米汽车 行业"}],
+    "research_agent": {
+        "research_questions": [
+            "中国新能源汽车 2024-2025 市场份额格局如何？头部玩家排名？",
+            "新能源汽车消费者购买决策的关键因素有哪些变化？",
+            "小米 SU7 所在的 20-30 万价格带竞争态势？",
+        ],
+        "research_scope": {
+            "industry": "新能源汽车",
+            "geography": "中国",
+            "time_range": "2024-2025",
+        },
+        "focus_domains": ["deloitte.com", "mckinsey.com", "kpmg.com"],  # 可选，AI 建议
+    }
+}
+```
+
+用户可在研究计划编辑器中调整 research_questions、research_scope 和 focus_domains。
+
+### confirm-research：三渠道并行启动
+
+```
+confirm-research:
+  social_media 维度 → 创建 SocialMonitor + probe 任务（等爬虫）
+  news_media 维度   → 创建 NewsMonitor + probe 任务（Celery 搜索）
+  research_agent    → 创建 ResearchTask（Celery 立即启动 LangGraph）
+```
+
+Research Agent **没有探测/审核阶段**——内部 evaluate 节点自动循环，全自动完成。因此它通常比社媒/新闻更快完成。
+
+### 状态流转
+
+```
+                    social_media:   probing → collecting → done
+planned → confirm → news_media:     probing → collecting → done    → 全部 done → ready → 产出
+                    research_agent: running → done
+```
+
+`collection-status` 端点同时检查三个渠道的完成状态。
+
+### 产出生成
+
+```
+当前：
+  primary: social_media slices / news_media slices
+  background: knowledge_base RAG → {market_context}
+
+修改后：
+  primary: social_media slices / news_media slices（不变）
+  background: research_agent → {market_context}（替代 KB RAG）
+```
+
+`_retrieve_strategy_market_context` 改为读 ResearchTask 的结构化结果：
+- `{market_context}` 注入 synthesis（完整 markdown 报告）
+- 策略 chain 可选择性消费 `findings_by_question` 中与当前 stage 相关的发现
+- `coverage.source_quality` 记入 `data_provenance`（"基于 N 份四大报告 + M 份行业报告"）
+- `information_gaps` 可被策略产出引用（"此维度缺乏第三方数据支撑"）
+
+## LangGraph 状态图
+
+### Phase 1 线性图（最小可用）
+
+```
+START → plan → search → filter → synthesize → END
+```
+
+plan 节点即使在 Phase 1 也使用 LLM——用户输入可能是随意的自然语言，需要 LLM 梳理确认研究范围，生成结构化搜索计划。策略模式下 research_questions 由 research_design_chain 产出，plan 节点将其转化为搜索关键词。
+
+### Phase 2 线性图（全文分析）
+
+```
+START → plan → search → filter → fetch → analyze → synthesize → END
+```
+
+### Phase 3 完整图（带循环）
+
+```
+              ┌─────────┐
+              │  START   │
+              └────┬─────┘
+                   ▼
+              ┌─────────┐
+              │  plan    │  LLM 梳理输入，生成/调整搜索计划
+              └────┬─────┘
+                   ▼
+              ┌─────────┐
+              │ search   │  Tavily 定向搜索（仅权威域名）
+              └────┬─────┘
+                   ▼
+              ┌─────────┐
+              │ filter   │  LLM 批量评估相关性，选出 top N（3-8 篇）
+              └────┬─────┘
+                   ▼
+              ┌─────────┐
+              │  fetch   │  并行下载全文（PDF→pdfplumber / HTML→Crawl4AI）
+              │          │  每个下载 30s 超时
+              └────┬─────┘
+                   ▼
+              ┌─────────┐
+              │ analyze  │  逐篇深度阅读，提取 key findings
+              └────┬─────┘
+                   ▼
+              ╔══════════╗
+              ║ evaluate ║─── 缺口 + 轮次<max_rounds ──→ plan（补充搜索角度）
+              ╚════╤═════╝
+                   │ 够了 / 达到上限
+                   ▼
+              ┌───────────┐
+              │ synthesize│  跨报告综合分析，输出结构化 markdown
+              └─────┬─────┘
+                    ▼
+              ┌─────────┐
+              │   END    │
+              └─────────┘
+```
+
+### 执行方式：sync invoke
+
+**关键约束**：现有 Celery worker 使用 gevent pool。LangGraph 必须使用 **sync `invoke()`**，所有 tools 写成同步函数。gevent monkey-patch 自动让 HTTP 调用协作式让出。禁止在 Celery 任务中使用 `ainvoke()` 或 `asyncio.run()` 包装 LangGraph。
+
+### 各节点职责
+
+| 节点 | 输入 | 输出 | 说明 |
+|------|------|------|------|
+| **plan** | query + research_questions | SearchPlan | LLM 梳理用户输入（可能较随意），确认研究范围，生成结构化搜索计划。首轮：基于研究角度生成初始计划；后续轮（Phase 3）：基于 evaluation 的缺口调整 |
+| **search** | SearchPlan | candidates | Tavily `include_domains` 定向搜索（默认域名 + LLM 推荐域名合并） |
+| **filter** | candidates + research_questions | selected | **单次 LLM 调用**批量评分所有候选，选 top N，标注 `source_tier`（tier1=四大/权威智库, tier2=行业机构, tier3=其他）。不逐条评分 |
+| **fetch** | selected | documents | PDF: httpx 下载 → pdfplumber（30s 超时/个）；HTML: Crawl4AI（30s 超时/个）。失败 `logger.warning()` 记录，不中断 |
+| **analyze** | documents + research_questions | findings | 智能截取：目录/摘要优先，LLM 判断关键章节细读。每次 LLM 调用 60s 超时 |
+| **evaluate** | findings + research_questions | evaluation | ① 每个问题是否有 findings？confidence 是否够？② tier1 来源数 ≥ 1？③ 定位缺口 → 生成补充关键词 |
+| **synthesize** | findings（全部累积） | structured result | 输出 `findings_by_question`（按研究问题组织，含 confidence/data_points/source_refs）+ `synthesis`（markdown 报告）+ `sources`（含 source_tier）+ `coverage` 元信息 + `information_gaps` |
+
+## State 定义
+
+```python
+from typing import Annotated, TypedDict
+import operator
+
+
+class SearchPlan(TypedDict):
+    keywords: list[str]          # 搜索关键词
+    target_domains: list[str]    # 优先搜索的域名
+    search_angles: list[str]     # 搜索角度（行业趋势/竞争格局/消费者...）
+
+
+class Candidate(TypedDict):
+    title: str
+    url: str
+    snippet: str
+    source: str                  # 来源域名
+    content_type: str            # "pdf" | "html"
+    source_tier: str             # "tier1" | "tier2" | "tier3"（filter 节点标注）
+    relevance_score: float       # filter 节点填入
+
+
+class Document(TypedDict):
+    url: str
+    title: str
+    content: str                 # 全文或关键章节
+    source: str
+    content_type: str
+    page_count: int | None       # PDF 页数
+
+
+class DataPoint(TypedDict):
+    metric: str                  # 指标名称
+    value: str                   # 具体数值
+    period: str                  # 时间范围
+    source: str                  # 来源名称
+
+
+class Finding(TypedDict):
+    source_url: str
+    source_title: str
+    source_tier: str             # 继承自 Candidate
+    key_points: list[str]        # 关键发现
+    data_points: list[DataPoint] # 结构化数据点
+    relevance_to_questions: dict[str, str]  # question → 相关发现摘要
+
+
+class QuestionFinding(TypedDict):
+    """按研究问题组织的发现（synthesize 节点产出）"""
+    answer_summary: str          # 简要回答
+    confidence: str              # "high" | "medium" | "low"
+    data_points: list[DataPoint]
+    source_refs: list[str]       # 指向 sources[].id
+
+
+class Evaluation(TypedDict):
+    questions_covered: list[str]       # confidence >= medium 的问题
+    gap_questions: list[str]           # confidence = low 或无 findings
+    tier1_source_count: int            # 四大/权威智库来源数
+    suggested_keywords: list[str]      # 补充搜索关键词
+    should_continue: bool
+
+
+class ResearchState(TypedDict):
+    # 输入
+    query: str                    # 研究主题
+    research_questions: list[str] # 研究问题列表
+
+    # 过程数据（candidates/selected 每轮替换）
+    search_plan: SearchPlan
+    candidates: list[Candidate]
+    selected: list[Candidate]
+
+    # 过程数据（跨轮次累积，使用 reducer 注解）
+    documents: Annotated[list[Document], operator.add]
+    findings: Annotated[list[Finding], operator.add]
+
+    # 评估（Phase 3 启用）
+    evaluation: Evaluation
+
+    # 控制
+    round: int
+    max_rounds: int
+
+    # 输出（synthesize 节点填入）
+    findings_by_question: dict[str, QuestionFinding]  # 按研究问题组织
+    synthesis: str                # markdown 综合报告
+    coverage: dict                # {questions_covered, questions_total, high_confidence_count, source_quality}
+    information_gaps: list[str]   # 信息缺口描述
+```
+
+**关键设计**：
+- `documents`、`findings` 使用 `Annotated[list[X], operator.add]` 确保跨轮次追加而非覆盖
+- `findings_by_question` 是 synthesize 节点的核心产出，按研究问题组织发现，含 confidence 评估和 data_points
+- `source_tier` 贯穿 filter → findings → synthesize 全链路，tier1=四大/权威智库，tier2=行业机构，tier3=其他
+- Token 用量通过 AnalysisJob 追踪，不在 State 中冗余存储
+- 下载失败直接 `logger.warning()` 记录，不需要专门的 FetchError 类型
+
+## 设计决策
+
+### 1. 搜索工具选型
+
+| 工具 | 角色 | 实现方式 | 依赖 |
+|------|------|---------|------|
+| **Tavily** | 搜索层：`include_domains` 定向搜索（仅权威域名） | 同步调用 | `tavily-python`，API key |
+| **Crawl4AI** | 全文获取：HTML 文章抓取 | 同步 HTTP 调用 Crawl4AI REST API | 现有 Docker 服务 |
+| **httpx** | 全文获取：PDF 下载 | 同步调用 | 现有依赖 |
+| **pdfplumber** | PDF 解析 | 同步 | 现有依赖（KB 模块已用） |
+
+不加 SerpAPI 百度引擎——Tavily 中文覆盖对专业报告场景够用，四大/麦肯锡官网中英双语。
+
+### 2. 定向搜索目标源（Tavily `include_domains`）
+
+Tier 1 免费可爬源（无登录墙）：
+
+| 源 | 域名 | 内容形式 | 年产量 |
+|----|------|----------|--------|
+| 麦肯锡中国 | mckinsey.com.cn, mckinsey.com | HTML + PDF | ~50-80 |
+| 德勤中国 | deloitte.com | HTML + PDF | ~40-60 |
+| 普华永道中国 | pwccn.com | HTML + PDF | ~50-70 |
+| 安永中国 | ey.com | HTML | ~30-50 |
+| 毕马威中国 | kpmg.com | HTML + PDF | ~40-60 |
+| 社科院 | cssn.cn | PDF | ~100+ |
+| 国研中心 | drc.gov.cn | HTML + PDF | ~50-80 |
+
+配置在 `research_agent/config.py` 中，可动态扩展。
+
+### 3. 全文分析策略：智能截取
+
+不做临时向量化（太重），不做全文 map-reduce（太贵）：
+
+1. PDF：提取目录 + 摘要（前 2 页）+ 结论（后 2 页）
+2. LLM 根据研究问题判断哪些章节值得细读
+3. 只取相关章节全文给 LLM 深度分析
+4. HTML 文章（通常 2000-5000 字）直接全文喂入
+
+### 4. AnalysisJob 集成
+
+每个 ResearchTask 创建**一个 AnalysisJob**（`job_type = "RESEARCH"`），各节点的 LLM 调用累加 token usage 到该 job。遵循现有跨渠道 AnalysisJob 模式：
+
+- `research_agent/tasks.py` 中创建 job → 各节点执行 → 更新 token_usage → 任务完成时 finalize job
+- 前端通过 `/jobs` 统一入口可查看研究任务的 token 消耗和费用
+
+### 5. 超时与并发控制
+
+| 控制项 | 值 | 配置方式 |
+|--------|-----|---------|
+| `TAVILY_API_KEY` | — | **环境变量**（必需） |
+| `RESEARCH_AGENT_TARGET_DOMAINS` | 见下方源列表 | **config.py**（可调） |
+| `max_rounds` | 3 | 硬编码常量 |
+| `fetch_timeout` | 30s | 硬编码常量 |
+| `llm_timeout` | 60s | 硬编码常量 |
+| `task_hard_timeout` | 600s | Celery `time_limit` |
+| `max_concurrent_tasks` | 3 | Celery `rate_limit` |
+
+Token 用量通过 AnalysisJob 记录和追踪，不在 LangGraph State 中管理。Phase 3 的 evaluate 节点可通过查询 AnalysisJob 累积 token 判断是否终止循环。
+
+### 6. 与 knowledge_base 的关系
+
+- **Research Agent 不检索本地 KB**：Tavily 实时搜索已覆盖公开报告和统计数据，KB 预存的 chunks 对 Agent 无增量价值
+- **KB 不参与策略产出**：原来的 KB RAG 背景注入角色完全被 Research Agent 替代
+- **KB 保留现状**：cnnic/nbs/govsite 三个爬虫继续运行，用户上传功能不变
+- **不做自动入库**：研究结果存在 ResearchTask.result_data 中，不回写 KB
+
+KB 演化后的角色：**独立的私有文档管理工具 + 基础统计数据预存（3 个爬虫）**，与策略产出解耦。
+
+### 7. 与 news_media 的关系
+
+Research Agent 与 news_media **互不冲突**，搜索不同层次的信息：
+
+| | news_media | research_agent |
+|---|---|---|
+| 搜什么 | 新闻报道（百度/搜狗/DDG/微信） | 专业报告（Tavily 定向四大/智库） |
+| 内容性质 | **事实层**：正在发生什么（事件、舆论、声量） | **分析层**：深层分析是什么（趋势、框架、数据） |
+| 分析方式 | tagging（实体/情感/tier）→ 切片 insight | 逐篇深度阅读 → 跨报告综合 |
+| 人工介入 | probe_review → approve/refine | 全自动循环（内部 evaluate） |
+| 独立使用 | 有（独立新闻监测项目） | 有（独立研究任务） |
+| 策略中角色 | Agenda Map 主数据源（不可替代） | 市场背景增强（替代 KB RAG） |
+
+在策略产出各 stage 中的定位：
+
+| Stage | news_media | research_agent |
+|-------|-----------|----------------|
+| **Agenda Map**（媒体议程图） | **主数据源**：媒体在讨论什么，报告替代不了 | 辅助：行业报告中的媒体分析 |
+| **Landscape**（竞争格局） | 有价值但偏表面 | **深度数据**：报告的市场份额/竞争分析更扎实 |
+| **Insight**（消费者洞察） | 辅助 | 补充行业趋势 |
+| **Brand Role / Big Idea** | 辅助 | 补充竞争格局 |
+
+## 具体场景示例
+
+### 场景 A：策略渠道模式
+
+策略："小米 SU7 品牌策略"，output_type: brand_strategy
+
+```
+brief_parser_chain → channels: { social_media: true, news_media: true, research_agent: true }
+
+research_design_chain → data_plan:
+  social_media: [{"keyword": "小米SU7", "platforms": ["douyin", "weibo"]}]
+  news_media: [{"keyword": "小米汽车 行业"}]
+  research_agent: {
+    "research_questions": [
+      "中国新能源汽车 2024-2025 市场份额格局？头部玩家排名？",
+      "消费者购买决策关键因素变化？",
+      "小米 SU7 所在 20-30 万价格带竞争态势？"
+    ],
+    "research_scope": {"industry": "新能源汽车", "geography": "中国", "time_range": "2024-2025"},
+    "focus_domains": ["deloitte.com", "mckinsey.com", "kpmg.com"]
+  }
+
+confirm-research → 三渠道并行：
+  SocialMonitor + probe 任务
+  NewsMonitor + probe 任务
+  ResearchTask（Celery 立即开始，research_questions 直接传入）
+
+Research Agent 执行（Phase 1 线性图，Phase 3 才有 evaluate 循环）：
+
+  plan    → LLM 基于 3 个研究问题 + scope 生成搜索关键词
+            关键词 = ["小米汽车 行业分析 2025", "新能源汽车 品牌格局 市场份额", "20万 新能源 竞争"]
+            目标源 = [deloitte.com, mckinsey.com, kpmg.com, ey.com]
+  search  → 14 条候选（Tavily 定向搜索）
+  filter  → 单次 LLM 调用，选出 5 篇最相关（标注 source_tier）
+  synthesize → 结构化产出：
+
+  result_data = {
+    "findings_by_question": {
+      "中国新能源汽车市场份额格局": {
+        "answer_summary": "比亚迪以 33% 份额领先，特斯拉 7.8%...",
+        "confidence": "high",
+        "data_points": [
+          {"metric": "比亚迪市场份额", "value": "33.1%", "period": "2024H2", "source": "KPMG"},
+          {"metric": "特斯拉中国份额", "value": "7.8%", "period": "2024H2", "source": "Deloitte"}
+        ],
+        "source_refs": ["src_0", "src_2"]
+      },
+      "消费者购买决策变化": {
+        "answer_summary": "智能化体验超越续航成为首要因素...",
+        "confidence": "medium",
+        "data_points": [...],
+        "source_refs": ["src_1"]
+      },
+      "20-30 万价格带竞争态势": {
+        "answer_summary": "...",
+        "confidence": "low",
+        "data_points": [],
+        "source_refs": []
+      }
+    },
+    "synthesis": "# 新能源汽车行业研究\n\n## 市场格局\n...",
+    "sources": [
+      {"id": "src_0", "title": "2025 中国新能源汽车展望", "url": "...",
+       "source_tier": "tier1", "relevance_score": 0.92},
+      ...
+    ],
+    "coverage": {
+      "questions_covered": 2, "questions_total": 3,
+      "high_confidence_count": 1,
+      "source_quality": {"tier1": 3, "tier2": 1, "tier3": 0}
+    },
+    "information_gaps": ["小米 SU7 价格带竞争数据不足——建议参考社媒/新闻渠道"]
+  }
+```
+
+### 场景 B：独立研究模式
+
+```
+用户创建：
+  POST /research/tasks
+  {
+    "query": "2025 中国新能源汽车行业格局",
+    "research_questions": ["头部玩家市场份额？", "技术路线分化趋势？"]
+  }
+
+Agent 自主执行（同上流程）→ 用户查看研究报告 + 引用源列表 + findings
+```
+
+## 数据模型
+
+### research_tasks 表
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | UUID | PK |
+| query | Text | 研究主题 |
+| research_questions | JSONB | 研究问题列表 |
+| strategy_id | UUID, FK, nullable | 关联策略（策略模式下非空） |
+| user_id | UUID, FK | 创建者 |
+| status | String(20) | pending / running / completed / failed |
+| error_message | Text, nullable | 失败原因 |
+| search_config | JSONB | research_angles, focus_domains 等 |
+| result_data | JSONB | synthesis + findings + sources + evaluation |
+| stats | JSONB | token_usage, rounds, documents_analyzed 等统计 |
+| job_id | UUID, FK, nullable | 关联 AnalysisJob（token/cost 追踪） |
+| created_at | DateTime | 创建时间 |
+| updated_at | DateTime | 更新时间 |
+
+语义字段遵循项目规范：`user_id`、`status`、`error_message`、`result_data`、`stats`。
+
+### 与 Strategy 的关联
+
+通过 `research_tasks.strategy_id` FK 关联，**不在 Strategy 表上加冗余字段**。查询策略的研究状态直接查 ResearchTask：
+
+```python
+# 查策略关联的研究结果
+task = await db.scalar(
+    select(ResearchTask)
+    .where(ResearchTask.strategy_id == strategy_id)
+    .order_by(ResearchTask.created_at.desc())
+)
+```
+
+## 新增依赖
+
+| 包 | 用途 | 说明 |
+|----|------|------|
+| `langgraph` | 状态图编排 | 与现有 langchain 同生态，sync invoke |
+| `tavily-python` | Web 搜索 API | 轻量，按调用付费（~$0.01/次） |
+
+现有依赖复用：`langchain`、`httpx`、`pdfplumber`、`crawl4ai`（Docker 服务）。
+
+## 配置项（新增）
+
+```python
+# config.py 新增（仅 2 个环境变量，其余硬编码在 research_agent/config.py）
+TAVILY_API_KEY: str                          # Tavily 搜索 API key
+RESEARCH_AGENT_TARGET_DOMAINS: list[str] = [  # 定向搜索域名
+    "mckinsey.com.cn", "mckinsey.com",
+    "deloitte.com",
+    "pwccn.com",
+    "ey.com",
+    "kpmg.com",
+    "cssn.cn",
+    "drc.gov.cn",
+]
+
+# research_agent/config.py 硬编码常量（不暴露到 Settings）
+MAX_ROUNDS = 3
+MAX_CANDIDATES_PER_ROUND = 8
+FETCH_TIMEOUT = 30   # 秒
+LLM_TIMEOUT = 60     # 秒
+MAX_CONCURRENT_TASKS = 3
+```
+
+## 对现有模块的改动
+
+| 文件 | 改动 |
+|------|------|
+| `llm/chains/strategy/brief_parser_chain.py` | `knowledge_base` 渠道替换为 `research_agent`（KB 不再参与策略） |
+| `llm/chains/strategy/research_design_chain.py` | data_plan 新增 `research_agent` 部分 |
+| `strategies/service.py` | `confirm_research` 新增 ResearchTask 创建；`_retrieve_strategy_market_context` 改为读 ResearchTask 结果；`collection-status` 检查三渠道状态 |
+| `celery_app.py` | `include` 列表新增 `src.research_agent.tasks` |
+| `main.py` | 注册 research_agent router |
+| `config.py` | 新增 Tavily / research agent 配置项 |
+| `jobs/` | 新增 `RESEARCH` job_type |
+
+## 前端改动
+
+- 策略研究计划编辑器：展示/编辑 research_agent 的 research_angles 和 focus_domains
+- 策略数据采集状态页：显示研究任务进度（与社媒/新闻探测进度并列）
+- 策略产出页：展示研究报告引用源列表 + key findings 摘要
+- 独立研究页面：创建研究任务、查看结果（新 layer: `research/`）
+
+## 实施顺序
+
+### Phase 1: 最小可用（snippet 综合，线性图） ✅ 已完成
+
+- **线性 LangGraph 图**：plan → search → filter → synthesize（4 节点，无循环）
+- plan 节点用 LLM 梳理用户输入、确认研究范围、生成搜索计划
+- Tavily 搜索，**不下载全文**，用 snippet 做综合
+- 独立 API 端点（`/research/tasks`）
+- Celery 任务 + AnalysisJob 集成
+- 前端独立研究页面（列表/创建/详情结果页）
+- RBAC 权限 + 路由配置
+
+### Phase 2: 全文分析（线性图扩展） ✅ 已完成
+
+- **线性图扩展**：plan → search → filter → fetch → analyze → synthesize（6 节点，无循环）
+- 增加 fetch + analyze 节点
+- PDF 下载解析（httpx + pdfplumber）+ HTML 全文获取（Crawl4AI REST API）
+- 每节点独立 LLM 实例（短超时 60-120s，max_retries=1，防止单文档阻塞整个任务）
+
+### Phase 3: 闭环优化（引入循环） ✅ 已完成
+
+- **图变为有循环**：analyze → evaluate → plan（回到起点补充搜索）
+- evaluate 节点：覆盖度评估（每问题 ≥2 来源）+ 缺口发现 + 补充关键词建议
+- max_rounds=3 控制最大循环次数
+- E2E 验证：78 data points，5 tier1 sources，1574 字综合报告，288s 完成
+
+### Phase 4: 策略集成（待实施）
+
+- brief_parser_chain / research_design_chain 改动（KB 渠道替换为 research_agent）
+- confirm-research 三渠道并行启动 ResearchTask
+- `_retrieve_strategy_market_context` 切换到 ResearchTask 结果（替代 KB RAG）
+- 前端策略集成界面（研究计划编辑器、采集状态、产出引用）

@@ -63,6 +63,9 @@ class AnalysisType(str, Enum):
     NEWS_TAGGING = "news_tagging"  # 逐篇标注（news_tagging_chain）
     NEWS_INSIGHT = "news_insight"  # 切片级 insight 分析（news_insight_chain）
 
+    # Research Agent（独立研究 / 策略渠道）
+    RESEARCH = "research"  # LangGraph 研究图
+
 
 class AnalysisStatus(str, Enum):
     """分析状态枚举"""

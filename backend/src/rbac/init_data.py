@@ -232,6 +232,25 @@ BUSINESS_PERMISSIONS = [
             "delete": "允许删除新闻监测项目",
         },
     ),
+    # ========================================================================
+    # Research Agent 研究分析
+    # ========================================================================
+    *create_module_permissions(
+        "research_agent",
+        ["access", "read", "write", "delete"],
+        display_names={
+            "access": "访问研究分析",
+            "read": "查看研究任务",
+            "write": "创建研究任务",
+            "delete": "删除研究任务",
+        },
+        descriptions={
+            "access": "允许访问研究分析页面",
+            "read": "允许查看研究任务和结果",
+            "write": "允许创建和重新运行研究任务",
+            "delete": "允许删除研究任务",
+        },
+    ),
 ]
 
 # 合并所有权限

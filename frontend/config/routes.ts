@@ -76,6 +76,15 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
   "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
   "/news-media/slices/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
+  // 研究分析模块
+  "/research-agent": {
+    permission: PERMISSIONS.RESEARCH_AGENT_ACCESS,
+    label: "研究分析",
+    showInNav: true,
+    order: 65,
+  },
+  "/research-agent/create": { permission: PERMISSIONS.RESEARCH_AGENT_WRITE },
+  "/research-agent/[id]": { permission: PERMISSIONS.RESEARCH_AGENT_READ },
   // AI 任务模块（跨渠道 AnalysisJob）
   "/jobs": {
     permission: null,

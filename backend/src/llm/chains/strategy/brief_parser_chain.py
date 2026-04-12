@@ -55,7 +55,7 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
 
 针对每种数据渠道，评估本 brief 的适合度。三种渠道各代表一种独立视角：
 
-- **social_media**（社交媒体 — 消费者声音）：覆盖小红书、抖音、微博、知乎、B站、快手、贴吧（不含脉脉、LinkedIn、Twitter 等平台）；适合消费者情感/口碑/行为观察、品牌认知研究、趋势话题分析；B2B/专业领域同样适用——知乎有大量企业决策者的专业讨论，B站有深度行业分析
+- **social_media**（社交媒体 — 消费者声音）：覆盖小红书、抖音、微博、知乎、B站、快手、贴吧（不含脉脉、LinkedIn、Twitter 等平台）；适合消费者情感/口碑/行为观察、品牌认知研究、趋势话题分析。**推荐判断**：关键问题是"研究主体在覆盖平台上是否有足够密度的用户讨论，能支撑系统化的消费者洞察分析"。有足够讨论密度时应推荐；讨论过于稀疏或碎片化、在覆盖平台上难以采集到足够样本进行系统化分析时不应推荐
 - **news_media**（新闻媒体 — 媒体报道视角）：通过多渠道搜索引擎（百度+搜狗+DuckDuckGo）检索公开新闻报道、行业资讯、媒体评论，可选启用微信公众号搜索（搜狗微信入口）获取行业深度分析和品牌自媒体内容；适合行业动态与竞品动向追踪、品牌舆情与 PR 效果评估、市场趋势与政策变化的媒体视角分析
 - **research_agent**（行业研究 — 专家/报告视角）：通过定向搜索四大咨询（麦肯锡/德勤/普华永道/安永/毕马威）、社科院、国研中心等权威机构的公开报告与分析文章，进行深度阅读和跨报告综合分析；适合行业市场格局与份额数据、竞争态势与趋势预测、专业机构的深度分析框架与数据佐证
 
@@ -67,52 +67,49 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
 - `channel_brief`: 针对该渠道的定制化研究描述（1-2句；聚焦该渠道能做的部分，是该渠道后续研究设计的输入）
 
 **规则**：
-- 按需分配渠道，只输出与本 brief 相关的渠道，若某渠道完全不适合则不输出该条目
-- 社媒渠道覆盖面广（消费品在小红书/抖音，专业/B2B 话题在知乎/B站），大多数研究主题都适用，但不强制——根据 brief 实际需要判断
+- 按需分配渠道，只输出与本 brief 研究目标真正匹配的渠道，不匹配则不输出该条目
+- social_media 的判断标准是"研究主体在覆盖平台上的用户讨论密度是否足以支撑系统化分析"，而非"平台上是否存在任何相关内容"。有充足 UGC 讨论的主题应推荐，讨论过于稀疏的主题不应推荐
 - research_agent 适合需要行业数据、市场格局、专业报告佐证的研究；简单的口碑监测或舆情追踪通常不需要
 - channel_plan 只输出 social_media、news_media、research_agent 三种渠道类型
 
-### platform_verdict（当前平台支持度）
+### platform_verdict（策略框架适配度）
 
-当前平台覆盖三大渠道（社交媒体 + 新闻媒体 + 行业研究），能满足大多数消费者洞察、品牌策略、行业分析类研究。基于 channel_plan 中各渠道的综合覆盖度，判断能否满足本 brief：
-- **sufficient**：渠道组合基本能回答 brief 的核心研究问题，可直接推进
-- **partial**：能回答部分核心问题，但 brief 涉及平台无法触达的数据类型（如企业内部 CRM/ERP 数据、金融终端数据、线下调研等），需用户知晓局限后决定是否推进
-- **insufficient**：brief 的核心问题主要依赖平台无法提供的数据源，该研究类型不适合当前平台
+策略研究有两种产出框架，各有明确的适用场景：
+- **brand_strategy**（品牌策略）：从消费者声音中发现社会张力 → 定义品牌角色 → 产出创意方向。适合品牌定位、消费者洞察、内容策略类研究
+- **market_report**（市场分析报告）：从媒体报道中梳理议程格局 → 分析竞争态势 → 产出战略建议。适合行业格局、竞争情报、市场进入类研究
 
-`platform_note`：1-2 句话说明判断依据——当前渠道能覆盖什么、缺失什么关键维度。
-- 如果 brief 的核心问题偏向纯行业研究/市场规模/宏观趋势（不需要消费者声音或媒体报道），channel_plan 可能只推荐 research_agent，但**策略研究的产出路径需要社媒或新闻切片数据驱动**，仅有 research_agent 无法生成完整策略报告。此时 platform_verdict 应为 **insufficient**，并在 platform_note 中提示"该需求建议直接使用「研究分析」功能快速获取行业分析报告，无需走完整策略流程"
-- 如果 brief 明确需要消费者/媒体视角（channel_plan 包含 social_media 或 news_media），不需要额外提示
+platform_verdict 判断的是**brief 的研究目标是否能被上述两种框架之一承载**，而非仅看渠道能否采到数据。"某个渠道能采到相关数据"不等于"该框架能回答 brief 的核心问题"——判断标准是框架的产出结构是否匹配 brief 的研究意图：
+- brand_strategy 产出的是消费者洞察 → 品牌角色定义 → 创意方向，适合"品牌应该如何与消费者沟通"类问题
+- market_report 产出的是媒体议程图 → 竞争格局定位 → 战略建议，适合"行业竞争态势如何、品牌应如何定位"类问题
+
+**判断规则**（按优先级从高到低，满足任一即确定 verdict）：
+
+- **insufficient**（优先判断）：满足以下**任一**条件即判定：
+  1. channel_plan 未推荐 social_media 也未推荐 news_media（仅有 research_agent 无法生成完整策略报告）
+  2. brief 的核心问题本质上是知识性/探索性的——研究目标是"了解某个领域的现状/机制/流程"而非"为品牌找到消费者沟通策略"或"为品牌找到竞争定位"。即使新闻媒体或社媒上有相关数据可采，这类问题的答案形式也不适合用 brand_strategy 或 market_report 的产出结构来承载
+- **partial**：框架能部分承载，但 brief 涉及框架覆盖不到的维度（如企业内部数据、金融终端数据、线下调研等），需用户知晓局限后决定是否推进
+- **sufficient**：brief 的研究目标能完整对应 brand_strategy 或 market_report 的产出结构，可直接推进
+
+`platform_note`：1-2 句话说明判断依据。
+- 当 platform_verdict 为 insufficient 时，必须在 platform_note 中提示："该需求建议直接使用「研究分析」功能获取研究报告，无需走完整策略流程"
+- 当 platform_verdict 为 sufficient 且 channel_plan 包含 social_media 或 news_media 时，不需要额外提示
 
 ## 输出格式
-只输出 JSON，不要额外文字或 markdown 代码块标记：
+只输出 JSON，不要额外文字或 markdown 代码块标记。channel_plan 只包含真正适合的渠道，不适合的渠道不输出：
 {{
   "strategy_name": "策略名称建议",
   "subject": "研究主体",
   "analysis_goal": "整体研究目标描述",
   "constraints": "补充说明（可为空字符串）",
-  "platform_verdict": "sufficient",
-  "platform_note": "三渠道组合覆盖消费者声音、媒体视角与专业报告，能满足本研究核心问题。",
+  "platform_verdict": "sufficient / partial / insufficient",
+  "platform_note": "判断依据说明",
   "channel_plan": [
     {{
-      "type": "social_media",
+      "type": "social_media / news_media / research_agent",
       "available": true,
-      "solvable": ["用户对品牌的情感态度", "消费者讨论的核心话题"],
-      "unsolvable": ["市场规模等结构化行业数据"],
-      "channel_brief": "聚焦[subject]在社媒平台的用户讨论，分析消费者情感倾向与核心话题..."
-    }},
-    {{
-      "type": "news_media",
-      "available": true,
-      "solvable": ["行业动态与竞品媒体曝光", "品牌相关新闻报道的舆论基调"],
-      "unsolvable": ["非公开的企业内部信息"],
-      "channel_brief": "搜索[subject]及竞品相关的新闻报道与行业资讯，分析媒体视角下的市场动态与品牌形象..."
-    }},
-    {{
-      "type": "research_agent",
-      "available": true,
-      "solvable": ["行业市场格局与份额数据", "专业机构的竞争分析与趋势预测"],
-      "unsolvable": ["实时消费者声音和口碑"],
-      "channel_brief": "聚焦[subject]所在行业的市场格局、竞争态势与发展趋势，搜索权威机构报告进行深度分析..."
+      "solvable": ["该渠道能解决的问题1", "问题2"],
+      "unsolvable": ["该渠道的局限"],
+      "channel_brief": "针对该渠道的定制化研究描述..."
     }}
   ]
 }}
@@ -155,12 +152,6 @@ def parse_brief_parser_response(response_text: str) -> dict[str, Any]:
     result.setdefault("platform_verdict", "partial")
     result.setdefault("platform_note", "")
     if not result.get("channel_plan"):
-        result["channel_plan"] = [{
-            "type": "social_media",
-            "available": True,
-            "solvable": ["用户情感态度与口碑分析"],
-            "unsolvable": [],
-            "channel_brief": "分析相关社媒平台的用户讨论，了解消费者真实反馈。",
-        }]
+        result["channel_plan"] = []
 
     return result

@@ -145,9 +145,17 @@ export interface RefinementSuggestion {
   reason: string
 }
 
+export interface ChannelSummary {
+  total: number
+  fail_count: number
+  channel_verdict: 'all_pass' | 'partial_pass' | 'all_fail'
+  note: string
+}
+
 export interface ProbeReviewResult {
   assessments: ProbeAssessment[]
   overall_verdict: 'all_pass' | 'partial_pass' | 'fail'
+  channel_summary?: Record<string, ChannelSummary>
   refinement_suggestions: RefinementSuggestion[]
 }
 

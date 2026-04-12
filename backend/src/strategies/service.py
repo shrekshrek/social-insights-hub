@@ -1645,6 +1645,44 @@ async def _build_probe_task_summaries(
     return statuses, analyzed_summaries
 
 
+def _build_channel_summary(assessments: list[dict]) -> dict[str, dict]:
+    """按渠道聚合 probe verdict，生成渠道级摘要。
+
+    当某渠道所有任务全部 fail 时，标记 channel_verdict="all_fail"，
+    提示用户考虑移除该渠道（可能影响 output_type 路径选择）。
+    """
+    by_channel: dict[str, list[str]] = {}
+    for a in assessments:
+        platform = a.get("platform", "")
+        channel = "news_media" if platform == "news_media" else "social_media"
+        by_channel.setdefault(channel, []).append(a.get("verdict", "fail"))
+
+    summary: dict[str, dict] = {}
+    for channel, verdicts in by_channel.items():
+        total = len(verdicts)
+        fail_count = sum(1 for v in verdicts if v == "fail")
+        if fail_count == 0:
+            channel_verdict = "all_pass"
+            note = ""
+        elif fail_count == total:
+            channel_verdict = "all_fail"
+            channel_label = "社交媒体" if channel == "social_media" else "新闻媒体"
+            note = (
+                f"{channel_label}的 {total} 个探测任务全部未通过，"
+                f"该渠道可能不适合当前研究主题，建议考虑移除相关维度"
+            )
+        else:
+            channel_verdict = "partial_pass"
+            note = ""
+        summary[channel] = {
+            "total": total,
+            "fail_count": fail_count,
+            "channel_verdict": channel_verdict,
+            "note": note,
+        }
+    return summary
+
+
 def _auto_verdict_probe_task(summary: dict) -> tuple[str, str] | None:
     """客观规则层：根据量化指标直接判定，返回 (verdict, note) 或 None（交 LLM 判断）
 
@@ -2029,9 +2067,13 @@ async def _run_probe_review(
         len(auto_assessments or []), len(llm_assessments),
     )
 
+    # 按渠道聚合 verdict，生成渠道级摘要
+    channel_summary = _build_channel_summary(all_assessments)
+
     result: dict = {
         "assessments": all_assessments,
         "overall_verdict": overall,
+        "channel_summary": channel_summary,
         "refinement_suggestions": all_suggestions,
         "add_suggestions": llm_add_suggestions,
     }

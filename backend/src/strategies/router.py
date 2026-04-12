@@ -14,7 +14,7 @@ from src.pagination import get_pagination_params, PaginationParams
 from src.schemas import CustomBaseModel, MessageResponse, PaginatedResponse
 
 from . import service
-from .dependencies import is_admin_or_super_admin, validate_strategy_owner
+from .dependencies import is_admin_or_super_admin, validate_strategy_access, validate_strategy_owner
 from .models import Strategy
 from .schemas import (
     AdjustSlicesRequest,
@@ -93,7 +93,7 @@ async def list_strategies(
     summary="策略详情",
 )
 async def get_strategy(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
 ):
     """获取策略详情"""
     return StrategyRead.from_orm_full(strategy)
@@ -171,7 +171,7 @@ async def remove_participant(
 )
 async def design_research(
     data: DesignResearchRequest,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """基于 Brief 生成研究计划（研究问题+数据方案+切片蓝图+产出类型）"""
@@ -185,7 +185,7 @@ async def design_research(
     summary="重置到研究设计阶段",
 )
 async def reset_to_design(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """从探测/采集阶段回退到研究设计，软删除已创建的任务"""
@@ -200,7 +200,7 @@ async def reset_to_design(
 )
 async def confirm_research(
     data: ConfirmResearchRequest,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -224,7 +224,7 @@ async def confirm_research(
     tags=["Strategies"],
 )
 async def get_probe_status(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """查询探测任务进度，全部分析完成后自动运行审查"""
@@ -239,7 +239,7 @@ async def get_probe_status(
     tags=["Strategies"],
 )
 async def approve_probe(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -256,7 +256,7 @@ async def approve_probe(
 )
 async def refine_probe(
     data: RefineProbeRequest,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -279,7 +279,7 @@ async def refine_probe(
     tags=["Strategies"],
 )
 async def get_collection_status(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -295,7 +295,7 @@ async def get_collection_status(
     tags=["Strategies"],
 )
 async def get_data_overview(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """数据全景：切片列表 + 覆盖度结果"""
@@ -311,7 +311,7 @@ async def get_data_overview(
 )
 async def adjust_slices(
     data: AdjustSlicesRequest,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -336,7 +336,7 @@ async def adjust_slices(
     summary="生成 brand_strategy 第 1 层: Insight (洞察)",
 )
 async def generate_insight(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """AI 生成 Insight: Social Tension + Brand Opportunity"""
@@ -351,7 +351,7 @@ async def generate_insight(
     summary="生成 brand_strategy 第 2 层: Brand Role (品牌角色)",
 )
 async def generate_brand_role(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """AI 生成 Brand Role: Brand Social Role + Social Strategy"""
@@ -366,7 +366,7 @@ async def generate_brand_role(
     summary="生成 brand_strategy 第 3 层: Big Idea (创意)",
 )
 async def generate_big_idea(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """AI 生成 Big Idea: Big Idea + Content Strategy"""
@@ -384,7 +384,7 @@ async def generate_big_idea(
     summary="生成 market_report 第 1 层: Agenda Map (媒体议程图)",
 )
 async def generate_agenda_map(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """AI 生成 Agenda Map: 媒体议程图"""
@@ -399,7 +399,7 @@ async def generate_agenda_map(
     summary="生成 market_report 第 2 层: Landscape (竞争格局)",
 )
 async def generate_landscape(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """AI 生成 Landscape: 竞争格局"""
@@ -414,7 +414,7 @@ async def generate_landscape(
     summary="生成 market_report 第 3 层: Strategic Brief (战略简报)",
 )
 async def generate_strategic_brief(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """AI 生成 Strategic Brief: 战略简报"""
@@ -435,7 +435,7 @@ async def generate_strategic_brief(
 )
 async def edit_insight(
     data: StageResultEdit,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """编辑 Insight 结果（自动清除 brand_role/big_idea）"""
@@ -453,7 +453,7 @@ async def edit_insight(
 )
 async def edit_brand_role(
     data: StageResultEdit,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """编辑 Brand Role 结果（自动清除 big_idea）"""
@@ -471,7 +471,7 @@ async def edit_brand_role(
 )
 async def edit_big_idea(
     data: StageResultEdit,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """编辑 Big Idea 结果"""
@@ -492,7 +492,7 @@ async def edit_big_idea(
 )
 async def edit_agenda_map(
     data: StageResultEdit,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """编辑 Agenda Map 结果（自动清除 landscape/strategic_brief）"""
@@ -510,7 +510,7 @@ async def edit_agenda_map(
 )
 async def edit_landscape(
     data: StageResultEdit,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """编辑 Landscape 结果（自动清除 strategic_brief）"""
@@ -528,7 +528,7 @@ async def edit_landscape(
 )
 async def edit_strategic_brief(
     data: StageResultEdit,
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
 ):
     """编辑 Strategic Brief 结果"""
@@ -548,7 +548,7 @@ async def edit_strategic_brief(
     tags=["Strategies"],
 )
 async def export_strategy(
-    strategy: Strategy = Depends(validate_strategy_owner),
+    strategy: Strategy = Depends(validate_strategy_access),
 ):
     """导出策略报告为 Word 文档"""
     from .export_docx import generate_strategy_docx

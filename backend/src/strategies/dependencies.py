@@ -28,6 +28,27 @@ async def validate_strategy_exists(
     return strategy
 
 
+async def validate_strategy_access(
+    strategy: Strategy = Depends(validate_strategy_exists),
+    current_user: User = Depends(get_current_user),
+) -> Strategy:
+    """验证用户是否有策略访问权限（创建者 / 参与者 / admin）"""
+    if is_admin_or_super_admin(current_user):
+        return strategy
+
+    if strategy.user_id == current_user.id:
+        return strategy
+
+    participant_ids = [p.id for p in (strategy.participants or [])]
+    if current_user.id in participant_ids:
+        return strategy
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="只有策略创建者、参与者或管理员可以访问此策略",
+    )
+
+
 async def validate_strategy_owner(
     strategy: Strategy = Depends(validate_strategy_exists),
     current_user: User = Depends(get_current_user),

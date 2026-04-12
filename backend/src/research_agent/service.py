@@ -1,0 +1,141 @@
+"""Research Agent 服务层
+
+提供异步接口供 FastAPI router 调用。
+"""
+
+import logging
+
+from sqlalchemy import func, select, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.research_agent.models import ResearchTask
+from src.research_agent.tasks import run_research_task
+
+logger = logging.getLogger(__name__)
+
+
+async def create_research_task(
+    db: AsyncSession,
+    user_id: int,
+    query: str,
+    research_questions: list[str] | None = None,
+    search_config: dict | None = None,
+    strategy_id: int | None = None,
+) -> ResearchTask:
+    """创建研究任务并派发 Celery 执行"""
+    task = ResearchTask(
+        query=query,
+        research_questions=research_questions,
+        search_config=search_config,
+        strategy_id=strategy_id,
+        user_id=user_id,
+        status="pending",
+    )
+    db.add(task)
+    await db.flush()
+
+    # 派发 Celery 任务
+    run_research_task.delay(task.id)
+
+    await db.commit()
+    await db.refresh(task)
+
+    logger.info("创建研究任务 %d: query=%s, strategy_id=%s", task.id, query, strategy_id)
+    return task
+
+
+async def get_research_task(db: AsyncSession, task_id: int) -> ResearchTask | None:
+    """获取研究任务"""
+    return await db.get(ResearchTask, task_id)
+
+
+async def list_research_tasks(
+    db: AsyncSession,
+    user_id: int | None = None,
+    strategy_id: int | None = None,
+    status: str | None = None,
+    search: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[ResearchTask], int]:
+    """列出研究任务，返回 (items, total)"""
+    base = select(ResearchTask)
+
+    if user_id is not None:
+        base = base.where(ResearchTask.user_id == user_id)
+    if strategy_id is not None:
+        base = base.where(ResearchTask.strategy_id == strategy_id)
+    if status:
+        base = base.where(ResearchTask.status == status)
+    if search:
+        base = base.where(ResearchTask.query.ilike(f"%{search}%"))
+
+    # total
+    count_result = await db.execute(select(func.count()).select_from(base.subquery()))
+    total = count_result.scalar() or 0
+
+    # items
+    offset = (page - 1) * page_size
+    stmt = base.order_by(desc(ResearchTask.created_at)).offset(offset).limit(page_size)
+    result = await db.execute(stmt)
+    return list(result.scalars().all()), total
+
+
+async def get_research_result(db: AsyncSession, task_id: int) -> dict | None:
+    """获取研究结果
+
+    Returns
+    -------
+    dict | None : 结构化结果或 None（未完成/不存在）
+    """
+    task = await db.get(ResearchTask, task_id)
+    if not task or task.status != "completed" or not task.result_data:
+        return None
+
+    return {
+        "id": task.id,
+        "query": task.query,
+        "status": task.status,
+        "findings_by_question": task.result_data.get("findings_by_question"),
+        "synthesis": task.result_data.get("synthesis"),
+        "sources": task.result_data.get("sources"),
+        "coverage": task.result_data.get("coverage"),
+        "information_gaps": task.result_data.get("information_gaps"),
+        "stats": task.stats,
+    }
+
+
+async def delete_research_task(db: AsyncSession, task_id: int) -> bool:
+    """删除研究任务"""
+    task = await db.get(ResearchTask, task_id)
+    if not task:
+        return False
+    await db.delete(task)
+    await db.commit()
+    return True
+
+
+async def get_strategy_research_synthesis(
+    db: AsyncSession, strategy_id: int
+) -> str:
+    """获取策略关联的最新研究综合分析
+
+    供 strategies/service.py 中 _retrieve_strategy_market_context 替换调用。
+    返回 synthesis markdown 或 ""（无结果/未完成）。
+    """
+    stmt = (
+        select(ResearchTask)
+        .where(
+            ResearchTask.strategy_id == strategy_id,
+            ResearchTask.status == "completed",
+        )
+        .order_by(desc(ResearchTask.created_at))
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    task = result.scalar_one_or_none()
+
+    if not task or not task.result_data:
+        return ""
+
+    return task.result_data.get("synthesis", "")

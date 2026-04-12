@@ -60,6 +60,12 @@ export const PERMISSIONS = {
   NEWS_MEDIA_READ: {target: 'news_media', action: 'read'},
   NEWS_MEDIA_WRITE: {target: 'news_media', action: 'write'},
   NEWS_MEDIA_DELETE: {target: 'news_media', action: 'delete'},
+
+  // 研究分析
+  RESEARCH_AGENT_ACCESS: {target: 'research_agent', action: 'access'},
+  RESEARCH_AGENT_READ: {target: 'research_agent', action: 'read'},
+  RESEARCH_AGENT_WRITE: {target: 'research_agent', action: 'write'},
+  RESEARCH_AGENT_DELETE: {target: 'research_agent', action: 'delete'},
 } as const satisfies Record<string, Permission>
 
 // ============================================================================

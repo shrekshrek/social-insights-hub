@@ -193,6 +193,37 @@ class Settings(BaseSettings):
         default=None, description="SerpAPI API key for news search"
     )
 
+    # ========== Research Agent Configuration ==========
+    TAVILY_API_KEY: str | None = Field(
+        default=None, description="Tavily Search API key (required for Research Agent)"
+    )
+    RESEARCH_AGENT_TARGET_DOMAINS: list[str] = Field(
+        default=[
+            # 四大 + 综合咨询
+            "mckinsey.com.cn",
+            "mckinsey.com",
+            "deloitte.com",
+            "pwccn.com",
+            "ey.com",
+            "kpmg.com",
+            "bcg.com",
+            "bain.com",
+            "rolandberger.com",
+            "accenture.com",
+            # 政府/智库
+            "cssn.cn",
+            "drc.gov.cn",
+            "stats.gov.cn",
+            # 行业研究
+            "iresearch.cn",
+            "questmobile.com.cn",
+            "euromonitor.com",
+            "frost.com",
+            "cbndata.com",
+        ],
+        description="Default target domains for directed Tavily search (merged with LLM-recommended domains)",
+    )
+
     # ========== Agent API Configuration ==========
     AGENT_API_KEY: str | None = Field(
         default=None, description="API Key for crawler agent authentication"

@@ -130,6 +130,7 @@ export default defineNuxtConfig({
     './layers/news-media',
     './layers/strategies',
     './layers/knowledge-base',
+    './layers/research-agent',
   ],
   components: [
     // 只注册根目录的全局组件和ui-kit组件为全局

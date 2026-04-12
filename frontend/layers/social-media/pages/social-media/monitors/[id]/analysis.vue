@@ -11,7 +11,7 @@ import PlatformScissorsChart from '../../../../analysis/components/slice/Platfor
 import GapAnalysisChart from '../../../../analysis/components/slice/GapAnalysisChart.vue'
 import PostListModal from '../../../../analysis/components/shared/PostListModal.vue'
 import SpamRatioBar from '../../../../analysis/components/shared/SpamRatioBar.vue'
-import MarkdownRenderer from '../../../../analysis/components/shared/MarkdownRenderer.vue'
+// MarkdownRenderer 由 ui-kit layer 自动注册
 import type { SpamDistribution } from '../../../../analysis/types'
 
 definePageMeta({ layout: 'default' })

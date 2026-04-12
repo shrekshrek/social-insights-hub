@@ -21,6 +21,7 @@ from src.knowledge_base.router import router as knowledge_base_router
 from src.news_media.monitors.router import router as news_monitors_router
 from src.news_media.tasks.router import router as news_tasks_router
 from src.news_media.analysis.router import router as news_slices_router
+from src.research_agent.router import router as research_agent_router
 from src.config import settings
 from src.database import get_async_db, AsyncSessionLocal
 from src.rbac.init_data import init_rbac_data
@@ -214,3 +215,4 @@ app.include_router(knowledge_base_router, prefix=settings.API_PREFIX)
 app.include_router(news_monitors_router, prefix=settings.API_PREFIX)
 app.include_router(news_tasks_router, prefix=settings.API_PREFIX)
 app.include_router(news_slices_router, prefix=settings.API_PREFIX)
+app.include_router(research_agent_router, prefix=settings.API_PREFIX)

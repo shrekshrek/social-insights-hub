@@ -32,13 +32,26 @@
               <span>|</span>
               <span>{{ formatDate(strategy.created_at) }}</span>
             </div>
-            <div v-if="strategy" class="mt-2">
-              <ParticipantsManager
-                :participants="(strategy!.participant_ids || []).map((id: number, i: number) => ({ id, username: strategy!.participant_usernames?.[i] || String(id) }))"
-                :owner-id="strategy.user_id"
-                :can-manage="strategy.user_id === currentUserId"
-                :on-add="async (ids: number[]) => { await strategiesApi.addParticipant(strategyId, ids); await refreshStrategy() }"
-                :on-remove="async (uid: number) => { await strategiesApi.removeParticipant(strategyId, uid); await refreshStrategy() }"
+            <div v-if="strategy" class="flex items-center gap-2 mt-1 text-sm text-gray-500">
+              <span class="shrink-0">参与者:</span>
+              <template v-if="strategy.participant_ids?.length">
+                <UBadge
+                  v-for="(pid, i) in strategy.participant_ids"
+                  :key="pid"
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                >
+                  {{ strategy.participant_usernames?.[i] || pid }}
+                </UBadge>
+              </template>
+              <span v-else class="text-gray-400">暂无</span>
+              <UButton
+                v-if="strategy.user_id === currentUserId"
+                variant="ghost"
+                size="xs"
+                icon="i-heroicons-pencil-square"
+                @click="showParticipantsModal = true"
               />
             </div>
           </ClientOnly>
@@ -419,6 +432,33 @@
         </template>
       </div>
     </ClientOnly>
+
+    <!-- 参与者管理弹窗 -->
+    <ClientOnly>
+      <UModal
+        v-model:open="showParticipantsModal"
+        title="管理参与者"
+        :ui="{ footer: 'justify-end' }"
+      >
+        <template #body>
+          <UFormField help="参与者变更会立即生效，无需点保存">
+            <ParticipantsManager
+              v-if="strategy"
+              :participants="(strategy!.participant_ids || []).map((id: number, i: number) => ({ id, username: strategy!.participant_usernames?.[i] || String(id) }))"
+              :owner-id="strategy!.user_id"
+              :can-manage="true"
+              :on-add="async (ids: number[]) => { await strategiesApi.addParticipant(strategyId, ids); await refreshStrategy() }"
+              :on-remove="async (uid: number) => { await strategiesApi.removeParticipant(strategyId, uid); await refreshStrategy() }"
+            />
+          </UFormField>
+        </template>
+        <template #footer>
+          <UButton variant="outline" @click="showParticipantsModal = false">
+            关闭
+          </UButton>
+        </template>
+      </UModal>
+    </ClientOnly>
   </div>
 </template>
 
@@ -457,6 +497,7 @@ const { currentUserId } = usePermissions()
 
 const strategyId = computed(() => Number(route.params.id))
 const { data: strategy, pending, refresh: refreshStrategy } = strategiesApi.getStrategy(strategyId)
+const showParticipantsModal = ref(false)
 
 // ── 轮询 ──────────────────────────────────────────────────────────────────────
 

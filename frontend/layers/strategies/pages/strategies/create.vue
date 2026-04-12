@@ -11,7 +11,7 @@
       </div>
       <div class="flex items-center gap-3">
         <UButton variant="outline" :disabled="submitting" to="/strategies">取消</UButton>
-        <UButton :loading="submitting" icon="i-heroicons-check" type="submit" form="strategy-form">创建策略</UButton>
+        <UButton :loading="submitting" :disabled="platformVerdict === 'insufficient'" icon="i-heroicons-check" type="submit" form="strategy-form">创建策略</UButton>
       </div>
     </div>
 
@@ -139,6 +139,16 @@
             }"
           >{{ platformVerdict === 'sufficient' ? '当前平台可满足该研究' : platformVerdict === 'partial' ? '当前平台部分支持该研究' : '当前平台暂不适合该研究' }}</span>
           <p v-if="platformNote" class="text-gray-600 dark:text-gray-400 mt-0.5">{{ platformNote }}</p>
+          <UButton
+            v-if="platformVerdict === 'insufficient'"
+            to="/research-agent/create"
+            label="前往研究分析"
+            icon="i-heroicons-arrow-right"
+            trailing
+            variant="subtle"
+            size="xs"
+            class="mt-2"
+          />
         </div>
       </div>
 

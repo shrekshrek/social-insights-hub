@@ -88,6 +88,16 @@
         </div>
       </div>
 
+      <!-- 渠道级警告 -->
+      <div
+        v-for="(ch, chKey) in channelWarnings"
+        :key="chKey"
+        class="p-3 rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 flex items-start gap-2"
+      >
+        <UIcon name="i-heroicons-exclamation-triangle" class="text-red-500 mt-0.5 shrink-0" />
+        <p class="text-sm text-red-700 dark:text-red-300">{{ ch.note }}</p>
+      </div>
+
       <!-- 逐维度评估 -->
       <div v-if="probeReview.assessments?.length" class="space-y-3">
         <!-- 按维度分组 -->
@@ -228,6 +238,15 @@ const progressPercent = computed(() => {
 const verdictInfo = computed(() => {
   const v = props.probeReview?.overall_verdict
   return VERDICT_MAP[v || 'fail'] || VERDICT_MAP.fail
+})
+
+/** 渠道级警告：筛选 channel_summary 中 all_fail 的渠道 */
+const channelWarnings = computed(() => {
+  const summary = props.probeReview?.channel_summary
+  if (!summary) return {}
+  return Object.fromEntries(
+    Object.entries(summary).filter(([, ch]) => ch.channel_verdict === 'all_fail'),
+  )
 })
 
 /** 按维度分组的任务状态（用于采集进度展示） */

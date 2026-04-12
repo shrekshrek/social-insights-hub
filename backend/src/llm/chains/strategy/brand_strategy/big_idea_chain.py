@@ -121,6 +121,8 @@ USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
+{research_findings}
+
 ## 洞察层 (Insight) 结果
 
 {insight_result}
@@ -193,6 +195,7 @@ def format_data_for_big_idea(
     brief: dict | None = None,
     research_design: dict | None = None,
     news_slices: list[dict] | None = None,
+    research_findings: str = "",
 ) -> dict[str, Any]:
     """将 insight + brand_role 结果 + 补充数据格式化为 big_idea 层输入
 
@@ -292,6 +295,7 @@ def format_data_for_big_idea(
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
+        "research_findings": research_findings,
         "news_media_section": news_media_section,
     }
 

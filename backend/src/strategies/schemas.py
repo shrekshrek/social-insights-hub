@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 #   market_report  填充 agenda_map_result / landscape_result / strategic_brief_result（三层递进）
 OutputType = Literal["brand_strategy", "market_report"]
 
-# 数据来源层级：primary = 直接输入，background = RAG 补充背景
+# 主数据源：决定产出路径（brand_strategy vs market_report）
 PrimarySource = Literal["social_media", "news_media"]
 
 
@@ -28,7 +28,7 @@ PrimarySource = Literal["social_media", "news_media"]
 class ChannelPlanItem(CustomBaseModel):
     """渠道分发条目"""
 
-    type: str = Field(description="渠道类型: social_media / knowledge_base / news_media")
+    type: str = Field(description="渠道类型: social_media / news_media / research_agent")
     available: bool = Field(description="当前是否可用")
     solvable: list[str] = Field(default_factory=list, description="该渠道能解决的研究问题")
     unsolvable: list[str] = Field(default_factory=list, description="该渠道的局限")
@@ -143,6 +143,14 @@ class ProbeTaskStatus(CustomBaseModel):
     has_analysis: bool = Field(False, description="是否已有分析结果")
 
 
+class ResearchAgentStatus(CustomBaseModel):
+    """Research Agent 任务状态（不阻塞主流程）"""
+
+    has_task: bool = Field(False, description="是否有关联的研究任务")
+    status: str = Field("", description="研究任务状态: pending / running / completed / failed")
+    task_id: int | None = Field(None, description="研究任务 ID")
+
+
 class ProbeStatusResponse(CustomBaseModel):
     """探测进度响应"""
 
@@ -151,6 +159,10 @@ class ProbeStatusResponse(CustomBaseModel):
     analyzed_count: int = 0
     total_count: int = 0
     probe_review_result: dict | None = Field(None, description="审查结果（全部分析完成后自动填充）")
+    research_agent: ResearchAgentStatus = Field(
+        default_factory=ResearchAgentStatus,
+        description="Research Agent 研究任务状态���与探测并行，不阻塞）",
+    )
     strategy: "StrategyRead | None" = None
 
 
@@ -257,6 +269,10 @@ class CollectionStatusResponse(CustomBaseModel):
     completed_count: int = 0
     total_count: int = 0
     coverage_check_result: dict | None = None
+    research_agent: ResearchAgentStatus = Field(
+        default_factory=ResearchAgentStatus,
+        description="Research Agent 研究任务状态（不阻塞采集流程）",
+    )
     strategy: "StrategyRead | None" = None
 
 
@@ -434,7 +450,10 @@ class ParseBriefResponse(CustomBaseModel):
     subject: str = Field("", description="研究主体（品牌/产品/品类）")
     analysis_goal: str = Field("", description="分析目标")
     constraints: str = Field("", description="补充说明")
-    platform_verdict: str = Field("partial", description="当前平台支持度: sufficient / partial / insufficient")
+    platform_verdict: str = Field(
+        "partial",
+        description="当前平台支持度: sufficient / partial / insufficient",
+    )
     platform_note: str = Field("", description="支持度说明（1-2句）")
     channel_plan: list[ChannelPlanItem] = Field(
         default_factory=list, description="渠道分发建议"

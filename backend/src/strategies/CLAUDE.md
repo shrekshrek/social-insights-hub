@@ -73,6 +73,7 @@ draft → planned → probing → collecting → ready ┬─ [brand_strategy] �
 3. `confirm-research`: 根据 data_plan 的渠道分别创建 SocialMonitor / NewsMonitor + 对应 phase="probe" 任务，状态 → probing
    - 社媒：每个 keyword×platform 一个 SocialTask，max_pages 限制翻页
    - 新闻：每个 keyword 一个 NewsTask，celery `run_news_probe_task` 异步派发（纯搜索）
+   - 行业研究：research_design 含 `research_agent` 字段时条件创建 ResearchTask（Celery 立即启动 LangGraph，无探测阶段，与社媒/新闻并行）
 
 ### ② 探测验证 (probing → collecting)
 
@@ -104,11 +105,11 @@ draft → planned → probing → collecting → ready ┬─ [brand_strategy] �
 - **主数据源（primary）**：直接注入 prompt 的切片数据
   - brand_strategy 路径：`social_media`（SocialSlice，消费者声音主轴）
   - market_report 路径：`news_media`（NewsSlice，媒体视角主轴）
-- **背景数据源（background）**：`knowledge_base` RAG 注入 `{market_context}` 占位符（可选，失败时优雅降级为 ""）
+- **行业研究（research）**：Research Agent 自动搜索分析，注入 `{research_findings}` 占位符（无结果时优雅降级为 ""）
 
 #### brand_strategy 路径（Insight → Brand Role → Big Idea）
 
-Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数据源 = social_media（`load_strategy_inputs`），同时通过 `_format_news_media_section` 将新闻切片作为补充段落注入 `{news_media_section}`（可选上下文，不是主数据）。知识库通过 `_retrieve_strategy_market_context` RAG 检索。
+Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数据源 = social_media（`load_strategy_inputs`），同时通过 `_format_news_media_section` 将新闻切片作为补充段落注入 `{news_media_section}`（可选上下文，不是主数据）。行业研究通过 `_retrieve_research_findings` 加载 Research Agent 结果，per-stage formatter 注入 `{research_findings}`。
 
 #### market_report 路径（Agenda Map → Landscape → Strategic Brief）
 
@@ -118,7 +119,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 #### data_provenance 记录
 
-每个 stage 生成后，结果 JSONB 的 `data_provenance` 字段按两层结构记录实际消费来源：
+每个 stage 生成后，结果 JSONB 的 `data_provenance` 字段记录实际消费来源：
 
 ```json
 {
@@ -127,13 +128,16 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
     "social_media_slice_count": <int>,
     "news_media_slice_count": <int>
   },
-  "background": {
-    "knowledge_base": <bool>
+  "research": {
+    "research_agent": <bool>
   }
 }
 ```
 
-前端 `DataProvenanceBadge` 组件据此展示"社媒/新闻主源 · N 切片 + 知识库背景"。`AnalysisJob.source_count` 取主数据源对应的切片数（brand_strategy → social 切片数；market_report → news 切片数）。
+- `primary` 决定"走哪条产出路径"（brand_strategy vs market_report）
+- `research` 是行业研究视角（Research Agent），与 primary 在分析权重上平等，但不驱动路径选择
+
+前端 `DataProvenanceBadge` 组件据此展示数据来源。`AnalysisJob.source_count` 取主数据源对应的切片数（brand_strategy → social 切片数；market_report → news 切片数）。
 
 ## LLM Chain
 
@@ -141,8 +145,8 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 | Chain | 角色 | 触发时机 | 路径 |
 |-------|------|---------|------|
-| brief_parser_chain | Brief 摄入 + 渠道分发判断 | 新建策略时（`parse-brief` 端点） | shared |
-| research_design_chain | 研究规划师（产出 data_plan 含 channel 字段） | ① | shared |
+| brief_parser_chain | Brief 摄入 + 三渠道分发判断（social_media / news_media / research_agent） | 新建策略时（`parse-brief` 端点） | shared |
+| research_design_chain | 研究规划师（产出 data_plan + 可选 research_agent） | ① | shared |
 | strategy_social_probe_review_chain | 社媒数据质检员 | ② | shared |
 | strategy_news_probe_review_chain | 新闻数据质检员（单任务并行） | ② | shared |
 | coverage_check_chain | 覆盖度验证 | ③ | shared |
@@ -153,7 +157,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 | landscape_chain | 竞争格局（第 2 层） | ④ | market_report |
 | strategic_brief_chain | 战略简报（第 3 层，只消费前两层） | ④ | market_report |
 
-所有 stage chain 都注入 `research_design` 中的 research_questions 作为分析上下文。brand_strategy chain 通过 `_format_news_media_section` 把新闻切片作为补充段落注入；market_report Agenda Map chain 直接消费 `load_strategy_news_inputs` 加载的 NewsSlice 作为主数据源。
+所有 stage chain 都注入 `research_design` 中的 research_questions 作为分析上下文。`research_findings.py` 提供 6 个 per-stage formatter 函数，按 token 预算从 ResearchTask.result_data 提取并格式化行业研究数据注入 `{research_findings}`。brand_strategy chain 通过 `_format_news_media_section` 把新闻切片作为补充段落注入；market_report Agenda Map chain 直接消费 `load_strategy_news_inputs` 加载的 NewsSlice 作为主数据源。
 
 ## Agent 协议
 
@@ -174,9 +178,10 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 - Strategy 通过 `strategy_slices` 关联社媒切片（SocialSlice），新闻切片（NewsSlice）通过 `news_monitor_id` 隐式关联
 - `_create_auto_slices` 按 `slice_blueprint` 自动创建：社媒维度 → SocialSlice，新闻维度 → NewsSlice，互不侵入
-- `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor，同渠道所有任务共享一个 Monitor
+- `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor（同渠道所有任务共��一个 Monitor）+ 条件创建 ResearchTask（research_design 含 `research_agent` 字段时）
 - `_task_dimension_map` / `_news_task_dimension_map` 存在 `research_design` 中，分别记录社媒 / 新闻 task_id → dimension_name 映射，供 probe 审查注入研究问题 + 自动建切片使用
-- `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）
+- `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）；两个端点同时返回 `research_agent` 状态（ResearchTask 进度，不阻塞主流程）
+- Research Agent 通过 `research_tasks.strategy_id` FK 关联策略，不在 Strategy 表上加冗余字段。`_retrieve_research_findings` 读取最新已完成的 ResearchTask.result_data，per-stage formatter 按 token 预算注入 `{research_findings}`
 - 新闻 insight 粒度：独立监测和策略研究都通过 NewsSlice 切片触发 insight（按 blueprint 条目分组新闻任务创建切片），采集阶段仅做 tagging 不做 insight
 - 新闻搜索渠道：baidu / sogou / duckduckgo（默认三渠道）+ wechat_mp（可选，通过搜狗微信专用入口）；source_tier 分层：tier1(权威) / tier2(行业) / tier3(其他) / wechat_mp(公众号)
 - `output_type` 由用户在 confirm-research 时**显式选择**，前端 `ResearchPlanEditor` 根据 data_plan 的渠道组成阻塞不合法的组合（brand_strategy 需含 social_media 维度；market_report 需含 news_media 维度）。后端 `_validate_market_report_output_type` 在生成时二次校验

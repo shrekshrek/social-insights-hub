@@ -131,18 +131,21 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - 新闻数据作为**补充证据**使用，evidence 中标明 source 为"新闻媒体数据"以区分
 - 不要仅凭新闻数据得出 Tension 结论——Tension 的核心依据应来自消费者真实声音（社媒切片），新闻数据用于验证或补充
 
-## 市场背景数据（market_context）使用指南
+## 行业研究数据（research_findings）使用指南
 
-- 知识库内容以宏观互联网/经济/政策统计为主，可能与本次研究主题不直接相关
-- 如 `{{market_context}}` 段落为空或内容与 brief 主题无明显关联，**必须忽略**该部分，仅基于切片和新闻数据进行分析
-- 仅当知识库内容与研究主题直接相关时，才可作为宏观背景引用，且不应成为 Tension 或 Opportunity 的核心依据
+- 行业研究数据来自自动化搜索引擎 + 行业报告 + 公开数据的综合分析，代表**专家/行业视角**
+- 与社媒消费者声音、新闻媒体报道构成**三位一体**的分析视角：消费者声音（社媒）→ 媒体叙事（新闻）→ 行业事实（研究）
+- **交叉验证优先**：当研究数据与社媒/新闻数据出现矛盾时（如行业增长但消费者不满），这本身就是高价值的 Tension 线索
+- 研究数据中的**置信度**标记（high/medium/low）反映证据充分程度，high 数据可直接引用，low 数据需其他来源佐证
+- 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，仅基于切片和新闻数据进行分析
+- evidence 中引用研究数据时标明 source 为"行业研究数据"以区分
 """
 
 USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
-{market_context}
+{research_findings}
 
 ## 切片数据
 
@@ -268,8 +271,8 @@ def format_slice_data_for_insight(
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
-    market_context: str = "",
     news_slices: list[dict] | None = None,
+    research_findings: str = "",
 ) -> dict[str, Any]:
     """将切片 result_data 格式化为 Insight (洞察层) 输入
 
@@ -497,7 +500,7 @@ def format_slice_data_for_insight(
         "brief_section": brief_section,
         "research_context_section": research_context_section,
         "slice_data": slice_data,
-        "market_context": market_context,
+        "research_findings": research_findings,
         "news_media_section": news_media_section,
     }
 

@@ -88,6 +88,7 @@ from .schemas import (
     ProbeTaskStatus,
     RefineProbeRequest,
     RefineProbeResponse,
+    ResearchAgentStatus,
     StrategyCreate,
     StrategyUpdate,
     StrategyRead,
@@ -397,29 +398,64 @@ def _validate_has_slices(strategy: Strategy) -> None:
         )
 
 
-async def _retrieve_strategy_market_context(
-    db: AsyncSession, strategy: Strategy, stage_label: str
-) -> str:
-    """从知识库检索市场背景（RAG），失败时优雅降级为空字符串。
-
-    brand_strategy 三层（insight/brand_role/big_idea）共用：都以 brief.subject + analysis_goal
-    为查询，无 brief 或查询为空时返回 ""，RAG 异常不中断主流程。
-    """
-    if not strategy.brand_brief:
-        return ""
+async def _get_research_agent_status(
+    db: AsyncSession, strategy_id: int
+) -> ResearchAgentStatus:
+    """查询策略关联的 Research Agent 任务状态。"""
     try:
-        from src.knowledge_base.service import retrieve_market_context
+        from src.research_agent.models import ResearchTask as RT
 
-        brief = strategy.brand_brief
-        query = f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
-        if not query:
-            return ""
-        return await retrieve_market_context(
-            db, query, user_id=strategy.user_id, top_k=6
+        stmt = (
+            select(RT)
+            .where(RT.strategy_id == strategy_id)
+            .order_by(RT.created_at.desc())
+            .limit(1)
         )
+        result = await db.execute(stmt)
+        task = result.scalar_one_or_none()
+        if task:
+            return ResearchAgentStatus(
+                has_task=True, status=task.status or "", task_id=task.id
+            )
+    except Exception:
+        pass
+    return ResearchAgentStatus()
+
+
+async def _retrieve_research_findings(
+    db: AsyncSession, strategy: Strategy, stage_label: str
+) -> dict | None:
+    """加载策略关联的最新已完成 ResearchTask 的 result_data。
+
+    返回 result_data dict 或 None（无研究任务/未完成），供 per-stage 格式化器使用。
+    失败时优雅降级为 None，不中断主流程。
+    """
+    try:
+        from src.research_agent.models import ResearchTask
+
+        stmt = (
+            select(ResearchTask)
+            .where(
+                ResearchTask.strategy_id == strategy.id,
+                ResearchTask.status == "completed",
+            )
+            .order_by(ResearchTask.created_at.desc())
+            .limit(1)
+        )
+        result = await db.execute(stmt)
+        task = result.scalar_one_or_none()
+
+        if not task or not task.result_data:
+            return None
+
+        logger.info(
+            "%s 加载研究发现: strategy=%d, research_task=%d",
+            stage_label, strategy.id, task.id,
+        )
+        return task.result_data
     except Exception as e:
-        logger.warning("%s RAG 检索失败，降级为空: %s", stage_label, e)
-        return ""
+        logger.warning("%s 研究数据加载失败，降级为空: %s", stage_label, e)
+        return None
 
 
 def _validate_slices_have_data(
@@ -469,26 +505,27 @@ def _validate_slices_have_data(
 def _build_data_provenance(
     slices_data: list[dict],
     news_slices_data: list[dict],
-    market_context: str,
     *,
     primary_channel: str,
+    research_findings: str = "",
 ) -> dict[str, Any]:
-    """构造本次 Phase 生成的数据来源记录，采用"两层模型"：
+    """构造本次 Phase 生成的数据来源记录，采用两层结构：
 
-    - primary: 本次分析的主数据输入（直接进入 prompt 的切片结果）
-    - background: 补充背景（知识库 RAG 注入的市场背景）
+    - primary: 驱动产出路径的主数据通道（社媒切片 or 新闻切片）
+    - research: 行业研究视角（Research Agent 自动搜索分析，与主通道平权的第三视角）
 
-    前端据此显示"基于 X 渠道的分析 + Y 背景"，而不是把知识库当第三条平行渠道。
+    primary 决定"走哪条产出路径"，research 提供"行业事实校验"，
+    两者在分析权重上平等，但在数据流水线上角色不同。
     """
     primary: dict[str, Any] = {
         "channel": primary_channel,
         "social_media_slice_count": len(slices_data),
         "news_media_slice_count": len(news_slices_data),
     }
-    background: dict[str, Any] = {
-        "knowledge_base": bool(market_context and market_context.strip()),
+    research: dict[str, Any] = {
+        "research_agent": bool(research_findings and research_findings.strip()),
     }
-    return {"primary": primary, "background": background}
+    return {"primary": primary, "research": research}
 
 
 async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
@@ -510,15 +547,17 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    market_context = await _retrieve_strategy_market_context(db, strategy, "Insight")
+    research_result = await _retrieve_research_findings(db, strategy, "Insight")
+    from src.llm.chains.strategy.research_findings import format_research_for_insight
+    research_findings_text = format_research_for_insight(research_result)
 
     chain = create_insight_chain()
     inputs = format_slice_data_for_insight(
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
-        market_context=market_context,
         news_slices=news_slices_data,
+        research_findings=research_findings_text,
     )
 
     job = await create_analysis_job_async(
@@ -538,8 +577,9 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     result = parse_insight_response(response.content)
     result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data, market_context,
+        slices_data, news_slices_data,
         primary_channel="social_media",
+        research_findings=research_findings_text,
     )
     logger.info("Strategy %d Insight 生成完成 (%.1fs)", strategy.id, duration)
 
@@ -571,7 +611,9 @@ async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    market_context = await _retrieve_strategy_market_context(db, strategy, "BrandRole")
+    research_result = await _retrieve_research_findings(db, strategy, "BrandRole")
+    from src.llm.chains.strategy.research_findings import format_research_for_brand_role
+    research_findings_text = format_research_for_brand_role(research_result)
 
     chain = create_brand_role_chain()
     inputs = format_data_for_brand_role(
@@ -579,8 +621,8 @@ async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
-        market_context=market_context,
         news_slices=news_slices_data,
+        research_findings=research_findings_text,
     )
 
     job = await create_analysis_job_async(
@@ -600,8 +642,9 @@ async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     result = parse_brand_role_response(response.content)
     result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data, market_context,
+        slices_data, news_slices_data,
         primary_channel="social_media",
+        research_findings=research_findings_text,
     )
     logger.info("Strategy %d Brand Role 生成完成 (%.1fs)", strategy.id, duration)
 
@@ -632,6 +675,10 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
+    research_result = await _retrieve_research_findings(db, strategy, "BigIdea")
+    from src.llm.chains.strategy.research_findings import format_research_for_big_idea
+    research_findings_text = format_research_for_big_idea(research_result)
+
     chain = create_big_idea_chain()
     inputs = format_data_for_big_idea(
         strategy.insight_result,
@@ -640,6 +687,7 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
         strategy.brand_brief,
         research_design=strategy.research_design,
         news_slices=news_slices_data,
+        research_findings=research_findings_text,
     )
 
     job = await create_analysis_job_async(
@@ -658,10 +706,10 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
     duration = time.time() - start
 
     result = parse_big_idea_response(response.content)
-    # big_idea 层不注入 knowledge_base（token 预算原因，见 big_idea_chain.py 头注）
     result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data, market_context="",
+        slices_data, news_slices_data,
         primary_channel="social_media",
+        research_findings=research_findings_text,
     )
     logger.info("Strategy %d Big Idea 生成完成 (%.1fs)", strategy.id, duration)
 
@@ -831,14 +879,16 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    market_context = await _retrieve_strategy_market_context(db, strategy, "AgendaMap")
+    research_result = await _retrieve_research_findings(db, strategy, "AgendaMap")
+    from src.llm.chains.strategy.research_findings import format_research_for_agenda_map
+    research_findings_text = format_research_for_agenda_map(research_result)
 
     chain = create_agenda_map_chain()
     inputs = format_inputs_for_agenda_map(
         news_slices=news_slices_data,
         brief=strategy.brand_brief,
         research_design=strategy.research_design,
-        market_context=market_context,
+        research_findings=research_findings_text,
     )
 
     job = await create_analysis_job_async(
@@ -858,8 +908,9 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     result = parse_agenda_map_response(response.content)
     result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data, market_context,
+        slices_data, news_slices_data,
         primary_channel="news_media",
+        research_findings=research_findings_text,
     )
     logger.info("Strategy %d Agenda Map 生成完成 (%.1fs)", strategy.id, duration)
 
@@ -894,7 +945,9 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
 
-    market_context = await _retrieve_strategy_market_context(db, strategy, "Landscape")
+    research_result = await _retrieve_research_findings(db, strategy, "Landscape")
+    from src.llm.chains.strategy.research_findings import format_research_for_landscape
+    research_findings_text = format_research_for_landscape(research_result)
 
     chain = create_landscape_chain()
     inputs = format_inputs_for_landscape(
@@ -902,7 +955,7 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         news_slices=news_slices_data,
         brief=strategy.brand_brief,
         research_design=strategy.research_design,
-        market_context=market_context,
+        research_findings=research_findings_text,
     )
 
     job = await create_analysis_job_async(
@@ -922,8 +975,9 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     result = parse_landscape_response(response.content)
     result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data, market_context,
+        slices_data, news_slices_data,
         primary_channel="news_media",
+        research_findings=research_findings_text,
     )
     logger.info("Strategy %d Landscape 生成完成 (%.1fs)", strategy.id, duration)
 
@@ -957,13 +1011,18 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
 
+    # strategic_brief 只注入高置信度研究要点作为证据锚点，不引入大量新数据
+    research_result = await _retrieve_research_findings(db, strategy, "StrategicBrief")
+    from src.llm.chains.strategy.research_findings import format_research_for_strategic_brief
+    research_findings_text = format_research_for_strategic_brief(research_result)
+
     chain = create_strategic_brief_chain()
     inputs = format_inputs_for_strategic_brief(
         agenda_map_result=strategy.agenda_map_result,
         landscape_result=strategy.landscape_result,
         brief=strategy.brand_brief,
         research_design=strategy.research_design,
-        market_context="",  # strategic_brief 不注入 KB，避免稀释前两层已经收敛的结论
+        research_findings=research_findings_text,
     )
 
     job = await create_analysis_job_async(
@@ -983,8 +1042,9 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
 
     result = parse_strategic_brief_response(response.content)
     result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data, market_context="",
+        slices_data, news_slices_data,
         primary_channel="news_media",
+        research_findings=research_findings_text,
     )
     # 埋点：观察 evidence_refs 实际产出规模，为后续决定是否需要路径校验提供数据
     priorities = result.get("strategic_priorities") or []
@@ -1033,27 +1093,6 @@ def _extract_channel_brief(brand_brief: dict | None, channel_type: str) -> str:
     return ""
 
 
-def _extract_social_media_channel_brief(brand_brief: dict | None) -> str:
-    """从 brand_brief 中提取社媒渠道专属描述，兼容旧格式（无 channel_plan 的记录）"""
-    if not brand_brief:
-        return ""
-    brief = _extract_channel_brief(brand_brief, "social_media")
-    if brief:
-        return brief
-    # 有 channel_plan 但无 social_media 条目 → 上游有意排除，不兜底
-    if brand_brief.get("channel_plan"):
-        return ""
-    # 旧格式（无 channel_plan）→ 从 brief 字段构建描述
-    parts = []
-    if subject := brand_brief.get("subject"):
-        parts.append(f"研究主体：{subject}")
-    if goal := brand_brief.get("analysis_goal"):
-        parts.append(f"分析目标：{goal}")
-    if constraints := brand_brief.get("constraints"):
-        parts.append(f"补充说明：{constraints}")
-    return "\n".join(parts)
-
-
 async def design_research(
     db: AsyncSession,
     strategy: Strategy,
@@ -1069,10 +1108,11 @@ async def design_research(
     brand_brief = strategy.brand_brief or {}
     inputs = format_research_design_inputs(
         user_input=user_input,
-        channel_brief=_extract_social_media_channel_brief(brand_brief),
+        social_channel_brief=_extract_channel_brief(brand_brief, "social_media"),
         subject=brand_brief.get("subject", ""),
         constraints=brand_brief.get("constraints") or "",
         news_channel_brief=_extract_channel_brief(brand_brief, "news_media"),
+        research_channel_brief=_extract_channel_brief(brand_brief, "research_agent"),
     )
 
     start = time.time()
@@ -1473,6 +1513,32 @@ async def confirm_research(
 
     strategy.social_monitor_id = monitor.id
     strategy.status = "probing"
+
+    # 条件创建 Research Agent 任务（仅 research_design 包含 research_agent 时）
+    ra_config = research_design.get("research_agent")
+    if ra_config and isinstance(ra_config, dict) and ra_config.get("research_questions"):
+        try:
+            from src.research_agent.service import create_research_task
+
+            brief = strategy.brand_brief or {}
+            research_query = (
+                f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
+            )
+            await create_research_task(
+                db,
+                user_id=current_user_id,
+                query=research_query or "行业研究",
+                research_questions=ra_config["research_questions"],
+                search_config={
+                    "research_scope": ra_config.get("research_scope", {}),
+                    "focus_domains": ra_config.get("focus_domains", []),
+                },
+                strategy_id=strategy.id,
+            )
+            logger.info("策略 %d: 创建 Research Agent 任务", strategy.id)
+        except Exception as e:
+            logger.warning("策略 %d: 创建研究任务失败（不阻塞主流程）: %s", strategy.id, e)
+            partial_errors.append(f"创建研究任务失败: {e}")
 
     await db.commit()
     updated = await get_strategy_by_id(db, strategy.id)
@@ -2129,12 +2195,15 @@ async def check_probe_status(
             _run_probe_review_bg_task(strategy.id, analyzed_summaries, news_probe_summaries)
         )
 
+    ra_status = await _get_research_agent_status(db, strategy.id)
+
     return ProbeStatusResponse(
         tasks=task_statuses,
         all_analyzed=all_analyzed,
         analyzed_count=analyzed_count,
         total_count=total_count,
         probe_review_result=strategy.probe_review_result,
+        research_agent=ra_status,
         strategy=_strategy_read(strategy),
     )
 
@@ -2615,6 +2684,8 @@ async def check_collection_status(
     )
     total_count = len(tasks) + len(news_tasks)
 
+    ra_status = await _get_research_agent_status(db, strategy.id)
+
     return CollectionStatusResponse(
         tasks=task_statuses,
         all_completed=all_completed,
@@ -2623,6 +2694,7 @@ async def check_collection_status(
         completed_count=completed_count,
         total_count=total_count,
         coverage_check_result=strategy.coverage_check_result,
+        research_agent=ra_status,
         strategy=_strategy_read(strategy),
     )
 

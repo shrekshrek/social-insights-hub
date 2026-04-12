@@ -10,7 +10,7 @@ market_report 三层分析的**第 2 层**：agenda_map → landscape → strate
 - research_context_section  : 研究问题 + 需求理解
 - agenda_map_section        : 上游 agenda_map 层的媒体议程图结果（必需，provides narrative backbone）
 - news_slice_data           : 新闻切片原始 insight（提供 entity/sentiment/SOV 数据）
-- market_context            : 知识库 RAG 背景（可选）
+- research_findings         : Research Agent 行业研究发现（自动注入）
 
 ## 输出结构
 
@@ -123,10 +123,11 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - 禁止脱离 agenda_map 议程图单独产生新的 battle
 - 禁止在 evidence_quote 中编造未出现的原文
 
-## 市场背景数据（market_context）使用指南
-- 知识库内容以宏观互联网/经济/政策统计为主，可能与本次研究主题不直接相关
-- 如 `{{market_context}}` 段落为空或内容与 brief 主题无明显关联，**必须忽略**该部分，players / positioning_map / discourse_battles 只基于 agenda_map 和新闻切片
-- 仅当知识库内容与研究主题直接相关时，才可在 market_dynamics.structural_shifts 中作为宏观参照引用
+## 行业研究数据（research_findings）使用指南
+- 行业研究数据来自自动化搜索引擎 + 行业报告 + 公开数据���综合分析，代表**专家/行业视角**
+- 研究数据中的量化数据点（市场份额、增长率等）可用于校验 media_sov 与实际市场地位的偏差
+- 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，players / positioning_map / discourse_battles 只基于 agenda_map 和新闻切片
+- 可在 market_dynamics.structural_shifts 中引用研究数据作为行业趋势佐证
 """
 
 
@@ -134,13 +135,13 @@ USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
-{market_context}
+{research_findings}
 
 ## 媒体议程图 (Agenda Map) 结果
 
 {agenda_map_section}
 
-## 新闻切片原始数据
+## 新闻切片原��数据
 
 {news_slice_data}"""
 
@@ -239,7 +240,7 @@ def format_inputs_for_landscape(
     news_slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
-    market_context: str = "",
+    research_findings: str = "",
 ) -> dict[str, Any]:
     """构建 Landscape chain 的输入参数字典。"""
     brief_section = ""
@@ -249,7 +250,7 @@ def format_inputs_for_landscape(
     return {
         "brief_section": brief_section,
         "research_context_section": _build_research_context_section(research_design),
-        "market_context": market_context or "",
+        "research_findings": research_findings,
         "agenda_map_section": _format_agenda_map_section(agenda_map_result),
         "news_slice_data": _format_news_slices_for_landscape(news_slices),
     }

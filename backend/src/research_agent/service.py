@@ -15,6 +15,7 @@ from src.research_agent.tasks import run_research_task
 logger = logging.getLogger(__name__)
 
 
+
 async def extract_brief_from_file(content: bytes, filename: str) -> str:
     """从上传文档提取纯文本（复用 knowledge_base.service.parse_text）"""
     from src.knowledge_base.service import parse_text
@@ -144,7 +145,7 @@ async def get_research_result(db: AsyncSession, task_id: int) -> dict | None:
         "synthesis": task.result_data.get("synthesis"),
         "sources": task.result_data.get("sources"),
         "coverage": task.result_data.get("coverage"),
-        "information_gaps": task.result_data.get("information_gaps"),
+        "information_gaps": task.result_data.get("information_gaps") or [],
         "stats": task.stats,
     }
 

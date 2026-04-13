@@ -15,6 +15,22 @@ from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
 
+# 回避性表述：包含这些词的 relevance 文本不计入有效覆盖
+_HEDGING_PHRASES = [
+    "缺乏", "没有直接", "未直接", "未提供", "没有提供",
+    "没有专项", "不足", "没有针对", "无专项", "缺少",
+    "没有相关", "未涉及", "不涉及",
+]
+# relevance 文本最低有效长度（过短说明 LLM 只给了泛泛一句话）
+_MIN_SUBSTANTIVE_LEN = 60
+
+
+def _is_substantive(relevance: str) -> bool:
+    """判断 relevance 文本是否为实质性答案（非搪塞/回避）"""
+    if len(relevance) < _MIN_SUBSTANTIVE_LEN:
+        return False
+    return not any(phrase in relevance for phrase in _HEDGING_PHRASES)
+
 
 def evaluate_node(state: ResearchState) -> dict:
     """评估覆盖度，输出 Evaluation"""
@@ -24,20 +40,33 @@ def evaluate_node(state: ResearchState) -> dict:
     current_round = state.get("round", 1)
     max_rounds = state.get("max_rounds", 3)
 
-    # 统计每个问题的覆盖情况
+    # 统计每个问题的实质性覆盖情况
     question_coverage: dict[str, list[str]] = {q: [] for q in questions}
     for finding in findings:
         rtq = finding.get("relevance_to_questions", {})
         for q in questions:
+            # 优先精确匹配，回退到 key 包含问题片段的模糊匹配（应对 LLM 改写 key）
             relevance = rtq.get(q, "")
-            if relevance and "无直接相关" not in relevance and "无相关" not in relevance:
+            if not relevance:
+                q_lower = q.lower()
+                for rtq_key, rtq_val in rtq.items():
+                    if rtq_key and (q_lower in rtq_key.lower() or rtq_key.lower() in q_lower):
+                        relevance = rtq_val
+                        break
+            # 只计入实质性答案，过滤搪塞/回避性表述
+            if (
+                relevance
+                and "无直接相关" not in relevance
+                and "无相关" not in relevance
+                and _is_substantive(relevance)
+            ):
                 question_coverage[q].append(finding.get("source_title", ""))
 
-    # 判断哪些问题覆盖不足
+    # 有 >= 1 条实质性来源即视为覆盖
     covered_questions = []
     gap_questions = []
     for q, sources in question_coverage.items():
-        if len(sources) >= 2:
+        if len(sources) >= 1:
             covered_questions.append(q)
         else:
             gap_questions.append(q)
@@ -47,16 +76,12 @@ def evaluate_node(state: ResearchState) -> dict:
         1 for c in selected if c.get("source_tier") == "tier1"
     )
 
-    # 生成补充关键词
-    suggested_keywords = []
-    for gap_q in gap_questions[:3]:
-        # 提取问题中的关键信息作为补充搜索词
-        suggested_keywords.append(gap_q)
-
     # 决策：是否继续
+    # selected 为空说明本轮没有新内容，继续也没有意义
     should_continue = (
         len(gap_questions) > 0
         and current_round < max_rounds
+        and len(selected) > 0
     )
 
     logger.info(
@@ -75,7 +100,6 @@ def evaluate_node(state: ResearchState) -> dict:
             "questions_covered": covered_questions,
             "gap_questions": gap_questions,
             "tier1_source_count": tier1_count,
-            "suggested_keywords": suggested_keywords,
             "should_continue": should_continue,
         },
     }

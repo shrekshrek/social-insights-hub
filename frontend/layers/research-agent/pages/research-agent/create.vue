@@ -49,7 +49,6 @@
         </div>
 
         <UFormField label="研究主题" name="analysis_goal" required>
-          <template #description>AI 提炼的核心研究意图，可手动填写或通过 Brief 解析自动生成</template>
           <UTextarea
             v-model="formState.analysis_goal"
             placeholder="例如：了解国内新能源汽车市场的主要玩家、竞争策略及消费者偏好变化趋势"

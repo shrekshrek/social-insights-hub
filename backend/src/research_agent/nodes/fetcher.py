@@ -37,7 +37,7 @@ def fetch_node(state: ResearchState) -> dict:
 
     # 报告研究模式：允许更长内容截断，充分利用报告全文
     max_content_len = 60000
-    pdf_timeout = FETCH_TIMEOUT * 2
+    pdf_timeout = FETCH_TIMEOUT
 
     documents = []
     for candidate in selected:

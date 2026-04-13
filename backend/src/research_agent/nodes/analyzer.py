@@ -9,10 +9,12 @@
 import json
 import logging
 
+from billiard.exceptions import SoftTimeLimitExceeded
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
 
 from src.config import settings
+from src.research_agent.config import MAX_CONCURRENT_TASKS
 from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 
@@ -26,6 +28,10 @@ def analyze_node(state: ResearchState) -> dict:
     selected = state.get("selected", [])
     profile = get_profile()
     analyzer_prompt = profile.analyzer_prompt
+
+    # documents 跨轮累积（operator.add），只分析本轮新增的文档，避免重复分析
+    already_analyzed = {f.get("source_url") for f in state.get("findings", [])}
+    documents = [d for d in documents if d.get("url") not in already_analyzed]
 
     if not documents:
         return {"findings": []}
@@ -46,22 +52,18 @@ def analyze_node(state: ResearchState) -> dict:
         timeout=90.0,
         max_retries=1,
     )
-    findings = []
-
-    for doc in documents:
-        # snippet 回退的文档跳过深度分析（synthesize 会直接用 snippet）
+    def _analyze_doc(doc: dict) -> dict:
+        """分析单篇文档，返回 finding（供并发调用）"""
         if doc.get("content_type") == "snippet":
-            findings.append({
+            return {
                 "source_url": doc["url"],
                 "source_title": doc["title"],
                 "source_tier": url_to_tier.get(doc["url"], "tier3"),
                 "key_points": [doc["content"][:300]],
                 "data_points": [],
                 "relevance_to_questions": {},
-            })
-            continue
+            }
 
-        # 报告研究模式：截取更长内容（报告信息密度高）
         max_excerpt = 16000
         content_excerpt = doc["content"][:max_excerpt]
 
@@ -80,6 +82,8 @@ def analyze_node(state: ResearchState) -> dict:
                 ]
             )
             parsed = _parse_analyze_response(response.content)
+        except SoftTimeLimitExceeded:
+            raise  # 软超时必须向上传播，让任务层更新 DB 状态
         except Exception:
             logger.warning("analyze LLM 调用失败: %s", doc["title"], exc_info=True)
             parsed = {
@@ -88,14 +92,22 @@ def analyze_node(state: ResearchState) -> dict:
                 "relevance_to_questions": {},
             }
 
-        findings.append({
+        return {
             "source_url": doc["url"],
             "source_title": doc["title"],
             "source_tier": url_to_tier.get(doc["url"], "tier3"),
             "key_points": parsed.get("key_points", []),
             "data_points": parsed.get("data_points", []),
             "relevance_to_questions": parsed.get("relevance_to_questions", {}),
-        })
+        }
+
+    # 并发分析（gevent.pool.Pool）：
+    # - gevent monkey-patch 后 ThreadPoolExecutor 底层是 greenlet，SoftTimeLimitExceeded
+    #   信号无法跨 greenlet 传播；gevent.pool.Pool 是原生 greenlet pool，异常可正常传播
+    # - LLM 调用本质是 HTTP I/O，greenlet 完全够用，无需 OS 线程
+    from gevent.pool import Pool as GeventPool
+    pool = GeventPool(MAX_CONCURRENT_TASKS)
+    findings = list(pool.map(_analyze_doc, documents))
 
     logger.info(
         "analyze 节点: %d 篇文档, %d 个数据点",

@@ -116,11 +116,26 @@ def call_planner_llm(
         }
 
 
+def _build_tried_domains(findings: list[dict]) -> list[str]:
+    """从历史 findings 中提取已尝试过的域名（去重，最多返回15个）"""
+    from urllib.parse import urlparse
+    seen: dict[str, int] = {}
+    for f in findings:
+        url = f.get("source_url", "")
+        if not url:
+            continue
+        domain = urlparse(url).netloc.lstrip("www.")
+        seen[domain] = seen.get(domain, 0) + 1
+    # 按出现次数降序，返回最多15个
+    return [d for d, _ in sorted(seen.items(), key=lambda x: -x[1])[:15]]
+
+
 def plan_node(state: ResearchState) -> dict:
     """生成或调整搜索计划
 
     第 1 轮：基于 query + research_questions 生成初始计划
-    后续轮次：基于 evaluation.gap_questions 生成补充搜索计划
+    后续轮次：基于 evaluation.gap_questions 生成补充搜索计划，
+              并注入已尝试域名和方向诊断，引导 LLM 换角度搜索。
     """
     query = state["query"]
     questions = state.get("research_questions", [])
@@ -132,18 +147,40 @@ def plan_node(state: ResearchState) -> dict:
     extra_context = context
     if current_round > 0 and evaluation:
         gap_questions = evaluation.get("gap_questions", [])
-        suggested_kw = evaluation.get("suggested_keywords", [])
-        suffix_parts = []
+        covered_count = len(evaluation.get("questions_covered", []))
+        total_count = len(questions)
+        findings = state.get("findings", [])
+        tried_domains = _build_tried_domains(findings)
+
+        suffix_parts: list[str] = []
+
         if gap_questions:
             suffix_parts.append(
                 "⚠️ 这是补充搜索轮次，以下问题在前一轮数据不足：\n"
                 + "\n".join(f"- {q}" for q in gap_questions)
                 + "\n请针对这些缺口问题生成新的搜索关键词，避免重复之前的搜索。"
             )
-        if suggested_kw:
-            suffix_parts.append(f"参考关键词方向：{', '.join(suggested_kw)}")
+
+        if tried_domains:
+            suffix_parts.append(
+                "已搜索过的域名（请生成新关键词时尽量避开，转向其他来源）：\n"
+                + "、".join(tried_domains)
+            )
+
+        # 覆盖率偏低时，注入方向诊断
+        if total_count > 0 and covered_count < total_count / 2:
+            suffix_parts.append(
+                '⚠️ 前几轮覆盖率不足，可能原因：来源集中于服务提供商自有内容（卖方视角），'
+                '无法回答买方行为问题。请尝试以下策略：\n'
+                '1. 转向独立研究机构：Edelman、Gartner、Forrester、LinkedIn Business、HBR 等\n'
+                '2. 使用买方视角关键词：如"企业采购咨询服务 决策流程"、'
+                '"B2B buyer behavior consulting selection"、"专业服务RFP评估标准"\n'
+                '3. 尝试学术/协会来源：CIPS（英国采购与供应链协会）、中国采购发展报告\n'
+                '4. 中英文混搜，英文来源往往有更多买方行为研究'
+            )
+
         if suffix_parts:
-            extra_context = (context + "\n\n" + "\n".join(suffix_parts)).strip()
+            extra_context = (context + "\n\n" + "\n\n".join(suffix_parts)).strip()
 
     plan = call_planner_llm(
         query=query,
@@ -160,11 +197,16 @@ def plan_node(state: ResearchState) -> dict:
         "round": state.get("round", 0) + 1,
     }
 
-    # 第 1 轮：写回生成的标题；研究问题已由用户在 preview 步骤确认，不再覆盖
+    # 第 1 轮：写回生成的标题和研究问题（仅在状态中没有研究问题时补全）
     if current_round == 0:
         generated_title = plan.get("title", "")
         if generated_title:
             result["title"] = generated_title
             logger.info("plan 节点生成标题: %s", generated_title)
+        if not questions:
+            generated_questions = plan.get("research_questions", [])
+            if generated_questions:
+                result["research_questions"] = generated_questions
+                logger.info("plan 节点生成研究问题: %d 个", len(generated_questions))
 
     return result

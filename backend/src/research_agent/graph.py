@@ -14,7 +14,6 @@ import logging
 
 from langgraph.graph import StateGraph, END
 
-from src.research_agent.config import MAX_ROUNDS
 from src.research_agent.state import ResearchState
 from src.research_agent.nodes.planner import plan_node
 from src.research_agent.nodes.searcher import search_node
@@ -68,43 +67,3 @@ def build_research_graph() -> StateGraph:
 
 # 编译后的图实例（模块级单例）
 research_graph = build_research_graph()
-
-
-def run_research(
-    query: str,
-    research_questions: list[str] | None = None,
-    context: str | None = None,
-) -> dict:
-    """同步执行研究图（行业报告专项）
-
-    Parameters
-    ----------
-    query : 研究主题
-    research_questions : 研究问题列表（可选）
-    context : 研究背景/补充说明（可选）
-
-    Returns
-    -------
-    dict : 最终 state（包含 synthesis, findings, selected 等）
-    """
-    initial_state = {
-        "query": query,
-        "context": context or "",
-        "title": "",
-        "research_questions": research_questions or [],
-        "round": 0,
-        "max_rounds": MAX_ROUNDS,
-    }
-
-    logger.info("开始研究: query=%s, questions=%d", query, len(initial_state["research_questions"]))
-
-    result = research_graph.invoke(initial_state)
-
-    logger.info(
-        "研究完成: query=%s, rounds=%d, sources=%d, synthesis_len=%d",
-        query,
-        result.get("round", 1),
-        len(result.get("selected", [])),
-        len(result.get("synthesis", "")),
-    )
-    return result

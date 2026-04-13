@@ -150,10 +150,21 @@ async def get_research_result(db: AsyncSession, task_id: int) -> dict | None:
 
 
 async def delete_research_task(db: AsyncSession, task_id: int) -> bool:
-    """删除研究任务"""
+    """删除研究任务，若 Celery 任务仍在运行则同时 revoke"""
+    from src.celery_app import celery_app
+    from src.jobs.models import AnalysisJob
+
     task = await db.get(ResearchTask, task_id)
     if not task:
         return False
+
+    # 尝试 revoke 正在运行的 Celery 任务
+    if task.job_id and task.status in ("pending", "running"):
+        job = await db.get(AnalysisJob, task.job_id)
+        if job and job.celery_task_id:
+            celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
+            logger.info("revoked celery task %s for ResearchTask %d", job.celery_task_id, task_id)
+
     await db.delete(task)
     await db.commit()
     return True

@@ -368,6 +368,34 @@ def _run_async(coro):
 - 每个 `_run()` 协程末尾**必须** `await async_engine.dispose()`，否则下次调用时 asyncpg pool 会绑定已关闭的事件循环
 - 在 `celery_app.py` 的 `include` 列表中注册模块，**不要**添加到 `beat_schedule`
 
+**Celery 任务内部并发（I/O 密集子任务）**：
+
+任务内部需要并发执行多个 I/O 子任务（如并发调 LLM、并发抓取多个 URL）时，**必须使用 `gevent.pool.Pool`，禁止使用 `ThreadPoolExecutor`**。
+
+原因：gevent monkey-patch 后 `threading.Thread` 被替换为 greenlet，`ThreadPoolExecutor` 底层实际是 greenlet pool，但 `SoftTimeLimitExceeded` 信号只能在主 greenlet 中抛出，无法穿透 `executor.submit()` 的 future 边界传播到子 greenlet——导致软超时失效、任务状态无法正确更新。`gevent.pool.Pool` 是原生 greenlet pool，异常可正常传播。
+
+```python
+from gevent.pool import Pool as GeventPool
+
+def my_celery_task(self, items: list) -> None:
+    def process_one(item):
+        # I/O 操作（LLM 调用、HTTP 请求等）
+        # SoftTimeLimitExceeded 会正确传播到任务层
+        from billiard.exceptions import SoftTimeLimitExceeded
+        try:
+            return do_io(item)
+        except SoftTimeLimitExceeded:
+            raise  # 必须向上传播
+        except Exception:
+            logger.warning("处理失败: %s", item, exc_info=True)
+            return None
+
+    pool = GeventPool(5)  # 并发数根据模块 config.py 中的常量配置
+    results = list(pool.map(process_one, items))
+```
+
+> Celery task 内部一律使用 `gevent.pool.Pool`，禁止使用 `ThreadPoolExecutor`。
+
 **触发方式**：
 ```python
 # 路由层派发

@@ -419,6 +419,66 @@ class ResearchState(TypedDict):
 
 不加 SerpAPI 百度引擎——Tavily 中文覆盖对专业报告场景够用，四大/麦肯锡官网中英双语。
 
+#### 未来方向：迁移至 Exa
+
+> **当前不实施**，在此记录决策依据。
+
+调研结论：**Exa 在研究报告发现场景下优于 Tavily**。
+
+| 维度 | Tavily（当前） | Exa |
+|------|--------------|-----|
+| 域名限制 | 最多 300 个 | 最多 1,200 个 |
+| 研究报告发现 | 通用语义搜索 | 专用 `research_paper` 分类，索引 1 亿+ 研究文档 |
+| 响应包含全文 | ✓ | ✓（最高 10K+ 字符，可省略 fetch 节点） |
+| 检索准确率（复杂查询） | 71% | 81% |
+| 速度 | 基准 | 2–3× 更快 |
+| 价格 / 千次查询 | $8 | $7–12 |
+
+**Exa 的核心价值**：响应直接携带页面全文，HTML 来源可跳过 fetcher 节点，每轮减少 30–60s；`research_paper` 分类更适合定向报告检索；域名白名单上限 4 倍于 Tavily。
+
+**触发迁移的条件**：
+- Tavily 中文报告检索质量明显下降，或
+- 需要研究报告的专项分类（`research_paper`），或
+- 每月 Tavily 费用超出预算
+
+**迁移工作量**：低——Exa Python SDK 接口结构与 Tavily 相近，主要改动在 `searcher.py`；fetcher 节点可为 Exa 已含全文的结果增加快速路径（跳过 HTTP 抓取）。
+
+⚠️ **Bing Search API 将于 2026-08-11 停服**，SerpAPI 价格 3–5 倍于 Exa，均不作考虑。
+
+#### 未来方向：双轨搜索（Tavily/Exa + 列表页直抓）
+
+> **当前不实施**，记录在此供后续参考。
+
+**问题背景**：Tavily 是语义搜索引擎，只返回关键词匹配的结果，可能漏掉"已知某域名存在但与关键词表述不符"的报告。对于有固定报告列表页的域名，直接爬取列表能获得完整覆盖。
+
+**触发条件（满足其一时值得实施）**：
+1. Tavily 按查询计费积累后成本显著
+2. 多轮搜索后信息缺口依然大量存在，且明确是"已知域名有相关报告但 Tavily 未检索到"——即卡点是搜索工具，而非报告本身稀缺
+
+**设计方案**：
+
+```
+searcher_node（双轨并行）
+  ├── track_a: Tavily 语义搜索（处理抽象主题、跨域发现）
+  └── track_b: 列表页直抓（Crawl4AI 抓固定入口，覆盖已知优质来源）
+       ↓ 合并去重 → filter（现有逻辑不变）
+```
+
+**已确认有独立报告列表页/子域名的来源**（track_b 候选）：
+
+| 来源 | 列表页入口 | 说明 |
+|------|-----------|------|
+| KPMG | `assets.kpmg.com` | PDF 资产库（已加入搜索域名列表） |
+| BCG | `media-publications.bcg.com` | BCG 报告 PDF 库 |
+| Bain | `media.bain.com` | Bain 报告 PDF 库 |
+| 艾瑞咨询 | `report.iresearch.cn` | 报告专页（已加入搜索域名列表） |
+| 信通院 | `caict.ac.cn/kxyj/qwfb/` | 研究报告发布页 |
+| CNNIC | `cnnic.net.cn/IDR/ReportDownloads/` | 报告下载页 |
+
+其余域名（McKinsey、Deloitte、PwC、EY、Roland Berger 等）报告分散在路径下，无独立列表页，不适合 track_b。
+
+**为何现在不做**：当前搜索噪音问题（服务页混入、单域名垄断）已通过 filter 代码层修复；主要信息缺口（如买方视角研究）属于报告本身稀缺，多搜一轮也找不到，不是搜索工具的问题。
+
 ### 2. 定向搜索目标源（Tavily `include_domains`）
 
 完整列表配置在 `src/config.py` 的 `RESEARCH_AGENT_TARGET_DOMAINS`，运行时与 planner LLM 推荐域名合并后传给 Tavily `include_domains`。

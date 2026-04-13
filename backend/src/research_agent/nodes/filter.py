@@ -8,6 +8,7 @@ import json
 import logging
 import re
 from datetime import datetime
+from urllib.parse import urlparse
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
@@ -71,8 +72,9 @@ TIER2_DOMAINS = {
     # 国际机构/数据平台
     "worldbank.org",
     "imf.org",
-    # 买方/消费者行为研究（免费报告）
+    # B2B 买方行为研究（发布完整免费报告）
     "edelman.com",
+    "linkedin.com",          # LinkedIn Business Intelligence B2B 研究报告
     "datareportal.com",
     "pewresearch.org",
     "ourworldindata.org",
@@ -85,6 +87,35 @@ TIER2_DOMAINS = {
     "caam.org.cn",
     "ccfa.org.cn",
 }
+
+# 咨询公司自有营销/服务页面的 URL 路径模式（代码层直接标记，比 prompt 规则更可靠）
+_SERVICE_PAGE_PATTERNS = [
+    "/services/", "/service/", "/about/", "/careers/", "/awards/",
+    "/our-work/", "/industries/", "/solutions/", "/capabilities/",
+    "/who-we-are/", "/join-us/",
+]
+
+# 单域名在 selected 中最多占用的槽位数（防止一家来源垄断结果）
+_MAX_SLOTS_PER_DOMAIN = 3
+
+
+def _is_service_page(url: str) -> bool:
+    """检测是否为咨询公司自有服务/营销页面（非研究报告）"""
+    path = urlparse(url).path.lower()
+    return any(pat in path for pat in _SERVICE_PAGE_PATTERNS)
+
+
+def _apply_domain_cap(selected: list[dict], max_per_domain: int) -> list[dict]:
+    """对 selected 列表按域名限流，防止单一来源垄断"""
+    domain_count: dict[str, int] = {}
+    result = []
+    for item in selected:
+        domain = urlparse(item.get("url", "")).netloc.lstrip("www.")
+        if domain_count.get(domain, 0) < max_per_domain:
+            result.append(item)
+            domain_count[domain] = domain_count.get(domain, 0) + 1
+    return result
+
 
 FILTER_SYSTEM_PROMPT = """你是一个研究文献筛选专家。给定一组搜索结果和研究问题，请评估每条结果的相关性。
 
@@ -124,6 +155,7 @@ def _build_report_hint() -> str:
         '- URL 以 .pdf 结尾或标题含"报告""白皮书""研究""report"等词的结果，相关性加 0.15 分\n'
         '- 来源为权威咨询/研究机构的结果优先选择\n'
         '- 普通资讯网页（非报告类）相关性应降低\n'
+        '- 候选列表中标注了"[服务介绍页，非报告]"的结果，相关性减 0.20 分\n'
         + _build_recency_hint()
     )
 
@@ -202,15 +234,22 @@ def filter_node(state: ResearchState) -> dict:
     if not candidates:
         return {"selected": []}
 
-    # 报告研究模式：PDF 优先排序，始终走 LLM 筛选
+    # 报告研究模式：PDF 优先，服务介绍页后置（代码层预处理，比 prompt 规则更可靠）
     candidates = sorted(
         candidates,
-        key=lambda c: (0 if c.get("content_type") == "pdf" else 1),
+        key=lambda c: (
+            2 if _is_service_page(c.get("url", "")) else
+            0 if c.get("content_type") == "pdf" else
+            1
+        ),
     )
 
-    # 构造候选列表文本
+    # 构造候选列表文本（在 URL 后标注服务页，辅助 LLM 判断）
     candidates_text = "\n".join(
-        f"[{i}] {c['title']}\n    URL: {c['url']}\n    类型: {c.get('content_type', 'html')}\n    摘要: {c['snippet'][:200]}"
+        f"[{i}] {c['title']}\n"
+        f"    URL: {c['url']}"
+        + (" [服务介绍页，非报告]" if _is_service_page(c.get("url", "")) else "")
+        + f"\n    类型: {c.get('content_type', 'html')}\n    摘要: {c['snippet'][:200]}"
         for i, c in enumerate(candidates)
     )
 
@@ -271,6 +310,12 @@ def filter_node(state: ResearchState) -> dict:
 
     if not selected:
         selected = candidates[:MAX_CANDIDATES_PER_ROUND]
+
+    # 域名多样性限流：单域名最多占 _MAX_SLOTS_PER_DOMAIN 个槽位
+    before_cap = len(selected)
+    selected = _apply_domain_cap(selected, _MAX_SLOTS_PER_DOMAIN)
+    if len(selected) < before_cap:
+        logger.info("filter 节点: 域名限流 %d → %d 条", before_cap, len(selected))
 
     # 排除已在历史 findings 中处理过的 URL（多轮去重，避免重复抓取和分析）
     already_processed = {

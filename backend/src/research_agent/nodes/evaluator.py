@@ -62,11 +62,13 @@ def evaluate_node(state: ResearchState) -> dict:
             ):
                 question_coverage[q].append(finding.get("source_title", ""))
 
-    # 有 >= 1 条实质性来源即视为覆盖
+    # 需要 >= 2 条实质性来源才视为覆盖（单条来源不足以排除偶然）
+    # 首轮放宽为 >= 1（避免第一轮因覆盖不足立即触发全部轮次）
+    min_sources = 1 if current_round == 1 else 2
     covered_questions = []
     gap_questions = []
     for q, sources in question_coverage.items():
-        if len(sources) >= 1:
+        if len(sources) >= min_sources:
             covered_questions.append(q)
         else:
             gap_questions.append(q)

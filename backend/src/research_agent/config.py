@@ -7,6 +7,8 @@
 # 搜索控制
 MAX_ROUNDS = 3
 MAX_CANDIDATES_PER_ROUND = 8
+# Tavily 候选低于此数时，触发 Crawl4AI 全网补充搜索
+MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK = 5
 
 # 超时（秒）
 FETCH_TIMEOUT = 30

@@ -1,11 +1,4 @@
-import type { ResearchTask, ResearchTaskCreate, ResearchTaskResult, ResearchType } from '../types'
-
-// 研究类型选项（供前端 select 使用）
-export const RESEARCH_TYPE_OPTIONS: { value: ResearchType; label: string; description: string }[] = [
-  { value: 'industry_research', label: '行业报告研究', description: '搜索四大咨询/智库/研究机构的专业报告' },
-  { value: 'ad_campaign', label: '广告营销案例', description: '搜索数英网/梅花网/SocialBeta 等营销案例' },
-  { value: 'product_research', label: '产品设计研究', description: '搜索人人都是PM/PMCAFF 等产品分析文章' },
-]
+import type { ResearchTask, ResearchTaskCreate, ResearchTaskResult, ResearchPlanPreviewRequest, ResearchPlanPreview, BriefExtractResult } from '../types'
 
 export function useResearchAgent() {
   const { apiRequest, useApiData } = useApi()
@@ -28,10 +21,29 @@ export function useResearchAgent() {
     })
   }
 
-  // 获取研究结果
+  // 获取研究结果（任务未完成时 404 静默处理）
   const getTaskResult = (id: number) => {
     return useApiData<ResearchTaskResult>(`/research/tasks/${id}/result`, {
       key: `research-result-${id}`,
+      silent404: true,
+    })
+  }
+
+  // 从文件提取 Brief 纯文本
+  async function extractBrief(file: File): Promise<BriefExtractResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiRequest<BriefExtractResult>('/research/tasks/extract-brief', {
+      method: 'POST',
+      body: formData,
+    })
+  }
+
+  // 预览研究计划（不创建任务）
+  async function previewPlan(data: ResearchPlanPreviewRequest): Promise<ResearchPlanPreview> {
+    return apiRequest<ResearchPlanPreview>('/research/tasks/preview', {
+      method: 'POST',
+      body: data,
     })
   }
 
@@ -123,6 +135,8 @@ export function useResearchAgent() {
     getTasks,
     getTask,
     getTaskResult,
+    extractBrief,
+    previewPlan,
     createTask,
     rerunTask,
     deleteTask,

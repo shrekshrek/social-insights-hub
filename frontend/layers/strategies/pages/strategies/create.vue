@@ -21,47 +21,12 @@
       </template>
 
       <!-- AI 快速填入 -->
-      <div
-        class="mb-5 p-3 rounded-lg space-y-2 transition-colors"
-        :class="isDragging
-          ? 'bg-primary-50 dark:bg-primary-900/20 border-2 border-dashed border-primary-400'
-          : 'bg-gray-50 dark:bg-gray-800'"
-        @dragenter.prevent="handleDragEnter"
-        @dragleave="handleDragLeave"
-        @dragover.prevent
-        @drop.prevent="handleDrop"
-      >
-        <p
-          class="text-xs font-medium"
-          :class="isDragging ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
-        >
-          {{ isDragging ? '松开以解析文件' : 'AI 快速填入（可选）' }}
-        </p>
-        <div class="flex gap-2">
-          <UTextarea
-            v-model="briefText"
-            placeholder="粘贴 Brief 文本，AI 自动提取关键信息..."
-            :rows="2"
-            class="flex-1"
-            :disabled="parsing"
-          />
-          <div class="flex flex-col gap-1.5">
-            <UButton
-              size="sm"
-              :loading="parsing"
-              :disabled="!briefText.trim() || parsing"
-              icon="i-heroicons-sparkles"
-              @click="handleParseText"
-            >
-              解析
-            </UButton>
-            <UButton size="sm" variant="outline" :disabled="parsing" @click="fileInputRef?.click()">
-              上传文件
-            </UButton>
-          </div>
-        </div>
-        <p class="text-xs text-gray-400">支持 PDF / DOCX / TXT / MD，最大 10 MB，可直接拖入</p>
-      </div>
+      <BriefUploader
+        :loading="parsing"
+        class="mb-5"
+        @text-submit="handleParseText"
+        @file-submit="parseFile"
+      />
 
       <UForm
         id="strategy-form"
@@ -204,13 +169,6 @@
       </div>
     </UCard>
 
-    <input
-      ref="fileInputRef"
-      type="file"
-      accept=".pdf,.docx,.txt,.md"
-      class="hidden"
-      @change="handleFileChange"
-    >
   </div>
 </template>
 
@@ -236,24 +194,11 @@ type FormState = z.output<typeof schema>
 const strategiesApi = useStrategies()
 const toast = useToast()
 
-const briefText = ref('')
 const parsing = ref(false)
 const submitting = ref(false)
-const fileInputRef = ref<HTMLInputElement | null>(null)
 const parsedChannelPlan = ref<ChannelPlanItem[] | null>(null)
 const platformVerdict = ref<ParseBriefResponse['platform_verdict'] | null>(null)
 const platformNote = ref('')
-const dragCounter = ref(0)
-const isDragging = computed(() => dragCounter.value > 0)
-
-const handleDragEnter = () => { if (!parsing.value) dragCounter.value++ }
-const handleDragLeave = () => { dragCounter.value = Math.max(0, dragCounter.value - 1) }
-const handleDrop = (e: DragEvent) => {
-  dragCounter.value = 0
-  if (parsing.value) return
-  const file = e.dataTransfer?.files?.[0]
-  if (file) parseFile(file)
-}
 
 const formState = reactive<FormState>({
   name: '',
@@ -272,11 +217,10 @@ const applyResult = (result: Partial<ParseBriefResponse>) => {
   platformNote.value = result.platform_note ?? ''
 }
 
-const handleParseText = async () => {
-  if (!briefText.value.trim()) return
+const handleParseText = async (text: string) => {
   parsing.value = true
   try {
-    const result = await strategiesApi.parseBriefText(briefText.value.trim())
+    const result = await strategiesApi.parseBriefText(text)
     applyResult(result)
   } catch {
     // 错误已由 useApi 处理
@@ -285,18 +229,7 @@ const handleParseText = async () => {
   }
 }
 
-const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'txt', 'md'])
-
 const parseFile = async (file: File) => {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-  if (!ALLOWED_EXTENSIONS.has(ext)) {
-    toast.add({ title: '请上传 PDF、DOCX、TXT 或 MD 文件', color: 'error' })
-    return
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    toast.add({ title: '文件大小不能超过 10 MB', color: 'error' })
-    return
-  }
   parsing.value = true
   try {
     const result = await strategiesApi.parseBrief(file)
@@ -306,12 +239,6 @@ const parseFile = async (file: File) => {
   } finally {
     parsing.value = false
   }
-}
-
-const handleFileChange = (event: Event) => {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (file) parseFile(file)
-  if (fileInputRef.value) fileInputRef.value.value = ''
 }
 
 const handleSubmit = async () => {

@@ -69,6 +69,8 @@ class Evaluation(TypedDict):
 class ResearchState(TypedDict):
     # 输入
     query: str
+    context: str  # 研究背景/补充说明（可选，planner 使用）
+    title: str  # 研究标题（planner 自动生成）
     research_questions: list[str]
 
     # 过程数据（每轮替换）
@@ -84,7 +86,6 @@ class ResearchState(TypedDict):
     evaluation: Evaluation
 
     # 控制
-    research_type: str  # profile key: "industry_research" | "ad_campaign" | ...
     round: int
     max_rounds: int
 

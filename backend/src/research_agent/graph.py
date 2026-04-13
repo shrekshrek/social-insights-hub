@@ -73,27 +73,25 @@ research_graph = build_research_graph()
 def run_research(
     query: str,
     research_questions: list[str] | None = None,
-    research_type: str | None = None,
+    context: str | None = None,
 ) -> dict:
-    """同步执行研究图
+    """同步执行研究图（行业报告专项）
 
     Parameters
     ----------
     query : 研究主题
     research_questions : 研究问题列表（可选）
-    research_type : 研究类型（可选），决定搜索域名和分析视角
-                    "industry_research"（默认）| "ad_campaign" | "product_research"
+    context : 研究背景/补充说明（可选）
 
     Returns
     -------
     dict : 最终 state（包含 synthesis, findings, selected 等）
     """
-    from src.research_agent.profiles import DEFAULT_PROFILE
-
     initial_state = {
         "query": query,
+        "context": context or "",
+        "title": "",
         "research_questions": research_questions or [],
-        "research_type": research_type or DEFAULT_PROFILE,
         "round": 0,
         "max_rounds": MAX_ROUNDS,
     }

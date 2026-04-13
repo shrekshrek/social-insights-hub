@@ -27,12 +27,15 @@ class ResearchTask(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # ===== 输入 =====
-    query: Mapped[str] = mapped_column(Text, nullable=False, comment="研究主题")
+    title: Mapped[str | None] = mapped_column(
+        String(200), nullable=True, comment="研究标题（可选，planner 自动生成）"
+    )
+    analysis_goal: Mapped[str] = mapped_column(Text, nullable=False, comment="核心研究意图")
     research_questions: Mapped[list | None] = mapped_column(
         JSON, nullable=True, comment="研究问题列表"
     )
     search_config: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="research_angles, focus_domains 等搜索配置"
+        JSON, nullable=True, comment="搜索配置：research_angles, focus_domains, context(brief) 等"
     )
 
     # ===== 关联 =====
@@ -76,6 +79,11 @@ class ResearchTask(Base):
         nullable=True,
         comment="rounds, documents_analyzed, candidates_total 等统计",
     )
+    progress: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="研究执行进度日志，每个节点完成后追加一条",
+    )
 
     # ===== 时间戳 =====
     created_at: Mapped[datetime] = mapped_column(
@@ -104,9 +112,6 @@ class ResearchTask(Base):
     )
 
     __table_args__ = (
-        Index("idx_research_task_strategy", "strategy_id"),
-        Index("idx_research_task_status", "status"),
-        Index("idx_research_task_user", "user_id"),
         Index("idx_research_task_created_at", "created_at"),
     )
 

@@ -1,7 +1,7 @@
 # Research Agent 设计方案
 
 > 状态：Phase 1-3 已实现，Phase 4（策略集成）进行中
-> 日期：2026-04-12（更新：2026-04-13）
+> 日期：2026-04-12（更新：2026-04-14）
 
 ## 背景与动机
 
@@ -305,7 +305,7 @@ START → plan → search → filter → fetch → analyze → synthesize → EN
 | **filter** | candidates + research_questions | selected | **单次 LLM 调用**批量评分所有候选，选 top N，标注 `source_tier`（tier1=四大/权威智库, tier2=行业机构, tier3=其他）。不逐条评分 |
 | **fetch** | selected | documents | PDF: httpx 下载 → pdfplumber（30s 超时/个）；HTML: Crawl4AI（30s 超时/个）。失败 `logger.warning()` 记录，不中断 |
 | **analyze** | documents + research_questions | findings | 智能截取：目录/摘要优先，LLM 判断关键章节细读。每次 LLM 调用 60s 超时 |
-| **evaluate** | findings + research_questions | evaluation | ① 每个问题是否有 findings？confidence 是否够？② tier1 来源数 ≥ 1？③ 定位缺口 → 生成补充关键词 |
+| **evaluate** | findings + research_questions | evaluation | ① 每个问题是否有 findings？confidence 是否够？② tier1 来源数 ≥ 1？③ 定位缺口 → 填入 gap_questions，plan 节点下一轮据此调整搜索方向 |
 | **synthesize** | findings（全部累积） | structured result | 输出 `findings_by_question`（按研究问题组织，含 confidence/data_points/source_refs）+ `synthesis`（markdown 报告）+ `sources`（含 source_tier）+ `coverage` 元信息 + `information_gaps` |
 
 ## State 定义
@@ -368,7 +368,6 @@ class Evaluation(TypedDict):
     questions_covered: list[str]       # confidence >= medium 的问题
     gap_questions: list[str]           # confidence = low 或无 findings
     tier1_source_count: int            # 四大/权威智库来源数
-    suggested_keywords: list[str]      # 补充搜索关键词
     should_continue: bool
 
 
@@ -422,19 +421,19 @@ class ResearchState(TypedDict):
 
 ### 2. 定向搜索目标源（Tavily `include_domains`）
 
-Tier 1 免费可爬源（无登录墙）：
+完整列表配置在 `src/config.py` 的 `RESEARCH_AGENT_TARGET_DOMAINS`，运行时与 planner LLM 推荐域名合并后传给 Tavily `include_domains`。
 
-| 源 | 域名 | 内容形式 | 年产量 |
-|----|------|----------|--------|
-| 麦肯锡中国 | mckinsey.com.cn, mckinsey.com | HTML + PDF | ~50-80 |
-| 德勤中国 | deloitte.com | HTML + PDF | ~40-60 |
-| 普华永道中国 | pwccn.com | HTML + PDF | ~50-70 |
-| 安永中国 | ey.com | HTML | ~30-50 |
-| 毕马威中国 | kpmg.com | HTML + PDF | ~40-60 |
-| 社科院 | cssn.cn | PDF | ~100+ |
-| 国研中心 | drc.gov.cn | HTML + PDF | ~50-80 |
+| 分类 | 代表域名 | 内容形式 | 说明 |
+|------|---------|----------|------|
+| 四大 + 综合咨询 | mckinsey.com, deloitte.com, pwccn.com, ey.com, kpmg.com, bcg.com, bain.com, rolandberger.com, accenture.com, oliverwyman.com, kearney.com | HTML + PDF | 免费可爬，年产数十至百篇 |
+| 中国政府/智库 | stats.gov.cn, ndrc.gov.cn, miit.gov.cn, mofcom.gov.cn, pbc.gov.cn, csrc.gov.cn, cnnic.net.cn, cssn.cn, drc.gov.cn | PDF + HTML | 完全免费，权威数据 |
+| 上市公司披露 ⭐ | cninfo.com.cn, hkexnews.hk, sse.com.cn | PDF（年报/招股书） | 招股书行业概况章节含 Frost & Sullivan 等付费机构数据，免费获取 |
+| 国际机构 | worldbank.org, imf.org, oecd.org, unctad.org, wto.org, adb.org | PDF + HTML | 完全免费开放 |
+| 中国行业研究 | iresearch.cn, questmobile.com.cn, aliresearch.com, mob.com, research.hktdc.com, caict.ac.cn, cesi.cn | PDF + HTML | 有完整免费报告（艾瑞/QuestMobile 注册可下载） |
+| 消费者/买方研究 | edelman.com, datareportal.com, pewresearch.org, ourworldindata.org | PDF | 完全免费，可直接下载 |
+| 垂直媒体/深度报道 | 36kr.com, latepost.com, caam.org.cn, ccfa.org.cn | HTML | 深度分析内容，免费 |
 
-配置在 `research_agent/config.py` 中，可动态扩展。
+> ⚠️ 付费墙域名不纳入列表（euromonitor、frost、grandviewresearch、gartner、forrester、analysys、askci 等订阅制平台报告正文无法下载）。如需其数据，优先通过 `cninfo.com.cn` 招股书间接获取。
 
 ### 3. 全文分析策略：智能截取
 
@@ -457,12 +456,11 @@ Tier 1 免费可爬源（无登录墙）：
 | 控制项 | 值 | 配置方式 |
 |--------|-----|---------|
 | `TAVILY_API_KEY` | — | **环境变量**（必需） |
-| `RESEARCH_AGENT_TARGET_DOMAINS` | 见下方源列表 | **config.py**（可调） |
-| `max_rounds` | 3 | 硬编码常量 |
-| `fetch_timeout` | 30s | 硬编码常量 |
-| `llm_timeout` | 60s | 硬编码常量 |
+| `RESEARCH_AGENT_TARGET_DOMAINS` | 见下方源列表 | **src/config.py**（`Settings` 字段，可通过环境变量覆盖） |
+| `max_rounds` | 4 | `research_agent/config.py` 硬编码常量 |
+| `fetch_timeout` | 30s | `research_agent/config.py` 硬编码常量 |
 | `task_hard_timeout` | 600s | Celery `time_limit` |
-| `max_concurrent_tasks` | 3 | Celery `rate_limit` |
+| `max_concurrent_tasks` | 10 | `research_agent/config.py` 硬编码常量 |
 
 Token 用量通过 AnalysisJob 记录和追踪，不在 LangGraph State 中管理。Phase 3 的 evaluate 节点可通过查询 AnalysisJob 累积 token 判断是否终止循环。
 

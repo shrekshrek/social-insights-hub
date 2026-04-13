@@ -146,6 +146,7 @@ def run_research_task(self, research_task_id: int) -> None:
         accumulated: dict = {**initial_state, "documents": [], "findings": []}
         progress: list[dict] = []
         current_round = 1
+        total_candidates = 0  # 跨轮次累计候选数
 
         for step in research_graph.stream(initial_state):
             # 每步开始前确认任务未被删除
@@ -157,14 +158,17 @@ def run_research_task(self, research_task_id: int) -> None:
             node_output = step[node_name]
 
             # 累积 state（reducer 字段追加，其余覆盖）
+            # selected 跨轮累积用于构建 url_meta（LangGraph state 中每轮覆盖，但此处需要全量）
             for k, v in node_output.items():
-                if k in ("documents", "findings"):
+                if k in ("documents", "findings", "selected"):
                     accumulated[k] = accumulated.get(k, []) + (v or [])
                 else:
                     accumulated[k] = v
 
             if node_name == "plan":
                 current_round = accumulated.get("round", current_round)
+            if node_name == "search":
+                total_candidates += len(node_output.get("candidates", []))
 
             entry = {
                 "step": node_name,
@@ -190,18 +194,31 @@ def run_research_task(self, research_task_id: int) -> None:
 
         result_state = accumulated
         selected = result_state.get("selected", [])
-        sources = [
-            {
+        findings = result_state.get("findings", [])
+
+        # 用 selected 构建 URL → 元数据映射（补充 relevance_score / content_type 等字段）
+        url_meta: dict[str, dict] = {
+            s["url"]: s for s in selected if s.get("url")
+        }
+
+        # sources 按 findings 顺序枚举（与 synthesize 节点 src_N 索引一致），URL 去重
+        seen_urls: set[str] = set()
+        sources: list[dict] = []
+        for i, f in enumerate(findings):
+            url = f.get("source_url", "")
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            meta = url_meta.get(url, {})
+            sources.append({
                 "id": f"src_{i}",
-                "title": s.get("title", ""),
-                "url": s.get("url", ""),
-                "source": s.get("source", ""),
-                "source_tier": s.get("source_tier", "tier3"),
-                "content_type": s.get("content_type", "html"),
-                "relevance_score": s.get("relevance_score", 0.0),
-            }
-            for i, s in enumerate(selected)
-        ]
+                "title": f.get("source_title", "") or meta.get("title", ""),
+                "url": url,
+                "source": meta.get("source", ""),
+                "source_tier": f.get("source_tier", "tier3"),
+                "content_type": meta.get("content_type", "html"),
+                "relevance_score": meta.get("relevance_score", 0.0),
+            })
 
         if not task.title:
             generated_title = result_state.get("title", "")
@@ -218,34 +235,39 @@ def run_research_task(self, research_task_id: int) -> None:
         }
         task.stats = {
             "rounds": result_state.get("round", 1),
-            "candidates_total": len(result_state.get("candidates", [])),
-            "documents_analyzed": len(selected),
+            "candidates_total": total_candidates,  # 跨轮次累计，非最后一轮
+            "documents_analyzed": len(sources),
             "synthesis_length": len(result_state.get("synthesis", "")),
         }
         task.status = "completed"
 
-        complete_analysis_job_sync(db=db, job=job, analyzed_count=len(selected))
+        complete_analysis_job_sync(db=db, job=job, analyzed_count=len(sources))
         db.commit()
 
         logger.info(
             "ResearchTask %d 完成: %d 条来源, %d 字综合分析",
             research_task_id,
-            len(selected),
+            len(sources),
             len(result_state.get("synthesis", "")),
         )
 
     except Exception as exc:
-        logger.error("ResearchTask %d 失败: %s", research_task_id, exc, exc_info=True)
+        # SoftTimeLimitExceeded 需要快速处理，hard limit (SIGKILL) 即将到来
+        from billiard.exceptions import SoftTimeLimitExceeded
+        is_timeout = isinstance(exc, SoftTimeLimitExceeded)
+        error_msg = "任务超时（执行时间超过限制）" if is_timeout else str(exc)[:500]
+        log_level = logger.warning if is_timeout else logger.error
+        log_level("ResearchTask %d 失败: %s", research_task_id, exc, exc_info=not is_timeout)
         db.rollback()
         try:
             task = db.get(ResearchTask, research_task_id)
             if task:
                 task.status = "failed"
-                task.error_message = str(exc)[:500]
+                task.error_message = error_msg
                 if task.job_id:
                     job = db.get(AnalysisJob, task.job_id)
                     if job:
-                        complete_analysis_job_sync(db=db, job=job, error_message=str(exc)[:500])
+                        complete_analysis_job_sync(db=db, job=job, error_message=error_msg)
                 db.commit()
         except Exception as inner_exc:
             logger.error("更新失败状态时出错: %s", inner_exc)

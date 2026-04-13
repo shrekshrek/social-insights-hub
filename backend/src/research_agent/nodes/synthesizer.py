@@ -109,6 +109,24 @@ def synthesize_node(state: ResearchState) -> dict:
     return result
 
 
+def _normalize_gaps(gaps: list) -> list[str]:
+    """将 information_gaps 规范化为字符串列表（LLM 有时输出对象）"""
+    result = []
+    for item in gaps:
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, dict):
+            # 合并结构化字段为可读字符串
+            question = item.get("question", "")
+            desc = item.get("gap_description", "")
+            direction = item.get("suggested_research_direction", "")
+            parts = [p for p in [question, desc, direction] if p]
+            result.append("；".join(parts))
+        else:
+            result.append(str(item))
+    return result
+
+
 def _parse_synthesis_response(
     content: str,
     questions: list[str],
@@ -126,7 +144,7 @@ def _parse_synthesis_response(
 
         findings_by_question = parsed.get("findings_by_question", {})
         synthesis = parsed.get("synthesis", "")
-        information_gaps = parsed.get("information_gaps", [])
+        information_gaps = _normalize_gaps(parsed.get("information_gaps", []))
 
     except (json.JSONDecodeError, IndexError):
         logger.warning("synthesize LLM 输出非 JSON，回退为纯 markdown")
@@ -149,18 +167,6 @@ def _parse_synthesis_response(
         "synthesis": synthesis,
         "coverage": coverage,
         "information_gaps": information_gaps,
-        # findings 列表仍然产出（供 Phase 3 evaluate 消费 + Celery task 保存）
-        "findings": [
-            {
-                "source_url": c["url"],
-                "source_title": c["title"],
-                "source_tier": c.get("source_tier", "tier3"),
-                "key_points": [c["snippet"][:200]] if c.get("snippet") else [],
-                "data_points": [],
-                "relevance_to_questions": {},
-            }
-            for c in selected
-        ],
     }
 
 

@@ -199,7 +199,7 @@ class Settings(BaseSettings):
     )
     RESEARCH_AGENT_TARGET_DOMAINS: list[str] = Field(
         default=[
-            # 四大 + 综合咨询（公开报告摘要/白皮书）
+            # 四大 + 综合咨询
             "mckinsey.com.cn",
             "mckinsey.com",
             "deloitte.com",
@@ -211,8 +211,8 @@ class Settings(BaseSettings):
             "rolandberger.com",
             "accenture.com",
             "oliverwyman.com",
-            "atkearney.com",
-            # 政府/监管/智库（公开全文）
+            "kearney.com",
+            # 中国政府/监管/智库
             "cssn.cn",
             "drc.gov.cn",
             "stats.gov.cn",
@@ -221,30 +221,38 @@ class Settings(BaseSettings):
             "mofcom.gov.cn",
             "pbc.gov.cn",
             "csrc.gov.cn",
-            # 国际机构（公开全文报告）
+            "cnnic.net.cn",
+            # 上市公司披露（含付费级行业数据）
+            "cninfo.com.cn",
+            "hkexnews.hk",
+            "sse.com.cn",
+            # 国际机构
             "documents.worldbank.org",
             "openknowledge.worldbank.org",
             "imf.org",
             "oecd.org",
+            "unctad.org",
             "wto.org",
             "adb.org",
-            # 中国行业研究（部分免费）
+            # 中国行业研究
             "iresearch.cn",
             "questmobile.com.cn",
-            "iimedia.cn",
-            "analysys.cn",
-            "cbndata.com",
-            "leadleo.com",
-            "chyxx.com",
-            # 信通院/工信院（公开全文）
+            "aliresearch.com",
+            "mob.com",
+            "research.hktdc.com",
+            # 信通院/工信院
             "caict.ac.cn",
             "cesi.cn",
-            # 国际行业研究
-            "euromonitor.com",
-            "frost.com",
-            "statista.com",
-            "grandviewresearch.com",
-            "mordorintelligence.com",
+            # 消费者/买方行为研究（免费报告）
+            "edelman.com",
+            "datareportal.com",
+            "pewresearch.org",
+            "ourworldindata.org",
+            # 垂直媒体/深度报道
+            "36kr.com",
+            "latepost.com",
+            "caam.org.cn",
+            "ccfa.org.cn",
         ],
         description="Default target domains for directed Tavily search (merged with LLM-recommended domains)",
     )

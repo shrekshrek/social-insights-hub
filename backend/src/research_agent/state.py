@@ -62,7 +62,6 @@ class Evaluation(TypedDict):
     questions_covered: list[str]
     gap_questions: list[str]
     tier1_source_count: int
-    suggested_keywords: list[str]
     should_continue: bool
 
 

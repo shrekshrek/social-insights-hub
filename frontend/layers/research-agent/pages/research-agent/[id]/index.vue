@@ -1,7 +1,7 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="space-y-6">
-    <div v-if="loadingTask" class="text-center py-8">
+    <div v-if="loadingTask && !task" class="text-center py-8">
       <p class="text-gray-500">加载中...</p>
     </div>
 
@@ -161,6 +161,42 @@
 
         <!-- 结果展示 -->
         <template v-if="task.status === 'completed'">
+          <!-- 研究过程（折叠） -->
+          <UCard v-if="task.progress?.length" :ui="{ body: 'p-0 sm:p-0' }">
+            <template #header>
+              <button
+                class="w-full flex items-center justify-between gap-2 text-left"
+                @click="progressExpanded = !progressExpanded"
+              >
+                <span class="text-lg font-semibold flex items-center gap-2">
+                  <UIcon name="i-heroicons-list-bullet" class="w-5 h-5 text-gray-400" />
+                  研究过程
+                </span>
+                <UIcon
+                  :name="progressExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+                  class="w-4 h-4 text-gray-400 shrink-0 transition-transform"
+                />
+              </button>
+            </template>
+            <div v-if="progressExpanded" class="px-4 sm:px-6 pb-4 sm:pb-6 pt-2">
+              <div
+                v-for="(entry, idx) in task.progress"
+                :key="idx"
+                class="flex items-start gap-3 py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
+              >
+                <UIcon name="i-heroicons-check-circle" class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ entry.label }}</span>
+                    <UBadge v-if="entry.round > 1" :label="`第 ${entry.round} 轮`" size="xs" variant="subtle" color="neutral" />
+                  </div>
+                  <p class="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{{ entry.detail }}</p>
+                </div>
+                <span class="text-xs text-gray-400 flex-shrink-0">{{ formatTime(entry.ts) }}</span>
+              </div>
+            </div>
+          </UCard>
+
           <!-- 覆盖度概览 -->
           <UCard v-if="result?.coverage">
             <template #header>
@@ -463,6 +499,7 @@ function formatDate(dateStr: string): string {
   })
 }
 
+const progressExpanded = ref(false)
 const refreshingAll = ref(false)
 
 async function handleRefreshAll() {

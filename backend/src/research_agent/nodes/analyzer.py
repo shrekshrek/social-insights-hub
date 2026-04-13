@@ -61,8 +61,8 @@ def analyze_node(state: ResearchState) -> dict:
             })
             continue
 
-        # report 策略允许更长的截取（报告信息密度高，值得多读）
-        max_excerpt = 16000 if profile.content_strategy == "report" else 8000
+        # 报告研究模式：截取更长内容（报告信息密度高）
+        max_excerpt = 16000
         content_excerpt = doc["content"][:max_excerpt]
 
         user_content = (

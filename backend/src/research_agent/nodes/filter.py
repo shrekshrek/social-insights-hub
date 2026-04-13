@@ -12,7 +12,6 @@ from langchain_deepseek import ChatDeepSeek
 
 from src.config import settings
 from src.research_agent.config import MAX_CANDIDATES_PER_ROUND
-from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
@@ -81,20 +80,11 @@ def filter_node(state: ResearchState) -> dict:
     for c in candidates:
         c["source_tier"] = _classify_source_tier(c.get("source", ""))
 
-    # report 策略：候选少时也走 LLM 筛选以偏好 PDF 内容
-    profile = get_profile()
-    is_report_strategy = profile.content_strategy == "report"
-
-    # 少于阈值直接全选（report 策略除外 — 需要 LLM 偏好 PDF）
-    if len(candidates) <= MAX_CANDIDATES_PER_ROUND and not is_report_strategy:
-        return {"selected": candidates}
-
-    # report 策略：将 PDF 候选排在前面（LLM 兜底前的硬排序）
-    if is_report_strategy:
-        candidates = sorted(
-            candidates,
-            key=lambda c: (0 if c.get("content_type") == "pdf" else 1),
-        )
+    # 报告研究模式：PDF 优先排序，始终走 LLM 筛选
+    candidates = sorted(
+        candidates,
+        key=lambda c: (0 if c.get("content_type") == "pdf" else 1),
+    )
 
     # 构造候选列表文本
     candidates_text = "\n".join(
@@ -107,7 +97,7 @@ def filter_node(state: ResearchState) -> dict:
         user_content += "研究问题：\n" + "\n".join(f"- {q}" for q in questions)
     user_content += f"\n\n候选结果（共 {len(candidates)} 条）：\n{candidates_text}"
 
-    strategy_hint = REPORT_FILTER_HINT if is_report_strategy else ""
+    strategy_hint = REPORT_FILTER_HINT
 
     llm = ChatDeepSeek(
         api_key=settings.DEEPSEEK_API_KEY,

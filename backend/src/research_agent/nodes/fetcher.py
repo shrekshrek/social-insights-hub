@@ -44,6 +44,20 @@ def fetch_node(state: ResearchState) -> dict:
         url = candidate["url"]
         content_type = candidate.get("content_type", "html")
 
+        # Exa 搜索已返回全文，直接使用，跳过网络请求
+        prefetched = candidate.get("full_text", "").strip()
+        if prefetched:
+            documents.append({
+                "url": url,
+                "title": candidate["title"],
+                "content": prefetched[:max_content_len],
+                "source": candidate.get("source", ""),
+                "content_type": content_type,
+                "page_count": None,
+                "published_date": candidate.get("published_date", ""),
+            })
+            continue
+
         try:
             if content_type == "pdf":
                 text = _fetch_pdf(url, timeout=pdf_timeout)
@@ -68,6 +82,7 @@ def fetch_node(state: ResearchState) -> dict:
                 "source": candidate.get("source", ""),
                 "content_type": content_type,
                 "page_count": None,
+                "published_date": candidate.get("published_date", ""),
             })
         else:
             # 全文获取失败时回退到 snippet
@@ -80,6 +95,7 @@ def fetch_node(state: ResearchState) -> dict:
                     "source": candidate.get("source", ""),
                     "content_type": "snippet",
                     "page_count": None,
+                    "published_date": candidate.get("published_date", ""),
                 })
 
     logger.info(
@@ -91,8 +107,40 @@ def fetch_node(state: ResearchState) -> dict:
     return {"documents": documents}
 
 
+_CRAWLER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+# Crawl4AI 返回内容低于此长度时视为抓取失败，降级到 httpx 直接获取
+_MIN_CRAWL_CONTENT_LEN = 300
+
+
 def _fetch_html(url: str) -> str | None:
-    """通过 Crawl4AI REST API 获取 HTML 全文 markdown"""
+    """通过 Crawl4AI REST API 获取 HTML 全文 markdown
+
+    失败时自动重试一次；内容过短时降级到 httpx 直接 GET（适合无 JS 的静态页）。
+    """
+    result = _crawl4ai_fetch(url)
+    if result and len(result.strip()) >= _MIN_CRAWL_CONTENT_LEN:
+        return result
+
+    # Crawl4AI 失败或内容过短：重试一次
+    if result is None:
+        logger.info("Crawl4AI 首次失败，重试: %s", url)
+        import gevent
+        gevent.sleep(2)
+        result = _crawl4ai_fetch(url)
+        if result and len(result.strip()) >= _MIN_CRAWL_CONTENT_LEN:
+            return result
+
+    # 仍然失败或内容过短：降级到 httpx 直接 GET（静态页兜底）
+    logger.info("Crawl4AI 内容不足，降级 httpx 直接获取: %s", url)
+    return _httpx_fetch(url)
+
+
+def _crawl4ai_fetch(url: str) -> str | None:
+    """单次 Crawl4AI 调用"""
     settings = get_settings()
     base_url = settings.CRAWL4AI_BASE_URL
     if not base_url:
@@ -104,6 +152,7 @@ def _fetch_html(url: str) -> str | None:
             "cache_mode": "bypass",
             "scan_full_page": True,
             "page_timeout": FETCH_TIMEOUT * 1000,
+            "headers": {"User-Agent": _CRAWLER_UA},
         },
     }
 
@@ -112,7 +161,7 @@ def _fetch_html(url: str) -> str | None:
         headers["Authorization"] = f"Bearer {settings.CRAWL4AI_TOKEN}"
 
     try:
-        with httpx.Client(timeout=FETCH_TIMEOUT + 10) as client:
+        with httpx.Client(timeout=FETCH_TIMEOUT + 15) as client:
             resp = client.post(
                 f"{base_url}/crawl",
                 json=payload,
@@ -128,7 +177,31 @@ def _fetch_html(url: str) -> str | None:
         markdown = results[0].get("markdown", {})
         return markdown.get("fit_markdown") or markdown.get("raw_markdown", "")
     except (httpx.HTTPError, KeyError, ValueError):
-        logger.warning("Crawl4AI 失败: %s", url, exc_info=True)
+        logger.warning("Crawl4AI 调用失败: %s", url, exc_info=True)
+        return None
+
+
+def _httpx_fetch(url: str) -> str | None:
+    """httpx 直接 GET，用于 Crawl4AI 失败时的静态页兜底"""
+    try:
+        with httpx.Client(
+            timeout=20,
+            follow_redirects=True,
+            headers={"User-Agent": _CRAWLER_UA},
+        ) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            # 只处理 HTML，二进制文件交给 _fetch_pdf
+            content_type = resp.headers.get("content-type", "")
+            if "html" not in content_type:
+                return None
+            # 粗提取：去掉 HTML 标签返回纯文本（简单但够用作兜底）
+            import re
+            text = re.sub(r"<[^>]+>", " ", resp.text)
+            text = re.sub(r"\s+", " ", text).strip()
+            return text if len(text) >= _MIN_CRAWL_CONTENT_LEN else None
+    except Exception:
+        logger.warning("httpx 直接获取失败: %s", url, exc_info=True)
         return None
 
 

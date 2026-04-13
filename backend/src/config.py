@@ -194,8 +194,15 @@ class Settings(BaseSettings):
     )
 
     # ========== Research Agent Configuration ==========
+    # Search provider: "tavily" (default) or "exa"
+    SEARCH_PROVIDER: str = Field(
+        default="tavily", description="Search provider for Research Agent: tavily | exa"
+    )
     TAVILY_API_KEY: str | None = Field(
-        default=None, description="Tavily Search API key (required for Research Agent)"
+        default=None, description="Tavily Search API key (required when SEARCH_PROVIDER=tavily)"
+    )
+    EXA_API_KEY: str | None = Field(
+        default=None, description="Exa Search API key (required when SEARCH_PROVIDER=exa)"
     )
     RESEARCH_AGENT_TARGET_DOMAINS: list[str] = Field(
         default=[

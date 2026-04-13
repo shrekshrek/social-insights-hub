@@ -589,6 +589,24 @@ wheels = [
 ]
 
 [[package]]
+name = "exa-py"
+version = "2.11.0"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple/" }
+dependencies = [
+    { name = "httpcore" },
+    { name = "httpx" },
+    { name = "openai" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/c5/08/af21dace845b5cd67d728e9d7747e4d1024ec90bd83e007d78f969dc6e19/exa_py-2.11.0.tar.gz", hash = "sha256:989103cbd83aae6dbe88cb70e11522a4bb06026fdb54b8659e3a7922da41fc93", size = 54905, upload-time = "2026-04-04T00:04:32.455Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/9b/c9/129dd486505e3c0dadda0d6c83c560060f76d4cf14ef4b7b93053846598a/exa_py-2.11.0-py3-none-any.whl", hash = "sha256:3b0070a6ce98e02895755f0f81752dff64e2e121cf9d9a82facf715a4b9a5238", size = 73424, upload-time = "2026-04-04T00:04:33.699Z" },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.116.1"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple/" }
@@ -613,6 +631,7 @@ dependencies = [
     { name = "bcrypt" },
     { name = "celery" },
     { name = "duckduckgo-search" },
+    { name = "exa-py" },
     { name = "fastapi" },
     { name = "gevent" },
     { name = "httpx" },
@@ -663,6 +682,7 @@ requires-dist = [
     { name = "bcrypt", specifier = ">=3.2.0,<4.0.0" },
     { name = "celery", specifier = ">=5.4.0" },
     { name = "duckduckgo-search", specifier = ">=6.0.0" },
+    { name = "exa-py", specifier = ">=2.11.0" },
     { name = "fastapi", specifier = ">=0.113.1" },
     { name = "gevent", specifier = ">=24.2.1" },
     { name = "greenlet", marker = "extra == 'dev'", specifier = ">=3.2.3" },

@@ -54,11 +54,14 @@ def analyze_node(state: ResearchState) -> dict:
     )
     def _analyze_doc(doc: dict) -> dict:
         """分析单篇文档，返回 finding（供并发调用）"""
-        if doc.get("content_type") == "snippet":
+        # snippet 过短时跳过 LLM（内容不够分析）；足够长时仍走 LLM 提取
+        # Tavily advanced 深度通常返回 500-2000 字，值得分析
+        if doc.get("content_type") == "snippet" and len(doc.get("content", "")) < 400:
             return {
                 "source_url": doc["url"],
                 "source_title": doc["title"],
                 "source_tier": url_to_tier.get(doc["url"], "tier3"),
+                "published_date": doc.get("published_date", ""),
                 "key_points": [doc["content"][:300]],
                 "data_points": [],
                 "relevance_to_questions": {},
@@ -96,6 +99,7 @@ def analyze_node(state: ResearchState) -> dict:
             "source_url": doc["url"],
             "source_title": doc["title"],
             "source_tier": url_to_tier.get(doc["url"], "tier3"),
+            "published_date": doc.get("published_date", ""),
             "key_points": parsed.get("key_points", []),
             "data_points": parsed.get("data_points", []),
             "relevance_to_questions": parsed.get("relevance_to_questions", {}),

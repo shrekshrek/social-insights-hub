@@ -59,8 +59,10 @@ def synthesize_node(state: ResearchState) -> dict:
                 if summary and "无直接相关" not in summary and "无相关" not in summary:
                     rtq_text += f"\n    [{q}]: {summary}"
 
+            pub_date = f.get("published_date", "")
+            date_label = f"，发布日期：{pub_date}" if pub_date else ""
             sources_for_prompt.append(
-                f"[src_{i}] {f.get('source_title', '')} ({f.get('source_tier', 'tier3')})\n"
+                f"[src_{i}] {f.get('source_title', '')} ({f.get('source_tier', 'tier3')}{date_label})\n"
                 f"  核心观点:\n    {key_points_text}"
                 + (f"\n  数据点:{data_points_text}" if data_points_text else "")
                 + (f"\n  问题相关性:{rtq_text}" if rtq_text else "")
@@ -68,8 +70,10 @@ def synthesize_node(state: ResearchState) -> dict:
     else:
         # Phase 1 回退：使用 snippets
         for i, c in enumerate(selected):
+            pub_date = c.get("published_date", "")
+            date_label = f"，发布日期：{pub_date}" if pub_date else ""
             sources_for_prompt.append(
-                f"[src_{i}] {c['title']} ({c.get('source_tier', 'tier3')})\n"
+                f"[src_{i}] {c['title']} ({c.get('source_tier', 'tier3')}{date_label})\n"
                 f"  URL: {c['url']}\n"
                 f"  摘要: {c['snippet']}"
             )

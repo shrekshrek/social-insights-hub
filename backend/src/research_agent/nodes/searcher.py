@@ -1,7 +1,11 @@
-"""Search 节点：执行 Tavily 搜索，候选不足时降级到 Crawl4AI
+"""Search 节点：执行搜索，候选不足时降级到 Crawl4AI
+
+支持两个 search provider（由 SEARCH_PROVIDER 环境变量控制）：
+- tavily（默认）：snippet 模式，fetcher 节点负责抓取全文
+- exa：直接返回全文（20k chars），可跳过 fetcher 节点抓取
 
 执行流程：
-1. 使用 Tavily 对每个关键词做定向域名搜索
+1. 按 provider 对每个关键词做定向域名搜索
 2. 若候选总量低于阈值，追加 Crawl4AI 全网搜索（Baidu/Bing）作为补充
 """
 
@@ -9,8 +13,8 @@ import logging
 
 from src.config import get_settings
 from src.research_agent.config import MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK
+from src.research_agent.nodes.filter import _extract_year
 from src.research_agent.state import ResearchState
-from src.research_agent.tools.web_search import tavily_search
 
 logger = logging.getLogger(__name__)
 
@@ -34,37 +38,17 @@ def search_node(state: ResearchState) -> dict:
         if not any(ind.lower() in kw.lower() for ind in report_indicators):
             effective_keywords.append(f"{kw} 报告")
 
-    # Tavily 搜索：每个关键词搜索
-    all_candidates = []
-    seen_urls: set[str] = set()
-
-    for kw in effective_keywords:
-        results = tavily_search(
-            query=kw,
-            target_domains=all_domains,
-            max_results=10,
-        )
-        for r in results:
-            url = r["url"]
-            if url not in seen_urls:
-                seen_urls.add(url)
-                all_candidates.append({
-                    "title": r["title"],
-                    "url": url,
-                    "snippet": r["snippet"],
-                    "source": _extract_domain(url),
-                    "content_type": _guess_content_type(url),
-                    "source_tier": "",  # filter 节点标注
-                    "relevance_score": r.get("score", 0.0),
-                })
+    provider = settings.SEARCH_PROVIDER.lower()
+    all_candidates, seen_urls = _run_search(provider, effective_keywords, all_domains)
 
     logger.info(
-        "search 节点 [Tavily]: %d 个关键词 → %d 条候选",
+        "search 节点 [%s]: %d 个关键词 → %d 条候选",
+        provider,
         len(keywords),
         len(all_candidates),
     )
 
-    # Tavily 候选不足时，降级到 Crawl4AI 全网搜索补充
+    # 候选不足时，降级到 Crawl4AI 全网搜索补充
     if len(all_candidates) < MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK:
         logger.info(
             "候选数 %d < %d，启动 Crawl4AI 补充搜索",
@@ -73,7 +57,6 @@ def search_node(state: ResearchState) -> dict:
         )
         from src.research_agent.tools.crawl4ai_search import crawl4ai_search
 
-        # 对前 3 个关键词补充（避免过多请求）
         for kw in effective_keywords[:3]:
             extra = crawl4ai_search(kw, max_results=15)
             for r in extra:
@@ -86,9 +69,84 @@ def search_node(state: ResearchState) -> dict:
             len(all_candidates),
         )
 
-    return {
-        "candidates": all_candidates,
-    }
+    return {"candidates": all_candidates}
+
+
+def _run_search(
+    provider: str,
+    keywords: list[str],
+    target_domains: list[str],
+) -> tuple[list[dict], set[str]]:
+    """按 provider 执行搜索，返回 (candidates, seen_urls)"""
+    if provider == "exa":
+        return _search_exa(keywords, target_domains)
+    return _search_tavily(keywords, target_domains)
+
+
+def _search_tavily(
+    keywords: list[str],
+    target_domains: list[str],
+) -> tuple[list[dict], set[str]]:
+    from src.research_agent.tools.web_search import tavily_search
+
+    candidates: list[dict] = []
+    seen_urls: set[str] = set()
+
+    for kw in keywords:
+        for r in tavily_search(query=kw, target_domains=target_domains, max_results=10):
+            url = r["url"]
+            if url not in seen_urls:
+                seen_urls.add(url)
+                title = r["title"]
+                year = _extract_year(url) or _extract_year(title)
+                candidates.append({
+                    "title": title,
+                    "url": url,
+                    "snippet": r["snippet"],
+                    "full_text": "",  # fetcher 节点负责填充
+                    "source": _extract_domain(url),
+                    "content_type": _guess_content_type(url),
+                    "source_tier": "",
+                    "relevance_score": r.get("score", 0.0),
+                    "published_date": str(year) if year else "",
+                })
+
+    return candidates, seen_urls
+
+
+def _search_exa(
+    keywords: list[str],
+    target_domains: list[str],
+) -> tuple[list[dict], set[str]]:
+    from src.research_agent.tools.exa_search import exa_search
+
+    candidates: list[dict] = []
+    seen_urls: set[str] = set()
+
+    for kw in keywords:
+        for r in exa_search(query=kw, target_domains=target_domains, max_results=10):
+            url = r["url"]
+            if url not in seen_urls:
+                seen_urls.add(url)
+                title = r["title"]
+                pub_date = r.get("published_date", "")
+                # Exa 日期格式为 ISO（2024-05-01），截取年份作为回退
+                if not pub_date:
+                    year = _extract_year(url) or _extract_year(title)
+                    pub_date = str(year) if year else ""
+                candidates.append({
+                    "title": title,
+                    "url": url,
+                    "snippet": r["snippet"],
+                    "full_text": r.get("full_text", ""),  # Exa 直接返回全文
+                    "source": _extract_domain(url),
+                    "content_type": _guess_content_type(url),
+                    "source_tier": "",
+                    "relevance_score": r.get("score", 0.0),
+                    "published_date": pub_date,
+                })
+
+    return candidates, seen_urls
 
 
 def _extract_domain(url: str) -> str:

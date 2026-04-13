@@ -22,6 +22,7 @@ class Candidate(TypedDict):
     content_type: str
     source_tier: str  # "tier1" | "tier2" | "tier3"
     relevance_score: float
+    published_date: str  # ISO date or year string, empty if unknown
 
 
 class DataPoint(TypedDict):
@@ -35,6 +36,7 @@ class Finding(TypedDict):
     source_url: str
     source_title: str
     source_tier: str
+    published_date: str  # ISO date or year string, empty if unknown
     key_points: list[str]
     data_points: list[DataPoint]
     relevance_to_questions: dict[str, str]
@@ -56,6 +58,7 @@ class Document(TypedDict):
     source: str
     content_type: str
     page_count: int | None
+    published_date: str  # ISO date or year string, empty if unknown
 
 
 class Evaluation(TypedDict):

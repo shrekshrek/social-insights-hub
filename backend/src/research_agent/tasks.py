@@ -148,6 +148,11 @@ def run_research_task(self, research_task_id: int) -> None:
         current_round = 1
 
         for step in research_graph.stream(initial_state):
+            # 每步开始前确认任务未被删除
+            if not db.get(ResearchTask, research_task_id):
+                logger.info("ResearchTask %d was deleted, aborting stream", research_task_id)
+                return
+
             node_name = list(step.keys())[0]
             node_output = step[node_name]
 

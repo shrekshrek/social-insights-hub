@@ -37,35 +37,64 @@ def _utcnow() -> str:
 
 def _extract_detail(node_name: str, node_output: dict) -> str:
     """从节点输出提取人可读的进度描述"""
+    from urllib.parse import urlparse
+
     if node_name == "plan":
         plan = node_output.get("search_plan", {})
         keywords = plan.get("keywords", [])
-        kw_preview = "、".join(keywords[:3])
-        if len(keywords) > 3:
-            kw_preview += f" 等 {len(keywords)} 个"
-        return f"关键词：{kw_preview}" if kw_preview else "研究计划已生成"
+        kw_str = "、".join(keywords[:4])
+        if len(keywords) > 4:
+            kw_str += f" 等 {len(keywords)} 个"
+        return f"关键词：{kw_str}" if kw_str else "研究计划已生成"
+
     if node_name == "search":
         candidates = node_output.get("candidates", [])
-        return f"找到 {len(candidates)} 条候选内容"
-    if node_name == "filter":
-        selected = node_output.get("selected", [])
-        return f"筛选保留 {len(selected)} 条高相关内容"
+        if not candidates:
+            return "未找到候选内容"
+        # 统计各域名出现次数
+        from collections import Counter
+        domains = [urlparse(c.get("url", "")).netloc.lstrip("www.") for c in candidates if c.get("url")]
+        top = Counter(domains).most_common(5)
+        domain_str = "、".join(f"{d}×{n}" if n > 1 else d for d, n in top)
+        extra = f"，另 {len(domains) - 5} 个域名" if len(set(domains)) > 5 else ""
+        return f"找到 {len(candidates)} 条：{domain_str}{extra}"
+
     if node_name == "fetch":
         docs = node_output.get("documents", [])
-        return f"成功抓取 {len(docs)} 篇全文"
+        if not docs:
+            return "未能抓取到全文"
+        titles = [d.get("title") or urlparse(d.get("url", "")).netloc for d in docs[:4]]
+        title_str = "\n".join(f"· {t[:40]}" for t in titles if t)
+        suffix = f"\n· 共 {len(docs)} 篇" if len(docs) > 4 else ""
+        return title_str + suffix
+
+    if node_name == "filter":
+        selected = node_output.get("selected", [])
+        if not selected:
+            return "无内容通过相关性筛选"
+        domains = [urlparse(s.get("url", "")).netloc.lstrip("www.") for s in selected if s.get("url")]
+        domain_str = "、".join(dict.fromkeys(domains)[:5])
+        return f"保留 {len(selected)} 条：{domain_str}"
+
     if node_name == "analyze":
         findings = node_output.get("findings", [])
-        return f"分析 {len(findings)} 篇文档"
+        return f"完成 {len(findings)} 篇文档分析"
+
     if node_name == "evaluate":
         evaluation = node_output.get("evaluation", {})
-        covered = len(evaluation.get("questions_covered", []))
-        gaps = len(evaluation.get("gap_questions", []))
+        covered = evaluation.get("questions_covered", [])
+        gaps = evaluation.get("gap_questions", [])
         if evaluation.get("should_continue"):
-            return f"覆盖 {covered} 个问题，{gaps} 个问题数据不足，继续补充搜索"
-        return f"覆盖 {covered} 个问题，研究充分，准备综合分析"
+            gap_str = "、".join(gaps[:3])
+            if len(gaps) > 3:
+                gap_str += f" 等 {len(gaps)} 个"
+            return f"覆盖 {len(covered)} 个问题，待补充：{gap_str}"
+        return f"全部 {len(covered)} 个问题覆盖充分，进入综合分析"
+
     if node_name == "synthesize":
         synthesis = node_output.get("synthesis", "")
-        return f"生成 {len(synthesis)} 字综合分析报告"
+        return f"生成 {len(synthesis)} 字综合报告"
+
     return ""
 
 

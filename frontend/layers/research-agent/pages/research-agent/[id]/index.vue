@@ -69,10 +69,7 @@
             <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究主题</dt>
             <dd class="text-gray-900 dark:text-white font-medium whitespace-pre-line">{{ task.analysis_goal }}</dd>
           </div>
-          <div v-if="researchContext" class="flex gap-3">
-            <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究背景</dt>
-            <dd class="text-gray-700 dark:text-gray-300 whitespace-pre-line">{{ researchContext }}</dd>
-          </div>
+
           <div v-if="task.research_questions?.length" class="flex gap-3">
             <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究问题</dt>
             <dd class="text-gray-900 dark:text-white">
@@ -126,16 +123,16 @@
               <span class="font-semibold">
                 {{ task.status === 'pending' ? '等待执行...' : '研究进行中' }}
               </span>
-              <span class="text-xs text-gray-400 font-normal ml-auto">每 10 秒自动刷新</span>
+              <span class="text-xs text-gray-400 font-normal ml-auto">每 3 秒自动刷新</span>
             </div>
           </template>
 
-          <!-- 进度日志 -->
-          <div v-if="task.progress?.length" class="space-y-1">
+          <!-- 线性进度日志 -->
+          <div v-if="task.progress?.length" class="space-y-0">
             <div
               v-for="(entry, idx) in task.progress"
               :key="idx"
-              class="flex items-start gap-3 py-2 border-b border-gray-50 dark:border-gray-800 last:border-0"
+              class="flex items-start gap-3 py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
             >
               <UIcon name="i-heroicons-check-circle" class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1 min-w-0">
@@ -143,21 +140,22 @@
                   <span class="text-sm font-medium text-gray-900 dark:text-white">{{ entry.label }}</span>
                   <UBadge v-if="entry.round > 1" :label="`第 ${entry.round} 轮`" size="xs" variant="subtle" color="neutral" />
                 </div>
-                <p class="text-xs text-gray-500 mt-0.5">{{ entry.detail }}</p>
+                <p class="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{{ entry.detail }}</p>
               </div>
               <span class="text-xs text-gray-400 flex-shrink-0">{{ formatTime(entry.ts) }}</span>
             </div>
 
-            <!-- 当前正在执行的步骤（最后一个已完成步骤的下一步） -->
-            <div v-if="task.status === 'running'" class="flex items-center gap-3 py-2">
+            <!-- 当前正在执行的下一步 -->
+            <div v-if="task.status === 'running'" class="flex items-center gap-3 py-2.5">
               <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 text-primary animate-spin flex-shrink-0" />
               <span class="text-sm text-gray-500">{{ nextStepLabel }}</span>
             </div>
           </div>
 
-          <!-- 尚无进度时 -->
-          <div v-else class="text-center py-8 text-sm text-gray-400">
-            AI 正在搜索相关资料并分析，通常需要 2-5 分钟...
+          <!-- 尚无进度（pending 或 running 初始阶段） -->
+          <div v-else class="flex items-center gap-3 py-6 text-sm text-gray-400">
+            <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin flex-shrink-0" />
+            <span>{{ task.status === 'pending' ? '等待 Celery Worker 接收任务...' : '生成研究计划中...' }}</span>
           </div>
         </UCard>
 
@@ -361,23 +359,20 @@ useHead({
   }),
 })
 
-// 研究背景
-const researchContext = computed(() => {
-  return ((task.value?.search_config as Record<string, unknown>)?.context as string) || null
-})
+
 
 // 进度：下一步预测标签
-const NODE_SEQUENCE = ['plan', 'search', 'filter', 'fetch', 'analyze', 'evaluate', 'synthesize']
+const NODE_SEQUENCE = ['plan', 'search', 'fetch', 'filter', 'analyze', 'evaluate', 'synthesize']
 const NODE_LABELS: Record<string, string> = {
-  plan: '生成研究计划', search: '搜索报告资料', filter: '筛选相关内容',
-  fetch: '抓取全文', analyze: '分析文档', evaluate: '评估覆盖度', synthesize: '综合分析报告',
+  plan: '生成研究计划', search: '搜索报告资料', fetch: '抓取全文',
+  filter: '筛选相关内容', analyze: '分析文档', evaluate: '评估覆盖度', synthesize: '综合分析报告',
 }
+
 const nextStepLabel = computed(() => {
   const progress = task.value?.progress
-  if (!progress?.length) return '准备开始...'
+  if (!progress?.length) return '生成研究计划中...'
   const lastStep = progress[progress.length - 1]?.step ?? ''
-  // evaluate → should_continue 时会回到 plan，难以预测，统一显示"继续搜索"
-  if (lastStep === 'evaluate') return '继续搜索中...'
+  if (lastStep === 'evaluate') return '判断是否补充搜索...'
   const nextIdx = NODE_SEQUENCE.indexOf(lastStep) + 1
   const nextNode = NODE_SEQUENCE[nextIdx]
   return nextNode ? `${NODE_LABELS[nextNode]}中...` : '完成中...'
@@ -401,7 +396,7 @@ function startPolling() {
       }
       stopPolling()
     }
-  }, 10000)
+  }, 3000)
 }
 
 function stopPolling() {

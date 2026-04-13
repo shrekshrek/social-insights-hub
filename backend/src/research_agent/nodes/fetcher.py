@@ -14,7 +14,6 @@ import httpx
 
 from src.config import get_settings
 from src.research_agent.config import FETCH_TIMEOUT
-from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
@@ -36,11 +35,9 @@ def fetch_node(state: ResearchState) -> dict:
     if not selected:
         return {"documents": []}
 
-    profile = get_profile()
-    is_report = profile.content_strategy == "report"
-    # report 策略：允许更长内容截断，充分利用报告全文
-    max_content_len = 60000 if is_report else 30000
-    pdf_timeout = FETCH_TIMEOUT * 2 if is_report else FETCH_TIMEOUT
+    # 报告研究模式：允许更长内容截断，充分利用报告全文
+    max_content_len = 60000
+    pdf_timeout = FETCH_TIMEOUT * 2
 
     documents = []
     for candidate in selected:

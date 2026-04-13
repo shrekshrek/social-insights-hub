@@ -9,7 +9,6 @@ import logging
 
 from src.config import get_settings
 from src.research_agent.config import MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK
-from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 from src.research_agent.tools.web_search import tavily_search
 
@@ -23,26 +22,17 @@ def search_node(state: ResearchState) -> dict:
     target_domains = plan.get("target_domains", [])
 
     settings = get_settings()
-    profile = get_profile()
 
-    # 三层域名合并：config 默认 + profile 专属 + LLM 推荐
-    all_domains = list(set(
-        settings.RESEARCH_AGENT_TARGET_DOMAINS
-        + profile.target_domains
-        + target_domains
-    ))
+    # 域名合并：config 全局默认 + LLM 针对本次主题推荐
+    all_domains = list(set(settings.RESEARCH_AGENT_TARGET_DOMAINS + target_domains))
 
-    # report 策略：为不含报告类词的关键词追加修饰
-    effective_keywords = keywords
-    if profile.content_strategy == "report":
-        report_indicators = {"报告", "白皮书", "研究报告", "PDF", "report", "whitepaper"}
-        augmented = []
-        for kw in keywords:
-            augmented.append(kw)
-            # 如果关键词中不含任何报告类修饰词，追加一条带"报告"的变体
-            if not any(ind.lower() in kw.lower() for ind in report_indicators):
-                augmented.append(f"{kw} 报告")
-        effective_keywords = augmented
+    # 为不含报告类修饰词的关键词追加"报告"变体，提升报告类内容命中率
+    report_indicators = {"报告", "白皮书", "研究报告", "PDF", "report", "whitepaper"}
+    effective_keywords: list[str] = []
+    for kw in keywords:
+        effective_keywords.append(kw)
+        if not any(ind.lower() in kw.lower() for ind in report_indicators):
+            effective_keywords.append(f"{kw} 报告")
 
     # Tavily 搜索：每个关键词搜索
     all_candidates = []

@@ -96,7 +96,6 @@ function handleTextSubmit() {
   const text = pasteText.value.trim()
   if (!text) return
   emit('textSubmit', text)
-  pasteText.value = ''
 }
 
 function submitFile(file: File) {

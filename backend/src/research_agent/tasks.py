@@ -73,7 +73,7 @@ def _extract_detail(node_name: str, node_output: dict) -> str:
         if not selected:
             return "无内容通过相关性筛选"
         domains = [urlparse(s.get("url", "")).netloc.lstrip("www.") for s in selected if s.get("url")]
-        domain_str = "、".join(dict.fromkeys(domains)[:5])
+        domain_str = "、".join(list(dict.fromkeys(domains))[:5])
         return f"保留 {len(selected)} 条：{domain_str}"
 
     if node_name == "analyze":

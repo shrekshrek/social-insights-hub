@@ -24,7 +24,7 @@ def analyze_node(state: ResearchState) -> dict:
     documents = state.get("documents", [])
     questions = state.get("research_questions", [])
     selected = state.get("selected", [])
-    profile = get_profile(state.get("research_type"))
+    profile = get_profile()
     analyzer_prompt = profile.analyzer_prompt
 
     if not documents:

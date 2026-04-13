@@ -97,7 +97,6 @@
 
 <script setup lang="ts">
 import { h, ref, computed, watch, type Component } from 'vue'
-import { RESEARCH_TYPE_OPTIONS } from '../../composables/useResearchAgent'
 import type { ResearchTask } from '../../types'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
@@ -161,13 +160,6 @@ const handleRefresh = async () => {
   }
 }
 
-function getResearchTypeLabel(task: ResearchTask): string | null {
-  const researchType = (task.search_config as Record<string, unknown>)?.research_type as string | undefined
-  if (!researchType) return null
-  const found = RESEARCH_TYPE_OPTIONS.find(opt => opt.value === researchType)
-  return found?.label ?? null
-}
-
 function formatDate(dateStr: string): string {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -180,10 +172,11 @@ function formatDate(dateStr: string): string {
 
 const columns: TableColumn<ResearchTask>[] = [
   {
-    accessorKey: 'query',
+    id: 'title',
     header: '研究主题',
     meta: { class: { th: 'w-[300px]', td: 'w-[300px] whitespace-normal' } },
     cell: ({ row }) => {
+      const displayTitle = row.original.title || row.original.analysis_goal
       return h(
         UButton as Component,
         {
@@ -191,18 +184,8 @@ const columns: TableColumn<ResearchTask>[] = [
           to: `/research-agent/${row.original.id}`,
           class: 'p-0 font-medium text-left whitespace-normal leading-snug line-clamp-2',
         },
-        () => row.getValue('query'),
+        () => displayTitle,
       )
-    },
-  },
-  {
-    id: 'research_type',
-    header: '类型',
-    meta: { class: { th: 'w-[100px]', td: 'w-[100px]' } },
-    cell: ({ row }) => {
-      const label = getResearchTypeLabel(row.original)
-      if (!label) return h('span', { class: 'text-sm text-gray-400' }, '-')
-      return h(UBadge as Component, { variant: 'subtle', size: 'sm' }, () => label)
     },
   },
   {
@@ -280,7 +263,7 @@ async function handleDelete(task: ResearchTask) {
   const { $confirm } = useNuxtApp()
   const confirmed = await $confirm({
     title: '确认删除',
-    message: `确定要删除研究任务「${task.query}」吗？此操作不可撤销。`,
+    message: `确定要删除研究任务「${task.title || task.analysis_goal}」吗？此操作不可撤销。`,
     confirmText: '删除',
     type: 'error',
   })

@@ -199,7 +199,7 @@ class Settings(BaseSettings):
     )
     RESEARCH_AGENT_TARGET_DOMAINS: list[str] = Field(
         default=[
-            # 四大 + 综合咨询
+            # 四大 + 综合咨询（公开报告摘要/白皮书）
             "mckinsey.com.cn",
             "mckinsey.com",
             "deloitte.com",
@@ -210,16 +210,41 @@ class Settings(BaseSettings):
             "bain.com",
             "rolandberger.com",
             "accenture.com",
-            # 政府/智库
+            "oliverwyman.com",
+            "atkearney.com",
+            # 政府/监管/智库（公开全文）
             "cssn.cn",
             "drc.gov.cn",
             "stats.gov.cn",
-            # 行业研究
+            "ndrc.gov.cn",
+            "miit.gov.cn",
+            "mofcom.gov.cn",
+            "pbc.gov.cn",
+            "csrc.gov.cn",
+            # 国际机构（公开全文报告）
+            "documents.worldbank.org",
+            "openknowledge.worldbank.org",
+            "imf.org",
+            "oecd.org",
+            "wto.org",
+            "adb.org",
+            # 中国行业研究（部分免费）
             "iresearch.cn",
             "questmobile.com.cn",
+            "iimedia.cn",
+            "analysys.cn",
+            "cbndata.com",
+            "leadleo.com",
+            "chyxx.com",
+            # 信通院/工信院（公开全文）
+            "caict.ac.cn",
+            "cesi.cn",
+            # 国际行业研究
             "euromonitor.com",
             "frost.com",
-            "cbndata.com",
+            "statista.com",
+            "grandviewresearch.com",
+            "mordorintelligence.com",
         ],
         description="Default target domains for directed Tavily search (merged with LLM-recommended domains)",
     )

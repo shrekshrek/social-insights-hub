@@ -1,11 +1,14 @@
-"""Search 节点：执行 Tavily 搜索
+"""Search 节点：执行 Tavily 搜索，候选不足时降级到 Crawl4AI
 
-对 search_plan 中的每个关键词执行搜索，合并去重。
+执行流程：
+1. 使用 Tavily 对每个关键词做定向域名搜索
+2. 若候选总量低于阈值，追加 Crawl4AI 全网搜索（Baidu/Bing）作为补充
 """
 
 import logging
 
 from src.config import get_settings
+from src.research_agent.config import MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK
 from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 from src.research_agent.tools.web_search import tavily_search
@@ -20,7 +23,7 @@ def search_node(state: ResearchState) -> dict:
     target_domains = plan.get("target_domains", [])
 
     settings = get_settings()
-    profile = get_profile(state.get("research_type"))
+    profile = get_profile()
 
     # 三层域名合并：config 默认 + profile 专属 + LLM 推荐
     all_domains = list(set(
@@ -66,10 +69,32 @@ def search_node(state: ResearchState) -> dict:
                 })
 
     logger.info(
-        "search 节点: %d 个关键词 → %d 条候选（去重后）",
+        "search 节点 [Tavily]: %d 个关键词 → %d 条候选",
         len(keywords),
         len(all_candidates),
     )
+
+    # Tavily 候选不足时，降级到 Crawl4AI 全网搜索补充
+    if len(all_candidates) < MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK:
+        logger.info(
+            "候选数 %d < %d，启动 Crawl4AI 补充搜索",
+            len(all_candidates),
+            MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK,
+        )
+        from src.research_agent.tools.crawl4ai_search import crawl4ai_search
+
+        # 对前 3 个关键词补充（避免过多请求）
+        for kw in effective_keywords[:3]:
+            extra = crawl4ai_search(kw, max_results=15)
+            for r in extra:
+                if r["url"] not in seen_urls:
+                    seen_urls.add(r["url"])
+                    all_candidates.append(r)
+
+        logger.info(
+            "search 节点 [Crawl4AI 补充]: 总计 %d 条候选",
+            len(all_candidates),
+        )
 
     return {
         "candidates": all_candidates,

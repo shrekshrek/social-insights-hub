@@ -3,9 +3,10 @@
 提供异步接口供 FastAPI router 调用。
 """
 
+import asyncio
 import logging
 
-from sqlalchemy import func, select, desc
+from sqlalchemy import func, or_, select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.research_agent.models import ResearchTask
@@ -14,17 +15,57 @@ from src.research_agent.tasks import run_research_task
 logger = logging.getLogger(__name__)
 
 
+async def extract_brief_from_file(content: bytes, filename: str) -> str:
+    """从上传文档提取纯文本（复用 knowledge_base.service.parse_text）"""
+    from src.knowledge_base.service import parse_text
+    from src.utils import run_cpu_bound_task
+
+    try:
+        return await run_cpu_bound_task(parse_text, content, filename)
+    except Exception as exc:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"无法从文档提取文本，请检查文件是否损坏: {exc}",
+        ) from exc
+
+
+async def preview_research_plan(
+    analysis_goal: str,
+    brief: str | None = None,
+    research_questions: list[str] | None = None,
+) -> dict:
+    """调用 planner LLM 生成研究计划预览，不创建任务"""
+    from src.research_agent.nodes.planner import call_planner_llm
+
+    plan = await asyncio.to_thread(
+        call_planner_llm,
+        analysis_goal,
+        brief or "",
+        research_questions or None,
+    )
+    return {
+        "title": plan.get("title", ""),
+        "analysis_goal": plan.get("analysis_goal", ""),
+        "research_questions": plan.get("research_questions", []),
+        "keywords": plan.get("keywords", []),
+        "search_angles": plan.get("search_angles", []),
+    }
+
+
 async def create_research_task(
     db: AsyncSession,
     user_id: int,
-    query: str,
+    analysis_goal: str,
+    title: str | None = None,
     research_questions: list[str] | None = None,
     search_config: dict | None = None,
     strategy_id: int | None = None,
 ) -> ResearchTask:
     """创建研究任务并派发 Celery 执行"""
     task = ResearchTask(
-        query=query,
+        analysis_goal=analysis_goal,
+        title=title,
         research_questions=research_questions,
         search_config=search_config,
         strategy_id=strategy_id,
@@ -40,7 +81,7 @@ async def create_research_task(
     await db.commit()
     await db.refresh(task)
 
-    logger.info("创建研究任务 %d: query=%s, strategy_id=%s", task.id, query, strategy_id)
+    logger.info("创建研究任务 %d: analysis_goal=%s, strategy_id=%s", task.id, analysis_goal, strategy_id)
     return task
 
 
@@ -68,7 +109,10 @@ async def list_research_tasks(
     if status:
         base = base.where(ResearchTask.status == status)
     if search:
-        base = base.where(ResearchTask.query.ilike(f"%{search}%"))
+        pattern = f"%{search}%"
+        base = base.where(
+            or_(ResearchTask.title.ilike(pattern), ResearchTask.analysis_goal.ilike(pattern))
+        )
 
     # total
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
@@ -94,7 +138,7 @@ async def get_research_result(db: AsyncSession, task_id: int) -> dict | None:
 
     return {
         "id": task.id,
-        "query": task.query,
+        "analysis_goal": task.analysis_goal,
         "status": task.status,
         "findings_by_question": task.result_data.get("findings_by_question"),
         "synthesis": task.result_data.get("synthesis"),

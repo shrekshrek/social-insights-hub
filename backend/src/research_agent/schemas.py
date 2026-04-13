@@ -7,16 +7,40 @@ from pydantic import Field
 from src.schemas import CustomBaseModel
 
 
+class BriefExtractResult(CustomBaseModel):
+    """文件提取的纯文本"""
+
+    text: str
+
+
+class ResearchPlanPreviewRequest(CustomBaseModel):
+    """预览研究计划（不创建任务，仅调用 planner LLM）"""
+
+    analysis_goal: str = Field(..., min_length=2, max_length=2000, description="核心研究意图（AI 提炼或用户手填）")
+    brief: str | None = Field(default=None, max_length=5000, description="原始 Brief 文本（可选，供 planner 参考）")
+    research_questions: list[str] | None = Field(default=None, description="初始研究问题（可选）")
+
+
+class ResearchPlanPreviewResult(CustomBaseModel):
+    """planner LLM 返回的研究计划预览"""
+
+    title: str
+    analysis_goal: str
+    research_questions: list[str]
+    keywords: list[str]
+    search_angles: list[str]
+
+
 class ResearchTaskCreate(CustomBaseModel):
     """创建研究任务"""
 
-    query: str = Field(..., min_length=2, max_length=500, description="研究主题")
+    analysis_goal: str = Field(..., min_length=2, max_length=2000, description="核心研究意图，贯穿整个研究链")
+    title: str = Field(..., min_length=1, max_length=200, description="研究标题")
+    brief: str | None = Field(
+        default=None, max_length=5000, description="原始 Brief 文本（可选，作为 planner 背景参考）"
+    )
     research_questions: list[str] | None = Field(
         default=None, description="研究问题列表（可选，plan 节点会自动生成）"
-    )
-    research_type: str = Field(
-        default="industry_research",
-        description="研究类型：industry_research（行业报告）| ad_campaign（广告营销）| product_research（产品设计）",
     )
     search_config: dict | None = Field(
         default=None, description="搜索配置：research_scope, focus_domains"
@@ -24,10 +48,14 @@ class ResearchTaskCreate(CustomBaseModel):
 
 
 class ResearchTaskRead(CustomBaseModel):
-    """研究任务详情"""
+    """研究任务详情
+
+    DB 列名为 query，对外 API 统一暴露为 analysis_goal（使用 alias 映射）。
+    """
 
     id: int
-    query: str
+    title: str | None = None
+    analysis_goal: str
     research_questions: list[str] | None = None
     search_config: dict | None = None
     strategy_id: int | None = None
@@ -36,6 +64,7 @@ class ResearchTaskRead(CustomBaseModel):
     status: str
     error_message: str | None = None
     stats: dict | None = None
+    progress: list | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -83,7 +112,7 @@ class ResearchTaskResult(CustomBaseModel):
     """研究结果（完整结构化产出）"""
 
     id: int
-    query: str
+    analysis_goal: str
     status: str
     findings_by_question: dict[str, QuestionFindingSchema] | None = None
     synthesis: str | None = None

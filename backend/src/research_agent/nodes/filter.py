@@ -82,7 +82,7 @@ def filter_node(state: ResearchState) -> dict:
         c["source_tier"] = _classify_source_tier(c.get("source", ""))
 
     # report 策略：候选少时也走 LLM 筛选以偏好 PDF 内容
-    profile = get_profile(state.get("research_type"))
+    profile = get_profile()
     is_report_strategy = profile.content_strategy == "report"
 
     # 少于阈值直接全选（report 策略除外 — 需要 LLM 偏好 PDF）

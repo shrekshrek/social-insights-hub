@@ -13,15 +13,13 @@
           <div>
             <div class="flex items-center gap-2">
               <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-                {{ task.query }}
+                {{ task.title || task.analysis_goal }}
               </h1>
               <UBadge :color="statusColor(task.status)" variant="subtle" size="sm">
                 {{ statusLabel(task.status) }}
               </UBadge>
             </div>
             <div class="flex items-center gap-2 mt-1 text-sm text-gray-500">
-              <span v-if="researchTypeLabel">{{ researchTypeLabel }}</span>
-              <span v-if="researchTypeLabel">|</span>
               <span>{{ formatDate(task.created_at) }}</span>
               <template v-if="task.stats">
                 <span>|</span>
@@ -69,13 +67,11 @@
         <dl class="space-y-2 text-sm">
           <div class="flex gap-3">
             <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究主题</dt>
-            <dd class="text-gray-900 dark:text-white font-medium">{{ task.query }}</dd>
+            <dd class="text-gray-900 dark:text-white font-medium whitespace-pre-line">{{ task.analysis_goal }}</dd>
           </div>
-          <div v-if="researchTypeLabel" class="flex gap-3">
-            <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究类型</dt>
-            <dd>
-              <UBadge variant="subtle" size="sm">{{ researchTypeLabel }}</UBadge>
-            </dd>
+          <div v-if="researchContext" class="flex gap-3">
+            <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究背景</dt>
+            <dd class="text-gray-700 dark:text-gray-300 whitespace-pre-line">{{ researchContext }}</dd>
           </div>
           <div v-if="task.research_questions?.length" class="flex gap-3">
             <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究问题</dt>
@@ -124,17 +120,44 @@
 
         <!-- 运行中状态 -->
         <UCard v-if="task.status === 'pending' || task.status === 'running'">
-          <div class="text-center py-12">
-            <UIcon name="i-heroicons-arrow-path" class="w-10 h-10 text-primary mx-auto mb-3 animate-spin" />
-            <p class="text-lg font-medium text-gray-900 dark:text-white">
-              {{ task.status === 'pending' ? '等待执行...' : '正在研究中...' }}
-            </p>
-            <p class="text-sm text-gray-500 mt-2">
-              AI 正在搜索相关资料并分析，通常需要 2-5 分钟
-            </p>
-            <p class="text-xs text-gray-400 mt-1">
-              每 10 秒自动刷新
-            </p>
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 text-primary animate-spin" />
+              <span class="font-semibold">
+                {{ task.status === 'pending' ? '等待执行...' : '研究进行中' }}
+              </span>
+              <span class="text-xs text-gray-400 font-normal ml-auto">每 10 秒自动刷新</span>
+            </div>
+          </template>
+
+          <!-- 进度日志 -->
+          <div v-if="task.progress?.length" class="space-y-1">
+            <div
+              v-for="(entry, idx) in task.progress"
+              :key="idx"
+              class="flex items-start gap-3 py-2 border-b border-gray-50 dark:border-gray-800 last:border-0"
+            >
+              <UIcon name="i-heroicons-check-circle" class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-gray-900 dark:text-white">{{ entry.label }}</span>
+                  <UBadge v-if="entry.round > 1" :label="`第 ${entry.round} 轮`" size="xs" variant="subtle" color="neutral" />
+                </div>
+                <p class="text-xs text-gray-500 mt-0.5">{{ entry.detail }}</p>
+              </div>
+              <span class="text-xs text-gray-400 flex-shrink-0">{{ formatTime(entry.ts) }}</span>
+            </div>
+
+            <!-- 当前正在执行的步骤（最后一个已完成步骤的下一步） -->
+            <div v-if="task.status === 'running'" class="flex items-center gap-3 py-2">
+              <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 text-primary animate-spin flex-shrink-0" />
+              <span class="text-sm text-gray-500">{{ nextStepLabel }}</span>
+            </div>
+          </div>
+
+          <!-- 尚无进度时 -->
+          <div v-else class="text-center py-8 text-sm text-gray-400">
+            AI 正在搜索相关资料并分析，通常需要 2-5 分钟...
           </div>
         </UCard>
 
@@ -306,7 +329,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from 'vue'
-import { RESEARCH_TYPE_OPTIONS } from '../../../composables/useResearchAgent'
+
 
 definePageMeta({ layout: 'default' })
 
@@ -332,15 +355,37 @@ const { data: task, pending: loadingTask, refresh: refreshTask } = getTask(taskI
 const { data: result, refresh: refreshResult } = getTaskResult(taskId)
 
 useHead({
-  title: computed(() => task.value?.query ? `${task.value.query} - 研究分析` : '研究详情'),
+  title: computed(() => {
+    const displayTitle = task.value?.title || task.value?.analysis_goal
+    return displayTitle ? `${displayTitle} - 研究分析` : '研究详情'
+  }),
 })
 
-// 研究类型标签
-const researchTypeLabel = computed(() => {
-  const rt = (task.value?.search_config as Record<string, unknown>)?.research_type as string | undefined
-  if (!rt) return null
-  return RESEARCH_TYPE_OPTIONS.find(opt => opt.value === rt)?.label ?? null
+// 研究背景
+const researchContext = computed(() => {
+  return ((task.value?.search_config as Record<string, unknown>)?.context as string) || null
 })
+
+// 进度：下一步预测标签
+const NODE_SEQUENCE = ['plan', 'search', 'filter', 'fetch', 'analyze', 'evaluate', 'synthesize']
+const NODE_LABELS: Record<string, string> = {
+  plan: '生成研究计划', search: '搜索报告资料', filter: '筛选相关内容',
+  fetch: '抓取全文', analyze: '分析文档', evaluate: '评估覆盖度', synthesize: '综合分析报告',
+}
+const nextStepLabel = computed(() => {
+  const progress = task.value?.progress
+  if (!progress?.length) return '准备开始...'
+  const lastStep = progress[progress.length - 1]?.step ?? ''
+  // evaluate → should_continue 时会回到 plan，难以预测，统一显示"继续搜索"
+  if (lastStep === 'evaluate') return '继续搜索中...'
+  const nextIdx = NODE_SEQUENCE.indexOf(lastStep) + 1
+  const nextNode = NODE_SEQUENCE[nextIdx]
+  return nextNode ? `${NODE_LABELS[nextNode]}中...` : '完成中...'
+})
+
+function formatTime(ts: string): string {
+  return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
 
 // 自动轮询：pending/running 状态每 10 秒刷新
 const pollTimer = ref<ReturnType<typeof setInterval> | null>(null)
@@ -349,9 +394,11 @@ function startPolling() {
   stopPolling()
   pollTimer.value = setInterval(async () => {
     await refreshTask()
-    await refreshResult()
-    // 状态已完成或失败时停止轮询
+    // 任务完成后拉取结果并停止轮询
     if (task.value && task.value.status !== 'pending' && task.value.status !== 'running') {
+      if (task.value.status === 'completed') {
+        await refreshResult()
+      }
       stopPolling()
     }
   }, 10000)
@@ -451,7 +498,7 @@ async function handleDelete() {
   const { $confirm } = useNuxtApp()
   const confirmed = await $confirm({
     title: '确认删除',
-    message: `确定要删除研究任务「${task.value?.query}」吗？此操作不可撤销。`,
+    message: `确定要删除研究任务「${task.value?.title || task.value?.analysis_goal}」吗？此操作不可撤销。`,
     confirmText: '删除',
     type: 'error',
   })

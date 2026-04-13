@@ -1521,13 +1521,19 @@ async def confirm_research(
             from src.research_agent.service import create_research_task
 
             brief = strategy.brand_brief or {}
-            research_query = (
-                f"{brief.get('subject', '')} {brief.get('analysis_goal', '')}".strip()
-            )
+            research_title = brief.get("subject", "") or "行业研究"
+            # query = 完整 brief 内容（analysis_goal + constraints）
+            research_query_parts = []
+            if brief.get("analysis_goal"):
+                research_query_parts.append(brief["analysis_goal"])
+            if brief.get("constraints"):
+                research_query_parts.append(f"补充说明：{brief['constraints']}")
+            research_query = "\n".join(research_query_parts) or research_title
             await create_research_task(
                 db,
                 user_id=current_user_id,
-                query=research_query or "行业研究",
+                query=research_query,
+                title=research_title,
                 research_questions=ra_config["research_questions"],
                 search_config={
                     "research_scope": ra_config.get("research_scope", {}),

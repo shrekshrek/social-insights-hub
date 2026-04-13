@@ -1,6 +1,16 @@
+export interface ProgressEntry {
+  step: string
+  label: string
+  round: number
+  status: 'completed'
+  ts: string
+  detail: string
+}
+
 export interface ResearchTask {
   id: number
-  query: string
+  title: string | null
+  analysis_goal: string
   research_questions: string[] | null
   search_config: Record<string, unknown> | null
   strategy_id: number | null
@@ -9,6 +19,7 @@ export interface ResearchTask {
   status: 'pending' | 'running' | 'completed' | 'failed'
   error_message: string | null
   stats: ResearchTaskStats | null
+  progress: ProgressEntry[] | null
   created_at: string
   updated_at: string
 }
@@ -20,12 +31,29 @@ export interface ResearchTaskStats {
   synthesis_length: number
 }
 
-export type ResearchType = 'industry_research' | 'ad_campaign' | 'product_research'
+export interface BriefExtractResult {
+  text: string
+}
+
+export interface ResearchPlanPreviewRequest {
+  analysis_goal: string
+  brief?: string
+  research_questions?: string[]
+}
+
+export interface ResearchPlanPreview {
+  title: string
+  analysis_goal: string
+  research_questions: string[]
+  keywords: string[]
+  search_angles: string[]
+}
 
 export interface ResearchTaskCreate {
-  query: string
+  analysis_goal: string
+  title: string
+  brief?: string
   research_questions?: string[]
-  research_type?: ResearchType
   search_config?: Record<string, unknown>
 }
 
@@ -62,7 +90,7 @@ export interface ResearchCoverage {
 
 export interface ResearchTaskResult {
   id: number
-  query: string
+  analysis_goal: string
   status: string
   findings_by_question: Record<string, QuestionFinding> | null
   synthesis: string | null

@@ -10,8 +10,8 @@ from difflib import SequenceMatcher
 
 import logging
 from typing import Any, List, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from gevent.pool import Pool as GeventPool
 from langchain_core.runnables import Runnable
 
 logger = logging.getLogger(__name__)
@@ -91,46 +91,39 @@ def run_parallel_normalization(
             logger.error("[并行归一化] 任务 '%s' 失败: %s", task_id, e, exc_info=True)
             return {"task": task_input, "error": str(e), "success": False}
 
-    # 并行执行
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # 提交所有任务
-        future_to_task = {
-            executor.submit(_run_single_task, task): task for task in tasks
-        }
+    # 并行执行（gevent.pool.Pool：gevent monkey-patch 后的原生 greenlet pool，
+    # 信号（SoftTimeLimitExceeded）可正常传播，优于 ThreadPoolExecutor）
+    pool = GeventPool(max_workers)
+    task_results = pool.map(_run_single_task, tasks)
 
-        for future in as_completed(future_to_task):
-            try:
-                result = future.result()
-                if not result["success"]:
-                    continue
+    for result in task_results:
+        if not result["success"]:
+            continue
 
-                results.append(result)
+        results.append(result)
 
-                # 汇总统计
-                stats = result.get("stats")
-                if stats:
-                    s = stats.get("summary", {})
-                    combined_stats["summary"]["total_calls"] += s.get("total_calls", 0)
-                    combined_stats["summary"]["total_input_tokens"] = combined_stats[
-                        "summary"
-                    ].get("total_input_tokens", 0) + s.get("total_input_tokens", 0)
-                    combined_stats["summary"]["total_output_tokens"] = combined_stats[
-                        "summary"
-                    ].get("total_output_tokens", 0) + s.get("total_output_tokens", 0)
-                    combined_stats["summary"]["total_tokens"] += s.get(
-                        "total_tokens", 0
-                    )
-                    combined_stats["summary"]["total_cost_cny"] += s.get(
-                        "total_cost_cny", 0.0
-                    )
-                    # duration 不需要累加用于计费，但用于统计总的计算资源占用
-                    combined_stats["summary"]["total_duration_seconds"] += s.get(
-                        "total_duration_seconds", 0.0
-                    )
-                    combined_stats["call_details"].extend(stats.get("call_details", []))
-
-            except Exception as e:
-                logger.error("[并行归一化] 线程执行异常: %s", e, exc_info=True)
+        # 汇总统计
+        stats = result.get("stats")
+        if stats:
+            s = stats.get("summary", {})
+            combined_stats["summary"]["total_calls"] += s.get("total_calls", 0)
+            combined_stats["summary"]["total_input_tokens"] = combined_stats[
+                "summary"
+            ].get("total_input_tokens", 0) + s.get("total_input_tokens", 0)
+            combined_stats["summary"]["total_output_tokens"] = combined_stats[
+                "summary"
+            ].get("total_output_tokens", 0) + s.get("total_output_tokens", 0)
+            combined_stats["summary"]["total_tokens"] += s.get(
+                "total_tokens", 0
+            )
+            combined_stats["summary"]["total_cost_cny"] += s.get(
+                "total_cost_cny", 0.0
+            )
+            # duration 不需要累加用于计费，但用于统计总的计算资源占用
+            combined_stats["summary"]["total_duration_seconds"] += s.get(
+                "total_duration_seconds", 0.0
+            )
+            combined_stats["call_details"].extend(stats.get("call_details", []))
 
     # 重新计算平均值
     total_calls = combined_stats["summary"]["total_calls"]

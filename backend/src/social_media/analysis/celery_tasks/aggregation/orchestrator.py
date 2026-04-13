@@ -21,7 +21,7 @@
 """
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import gevent
 from datetime import datetime, timezone
 from typing import Any
 
@@ -332,22 +332,19 @@ def aggregate_task_analysis(
             # enable_llm_normalization=enable_entity_normalization,
         )
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_entity = executor.submit(run_entity_aggregation)
-        future_topic = executor.submit(run_topic_aggregation)
+    # gevent.spawn：gevent monkey-patch 后的原生 greenlet，信号（SoftTimeLimitExceeded）可正常传播
+    g_entity = gevent.spawn(run_entity_aggregation)
+    g_topic = gevent.spawn(run_topic_aggregation)
+    gevent.joinall([g_entity, g_topic])
 
-        # 等待两个任务完成
-        for future in as_completed([future_entity, future_topic]):
-            try:
-                if future == future_entity:
-                    entity_stats = future.result()
-                    logger.info("[并行聚合] 实体聚合完成")
-                else:
-                    topic_stats = future.result()
-                    logger.info("[并行聚合] 观点聚合完成")
-            except Exception as e:
-                logger.error("[并行聚合] 聚合任务失败: %s", e)
-                raise
+    try:
+        entity_stats = g_entity.get()
+        logger.info("[并行聚合] 实体聚合完成")
+        topic_stats = g_topic.get()
+        logger.info("[并行聚合] 观点聚合完成")
+    except Exception as e:
+        logger.error("[并行聚合] 聚合任务失败: %s", e)
+        raise
 
     # 更新 AnalysisJob 记录
     # 归一化是一次性任务，完成后 analyzed_count = source_count

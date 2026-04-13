@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import gevent
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -220,15 +220,16 @@ def _run_pipeline_body(
             top_topics=[t for t in top_topics if isinstance(t, dict)],
         )
 
+    # gevent.spawn：gevent monkey-patch 后的原生 greenlet，信号（SoftTimeLimitExceeded）可正常传播
     logger.info("[项目切片] 并行启动实体归一和观点归一: slice_id=%s", slice_id)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_entity = executor.submit(run_entity_normalization)
-        future_opinion = executor.submit(run_opinion_normalization)
+    g_entity = gevent.spawn(run_entity_normalization)
+    g_opinion = gevent.spawn(run_opinion_normalization)
+    gevent.joinall([g_entity, g_opinion])
 
-    # .result() 会重新抛出线程内的异常，由外层 try/except 统一处理
-    ent_norm_result = future_entity.result()
+    # .get() 会重新抛出 greenlet 内的异常，由外层 try/except 统一处理
+    ent_norm_result = g_entity.get()
     logger.info("[项目切片] 实体归一完成: slice_id=%s", slice_id)
-    op_norm_result = future_opinion.result()
+    op_norm_result = g_opinion.get()
     logger.info("[项目切片] 观点归一完成: slice_id=%s", slice_id)
 
     # 3. 处理实体归一结果

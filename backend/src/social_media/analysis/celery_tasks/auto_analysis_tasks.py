@@ -402,7 +402,7 @@ def run_auto_analysis(
     # 幂等锁（执行侧兜底）：即使触发侧并发，也保证同一 task 只跑一个自动分析链
     owner = getattr(self.request, "id", None) or f"auto-{int(time.time())}"
     # TTL 需覆盖整个 pipeline（4 步 × 单步超时 + 余量）
-    lock_ttl = TASK_WAIT_TIMEOUT * 1
+    lock_ttl = TASK_WAIT_TIMEOUT * 4 + 600
     if not _acquire_auto_lock(task_id, owner=owner, ttl_seconds=lock_ttl):
         logger.info(
             f"Task {task_id}: Auto analysis already running (lock exists), skip"

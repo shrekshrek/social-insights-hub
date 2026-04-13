@@ -148,7 +148,13 @@ def run_research_task(self, research_task_id: int) -> None:
         current_round = 1
         total_candidates = 0  # 跨轮次累计候选数
 
-        for step in research_graph.stream(initial_state):
+        # recursion_limit：每轮 6 节点（plan/search/filter/fetch/analyze/evaluate）
+        # + 1 synthesize，留 2 倍余量避免 MAX_ROUNDS 调整时再次触顶
+        recursion_limit = (MAX_ROUNDS + 1) * 6 * 2
+        for step in research_graph.stream(
+            initial_state,
+            config={"recursion_limit": recursion_limit},
+        ):
             # 每步开始前确认任务未被删除
             if not db.get(ResearchTask, research_task_id):
                 logger.info("ResearchTask %d was deleted, aborting stream", research_task_id)

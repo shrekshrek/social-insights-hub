@@ -206,8 +206,11 @@ class Settings(BaseSettings):
             "pwccn.com",
             "ey.com",
             "kpmg.com",
+            "assets.kpmg.com",
             "bcg.com",
+            "media-publications.bcg.com",
             "bain.com",
+            "media.bain.com",
             "rolandberger.com",
             "accenture.com",
             "oliverwyman.com",
@@ -236,6 +239,7 @@ class Settings(BaseSettings):
             "adb.org",
             # 中国行业研究
             "iresearch.cn",
+            "report.iresearch.cn",
             "questmobile.com.cn",
             "aliresearch.com",
             "mob.com",
@@ -245,6 +249,7 @@ class Settings(BaseSettings):
             "cesi.cn",
             # 消费者/买方行为研究（免费报告）
             "edelman.com",
+            "business.linkedin.com",
             "datareportal.com",
             "pewresearch.org",
             "ourworldindata.org",

@@ -1532,7 +1532,7 @@ async def confirm_research(
             await create_research_task(
                 db,
                 user_id=current_user_id,
-                query=research_query,
+                analysis_goal=research_query,
                 title=research_title,
                 research_questions=ra_config["research_questions"],
                 search_config={

@@ -571,32 +571,44 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
         analysis_config={"strategy_id": strategy.id},
     )
 
-    start = time.time()
-    response = await chain.ainvoke(inputs)
-    duration = time.time() - start
+    try:
+        start = time.time()
+        response = await chain.ainvoke(inputs)
+        duration = time.time() - start
 
-    result = parse_insight_response(response.content)
-    result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data,
-        primary_channel="social_media",
-        research_findings=research_findings_text,
-    )
-    logger.info("Strategy %d Insight 生成完成 (%.1fs)", strategy.id, duration)
+        result = parse_insight_response(response.content)
+        result["data_provenance"] = _build_data_provenance(
+            slices_data, news_slices_data,
+            primary_channel="social_media",
+            research_findings=research_findings_text,
+        )
+        logger.info("Strategy %d Insight 生成完成 (%.1fs)", strategy.id, duration)
 
-    now = datetime.now(timezone.utc)
-    job.status = "completed"
-    job.completed_at = now
-    job.analyzed_count = 1
-    job.processing_time = int(duration)
-    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.insight_result = result
-    strategy.brand_role_result = None
-    strategy.big_idea_result = None
-    strategy.status = "insight_done"
+        strategy.insight_result = result
+        strategy.brand_role_result = None
+        strategy.big_idea_result = None
+        strategy.status = "insight_done"
 
-    await db.commit()
-    return await get_strategy_by_id(db, strategy.id)
+        await db.commit()
+        return await get_strategy_by_id(db, strategy.id)
+    except Exception as exc:
+        logger.error("Strategy %d Insight 生成失败: %s", strategy.id, exc, exc_info=True)
+        try:
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - start)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        raise
 
 
 async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
@@ -636,31 +648,43 @@ async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
         analysis_config={"strategy_id": strategy.id},
     )
 
-    start = time.time()
-    response = await chain.ainvoke(inputs)
-    duration = time.time() - start
+    try:
+        start = time.time()
+        response = await chain.ainvoke(inputs)
+        duration = time.time() - start
 
-    result = parse_brand_role_response(response.content)
-    result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data,
-        primary_channel="social_media",
-        research_findings=research_findings_text,
-    )
-    logger.info("Strategy %d Brand Role 生成完成 (%.1fs)", strategy.id, duration)
+        result = parse_brand_role_response(response.content)
+        result["data_provenance"] = _build_data_provenance(
+            slices_data, news_slices_data,
+            primary_channel="social_media",
+            research_findings=research_findings_text,
+        )
+        logger.info("Strategy %d Brand Role 生成完成 (%.1fs)", strategy.id, duration)
 
-    now = datetime.now(timezone.utc)
-    job.status = "completed"
-    job.completed_at = now
-    job.analyzed_count = 1
-    job.processing_time = int(duration)
-    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.brand_role_result = result
-    strategy.big_idea_result = None
-    strategy.status = "brand_role_done"
+        strategy.brand_role_result = result
+        strategy.big_idea_result = None
+        strategy.status = "brand_role_done"
 
-    await db.commit()
-    return await get_strategy_by_id(db, strategy.id)
+        await db.commit()
+        return await get_strategy_by_id(db, strategy.id)
+    except Exception as exc:
+        logger.error("Strategy %d Brand Role 生成失败: %s", strategy.id, exc, exc_info=True)
+        try:
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - start)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        raise
 
 
 async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
@@ -701,30 +725,42 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
         analysis_config={"strategy_id": strategy.id},
     )
 
-    start = time.time()
-    response = await chain.ainvoke(inputs)
-    duration = time.time() - start
+    try:
+        start = time.time()
+        response = await chain.ainvoke(inputs)
+        duration = time.time() - start
 
-    result = parse_big_idea_response(response.content)
-    result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data,
-        primary_channel="social_media",
-        research_findings=research_findings_text,
-    )
-    logger.info("Strategy %d Big Idea 生成完成 (%.1fs)", strategy.id, duration)
+        result = parse_big_idea_response(response.content)
+        result["data_provenance"] = _build_data_provenance(
+            slices_data, news_slices_data,
+            primary_channel="social_media",
+            research_findings=research_findings_text,
+        )
+        logger.info("Strategy %d Big Idea 生成完成 (%.1fs)", strategy.id, duration)
 
-    now = datetime.now(timezone.utc)
-    job.status = "completed"
-    job.completed_at = now
-    job.analyzed_count = 1
-    job.processing_time = int(duration)
-    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.big_idea_result = result
-    strategy.status = "completed"
+        strategy.big_idea_result = result
+        strategy.status = "completed"
 
-    await db.commit()
-    return await get_strategy_by_id(db, strategy.id)
+        await db.commit()
+        return await get_strategy_by_id(db, strategy.id)
+    except Exception as exc:
+        logger.error("Strategy %d Big Idea 生成失败: %s", strategy.id, exc, exc_info=True)
+        try:
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - start)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        raise
 
 
 # ==================== market_report 路径 agenda_map / landscape / strategic_brief ====================
@@ -902,33 +938,45 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         analysis_config={"strategy_id": strategy.id},
     )
 
-    start = time.time()
-    response = await chain.ainvoke(inputs)
-    duration = time.time() - start
+    try:
+        start = time.time()
+        response = await chain.ainvoke(inputs)
+        duration = time.time() - start
 
-    result = parse_agenda_map_response(response.content)
-    result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data,
-        primary_channel="news_media",
-        research_findings=research_findings_text,
-    )
-    logger.info("Strategy %d Agenda Map 生成完成 (%.1fs)", strategy.id, duration)
+        result = parse_agenda_map_response(response.content)
+        result["data_provenance"] = _build_data_provenance(
+            slices_data, news_slices_data,
+            primary_channel="news_media",
+            research_findings=research_findings_text,
+        )
+        logger.info("Strategy %d Agenda Map 生成完成 (%.1fs)", strategy.id, duration)
 
-    now = datetime.now(timezone.utc)
-    job.status = "completed"
-    job.completed_at = now
-    job.analyzed_count = 1
-    job.processing_time = int(duration)
-    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.agenda_map_result = result
-    # 重新生成 agenda_map 时，landscape/strategic_brief 必须作废
-    strategy.landscape_result = None
-    strategy.strategic_brief_result = None
-    strategy.status = "agenda_map_done"
+        strategy.agenda_map_result = result
+        # 重新生成 agenda_map 时，landscape/strategic_brief 必须作废
+        strategy.landscape_result = None
+        strategy.strategic_brief_result = None
+        strategy.status = "agenda_map_done"
 
-    await db.commit()
-    return await get_strategy_by_id(db, strategy.id)
+        await db.commit()
+        return await get_strategy_by_id(db, strategy.id)
+    except Exception as exc:
+        logger.error("Strategy %d Agenda Map 生成失败: %s", strategy.id, exc, exc_info=True)
+        try:
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - start)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        raise
 
 
 async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
@@ -969,31 +1017,43 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         analysis_config={"strategy_id": strategy.id},
     )
 
-    start = time.time()
-    response = await chain.ainvoke(inputs)
-    duration = time.time() - start
+    try:
+        start = time.time()
+        response = await chain.ainvoke(inputs)
+        duration = time.time() - start
 
-    result = parse_landscape_response(response.content)
-    result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data,
-        primary_channel="news_media",
-        research_findings=research_findings_text,
-    )
-    logger.info("Strategy %d Landscape 生成完成 (%.1fs)", strategy.id, duration)
+        result = parse_landscape_response(response.content)
+        result["data_provenance"] = _build_data_provenance(
+            slices_data, news_slices_data,
+            primary_channel="news_media",
+            research_findings=research_findings_text,
+        )
+        logger.info("Strategy %d Landscape 生成完成 (%.1fs)", strategy.id, duration)
 
-    now = datetime.now(timezone.utc)
-    job.status = "completed"
-    job.completed_at = now
-    job.analyzed_count = 1
-    job.processing_time = int(duration)
-    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.landscape_result = result
-    strategy.strategic_brief_result = None
-    strategy.status = "landscape_done"
+        strategy.landscape_result = result
+        strategy.strategic_brief_result = None
+        strategy.status = "landscape_done"
 
-    await db.commit()
-    return await get_strategy_by_id(db, strategy.id)
+        await db.commit()
+        return await get_strategy_by_id(db, strategy.id)
+    except Exception as exc:
+        logger.error("Strategy %d Landscape 生成失败: %s", strategy.id, exc, exc_info=True)
+        try:
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - start)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        raise
 
 
 async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Strategy:
@@ -1036,36 +1096,48 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         analysis_config={"strategy_id": strategy.id},
     )
 
-    start = time.time()
-    response = await chain.ainvoke(inputs)
-    duration = time.time() - start
+    try:
+        start = time.time()
+        response = await chain.ainvoke(inputs)
+        duration = time.time() - start
 
-    result = parse_strategic_brief_response(response.content)
-    result["data_provenance"] = _build_data_provenance(
-        slices_data, news_slices_data,
-        primary_channel="news_media",
-        research_findings=research_findings_text,
-    )
-    # 埋点：观察 evidence_refs 实际产出规模，为后续决定是否需要路径校验提供数据
-    priorities = result.get("strategic_priorities") or []
-    total_refs = sum(len(sp.get("evidence_refs") or []) for sp in priorities)
-    logger.info(
-        "Strategy %d Strategic Brief 生成完成 (%.1fs): %d priorities, %d evidence_refs",
-        strategy.id, duration, len(priorities), total_refs,
-    )
+        result = parse_strategic_brief_response(response.content)
+        result["data_provenance"] = _build_data_provenance(
+            slices_data, news_slices_data,
+            primary_channel="news_media",
+            research_findings=research_findings_text,
+        )
+        # 埋点：观察 evidence_refs 实际产出规模，为后续决定是否需要路径校验提供数据
+        priorities = result.get("strategic_priorities") or []
+        total_refs = sum(len(sp.get("evidence_refs") or []) for sp in priorities)
+        logger.info(
+            "Strategy %d Strategic Brief 生成完成 (%.1fs): %d priorities, %d evidence_refs",
+            strategy.id, duration, len(priorities), total_refs,
+        )
 
-    now = datetime.now(timezone.utc)
-    job.status = "completed"
-    job.completed_at = now
-    job.analyzed_count = 1
-    job.processing_time = int(duration)
-    job.token_usage = extract_token_usage(response, duration_seconds=duration)
+        now = datetime.now(timezone.utc)
+        job.status = "completed"
+        job.completed_at = now
+        job.analyzed_count = 1
+        job.processing_time = int(duration)
+        job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
-    strategy.strategic_brief_result = result
-    strategy.status = "completed"
+        strategy.strategic_brief_result = result
+        strategy.status = "completed"
 
-    await db.commit()
-    return await get_strategy_by_id(db, strategy.id)
+        await db.commit()
+        return await get_strategy_by_id(db, strategy.id)
+    except Exception as exc:
+        logger.error("Strategy %d Strategic Brief 生成失败: %s", strategy.id, exc, exc_info=True)
+        try:
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - start)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        raise
 
 
 PLATFORM_NAME_TO_CODE = {
@@ -1813,68 +1885,77 @@ async def _run_probe_review_bg_task(
                 )
 
                 start_news = time.time()
-                news_results = await asyncio.gather(*[
-                    _run_news_probe_review_one(news_chain, research_design, brief, nps)
-                    for nps in news_probe_summaries
-                ])
-                duration_news = time.time() - start_news
+                try:
+                    news_results = await asyncio.gather(*[
+                        _run_news_probe_review_one(news_chain, research_design, brief, nps)
+                        for nps in news_probe_summaries
+                    ])
+                    duration_news = time.time() - start_news
 
-                total_input = total_output = total_tokens = 0
-                total_cost = 0.0
-                call_details: list[dict] = []
-                failed_calls = 0
+                    total_input = total_output = total_tokens = 0
+                    total_cost = 0.0
+                    call_details: list[dict] = []
+                    failed_calls = 0
 
-                for idx, (nps, (assessment, usage, _dur)) in enumerate(
-                    zip(news_probe_summaries, news_results)
-                ):
-                    if usage:
-                        s = usage.get("summary", {})
-                        total_input += s.get("total_input_tokens", 0)
-                        total_output += s.get("total_output_tokens", 0)
-                        total_tokens += s.get("total_tokens", 0)
-                        total_cost += s.get("total_cost_cny", 0.0)
-                        for detail in usage.get("call_details", []):
-                            call_details.append({**detail, "call_index": idx})
+                    for idx, (nps, (assessment, usage, _dur)) in enumerate(
+                        zip(news_probe_summaries, news_results)
+                    ):
+                        if usage:
+                            s = usage.get("summary", {})
+                            total_input += s.get("total_input_tokens", 0)
+                            total_output += s.get("total_output_tokens", 0)
+                            total_tokens += s.get("total_tokens", 0)
+                            total_cost += s.get("total_cost_cny", 0.0)
+                            for detail in usage.get("call_details", []):
+                                call_details.append({**detail, "call_index": idx})
 
-                    if assessment is None:
-                        failed_calls += 1
-                        # LLM 调用失败：保守判 pass 让用户人工把关（不阻塞流程）
-                        auto_assessments.append({
-                            "task_id": nps["task_id"],
-                            "keyword": nps["keyword"],
-                            "platform": "news_media",
-                            "entity_match": False,
-                            "verdict": "pass",
-                            "note": "LLM 审查失败，已默认通过，请人工核查卡片后决定",
-                        })
-                        continue
-                    news_llm_assessments.append(assessment)
+                        if assessment is None:
+                            failed_calls += 1
+                            # LLM 调用失败：保守判 pass 让用户人工把关（不阻塞流程）
+                            auto_assessments.append({
+                                "task_id": nps["task_id"],
+                                "keyword": nps["keyword"],
+                                "platform": "news_media",
+                                "entity_match": False,
+                                "verdict": "pass",
+                                "note": "LLM 审查失败，已默认通过，请人工核查卡片后决定",
+                            })
+                            continue
+                        news_llm_assessments.append(assessment)
 
-                news_total = len(news_probe_summaries)
-                news_job.token_usage = {
-                    "summary": {
-                        "total_calls": news_total,
-                        "total_input_tokens": total_input,
-                        "total_output_tokens": total_output,
-                        "total_tokens": total_tokens,
-                        "total_cost_cny": round(total_cost, 6),
-                        "total_duration_seconds": round(duration_news, 2),
-                        "avg_tokens_per_call": float(total_tokens) / news_total if news_total else 0.0,
-                        "avg_cost_per_call": round(total_cost / news_total, 6) if news_total else 0.0,
-                    },
-                    "call_details": call_details,
-                }
-                news_job.analyzed_count = len(news_llm_assessments)
-                news_job.processing_time = int(duration_news)
-                news_job.completed_at = datetime.now(timezone.utc)
-                if failed_calls and failed_calls == news_total:
+                    news_total = len(news_probe_summaries)
+                    news_job.token_usage = {
+                        "summary": {
+                            "total_calls": news_total,
+                            "total_input_tokens": total_input,
+                            "total_output_tokens": total_output,
+                            "total_tokens": total_tokens,
+                            "total_cost_cny": round(total_cost, 6),
+                            "total_duration_seconds": round(duration_news, 2),
+                            "avg_tokens_per_call": float(total_tokens) / news_total if news_total else 0.0,
+                            "avg_cost_per_call": round(total_cost / news_total, 6) if news_total else 0.0,
+                        },
+                        "call_details": call_details,
+                    }
+                    news_job.analyzed_count = len(news_llm_assessments)
+                    news_job.processing_time = int(duration_news)
+                    news_job.completed_at = datetime.now(timezone.utc)
+                    if failed_calls and failed_calls == news_total:
+                        news_job.status = "failed"
+                        news_job.error_message = f"全部 {failed_calls} 个新闻 probe LLM 调用失败"
+                    else:
+                        news_job.status = "completed"
+                        if failed_calls:
+                            news_job.error_message = f"{failed_calls} 个调用失败（已保守判 pass）"
+                    await db.commit()
+                except Exception as exc:
+                    logger.error("Strategy %d news probe review 异常: %s", strategy.id, exc, exc_info=True)
                     news_job.status = "failed"
-                    news_job.error_message = f"全部 {failed_calls} 个新闻 probe LLM 调用失败"
-                else:
-                    news_job.status = "completed"
-                    if failed_calls:
-                        news_job.error_message = f"{failed_calls} 个调用失败（已保守判 pass）"
-                await db.commit()
+                    news_job.error_message = str(exc)[:500]
+                    news_job.completed_at = datetime.now(timezone.utc)
+                    news_job.processing_time = int(time.time() - start_news)
+                    await db.commit()
+                    raise
 
                 logger.info(
                     "Strategy %d news probe review 完成 (%.1fs, 任务=%d, 成功=%d, 失败=%d)",
@@ -1976,61 +2057,70 @@ async def _run_probe_review(
                 return None, None, time.time() - t0
 
         start = time.time()
-        call_results = await asyncio.gather(
-            *[_evaluate_one(t) for t in ambiguous_summaries]
-        )
-        duration = time.time() - start  # 并行总耗时
+        try:
+            call_results = await asyncio.gather(
+                *[_evaluate_one(t) for t in ambiguous_summaries]
+            )
+            duration = time.time() - start  # 并行总耗时
 
-        # 合并结果和 token 统计
-        total_input = total_output = total_tokens = 0
-        total_cost = 0.0
-        call_details = []
-        failed_parses = 0
+            # 合并结果和 token 统计
+            total_input = total_output = total_tokens = 0
+            total_cost = 0.0
+            call_details = []
+            failed_parses = 0
 
-        for idx, (assessment, usage, dur) in enumerate(call_results):
-            if assessment is None:
-                failed_parses += 1
-                continue
-            llm_assessments.append(assessment)
-            if usage:
-                s = usage.get("summary", {})
-                total_input += s.get("total_input_tokens", 0)
-                total_output += s.get("total_output_tokens", 0)
-                total_tokens += s.get("total_tokens", 0)
-                total_cost += s.get("total_cost_cny", 0.0)
-                for detail in usage.get("call_details", []):
-                    call_details.append({**detail, "call_index": idx})
+            for idx, (assessment, usage, dur) in enumerate(call_results):
+                if assessment is None:
+                    failed_parses += 1
+                    continue
+                llm_assessments.append(assessment)
+                if usage:
+                    s = usage.get("summary", {})
+                    total_input += s.get("total_input_tokens", 0)
+                    total_output += s.get("total_output_tokens", 0)
+                    total_tokens += s.get("total_tokens", 0)
+                    total_cost += s.get("total_cost_cny", 0.0)
+                    for detail in usage.get("call_details", []):
+                        call_details.append({**detail, "call_index": idx})
 
-        if failed_parses:
-            parse_error = f"{failed_parses} 个任务解析失败"
+            if failed_parses:
+                parse_error = f"{failed_parses} 个任务解析失败"
 
-        merged_token_usage = {
-            "summary": {
-                "total_calls": len(ambiguous_summaries),
-                "total_input_tokens": total_input,
-                "total_output_tokens": total_output,
-                "total_tokens": total_tokens,
-                "total_cost_cny": round(total_cost, 6),
-                "total_duration_seconds": round(duration, 2),
-                "avg_tokens_per_call": float(total_tokens) / len(ambiguous_summaries) if ambiguous_summaries else 0.0,
-                "avg_cost_per_call": round(total_cost / len(ambiguous_summaries), 6) if ambiguous_summaries else 0.0,
-            },
-            "call_details": call_details,
-        }
+            merged_token_usage = {
+                "summary": {
+                    "total_calls": len(ambiguous_summaries),
+                    "total_input_tokens": total_input,
+                    "total_output_tokens": total_output,
+                    "total_tokens": total_tokens,
+                    "total_cost_cny": round(total_cost, 6),
+                    "total_duration_seconds": round(duration, 2),
+                    "avg_tokens_per_call": float(total_tokens) / len(ambiguous_summaries) if ambiguous_summaries else 0.0,
+                    "avg_cost_per_call": round(total_cost / len(ambiguous_summaries), 6) if ambiguous_summaries else 0.0,
+                },
+                "call_details": call_details,
+            }
 
-        now = datetime.now(timezone.utc)
-        job.status = "completed" if not parse_error else "failed"
-        job.completed_at = now
-        job.analyzed_count = len(llm_assessments)
-        job.processing_time = int(duration)
-        job.token_usage = merged_token_usage
-        if parse_error:
-            job.error_message = parse_error
+            now = datetime.now(timezone.utc)
+            job.status = "completed" if not parse_error else "failed"
+            job.completed_at = now
+            job.analyzed_count = len(llm_assessments)
+            job.processing_time = int(duration)
+            job.token_usage = merged_token_usage
+            if parse_error:
+                job.error_message = parse_error
 
-        logger.info(
-            "Strategy %d probe review 并行 LLM 完成 (%.1fs, 模糊=%d, 成功=%d)",
-            strategy.id, duration, len(ambiguous_summaries), len(llm_assessments),
-        )
+            logger.info(
+                "Strategy %d probe review 并行 LLM 完成 (%.1fs, 模糊=%d, 成功=%d)",
+                strategy.id, duration, len(ambiguous_summaries), len(llm_assessments),
+            )
+        except Exception as exc:
+            logger.error("Strategy %d social probe review 异常: %s", strategy.id, exc, exc_info=True)
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - start)
+            await db.commit()
+            raise
     else:
         logger.info("Strategy %d probe review 全部自动判定，跳过 LLM", strategy.id)
 

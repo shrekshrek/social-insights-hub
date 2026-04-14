@@ -60,6 +60,7 @@ export const CHANNEL_LABELS: Record<string, string> = {
   social_media: '社交媒体',
   knowledge_base: '市场知识库',
   news_media: '新闻媒体',
+  research_agent: '专题研究',
 }
 
 export const formatDate = (dateString: string): string => {

@@ -235,6 +235,7 @@ const columns: TableColumn<ResearchTask>[] = [
           size: 'xs',
           variant: 'ghost',
           icon: 'i-heroicons-arrow-path',
+          disabled: row.original.status === 'pending' || row.original.status === 'running',
           onClick: () => handleRerun(row.original),
         }, () => '重跑'),
         h(UButton as Component, {
@@ -250,9 +251,17 @@ const columns: TableColumn<ResearchTask>[] = [
 ]
 
 async function handleRerun(task: ResearchTask) {
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '确认重新研究',
+    message: `将清空当前结果并重新执行研究，此操作不可撤销。确定继续？`,
+    confirmText: '重新研究',
+    type: 'warning',
+  })
+  if (!confirmed) return
   try {
-    const newTask = await rerunTask(task.id)
-    toast.add({ title: `已创建新研究任务 #${newTask.id}`, color: 'success' })
+    await rerunTask(task.id)
+    toast.add({ title: '已重新发起研究，请等待执行完成', color: 'success' })
     await refresh()
   } catch {
     // 错误已由 apiRequest 统一处理

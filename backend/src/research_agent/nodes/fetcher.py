@@ -262,7 +262,10 @@ def _extract_and_fetch_pdf(text: str, base_url: str, timeout: int) -> str | None
 
 
 def _fetch_pdf(url: str, timeout: int = FETCH_TIMEOUT) -> str | None:
-    """下载 PDF 并提取文本"""
+    """下载 PDF 并提取文本
+
+    网络错误（DNS / 连接失败）时重试一次；4xx/5xx 不重试（主动拦截无意义）。
+    """
     try:
         import pdfplumber
         from io import BytesIO
@@ -270,19 +273,37 @@ def _fetch_pdf(url: str, timeout: int = FETCH_TIMEOUT) -> str | None:
         logger.warning("pdfplumber 不可用，跳过 PDF: %s", url)
         return None
 
-    try:
+    def _download(u: str) -> bytes:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            resp = client.get(url)
+            resp = client.get(u)
             resp.raise_for_status()
+            return resp.content
 
-        with pdfplumber.open(BytesIO(resp.content)) as pdf:
+    try:
+        content = _download(url)
+    except httpx.HTTPStatusError:
+        # 4xx/5xx（如 429 限流、403 封锁）：重试无意义，直接放弃
+        logger.warning("PDF 下载失败（HTTP 错误，不重试）: %s", url, exc_info=True)
+        return None
+    except Exception:
+        # 网络层错误（DNS、连接超时等）：等待后重试一次
+        logger.info("PDF 下载网络错误，重试: %s", url)
+        import gevent
+        gevent.sleep(2)
+        try:
+            content = _download(url)
+        except Exception:
+            logger.warning("PDF 下载/解析失败: %s", url, exc_info=True)
+            return None
+
+    try:
+        with pdfplumber.open(BytesIO(content)) as pdf:
             pages = []
             for page in pdf.pages[:100]:  # 最多读 100 页
                 text = page.extract_text()
                 if text:
                     pages.append(text)
-
             return "\n\n".join(pages) if pages else None
     except Exception:
-        logger.warning("PDF 下载/解析失败: %s", url, exc_info=True)
+        logger.warning("PDF 解析失败: %s", url, exc_info=True)
         return None

@@ -65,7 +65,7 @@ def search_node(state: ResearchState) -> dict:
         )
         from src.research_agent.tools.crawl4ai_search import crawl4ai_search
 
-        for kw in effective_keywords[:3]:
+        for kw in keywords[:3]:
             extra = crawl4ai_search(kw, max_results=15)
             for r in extra:
                 if r["url"] not in seen_urls:

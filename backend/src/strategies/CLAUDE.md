@@ -73,7 +73,7 @@ draft → planned → probing → collecting → ready ┬─ [brand_strategy] �
 3. `confirm-research`: 根据 data_plan 的渠道分别创建 SocialMonitor / NewsMonitor + 对应 phase="probe" 任务，状态 → probing
    - 社媒：每个 keyword×platform 一个 SocialTask，max_pages 限制翻页
    - 新闻：每个 keyword 一个 NewsTask，celery `run_news_probe_task` 异步派发（纯搜索）
-   - 行业研究：research_design 含 `research_agent` 字段时条件创建 ResearchTask（Celery 立即启动 LangGraph，无探测阶段，与社媒/新闻并行）
+   - 行业研究：brand_brief.channel_plan 含 `research_agent` 渠道时条件创建 ResearchTask（Celery 立即启动 LangGraph，无探测阶段，与社媒/新闻并行）；query=channel_brief，context=analysis_goal，研究问题由 Planner 自行生成
 
 ### ② 探测验证 (probing → collecting)
 
@@ -146,7 +146,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 | Chain | 角色 | 触发时机 | 路径 |
 |-------|------|---------|------|
 | brief_parser_chain | Brief 摄入 + 三渠道分发判断（social_media / news_media / research_agent） | 新建策略时（`parse-brief` 端点） | shared |
-| research_design_chain | 研究规划师（产出 data_plan + 可选 research_agent） | ① | shared |
+| research_design_chain | 研究规划师（产出社媒/新闻 data_plan，不含 research_agent） | ① | shared |
 | strategy_social_probe_review_chain | 社媒数据质检员 | ② | shared |
 | strategy_news_probe_review_chain | 新闻数据质检员（单任务并行） | ② | shared |
 | coverage_check_chain | 覆盖度验证 | ③ | shared |
@@ -178,7 +178,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 - Strategy 通过 `strategy_slices` 关联社媒切片（SocialSlice），新闻切片（NewsSlice）通过 `news_monitor_id` 隐式关联
 - `_create_auto_slices` 按 `slice_blueprint` 自动创建：社媒维度 → SocialSlice，新闻维度 → NewsSlice，互不侵入
-- `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor（同渠道所有任务共��一个 Monitor）+ 条件创建 ResearchTask（research_design 含 `research_agent` 字段时）
+- `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor（同渠道所有任务共享一个 Monitor）+ 条件创建 ResearchTask（brand_brief.channel_plan 含 `research_agent` 渠道时）
 - `_task_dimension_map` / `_news_task_dimension_map` 存在 `research_design` 中，分别记录社媒 / 新闻 task_id → dimension_name 映射，供 probe 审查注入研究问题 + 自动建切片使用
 - `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）；两个端点同时返回 `research_agent` 状态（ResearchTask 进度，不阻塞主流程）
 - Research Agent 通过 `research_tasks.strategy_id` FK 关联策略，不在 Strategy 表上加冗余字段。`_retrieve_research_findings` 读取最新已完成的 ResearchTask.result_data，per-stage formatter 按 token 预算注入 `{research_findings}`

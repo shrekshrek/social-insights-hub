@@ -103,6 +103,9 @@ INDUSTRY_RESEARCH = ResearchProfile(
     "relevance_to_questions": {
         "<研究问题原文，必须与输入完全一致>": "该文档对此问题的相关发现摘要（2-3句话）",
         "<另一个研究问题原文>": "无直接相关"
+    },
+    "question_relevance_scores": {
+        "<研究问题原文，必须与输入完全一致>": 0.8
     }
 }
 
@@ -111,7 +114,14 @@ INDUSTRY_RESEARCH = ResearchProfile(
 - 趋势判断、竞争格局、技术路线等定性结论
 - 预测和展望性数据
 
-⚠️ 重要：relevance_to_questions 的每个 key 必须是输入研究问题的原文，不得改写、缩写或翻译。
+⚠️ 重要规则：
+1. relevance_to_questions 和 question_relevance_scores 的每个 key 必须是输入研究问题的原文，不得改写、缩写或翻译。
+2. question_relevance_scores 评分标准（0.0–1.0）：
+   - 0.8–1.0：文档专门、直接回答了此问题，有具体数据或明确论述
+   - 0.5–0.7：文档有部分相关内容，间接涉及此问题
+   - 0.2–0.4：文档偶有提及，但非主题，缺乏实质内容
+   - 0.0–0.1：文档与此问题几乎无关（如主题完全不同，仅有泛泛背景）
+3. 评分必须客观反映文档内容与问题的实质匹配程度，不因来源权威性而虚高。
 
 只输出 JSON，不要其他内容。""",
     synthesizer_prompt="""你是一个资深行业研究分析师。基于搜索结果，针对每个研究问题进行结构化分析。

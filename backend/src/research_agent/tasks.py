@@ -179,7 +179,7 @@ def run_research_task(self, research_task_id: int) -> None:
             # 累积 state（reducer 字段追加，其余覆盖）
             # selected 跨轮累积用于构建 url_meta（LangGraph state 中每轮覆盖，但此处需要全量）
             for k, v in node_output.items():
-                if k in ("documents", "findings", "selected"):
+                if k in ("documents", "findings", "selected", "token_usage_records"):
                     accumulated[k] = accumulated.get(k, []) + (v or [])
                 else:
                     accumulated[k] = v

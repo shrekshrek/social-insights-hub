@@ -77,6 +77,7 @@ def analyze_node(state: ResearchState) -> dict:
                 "key_points": [doc["content"][:300]],
                 "data_points": [],
                 "relevance_to_questions": {},
+                "question_relevance_scores": {},  # 无 LLM 分析，不参与覆盖度计算
                 "_token_usage": {},  # 无 LLM 调用，无 token 消耗
             }
 
@@ -108,6 +109,7 @@ def analyze_node(state: ResearchState) -> dict:
                 "key_points": [content_excerpt[:300]],
                 "data_points": [],
                 "relevance_to_questions": {},
+                "question_relevance_scores": {},
             }
 
         return {
@@ -118,6 +120,7 @@ def analyze_node(state: ResearchState) -> dict:
             "key_points": parsed.get("key_points", []),
             "data_points": parsed.get("data_points", []),
             "relevance_to_questions": parsed.get("relevance_to_questions", {}),
+            "question_relevance_scores": parsed.get("question_relevance_scores", {}),
             "_token_usage": token_rec,
         }
 
@@ -156,4 +159,5 @@ def _parse_analyze_response(content: str) -> dict:
             "key_points": [content[:300]],
             "data_points": [],
             "relevance_to_questions": {},
+            "question_relevance_scores": {},
         }

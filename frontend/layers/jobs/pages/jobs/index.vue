@@ -103,6 +103,7 @@ const typeOptions = [
   { label: '策略·媒体议程图 (Agenda Map)', value: 'strategy_agenda_map' },
   { label: '策略·竞争格局 (Landscape)', value: 'strategy_landscape' },
   { label: '策略·战略简报 (Strategic Brief)', value: 'strategy_strategic_brief' },
+  { label: '专题研究', value: 'research' },
 ]
 
 // 状态选项
@@ -162,6 +163,7 @@ const getAnalysisTypeLabel = (type: string) => {
     strategy_agenda_map: '策略·媒体议程图 (Agenda Map)',
     strategy_landscape: '策略·竞争格局 (Landscape)',
     strategy_strategic_brief: '策略·战略简报 (Strategic Brief)',
+    research: '专题研究',
   }
   return labels[type] || type
 }
@@ -278,7 +280,25 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       meta: { class: { th: 'w-[160px]', td: 'w-[160px] whitespace-normal' } },
       cell: ({ row }) => {
         const job = row.original
-        // 优先展示社媒监测，兜底展示新闻监测
+
+        // 专题研究：链接到 research-agent 详情页
+        if (job.analysis_type === 'research') {
+          const cfg = job.analysis_config as Record<string, unknown> | null
+          const researchId = cfg?.research_task_id
+          const researchTitle = cfg?.research_task_title as string | undefined
+          if (!researchId) return h('span', { class: 'text-gray-400' }, '-')
+          return h(Button, {
+            variant: 'link',
+            size: 'xs',
+            class: 'p-0 font-normal text-left whitespace-normal leading-snug line-clamp-2',
+            to: `/research-agent/${researchId}`,
+          }, () => [
+            h('span', { class: 'text-gray-400 font-mono mr-1' }, `#${researchId}`),
+            researchTitle || '-',
+          ])
+        }
+
+        // 社媒 / 新闻监测
         const monitorId = job.social_monitor_id || job.news_monitor_id
         const monitorName = job.social_monitor_name || job.news_monitor_name
         const isNews = !job.social_monitor_id && !!job.news_monitor_id
@@ -305,7 +325,13 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       meta: { class: { th: 'w-[180px]', td: 'w-[180px] whitespace-normal' } },
       cell: ({ row }) => {
         const job = row.original
-        // 优先展示社媒任务，兜底展示新闻任务
+
+        // 专题研究：项目列已显示研究任务，此列留空
+        if (job.analysis_type === 'research') {
+          return h('span', { class: 'text-gray-400' }, '-')
+        }
+
+        // 社媒 / 新闻任务
         const taskId = job.social_task_id || job.news_task_id
         const taskName = job.social_task_name || job.news_task_name
         const isNews = !job.social_task_id && !!job.news_task_id
@@ -421,7 +447,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-          AI 任务
+          AI 统计
         </h1>
         <p class="text-gray-600 dark:text-gray-400 mt-1">
           跨渠道 AI 分析任务的状态、进度与成本

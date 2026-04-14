@@ -96,3 +96,6 @@ class ResearchState(TypedDict):
     synthesis: str
     coverage: dict
     information_gaps: list[str]
+
+    # Token 用量（各节点 LLM 调用后追加，tasks.py 汇总）
+    token_usage_records: Annotated[list[dict], operator.add]

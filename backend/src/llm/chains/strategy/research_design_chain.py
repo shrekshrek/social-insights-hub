@@ -177,18 +177,6 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
       "serves_questions": ["rq1"]
     }}
   ],
-  "research_agent": {{
-    "research_questions": [
-      "面向行业报告的具体研究问题1",
-      "面向行业报告的具体研究问题2"
-    ],
-    "research_scope": {{
-      "industry": "行业/品类",
-      "geography": "地域范围",
-      "time_range": "时间范围（如 2024-2025）"
-    }},
-    "focus_domains": ["deloitte.com", "mckinsey.com"]
-  }},
   "primary_sources": ["social_media"],
   "output_type": "brand_strategy",
   "output_type_rationale": "选择理由（一句话，必须说明为何依据决策表推导出该 output_type）"
@@ -207,7 +195,6 @@ output_type 可选值（按决策表推导）: brand_strategy / market_report
 - research_questions: 2-4 个，覆盖所有渠道研究方向中的核心分析目标
 - data_plan: 只为输入中出现的社媒/新闻渠道生成维度。社媒维度（如有）2-4 个，每个 1-2 关键词 + 1-2 平台，社媒总任务数目标 8-12；新闻维度（如有）1-2 个，每个 1-2 关键词，无 platforms
 - data_plan 中每个条目必须包含 `channel` 字段（"social_media" 或 "news_media"）
-- research_agent: 仅在输入包含"行业研究方向"时输出。research_questions 应面向行业报告（市场格局/份额/趋势），与 data_plan 的社媒/新闻关键词不重复；research_scope 提供搜索范围约束；focus_domains 可选，建议 2-4 个权威机构域名。**输入中无行业研究方向时不输出此字段**
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
@@ -341,18 +328,8 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
     result["primary_sources"] = derived_sources
     result["output_type"] = derived_type
 
-    # research_agent 字段校验：确保结构正确（可选字段，LLM 可能不输出）
-    ra = result.get("research_agent")
-    if ra and isinstance(ra, dict):
-        ra.setdefault("research_questions", [])
-        ra.setdefault("research_scope", {})
-        ra.setdefault("focus_domains", [])
-        # 过滤空问题
-        ra["research_questions"] = [
-            q for q in ra["research_questions"] if isinstance(q, str) and q.strip()
-        ]
-        if not ra["research_questions"]:
-            # 无有效研究问题则移除整个字段
-            del result["research_agent"]
+    # research_agent 字段已从 research_design 输出中移除
+    # 行业研究渠道由 brand_brief.channel_plan 中 research_agent 条目触发
+    result.pop("research_agent", None)
 
     return result

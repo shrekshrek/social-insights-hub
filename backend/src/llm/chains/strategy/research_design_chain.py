@@ -92,7 +92,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 - 品牌维度只用品牌专属词，不混入品类通用词或竞品词
 - 竞品维度只放竞品品牌词，不和自有品牌混在一起
 - 行业维度用品类通用词，不混入具体品牌名
-- **主品维度与竞品维度的平台必须对称**：当研究计划同时包含主品维度（brand_voice）和竞品维度（competitive）时，两者选取的平台集合必须完全一致。对称是横向数据对比的基础——若主品在小红书采集而竞品在抖音采集，采集到的受众结构不同，声量和情感对比结论会失真。若某平台不适合其中一方，应同时从两者的方案中移除，而非单独调整
+- **主品维度与竞品维度的平台建议对称**：当研究计划同时包含主品维度（brand_voice）和竞品维度（competitive）时，建议两者选取相同的平台，以便横向数据对比。若某平台不适合其中一方，应同时从两者的方案中移除，而非单独调整（后端会自动取交集修正）
 - **同一维度的关键词必须属于同一赛道/品类**。如果 Brief 涉及多个不同赛道，必须拆成独立维度分别采集，不要混在同一组关键词中——混合搜索会导致数据噪音，实体提取和竞品对比无法正确归类
 - **关键词必须对目标平台有效**——对每个关键词×平台组合，想象一个真实用户在该平台搜索栏输入该词，能否返回足够多的相关内容？如果一个关键词在某平台上大概率搜不到有意义的结果，就不要选这个平台。宁可少一个平台也不要采一堆噪音
 - 避免过于宽泛的行业热词（如"数字化转型""商业决策"）——这类词在任何平台都返回海量不相关内容，信噪比极低。关键词应精确到能圈定目标讨论群体
@@ -107,7 +107,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 
 **新闻媒体（channel = "news_media"）**：
 - **不需要** `platforms` 字段（系统自动通过百度+搜狗+DuckDuckGo 搜索引擎检索）
-- 可选启用微信公众号搜索（通过搜狗微信专用入口），适合行业分析、企业深度报道、品牌自媒体内容
+- 可选启用微信公众号搜索（`enable_wechat_mp: true`，通过搜狗微信专用入口）——适合品牌公关、行业深度分析、企业自媒体内容；若主要关注新闻媒体报道或研究主体在公众号上讨论度不高，则设为 false
 - 每个维度 1-2 个关键词，面向搜索引擎优化（与社媒平台搜索习惯不同）
 - 关键词应偏向新闻报道视角：品牌动态、行业趋势、市场分析、政策影响等
 - 适合场景：品牌媒体曝光监测、行业新闻动态追踪、竞品公关/融资/战略动向、市场趋势的媒体视角
@@ -121,7 +121,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 - 每个社媒维度选 **1-2 个平台**，最多 3 个（质量优先，宁精不滥）
 - 每个新闻维度 **1-2 个关键词**（无需选平台）
 - **社媒总任务数 = Σ(各社媒维度关键词数 × 平台数)，目标 8-12 个；生成后自行验算，超过则删减关键词或平台**
-- **对称代价**：brand_voice 与 competitive 维度共用同一组平台时，两者各自独立贡献任务数（合计 = 2 × 关键词数 × 平台数），会显著占用预算。设计时优先将这两个维度的关键词控制在 1-2 个、平台控制在 1-2 个，再为其他维度分配剩余预算
+- **对称代价**：brand_voice 与 competitive 维度共用同一组平台时，两者各自独立贡献任务数（合计 = 2 × 关键词数 × 平台数），建议将这两个维度的关键词控制在 1-2 个、平台控制在 1-2 个，再为其他维度分配剩余预算
 - **社媒平台选择必须同时考虑品类特点和关键词适配性**（只能从以下 5 个平台中选择，策略研究不使用 kuaishou / tieba）：
   - 知乎：问答式深度讨论、行业分析、专业评价。用户偏理性，适合需要深度观点和专业判断的主题
   - 微博：新闻热点驱动、品牌公关、大众舆论。内容短平快，适合有公众讨论度和时效性的话题
@@ -139,6 +139,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 - 切片的 `source_dimensions` 可以同时引用社媒和新闻维度——系统会按渠道分别创建独立切片（社媒 SocialSlice + 新闻 NewsSlice），最终在 brand_strategy / market_report 两条路径的三层产出中合并两方数据
 - 每个切片建议同时引用社媒和新闻维度，让两个渠道的分析结果能在报告中交叉验证
 - 纯新闻切片（无社媒维度）和纯社媒切片（无新闻维度）都是允许的
+- **competitive 维度建议加入品牌聚焦切片**：若 data_plan 中存在 competitive 维度，建议将其加入品牌聚焦切片的 source_dimensions（供竞品质性对比），以及大盘分析切片（供 SOV 声量对比）。若遗漏，后端会自动将 competitive 维度追加到品牌聚焦切片
 
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记：
@@ -165,6 +166,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
       "dimension_name": "品牌媒体报道",
       "channel": "news_media",
       "keywords": ["品牌名 行业动态", "品牌名 市场分析"],
+      "enable_wechat_mp": true,
       "rationale": "追踪品牌在新闻媒体中的曝光与行业定位",
       "question_ids": ["rq1"]
     }}
@@ -184,7 +186,8 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
   "output_type_rationale": "选择理由（一句话，必须说明为何依据决策表推导出该 output_type）"
 }}
 
-channel 可选值: social_media（默认，需 platforms）/ news_media（无 platforms）
+channel 可选值: social_media（默认，需 platforms）/ news_media（无 platforms，需 enable_wechat_mp）
+enable_wechat_mp 可选值（仅 news_media）: true / false
 platforms 可选值（仅 social_media）: douyin / weibo / bilibili / xiaohongshu / zhihu
 dimension 可选值: brand_voice / consumer_voice / competitive / industry
 priority 可选值: high / medium / low
@@ -197,6 +200,7 @@ output_type 可选值（按决策表推导）: brand_strategy / market_report
 - research_questions: 2-4 个，覆盖所有渠道研究方向中的核心分析目标
 - data_plan: 只为输入中出现的社媒/新闻渠道生成维度。社媒维度（如有）2-4 个，每个 1-2 关键词 + 1-2 平台，社媒总任务数目标 8-12；新闻维度（如有）1-2 个，每个 1-2 关键词，无 platforms
 - data_plan 中每个条目必须包含 `channel` 字段（"social_media" 或 "news_media"）
+- news_media 维度必须包含 `enable_wechat_mp` 字段（true 或 false），依据 Section 2 的判断标准填写，不得省略
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
@@ -292,6 +296,144 @@ def _derive_primary_sources_and_output_type(
     return primary_sources, output_type
 
 
+def _build_dim_type_map(
+    data_plan: list[dict[str, Any]],
+    research_questions: list[dict[str, Any]],
+) -> dict[str, str]:
+    """构建 dimension_name → dimension_type（brand_voice/competitive/...）映射。
+
+    通过 data_plan[].question_ids → research_questions[].dimension 推导，
+    取第一个关联问题的 dimension 类型作为该维度的代表类型。
+    """
+    rq_by_id = {rq.get("id"): rq for rq in research_questions}
+    dim_type_map: dict[str, str] = {}
+    for dp in data_plan:
+        dim_name = dp.get("dimension_name", "")
+        q_ids = dp.get("question_ids") or []
+        for qid in q_ids:
+            rq = rq_by_id.get(qid)
+            if rq and rq.get("dimension"):
+                dim_type_map[dim_name] = rq["dimension"]
+                break
+    return dim_type_map
+
+
+def _fix_platform_symmetry(
+    data_plan: list[dict[str, Any]],
+    dim_type_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    """将社媒 brand_voice 与 competitive 维度的平台集合统一为交集。
+
+    交集为空时跳过（宁可不对称也不清空平台），并写 warning 日志。
+    """
+    brand_voice_dims = [
+        dp for dp in data_plan
+        if (dp.get("channel") or "social_media") == "social_media"
+        and dim_type_map.get(dp.get("dimension_name", "")) == "brand_voice"
+    ]
+    competitive_dims = [
+        dp for dp in data_plan
+        if (dp.get("channel") or "social_media") == "social_media"
+        and dim_type_map.get(dp.get("dimension_name", "")) == "competitive"
+    ]
+
+    if not brand_voice_dims or not competitive_dims:
+        return data_plan
+
+    # 取所有 brand_voice 维度平台的并集，再与所有 competitive 维度平台的并集求交集
+    bv_platforms: set[str] = set()
+    for dp in brand_voice_dims:
+        bv_platforms.update(dp.get("platforms") or [])
+
+    comp_platforms: set[str] = set()
+    for dp in competitive_dims:
+        comp_platforms.update(dp.get("platforms") or [])
+
+    common = bv_platforms & comp_platforms
+    if not common:
+        logger.warning(
+            "brand_voice 平台 %s 与 competitive 平台 %s 无交集，跳过对称修正",
+            bv_platforms,
+            comp_platforms,
+        )
+        return data_plan
+
+    # 保留原有顺序，统一为交集
+    common_ordered = [p for p in (bv_platforms | comp_platforms) if p in common]
+
+    fixed_names = set()
+    result = []
+    for dp in data_plan:
+        dim_name = dp.get("dimension_name", "")
+        dim_type = dim_type_map.get(dim_name)
+        if (
+            (dp.get("channel") or "social_media") == "social_media"
+            and dim_type in ("brand_voice", "competitive")
+            and set(dp.get("platforms") or []) != common
+        ):
+            dp = {**dp, "platforms": common_ordered}
+            fixed_names.add(dim_name)
+        result.append(dp)
+
+    if fixed_names:
+        logger.info("平台对称修正：%s → %s", fixed_names, common_ordered)
+
+    return result
+
+
+def _fix_competitive_in_slices(
+    data_plan: list[dict[str, Any]],
+    slice_blueprint: list[dict[str, Any]],
+    dim_type_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    """确保 competitive 维度至少出现在一个切片的 source_dimensions 里。
+
+    若所有切片都未引用任何 competitive 维度，自动将其追加到品牌聚焦切片（有 subject 的切片）。
+    无品牌聚焦切片时追加到第一个切片。
+    """
+    competitive_dim_names = {
+        dp.get("dimension_name", "")
+        for dp in data_plan
+        if dim_type_map.get(dp.get("dimension_name", "")) == "competitive"
+    }
+    if not competitive_dim_names:
+        return slice_blueprint
+
+    # 检查是否已有切片引用了 competitive 维度
+    already_referenced = any(
+        bool(competitive_dim_names & set(sb.get("source_dimensions") or []))
+        for sb in slice_blueprint
+    )
+    if already_referenced:
+        return slice_blueprint
+
+    if not slice_blueprint:
+        return slice_blueprint
+
+    # 找品牌聚焦切片，没有则取第一个
+    target_idx = next(
+        (i for i, sb in enumerate(slice_blueprint) if sb.get("subject")),
+        0,
+    )
+
+    logger.info(
+        "competitive 维度 %s 未被任何切片引用，自动追加到切片「%s」",
+        competitive_dim_names,
+        slice_blueprint[target_idx].get("name", ""),
+    )
+
+    fixed = slice_blueprint[target_idx].copy()
+    existing = list(fixed.get("source_dimensions") or [])
+    fixed["source_dimensions"] = existing + [
+        name for name in competitive_dim_names if name not in existing
+    ]
+
+    return [
+        fixed if i == target_idx else sb
+        for i, sb in enumerate(slice_blueprint)
+    ]
+
+
 def parse_research_design_response(response_text: str) -> dict[str, Any]:
     """解析研究设计 Chain 输出，失败时抛出 ValueError
 
@@ -329,6 +471,13 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
         )
     result["primary_sources"] = derived_sources
     result["output_type"] = derived_type
+
+    # 后端结构校正（不依赖 LLM 严格遵守 prompt）
+    dim_type_map = _build_dim_type_map(result["data_plan"], result["research_questions"])
+    result["data_plan"] = _fix_platform_symmetry(result["data_plan"], dim_type_map)
+    result["slice_blueprint"] = _fix_competitive_in_slices(
+        result["data_plan"], result["slice_blueprint"], dim_type_map
+    )
 
     # research_agent 字段已从 research_design 输出中移除
     # 行业研究渠道由 brand_brief.channel_plan 中 research_agent 条目触发

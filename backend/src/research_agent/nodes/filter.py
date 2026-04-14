@@ -138,6 +138,11 @@ _DOMAIN_SATURATION_PENALTIES: list[tuple[int, float]] = [
     (1, 0.05),   # ≥1 篇 findings → -0.05（轻微，保留高质量二次引用的可能）
 ]
 
+# LLM 基础分最低入选阈值：低于此分数的候选直接丢弃，不进入惩罚/排序阶段
+# 作用：防止内容明显不相关的权威来源（如发改委五年规划、信通院数据要素白皮书）
+# 因 PDF 加分 / tier1 身份而挤占槽位，宁可 selected 为空也不选低质量内容
+_MIN_LLM_SCORE = 0.40
+
 
 def _is_fetch_blocked(url: str) -> bool:
     """判断 URL 是否属于已知抓取失败域名"""
@@ -367,10 +372,15 @@ def filter_node(state: ResearchState) -> dict:
             domain_finding_count[d] = domain_finding_count.get(d, 0) + 1
 
     scored_candidates = []
+    low_score_dropped = 0
     for item in scored:
         idx = item.get("index", -1)
         if 0 <= idx < len(candidates):
             score = float(item.get("score", 0.0))
+            # LLM 基础分低于阈值：内容不相关，直接丢弃，不进入后续惩罚/排序
+            if score < _MIN_LLM_SCORE:
+                low_score_dropped += 1
+                continue
             candidate = candidates[idx]
             # 代码层惩罚①：已知抓取失败域名扣分，让可访问来源优先
             if _is_fetch_blocked(candidate.get("url", "")):
@@ -391,9 +401,6 @@ def filter_node(state: ResearchState) -> dict:
     scored_candidates.sort(key=lambda x: x["relevance_score"], reverse=True)
     selected = scored_candidates[:MAX_CANDIDATES_PER_ROUND]
 
-    if not selected:
-        selected = candidates[:MAX_CANDIDATES_PER_ROUND]
-
     # 域名多样性限流：单域名最多占 _MAX_SLOTS_PER_DOMAIN 个槽位
     before_cap = len(selected)
     selected = _apply_domain_cap(selected, _MAX_SLOTS_PER_DOMAIN)
@@ -411,5 +418,8 @@ def filter_node(state: ResearchState) -> dict:
         if deduped:
             logger.info("filter 节点: 跨轮去重 %d 条已处理 URL", deduped)
 
-    logger.info("filter 节点: %d → %d 条", len(candidates), len(selected))
+    logger.info(
+        "filter 节点: %d → %d 条（低分丢弃 %d）",
+        len(candidates), len(selected), low_score_dropped,
+    )
     return {"selected": selected, "token_usage_records": [_token_record(response)]}

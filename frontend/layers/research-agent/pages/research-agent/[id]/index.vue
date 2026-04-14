@@ -43,6 +43,7 @@
               variant="outline"
               icon="i-heroicons-arrow-path"
               :loading="rerunning"
+              :disabled="task.status === 'pending' || task.status === 'running'"
               @click="handleRerun"
             >
               重新研究
@@ -515,11 +516,19 @@ async function handleRefreshAll() {
 const rerunning = ref(false)
 
 async function handleRerun() {
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '确认重新研究',
+    message: `将清空当前结果并重新执行研究，此操作不可撤销。确定继续？`,
+    confirmText: '重新研究',
+    type: 'warning',
+  })
+  if (!confirmed) return
   rerunning.value = true
   try {
-    const newTask = await rerunTask(taskId)
-    toast.add({ title: `已创建新研究任务 #${newTask.id}`, color: 'success' })
-    router.push(`/research-agent/${newTask.id}`)
+    await rerunTask(taskId)
+    toast.add({ title: '已重新发起研究，请等待执行完成', color: 'success' })
+    await refreshTask()
   } catch {
     // 错误已由 apiRequest 统一处理
   } finally {

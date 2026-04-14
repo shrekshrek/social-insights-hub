@@ -160,7 +160,7 @@ async def get_task_result(
 @router.post(
     "/tasks/{task_id}/rerun",
     response_model=schemas.ResearchTaskRead,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
     summary="重新研究",
 )
 async def rerun_task(
@@ -168,23 +168,19 @@ async def rerun_task(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """基于已有任务的参数重新创建研究"""
-    original = await service.get_research_task(db, task_id)
-    if not original:
+    """原地重置研究任务并重新执行，覆盖原有结果"""
+    task = await service.get_research_task(db, task_id)
+    if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="原研究任务不存在",
+            detail="研究任务不存在",
         )
-    new_task = await service.create_research_task(
-        db=db,
-        user_id=current_user.id,
-        analysis_goal=original.analysis_goal,
-        title=original.title,
-        research_questions=original.research_questions,
-        search_config=original.search_config,
-        strategy_id=original.strategy_id,
-    )
-    return new_task
+    if task.status in ("pending", "running"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="任务正在执行中，无法重新研究",
+        )
+    return await service.rerun_research_task(db, task)
 
 
 @router.delete(

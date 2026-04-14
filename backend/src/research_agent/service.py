@@ -91,6 +91,23 @@ async def get_research_task(db: AsyncSession, task_id: int) -> ResearchTask | No
     return await db.get(ResearchTask, task_id)
 
 
+async def rerun_research_task(db: AsyncSession, task: ResearchTask) -> ResearchTask:
+    """原地重置研究任务并重新派发 Celery 执行（覆盖原有结果）"""
+    task.status = "pending"
+    task.result_data = None
+    task.progress = []
+    task.stats = None
+    task.error_message = None
+    task.job_id = None
+    await db.commit()
+    await db.refresh(task)
+
+    run_research_task.delay(task.id)
+
+    logger.info("重新派发研究任务 %d", task.id)
+    return task
+
+
 async def list_research_tasks(
     db: AsyncSession,
     user_id: int | None = None,

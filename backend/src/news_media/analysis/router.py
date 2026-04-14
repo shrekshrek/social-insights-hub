@@ -18,7 +18,7 @@ from src.news_media.analysis.schemas import (
 from src.news_media.monitors.dependencies import validate_news_monitor_exists
 from src.news_media.monitors.models import NewsMonitor
 
-router = APIRouter(prefix="/news-media", tags=["news-slices"])
+router = APIRouter(prefix="/news-media", tags=["News Media - Analysis"])
 
 
 @router.get(

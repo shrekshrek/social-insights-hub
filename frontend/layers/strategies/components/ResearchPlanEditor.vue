@@ -52,7 +52,10 @@
               <span class="font-medium text-blue-700 dark:text-blue-300">{{ dp.dimension_name }}</span>
               <span v-if="dp.rationale" class="text-gray-500 ml-1">&mdash; {{ dp.rationale }}</span>
               <div class="flex flex-wrap gap-x-3 text-xs text-gray-400 mt-0.5">
-                <span v-if="dp.platforms?.length">
+                <span v-if="dp.channel === 'news_media'">
+                  渠道: 百度 + 搜狗 + DuckDuckGo<span v-if="dp.enable_wechat_mp"> + 微信公众号</span>
+                </span>
+                <span v-else-if="dp.platforms?.length">
                   平台: {{ dp.platforms.map(p => platformLabel(p)).join('、') }}
                 </span>
                 <span v-if="dp.keywords?.length">关键词: {{ dp.keywords.join('、') }}</span>
@@ -105,7 +108,8 @@
                 >
               </div>
             </div>
-            <div>
+            <!-- 社媒维度：平台选择 -->
+            <div v-if="dp.channel !== 'news_media'">
               <label class="text-xs text-gray-500 mb-1 block">平台</label>
               <div class="flex flex-wrap gap-2">
                 <label
@@ -123,6 +127,31 @@
                     @change="togglePlatform(i, p.code)"
                   >
                   {{ p.label }}
+                </label>
+              </div>
+            </div>
+            <!-- 新闻维度：搜索渠道说明 + 公众号开关 -->
+            <div v-else>
+              <label class="text-xs text-gray-500 mb-1 block">搜索渠道</label>
+              <div class="flex flex-wrap items-center gap-2">
+                <span
+                  v-for="ch in ['百度', '搜狗', 'DuckDuckGo']"
+                  :key="ch"
+                  class="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-xs text-gray-400"
+                >{{ ch }}</span>
+                <label
+                  class="flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer transition-colors"
+                  :class="dp.enable_wechat_mp
+                    ? 'border-primary-400 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="dp.enable_wechat_mp"
+                    class="sr-only"
+                    @change="updateDataPlanField(i, 'enable_wechat_mp', !dp.enable_wechat_mp)"
+                  >
+                  微信公众号（可选）
                 </label>
               </div>
             </div>
@@ -333,13 +362,17 @@ const keywordInputRefs = ref<Record<number, HTMLInputElement | null>>({})
 const estimatedTaskCount = computed(() => {
   return props.dataPlan.reduce((total, dp) => {
     const keywords = dp.keywords?.length || 1
+    if (dp.channel === 'news_media') {
+      // 新闻维度：每个关键词一个任务（无平台维度）
+      return total + keywords
+    }
     const platforms = dp.platforms?.length || 1
     return total + keywords * platforms
   }, 0)
 })
 
 // data_plan 编辑
-const updateDataPlanField = (index: number, field: string, value: string) => {
+const updateDataPlanField = (index: number, field: string, value: string | boolean) => {
   emit('update:dataPlan', props.dataPlan.map((dp, i) =>
     i === index ? { ...dp, [field]: value } : dp,
   ))

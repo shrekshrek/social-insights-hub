@@ -94,6 +94,8 @@ export interface DataPlanItem {
   platforms: string[]
   /** 数据渠道：social_media（默认）| news_media */
   channel?: 'social_media' | 'news_media'
+  /** 新闻维度专属：是否额外搜索微信公众号（通过搜狗微信入口） */
+  enable_wechat_mp?: boolean
   rationale?: string
 }
 

@@ -1486,6 +1486,11 @@ async def confirm_research(
             from src.news_media.tasks.schemas import NewsTaskCreate
             from src.news_media.tasks.celery_tasks import run_news_probe_task
 
+            enable_wechat_mp = dimension.get("enable_wechat_mp", False)
+            news_channels = ["baidu", "sogou", "duckduckgo"]
+            if enable_wechat_mp:
+                news_channels.append("wechat_mp")
+
             for keyword in clean_keywords:
                 try:
                     news_task = await create_news_task(
@@ -1494,7 +1499,7 @@ async def confirm_research(
                         NewsTaskCreate(
                             name=f"{dimension_name} - {keyword}",
                             keywords=keyword,
-                            search_params={"max_results": 10},
+                            search_params={"channels": news_channels},
                             auto_analyze=False,
                         ),
                         current_user_id,

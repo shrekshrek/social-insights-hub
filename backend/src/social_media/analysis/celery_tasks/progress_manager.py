@@ -334,6 +334,34 @@ class AnalysisProgressManager:
         except Exception as e:
             logger.error("最终同步失败: %s", e, exc_info=True)
 
+    def mark_failed(self, error_message: str = "") -> None:
+        """将 AnalysisJob 标记为失败（用于异常中断快速兜底）
+
+        不使用 with_for_update，避免在同进程已持有锁时死锁（软超时场景）。
+        """
+        db = SyncSessionLocal()
+        try:
+            stmt = select(AnalysisJob).where(AnalysisJob.id == self.result_id)
+            result = db.execute(stmt)
+            analysis_job = result.scalar_one_or_none()
+            if analysis_job and analysis_job.status == "processing":
+                analysis_job.status = "failed"
+                analysis_job.completed_at = datetime.now(timezone.utc)
+                analysis_job.error_message = (error_message[:500] if error_message else "任务异常中断")
+                db.commit()
+                logger.info("AnalysisJob %s 已标记为失败: %s", self.result_id, error_message)
+            else:
+                logger.debug(
+                    "AnalysisJob %s 状态为 %s，跳过失败标记",
+                    self.result_id,
+                    analysis_job.status if analysis_job else "不存在",
+                )
+        except Exception as e:
+            logger.error("标记 AnalysisJob 失败时出错: %s", e)
+            db.rollback()
+        finally:
+            db.close()
+
     def _fallback_increment_analyzed(self, token_stats: Dict[str, Any]) -> int:
         """降级方案：直接写入数据库（Redis不可用时）- 单条版本"""
         return self._fallback_increment_analyzed_batch(1, token_stats)

@@ -25,6 +25,8 @@ from src.database import SyncSessionLocal
 from src.social_media.analysis.models import PostAnalysis
 from src.social_media.analysis.schemas import PostDeepResult, CommentDeepResult
 from src.social_media.tasks.models import SocialPost, SocialComment
+from billiard.exceptions import SoftTimeLimitExceeded
+
 from src.social_media.analysis.celery_tasks.progress_manager import (
     AnalysisProgressManager,
 )
@@ -250,46 +252,65 @@ def finalize_post_deep_analysis(
 
     progress_mgr = AnalysisProgressManager(result_id)
 
-    # 1. 等待所有子任务完成（最多2小时）
-    max_wait_time = 7200  # 2小时
-    poll_interval = 5  # 每5秒检查一次
-    start_time = time.time()
-
-    while time.time() - start_time < max_wait_time:
-        current_progress = progress_mgr.get_progress()
-        completed = (
-            current_progress["analyzed_count"] + current_progress["failed_count"]
-        )
-
-        if completed >= total_count:
-            logger.info("[Finalizer] 所有子任务已完成: %s/%s", completed, total_count)
-            break
-
-        logger.info(
-            "[Finalizer] 等待子任务完成: %s/%s, 已等待 %ss",
-            completed,
-            total_count,
-            int(time.time() - start_time),
-        )
-        time.sleep(poll_interval)
-    else:
-        logger.warning("[Finalizer] 等待超时，部分任务可能未完成")
-
-    # 2. 最终同步 Redis → DB
     try:
-        progress_mgr.finalize()
-        logger.info("[Finalizer] 进度已同步到数据库")
-    except Exception as e:
-        logger.error("[Finalizer] 同步进度到数据库失败: %s", e, exc_info=True)
+        # 1. 等待所有子任务完成（最多2小时）
+        max_wait_time = 7200  # 2小时
+        poll_interval = 5  # 每5秒检查一次
+        start_time = time.time()
 
-    # 3. 返回最终统计
-    final_progress = progress_mgr.get_progress()
-    return {
-        "status": "completed",
-        "analyzed": final_progress["analyzed_count"],
-        "failed": final_progress["failed_count"],
-        "total": total_count,
-    }
+        while time.time() - start_time < max_wait_time:
+            current_progress = progress_mgr.get_progress()
+            completed = (
+                current_progress["analyzed_count"] + current_progress["failed_count"]
+            )
+
+            if completed >= total_count:
+                logger.info("[Finalizer] 所有子任务已完成: %s/%s", completed, total_count)
+                break
+
+            logger.info(
+                "[Finalizer] 等待子任务完成: %s/%s, 已等待 %ss",
+                completed,
+                total_count,
+                int(time.time() - start_time),
+            )
+            time.sleep(poll_interval)
+        else:
+            # 等待 2 小时仍有子任务未完成，标记为失败而非 completed
+            logger.warning("[Finalizer] 等待超时，部分任务可能未完成，标记 AnalysisJob %s 为失败", result_id)
+            progress_mgr.mark_failed("等待子任务超时（2小时）")
+            final_progress = progress_mgr.get_progress()
+            return {
+                "status": "timeout",
+                "analyzed": final_progress["analyzed_count"],
+                "failed": final_progress["failed_count"],
+                "total": total_count,
+            }
+
+        # 2. 最终同步 Redis → DB
+        try:
+            progress_mgr.finalize()
+            logger.info("[Finalizer] 进度已同步到数据库")
+        except Exception as e:
+            logger.error("[Finalizer] 同步进度到数据库失败: %s", e, exc_info=True)
+
+        # 3. 返回最终统计
+        final_progress = progress_mgr.get_progress()
+        return {
+            "status": "completed",
+            "analyzed": final_progress["analyzed_count"],
+            "failed": final_progress["failed_count"],
+            "total": total_count,
+        }
+    except Exception as exc:
+        msg = (
+            "原文深度分析超时（Celery 软限制）"
+            if isinstance(exc, SoftTimeLimitExceeded)
+            else f"Finalizer 异常: {str(exc)[:200]}"
+        )
+        logger.warning("[Finalizer] posts 异常，标记 AnalysisJob %s 为失败: %s", result_id, msg)
+        progress_mgr.mark_failed(msg)
+        raise
 
 
 # ============================================================================
@@ -660,50 +681,69 @@ def finalize_comment_deep_analysis(
 
     progress_mgr = AnalysisProgressManager(result_id)
 
-    # 1. 等待所有子任务完成（最多2小时）
-    max_wait_time = 7200
-    poll_interval = 5
-    start_time = time.time()
+    try:
+        # 1. 等待所有子任务完成（最多2小时）
+        max_wait_time = 7200
+        poll_interval = 5
+        start_time = time.time()
 
-    while time.time() - start_time < max_wait_time:
-        current_progress = progress_mgr.get_progress()
-        completed = (
-            current_progress["analyzed_count"] + current_progress["failed_count"]
-        )
+        while time.time() - start_time < max_wait_time:
+            current_progress = progress_mgr.get_progress()
+            completed = (
+                current_progress["analyzed_count"] + current_progress["failed_count"]
+            )
 
-        if completed >= total_count:
+            if completed >= total_count:
+                logger.info(
+                    "[Finalizer] 所有评论分析子任务已完成: %s/%s",
+                    completed,
+                    total_count,
+                )
+                break
+
             logger.info(
-                "[Finalizer] 所有评论分析子任务已完成: %s/%s",
+                "[Finalizer] 等待评论分析完成: %s/%s, 已等待 %ss",
                 completed,
                 total_count,
+                int(time.time() - start_time),
             )
-            break
+            time.sleep(poll_interval)
+        else:
+            # 等待 2 小时仍有子任务未完成，标记为失败而非 completed
+            logger.warning("[Finalizer] 等待超时，部分评论分析任务可能未完成，标记 AnalysisJob %s 为失败", result_id)
+            progress_mgr.mark_failed("等待评论分析子任务超时（2小时）")
+            final_progress = progress_mgr.get_progress()
+            return {
+                "status": "timeout",
+                "analyzed": final_progress["analyzed_count"],
+                "failed": final_progress["failed_count"],
+                "total": total_count,
+            }
 
-        logger.info(
-            "[Finalizer] 等待评论分析完成: %s/%s, 已等待 %ss",
-            completed,
-            total_count,
-            int(time.time() - start_time),
+        # 2. 最终同步
+        try:
+            progress_mgr.finalize()
+            logger.info("[Finalizer] 评论分析进度已同步到数据库")
+        except Exception as e:
+            logger.error("[Finalizer] 同步评论分析进度失败: %s", e, exc_info=True)
+
+        # 3. 返回最终统计
+        final_progress = progress_mgr.get_progress()
+        return {
+            "status": "completed",
+            "analyzed": final_progress["analyzed_count"],
+            "failed": final_progress["failed_count"],
+            "total": total_count,
+        }
+    except Exception as exc:
+        msg = (
+            "评论深度分析超时（Celery 软限制）"
+            if isinstance(exc, SoftTimeLimitExceeded)
+            else f"Finalizer 异常: {str(exc)[:200]}"
         )
-        time.sleep(poll_interval)
-    else:
-        logger.warning("[Finalizer] 等待超时，部分评论分析任务可能未完成")
-
-    # 2. 最终同步
-    try:
-        progress_mgr.finalize()
-        logger.info("[Finalizer] 评论分析进度已同步到数据库")
-    except Exception as e:
-        logger.error("[Finalizer] 同步评论分析进度失败: %s", e, exc_info=True)
-
-    # 3. 返回最终统计
-    final_progress = progress_mgr.get_progress()
-    return {
-        "status": "completed",
-        "analyzed": final_progress["analyzed_count"],
-        "failed": final_progress["failed_count"],
-        "total": total_count,
-    }
+        logger.warning("[Finalizer] comments 异常，标记 AnalysisJob %s 为失败: %s", result_id, msg)
+        progress_mgr.mark_failed(msg)
+        raise
 
 
 # ============================================================================

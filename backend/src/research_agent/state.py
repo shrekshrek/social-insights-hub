@@ -40,6 +40,7 @@ class Finding(TypedDict):
     key_points: list[str]
     data_points: list[DataPoint]
     relevance_to_questions: dict[str, str]
+    question_relevance_scores: dict[str, float]  # 每题实质相关度 0.0–1.0，Analyzer LLM 打分
 
 
 class QuestionFinding(TypedDict):

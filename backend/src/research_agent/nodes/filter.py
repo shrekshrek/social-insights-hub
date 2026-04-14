@@ -23,10 +23,10 @@ _YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
 
 # 时效分层（相对当前年，运行时计算）
 _RECENCY_TIERS = [
-    (0, 1,  +0.15, "最新，高度优先"),
-    (2, 2,  +0.05, "近期"),
-    (3, 3,  -0.20, "偏旧"),
-    (4, 5,  -0.40, "过旧"),
+    (0, 1,  +0.1, "最新，高度优先"),
+    (2, 2,  +0, "近期"),
+    (3, 3,  -0.10, "偏旧"),
+    (4, 5,  -0.20, "过旧"),
 ]
 # 硬截止：超过此年限的候选在代码层直接剔除
 _HARD_CUTOFF_AGE = 5
@@ -225,7 +225,7 @@ def _build_geo_hint(query: str, questions: list[str]) -> str:
     for keywords, market_label in _GEO_KEYWORDS:
         if any(kw in combined for kw in keywords):
             return (
-                f"- 来源或内容明确涉及{market_label}的结果，相关性额外加 0.20 分；"
+                f"- 来源或内容明确涉及{market_label}的结果，相关性额外加 0.10 分；"
                 f"仅涉及其他地区（无{market_label}数据）的结果相关性减 0.10 分"
             )
     return ""

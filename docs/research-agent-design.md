@@ -152,13 +152,11 @@ src/
 
 AI 根据 brief 内容按需分配渠道——简单口碑分析可能只推荐 social_media；行业格局分析推荐全部三个。不强制全开。
 
-### ② 研究设计：data_plan + research_agent
+### ② 研究设计：data_plan（不含 research_agent）
 
-`research_design_chain` 产出 `data_plan`（social_media / news_media 维度）和独立的 `research_agent` 字段。
+`research_design_chain` 只负责社媒 / 新闻渠道的采集设计（`data_plan`、`slice_blueprint`、`output_type`），**不再输出 `research_agent` 字段**。
 
-`research_agent` 不放进 `data_plan` 数组——因为它不产出维度/关键词/平台，数据结构与采集维度不同。它是顶层独立字段，包含面向行业报告搜索的研究问题和范围。
-
-Research Agent 的 plan 节点负责将研究问题转化为搜索关键词——**分工：research_design_chain = 研究什么，plan 节点 = 怎么搜**。
+行业研究渠道由 `brief_parser_chain` 的 `channel_plan` 决定（存在 `type: "research_agent"` 条目即触发），`research_design_chain` 无需重复规划。
 
 ```json
 {
@@ -170,28 +168,14 @@ Research Agent 的 plan 节点负责将研究问题转化为搜索关键词—�
     {"dimension_name": "品牌声量", "channel": "social_media", "keywords": ["小米SU7"], "platforms": ["douyin", "weibo"]},
     {"dimension_name": "行业报道", "channel": "news_media", "keywords": ["小米汽车 行业动态"]}
   ],
-  "research_agent": {
-    "research_questions": [
-      "中国新能源汽车 2024-2025 市场份额格局如何？头部玩家排名？",
-      "新能源汽车消费者购买决策的关键因素有哪些变化？",
-      "小米 SU7 所在的 20-30 万价格带竞争态势？"
-    ],
-    "research_scope": {
-      "industry": "新能源汽车",
-      "geography": "中国",
-      "time_range": "2024-2025"
-    },
-    "focus_domains": ["deloitte.com", "mckinsey.com", "kpmg.com"]
-  },
   "slice_blueprint": [...],
   "primary_sources": ["social_media", "news_media"],
   "output_type": "brand_strategy"
 }
 ```
 
-- `primary_sources` 仍然只含 `social_media` / `news_media`（决定产出路径），research_agent 不影响路径选择
-- 用户在 ResearchPlanEditor 中可编辑 research_questions、scope、domains，或整体关闭 research_agent
-- 若 brief_parser 未推荐 research_agent，research_design 不输出 `research_agent` 字段
+- `primary_sources` 只含 `social_media` / `news_media`（决定产出路径），research_agent 不影响路径选择
+- 若 brief_parser 未推荐 research_agent，confirm-research 不创建 ResearchTask
 
 ### ③ confirm-research：按 plan 条件创建
 
@@ -199,7 +183,7 @@ Research Agent 的 plan 节点负责将研究问题转化为搜索关键词—�
 confirm-research:
   有 social_media 维度 → 创建 SocialMonitor + probe 任务（等爬虫）
   有 news_media 维度   → 创建 NewsMonitor + probe 任务（Celery 搜索）
-  有 research_agent    → 创建 ResearchTask（Celery 立即启动 LangGraph）
+  channel_plan 含 research_agent → 创建 ResearchTask（Celery 立即启动 LangGraph）
 ```
 
 Research Agent **不是每次都创建**——只有 research_design 中包含 `research_agent` 字段时才创建。
@@ -242,7 +226,7 @@ research: research_agent → {research_findings}（第三视角，与 primary �
 START → plan → search → filter → synthesize → END
 ```
 
-plan 节点即使在 Phase 1 也使用 LLM——用户输入可能是随意的自然语言，需要 LLM 梳理确认研究范围，生成结构化搜索计划。策略模式下 research_questions 由 research_design_chain 产出，plan 节点将其转化为搜索关键词。
+plan 节点即使在 Phase 1 也使用 LLM——用户输入可能是随意的自然语言，需要 LLM 梳理确认研究范围，生成结构化搜索计划。策略模式下 query = channel_brief（research_agent 渠道专属描述），Planner 自行生成 research_questions、关键词和目标域名。
 
 ### Phase 2 线性图（全文分析）
 
@@ -567,24 +551,24 @@ Research Agent 与 news_media **互不冲突**，搜索不同层次的信息：
     {"type": "research_agent", "solvable": ["市场份额格局", "价格带竞争分析"], "channel_brief": "..."}
   ]
 
-② research_design_chain → data_plan + research_agent:
+② research_design_chain → data_plan（只含社媒/新闻）:
   data_plan:
     [{"dimension_name": "品牌声量", "channel": "social_media", "keywords": ["小米SU7"], "platforms": ["douyin", "weibo"]},
      {"dimension_name": "行业报道", "channel": "news_media", "keywords": ["小米汽车 行业"]}]
-  research_agent:
-    {"research_questions": ["中国新能源汽车市场份额格局？", "20-30万价格带竞争态势？", ...],
-     "research_scope": {"industry": "新能源汽车", "geography": "中国", "time_range": "2024-2025"},
-     "focus_domains": ["deloitte.com", "mckinsey.com", "kpmg.com"]}
+  （research_agent 字段已移除，行业研究由 channel_plan 触发，Planner 自主规划）
 
 ③ confirm-research → 三渠道条件并行：
   SocialMonitor + probe 任务（social_media 维度存在）
   NewsMonitor + probe 任务（news_media 维度存在）
-  ResearchTask（research_agent 字段存在，Celery 立即开始）
+  ResearchTask（channel_plan 含 research_agent 条目，Celery 立即开始）
+    query   = channel_brief（"聚焦新能源汽车行业竞争格局、价格带分析与市场趋势..."）
+    context = analysis_goal（整体策略背景）
 
 ④ Research Agent 执行：
 
-  plan    → LLM 基于 3 个研究问题 + scope 生成搜索关键词
-            关键词 = ["小米汽车 行业分析 2025", "新能源汽车 品牌格局 市场份额", "20万 新能源 竞争"]
+  plan    → LLM 基于 channel_brief 自行生成研究问题和搜索关键词
+            research_questions = ["中国新能源汽车市场份额格局？", "20-30万价格带竞争态势？", ...]
+            关键词 = ["新能源汽车行业报告 2025 PDF", "China NEV market share report", ...]
             目标源 = [deloitte.com, mckinsey.com, kpmg.com, ey.com]
   search  → 14 条候选（Tavily 定向搜索）
   filter  → 单次 LLM 调用，选出 5 篇最相关（标注 source_tier）
@@ -734,9 +718,9 @@ MAX_CONCURRENT_TASKS = 3
 
 | 文件 | 改动 |
 |------|------|
-| `llm/chains/strategy/brief_parser_chain.py` | channel_plan 新增 `research_agent` 渠道类型 + prompt 描述 |
-| `llm/chains/strategy/research_design_chain.py` | 新增 `research_agent` 顶层输出字段（research_questions / scope / domains） |
-| `strategies/service.py confirm_research` | 条件创建 ResearchTask（research_design 含 research_agent 时才创建） |
+| `llm/chains/strategy/brief_parser_chain.py` | channel_plan 新增 `research_agent` 渠道类型 + prompt 描述 | ✅ |
+| `llm/chains/strategy/research_design_chain.py` | 只产出社媒/新闻 data_plan，移除 research_agent 字段 | ✅ |
+| `strategies/service.py confirm_research` | 触发条件改为 channel_plan 含 research_agent，query=channel_brief，context=analysis_goal | ✅ |
 | `strategies/service.py collection-status` | 加入 ResearchTask 完成状态检查 |
 | `strategies/schemas.py` | ChannelPlanItem.type 描述更新、ConfirmResearchRequest/Response 适配 |
 | `strategies/CLAUDE.md` | 更新流程文档 |

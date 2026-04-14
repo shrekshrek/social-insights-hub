@@ -23,16 +23,50 @@ logger = logging.getLogger(__name__)
 _MAX_CANDIDATES_PER_DOMAIN = 5
 
 
+def _saturated_domains(findings: list[dict], min_count: int = 2) -> set[str]:
+    """从已分析 findings 中找出已充分采集的域名（出现 min_count 次及以上）"""
+    domain_count: dict[str, int] = {}
+    for f in findings:
+        url = f.get("source_url", "")
+        if not url:
+            continue
+        domain = urlparse(url).netloc.lower().lstrip("www.")
+        domain_count[domain] = domain_count.get(domain, 0) + 1
+    return {d for d, cnt in domain_count.items() if cnt >= min_count}
+
+
 def search_node(state: ResearchState) -> dict:
     """执行搜索，收集候选结果"""
     plan = state["search_plan"]
     keywords = plan.get("keywords", [])
     target_domains = plan.get("target_domains", [])
+    current_round = state.get("round", 1)
 
     settings = get_settings()
 
     # 域名合并：config 全局默认 + LLM 针对本次主题推荐
     all_domains = list(set(settings.RESEARCH_AGENT_TARGET_DOMAINS + target_domains))
+
+    # 第 3 轮起：从 target_domains 移除已充分采集的域名（≥2 篇已分析），
+    # 强制 Tavily 在尚未充分搜索的来源中寻找内容，避免强势域名持续垄断
+    if current_round >= 3:
+        findings = state.get("findings", [])
+        saturated = _saturated_domains(findings, min_count=2)
+        if saturated:
+            reduced = [
+                d for d in all_domains
+                if not any(
+                    d == s or d.endswith("." + s) or s.endswith("." + d)
+                    for s in saturated
+                )
+            ]
+            # 保底：至少保留 10 个域名，避免过度限制
+            if len(reduced) >= 10:
+                logger.info(
+                    "search 节点 round=%d: 移除已饱和域名 %d 个，剩余 %d 个",
+                    current_round, len(saturated), len(reduced),
+                )
+                all_domains = reduced
 
     # planner 已强制每个关键词含报告类修饰词，无需再追加变体
     provider = settings.SEARCH_PROVIDER.lower()

@@ -133,34 +133,11 @@ def run_research_task(self, research_task_id: int) -> None:
         from src.research_agent.config import MAX_ROUNDS
         from src.research_agent.graph import research_graph
 
-        # 从 search_config 构建 Planner 上下文：
-        # - "context"：独立任务传入的 Brief 背景文本
-        # - "research_scope"：策略任务的行业/地域/时间范围约束
-        # - "focus_domains"：策略 research_design_chain 推荐的权威域名
-        search_config = task.search_config or {}
-        context_parts: list[str] = []
-        if search_config.get("context"):
-            context_parts.append(search_config["context"])
-        scope = search_config.get("research_scope", {})
-        if scope and isinstance(scope, dict):
-            scope_desc = "，".join(
-                f"{k}：{v}"
-                for k, v in [
-                    ("行业", scope.get("industry")),
-                    ("地域", scope.get("geography")),
-                    ("时间范围", scope.get("time_range")),
-                ]
-                if v
-            )
-            if scope_desc:
-                context_parts.append(f"研究范围——{scope_desc}")
-        focus_domains = search_config.get("focus_domains", [])
-        if focus_domains:
-            context_parts.append(f"建议优先搜索域名：{', '.join(focus_domains)}")
-
         initial_state = {
             "query": task.analysis_goal,
-            "context": "\n".join(context_parts),
+            # context 仅用于独立任务：用户填写的 Brief 背景文本
+            # 策略任务不传 context，Planner 从 query + research_questions 自行推断搜索范围
+            "context": (task.search_config or {}).get("context", ""),
             "title": task.title or "",
             "research_questions": task.research_questions or [],
             "round": 0,

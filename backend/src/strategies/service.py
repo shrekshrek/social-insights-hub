@@ -1515,30 +1515,24 @@ async def confirm_research(
     strategy.status = "probing"
 
     # 条件创建 Research Agent 任务（仅 research_design 包含 research_agent 时）
-    ra_config = research_design.get("research_agent")
-    if ra_config and isinstance(ra_config, dict) and ra_config.get("research_questions"):
+    brief = strategy.brand_brief or {}
+    ra_channel_brief = _extract_channel_brief(brief, "research_agent")
+    if ra_channel_brief:
         try:
             from src.research_agent.service import create_research_task
 
-            brief = strategy.brand_brief or {}
             research_title = brief.get("subject", "") or "行业研究"
-            # query = 完整 brief 内容（analysis_goal + constraints）
-            research_query_parts = []
-            if brief.get("analysis_goal"):
-                research_query_parts.append(brief["analysis_goal"])
-            if brief.get("constraints"):
-                research_query_parts.append(f"补充说明：{brief['constraints']}")
-            research_query = "\n".join(research_query_parts) or research_title
+            # query = channel_brief（research_agent 渠道专属定制描述，Planner 的主锚点）
+            # context = analysis_goal（整体策略背景，replan 各轮持续参考）
+            analysis_goal = brief.get("analysis_goal", "")
+            search_config = {"context": analysis_goal} if analysis_goal else {}
+            # research_questions 不传：Planner 从 channel_brief 自行生成搜索优化的问题
             await create_research_task(
                 db,
                 user_id=current_user_id,
-                analysis_goal=research_query,
+                analysis_goal=ra_channel_brief,
                 title=research_title,
-                research_questions=ra_config["research_questions"],
-                search_config={
-                    "research_scope": ra_config.get("research_scope", {}),
-                    "focus_domains": ra_config.get("focus_domains", []),
-                },
+                search_config=search_config,
                 strategy_id=strategy.id,
             )
             logger.info("策略 %d: 创建 Research Agent 任务", strategy.id)

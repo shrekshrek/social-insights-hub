@@ -96,7 +96,7 @@ _SERVICE_PAGE_PATTERNS = [
 ]
 
 # 单域名在 selected 中最多占用的槽位数（防止一家来源垄断结果）
-_MAX_SLOTS_PER_DOMAIN = 2
+_MAX_SLOTS_PER_DOMAIN = 3
 
 # 已知自动抓取失败的域名（服务端封堵，全文通常为空）
 # 数据来源：实测 findings.key_points chars=0，无论 Crawl4AI 还是 httpx 均失败

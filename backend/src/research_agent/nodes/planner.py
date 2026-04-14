@@ -200,12 +200,13 @@ def plan_node(state: ResearchState) -> dict:
         "round": state.get("round", 0) + 1,
     }
 
-    # 第 1 轮：写回生成的标题和研究问题（仅在状态中没有研究问题时补全）
+    # 第 1 轮：写回生成的标题和研究问题（仅在状态中没有对应字段时补全）
     if current_round == 0:
-        generated_title = plan.get("title", "")
-        if generated_title:
-            result["title"] = generated_title
-            logger.info("plan 节点生成标题: %s", generated_title)
+        if not state.get("title"):
+            generated_title = plan.get("title", "")
+            if generated_title:
+                result["title"] = generated_title
+                logger.info("plan 节点生成标题: %s", generated_title)
         if not questions:
             generated_questions = plan.get("research_questions", [])
             if generated_questions:

@@ -49,6 +49,8 @@ SINGLE_TASK_SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估�
 **suggested_keyword 是提交给平台的单一搜索查询**（可包含空格），禁止用 `|` 拼接多个备选查询。
 如果 fail 的原因是「该平台本身不适合此类研究」，可将 suggested_keyword 设为 null，表示建议直接移除。
 
+**竞品维度的平台对称保护**：若当前 fail 任务属于竞品维度（competitive），且其所在平台同时被主品维度（brand_voice）使用，应优先尝试换词（调整 suggested_keyword）而非建议移除该平台（suggested_keyword=null）。主品和竞品在相同平台采集是横向对比的基础，轻易移除竞品在某平台的任务会破坏数据对称性，导致后续对比结论失真。只有在确认该平台对竞品研究完全无效（无论如何换词都无法召回相关内容）时，才允许建议移除。
+
 各平台替换词格式参考：
 - 知乎：加"怎么样/如何评价"等评价词能精准命中问题标题，纯品牌名召回较泛
 - 微博：品牌名 + 口碑类词（口碑/评价/怎么样）效果好；纯品牌名噪音大
@@ -99,11 +101,27 @@ def format_single_task_probe_review_inputs(
 
     rq_by_id = {rq.get("id"): rq for rq in all_rqs}
     dim_to_rqs: dict[str, list[dict]] = {}
+    # dim_name → dimension type（brand_voice / competitive / ...）
+    dim_to_type: dict[str, str] = {}
     for dp in data_plan:
         dim_name = dp.get("dimension_name", "")
         q_ids = dp.get("question_ids") or []
         if dim_name and q_ids:
-            dim_to_rqs[dim_name] = [rq_by_id[qid] for qid in q_ids if qid in rq_by_id]
+            rqs = [rq_by_id[qid] for qid in q_ids if qid in rq_by_id]
+            dim_to_rqs[dim_name] = rqs
+            # 取第一个 research_question 的 dimension 类型代表该维度
+            if rqs:
+                dim_to_type[dim_name] = rqs[0].get("dimension", "")
+
+    # brand_voice 维度的平台集合（供竞品对称保护判断）
+    brand_voice_platforms: list[str] = []
+    for dp in data_plan:
+        dp_type = dim_to_type.get(dp.get("dimension_name", ""), "")
+        if dp_type == "brand_voice" and dp.get("channel", "social_media") == "social_media":
+            brand_voice_platforms.extend(dp.get("platforms") or [])
+    # 去重保序
+    seen: set[str] = set()
+    brand_voice_platforms = [p for p in brand_voice_platforms if not (p in seen or seen.add(p))]  # type: ignore[func-returns-value]
 
     lines = ["## 研究背景"]
     if brief:
@@ -118,12 +136,19 @@ def format_single_task_probe_review_inputs(
     research_design_section = "\n".join(lines)
 
     dim_name = task_dim_map.get(str(task["task_id"]), "")
+    current_dim_type = dim_to_type.get(dim_name, "")
     task_lines = ["## 待判定任务"]
     task_lines.append(f"\n### 任务 #{task['task_id']}")
     task_lines.append(
         f"关键词: {task.get('keyword', '')} | 平台: {task.get('platform', '')}"
         + (f" | 维度: {dim_name}" if dim_name else "")
     )
+    # 竞品维度时注入主品平台，供对称保护判断
+    if current_dim_type == "competitive" and brand_voice_platforms:
+        task_lines.append(
+            f"⚠️ 竞品对称保护：主品维度（brand_voice）采集平台为 {', '.join(brand_voice_platforms)}。"
+            f"当前平台 {task.get('platform', '')} {'已被主品维度使用，建议换词而非移除' if task.get('platform', '') in brand_voice_platforms else '未被主品维度使用，可视情况移除'}。"
+        )
 
     rqs_for_dim = dim_to_rqs.get(dim_name) if dim_name else None
     if rqs_for_dim:

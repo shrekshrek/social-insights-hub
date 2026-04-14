@@ -85,10 +85,10 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   },
   "/research-agent/create": { permission: PERMISSIONS.RESEARCH_AGENT_WRITE },
   "/research-agent/[id]": { permission: PERMISSIONS.RESEARCH_AGENT_READ },
-  // AI 任务模块（跨渠道 AnalysisJob）
+  // AI 统计模块（跨渠道 AnalysisJob）
   "/jobs": {
     permission: null,
-    label: "AI 任务",
+    label: "AI 统计",
     showInNav: true,
     order: 70,
   },

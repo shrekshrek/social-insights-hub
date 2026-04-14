@@ -119,6 +119,26 @@ _FETCH_BLOCKED_DOMAINS = {
 _FETCH_BLOCKED_PENALTY = 0.20
 
 
+def _token_record(response) -> dict:
+    """从 LLM 响应中提取 token 用量（最小结构，供 state 累积）"""
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        um = response.usage_metadata
+        return {
+            "input_tokens": um.get("input_tokens", 0),
+            "output_tokens": um.get("output_tokens", 0),
+            "total_tokens": um.get("total_tokens", 0),
+        }
+    return {}
+
+# 跨轮次域名饱和度惩罚：同一域名在历史 findings 中出现越多，本轮新条目扣分越重
+# 目的：引导 filter 在后续轮次优先选择尚未深度挖掘的来源
+_DOMAIN_SATURATION_PENALTIES: list[tuple[int, float]] = [
+    (3, 0.25),   # ≥3 篇 findings → -0.25
+    (2, 0.15),   # ≥2 篇 findings → -0.15
+    (1, 0.05),   # ≥1 篇 findings → -0.05（轻微，保留高质量二次引用的可能）
+]
+
+
 def _is_fetch_blocked(url: str) -> bool:
     """判断 URL 是否属于已知抓取失败域名"""
     netloc = urlparse(url).netloc.lower().lstrip("www.")
@@ -333,18 +353,35 @@ def filter_node(state: ResearchState) -> dict:
             MAX_CANDIDATES_PER_ROUND,
             response.content[:200],
         )
-        return {"selected": candidates[:MAX_CANDIDATES_PER_ROUND]}
+        return {
+            "selected": candidates[:MAX_CANDIDATES_PER_ROUND],
+            "token_usage_records": [_token_record(response)],
+        }
 
     # 按 LLM 打分重建候选列表（取全部打过分的条目，后续再截取 top N）
+    # 统计历史 findings 中各域名已有篇数（用于跨轮次饱和度惩罚）
+    domain_finding_count: dict[str, int] = {}
+    for f in state.get("findings", []):
+        d = urlparse(f.get("source_url", "")).netloc.lstrip("www.")
+        if d:
+            domain_finding_count[d] = domain_finding_count.get(d, 0) + 1
+
     scored_candidates = []
     for item in scored:
         idx = item.get("index", -1)
         if 0 <= idx < len(candidates):
             score = float(item.get("score", 0.0))
             candidate = candidates[idx]
-            # 代码层惩罚：已知抓取失败域名扣分，让可访问来源优先
+            # 代码层惩罚①：已知抓取失败域名扣分，让可访问来源优先
             if _is_fetch_blocked(candidate.get("url", "")):
                 score = max(0.0, score - _FETCH_BLOCKED_PENALTY)
+            # 代码层惩罚②：跨轮次域名饱和度——已有 findings 越多扣分越重
+            domain = urlparse(candidate.get("url", "")).netloc.lstrip("www.")
+            finding_count = domain_finding_count.get(domain, 0)
+            for threshold, penalty in _DOMAIN_SATURATION_PENALTIES:
+                if finding_count >= threshold:
+                    score = max(0.0, score - penalty)
+                    break
             scored_candidates.append({
                 **candidate,
                 "relevance_score": score,
@@ -375,4 +412,4 @@ def filter_node(state: ResearchState) -> dict:
             logger.info("filter 节点: 跨轮去重 %d 条已处理 URL", deduped)
 
     logger.info("filter 节点: %d → %d 条", len(candidates), len(selected))
-    return {"selected": selected}
+    return {"selected": selected, "token_usage_records": [_token_record(response)]}

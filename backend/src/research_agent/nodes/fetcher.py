@@ -13,7 +13,7 @@ from urllib.parse import urljoin
 import httpx
 
 from src.config import get_settings
-from src.research_agent.config import FETCH_TIMEOUT
+from src.research_agent.config import FETCH_HTML_TIMEOUT, FETCH_PDF_TIMEOUT
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
@@ -37,32 +37,16 @@ def fetch_node(state: ResearchState) -> dict:
 
     # 报告研究模式：允许更长内容截断，充分利用报告全文
     max_content_len = 60000
-    pdf_timeout = FETCH_TIMEOUT
+    pdf_timeout = FETCH_PDF_TIMEOUT
 
     documents = []
     for candidate in selected:
         url = candidate["url"]
         content_type = candidate.get("content_type", "html")
 
-        # 已知封堵域名的 PDF：直接跳过，避免等待 45s 超时
-        # (filter 层已降分，此处作为最后兜底，省掉无谓的网络等待)
         from src.research_agent.nodes.filter import _is_fetch_blocked
-        if content_type == "pdf" and _is_fetch_blocked(url):
-            logger.info("跳过已知封堵域名 PDF，降级 snippet: %s", url)
-            snippet = candidate.get("snippet", "")
-            if snippet:
-                documents.append({
-                    "url": url,
-                    "title": candidate["title"],
-                    "content": snippet,
-                    "source": candidate.get("source", ""),
-                    "content_type": "snippet",
-                    "page_count": None,
-                    "published_date": candidate.get("published_date", ""),
-                })
-            continue
 
-        # Exa 搜索已返回全文，直接使用，跳过网络请求
+        # Exa 搜索已返回全文，直接使用（优先级最高，不受封堵名单影响）
         prefetched = candidate.get("full_text", "").strip()
         if prefetched:
             documents.append({
@@ -74,6 +58,23 @@ def fetch_node(state: ResearchState) -> dict:
                 "page_count": None,
                 "published_date": candidate.get("published_date", ""),
             })
+            continue
+
+        # 已知封堵域名：直接降级 snippet，省掉 Crawl4AI + httpx / PDF 下载的无谓等待
+        # (filter 层已降分；HTML 页面均为 JS SPA，Crawl4AI 和 httpx 均无法渲染)
+        if _is_fetch_blocked(url):
+            logger.info("跳过已知封堵域名，降级 snippet: %s", url)
+            snippet = candidate.get("snippet", "")
+            if snippet:
+                documents.append({
+                    "url": url,
+                    "title": candidate["title"],
+                    "content": snippet,
+                    "source": candidate.get("source", ""),
+                    "content_type": "snippet",
+                    "page_count": None,
+                    "published_date": candidate.get("published_date", ""),
+                })
             continue
 
         try:
@@ -169,7 +170,7 @@ def _crawl4ai_fetch(url: str) -> str | None:
         "crawler_config": {
             "cache_mode": "bypass",
             "scan_full_page": True,
-            "page_timeout": FETCH_TIMEOUT * 1000,
+            "page_timeout": FETCH_HTML_TIMEOUT * 1000,
             "headers": {"User-Agent": _CRAWLER_UA},
         },
     }
@@ -179,7 +180,7 @@ def _crawl4ai_fetch(url: str) -> str | None:
         headers["Authorization"] = f"Bearer {settings.CRAWL4AI_TOKEN}"
 
     try:
-        with httpx.Client(timeout=FETCH_TIMEOUT + 15) as client:
+        with httpx.Client(timeout=FETCH_HTML_TIMEOUT + 15) as client:
             resp = client.post(
                 f"{base_url}/crawl",
                 json=payload,
@@ -261,7 +262,7 @@ def _extract_and_fetch_pdf(text: str, base_url: str, timeout: int) -> str | None
     return None
 
 
-def _fetch_pdf(url: str, timeout: int = FETCH_TIMEOUT) -> str | None:
+def _fetch_pdf(url: str, timeout: int = FETCH_PDF_TIMEOUT) -> str | None:
     """下载 PDF 并提取文本
 
     网络错误（DNS / 连接失败）时重试一次；4xx/5xx 不重试（主动拦截无意义）。

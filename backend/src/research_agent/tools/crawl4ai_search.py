@@ -11,7 +11,7 @@ from urllib.parse import quote_plus, urlparse
 import httpx
 
 from src.config import get_settings
-from src.research_agent.config import FETCH_TIMEOUT
+from src.research_agent.config import FETCH_HTML_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def _search_via_engine(query: str, search_url: str, max_results: int) -> list[di
         "crawler_config": {
             "cache_mode": "bypass",
             "scan_full_page": True,
-            "page_timeout": FETCH_TIMEOUT * 1000,
+            "page_timeout": FETCH_HTML_TIMEOUT * 1000,
         },
     }
     headers: dict[str, str] = {}
@@ -88,7 +88,7 @@ def _search_via_engine(query: str, search_url: str, max_results: int) -> list[di
         headers["Authorization"] = f"Bearer {settings.CRAWL4AI_TOKEN}"
 
     try:
-        with httpx.Client(timeout=FETCH_TIMEOUT + 15) as client:
+        with httpx.Client(timeout=FETCH_HTML_TIMEOUT + 15) as client:
             resp = client.post(f"{base_url}/crawl", json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()

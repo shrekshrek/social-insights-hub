@@ -45,6 +45,7 @@ export interface TokenUsageStats {
  * - 策略 market_report 路径: strategy_agenda_map / strategy_landscape / strategy_strategic_brief
  * - 策略共享: strategy_social_probe_review, strategy_news_probe_review, strategy_coverage_check
  * - 新闻: news_tagging, news_insight
+ * - 专题研究: research
  */
 export type AnalysisType =
   | "screening_posts"
@@ -64,7 +65,8 @@ export type AnalysisType =
   | "strategy_landscape"
   | "strategy_strategic_brief"
   | "news_tagging"
-  | "news_insight";
+  | "news_insight"
+  | "research";
 
 export type AnalysisStatus = "pending" | "processing" | "completed" | "failed";
 

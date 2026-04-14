@@ -18,6 +18,18 @@ from src.research_agent.state import ResearchState
 logger = logging.getLogger(__name__)
 
 
+def _token_record(response) -> dict:
+    """从 LLM 响应中提取 token 用量（最小结构，供 state 累积）"""
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        um = response.usage_metadata
+        return {
+            "input_tokens": um.get("input_tokens", 0),
+            "output_tokens": um.get("output_tokens", 0),
+            "total_tokens": um.get("total_tokens", 0),
+        }
+    return {}
+
+
 def synthesize_node(state: ResearchState) -> dict:
     """综合分析所有搜索结果，输出结构化研究结果"""
     selected = state.get("selected", [])
@@ -101,6 +113,7 @@ def synthesize_node(state: ResearchState) -> dict:
         ]
     )
 
+    token_rec = _token_record(response)
     # 解析 LLM 结构化输出
     result = _parse_synthesis_response(response.content, questions, selected)
 
@@ -110,7 +123,7 @@ def synthesize_node(state: ResearchState) -> dict:
         len(questions),
         len(result.get("synthesis", "")),
     )
-    return result
+    return {**result, "token_usage_records": [token_rec] if token_rec else []}
 
 
 def _normalize_gaps(gaps: list) -> list[str]:

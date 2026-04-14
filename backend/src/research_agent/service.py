@@ -39,7 +39,7 @@ async def preview_research_plan(
     """调用 planner LLM 生成研究计划预览，不创建任务"""
     from src.research_agent.nodes.planner import call_planner_llm
 
-    plan = await asyncio.to_thread(
+    plan, _ = await asyncio.to_thread(
         call_planner_llm,
         analysis_goal,
         brief or "",
@@ -159,12 +159,19 @@ async def delete_research_task(db: AsyncSession, task_id: int) -> bool:
     if not task:
         return False
 
-    # 尝试 revoke 正在运行的 Celery 任务
+    # 尝试 revoke 正在运行的 Celery 任务，并主动 fail 对应的 AnalysisJob
     if task.job_id and task.status in ("pending", "running"):
         job = await db.get(AnalysisJob, task.job_id)
-        if job and job.celery_task_id:
-            celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
-            logger.info("revoked celery task %s for ResearchTask %d", job.celery_task_id, task_id)
+        if job:
+            if job.celery_task_id:
+                celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
+                logger.info("revoked celery task %s for ResearchTask %d", job.celery_task_id, task_id)
+            # 主动标记 AnalysisJob 为失败，避免 revoke 竞态时 job 永远停在 processing
+            if job.status in ("pending", "processing"):
+                from datetime import datetime, timezone
+                job.status = "failed"
+                job.error_message = "研究任务已被删除"
+                job.completed_at = datetime.now(timezone.utc)
 
     await db.delete(task)
     await db.commit()

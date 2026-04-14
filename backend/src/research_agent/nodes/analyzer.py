@@ -21,6 +21,18 @@ from src.research_agent.state import ResearchState
 logger = logging.getLogger(__name__)
 
 
+def _token_record(response) -> dict:
+    """从 LLM 响应中提取 token 用量（最小结构，供 state 累积）"""
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        um = response.usage_metadata
+        return {
+            "input_tokens": um.get("input_tokens", 0),
+            "output_tokens": um.get("output_tokens", 0),
+            "total_tokens": um.get("total_tokens", 0),
+        }
+    return {}
+
+
 def analyze_node(state: ResearchState) -> dict:
     """逐文档深度分析，产出结构化 findings"""
     documents = state.get("documents", [])
@@ -65,6 +77,7 @@ def analyze_node(state: ResearchState) -> dict:
                 "key_points": [doc["content"][:300]],
                 "data_points": [],
                 "relevance_to_questions": {},
+                "_token_usage": {},  # 无 LLM 调用，无 token 消耗
             }
 
         max_excerpt = 16000
@@ -77,6 +90,7 @@ def analyze_node(state: ResearchState) -> dict:
             f"文档内容（截取）：\n{content_excerpt}"
         )
 
+        token_rec = {}
         try:
             response = llm.invoke(
                 [
@@ -84,6 +98,7 @@ def analyze_node(state: ResearchState) -> dict:
                     HumanMessage(content=user_content),
                 ]
             )
+            token_rec = _token_record(response)
             parsed = _parse_analyze_response(response.content)
         except SoftTimeLimitExceeded:
             raise  # 软超时必须向上传播，让任务层更新 DB 状态
@@ -103,6 +118,7 @@ def analyze_node(state: ResearchState) -> dict:
             "key_points": parsed.get("key_points", []),
             "data_points": parsed.get("data_points", []),
             "relevance_to_questions": parsed.get("relevance_to_questions", {}),
+            "_token_usage": token_rec,
         }
 
     # 并发分析（gevent.pool.Pool）：
@@ -111,14 +127,17 @@ def analyze_node(state: ResearchState) -> dict:
     # - LLM 调用本质是 HTTP I/O，greenlet 完全够用，无需 OS 线程
     from gevent.pool import Pool as GeventPool
     pool = GeventPool(MAX_CONCURRENT_TASKS)
-    findings = list(pool.map(_analyze_doc, documents))
+    raw_findings = list(pool.map(_analyze_doc, documents))
+
+    # 分离 token 用量（_token_usage 是内部 key，不写入正式 Finding）
+    token_records = [f.pop("_token_usage", {}) for f in raw_findings]
 
     logger.info(
         "analyze 节点: %d 篇文档, %d 个数据点",
-        len(documents),
-        sum(len(f.get("data_points", [])) for f in findings),
+        len(raw_findings),
+        sum(len(f.get("data_points", [])) for f in raw_findings),
     )
-    return {"findings": findings}
+    return {"findings": raw_findings, "token_usage_records": token_records}
 
 
 def _parse_analyze_response(content: str) -> dict:

@@ -64,16 +64,28 @@ target_domains 要求：
 只输出 JSON，不要其他内容。"""
 
 
+def _token_record(response) -> dict:
+    """从 LLM 响应中提取 token 用量（最小结构，供 state 累积）"""
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        um = response.usage_metadata
+        return {
+            "input_tokens": um.get("input_tokens", 0),
+            "output_tokens": um.get("output_tokens", 0),
+            "total_tokens": um.get("total_tokens", 0),
+        }
+    return {}
+
+
 def call_planner_llm(
     query: str,
     context: str = "",
     research_questions: list[str] | None = None,
-) -> dict:
-    """调用 planner LLM，返回结构化研究计划（同步，可复用于 preview 接口）
+) -> tuple[dict, dict]:
+    """调用 planner LLM，返回 (结构化研究计划, token_record)（同步，可复用于 preview 接口）
 
     Returns
     -------
-    dict : 包含 title / description / research_questions / keywords / target_domains / search_angles
+    tuple[dict, dict] : (plan_dict, token_record)
     """
     profile = get_profile()
     system_prompt = PLAN_SYSTEM_TEMPLATE.format(planner_context=profile.planner_context)
@@ -99,6 +111,7 @@ def call_planner_llm(
             HumanMessage(content=user_content),
         ]
     )
+    token_rec = _token_record(response)
 
     try:
         content = response.content.strip()
@@ -107,7 +120,7 @@ def call_planner_llm(
             if content.startswith("json"):
                 content = content[4:]
             content = content.strip()
-        return json.loads(content)
+        return json.loads(content), token_rec
     except (json.JSONDecodeError, IndexError):
         logger.warning("planner LLM 输出解析失败，使用回退方案: %s", response.content[:200])
         return {
@@ -117,11 +130,15 @@ def call_planner_llm(
             "target_domains": [],
             "search_angles": [],
             "research_questions": [],
-        }
+        }, token_rec
 
 
-def _build_tried_domains(findings: list[dict]) -> list[str]:
-    """从历史 findings 中提取已尝试过的域名（去重，最多返回15个）"""
+def _build_tried_domains(findings: list[dict], selected: list[dict] | None = None) -> list[str]:
+    """从历史 findings + 上轮 selected 中提取已尝试过的域名（去重，最多返回15个）
+
+    selected 补充 findings 的覆盖盲区：fetch 完全失败且无 snippet 的来源不会生成
+    finding，但其域名仍应纳入"已尝试"名单，避免 planner 重复推荐。
+    """
     from urllib.parse import urlparse
     seen: dict[str, int] = {}
     for f in findings:
@@ -130,6 +147,14 @@ def _build_tried_domains(findings: list[dict]) -> list[str]:
             continue
         domain = urlparse(url).netloc.lstrip("www.")
         seen[domain] = seen.get(domain, 0) + 1
+    # 补充 selected 中尚未出现在 findings 的域名（计入 1 次，不影响已有计数）
+    for s in (selected or []):
+        url = s.get("url", "")
+        if not url:
+            continue
+        domain = urlparse(url).netloc.lstrip("www.")
+        if domain not in seen:
+            seen[domain] = 1
     # 按出现次数降序，返回最多15个
     return [d for d, _ in sorted(seen.items(), key=lambda x: -x[1])[:15]]
 
@@ -154,7 +179,7 @@ def plan_node(state: ResearchState) -> dict:
         covered_count = len(evaluation.get("questions_covered", []))
         total_count = len(questions)
         findings = state.get("findings", [])
-        tried_domains = _build_tried_domains(findings)
+        tried_domains = _build_tried_domains(findings, state.get("selected", []))
 
         suffix_parts: list[str] = []
 
@@ -185,7 +210,7 @@ def plan_node(state: ResearchState) -> dict:
         if suffix_parts:
             extra_context = (context + "\n\n" + "\n\n".join(suffix_parts)).strip()
 
-    plan = call_planner_llm(
+    plan, token_rec = call_planner_llm(
         query=query,
         context=extra_context,
         research_questions=questions or None,
@@ -198,6 +223,7 @@ def plan_node(state: ResearchState) -> dict:
             "search_angles": plan.get("search_angles", []),
         },
         "round": state.get("round", 0) + 1,
+        "token_usage_records": [token_rec] if token_rec else [],
     }
 
     # 第 1 轮：写回生成的标题和研究问题（仅在状态中没有对应字段时补全）

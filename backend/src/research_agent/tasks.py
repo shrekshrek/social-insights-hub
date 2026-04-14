@@ -120,7 +120,11 @@ def run_research_task(self, research_task_id: int) -> None:
             analysis_type="research",
             source_count=0,
             celery_task_id=self.request.id or "",
-            analysis_config=task.search_config,
+            analysis_config={
+                **(task.search_config or {}),
+                "research_task_id": research_task_id,
+                "research_task_title": task.title or task.analysis_goal,
+            },
         )
         task.job_id = job.id
         task.status = "running"
@@ -160,6 +164,13 @@ def run_research_task(self, research_task_id: int) -> None:
             # 每步开始前确认任务未被删除
             if not db.get(ResearchTask, research_task_id):
                 logger.info("ResearchTask %d was deleted, aborting stream", research_task_id)
+                # AnalysisJob 也需要终止，否则会永远停留在 processing 状态
+                db.refresh(job)
+                if job.status in ("pending", "processing"):
+                    complete_analysis_job_sync(
+                        db=db, job=job, error_message="研究任务已被删除"
+                    )
+                    db.commit()
                 return
 
             node_name = list(step.keys())[0]
@@ -250,7 +261,39 @@ def run_research_task(self, research_task_id: int) -> None:
         }
         task.status = "completed"
 
-        complete_analysis_job_sync(db=db, job=job, analyzed_count=len(sources))
+        # 汇总所有节点的 token 用量
+        token_records = result_state.get("token_usage_records", [])
+        total_input = sum(r.get("input_tokens", 0) for r in token_records)
+        total_output = sum(r.get("output_tokens", 0) for r in token_records)
+        total_tokens = sum(r.get("total_tokens", 0) for r in token_records)
+        total_calls = sum(1 for r in token_records if r.get("total_tokens", 0) > 0)
+        from src.config import settings as _settings
+        cost = (
+            total_input * _settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION / 1_000_000
+            + total_output * _settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION / 1_000_000
+        )
+        token_usage = {
+            "summary": {
+                "total_calls": total_calls,
+                "total_input_tokens": total_input,
+                "total_output_tokens": total_output,
+                "total_tokens": total_tokens,
+                "total_cost_cny": round(cost, 6),
+                "total_duration_seconds": 0.0,
+                "avg_tokens_per_call": round(total_tokens / total_calls, 1) if total_calls else 0.0,
+                "avg_cost_per_call": round(cost / total_calls, 6) if total_calls else 0.0,
+            },
+            "call_details": [],
+        }
+
+        # source_count 同步为实际来源数，使 X/X 进度显示正确
+        job.source_count = len(sources)
+        complete_analysis_job_sync(
+            db=db,
+            job=job,
+            analyzed_count=len(sources),
+            token_usage=token_usage,
+        )
         db.commit()
 
         logger.info(

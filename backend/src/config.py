@@ -206,67 +206,23 @@ class Settings(BaseSettings):
     )
     RESEARCH_AGENT_TARGET_DOMAINS: list[str] = Field(
         default=[
-            # 四大 + 综合咨询
-            "mckinsey.com.cn",
-            "mckinsey.com",
-            "deloitte.com",
-            "pwccn.com",
-            "ey.com",
-            "kpmg.com",
-            "assets.kpmg.com",
-            "bcg.com",
-            "media-publications.bcg.com",
-            "bain.com",
-            "media.bain.com",
-            "rolandberger.com",
-            "accenture.com",
-            "oliverwyman.com",
-            "kearney.com",
-            # 中国政府/监管/智库
-            "cssn.cn",
-            "drc.gov.cn",
-            "stats.gov.cn",
-            "ndrc.gov.cn",
-            "miit.gov.cn",
-            "mofcom.gov.cn",
-            "pbc.gov.cn",
-            "csrc.gov.cn",
-            "cnnic.net.cn",
-            # 上市公司披露（含付费级行业数据）
-            "cninfo.com.cn",
-            "hkexnews.hk",
-            "sse.com.cn",
-            # 国际机构
-            "documents.worldbank.org",
-            "openknowledge.worldbank.org",
-            "imf.org",
-            "oecd.org",
-            "unctad.org",
-            "wto.org",
-            "adb.org",
-            # 中国行业研究
-            "iresearch.cn",
-            "report.iresearch.cn",
-            "questmobile.com.cn",
-            "aliresearch.com",
-            "mob.com",
-            "research.hktdc.com",
-            # 信通院/工信院
-            "caict.ac.cn",
-            "cesi.cn",
-            # 消费者/买方行为研究（免费报告）
-            "edelman.com",
-            "business.linkedin.com",
-            "datareportal.com",
-            "pewresearch.org",
-            "ourworldindata.org",
-            # 垂直媒体/深度报道
-            "36kr.com",
-            "latepost.com",
-            "caam.org.cn",
-            "ccfa.org.cn",
+            # 中国政府统计 —— 几乎所有中国市场研究都需要基础数据
+            "stats.gov.cn",       # 国家统计局
+            "ndrc.gov.cn",        # 国家发改委，产业政策/五年规划
+            # 国际数据平台 —— 跨领域通用，提供跨国对标与宏观数据
+            "oecd.org",           # 跨国行业对标与政策比较
+            "ourworldindata.org", # 开放数据，13000+ 图表
+            "pewresearch.org",    # 全球消费者/技术态度调查
+            "datareportal.com",   # 全球数字消费者年度报告
+            # 广域财经媒体 —— 覆盖面宽，适合多数商业研究主题
+            "36kr.com",           # 科技/创投/数字经济
+            "latepost.com",       # 深度商业调查报道
         ],
-        description="Default target domains for directed Tavily search (merged with LLM-recommended domains)",
+        description=(
+            "Domains always included in Tavily search regardless of topic (universal fallback). "
+            "Vertical/sector-specific domains (consulting firms, industry associations, exchanges, etc.) "
+            "are listed in profiles.py planner_context for the LLM to select topic-specifically."
+        ),
     )
 
     # ========== Agent API Configuration ==========

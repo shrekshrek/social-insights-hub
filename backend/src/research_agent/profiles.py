@@ -22,16 +22,18 @@ INDUSTRY_RESEARCH = ResearchProfile(
 
 可选的目标域名参考（不限于此，请根据主题补充更多）：
 
-综合咨询/四大：
-- mckinsey.com.cn / mckinsey.com（麦肯锡）
+综合咨询/四大（⚠️ 注意子域名：PDF 报告通常托管在子域名，需两个一起推荐才能被搜索到）：
+- mckinsey.com.cn + mckinsey.com（麦肯锡，前者中文本土化报告，后者英文全球报告）
 - deloitte.com（德勤）
-- pwccn.com（普华永道）
+- pwccn.com（普华永道中国）
 - ey.com（安永）
-- kpmg.com（毕马威）
-- bcg.com（波士顿咨询）
-- bain.com（贝恩）
+- kpmg.com + assets.kpmg.com（毕马威，assets 子域托管 PDF 报告）
+- bcg.com + media-publications.bcg.com（波士顿咨询，media-publications 子域托管出版物）
+- bain.com + media.bain.com（贝恩，media 子域托管报告）
 - rolandberger.com（罗兰贝格）
 - accenture.com（埃森哲）
+- oliverwyman.com（奥纬咨询）
+- kearney.com（科尔尼）
 
 政府/智库：
 - cssn.cn（社科院）
@@ -41,6 +43,8 @@ INDUSTRY_RESEARCH = ResearchProfile(
 - miit.gov.cn（工业和信息化部，工业/互联网/通信行业月度运行数据）
 - pbc.gov.cn（中国人民银行，货币政策/金融/支付行业数据）
 - ndrc.gov.cn（国家发展改革委，产业政策/五年规划/行业分析）
+- mofcom.gov.cn（商务部，对外贸易/外资/消费数据）
+- csrc.gov.cn（证监会，资本市场/上市公司监管数据）
 
 上市公司披露（⭐ 适用于"某行业市场规模/竞争格局"类问题，不适合买方行为/决策流程类问题）：
 - cninfo.com.cn（巨潮资讯，A股年报/招股书全库；招股书"行业概况"章节含 Frost & Sullivan、灼识等机构的付费数据，完全免费）
@@ -48,24 +52,29 @@ INDUSTRY_RESEARCH = ResearchProfile(
 - sse.com.cn（上交所公告及行业信息披露；同上，仅限行业数据类问题）
 
 行业研究（完全免费或有完整免费报告）：
-- iresearch.cn（艾瑞咨询，有完整免费版报告 PDF，含数据图表）
+- iresearch.cn + report.iresearch.cn（艾瑞咨询，report 子域托管 PDF 报告下载，需两个一起推荐）
 - questmobile.com.cn（QuestMobile，有完整免费季度报告，App/移动互联网数据）
 - aliresearch.com（阿里研究院，数字经济/电商行业报告，完全免费）
 - mob.com（Mob研究院，消费者行为/App行业免费报告）
 - research.hktdc.com（香港贸易发展局，中国各省市场+跨境贸易报告，完全免费）
 - caict.ac.cn（信通院，ICT 白皮书/行业报告，完全免费）
+- cesi.cn（中国电子标准化研究院，数字化/信息化标准与报告）
 
 注意：euromonitor、frost、grandviewresearch、mordorintelligence、analysys、askci、cbndata、qianzhan 等为高价订阅制，报告正文无法获取，请勿推荐。
 
 垂直媒体/深度报道（完全免费）：
 - 36kr.com（36氪研究院，科技/创投领域研究报告）
 - latepost.com（晚点LatePost，深度商业调查报道）
-- caam.org.cn（中国汽车工业协会，月度产销数据摘要）
-- ccfa.org.cn（中国连锁经营协会，零售行业报告）
+- caam.org.cn（中国汽车工业协会，月度产销数据摘要，仅汽车行业）
+- ccfa.org.cn（中国连锁经营协会，零售行业报告，仅零售行业）
 
 国际数据/消费者研究（完全免费）：
 - oecd.org（OECD，2024年起全面免费开放，跨国行业对标与政策比较）
 - unctad.org（联合国贸发会，全球贸易/FDI/新兴市场数据）
+- documents.worldbank.org + openknowledge.worldbank.org（世界银行，两个文档库内容不同，均可推荐）
+- imf.org（IMF，全球宏观经济/金融稳定报告）
+- wto.org（WTO，全球贸易统计与政策报告）
+- adb.org（亚开行，亚太地区发展报告）
 - datareportal.com（每年发布全球数字消费者报告，640页完全免费）
 - pewresearch.org（皮尤研究中心，全球消费者/技术态度调查，完全免费）
 - ourworldindata.org（牛津全球数据，CC-BY开放，13000+图表及原始数据）

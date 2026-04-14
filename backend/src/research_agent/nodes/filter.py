@@ -33,16 +33,18 @@ _HARD_CUTOFF_AGE = 5
 
 # 域名 → tier 映射（filter 节点自动标注，LLM 可覆盖）
 TIER1_DOMAINS = {
-    # 综合咨询/四大
-    "mckinsey.com", "mckinsey.com.cn",
+    # 综合咨询/四大（子域名由父域名 `in` 匹配自动覆盖，无需单独列出）
+    "mckinsey.com", "mckinsey.com.cn",  # 不同 TLD，均需保留
     "deloitte.com",
-    "pwccn.com", "pwc.com",
+    "pwccn.com", "pwc.com",             # 不同域名，均需保留
     "ey.com",
     "kpmg.com",
     "bcg.com",
     "bain.com",
     "rolandberger.com",
     "accenture.com",
+    "oliverwyman.com",
+    "kearney.com",
     # 中国政府/权威机构
     "cssn.cn",
     "drc.gov.cn",
@@ -52,29 +54,32 @@ TIER1_DOMAINS = {
     "mofcom.gov.cn",
     "pbc.gov.cn",
     "ndrc.gov.cn",
+    "csrc.gov.cn",
     # 上市公司披露平台（含付费级行业数据）
     "cninfo.com.cn",
     "hkexnews.hk",
     "sse.com.cn",
-    # 国际权威机构
+    # 国际权威机构（worldbank.org 覆盖 documents/openknowledge 等所有子域名）
     "oecd.org",
     "unctad.org",
+    "worldbank.org",
+    "imf.org",
+    "wto.org",
+    "adb.org",
 }
 
 TIER2_DOMAINS = {
-    # 中国行业研究机构
+    # 中国行业研究机构（子域名由父域名 `in` 匹配自动覆盖）
     "iresearch.cn",
     "questmobile.com.cn",
     "caict.ac.cn",
+    "cesi.cn",
     "aliresearch.com",
     "mob.com",
     "research.hktdc.com",
-    # 国际机构/数据平台
-    "worldbank.org",
-    "imf.org",
     # B2B 买方行为研究（发布完整免费报告）
     "edelman.com",
-    "linkedin.com",          # LinkedIn Business Intelligence B2B 研究报告
+    "linkedin.com",       # 覆盖 business.linkedin.com 等所有子域名
     "datareportal.com",
     "pewresearch.org",
     "ourworldindata.org",

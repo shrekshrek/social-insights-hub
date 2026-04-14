@@ -262,7 +262,7 @@ const NOTES_OPTIONS = [50, 100] as const
 const OUTPUT_TYPE_OPTIONS: ReadonlyArray<{ value: OutputType; hint: string }> = [
   {
     value: 'brand_strategy',
-    hint: '消费者洞察主导：Social Tension → Brand Social Role → Big Idea（要求研究计划含 social_media 维度）',
+    hint: '消费者洞察主导：社会张力 → 品牌社会角色 → 大创意（要求研究计划含 social_media 维度）',
   },
   {
     value: 'market_report',

@@ -98,6 +98,27 @@ _SERVICE_PAGE_PATTERNS = [
 # 单域名在 selected 中最多占用的槽位数（防止一家来源垄断结果）
 _MAX_SLOTS_PER_DOMAIN = 3
 
+# 已知自动抓取失败的域名（服务端封堵，全文通常为空）
+# 数据来源：实测 findings.key_points chars=0，无论 Crawl4AI 还是 httpx 均失败
+# 这些域名 LLM 打分后额外扣 0.20 分，让可抓取来源优先占槽位
+_FETCH_BLOCKED_DOMAINS = {
+    "bain.com",
+    "bcg.com",
+    "gartner.com",
+    "deloitte.com",
+    "ey.com",           # ey.com 全站；mckinsey.com.cn 可抓到部分内容，不列入
+    "mckinsey.com",     # PDF ReadTimeout 实测失败；.cn 子站单独可访问，不受影响
+}
+
+# 扣分幅度：够把"相关但抓不到"的来源排在"稍弱但可抓到"的来源后面
+_FETCH_BLOCKED_PENALTY = 0.20
+
+
+def _is_fetch_blocked(url: str) -> bool:
+    """判断 URL 是否属于已知抓取失败域名"""
+    netloc = urlparse(url).netloc.lower().lstrip("www.")
+    return any(netloc == d or netloc.endswith("." + d) for d in _FETCH_BLOCKED_DOMAINS)
+
 
 def _is_service_page(url: str) -> bool:
     """检测是否为咨询公司自有服务/营销页面（非研究报告）"""
@@ -119,6 +140,11 @@ def _apply_domain_cap(selected: list[dict], max_per_domain: int) -> list[dict]:
 
 FILTER_SYSTEM_PROMPT = """你是一个研究文献筛选专家。给定一组搜索结果和研究问题，请评估每条结果的相关性。
 
+评分原则（按优先级）：
+1. 【内容相关性】文章实质内容是否直接回答研究问题——这是评分的决定性依据
+2. 【来源权威性】权威机构来源仅在内容相关度相近时作为优先选择依据，不能替代内容相关性
+3. 【硬性上限】无论来源多权威，若文章内容与研究问题无直接关联（如咨询公司发布的无关行业报告），评分不超过 0.35
+
 对每条结果打分（0-1），选出最相关的 {max_n} 条。
 
 {strategy_hint}
@@ -126,7 +152,7 @@ FILTER_SYSTEM_PROMPT = """你是一个研究文献筛选专家。给定一组搜
 输出 JSON 数组，每个元素包含：
 - "index": 原始列表中的序号（从 0 开始）
 - "score": 相关性评分（0-1）
-- "reason": 一句话理由
+- "reason": 一句话理由（说明内容与研究问题的关联，或说明为何内容不相关）
 
 只输出 JSON 数组，按 score 降序排列，不要其他内容。"""
 
@@ -151,11 +177,10 @@ def _build_recency_hint() -> str:
 
 def _build_report_hint() -> str:
     return (
-        '评分加权规则：\n'
-        '- URL 以 .pdf 结尾或标题含"报告""白皮书""研究""report"等词的结果，相关性加 0.15 分\n'
-        '- 来源为权威咨询/研究机构的结果优先选择\n'
-        '- 普通资讯网页（非报告类）相关性应降低\n'
-        '- 候选列表中标注了"[服务介绍页，非报告]"的结果，相关性减 0.20 分\n'
+        '辅助评分规则（在内容相关性基础上叠加，不改变相关性主导地位）：\n'
+        '- URL 以 .pdf 结尾或标题含"报告""白皮书""研究""report"等词的结果，加 0.10 分\n'
+        '- 候选列表中标注了"[服务介绍页，非报告]"的结果，减 0.20 分\n'
+        '- 内容仅涉及无关行业/主题（即使来源权威），不加分，并受 0.35 上限约束\n'
         + _build_recency_hint()
     )
 
@@ -189,10 +214,16 @@ def _extract_year(text: str) -> int | None:
 
 
 def _is_too_old(candidate: dict) -> bool:
-    """判断候选是否超过硬截止年龄（> _HARD_CUTOFF_AGE 年）"""
+    """判断候选是否超过硬截止年龄（> _HARD_CUTOFF_AGE 年）
+
+    按优先级检查 URL → 标题 → snippet（snippet 通常含发布年份，
+    可捕获 URL 和标题均无年份的旧文档，如 IDC 白皮书）。
+    三者均无年份信息时保守放行（不误杀）。
+    """
     url = candidate.get("url", "")
     title = candidate.get("title", "")
-    year = _extract_year(url) or _extract_year(title)
+    snippet = candidate.get("snippet", "")
+    year = _extract_year(url) or _extract_year(title) or _extract_year(snippet)
     if year is None:
         return False
     return datetime.now().year - year > _HARD_CUTOFF_AGE
@@ -244,11 +275,12 @@ def filter_node(state: ResearchState) -> dict:
         ),
     )
 
-    # 构造候选列表文本（在 URL 后标注服务页，辅助 LLM 判断）
+    # 构造候选列表文本（标注服务页 / 已知抓取失败域名，辅助 LLM 判断）
     candidates_text = "\n".join(
         f"[{i}] {c['title']}\n"
         f"    URL: {c['url']}"
         + (" [服务介绍页，非报告]" if _is_service_page(c.get("url", "")) else "")
+        + (" [全文通常不可访问，仅有摘要]" if _is_fetch_blocked(c.get("url", "")) else "")
         + f"\n    类型: {c.get('content_type', 'html')}\n    摘要: {c['snippet'][:200]}"
         for i, c in enumerate(candidates)
     )
@@ -298,15 +330,24 @@ def filter_node(state: ResearchState) -> dict:
         )
         return {"selected": candidates[:MAX_CANDIDATES_PER_ROUND]}
 
-    # 按 LLM 打分选出 top N
-    selected = []
-    for item in scored[:MAX_CANDIDATES_PER_ROUND]:
+    # 按 LLM 打分重建候选列表（取全部打过分的条目，后续再截取 top N）
+    scored_candidates = []
+    for item in scored:
         idx = item.get("index", -1)
         if 0 <= idx < len(candidates):
-            selected.append({
-                **candidates[idx],
-                "relevance_score": item.get("score", 0.0),
+            score = float(item.get("score", 0.0))
+            candidate = candidates[idx]
+            # 代码层惩罚：已知抓取失败域名扣分，让可访问来源优先
+            if _is_fetch_blocked(candidate.get("url", "")):
+                score = max(0.0, score - _FETCH_BLOCKED_PENALTY)
+            scored_candidates.append({
+                **candidate,
+                "relevance_score": score,
             })
+
+    # 按调整后分数降序取 top N
+    scored_candidates.sort(key=lambda x: x["relevance_score"], reverse=True)
+    selected = scored_candidates[:MAX_CANDIDATES_PER_ROUND]
 
     if not selected:
         selected = candidates[:MAX_CANDIDATES_PER_ROUND]

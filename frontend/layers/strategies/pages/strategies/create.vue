@@ -107,7 +107,7 @@
           <UButton
             v-if="platformVerdict === 'insufficient'"
             to="/research-agent/create"
-            label="前往研究分析"
+            label="前往专题研究"
             icon="i-heroicons-arrow-right"
             trailing
             variant="subtle"

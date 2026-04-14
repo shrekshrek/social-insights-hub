@@ -5,7 +5,7 @@
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-          研究分析
+          专题研究
         </h1>
         <p class="text-gray-600 dark:text-gray-400 mt-1">
           Agentic 搜索分析，自动搜集行业报告并生成结构化研究结论
@@ -102,7 +102,7 @@ import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
 
 definePageMeta({ layout: 'default' })
-useHead({ title: '研究分析' })
+useHead({ title: '专题研究' })
 
 const PAGE_SIZE = 10
 

@@ -44,6 +44,24 @@ def fetch_node(state: ResearchState) -> dict:
         url = candidate["url"]
         content_type = candidate.get("content_type", "html")
 
+        # 已知封堵域名的 PDF：直接跳过，避免等待 45s 超时
+        # (filter 层已降分，此处作为最后兜底，省掉无谓的网络等待)
+        from src.research_agent.nodes.filter import _is_fetch_blocked
+        if content_type == "pdf" and _is_fetch_blocked(url):
+            logger.info("跳过已知封堵域名 PDF，降级 snippet: %s", url)
+            snippet = candidate.get("snippet", "")
+            if snippet:
+                documents.append({
+                    "url": url,
+                    "title": candidate["title"],
+                    "content": snippet,
+                    "source": candidate.get("source", ""),
+                    "content_type": "snippet",
+                    "page_count": None,
+                    "published_date": candidate.get("published_date", ""),
+                })
+            continue
+
         # Exa 搜索已返回全文，直接使用，跳过网络请求
         prefetched = candidate.get("full_text", "").strip()
         if prefetched:
@@ -182,10 +200,14 @@ def _crawl4ai_fetch(url: str) -> str | None:
 
 
 def _httpx_fetch(url: str) -> str | None:
-    """httpx 直接 GET，用于 Crawl4AI 失败时的静态页兜底"""
+    """httpx 直接 GET，用于 Crawl4AI 失败时的静态页兜底
+
+    仅对静态页有效；JS 渲染站（McKinsey、BCG 等）会超时，属预期行为。
+    超时故意设短（8s），避免对必定失败的站点白白等待。
+    """
     try:
         with httpx.Client(
-            timeout=20,
+            timeout=10,
             follow_redirects=True,
             headers={"User-Agent": _CRAWLER_UA},
         ) as client:
@@ -201,7 +223,7 @@ def _httpx_fetch(url: str) -> str | None:
             text = re.sub(r"\s+", " ", text).strip()
             return text if len(text) >= _MIN_CRAWL_CONTENT_LEN else None
     except Exception:
-        logger.warning("httpx 直接获取失败: %s", url, exc_info=True)
+        logger.debug("httpx 直接获取失败（JS站或超时，正常降级）: %s", url, exc_info=False)
         return None
 
 

@@ -10,6 +10,7 @@
 """
 
 import logging
+from urllib.parse import urlparse
 
 from src.config import get_settings
 from src.research_agent.config import MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK
@@ -17,6 +18,9 @@ from src.research_agent.nodes.filter import _extract_year
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
+
+# 单域名进入候选池的最大条数（filter 层上限为 3，此处取 1.67 倍给 filter 留选择空间）
+_MAX_CANDIDATES_PER_DOMAIN = 5
 
 
 def search_node(state: ResearchState) -> dict:
@@ -30,16 +34,20 @@ def search_node(state: ResearchState) -> dict:
     # 域名合并：config 全局默认 + LLM 针对本次主题推荐
     all_domains = list(set(settings.RESEARCH_AGENT_TARGET_DOMAINS + target_domains))
 
-    # 为不含报告类修饰词的关键词追加"报告"变体，提升报告类内容命中率
-    report_indicators = {"报告", "白皮书", "研究报告", "PDF", "report", "whitepaper"}
-    effective_keywords: list[str] = []
-    for kw in keywords:
-        effective_keywords.append(kw)
-        if not any(ind.lower() in kw.lower() for ind in report_indicators):
-            effective_keywords.append(f"{kw} 报告")
-
+    # planner 已强制每个关键词含报告类修饰词，无需再追加变体
     provider = settings.SEARCH_PROVIDER.lower()
-    all_candidates, seen_urls = _run_search(provider, effective_keywords, all_domains)
+    all_candidates, seen_urls = _run_search(provider, keywords, all_domains)
+
+    # 候选池域名限流：单域名最多 _MAX_CANDIDATES_PER_DOMAIN 条
+    # 防止 assets.kpmg.com 等高产域名霸占候选池，挤占其他来源的曝光机会
+    before_cap = len(all_candidates)
+    all_candidates = _cap_candidates_by_domain(all_candidates, _MAX_CANDIDATES_PER_DOMAIN)
+    if len(all_candidates) < before_cap:
+        logger.info(
+            "search 节点: 候选池域名限流 %d → %d 条",
+            before_cap,
+            len(all_candidates),
+        )
 
     logger.info(
         "search 节点 [%s]: %d 个关键词 → %d 条候选",
@@ -98,7 +106,9 @@ def _search_tavily(
             if url not in seen_urls:
                 seen_urls.add(url)
                 title = r["title"]
-                year = _extract_year(url) or _extract_year(title)
+                snippet = r["snippet"]
+                # snippet 通常含发布年份，作为 URL/标题都无年份时的兜底
+                year = _extract_year(url) or _extract_year(title) or _extract_year(snippet)
                 candidates.append({
                     "title": title,
                     "url": url,
@@ -149,10 +159,21 @@ def _search_exa(
     return candidates, seen_urls
 
 
+def _cap_candidates_by_domain(candidates: list[dict], max_per_domain: int) -> list[dict]:
+    """对候选池按域名限流，保留每个域名最靠前的 max_per_domain 条"""
+    domain_count: dict[str, int] = {}
+    result = []
+    for c in candidates:
+        domain = urlparse(c.get("url", "")).netloc.lstrip("www.")
+        if domain_count.get(domain, 0) < max_per_domain:
+            result.append(c)
+            domain_count[domain] = domain_count.get(domain, 0) + 1
+    return result
+
+
 def _extract_domain(url: str) -> str:
     """从 URL 提取域名"""
     try:
-        from urllib.parse import urlparse
         return urlparse(url).netloc
     except Exception:
         return ""

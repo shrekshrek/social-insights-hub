@@ -97,6 +97,7 @@ class SourceSchema(CustomBaseModel):
     source_tier: str = "tier3"
     content_type: str = "html"
     relevance_score: float = 0.0
+    published_date: str = ""
 
 
 class CoverageSchema(CustomBaseModel):

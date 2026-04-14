@@ -102,8 +102,8 @@ def _extract_detail(node_name: str, node_output: dict) -> str:
     name="research_agent.run_research",
     bind=True,
     max_retries=0,
-    time_limit=600,
-    soft_time_limit=570,
+    time_limit=1800,      # 4轮×~160s + synthesize(120s) + 余量 ≈ 900s；1800s 留足缓冲
+    soft_time_limit=1700,
 )
 def run_research_task(self, research_task_id: int) -> None:
     """执行研究任务，逐节点写入 progress"""
@@ -224,6 +224,7 @@ def run_research_task(self, research_task_id: int) -> None:
                 "source_tier": f.get("source_tier", "tier3"),
                 "content_type": meta.get("content_type", "html"),
                 "relevance_score": meta.get("relevance_score", 0.0),
+                "published_date": f.get("published_date", ""),
             })
 
         if not task.title:

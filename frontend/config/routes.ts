@@ -76,10 +76,10 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
   "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
   "/news-media/slices/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
-  // 研究分析模块
+  // 专题研究模块
   "/research-agent": {
     permission: PERMISSIONS.RESEARCH_AGENT_ACCESS,
-    label: "研究分析",
+    label: "专题研究",
     showInNav: true,
     order: 65,
   },

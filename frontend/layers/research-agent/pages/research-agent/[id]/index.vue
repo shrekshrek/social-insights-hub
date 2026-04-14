@@ -318,6 +318,7 @@
                   </UBadge>
                   <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ source.title }}</span>
                   <span class="text-xs text-gray-400 shrink-0">{{ source.source }}</span>
+                  <span v-if="source.published_date" class="text-xs text-gray-400 shrink-0">· {{ source.published_date }}</span>
                 </div>
                 <a
                   :href="source.url"
@@ -391,7 +392,7 @@ const { data: result, refresh: refreshResult } = getTaskResult(taskId)
 useHead({
   title: computed(() => {
     const displayTitle = task.value?.title || task.value?.analysis_goal
-    return displayTitle ? `${displayTitle} - 研究分析` : '研究详情'
+    return displayTitle ? `${displayTitle} - 专题研究` : '研究详情'
   }),
 })
 

@@ -79,6 +79,7 @@ export interface ResearchSource {
   source_tier: 'tier1' | 'tier2' | 'tier3'
   content_type: string
   relevance_score: number
+  published_date: string
 }
 
 export interface ResearchCoverage {

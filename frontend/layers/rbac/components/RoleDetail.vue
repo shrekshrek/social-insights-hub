@@ -61,13 +61,25 @@
 
       <!-- 权限信息 -->
       <div class="space-y-1">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">权限数量</label>
-        <div class="flex items-center gap-2">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">权限</label>
+        <div v-if="role.permission_strategy === 'all'" class="flex items-center gap-2">
+          <UBadge color="warning" variant="soft" icon="i-heroicons-shield-check">
+            自动获得全部权限
+          </UBadge>
+          <span class="text-sm text-gray-500 dark:text-gray-400">包含当前及未来新增的所有权限</span>
+        </div>
+        <div v-else-if="role.permission_strategy === 'admin'" class="flex items-center gap-2">
+          <UBadge color="warning" variant="soft" icon="i-heroicons-shield-check">
+            自动获得管理员权限
+          </UBadge>
+          <span class="text-sm text-gray-500 dark:text-gray-400">拥有所有业务权限，不含 RBAC 管理权限</span>
+        </div>
+        <div v-else class="flex items-center gap-2">
           <UBadge color="primary" variant="soft">
             {{ role.permissions?.length || 0 }} 个权限
           </UBadge>
           <span class="text-sm text-gray-500 dark:text-gray-400">
-            {{ role.permissions?.length ? '点击"编辑权限"查看详细权限配置' : '该角色暂未分配任何权限' }}
+            {{ role.permissions?.length ? '点击"配置权限"查看或修改权限配置' : '该角色暂未分配任何权限' }}
           </span>
         </div>
       </div>

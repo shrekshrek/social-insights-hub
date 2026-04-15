@@ -243,15 +243,18 @@ const columns: TableColumn<Role>[] = [
   },
   {
     accessorKey: "permissions",
-    header: "权限数量",
-    meta: { class: { th: "w-[100px]", td: "w-[100px]" } },
+    header: "权限",
+    meta: { class: { th: "w-[120px]", td: "w-[120px]" } },
     cell: ({ row }) => {
+      const strategy = row.original.permission_strategy;
+      if (strategy === 'all') {
+        return h(UBadge as Component, { color: "warning", variant: "soft" }, () => "全部权限");
+      }
+      if (strategy === 'admin') {
+        return h(UBadge as Component, { color: "warning", variant: "soft" }, () => "管理员权限");
+      }
       const permissions = row.getValue("permissions") as Permission[] || [];
-      return h(
-        UBadge as Component,
-        { color: "primary", variant: "soft" },
-        () => `${permissions.length} 个`
-      );
+      return h(UBadge as Component, { color: "primary", variant: "soft" }, () => `${permissions.length} 个`);
     },
   },
   {
@@ -284,13 +287,14 @@ const columns: TableColumn<Role>[] = [
           icon: "i-heroicons-eye",
           to: `/rbac/roles/${row.original.id}`,
         }, () => "查看"),
-        h(UButton as Component, {
-          size: "xs",
-          variant: "ghost",
-          color: "primary",
-          icon: "i-heroicons-key",
-          to: `/rbac/roles/${row.original.id}/permissions`,
-        }, () => "权限"),
+        row.original.permission_strategy === 'explicit' &&
+          h(UButton as Component, {
+            size: "xs",
+            variant: "ghost",
+            color: "primary",
+            icon: "i-heroicons-key",
+            to: `/rbac/roles/${row.original.id}/permissions`,
+          }, () => "权限"),
         !isCore &&
           h(UButton as Component, {
             size: "xs",

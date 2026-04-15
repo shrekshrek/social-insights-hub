@@ -31,7 +31,7 @@
             编辑
           </UButton>
           <UButton
-            v-if="canEdit"
+            v-if="canConfigPermissions"
             variant="outline"
             icon="i-heroicons-shield-check"
             @click="handleEditPermissions"
@@ -108,6 +108,11 @@ const canEdit = computed(() => {
 const canDelete = computed(() => {
   if (!data.value) return false;
   return permissions.hasPermission(PERMISSIONS.ROLE_DELETE) && !isCoreRole(data.value?.name);
+});
+
+const canConfigPermissions = computed(() => {
+  if (!data.value) return false;
+  return canEdit.value && data.value.permission_strategy === 'explicit';
 });
 
 // 事件处理

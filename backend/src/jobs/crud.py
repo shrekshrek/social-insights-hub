@@ -287,7 +287,7 @@ async def _assert_job_access(db: AsyncSession, job: AnalysisJob, current_user_id
         user = (await db.execute(user_stmt)).scalar_one_or_none()
         if user and is_admin_or_super_admin(user):
             return
-        if monitor.owner_id != current_user_id and current_user_id not in {p.id for p in monitor.participants}:
+        if monitor.user_id != current_user_id and current_user_id not in {p.id for p in monitor.participants}:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this analysis job",

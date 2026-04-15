@@ -3,12 +3,15 @@ import { h, computed, ref, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton, UProgress } from '#components'
 import type { AnalysisJob, AnalysisType, AnalysisStatus } from '../../types'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: 'default',
 })
 
 const toast = useToast()
+
+const { currentUserId, hasPermission } = usePermissions()
 
 const {
   getAnalysisJobs,
@@ -417,23 +420,26 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       cell: ({ row }) => {
         const job = row.original
         const isRunning = ['pending', 'running'].includes(job.status)
+        const canAct = job.user_id === currentUserId.value || hasPermission(PERMISSIONS.ANALYSIS_DELETE)
 
         return h('div', { class: 'flex items-center gap-2' }, [
-          isRunning
-            ? h(Button, {
-                size: 'xs',
-                color: 'warning',
-                variant: 'ghost',
-                icon: 'i-heroicons-stop',
-                onClick: () => handleCancel(job),
-              }, () => '取消')
-            : h(Button, {
-                size: 'xs',
-                color: 'error',
-                variant: 'ghost',
-                icon: 'i-heroicons-trash',
-                onClick: () => handleDelete(job),
-              }, () => '删除'),
+          canAct
+            ? (isRunning
+                ? h(Button, {
+                    size: 'xs',
+                    color: 'warning',
+                    variant: 'ghost',
+                    icon: 'i-heroicons-stop',
+                    onClick: () => handleCancel(job),
+                  }, () => '取消')
+                : h(Button, {
+                    size: 'xs',
+                    color: 'error',
+                    variant: 'ghost',
+                    icon: 'i-heroicons-trash',
+                    onClick: () => handleDelete(job),
+                  }, () => '删除'))
+            : null,
         ])
       },
     },

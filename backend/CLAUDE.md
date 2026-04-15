@@ -95,7 +95,7 @@ backend/src/
   - `src/social_media/analysis/celery_tasks/` — 社媒 screening/deep/aggregation/slice
   - `src/news_media/analysis/` — 新闻切片（NewsSlice models/crud/service/router）+ tagging job 封装（jobs.py）
 - **采集/处理类 celery 任务** 归各自渠道模块：
-  - `src/news_media/tasks/celery_tasks.py` — 新闻爬取
+  - `src/news_media/tasks/tasks.py` — 新闻爬取
   - `src/knowledge_base/tasks.py` — 文档向量化
   - `src/social_media/` 无采集 celery —— 走 agent pull 模型（见下）
 - 所有 celery 模块必须在 `src/celery_app.py` 的 `include` 列表中显式注册

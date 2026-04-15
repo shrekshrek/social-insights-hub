@@ -90,7 +90,7 @@ async function handleUpload() {
   file_name: string | null           // 原始文件名
   industry_tags: string[]
   chunk_count: number
-  processing_status: 'pending' | 'processing' | 'ready' | 'failed'
+  status: 'pending' | 'processing' | 'ready' | 'failed'
   error_message: string | null       // 处理失败原因
   created_at: string
   updated_at: string

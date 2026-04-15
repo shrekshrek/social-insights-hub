@@ -290,7 +290,7 @@ async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -
         monitor = await get_social_monitor_by_id(db, strategy.social_monitor_id, load_relations=True)
         if monitor:
             users = await db.execute(select(User).where(User.id.in_(participant_ids)))
-            new_participants = [u for u in users.scalars().all() if u.id != monitor.owner_id]
+            new_participants = [u for u in users.scalars().all() if u.id != monitor.user_id]
             monitor.participants = new_participants
             await db.flush()
 
@@ -301,7 +301,7 @@ async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -
         news_monitor = await get_news_monitor_by_id(db, strategy.news_monitor_id, load_relations=True)
         if news_monitor:
             users2 = await db.execute(select(User).where(User.id.in_(participant_ids)))
-            new_participants2 = [u for u in users2.scalars().all() if u.id != news_monitor.owner_id]
+            new_participants2 = [u for u in users2.scalars().all() if u.id != news_monitor.user_id]
             news_monitor.participants = new_participants2
             await db.flush()
 
@@ -1484,7 +1484,7 @@ async def confirm_research(
 
             from src.news_media.tasks.service import create_news_task
             from src.news_media.tasks.schemas import NewsTaskCreate
-            from src.news_media.tasks.celery_tasks import run_news_probe_task
+            from src.news_media.tasks.tasks import run_news_probe_task
 
             enable_wechat_mp = dimension.get("enable_wechat_mp", False)
             news_channels = ["baidu", "sogou", "duckduckgo"]
@@ -2475,7 +2475,7 @@ async def approve_probe(
         from src.news_media.analysis.jobs import create_news_tagging_job
         from src.jobs import crud as jobs_crud
         from src.news_media.tasks import crud as news_crud
-        from src.news_media.tasks.celery_tasks import run_news_collect_task
+        from src.news_media.tasks.tasks import run_news_collect_task
 
         for tid in news_collect_task_ids:
             collect_task = await news_crud.get_task_by_id(db, tid, load_relations=False)
@@ -2648,7 +2648,7 @@ async def refine_probe(
         from src.news_media.tasks.crud import delete_task as delete_news_task_crud
         from src.news_media.tasks.schemas import NewsTaskCreate
         from src.news_media.tasks.service import create_news_task as create_news_task_svc
-        from src.news_media.tasks.celery_tasks import run_news_probe_task
+        from src.news_media.tasks.tasks import run_news_probe_task
 
         if not strategy.news_monitor_id:
             raise HTTPException(

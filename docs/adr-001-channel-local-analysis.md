@@ -12,7 +12,7 @@
 项目最早只有社媒一个数据渠道，分析流水线（screening → deep → aggregation → slice）被写在顶层的 `src/analysis/` 模块下，姿态是"通用分析编排层"。后续陆续接入 `news_media`、`knowledge_base`、`strategies` 三个渠道/编排层，才逐渐暴露出这个抽象立不住：
 
 1. **`analysis/celery_tasks/` 里的内容全是社媒特有领域逻辑**——CII / NSR / SERP / spam 4D 分布 / 实体与观点聚合 / KOL 声音 / 竞品雷达。没有任何一项对 news 或 knowledge_base 有意义
-2. **`news_media` 不走这条流水线**。news 的 tagging / insight celery 任务住在 `news_media/tasks/celery_tasks.py`，只是"来 analysis 领一张 AnalysisJob 票据"做成本追踪
+2. **`news_media` 不走这条流水线**。news 的 tagging / insight celery 任务住在 `news_media/tasks/tasks.py`，只是"来 analysis 领一张 AnalysisJob 票据"做成本追踪
 3. **`knowledge_base` 也不走这条流水线**。vectorization / RAG 检索住在 `knowledge_base/tasks.py` 和 `knowledge_base/retrieval/`
 4. **`strategies` 作为编排层**，各渠道的分析调用走各自的 celery 入口，并不依赖一个"通用 analysis 模块"
 
@@ -167,7 +167,7 @@ strategies
 | **P3** | 社媒流水线搬家：`analysis/celery_tasks/*` + `monitor_slice.py` + `export_docx.py` + `base_task.py` + `constants.py` → `src/social_media/analysis/`；更新 `celery_app.py` include 列表 | 中 |
 | **P4** | `analysis/service.py` 按内容拆分：社媒部分 → `social_media/analysis/service.py`；剩余跨渠道 helper 视情况归属 | 中 |
 | **P5** | `analysis/router.py` → `social_media/analysis/router.py`；路由路径前缀更新；前端 `useApi` 调用点同步更新 | 中（前后端必须同步） |
-| **P6** | `news_media/tasks/celery_tasks.py` 中的 tagging/insight → `news_media/analysis/celery_tasks.py`；`sources/news.py` → `news_media/analysis/jobs.py` | 低 |
+| **P6** | `news_media/tasks/tasks.py` 中的 tagging/insight → `news_media/analysis/celery_tasks.py`；`sources/news.py` → `news_media/analysis/jobs.py` | 低 |
 | **P7** | 删除空壳 `src/analysis/` 整个目录（含 `sources/`）；更新 `backend/CLAUDE.md` 架构章节 | 低 |
 
 每个 Phase 完成后必须达到的检查点：

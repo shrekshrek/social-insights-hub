@@ -105,7 +105,7 @@ async def process_document(db: AsyncSession, doc_id: int, embedding_svc: Embeddi
         return
 
     try:
-        doc.processing_status = "processing"
+        doc.status = "processing"
         doc.updated_at = datetime.now(timezone.utc)
         await db.commit()
 
@@ -167,7 +167,7 @@ async def process_document(db: AsyncSession, doc_id: int, embedding_svc: Embeddi
         doc.source_meta = source_meta if source_meta else None
 
         doc.chunk_count = len(chunks)
-        doc.processing_status = "ready"
+        doc.status = "ready"
         doc.error_message = None
         doc.updated_at = datetime.now(timezone.utc)
         await db.commit()
@@ -179,7 +179,7 @@ async def process_document(db: AsyncSession, doc_id: int, embedding_svc: Embeddi
         try:
             doc = await db.get(KnowledgeDocument, doc_id)
             if doc:
-                doc.processing_status = "failed"
+                doc.status = "failed"
                 doc.error_message = str(e)[:500]
                 doc.updated_at = datetime.now(timezone.utc)
                 await db.commit()
@@ -223,7 +223,7 @@ async def retrieve_market_context(
                 (1 - KnowledgeChunk.embedding.cosine_distance(query_vec)).label("score"),
             )
             .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
-            .where(KnowledgeDocument.processing_status == "ready")
+            .where(KnowledgeDocument.status == "ready")
             .where(filter_cond)
             .order_by(KnowledgeChunk.embedding.cosine_distance(query_vec))
             .limit(top_k)
@@ -276,7 +276,7 @@ async def list_documents(
         query = query.where(KnowledgeDocument.source_type == source_type)
 
     if status:
-        query = query.where(KnowledgeDocument.processing_status == status)
+        query = query.where(KnowledgeDocument.status == status)
 
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar() or 0

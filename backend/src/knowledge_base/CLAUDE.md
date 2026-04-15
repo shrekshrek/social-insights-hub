@@ -38,7 +38,7 @@ market_context = await retrieve_market_context(
 ### `knowledge_documents`
 - `workspace_id = NULL` → 平台公共文档（所有用户可检索）
 - `workspace_id = user_id` → 用户私有上传（仅该用户可检索）
-- `processing_status`: `pending` → `processing` → `ready` / `failed`
+- `status`: `pending` → `processing` → `ready` / `failed`
   - 前端 types 使用 `'ready'`（不是 `'completed'`）
 - `source_meta._file_bytes_b64`: 文件字节临时存储（Base64），处理完成后自动清除
 
@@ -50,7 +50,7 @@ market_context = await retrieve_market_context(
 ## Important Notes
 
 - **pgvector 依赖**: 需要 `pgvector/pgvector:pg16` 镜像（已在 `docker-compose.yml` 与 `docker-compose.prod.yml` 配置），`postgres:16-alpine` 不含该扩展
-- **Celery 异步处理**: 上传端点仅创建 DB 记录，通过 `process_document_task.delay(doc_id)` 派发处理；`processing_status` 异步更新
+- **Celery 异步处理**: 上传端点仅创建 DB 记录，通过 `process_document_task.delay(doc_id)` 派发处理；`status` 异步更新
 - **RAG 优雅降级**: `retrieve_market_context()` 所有异常静默处理，返回 `""`；策略生成主流程不受 KB 可用性影响
 - **Embedding API**: 通过 OpenAI-compatible API 调用（默认 SiliconFlow BAAI/bge-large-zh-v1.5），无本地模型，无 NVIDIA 依赖；配置项：`EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL`
 - **渠道架构**: `strategy_brief_parser_chain.py` 中 `knowledge_base` 标记为 `available=true`；`ecommerce` 和 `industry_data` 已删除

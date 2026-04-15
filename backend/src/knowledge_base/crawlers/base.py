@@ -81,11 +81,11 @@ class BaseCrawler(ABC):
         existing = result.scalar_one_or_none()
 
         if existing is not None:
-            if existing.processing_status in ("ready", "processing", "pending"):
+            if existing.status in ("ready", "processing", "pending"):
                 return True  # 跳过
 
             # status = failed → 重置重试
-            existing.processing_status = "pending"
+            existing.status = "pending"
             existing.error_message = None
             existing.source_meta = {
                 **dict(src.source_meta),
@@ -102,7 +102,7 @@ class BaseCrawler(ABC):
             source_type=self.source_type,
             source_url=src.url,
             file_name=src.filename,
-            processing_status="pending",
+            status="pending",
             source_meta={
                 **dict(src.source_meta),
                 "_file_bytes_b64": base64.b64encode(src.file_bytes).decode(),

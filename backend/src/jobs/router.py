@@ -19,7 +19,7 @@ from src.database import get_async_db
 from src.jobs import crud
 from src.rbac.dependencies import (
     require_analysis_read,
-    require_analysis_task_delete_results,
+    require_analysis_delete,
 )
 from src.jobs.schemas import (
     AnalysisJobListResponse,
@@ -126,7 +126,7 @@ async def cancel_analysis_job(
 async def delete_analysis_job(
     job_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_delete_results),
+    current_user: User = Depends(require_analysis_delete),
 ):
     success = await crud.delete_analysis_job(db, job_id, current_user.id)
     return {"success": success, "message": "Analysis job deleted"}

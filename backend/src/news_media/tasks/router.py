@@ -141,7 +141,7 @@ async def execute_task(
     """
     from fastapi import HTTPException
 
-    from src.news_media.tasks.celery_tasks import run_news_collect_task
+    from src.news_media.tasks.tasks import run_news_collect_task
 
     if task.strategy_id is not None:
         raise HTTPException(

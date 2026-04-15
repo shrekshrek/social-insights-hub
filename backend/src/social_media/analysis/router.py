@@ -27,15 +27,9 @@ from src.database import get_async_db
 from src.schemas import MessageResponse
 from src.auth.models import User
 from src.rbac.dependencies import (
-    require_analysis_task_run_screening,
-    require_analysis_task_run_deep,
-    require_analysis_task_view_results,
-    require_analysis_task_delete_results,
-    require_analysis_monitor_run_clustering,
-    require_analysis_monitor_view_results,
-    require_analysis_monitor_delete_results,
-    require_analysis_stats_view,
-    require_analysis_results_export,
+    require_analysis_read,
+    require_analysis_write,
+    require_analysis_delete,
 )
 
 from . import service
@@ -74,7 +68,7 @@ router = APIRouter(
 async def run_post_screening(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_run_screening),
+    current_user: User = Depends(require_analysis_write),
 ):
     """
     运行原文AI初筛分析
@@ -99,7 +93,7 @@ async def run_post_deep_analysis(
     value_min: float | None = Query(None, ge=0, le=10, description="价值分下限"),
     relevance_min: float | None = Query(None, ge=0, le=10, description="相关度分下限"),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_run_deep),
+    current_user: User = Depends(require_analysis_write),
 ):
     """
     运行原文深度分析
@@ -132,7 +126,7 @@ async def run_comment_deep_analysis(
     value_min: float | None = Query(None, ge=0, le=10, description="价值分下限"),
     relevance_min: float | None = Query(None, ge=0, le=10, description="相关度分下限"),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_run_deep),
+    current_user: User = Depends(require_analysis_write),
 ):
     """
     运行评论深度分析
@@ -168,7 +162,7 @@ async def get_task_post_analyses(
     post_ids: str | None = Query(None, description="按原文ID列表筛选（逗号分隔）"),
     spam_group: str | None = Query(None, description="按垃圾分组筛选（high=推广/low=有机）"),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_view_results),
+    current_user: User = Depends(require_analysis_read),
 ):
     """
     获取任务下所有原文的分析结果
@@ -222,7 +216,7 @@ async def get_task_post_analyses(
 async def run_task_aggregation(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_run_deep),
+    current_user: User = Depends(require_analysis_write),
 ):
     """
     运行聚合分析，生成任务级分析报告（异步执行）
@@ -244,7 +238,7 @@ async def run_task_aggregation(
 async def get_task_aggregation(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_view_results),
+    current_user: User = Depends(require_analysis_read),
 ):
     """
     获取任务级聚合分析结果
@@ -274,7 +268,7 @@ async def preview_deep_analysis(
     value_min: float | None = Query(None, ge=0, le=10, description="价值分下限"),
     relevance_min: float | None = Query(None, ge=0, le=10, description="相关度分下限"),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_view_results),
+    current_user: User = Depends(require_analysis_read),
 ):
     """
     基于初筛分阈值，预览可进行深度分析的原文统计
@@ -298,7 +292,7 @@ async def preview_deep_analysis(
 async def delete_task_analyses(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_task_delete_results),
+    current_user: User = Depends(require_analysis_delete),
 ):
     """
     删除任务下所有原文的分析结果，方便重新分析
@@ -325,7 +319,7 @@ async def create_monitor_slice(
     monitor_id: int,
     request: CreateProjectSliceRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_monitor_run_clustering),
+    current_user: User = Depends(require_analysis_write),
 ):
     """生成项目级合并分析切片，并自动启动项目级归一化与总结（异步）。
 
@@ -417,7 +411,7 @@ async def _get_slice_or_403(
 async def list_monitor_slices(
     monitor_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_monitor_view_results),
+    current_user: User = Depends(require_analysis_read),
 ):
     """获取项目下的历史切片列表（按创建时间倒序）"""
     from src.social_media.monitors import crud as monitor_crud
@@ -444,7 +438,7 @@ async def get_monitor_slice(
     monitor_id: int,
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_monitor_view_results),
+    current_user: User = Depends(require_analysis_read),
 ):
     """获取单个切片详情"""
     slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
@@ -464,7 +458,7 @@ async def update_monitor_slice(
     slice_id: int,
     request: UpdateProjectSliceRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_monitor_view_results),
+    current_user: User = Depends(require_analysis_read),
 ):
     """更新切片名称。需要项目访问权限。"""
     slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
@@ -484,7 +478,7 @@ async def delete_monitor_slice(
     monitor_id: int,
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_monitor_delete_results),
+    current_user: User = Depends(require_analysis_delete),
 ):
     """删除单个切片（硬删除）"""
     slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
@@ -506,7 +500,7 @@ async def export_monitor_slice(
     monitor_id: int,
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_results_export),
+    current_user: User = Depends(require_analysis_read),
 ):
     """导出切片的 AI 报告为 Word (.docx) 文档。
 
@@ -553,7 +547,7 @@ async def export_monitor_slice(
 )
 async def get_global_stats(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_stats_view),
+    current_user: User = Depends(require_analysis_read),
 ):
     """
     获取全局分析统计

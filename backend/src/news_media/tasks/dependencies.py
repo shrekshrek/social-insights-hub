@@ -39,7 +39,7 @@ async def validate_news_task_access(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have access to this task",
         )
-    if task.monitor.owner_id == current_user.id:
+    if task.monitor.user_id == current_user.id:
         return task
     if current_user.id in {p.id for p in task.monitor.participants}:
         return task

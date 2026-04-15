@@ -68,9 +68,11 @@ export const PERMISSIONS = {
   KB_WRITE: {target: 'knowledge_base', action: 'write'},
   KB_DELETE: {target: 'knowledge_base', action: 'delete'},
 
-  // AI 分析统计
+  // AI 分析
   ANALYSIS_ACCESS: {target: 'analysis', action: 'access'},
-  ANALYSIS_STATS_VIEW: {target: 'analysis', action: 'stats.view'},
+  ANALYSIS_READ: {target: 'analysis', action: 'read'},
+  ANALYSIS_WRITE: {target: 'analysis', action: 'write'},
+  ANALYSIS_DELETE: {target: 'analysis', action: 'delete'},
 
   // 研究分析
   RESEARCH_AGENT_ACCESS: {target: 'research_agent', action: 'access'},

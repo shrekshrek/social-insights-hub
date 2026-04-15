@@ -52,7 +52,7 @@ async def validate_task_owner(
     monitor = await social_crud.get_monitor_by_id(
         db, task.monitor_id, load_relations=False
     )
-    if monitor and monitor.owner_id == current_user.id:
+    if monitor and monitor.user_id == current_user.id:
         return task
 
     raise HTTPException(

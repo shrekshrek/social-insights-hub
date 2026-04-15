@@ -22,7 +22,7 @@ export const useSocialTasks = () => {
           "task_type",
           "status",
           "data_source",
-          "creator_id",
+          "user_id",
           "search",
           "phase",
         ];

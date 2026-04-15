@@ -39,13 +39,13 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/strategies/[id]": { permission: PERMISSIONS.STRATEGY_READ },
   // 社媒监测模块
   "/social-media/monitors": {
-    permission: PERMISSIONS.MONITOR_ACCESS,
+    permission: PERMISSIONS.SOCIAL_MONITOR_ACCESS,
     label: "社媒监测",
     showInNav: true,
     order: 30,
   },
-  "/social-media/monitors/create": { permission: PERMISSIONS.MONITOR_WRITE },
-  "/social-media/monitors/[id]": { permission: PERMISSIONS.MONITOR_READ },
+  "/social-media/monitors/create": { permission: PERMISSIONS.SOCIAL_MONITOR_WRITE },
+  "/social-media/monitors/[id]": { permission: PERMISSIONS.SOCIAL_MONITOR_READ },
   "/social-media/tasks": {
     permission: PERMISSIONS.SOCIAL_TASK_ACCESS,
     label: "社媒采集",
@@ -60,22 +60,22 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/social-media/posts/[id]": { permission: PERMISSIONS.SOCIAL_TASK_READ },
   // 新闻监测模块
   "/news-media/monitors": {
-    permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
+    permission: PERMISSIONS.NEWS_MONITOR_ACCESS,
     label: "新闻监测",
     showInNav: true,
     order: 50,
   },
-  "/news-media/monitors/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
-  "/news-media/monitors/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
+  "/news-media/monitors/create": { permission: PERMISSIONS.NEWS_MONITOR_WRITE },
+  "/news-media/monitors/[id]": { permission: PERMISSIONS.NEWS_MONITOR_READ },
   "/news-media/tasks": {
-    permission: PERMISSIONS.NEWS_MEDIA_ACCESS,
+    permission: PERMISSIONS.NEWS_TASK_ACCESS,
     label: "新闻采集",
     showInNav: true,
     order: 60,
   },
-  "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_MEDIA_WRITE },
-  "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
-  "/news-media/slices/[id]": { permission: PERMISSIONS.NEWS_MEDIA_READ },
+  "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_TASK_WRITE },
+  "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_TASK_READ },
+  "/news-media/slices/[id]": { permission: PERMISSIONS.NEWS_MONITOR_READ },
   // 专题研究模块
   "/research-agent": {
     permission: PERMISSIONS.RESEARCH_AGENT_ACCESS,
@@ -87,7 +87,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/research-agent/[id]": { permission: PERMISSIONS.RESEARCH_AGENT_READ },
   // AI 统计模块（跨渠道 AnalysisJob）
   "/jobs": {
-    permission: null,
+    permission: PERMISSIONS.ANALYSIS_ACCESS,
     label: "AI 统计",
     showInNav: true,
     order: 70,

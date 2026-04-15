@@ -2,6 +2,7 @@
 import { h, ref, computed, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UButton, UBadge } from '#components'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: 'default',
@@ -9,6 +10,7 @@ definePageMeta({
 
 const route = useRoute()
 const taskId = Number(route.params.id)
+const { currentUserId, hasPermission } = usePermissions()
 
 const { getTask, executeTask, deleteTask, getTaskArticles } = useNewsTasks()
 
@@ -347,6 +349,7 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
               刷新
             </UButton>
             <UButton
+              v-if="hasPermission(PERMISSIONS.NEWS_TASK_DELETE) || task?.user_id === currentUserId"
               variant="outline"
               icon="i-heroicons-trash"
               color="error"

@@ -28,7 +28,7 @@ class NewsMonitorRead(CustomBaseModel):
     id: int
     name: str
     description: str | None
-    owner_id: int
+    user_id: int
     participant_ids: list[int] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
@@ -46,7 +46,7 @@ class NewsMonitorReadWithOwner(NewsMonitorRead):
             id=monitor.id,
             name=monitor.name,
             description=monitor.description,
-            owner_id=monitor.owner_id,
+            user_id=monitor.user_id,
             participant_ids=[p.id for p in monitor.participants],
             created_at=monitor.created_at,
             updated_at=monitor.updated_at,

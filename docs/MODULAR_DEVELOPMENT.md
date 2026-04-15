@@ -26,19 +26,26 @@
 
 ```python
 # 1. 后端权限定义 (backend/src/rbac/init_data.py)
-*create_module_permissions("reports", ["access", "read", "export"])
+*create_module_permissions("reports", ["access", "read", "write", "delete"])
 
-# 2. 重启服务自动同步
-pnpm dev
+# 2. 后端快捷依赖 (backend/src/rbac/dependencies.py)
+require_reports_read   = create_permission_dependency("reports:read")
+require_reports_write  = create_permission_dependency("reports:write")
+require_reports_delete = create_permission_dependency("reports:delete")
 
-# 3. 前端权限配置 (frontend/config/permissions.ts)
+# 3. 重启服务自动同步
+# pnpm dev
+
+# 4. 前端权限配置 (frontend/config/permissions.ts)
 REPORTS_ACCESS: {target: 'reports', action: 'access'},
-REPORTS_READ: {target: 'reports', action: 'read'},
-REPORTS_EXPORT: {target: 'reports', action: 'export'},
+REPORTS_READ:   {target: 'reports', action: 'read'},
+REPORTS_WRITE:  {target: 'reports', action: 'write'},
+REPORTS_DELETE: {target: 'reports', action: 'delete'},
 
-# 4. 路由权限 (frontend/config/routes.ts)
-'/reports': PERMISSIONS.REPORTS_ACCESS,
-'/reports/export': PERMISSIONS.REPORTS_EXPORT,
+# 5. 路由权限 (frontend/config/routes.ts)
+'/reports':        { permission: PERMISSIONS.REPORTS_ACCESS, label: '报表', showInNav: true, order: 60 },
+'/reports/create': { permission: PERMISSIONS.REPORTS_WRITE },
+'/reports/[id]':   { permission: PERMISSIONS.REPORTS_READ },
 ```
 
 完成！模块基础权限已配置。
@@ -47,7 +54,7 @@ REPORTS_EXPORT: {target: 'reports', action: 'export'},
 
 ### 第一步：定义权限（1分钟）
 
-在 `backend/src/rbac/init_data.py` 使用模板函数：
+**1a. 在 `backend/src/rbac/init_data.py` 注册权限：**
 
 ```python
 # 基础访问权限
@@ -65,10 +72,21 @@ REPORTS_EXPORT: {target: 'reports', action: 'export'},
 
 **常用权限组合**：
 - `["access"]` - 仅页面访问
-- `["access", "read"]` - 查看数据
+- `["access", "read"]` - 查看数据（access 控前端页面，read 控后端 API，两者并行）
 - `["access", "read", "write"]` - 增改操作
 - `["access", "read", "write", "delete"]` - 完整CRUD
 - `["access", "read", "export"]` - 数据导出
+
+**1b. 在 `backend/src/rbac/dependencies.py` 注册快捷依赖：**
+
+```python
+# 在文件末尾追加
+require_module_name_read   = create_permission_dependency("module_name:read")
+require_module_name_write  = create_permission_dependency("module_name:write")
+require_module_name_delete = create_permission_dependency("module_name:delete")
+```
+
+> 快捷依赖让路由文件的 `Depends(...)` 写法更简洁，且统一在一处管理。
 
 ### 第二步：创建后端模块（10分钟）
 
@@ -89,26 +107,56 @@ backend/src/reports/
 ```python
 # backend/src/reports/router.py
 from fastapi import APIRouter, Depends
-from src.rbac.dependencies import require_permission
-from src.pagination import get_pagination_params, PaginationParams
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.auth.models import User
+from src.database import get_async_db
+from src.rbac.dependencies import (
+    require_reports_read,
+    require_reports_write,
+    require_reports_delete,
+)
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
-@router.get("/")
-async def get_reports(
-    pagination: PaginationParams = Depends(get_pagination_params),
-    _: User = Depends(require_permission("reports", "read"))
+@router.get(
+    "",
+    response_model=ReportListResponse,
+    status_code=200,
+    summary="获取报表列表",
+)
+async def list_reports(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_reports_read),  # 用 current_user 当需要 .id；否则用 _
 ):
-    """获取报表列表"""
-    return await service.get_reports(pagination)
+    return await service.get_reports(db, current_user.id)
 
-@router.get("/export")
-async def export_reports(
-    _: User = Depends(require_permission("reports", "export"))
+@router.post(
+    "",
+    response_model=ReportResponse,
+    status_code=201,
+    summary="创建报表",
+)
+async def create_report(
+    data: ReportCreate,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_reports_write),
 ):
-    """导出报表"""
-    return await service.export_reports()
+    return await service.create_report(db, data, current_user.id)
+
+@router.delete(
+    "/{report_id}",
+    status_code=200,
+    summary="删除报表",
+)
+async def delete_report(
+    report_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_reports_delete),  # 不需要 .id 时用 _
+):
+    return await service.delete_report(db, report_id)
 ```
+
+> **命名约定**：端点参数需要 `current_user.id` 时用 `current_user: User = Depends(...)`；仅做权限门控不需要用户信息时用 `_: User = Depends(...)`。
 
 #### 2.3 注册路由
 
@@ -205,12 +253,45 @@ export const ROUTE_CONFIG = {
 }
 ```
 
-### 第五步：测试集成（5分钟）
+### 第五步：组件级权限控制（按需）
 
-1. **重启服务**：`pnpm dev`
+路由守卫只控制页面能否进入。页面内的编辑/删除按钮需要额外的组件级权限控制。
+
+#### 编辑/删除按钮模式
+
+```vue
+<script setup lang="ts">
+import { PERMISSIONS } from '~/config/permissions'
+const { currentUserId, hasPermission } = usePermissions()
+
+// 有 participants 概念的模块：owner 或有写权限者可编辑
+const canEdit = computed(() =>
+  hasPermission(PERMISSIONS.REPORTS_WRITE) || item.value?.user_id === currentUserId.value
+)
+
+// 删除同理
+const canDelete = computed(() =>
+  hasPermission(PERMISSIONS.REPORTS_DELETE) || item.value?.user_id === currentUserId.value
+)
+</script>
+
+<template>
+  <UButton v-if="canEdit" @click="openEditModal">编辑</UButton>
+  <UButton v-if="canDelete" color="error" @click="handleDelete">删除</UButton>
+</template>
+```
+
+> `hasPermission()` 对 super_admin 和 admin 自动返回 `true`，无需额外处理。
+>
+> 所有者字段全栈统一为 `user_id`，详见 [权限系统深度指南](./PERMISSION_MANAGEMENT.md#所有者字段命名规范)。
+
+### 第六步：测试集成（5分钟）
+
+1. **重启服务**：`pnpm dev`（自动同步新权限到数据库）
 2. **检查权限同步**：查看后端日志确认权限已创建
 3. **访问页面**：登录后访问 `/reports`
 4. **测试权限**：分配角色权限，验证访问控制
+5. **类型检查**：`pnpm fe:typecheck && pnpm be:lint`
 
 ## 📁 模块结构模板
 

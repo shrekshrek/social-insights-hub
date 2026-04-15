@@ -10,6 +10,8 @@ from src.rbac.utils import create_module_permissions
 ANALYSIS_PERMISSIONS = create_module_permissions(
     module_name="analysis",
     actions=[
+        "access",              # 访问AI分析统计页面
+        "read",                # 查看分析任务列表和结果
         "task.run_screening",  # 运行任务级AI初筛分析
         "task.run_deep",  # 运行任务级深度分析
         "task.view_results",  # 查看任务级分析结果
@@ -22,6 +24,8 @@ ANALYSIS_PERMISSIONS = create_module_permissions(
         "results.export",  # 导出分析结果
     ],
     display_names={
+        "access": "访问AI分析",
+        "read": "查看分析任务",
         "task.run_screening": "运行任务AI初筛",
         "task.run_deep": "运行任务深度分析",
         "task.view_results": "查看任务分析结果",
@@ -34,6 +38,8 @@ ANALYSIS_PERMISSIONS = create_module_permissions(
         "results.export": "导出分析结果",
     },
     descriptions={
+        "access": "允许访问AI分析统计页面",
+        "read": "允许查看分析任务列表、详情和进度",
         "task.run_screening": "允许对单个任务执行AI初筛分析（垃圾分、价值分、相关度）",
         "task.run_deep": "允许对单个任务执行深度分析（原文和评论深度挖掘）",
         "task.view_results": "允许查看任务级分析结果和详情",

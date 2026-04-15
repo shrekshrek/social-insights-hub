@@ -6,6 +6,7 @@ import type { SocialTaskWithRelations } from '../../../../tasks/types'
 import type { MonitorSlice } from '../../../../types/monitor-slice'
 import TaskComparisonSlideover from '../../../../monitors/components/TaskComparisonSlideover.vue'
 import QuickTaskForm from '../../../../monitors/components/QuickTaskForm.vue'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: 'default',
@@ -18,7 +19,7 @@ const { getMonitor, deleteMonitor, batchCreateTasks, addParticipant, removeParti
 const { getTasks, deleteTask } = useTasks()
 const { createMonitorSlice, deleteMonitorSlice } = useAnalysis()
 const { useApiData } = useApi()
-const { currentUserId } = usePermissions()
+const { currentUserId, hasPermission } = usePermissions()
 
 // 获取项目详情（使用顶层 await）
 const { data: monitor, pending: _monitorLoading, refresh: refreshMonitor } = await getMonitor(monitorId.value)
@@ -804,7 +805,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
       </div>
 
       <ClientOnly>
-        <div v-if="monitor" class="flex items-center gap-3">
+        <div v-if="monitor && (hasPermission(PERMISSIONS.SOCIAL_MONITOR_DELETE) || monitor.user_id === currentUserId)" class="flex items-center gap-3">
           <UButton
             variant="outline"
             icon="i-heroicons-trash"
@@ -826,7 +827,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
           </h2>
           <ClientOnly>
             <UButton
-              v-if="monitor.owner_id === currentUserId"
+              v-if="hasPermission(PERMISSIONS.SOCIAL_MONITOR_WRITE) || monitor.user_id === currentUserId"
               size="sm"
               variant="outline"
               icon="i-heroicons-pencil-square"
@@ -1271,7 +1272,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
             >
               <ParticipantsManager
                 :participants="(monitor?.participant_ids || []).map((id: number, i: number) => ({ id, username: monitor?.participant_usernames?.[i] || String(id) }))"
-                :owner-id="monitor?.owner_id || 0"
+                :owner-id="monitor?.user_id || 0"
                 :can-manage="true"
                 :on-add="async (ids: number[]) => { await addParticipant(monitorId, ids); await refreshMonitor() }"
                 :on-remove="async (uid: number) => { await removeParticipant(monitorId, uid); await refreshMonitor() }"

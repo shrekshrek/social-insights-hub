@@ -34,7 +34,7 @@ async def validate_news_monitor_access(
     """验证用户是否有新闻监测项目访问权限（admin / owner / participant）"""
     if is_admin_or_super_admin(current_user):
         return monitor
-    if monitor.owner_id == current_user.id:
+    if monitor.user_id == current_user.id:
         return monitor
     if current_user.id in {p.id for p in monitor.participants}:
         return monitor
@@ -51,7 +51,7 @@ async def validate_news_monitor_owner(
     """验证用户是否是新闻监测项目的所有者（或管理员）"""
     if is_admin_or_super_admin(current_user):
         return monitor
-    if monitor.owner_id != current_user.id:
+    if monitor.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the monitor owner or administrators can perform this action",

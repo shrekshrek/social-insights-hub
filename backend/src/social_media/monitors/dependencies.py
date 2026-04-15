@@ -55,7 +55,7 @@ async def validate_monitor_access(
         return monitor
 
     # 检查是否是owner
-    if monitor.owner_id == current_user.id:
+    if monitor.user_id == current_user.id:
         return monitor
 
     # 检查是否是participant
@@ -85,7 +85,7 @@ async def validate_monitor_owner(
         return monitor
 
     # 检查是否是owner
-    if monitor.owner_id != current_user.id:
+    if monitor.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the monitor owner or administrators can perform this action",

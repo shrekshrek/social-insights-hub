@@ -33,7 +33,7 @@ async def get_news_monitors(
     db: AsyncSession,
     page: int = 1,
     page_size: int = 20,
-    owner_id: int | None = None,
+    user_id: int | None = None,
     participant_id: int | None = None,
     search: str | None = None,
 ) -> tuple[list[NewsMonitor], int]:
@@ -41,7 +41,7 @@ async def get_news_monitors(
     skip = (page - 1) * page_size
     return await crud.get_monitors(
         db, skip=skip, limit=page_size,
-        owner_id=owner_id, participant_id=participant_id, search=search,
+        user_id=user_id, participant_id=participant_id, search=search,
     )
 
 
@@ -78,8 +78,8 @@ async def add_participants_to_news_monitor(
     db: AsyncSession, monitor: NewsMonitor, user_ids: list[int]
 ) -> NewsMonitor:
     """为新闻监测项目添加参与者（owner 不会被加入）"""
-    if monitor.owner_id in user_ids:
-        user_ids = [uid for uid in user_ids if uid != monitor.owner_id]
+    if monitor.user_id in user_ids:
+        user_ids = [uid for uid in user_ids if uid != monitor.user_id]
     if not user_ids:
         return monitor
     return await crud.add_participants_to_news_monitor(db, monitor, user_ids)
@@ -89,7 +89,7 @@ async def remove_participant_from_news_monitor(
     db: AsyncSession, monitor: NewsMonitor, user_id: int
 ) -> NewsMonitor:
     """从新闻监测项目移除参与者"""
-    if user_id == monitor.owner_id:
+    if user_id == monitor.user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="不能移除项目所有者",

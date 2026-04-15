@@ -43,7 +43,7 @@ class NewsMonitor(Base):
         String(255), nullable=False, unique=True, index=True, comment="监测项目名称"
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="项目描述")
-    owner_id: Mapped[int] = mapped_column(
+    user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -54,7 +54,7 @@ class NewsMonitor(Base):
     )
 
     owner: Mapped["User"] = relationship(
-        "src.auth.models.User", foreign_keys=[owner_id], lazy="selectin"
+        "src.auth.models.User", foreign_keys=[user_id], lazy="selectin"
     )
     participants: Mapped[list["User"]] = relationship(
         "src.auth.models.User", secondary=news_monitor_participants, lazy="selectin"

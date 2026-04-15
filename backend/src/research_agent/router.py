@@ -3,9 +3,13 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import get_current_user
 from src.auth.models import User
 from src.database import get_async_db
+from src.rbac.dependencies import (
+    require_research_agent_read,
+    require_research_agent_write,
+    require_research_agent_delete,
+)
 from src.research_agent import schemas, service
 from src.schemas import PaginatedResponse
 
@@ -20,7 +24,7 @@ router = APIRouter(prefix="/research", tags=["Research Agent"])
 )
 async def extract_brief(
     file: UploadFile = File(...),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_research_agent_write),
 ):
     """上传 PDF/DOCX/TXT/MD 文件，返回提取的纯文本，供前端填入研究主题输入框。"""
     _ALLOWED = {"pdf", "docx", "txt", "md"}
@@ -48,7 +52,7 @@ async def extract_brief(
 )
 async def preview_task(
     body: schemas.ResearchPlanPreviewRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_research_agent_write),
 ):
     """调用 planner LLM 生成研究计划预览，不创建任务。
     用于创建页的两步流程：用户确认 title + research_questions 后再正式提交。
@@ -70,7 +74,7 @@ async def preview_task(
 async def create_task(
     body: schemas.ResearchTaskCreate,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_research_agent_write),
 ):
     """创建独立研究任务，后台 Celery 自动执行 LangGraph 研究图"""
     search_config = {**(body.search_config or {})}
@@ -99,7 +103,7 @@ async def list_tasks(
     status_filter: str | None = Query(None, alias="status"),
     search: str | None = Query(None),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_research_agent_read),
 ):
     """列出当前用户的研究任务"""
     items, total = await service.list_research_tasks(
@@ -124,7 +128,7 @@ async def list_tasks(
 async def get_task(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_research_agent_read),
 ):
     """获取研究任务详情"""
     task = await service.get_research_task(db, task_id)
@@ -145,7 +149,7 @@ async def get_task(
 async def get_task_result(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_research_agent_read),
 ):
     """获取研究结果（synthesis + findings + sources）"""
     result = await service.get_research_result(db, task_id)
@@ -166,7 +170,7 @@ async def get_task_result(
 async def rerun_task(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_research_agent_write),
 ):
     """原地重置研究任务并重新执行，覆盖原有结果"""
     task = await service.get_research_task(db, task_id)
@@ -191,7 +195,7 @@ async def rerun_task(
 async def delete_task(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_research_agent_delete),
 ):
     """删除研究任务"""
     deleted = await service.delete_research_task(db, task_id)

@@ -7,10 +7,14 @@ from pydantic import Field
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import get_current_user
 from src.auth.models import User
 from src.database import get_async_db
 from src.pagination import get_pagination_params, PaginationParams
+from src.rbac.dependencies import (
+    require_strategy_read,
+    require_strategy_write,
+    require_strategy_delete,
+)
 from src.schemas import CustomBaseModel, MessageResponse, PaginatedResponse
 
 from . import service
@@ -49,7 +53,7 @@ router = APIRouter(prefix="/strategies", tags=["Strategies"])
 async def create_strategy(
     data: StrategyCreate,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_strategy_write),
 ):
     """创建新策略，关联指定切片"""
     strategy = await service.create_strategy(db, data, current_user.id)
@@ -64,7 +68,7 @@ async def create_strategy(
 )
 async def list_strategies(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_strategy_read),
     pagination: PaginationParams = Depends(get_pagination_params),
     search: str | None = Query(None, description="搜索策略名称"),
 ):
@@ -94,6 +98,7 @@ async def list_strategies(
 )
 async def get_strategy(
     strategy: Strategy = Depends(validate_strategy_access),
+    _: User = Depends(require_strategy_read),
 ):
     """获取策略详情"""
     return StrategyRead.from_orm_full(strategy)
@@ -109,6 +114,7 @@ async def update_strategy(
     data: StrategyUpdate,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """更新策略基本信息（名称/Brief）"""
     updated = await service.update_strategy(db, strategy, data)
@@ -124,6 +130,7 @@ async def update_strategy(
 async def delete_strategy(
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_delete),
 ):
     """删除策略"""
     await service.delete_strategy(db, strategy)
@@ -140,6 +147,7 @@ async def add_participants(
     data: StrategyParticipantAssignment,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     updated = await service.add_participants_to_strategy(db, strategy, data.user_ids)
     return StrategyRead.from_orm_full(updated)
@@ -155,6 +163,7 @@ async def remove_participant(
     user_id: int,
     strategy: Strategy = Depends(validate_strategy_owner),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     updated = await service.remove_participant_from_strategy(db, strategy, user_id)
     return StrategyRead.from_orm_full(updated)
@@ -173,6 +182,7 @@ async def design_research(
     data: DesignResearchRequest,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """基于 Brief 生成研究计划（研究问题+数据方案+切片蓝图+产出类型）"""
     return await service.design_research(db, strategy, data.user_input)
@@ -187,6 +197,7 @@ async def design_research(
 async def reset_to_design(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """从探测/采集阶段回退到研究设计，软删除已创建的任务"""
     return await service.reset_to_design(db, strategy)
@@ -202,7 +213,7 @@ async def confirm_research(
     data: ConfirmResearchRequest,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_strategy_write),
 ):
     """确认研究计划，一键创建 SocialMonitor 和探测任务，状态推进到 probing"""
     return await service.confirm_research(
@@ -226,6 +237,7 @@ async def confirm_research(
 async def get_probe_status(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_read),
 ):
     """查询探测任务进度，全部分析完成后自动运行审查"""
     return await service.check_probe_status(db, strategy)
@@ -241,7 +253,7 @@ async def get_probe_status(
 async def approve_probe(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_strategy_write),
 ):
     """手动确认探测通过，为每个探测任务创建独立全量采集任务，状态 → collecting"""
     return await service.approve_probe(db, strategy, current_user_id=current_user.id)
@@ -258,7 +270,7 @@ async def refine_probe(
     data: RefineProbeRequest,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_strategy_write),
 ):
     """调整不合格的关键词，创建新探测任务，probe_round++"""
     return await service.refine_probe(
@@ -281,7 +293,7 @@ async def refine_probe(
 async def get_collection_status(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_strategy_read),
 ):
     """查询全量采集进度，全部完成后自动建切片并验证覆盖度"""
     return await service.check_collection_status(db, strategy, current_user.id)
@@ -297,6 +309,7 @@ async def get_collection_status(
 async def get_data_overview(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_read),
 ):
     """数据全景：切片列表 + 覆盖度结果"""
     return await service.get_data_overview(db, strategy)
@@ -313,7 +326,7 @@ async def adjust_slices(
     data: AdjustSlicesRequest,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_strategy_write),
 ):
     """微调切片配置（名称/主体/竞品），自动重新验证覆盖度"""
     updated = await service.adjust_slices(
@@ -338,6 +351,7 @@ async def adjust_slices(
 async def generate_insight(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """AI 生成 Insight: Social Tension + Brand Opportunity"""
     updated = await service.generate_insight(db, strategy)
@@ -353,6 +367,7 @@ async def generate_insight(
 async def generate_brand_role(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """AI 生成 Brand Role: Brand Social Role + Social Strategy"""
     updated = await service.generate_brand_role(db, strategy)
@@ -368,6 +383,7 @@ async def generate_brand_role(
 async def generate_big_idea(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """AI 生成 Big Idea: Big Idea + Content Strategy"""
     updated = await service.generate_big_idea(db, strategy)
@@ -386,6 +402,7 @@ async def generate_big_idea(
 async def generate_agenda_map(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """AI 生成 Agenda Map: 媒体议程图"""
     updated = await service.generate_agenda_map(db, strategy)
@@ -401,6 +418,7 @@ async def generate_agenda_map(
 async def generate_landscape(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """AI 生成 Landscape: 竞争格局"""
     updated = await service.generate_landscape(db, strategy)
@@ -416,6 +434,7 @@ async def generate_landscape(
 async def generate_strategic_brief(
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """AI 生成 Strategic Brief: 战略简报"""
     updated = await service.generate_strategic_brief(db, strategy)
@@ -437,6 +456,7 @@ async def edit_insight(
     data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """编辑 Insight 结果（自动清除 brand_role/big_idea）"""
     updated = await service.edit_brand_strategy_result(
@@ -455,6 +475,7 @@ async def edit_brand_role(
     data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """编辑 Brand Role 结果（自动清除 big_idea）"""
     updated = await service.edit_brand_strategy_result(
@@ -473,6 +494,7 @@ async def edit_big_idea(
     data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """编辑 Big Idea 结果"""
     updated = await service.edit_brand_strategy_result(
@@ -494,6 +516,7 @@ async def edit_agenda_map(
     data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """编辑 Agenda Map 结果（自动清除 landscape/strategic_brief）"""
     updated = await service.edit_market_report_result(
@@ -512,6 +535,7 @@ async def edit_landscape(
     data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """编辑 Landscape 结果（自动清除 strategic_brief）"""
     updated = await service.edit_market_report_result(
@@ -530,6 +554,7 @@ async def edit_strategic_brief(
     data: StageResultEdit,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
 ):
     """编辑 Strategic Brief 结果"""
     updated = await service.edit_market_report_result(
@@ -549,6 +574,7 @@ async def edit_strategic_brief(
 )
 async def export_strategy(
     strategy: Strategy = Depends(validate_strategy_access),
+    _: User = Depends(require_strategy_read),
 ):
     """导出策略报告为 Word 文档"""
     from .export_docx import generate_strategy_docx
@@ -583,7 +609,7 @@ _MAX_BRIEF_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 )
 async def parse_brief(
     file: UploadFile = File(..., description="支持 PDF / DOCX / TXT / MD，最大 10 MB"),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_strategy_write),
 ):
     """上传 Brief 文档，AI 提取 subject / analysis_goal / constraints 等字段"""
     filename = file.filename or ""
@@ -617,7 +643,7 @@ class ParseBriefTextRequest(CustomBaseModel):
 )
 async def parse_brief_text(
     body: ParseBriefTextRequest,
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_strategy_write),
 ):
     """接受纯文本 Brief，AI 提取结构化字段（无需上传文件）"""
     return await service.parse_brief_from_text(body.text)

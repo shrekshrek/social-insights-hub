@@ -51,6 +51,36 @@
 - `target`: 目标模块（如: user, reports, dashboard）
 - `action`: 操作类型（如: access, read, write, delete）
 
+### access 与 read 的并行设计
+
+每个业务模块的权限分为两层，各司其职：
+
+| 权限 | 控制位置 | 作用 |
+|------|---------|------|
+| `xxx:access` | 前端路由守卫 | 控制是否能进入该模块页面/导航可见性 |
+| `xxx:read` | 后端 API 端点 | 控制是否能获取列表和详情数据 |
+
+两者并行存在，不合并。这与系统原始设计的 `user_mgmt:access`（前端页面门控）+ `user:read`（后端API门控）模式一致。
+
+### 超级管理员与 admin 的处理
+
+`usePermissions.ts` 的 `hasPermission()` 函数内置了角色短路逻辑：
+
+```typescript
+// super_admin 拥有所有权限
+if (userRoles.includes('super_admin')) return true
+
+// admin 拥有所有非核心删除权限
+if (userRoles.includes('admin')) {
+  if (permission.action !== 'delete' ||
+      !['user', 'role', 'permission'].includes(permission.target)) {
+    return true
+  }
+}
+```
+
+因此所有使用 `hasPermission()` 的地方，超管和 admin 自动满足，无需特殊处理。
+
 ### 配置方式
 - 所有路由权限在 `config/routes.ts` 的 `ROUTE_CONFIG` 中管理
 - 权限常量在 `config/permissions.ts` 中定义
@@ -102,6 +132,62 @@
 3. 点击"编辑角色"
 4. 选择适当的角色
 5. 保存配置
+
+## 组件级权限控制
+
+路由守卫只控制页面能否进入，页面内的编辑/删除按钮需要单独做组件级权限控制。
+
+### 编辑按钮模式
+
+有 `participants` 概念的模块（monitors、strategies），编辑按钮对 owner 和有写权限的用户均可见：
+
+```vue
+<UButton
+  v-if="hasPermission(PERMISSIONS.SOCIAL_MONITOR_WRITE) || item.user_id === currentUserId"
+  @click="openEditModal"
+>
+  编辑
+</UButton>
+```
+
+在 `<script setup>` 中：
+
+```typescript
+import { PERMISSIONS } from '~/config/permissions'
+const { currentUserId, hasPermission } = usePermissions()
+
+// 可封装为 computed
+const canEdit = computed(() =>
+  hasPermission(PERMISSIONS.XXX_WRITE) || item.value?.user_id === currentUserId.value
+)
+```
+
+### 删除按钮模式
+
+删除权限与编辑保持相同模式（owner 也可删除自己创建的内容）：
+
+```vue
+<UButton
+  v-if="hasPermission(PERMISSIONS.SOCIAL_MONITOR_DELETE) || item.user_id === currentUserId"
+  color="error"
+  @click="handleDelete"
+>
+  删除
+</UButton>
+```
+
+### 所有者字段命名规范
+
+项目全栈统一使用 `user_id` 表示创建者/所有者，**禁止**使用 `owner_id`、`creator_id` 等变体：
+
+| 层 | 字段 |
+|----|------|
+| 后端 DB model | `user_id: Mapped[int]` |
+| 后端 Pydantic schema | `user_id: int` |
+| 前端 TypeScript 类型 | `user_id: number` |
+| 前端模板比较 | `item.user_id === currentUserId` |
+
+> 注：`ParticipantsManager` 组件的 `ownerId` prop 是内部接口名，不受此规范约束。
 
 ## 最佳实践
 

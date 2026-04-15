@@ -6,9 +6,13 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import get_current_user
 from src.auth.models import User
 from src.database import get_async_db
+from src.rbac.dependencies import (
+    require_news_monitor_read,
+    require_news_monitor_write,
+    require_news_monitor_delete,
+)
 from src.news_media.analysis import crud, service
 from src.news_media.analysis.schemas import (
     NewsSliceCreate,
@@ -30,7 +34,7 @@ router = APIRouter(prefix="/news-media", tags=["News Media - Analysis"])
 async def list_slices(
     monitor: NewsMonitor = Depends(validate_news_monitor_exists),
     db: AsyncSession = Depends(get_async_db),
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(require_news_monitor_read),
 ):
     return await crud.get_slices_by_monitor(db, monitor.id)
 
@@ -45,7 +49,7 @@ async def create_slice(
     data: NewsSliceCreate,
     monitor: NewsMonitor = Depends(validate_news_monitor_exists),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_news_monitor_write),
 ):
     return await service.create_slice(db, monitor.id, data, current_user.id)
 
@@ -59,7 +63,7 @@ async def create_slice(
 async def get_slice(
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(require_news_monitor_read),
 ):
     slice_obj = await crud.get_news_slice(db, slice_id)
     if not slice_obj:
@@ -79,7 +83,7 @@ async def get_slice(
 async def analyze_slice(
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_news_monitor_write),
     analysis_goal: str = Body(default="", embed=True),
     subject: str = Body(default="", embed=True),
 ):
@@ -103,7 +107,7 @@ async def analyze_slice(
 async def delete_slice(
     slice_id: int,
     db: AsyncSession = Depends(get_async_db),
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(require_news_monitor_delete),
 ):
     slice_obj = await crud.get_news_slice(db, slice_id)
     if not slice_obj:

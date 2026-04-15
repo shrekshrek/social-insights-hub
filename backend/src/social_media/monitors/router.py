@@ -5,10 +5,15 @@ from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
-from src.auth.dependencies import get_current_user
 from src.database import get_async_db
 from src.pagination import get_pagination_params, PaginationParams
 from src.schemas import MessageResponse
+from src.rbac.dependencies import (
+    require_social_monitor_read,
+    require_social_monitor_write,
+    require_social_monitor_delete,
+    require_social_task_write,
+)
 
 from . import schemas, service
 from .dependencies import (
@@ -38,7 +43,7 @@ router = APIRouter(
 )
 async def get_all_platforms(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_social_monitor_read),
 ):
     """
     获取所有平台列表，用于前端下拉选择。
@@ -58,7 +63,7 @@ async def get_all_platforms(
 )
 async def get_platform(
     platform: Platform = Depends(validate_platform_exists),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_social_monitor_read),
 ):
     """根据ID获取单个平台的详细信息"""
     return platform
@@ -77,7 +82,7 @@ async def get_platform(
 async def create_monitor(
     monitor_in: schemas.SocialMonitorCreate,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_monitor_write),
 ):
     """
     创建新项目。
@@ -121,8 +126,8 @@ async def create_monitor(
 async def get_monitors(
     pagination: PaginationParams = Depends(get_pagination_params),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-    owner_id: Optional[int] = Query(None, description="按owner过滤"),
+    current_user: User = Depends(require_social_monitor_read),
+    user_id: Optional[int] = Query(None, description="按owner过滤"),
     my_monitors: bool = Query(
         False, description="只显示我参与的项目（owner或participant）"
     ),
@@ -139,7 +144,7 @@ async def get_monitors(
 
     过滤选项：
     - my_monitors=true: 显式只显示当前用户的项目
-    - owner_id: 按特定owner过滤（管理员可用）
+    - user_id: 按特定owner过滤（管理员可用）
     - search: 搜索项目名称或关键词
 
     返回分页结果，包含owner信息和关联平台。
@@ -158,7 +163,7 @@ async def get_monitors(
         db,
         page=pagination.page,
         page_size=pagination.page_size,
-        owner_id=owner_id,
+        user_id=user_id,
         participant_id=participant_id,
         search=search,
     )
@@ -206,6 +211,7 @@ async def update_monitor(
     monitor_update: schemas.SocialMonitorUpdate,
     db: AsyncSession = Depends(get_async_db),
     monitor: SocialMonitor = Depends(validate_monitor_owner),
+    _: User = Depends(require_social_monitor_write),
 ):
     """
     更新项目信息。
@@ -227,6 +233,7 @@ async def update_monitor(
 async def delete_monitor(
     db: AsyncSession = Depends(get_async_db),
     monitor: SocialMonitor = Depends(validate_monitor_owner),
+    _: User = Depends(require_social_monitor_delete),
 ):
     """
     删除项目。
@@ -252,7 +259,7 @@ async def batch_create_tasks(
     quick_tasks: schemas.SocialQuickTaskCreate,
     db: AsyncSession = Depends(get_async_db),
     monitor: SocialMonitor = Depends(validate_monitor_access),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_task_write),
 ):
     """
     为已有项目批量创建任务。
@@ -295,6 +302,7 @@ async def add_participants_to_monitor(
     participant_assignment: schemas.MonitorParticipantAssignment,
     db: AsyncSession = Depends(get_async_db),
     monitor: SocialMonitor = Depends(validate_monitor_owner),
+    _: User = Depends(require_social_monitor_write),
 ):
     """
     为项目添加一个或多个参与者。
@@ -319,6 +327,7 @@ async def remove_participant_from_monitor(
     user_id: int,
     db: AsyncSession = Depends(get_async_db),
     monitor: SocialMonitor = Depends(validate_monitor_owner),
+    _: User = Depends(require_social_monitor_write),
 ):
     """
     从项目移除指定参与者。
@@ -344,6 +353,7 @@ async def update_deep_analysis_settings(
     settings_update: schemas.UpdateDeepAnalysisSettings,
     db: AsyncSession = Depends(get_async_db),
     monitor: SocialMonitor = Depends(validate_monitor_owner),
+    _: User = Depends(require_social_monitor_write),
 ):
     """
     更新项目的AI深度分析阈值配置。
@@ -393,7 +403,7 @@ async def compare_tasks(
     monitor_id: int,
     request: schemas.TaskComparisonRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_monitor_read),
 ):
     """
     对比项目内选定的任务，分析数据重合情况。

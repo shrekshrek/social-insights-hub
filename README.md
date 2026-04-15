@@ -87,7 +87,8 @@ pnpm dev     # 启动所有服务（自动迁移 + 初始化权限数据）
 ## 📖 文档导航
 
 **开发指南**：
-- 开发流程 + 新模块开发：[`docs/MODULAR_DEVELOPMENT.md`](docs/MODULAR_DEVELOPMENT.md) ⭐ 必读
+- 开发流程快查：[`docs/WORKFLOW.md`](docs/WORKFLOW.md)
+- 新模块开发：[`docs/MODULAR_DEVELOPMENT.md`](docs/MODULAR_DEVELOPMENT.md) ⭐ 必读
 - 权限系统：[`docs/PERMISSION_MANAGEMENT.md`](docs/PERMISSION_MANAGEMENT.md)
 - 配置管理：[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
 - CI/CD 部署：[`docs/GITLAB_CI_VARIABLES.md`](docs/GITLAB_CI_VARIABLES.md)

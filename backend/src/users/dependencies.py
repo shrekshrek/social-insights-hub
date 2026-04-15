@@ -66,6 +66,42 @@ async def require_user_delete_not_self(
     return current_user
 
 
+async def validate_not_last_super_admin(
+    user_id: Annotated[int, Path()],
+    db: AsyncSession = Depends(get_async_db),
+) -> None:
+    """
+    权限检查：不允许删除最后一个 super_admin
+    """
+    from sqlalchemy import select, func
+    from src.rbac.models import UserRole, Role
+
+    # 检查目标用户是否持有 super_admin 角色
+    is_super_admin = (await db.execute(
+        select(func.count())
+        .select_from(UserRole)
+        .join(Role)
+        .where(UserRole.user_id == user_id, Role.name == "super_admin")
+    )).scalar()
+
+    if not is_super_admin:
+        return
+
+    # 统计全局 super_admin 持有人数
+    total = (await db.execute(
+        select(func.count())
+        .select_from(UserRole)
+        .join(Role)
+        .where(Role.name == "super_admin")
+    )).scalar()
+
+    if total <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete the last super admin",
+        )
+
+
 # ============================================================================
 # 数据库验证依赖（FastAPI最佳实践：使用依赖进行数据库约束验证）
 # ============================================================================

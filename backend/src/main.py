@@ -37,6 +37,31 @@ from src.rate_limit import limiter
 logger = logging.getLogger(__name__)
 
 
+async def _ensure_admin_user(db: AsyncSession) -> None:
+    """首次启动时创建超管账号（若不存在），使用环境变量中的密码"""
+    from sqlalchemy import select
+    from src.auth.models import User
+    from src.auth.security import pwd_context
+    from src.rbac.models import UserRole, Role
+
+    username = settings.ADMIN_USERNAME
+    existing = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+    if existing:
+        return
+
+    hashed = pwd_context.hash(settings.ADMIN_PASSWORD)
+    user = User(username=username, email=f"{username}@example.com", hashed_password=hashed)
+    db.add(user)
+    await db.flush()
+
+    super_admin_role = (await db.execute(select(Role).where(Role.name == "super_admin"))).scalar_one_or_none()
+    if super_admin_role:
+        db.add(UserRole(user_id=user.id, role_id=super_admin_role.id))
+
+    await db.commit()
+    logger.info("初始超管用户 '%s' 已创建", username)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -55,6 +80,13 @@ async def lifespan(app: FastAPI):
             logger.critical("RBAC sync failed in production, aborting startup")
             raise
         logger.warning("RBAC sync failed, starting with existing permissions (dev mode)")
+
+    # 确保初始超管用户存在
+    try:
+        async with AsyncSessionLocal() as db:
+            await _ensure_admin_user(db)
+    except Exception as e:
+        logger.error("Admin user init failed: %s", e, exc_info=True)
 
     # 初始化平台数据
     try:

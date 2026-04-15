@@ -160,6 +160,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     PASSWORD_MIN_LENGTH: int = 8
 
+    # Initial admin account
+    ADMIN_USERNAME: str = Field(default="admin", description="初始超管用户名")
+    ADMIN_PASSWORD: str = Field(default="admin123", description="初始超管密码，生产环境必须修改")
+
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 60
 
@@ -245,6 +249,18 @@ class Settings(BaseSettings):
                     "请设置一个安全的 SECRET_KEY！可以使用以下命令生成: "
                     "openssl rand -hex 32"
                 )
+        return v
+
+    @field_validator("ADMIN_PASSWORD")
+    @classmethod
+    def validate_admin_password(cls, v: str) -> str:
+        """生产环境禁止使用默认密码"""
+        import os
+
+        if v == "admin123" and os.getenv("ENVIRONMENT", "development") == "production":
+            raise ValueError(
+                "生产环境必须设置 ADMIN_PASSWORD 环境变量，禁止使用默认密码 admin123"
+            )
         return v
 
     @field_validator("APP_NAME", mode="before")

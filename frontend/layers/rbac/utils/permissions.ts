@@ -16,7 +16,7 @@ export const isCoreRole = (roleName: string | undefined): boolean => {
 // 判断权限是否为RBAC核心权限
 export const isCorePermission = (target: string | undefined): boolean => {
   if (!target) return false
-  return ['user', 'role', 'permission', 'user_mgmt', 'role_mgmt', 'perm_mgmt'].includes(target)
+  return ['user', 'role', 'permission'].includes(target)
 }
 
 // 权限分类工具函数
@@ -25,7 +25,7 @@ export const getPermissionType = (permission: Permission): 'page' | 'core' | 'bu
     return 'page'  // 页面访问权限
   }
   
-  if (['user', 'role', 'permission', 'user_mgmt', 'role_mgmt', 'perm_mgmt'].includes(permission.target)) {
+  if (['user', 'role', 'permission'].includes(permission.target)) {
     return 'core'  // 系统核心权限
   }
   
@@ -51,7 +51,7 @@ export const getPermissionTypeLabel = (target: string | undefined, action: strin
     return '页面访问权限'
   }
   
-  if (target && ['user', 'role', 'permission', 'user_mgmt', 'role_mgmt', 'perm_mgmt'].includes(target)) {
+  if (target && ['user', 'role', 'permission'].includes(target)) {
     return 'RBAC核心权限'
   }
   
@@ -64,7 +64,7 @@ export const getPermissionTypeColor = (target: string | undefined, action: strin
     return 'info'  // 页面权限用info色
   }
   
-  if (target && ['user', 'role', 'permission', 'user_mgmt', 'role_mgmt', 'perm_mgmt'].includes(target)) {
+  if (target && ['user', 'role', 'permission'].includes(target)) {
     return 'warning'  // RBAC核心权限用warning色
   }
   
@@ -85,9 +85,9 @@ export const getPermissionDisplayName = (permission: Permission): string => {
     'permission:write': '编辑权限',
     'permission:delete': '删除权限',
     'dashboard:access': '访问工作台',
-    'user_mgmt:access': '访问用户管理',
-    'role_mgmt:access': '访问角色管理',
-    'perm_mgmt:access': '访问权限管理',
+    'user:access': '访问用户管理',
+    'role:access': '访问角色管理',
+    'permission:access': '访问权限管理',
   }
   return displayNames[key] || key
 }

@@ -498,23 +498,23 @@ const allPermissions = computed(() => [
     hasPermission: permissions.hasPermission(PERMISSIONS.DASHBOARD_ACCESS),
     type: isCorePermission(PERMISSIONS.DASHBOARD_ACCESS) ? 'core' : 'business'
   },
-  { 
-    key: PERMISSIONS.USER_MGMT_ACCESS, 
+  {
+    key: PERMISSIONS.USER_ACCESS,
     name: '访问用户管理',
-    hasPermission: permissions.hasPermission(PERMISSIONS.USER_MGMT_ACCESS),
-    type: isCorePermission(PERMISSIONS.USER_MGMT_ACCESS) ? 'core' : 'business'
+    hasPermission: permissions.hasPermission(PERMISSIONS.USER_ACCESS),
+    type: isCorePermission(PERMISSIONS.USER_ACCESS) ? 'core' : 'business'
   },
-  { 
-    key: PERMISSIONS.ROLE_MGMT_ACCESS, 
+  {
+    key: PERMISSIONS.ROLE_ACCESS,
     name: '访问角色管理',
-    hasPermission: permissions.hasPermission(PERMISSIONS.ROLE_MGMT_ACCESS),
-    type: isCorePermission(PERMISSIONS.ROLE_MGMT_ACCESS) ? 'core' : 'business'
+    hasPermission: permissions.hasPermission(PERMISSIONS.ROLE_ACCESS),
+    type: isCorePermission(PERMISSIONS.ROLE_ACCESS) ? 'core' : 'business'
   },
-  { 
-    key: PERMISSIONS.PERM_MGMT_ACCESS, 
+  {
+    key: PERMISSIONS.PERMISSION_ACCESS,
     name: '访问权限管理',
-    hasPermission: permissions.hasPermission(PERMISSIONS.PERM_MGMT_ACCESS),
-    type: isCorePermission(PERMISSIONS.PERM_MGMT_ACCESS) ? 'core' : 'business'
+    hasPermission: permissions.hasPermission(PERMISSIONS.PERMISSION_ACCESS),
+    type: isCorePermission(PERMISSIONS.PERMISSION_ACCESS) ? 'core' : 'business'
   },
 ])
 

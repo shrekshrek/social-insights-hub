@@ -127,9 +127,9 @@ export const usePermissions = () => {
 
   // 常用页面访问权限检查（基于hasPermission的便捷封装）
   const canAccessDashboard = computed(() => hasPermission({ target: 'dashboard', action: 'access' }))
-  const canAccessUsersPage = computed(() => hasPermission({ target: 'user_mgmt', action: 'access' }))
-  const canAccessRolesPage = computed(() => hasPermission({ target: 'role_mgmt', action: 'access' }))
-  const canAccessPermissionsPage = computed(() => hasPermission({ target: 'perm_mgmt', action: 'access' }))
+  const canAccessUsersPage = computed(() => hasPermission({ target: 'user', action: 'access' }))
+  const canAccessRolesPage = computed(() => hasPermission({ target: 'role', action: 'access' }))
+  const canAccessPermissionsPage = computed(() => hasPermission({ target: 'permission', action: 'access' }))
   
   // 管理员权限检查
   const hasAdminPermissions = computed(() => {
@@ -201,7 +201,7 @@ export const usePermissions = () => {
  * 判断是否为核心权限
  */
 export const isCorePermission = (permission: Permission): boolean => {
-  return ['user', 'role', 'permission', 'user_mgmt', 'role_mgmt', 'perm_mgmt'].includes(permission.target)
+  return ['user', 'role', 'permission'].includes(permission.target)
 }
 
 /**

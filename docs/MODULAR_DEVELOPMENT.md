@@ -2,6 +2,21 @@
 
 本指南介绍如何在项目中开发新的业务模块，从权限定义到前后端实现的完整流程。
 
+## 🔄 开发阶段
+
+一个功能从构思到上线的标准流程：
+
+| 阶段 | 工作 |
+|------|------|
+| **0. 设计** | 数据库表设计、API 端点规划、权限规划 |
+| **1. 后端** | models → schemas → service → router → 注册路由 → 迁移 → Swagger 测试 |
+| **2. 前端** | composables 封装 API → 页面/组件开发 → 注册 Layer 和路由权限 |
+| **3. 联调** | 端到端测试完整流程 → `pnpm fe:typecheck && pnpm be:lint` |
+
+后端先行：先交付稳定 API，再开发前端，减少等待和返工。
+
+---
+
 ## 📋 概述
 
 本项目采用**领域驱动设计（DDD）**，前后端模块化架构：
@@ -448,9 +463,9 @@ const user = await getUser(userId)
 ## 📚 相关文档
 
 - [权限系统深度指南](./PERMISSION_MANAGEMENT.md) - 了解权限同步原理
+- [后端架构文档](./backend-architecture.md) - 模块边界、数据模型、分析管线
 - [后端开发规范](../backend/CODING_GUIDE.md) - 后端详细规范
 - [前端开发规范](../frontend/CODING_GUIDE.md) - 前端详细规范
-- [工作流程指南](./WORKFLOW.md) - 完整的开发流程
 
 ## 🎯 下一步
 

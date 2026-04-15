@@ -60,7 +60,7 @@
 | `xxx:access` | 前端路由守卫 | 控制是否能进入该模块页面/导航可见性 |
 | `xxx:read` | 后端 API 端点 | 控制是否能获取列表和详情数据 |
 
-两者并行存在，不合并。这与系统原始设计的 `user_mgmt:access`（前端页面门控）+ `user:read`（后端API门控）模式一致。
+两者并行存在，不合并。例如用户管理：`user:access`（前端路由守卫）+ `user:read`（后端 API 门控）。
 
 ### 超级管理员与 admin 的处理
 
@@ -80,6 +80,27 @@ if (userRoles.includes('admin')) {
 ```
 
 因此所有使用 `hasPermission()` 的地方，超管和 admin 自动满足，无需特殊处理。
+
+### 角色 permission_strategy
+
+每个角色有 `permission_strategy` 字段，控制权限获取方式：
+
+| 值 | 含义 | 适用角色 |
+|----|------|---------|
+| `all` | 自动获得所有权限 | super_admin |
+| `admin` | 自动获得管理员权限（除核心删除） | admin |
+| `explicit` | 仅拥有明确分配的权限 | 自定义角色 |
+
+UI 上只有 `explicit` 角色才显示"配置权限"按钮；`all`/`admin` 角色无需配置权限，显示策略标签即可。
+
+### 超管安全保护
+
+系统在以下操作上有硬性保护，防止超管账号意外失效：
+
+1. **删除用户**：若目标用户是最后一个 super_admin，拒绝删除（HTTP 400）
+2. **分配角色**：
+   - 不允许用户修改自己的角色（防止锁死自己）
+   - 若操作会导致 super_admin 角色无人持有，拒绝执行（HTTP 400）
 
 ### 配置方式
 - 所有路由权限在 `config/routes.ts` 的 `ROUTE_CONFIG` 中管理
@@ -220,7 +241,7 @@ export const ROUTE_CONFIG = {
   '/profile': { permission: null },
 
   // 单一权限
-  '/users': { permission: PERMISSIONS.USER_MGMT_ACCESS, label: '用户管理', showInNav: true },
+  '/users': { permission: PERMISSIONS.USER_ACCESS, label: '用户管理', showInNav: true },
   '/users/create': { permission: PERMISSIONS.USER_WRITE },
 
   // 多权限组合（必须全部满足）

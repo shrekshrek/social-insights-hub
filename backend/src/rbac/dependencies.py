@@ -68,9 +68,9 @@ require_permission_read = create_permission_dependency("permission:read")
 
 # 页面访问权限依赖
 require_dashboard_access = create_permission_dependency("dashboard:access")
-require_user_mgmt_access = create_permission_dependency("user_mgmt:access")
-require_role_mgmt_access = create_permission_dependency("role_mgmt:access")
-require_perm_mgmt_access = create_permission_dependency("perm_mgmt:access")
+require_user_access = create_permission_dependency("user:access")
+require_role_access = create_permission_dependency("role:access")
+require_permission_access = create_permission_dependency("permission:access")
 
 # 社媒监测权限依赖
 require_social_monitor_read = create_permission_dependency("social_monitor:read")

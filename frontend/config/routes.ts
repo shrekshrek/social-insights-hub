@@ -108,7 +108,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "RAG 检索测试",
   },
   "/users": {
-    permission: PERMISSIONS.USER_MGMT_ACCESS,
+    permission: PERMISSIONS.USER_ACCESS,
     label: "用户管理",
     showInNav: true,
     order: 90,
@@ -118,7 +118,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/users/[id]/edit": { permission: PERMISSIONS.USER_WRITE },
   "/users/[id]/roles": { permission: PERMISSIONS.USER_WRITE },
   "/rbac/roles": {
-    permission: PERMISSIONS.ROLE_MGMT_ACCESS,
+    permission: PERMISSIONS.ROLE_ACCESS,
     label: "角色管理",
     showInNav: true,
     order: 100,
@@ -128,7 +128,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/rbac/roles/[id]/edit": { permission: PERMISSIONS.ROLE_WRITE },
   "/rbac/roles/[id]/permissions": { permission: PERMISSIONS.ROLE_WRITE },
   "/rbac/permissions": {
-    permission: PERMISSIONS.PERM_MGMT_ACCESS,
+    permission: PERMISSIONS.PERMISSION_ACCESS,
     label: "权限管理",
     showInNav: true,
     order: 110,

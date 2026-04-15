@@ -81,19 +81,19 @@ CORE_PERMISSIONS = [
     },
     # RBAC管理页面访问权限
     {
-        "target": "user_mgmt",
+        "target": "user",
         "action": "access",
         "display_name": "访问用户管理",
         "description": "允许访问用户管理页面",
     },
     {
-        "target": "role_mgmt",
+        "target": "role",
         "action": "access",
         "display_name": "访问角色管理",
         "description": "允许访问角色管理页面",
     },
     {
-        "target": "perm_mgmt",
+        "target": "permission",
         "action": "access",
         "display_name": "访问权限管理",
         "description": "允许访问权限管理页面",
@@ -556,14 +556,7 @@ def auto_generate_permission_groups() -> dict:
         action = permission["action"]
         permission_key = f"{target}:{action}"
 
-        if target in [
-            "user",
-            "role",
-            "permission",
-            "user_mgmt",
-            "role_mgmt",
-            "perm_mgmt",
-        ]:
+        if target in ["user", "role", "permission"]:
             organized_groups["CORE"]["permissions"].append(permission_key)
         elif action == "access":
             organized_groups["PAGE_ACCESS"]["permissions"].append(permission_key)

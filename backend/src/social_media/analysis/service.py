@@ -796,7 +796,7 @@ async def get_global_stats(
     completed_jobs = sum(1 for j in all_jobs if j.status == "completed")
     failed_jobs = sum(1 for j in all_jobs if j.status == "failed")
     pending_jobs = sum(1 for j in all_jobs if j.status == "pending")
-    processing_jobs = sum(1 for j in all_jobs if j.status == "processing")
+    processing_jobs = sum(1 for j in all_jobs if j.status == "running")
 
     total_cost = 0.0
     total_tokens = 0

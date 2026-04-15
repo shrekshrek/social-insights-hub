@@ -71,7 +71,7 @@ class AnalysisStatus(str, Enum):
     """分析状态枚举"""
 
     PENDING = "pending"
-    PROCESSING = "processing"
+    RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -159,7 +159,7 @@ class AnalysisJob(Base):
         nullable=False,
         default="pending",
         index=True,
-        comment="状态: pending/processing/completed/failed",
+        comment="状态: pending/running/completed/failed",
     )
 
     # ===== 性能指标 =====

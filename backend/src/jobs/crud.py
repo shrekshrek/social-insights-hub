@@ -345,7 +345,7 @@ async def cancel_analysis_job(
     # 验证权限
     await _assert_job_access(db, job, current_user_id)
 
-    if job.status not in ("pending", "processing"):
+    if job.status not in ("pending", "running"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot cancel analysis in status: {job.status}",

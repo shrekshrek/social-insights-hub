@@ -164,9 +164,9 @@ def run_research_task(self, research_task_id: int) -> None:
             # 每步开始前确认任务未被删除
             if not db.get(ResearchTask, research_task_id):
                 logger.info("ResearchTask %d was deleted, aborting stream", research_task_id)
-                # AnalysisJob 也需要终止，否则会永远停留在 processing 状态
+                # AnalysisJob 也需要终止，否则会永远停留在 running 状态
                 db.refresh(job)
-                if job.status in ("pending", "processing"):
+                if job.status in ("pending", "running"):
                     complete_analysis_job_sync(
                         db=db, job=job, error_message="研究任务已被删除"
                     )

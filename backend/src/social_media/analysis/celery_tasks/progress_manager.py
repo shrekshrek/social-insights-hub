@@ -70,7 +70,7 @@ class AnalysisProgressManager:
                 analysis_job = result.scalar_one_or_none()
 
                 if analysis_job:
-                    analysis_job.status = "processing"
+                    analysis_job.status = "running"
                     analysis_job.started_at = datetime.now(timezone.utc)
                     db.commit()
                     logger.info(
@@ -344,7 +344,7 @@ class AnalysisProgressManager:
             stmt = select(AnalysisJob).where(AnalysisJob.id == self.result_id)
             result = db.execute(stmt)
             analysis_job = result.scalar_one_or_none()
-            if analysis_job and analysis_job.status == "processing":
+            if analysis_job and analysis_job.status == "running":
                 analysis_job.status = "failed"
                 analysis_job.completed_at = datetime.now(timezone.utc)
                 analysis_job.error_message = (error_message[:500] if error_message else "任务异常中断")

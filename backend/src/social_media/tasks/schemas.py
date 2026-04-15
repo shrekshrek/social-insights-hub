@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import Field, field_validator
 
-from src.schemas import CustomBaseModel
+from src.schemas import CustomBaseModel, PaginatedResponse
 
 
 # ==================== SocialTask Schemas ====================
@@ -81,24 +81,8 @@ class SocialTaskReadWithRelations(SocialTaskRead):
     aggregation_status: Optional[str] = None
 
 
-class DataTaskListResponse(CustomBaseModel):
+class DataTaskListResponse(PaginatedResponse[SocialTaskReadWithRelations]):
     """任务列表响应"""
-
-    items: List[SocialTaskReadWithRelations]
-    total: int
-    page: int
-    page_size: int
-
-    @classmethod
-    def create(
-        cls,
-        items: List[SocialTaskReadWithRelations],
-        total: int,
-        page: int,
-        page_size: int,
-    ):
-        """创建分页响应"""
-        return cls(items=items, total=total, page=page, page_size=page_size)
 
 
 # ==================== SocialPost Schemas ====================

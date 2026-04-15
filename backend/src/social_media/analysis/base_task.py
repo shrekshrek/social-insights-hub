@@ -109,7 +109,7 @@ class AnalysisTaskBase(Task):
                     "updated_at": datetime.now(timezone.utc),
                 }
 
-                if status == "processing" and not result_data:
+                if status == "running" and not result_data:
                     update_data["started_at"] = datetime.now(timezone.utc)
 
                 if status in ("completed", "failed"):

@@ -8,7 +8,7 @@ from datetime import datetime
 
 from pydantic import Field
 
-from src.schemas import CustomBaseModel
+from src.schemas import CustomBaseModel, PaginatedResponse
 
 
 # ==================== Token 使用统计 ====================
@@ -127,13 +127,8 @@ class AnalysisJobResponse(CustomBaseModel):
     user_name: str | None = None
 
 
-class AnalysisJobListResponse(CustomBaseModel):
+class AnalysisJobListResponse(PaginatedResponse[AnalysisJobResponse]):
     """分析任务列表响应"""
-
-    items: list[AnalysisJobResponse]
-    total: int
-    page: int
-    page_size: int
 
 
 # ==================== 分析进度查询 Schema ====================

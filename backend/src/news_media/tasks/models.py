@@ -58,6 +58,12 @@ class NewsTask(Base):
     analysis_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="任务级聚合分析结果"
     )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="任务开始时间"
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="任务完成时间"
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"

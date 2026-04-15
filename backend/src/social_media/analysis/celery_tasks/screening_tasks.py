@@ -235,8 +235,8 @@ def _update_task_status(result_id: int, status: str, **kwargs):
             **kwargs,
         }
 
-        # 当状态变为processing时，设置started_at
-        if status == "processing":
+        # 当状态变为running时，设置started_at
+        if status == "running":
             update_data["started_at"] = datetime.now(timezone.utc)
 
         stmt = (
@@ -303,7 +303,7 @@ def finalize_screening_analysis(result_id: int, total_count: int):
         job = db_check.execute(
             select(AnalysisJob).where(AnalysisJob.id == result_id)
         ).scalar_one_or_none()
-        if job and job.status != "processing":
+        if job and job.status != "running":
             logger.info("Job %s 状态已为 %s，跳过重复 finalizer", result_id, job.status)
             return {"status": "skipped", "reason": f"job already {job.status}"}
     finally:
@@ -367,7 +367,7 @@ def run_screening_task(
     """
     try:
         # 更新状态为处理中
-        _update_task_status(result_id, status="processing")
+        _update_task_status(result_id, status="running")
 
         # 将原文分批（批次大小从配置读取）
         from celery import group, chain

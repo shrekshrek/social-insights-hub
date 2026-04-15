@@ -36,6 +36,8 @@ class NewsTaskRead(CustomBaseModel):
     articles_count: int
     auto_analyze: bool
     analysis_result: dict | None
+    started_at: datetime | None
+    completed_at: datetime | None
     error_message: str | None
     user_id: int
     created_at: datetime
@@ -62,6 +64,8 @@ class NewsTaskReadWithRelations(NewsTaskRead):
             articles_count=task.articles_count,
             auto_analyze=task.auto_analyze,
             analysis_result=task.analysis_result,
+            started_at=task.started_at,
+            completed_at=task.completed_at,
             error_message=task.error_message,
             user_id=task.user_id,
             created_at=task.created_at,

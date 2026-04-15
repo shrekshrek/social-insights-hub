@@ -100,6 +100,7 @@ import { h, ref, computed, watch, type Component } from 'vue'
 import type { ResearchTask } from '../../types'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '专题研究' })
@@ -109,6 +110,7 @@ const PAGE_SIZE = 10
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const { currentUserId, hasPermission } = usePermissions()
 const { getTasks, rerunTask, deleteTask, statusLabel, statusColor } = useResearchAgent()
 
 const searchQuery = ref('')
@@ -231,20 +233,24 @@ const columns: TableColumn<ResearchTask>[] = [
           icon: 'i-heroicons-eye',
           to: `/research-agent/${row.original.id}`,
         }, () => '查看'),
-        h(UButton as Component, {
-          size: 'xs',
-          variant: 'ghost',
-          icon: 'i-heroicons-arrow-path',
-          disabled: row.original.status === 'pending' || row.original.status === 'running',
-          onClick: () => handleRerun(row.original),
-        }, () => '重跑'),
-        h(UButton as Component, {
-          size: 'xs',
-          variant: 'ghost',
-          color: 'error',
-          icon: 'i-heroicons-trash',
-          onClick: () => handleDelete(row.original),
-        }, () => '删除'),
+        (hasPermission(PERMISSIONS.RESEARCH_AGENT_WRITE) || row.original.user_id === currentUserId.value)
+          ? h(UButton as Component, {
+              size: 'xs',
+              variant: 'ghost',
+              icon: 'i-heroicons-arrow-path',
+              disabled: row.original.status === 'pending' || row.original.status === 'running',
+              onClick: () => handleRerun(row.original),
+            }, () => '重跑')
+          : null,
+        (hasPermission(PERMISSIONS.RESEARCH_AGENT_DELETE) || row.original.user_id === currentUserId.value)
+          ? h(UButton as Component, {
+              size: 'xs',
+              variant: 'ghost',
+              color: 'error',
+              icon: 'i-heroicons-trash',
+              onClick: () => handleDelete(row.original),
+            }, () => '删除')
+          : null,
       ])
     },
   },

@@ -33,7 +33,7 @@ _SRC = CrawlSource(
 def _make_doc(status: str) -> KnowledgeDocument:
     doc = KnowledgeDocument()
     doc.id = 1
-    doc.processing_status = status
+    doc.status = status
     doc.source_type = "cnnic"
     doc.source_url = _SRC.url
     doc.source_meta = {}
@@ -75,7 +75,7 @@ async def test_upsert_retries_failed_document(crawler):
         skipped = await crawler._upsert(db, _SRC)
 
     assert skipped is False
-    assert doc.processing_status == "pending"
+    assert doc.status == "pending"
     assert doc.error_message is None
     mock_task.delay.assert_called_once_with(doc.id)
     db.commit.assert_called_once()
@@ -106,6 +106,6 @@ async def test_upsert_creates_new_document(crawler):
     assert doc.workspace_id is None          # 平台公共
     assert doc.source_type == "cnnic"
     assert doc.source_url == _SRC.url
-    assert doc.processing_status == "pending"
+    assert doc.status == "pending"
     assert "_file_bytes_b64" in doc.source_meta
     mock_task.delay.assert_called_once_with(42)

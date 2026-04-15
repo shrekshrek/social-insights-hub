@@ -3,7 +3,7 @@
 - analysis_jobs: rename status value 'processing' -> 'running' (data migration)
 - news_tasks: add started_at and completed_at columns
 
-Revision ID: align_status_and_news_task_fields
+Revision ID: align_jobs_news_tasks
 Revises: rename_owner_id_monitors
 Create Date: 2026-04-15
 
@@ -14,7 +14,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "align_status_and_news_task_fields"
+revision: str = "align_jobs_news_tasks"
 down_revision: Union[str, Sequence[str]] = "rename_owner_id_monitors"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

@@ -65,7 +65,7 @@ class KnowledgeDocument(Base):
     chunk_count: Mapped[int] = mapped_column(
         Integer(), nullable=False, default=0, server_default="0", comment="处理后分块数"
     )
-    processing_status: Mapped[str] = mapped_column(
+    status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
         default="pending",

@@ -14,10 +14,6 @@ from src.rbac.models import SystemRoles
 # 导入权限模板工具函数
 from src.rbac.utils import create_module_permissions
 
-# 导入模块权限定义
-from src.social_media.analysis.permissions_def import (
-    ALL_PERMISSIONS as ANALYSIS_PERMISSIONS,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -215,10 +211,24 @@ BUSINESS_PERMISSIONS = [
         },
     ),
     # ========================================================================
-    # 数据分析模块 (新增)
+    # 数据分析模块
     # ========================================================================
-    # 分析模块使用细粒度的权限定义（task和project两个层级）
-    *ANALYSIS_PERMISSIONS,
+    *create_module_permissions(
+        "analysis",
+        ["access", "read", "write", "delete"],
+        display_names={
+            "access": "访问AI分析",
+            "read": "查看分析数据",
+            "write": "运行分析任务",
+            "delete": "删除分析结果",
+        },
+        descriptions={
+            "access": "允许访问AI分析统计页面",
+            "read": "允许查看分析任务列表、结果和统计数据",
+            "write": "允许发起/重跑各类AI分析（初筛、深度、聚合、切片）",
+            "delete": "允许删除分析结果和分析任务记录",
+        },
+    ),
     # ========================================================================
     # 策略定义模块
     # ========================================================================

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { NewsNarrative, NewsEntity } from '../../../../types'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: 'default',
@@ -8,6 +9,7 @@ definePageMeta({
 const route = useRoute()
 const sliceId = Number(route.params.id)
 
+const { hasPermission } = usePermissions()
 const { getSlice, analyzeSlice, deleteSlice: deleteSliceApi } = useNewsSlices()
 const { data: slice, pending: loading, refresh } = getSlice(sliceId)
 
@@ -109,7 +111,7 @@ const entities = computed(() => (resultData.value.entities || []) as NewsEntity[
 
         <div class="flex items-center gap-3">
           <UButton
-            v-if="slice.status === 'completed' || slice.status === 'failed'"
+            v-if="(slice.status === 'completed' || slice.status === 'failed') && hasPermission(PERMISSIONS.ANALYSIS_WRITE)"
             icon="i-heroicons-sparkles"
             :loading="analyzing"
             @click="handleAnalyze"

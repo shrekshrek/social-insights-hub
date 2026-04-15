@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
 from src.database import get_async_db
-from src.rbac.dependencies import require_kb_read, require_kb_write
+from src.rbac.dependencies import require_kb_delete, require_kb_read, require_kb_write
 from src.rbac.service import check_user_permission
 from src.pagination import PaginationParams, get_pagination_params
 from src.schemas import MessageResponse, PaginatedResponse
@@ -87,7 +87,7 @@ async def upload_document(
         title=doc_title,
         source_type="upload",
         file_name=filename,
-        processing_status="pending",
+        status="pending",
         source_meta={"_file_bytes_b64": base64.b64encode(file_bytes).decode()},
     )
     db.add(doc)
@@ -98,7 +98,7 @@ async def upload_document(
     process_document_task.delay(doc.id)
     logger.info("文档 %d 上传完成，已派发处理任务", doc.id)
 
-    return DocumentUploadResponse(id=doc.id, title=doc.title, processing_status=doc.processing_status)
+    return DocumentUploadResponse(id=doc.id, title=doc.title, status=doc.status)
 
 
 @router.get(
@@ -109,7 +109,7 @@ async def upload_document(
 )
 async def list_documents(
     source_type: str | None = Query(None, description="来源类型过滤"),
-    processing_status: str | None = Query(None, description="处理状态过滤"),
+    status: str | None = Query(None, description="处理状态过滤"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_kb_read),
     pagination: PaginationParams = Depends(get_pagination_params),
@@ -119,7 +119,7 @@ async def list_documents(
         db,
         workspace_id=current_user.id,
         source_type=source_type,
-        status=processing_status,
+        status=status,
         skip=pagination.offset,
         limit=pagination.limit,
     )
@@ -195,7 +195,7 @@ async def get_document_file(
 async def delete_document(
     doc_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_kb_write),
+    current_user: User = Depends(require_kb_delete),
 ):
     """删除文档及所有向量分块"""
     doc = await service.get_document(db, doc_id)
@@ -224,7 +224,7 @@ async def delete_document(
 async def batch_delete_documents(
     request: BatchDeleteRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_kb_write),
+    current_user: User = Depends(require_kb_delete),
 ):
     """批量删除文档，跳过无权限的条目"""
     is_admin = await check_user_permission(db, current_user.id, "knowledge_base:delete")
@@ -272,7 +272,7 @@ async def search_documents(
             (1 - KnowledgeChunk.embedding.cosine_distance(query_vec)).label("score"),
         )
         .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
-        .where(KnowledgeDocument.processing_status == "ready")
+        .where(KnowledgeDocument.status == "ready")
         .where(
             or_(
                 KnowledgeDocument.workspace_id.is_(None),
@@ -324,10 +324,10 @@ async def get_crawler_status(
             select(
                 func.count(KnowledgeDocument.id).label("total"),
                 func.count(
-                    case((KnowledgeDocument.processing_status == "ready", 1))
+                    case((KnowledgeDocument.status == "ready", 1))
                 ).label("ready"),
                 func.count(
-                    case((KnowledgeDocument.processing_status == "failed", 1))
+                    case((KnowledgeDocument.status == "failed", 1))
                 ).label("failed"),
                 func.max(KnowledgeDocument.updated_at).label("last_at"),
             ).where(KnowledgeDocument.source_type == source_type)

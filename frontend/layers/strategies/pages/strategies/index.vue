@@ -92,6 +92,7 @@ import type { StrategyListItem, StrategyStatus } from '../../types'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
 import { STATUS_MAP, formatDate } from '../../composables/useStrategyConstants'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   title: '策略管理',
@@ -116,6 +117,8 @@ const currentPage = computed({
 })
 
 const pageSize = ref(DEFAULT_PAGE_SIZE)
+
+const { currentUserId, hasPermission } = usePermissions()
 
 const strategiesApi = useStrategies()
 
@@ -219,13 +222,15 @@ const columns: TableColumn<StrategyListItem>[] = [
           icon: 'i-heroicons-eye',
           to: `/strategies/${row.original.id}`,
         }, () => '查看'),
-        h(UButton as Component, {
-          size: 'xs',
-          variant: 'ghost',
-          color: 'error',
-          icon: 'i-heroicons-trash',
-          onClick: () => confirmDelete(row.original),
-        }, () => '删除'),
+        (hasPermission(PERMISSIONS.STRATEGY_DELETE) || row.original.user_id === currentUserId.value)
+          ? h(UButton as Component, {
+              size: 'xs',
+              variant: 'ghost',
+              color: 'error',
+              icon: 'i-heroicons-trash',
+              onClick: () => confirmDelete(row.original),
+            }, () => '删除')
+          : null,
       ])
     },
   },

@@ -7,7 +7,6 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from src.rbac.models import UserRole
-    from src.social_media.monitors.models import SocialMonitor
 
 
 class User(Base):
@@ -29,18 +28,4 @@ class User(Base):
     # 关系
     user_roles: Mapped[list["UserRole"]] = relationship(
         "src.rbac.models.UserRole", back_populates="user", cascade="all, delete-orphan"
-    )
-
-    # 监测关系（作为owner）
-    owned_monitors: Mapped[list["SocialMonitor"]] = relationship(
-        "src.social_media.monitors.models.SocialMonitor",
-        foreign_keys="SocialMonitor.owner_id",
-        back_populates="owner",
-    )
-
-    # 监测关系（作为participant）
-    participating_monitors: Mapped[list["SocialMonitor"]] = relationship(
-        "src.social_media.monitors.models.SocialMonitor",
-        secondary="social_monitor_participants",
-        back_populates="participants",
     )

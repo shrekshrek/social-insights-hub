@@ -43,7 +43,7 @@ class DocumentRead(CustomBaseModel):
     file_path: str | None = None
     industry_tags: list[str]
     chunk_count: int
-    processing_status: str  # pending / processing / ready / failed
+    status: str  # pending / processing / ready / failed
     error_message: str | None
     created_at: datetime
     updated_at: datetime
@@ -54,7 +54,7 @@ class DocumentUploadResponse(CustomBaseModel):
 
     id: int
     title: str
-    processing_status: str
+    status: str
     message: str = "文档上传成功，正在后台处理"
 
 

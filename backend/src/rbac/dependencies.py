@@ -108,16 +108,9 @@ require_research_agent_write = create_permission_dependency("research_agent:writ
 require_research_agent_delete = create_permission_dependency("research_agent:delete")
 
 # 分析权限依赖
-require_analysis_task_run_screening = create_permission_dependency("analysis:task.run_screening")
-require_analysis_task_run_deep = create_permission_dependency("analysis:task.run_deep")
-require_analysis_task_view_results = create_permission_dependency("analysis:task.view_results")
-require_analysis_task_delete_results = create_permission_dependency("analysis:task.delete_results")
-require_analysis_monitor_run_clustering = create_permission_dependency("analysis:monitor.run_clustering")
-require_analysis_monitor_view_results = create_permission_dependency("analysis:monitor.view_results")
-require_analysis_monitor_delete_results = create_permission_dependency("analysis:monitor.delete_results")
 require_analysis_read = create_permission_dependency("analysis:read")
-require_analysis_stats_view = create_permission_dependency("analysis:stats.view")
-require_analysis_results_export = create_permission_dependency("analysis:results.export")
+require_analysis_write = create_permission_dependency("analysis:write")
+require_analysis_delete = create_permission_dependency("analysis:delete")
 
 
 async def get_current_user_permissions(

@@ -8,6 +8,7 @@ import type {
 import { usePostAnalysisColumns } from '../../../../../analysis/composables/usePostAnalysisColumns'
 import DeepResultModal from '../../../../../analysis/components/deep-result/DeepResultModal.vue'
 import TaskAnalysisReport from '../../../../../analysis/components/task/TaskAnalysisReport.vue'
+import { PERMISSIONS } from '~/config/permissions'
 
 const props = defineProps<{
   taskId: number
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const { hasPermission } = usePermissions()
 
 const { getAnalysisJobs } = useJobs()
 const {
@@ -612,6 +614,7 @@ defineExpose({
 
           <!-- 删除分析结果按钮 -->
           <UButton
+            v-if="hasPermission(PERMISSIONS.ANALYSIS_DELETE)"
             size="sm"
             color="error"
             variant="soft"
@@ -628,7 +631,7 @@ defineExpose({
     <!-- 操作按钮区 + 进度 -->
     <div class="mb-4 flex justify-between items-start flex-wrap gap-3">
       <!-- 左侧：操作按钮 -->
-      <div class="flex items-center gap-2 flex-wrap">
+      <div v-if="hasPermission(PERMISSIONS.ANALYSIS_WRITE)" class="flex items-center gap-2 flex-wrap">
         <UTooltip
           :text="allPostsScreened ? '所有原文已完成初筛' : totalPostsCount === 0 ? '没有原文数据' : ''"
           :disabled="!allPostsScreened && totalPostsCount > 0"
@@ -1049,6 +1052,7 @@ defineExpose({
           </UBadge>
         </div>
         <UButton
+          v-if="hasPermission(PERMISSIONS.ANALYSIS_WRITE)"
           icon="i-heroicons-sparkles"
           :loading="actionLoading.aggregate"
           :disabled="hasRunningTask || !hasScreeningResult"

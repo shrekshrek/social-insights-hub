@@ -5,7 +5,7 @@
   提供底层 execute_news_probe / celery 任务，approve/refine 入口不对外暴露
   （策略通过 strategies/service.py 的批量端点处理）
 
-collect 阶段的执行流水线位于 src/news_media/tasks/celery_tasks.py，
+collect 阶段的执行流水线位于 src/news_media/tasks/tasks.py，
 本模块内的辅助函数（_tag_articles_batch / _run_insight_analysis）供 celery
 _async_run_collect 直接引用。
 """

@@ -15,19 +15,19 @@ export const PERMISSIONS = {
   USER_READ: {target: 'user', action: 'read'},
   USER_WRITE: {target: 'user', action: 'write'},
   USER_DELETE: {target: 'user', action: 'delete'},
-  USER_MGMT_ACCESS: {target: 'user_mgmt', action: 'access'},
-  
+  USER_ACCESS: {target: 'user', action: 'access'},
+
   // 角色管理
   ROLE_READ: {target: 'role', action: 'read'},
   ROLE_WRITE: {target: 'role', action: 'write'},
   ROLE_DELETE: {target: 'role', action: 'delete'},
-  ROLE_MGMT_ACCESS: {target: 'role_mgmt', action: 'access'},
-  
+  ROLE_ACCESS: {target: 'role', action: 'access'},
+
   // 权限管理
   PERMISSION_READ: {target: 'permission', action: 'read'},
   PERMISSION_WRITE: {target: 'permission', action: 'write'},
   PERMISSION_DELETE: {target: 'permission', action: 'delete'},
-  PERM_MGMT_ACCESS: {target: 'perm_mgmt', action: 'access'},
+  PERMISSION_ACCESS: {target: 'permission', action: 'access'},
   
   // 基础业务
   DASHBOARD_ACCESS: {target: 'dashboard', action: 'access'},

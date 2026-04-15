@@ -1,23 +1,30 @@
-# 全栈脚手架：FastAPI + Nuxt 4
+# 脉图智策
 
-这是一个功能强大、开箱即用的全栈Web应用脚手架，基于 **FastAPI (后端)** 和 **Nuxt 4 (前端)** 构建。它旨在为需要快速启动新项目的开发者提供一个坚实、现代化的起点。
+社交媒体数据智能分析平台。聚合抖音、微博、B站、小红书、快手、知乎、贴吧等平台数据，通过 LLM 进行筛选、实体提取、情感分析和竞品分析，提供项目化的监控与报告。
 
 ---
 
-## ✨ 核心特性
+## ✨ 核心功能
 
--   **现代化技术栈**:
-    -   **后端**: FastAPI, PostgreSQL, SQLAlchemy (异步), Celery, Redis
-    -   **前端**: Nuxt 4, Vue 3, Pinia, `@nuxt/ui`, Tailwind CSS
--   **完全容器化**: 使用 Docker 和 Docker Compose 提供一致、可复现的开发与生产环境。
--   **代码驱动RBAC权限系统**:
-    -   权限在代码中定义，启动时自动同步到数据库，确保一致性。
-    -   前端 `usePermissions` 组合式函数和 `<PermissionGuard>` 组件，轻松实现细粒度权限控制。
-    -   支持权限的完全自动化管理（增删改），开发者零配置。
--   **Nuxt Layers 架构**: 前端采用领域驱动设计，模块化、可扩展性强。
--   **统一的API与错误处理**: 全局 `useApi` 组合式函数，简化API调用，自动处理加载状态、错误和认证。
--   **类型安全**: 从数据库到API，再到前端组件，全程使用 TypeScript 和 Pydantic，提供端到端的类型安全。
--   **清晰的工作流与部署方案**: 提供了从开发到部署的完整文档和脚本。
+- **社媒监测**：创建多平台监测项目，采集原文与评论，追踪舆情动态
+- **新闻监测**：整合新闻渠道，自动切片分析，生成舆情报告
+- **策略研究**：多渠道数据汇聚，LLM 辅助生成品牌策略报告
+- **AI 统计**：跨渠道 AnalysisJob 管理，实时追踪分析进度与 LLM 成本
+- **市场知识库**：上传文档并向量化，支持 RAG 语义检索
+- **RBAC 权限系统**：代码驱动的角色权限管理，支持细粒度授权
+
+---
+
+## 🛠️ 技术栈
+
+| 层 | 选型 |
+|---|------|
+| 后端 | FastAPI + Python 3.11+ + SQLAlchemy 2.0 (async) |
+| 前端 | Nuxt 4 + Vue 3 + TypeScript + @nuxt/ui v4 |
+| 数据库 | PostgreSQL 16 + Alembic 迁移 |
+| 缓存/队列 | Redis 7 + Celery + APScheduler |
+| AI/LLM | LangChain 1.0+ + DeepSeek API |
+| 部署 | Docker Compose + Nginx |
 
 ---
 
@@ -25,154 +32,77 @@
 
 ### 1. 环境准备
 
--   安装 [Docker](https://www.docker.com/products/docker-desktop/) 和 [pnpm](https://pnpm.io/installation)。
--   克隆本项目：`git clone <your-repo-url>`
--   进入项目目录：`cd <your-repo-folder>`
+- 安装 [Docker](https://www.docker.com/products/docker-desktop/) 和 [pnpm](https://pnpm.io/installation)
+- 克隆项目并进入目录
 
-### 2. 初始化设置
+### 2. 初始化配置
 
-1.  **复制环境变量文件**:
-    ```bash
-    cp .env.example .env
-    ```
-2.  **设置项目标识与显示名称** (重要！):
-    
-    编辑 `.env` 文件，设置唯一的 `PROJECT_NAME`（用于 Docker/数据库隔离）与可选的 `APP_NAME`（对外显示）：
-    ```bash
-    # 使用有意义的项目名称，如: crm, admin, api_v2
-    PROJECT_NAME=your_project_name
+```bash
+cp .env.example .env
+```
 
-    # 可选：应用显示名称（API 文档 title / 网站 title）
-    APP_NAME=你的应用名称
-    ```
-    
-> 💡 **多项目开发**: 如果你基于此脚手架开发多个项目，每个项目的 `PROJECT_NAME` 必须不同。这样可以避免 Docker 容器和数据库冲突，让多个项目同时运行。`APP_NAME` 仅影响展示，可按需设置。
+编辑 `.env`，至少设置以下项：
 
-3.  **一键安装与构建**:
-    ```bash
-    pnpm setup
-    ```
-    *此命令会安装所有前后端依赖，并首次构建 Docker 镜像。*
+```bash
+PROJECT_NAME=your_project_name   # Docker 资源隔离用
+APP_NAME=脉图智策                  # 对外显示名称
+DEEPSEEK_API_KEY=sk-...          # AI 分析必填
+```
 
 ### 3. 启动开发环境
 
-执行以下命令，一键启动所有服务：
-
 ```bash
-pnpm dev
+pnpm setup   # 首次：安装依赖、构建镜像
+pnpm dev     # 启动所有服务（自动迁移 + 初始化权限数据）
 ```
 
 启动后：
--   **前端应用** 访问: `http://localhost:3000`
--   **后端API文档** 访问: `http://localhost:8000/docs`
+- **前端**：`http://localhost:3000`
+- **API 文档**：`http://localhost:8000/docs`
+- **默认账号**：`admin / admin123`（见 `.env` 的 `ADMIN_PASSWORD`）
 
 ---
 
-## 📚 主要命令
+## 📚 常用命令
 
-所有命令都应在项目**根目录**下执行。
+| 命令 | 说明 |
+|------|------|
+| `pnpm dev` | 启动开发环境 |
+| `pnpm dev:stop` | 停止所有服务 |
+| `pnpm be:migrate:make "描述"` | 创建数据库迁移 |
+| `pnpm be:migrate:up` | 执行数据库迁移 |
+| `pnpm be:lint` | 后端 lint + 格式化 |
+| `pnpm be:test` | 后端测试 |
+| `pnpm fe:typecheck` | 前端类型检查 |
+| `pnpm fe:lint` | 前端 lint |
+| `pnpm prod:build` | 构建生产镜像 |
+| `pnpm prod:deploy` | **（推荐）** 执行部署脚本，在生产服务器上启动应用 |
+| `pnpm prod:up` | 在生产模式下（后台）启动所有服务 |
+| `pnpm prod:down` | 停止并移除所有生产模式下的服务 |
 
-| 命令 | 描述 |
-| :--- | :--- |
-| `pnpm setup` | **首次安装**：安装所有依赖并预构建Docker镜像。|
-| `pnpm dev` | **日常开发**：一键启动整个开发环境。 |
-| `pnpm dev:stop` | **停止服务**：停止并移除所有开发容器。 |
-| `pnpm cleanup` | **清理资源**：交互式清理 Docker 容器和数据卷。 |
-
-### 后端命令 (`be:*`)
-
-| 命令 | 描述 |
-| :--- | :--- |
-| `pnpm be:install` | 安装后端的 Python 依赖。 |
-| `pnpm be:add <包名>` | 向后端添加一个新的 Python 依赖。 |
-| `pnpm be:migrate:make "<信息>"` | **(常用)** 生成一个新的数据库迁移脚本。 |
-| `pnpm be:migrate:up` | **(常用)** 应用所有数据库迁移。 |
-| `pnpm be:shell` | 进入正在运行的后端容器的 Shell 环境。 |
-
-### 生产部署命令 (`prod:*`)
-
-| 命令 | 描述 |
-| :--- | :--- |
-| `pnpm prod:build` | 构建用于生产环境的前后端 Docker 镜像。 |
-| `pnpm prod:deploy`| **(推荐)** 执行部署脚本，在生产服务器上启动应用。|
-| `pnpm prod:up` | 在生产模式下（后台）启动所有服务。 |
-| `pnpm prod:down`| 停止并移除所有生产模式下的服务。 |
-
-> ℹ️ **生产迁移提示**：生产 compose 启动时会自动执行 `alembic upgrade head`，无需手动迁移。
+> ℹ️ **生产迁移**：`prod:deploy` / `prod:up` 启动时会自动执行 `alembic upgrade head`，无需手动迁移。
 
 ---
 
-## 📚 文档导航
+## 📖 文档导航
 
-**🚀 快速上手**：
-- 新项目开始：本文档 → [快速开始](#🚀-快速开始)
-- 开发环境：本文档 → [主要命令](#📚-主要命令)
-
-**👨‍💻 开发指南**：
-- 模块化开发：[`docs/MODULAR_DEVELOPMENT.md`](docs/MODULAR_DEVELOPMENT.md) ⭐ 新手必读
-- 后端规范：[`backend/CODING_GUIDE.md`](backend/CODING_GUIDE.md)
-- 前端规范：[`frontend/CODING_GUIDE.md`](frontend/CODING_GUIDE.md)
-- 工作流程：[`docs/WORKFLOW.md`](docs/WORKFLOW.md)
-
-**⚙️ 专项功能**：
-- 权限管理：[`docs/PERMISSION_MANAGEMENT.md`](docs/PERMISSION_MANAGEMENT.md)
+**开发指南**：
+- 开发流程 + 新模块开发：[`docs/MODULAR_DEVELOPMENT.md`](docs/MODULAR_DEVELOPMENT.md) ⭐ 必读
+- 权限系统：[`docs/PERMISSION_MANAGEMENT.md`](docs/PERMISSION_MANAGEMENT.md)
 - 配置管理：[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
 - CI/CD 部署：[`docs/GITLAB_CI_VARIABLES.md`](docs/GITLAB_CI_VARIABLES.md)
-- Claude配置：[`CLAUDE.md`](CLAUDE.md)
 
----
+**架构参考**：
+- 后端架构：[`docs/backend-architecture.md`](docs/backend-architecture.md)
+- 前端架构：[`docs/frontend-architecture.md`](docs/frontend-architecture.md)
+- 爬虫数据结构：[`docs/CRAWLER_DATA_STRUCTURE.md`](docs/CRAWLER_DATA_STRUCTURE.md)
+- 云端 Agent API：[`docs/云端分析平台API规范.md`](docs/云端分析平台API规范.md)
 
-## 🔄 多项目开发
+**设计文档**：
+- Research Agent 设计：[`docs/research-agent-design.md`](docs/research-agent-design.md)
+- 策略多渠道架构：[`docs/strategy-multi-source-architecture.md`](docs/strategy-multi-source-architecture.md)
 
-如果你基于此脚手架开发多个项目，需要注意：
-
-### 项目隔离机制
-
-每个项目通过 `PROJECT_NAME` 环境变量实现资源隔离：
-- **Docker 容器名**: `{PROJECT_NAME}_postgres_db_1`, `{PROJECT_NAME}_backend_1`
-- **数据卷名**: `{PROJECT_NAME}_postgres_data`, `{PROJECT_NAME}_redis_data`
-- **数据库名**: `{PROJECT_NAME}_db`
-
-### 最佳实践
-
-1. **设置唯一的项目名**
-   ```bash
-   # 项目 A (.env)
-   PROJECT_NAME=crm_app
-   
-   # 项目 B (.env)
-   PROJECT_NAME=admin_panel
-   ```
-
-2. **同时运行多个项目**
-   ```bash
-   # 项目 A
-   cd /path/to/project-a
-   pnpm dev  # 运行在 localhost:3000
-   
-   # 项目 B (新终端)
-   cd /path/to/project-b
-   # 需要修改前端端口或停止项目 A 的前端
-   ```
-
-3. **切换项目时的注意事项**
-   - 确保每个项目的 `.env` 文件都设置了不同的 `PROJECT_NAME`
-   - 使用 `pnpm cleanup` 清理不用的 Docker 资源
-   - 数据库数据会保留在各自的数据卷中
-
-4. **端口占用处理**
-   - PostgreSQL (5432)、Redis (6379)、Backend (8000) 端口会被共享
-   - 如需同时运行多个项目，需要修改 `docker-compose.yml` 中的端口映射
-
----
-
-## 🧭 深入了解
-
-想要更深入地理解本项目的设计和工作流程？请查阅以下文档：
-
--   **部署指南**: [`DEPLOYMENT.md`](./DEPLOYMENT.md) - **(必读)** 获取生产环境部署、配置和维护的详细步骤。
--   **配置管理**: [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) - 了解环境配置的统一管理策略。
--   **开发工作流**: [`docs/WORKFLOW.md`](./docs/WORKFLOW.md) - 了解如何从零开始开发一个新功能。
--   **前端架构**: [`docs/frontend-architecture.md`](./docs/frontend-architecture.md) - 深入理解前端 Nuxt Layers 架构。
--   **后端架构**: [`docs/backend-architecture.md`](./docs/backend-architecture.md) - 深入理解后端 FastAPI 模块化设计。
--   **权限管理指南**: [`docs/PERMISSION_MANAGEMENT.md`](./docs/PERMISSION_MANAGEMENT.md) - 代码驱动的权限管理系统详解。 
+**编码规范**：
+- AI 编码规则：[`CLAUDE.md`](CLAUDE.md)
+- 后端规范：[`backend/CODING_GUIDE.md`](backend/CODING_GUIDE.md)
+- 前端规范：[`frontend/CODING_GUIDE.md`](frontend/CODING_GUIDE.md)

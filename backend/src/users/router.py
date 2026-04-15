@@ -16,6 +16,7 @@ from src.users.dependencies import (
     require_user_read_or_self,
     require_user_write_or_self,
     require_user_delete_not_self,
+    validate_not_last_super_admin,
 )
 
 router = APIRouter(
@@ -154,6 +155,7 @@ async def delete_user(
     db: AsyncSession = Depends(get_async_db),
     current_user: auth_models.User = Depends(require_user_delete),
     _: auth_models.User = Depends(require_user_delete_not_self),
+    __: None = Depends(validate_not_last_super_admin),
 ):
     """
     Delete user.

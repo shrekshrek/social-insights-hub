@@ -7,6 +7,7 @@ export interface Role {
   display_name: string;
   description?: string;
   is_system: boolean;
+  permission_strategy: 'all' | 'admin' | 'explicit';
   permissions?: PermissionWithMeta[]; // 可选的权限列表，用于角色详情展示
 }
 

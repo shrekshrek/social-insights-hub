@@ -246,8 +246,8 @@ const rbacApi = useRbacApi();
 // 获取角色详情
 const { data: roleData, pending: _roleLoading, error: _roleError } = await rbacApi.getRole(roleId.value);
 
-// 获取所有权限
-const { data: permissionsData } = rbacApi.getPermissions();
+// 获取所有权限（page_size=100 为后端上限，权限总量不会超过该值）
+const { data: permissionsData } = rbacApi.getPermissions({ page_size: 100 });
 
 // 计算属性
 const availablePermissions = computed(() => {
@@ -268,23 +268,35 @@ const filteredPermissions = computed(() => {
   );
 });
 
+const MODULE_LABELS: Record<string, string> = {
+  dashboard: '仪表盘',
+  social_monitor: '社媒监测',
+  social_task: '社媒采集任务',
+  news_monitor: '新闻监测',
+  news_task: '新闻采集任务',
+  analysis: 'AI 分析',
+  strategy: '策略研究',
+  knowledge_base: '知识库',
+  research_agent: '专题研究',
+}
+
 // 权限分类 - 基于业务逻辑重新设计
 const permissionCategories = computed(() => {
   const categories: Record<string, { label: string; permissions: Permission[]; priority: number }> = {};
-  
+
   // 动态分类权限
   filteredPermissions.value.forEach(permission => {
     let categoryKey: string;
     let categoryLabel: string;
     let priority: number;
-    
+
     // 页面访问权限
     if (permission.action === 'access') {
       categoryKey = 'page_access';
       categoryLabel = '页面访问权限';
       priority = 1;
     }
-    // RBAC核心权限 
+    // RBAC核心权限
     else if (['user', 'role', 'permission'].includes(permission.target)) {
       categoryKey = 'rbac_core';
       categoryLabel = 'RBAC核心权限';
@@ -293,7 +305,8 @@ const permissionCategories = computed(() => {
     // 业务功能权限
     else {
       categoryKey = `business_${permission.target}`;
-      categoryLabel = `${permission.target}模块权限`;
+      const moduleName = MODULE_LABELS[permission.target] ?? permission.target;
+      categoryLabel = `${moduleName}`;
       priority = 3;
     }
     

@@ -32,16 +32,29 @@ export const PERMISSIONS = {
   // 基础业务
   DASHBOARD_ACCESS: {target: 'dashboard', action: 'access'},
 
-  // 监测管理
-  MONITOR_ACCESS: {target: 'monitor', action: 'access'},
-  MONITOR_READ: {target: 'monitor', action: 'read'},
-  MONITOR_WRITE: {target: 'monitor', action: 'write'},
-  MONITOR_DELETE: {target: 'monitor', action: 'delete'},
+  // 社媒监测
+  SOCIAL_MONITOR_ACCESS: {target: 'social_monitor', action: 'access'},
+  SOCIAL_MONITOR_READ: {target: 'social_monitor', action: 'read'},
+  SOCIAL_MONITOR_WRITE: {target: 'social_monitor', action: 'write'},
+  SOCIAL_MONITOR_DELETE: {target: 'social_monitor', action: 'delete'},
 
+  // 社媒采集
   SOCIAL_TASK_ACCESS: {target: 'social_task', action: 'access'},
   SOCIAL_TASK_READ: {target: 'social_task', action: 'read'},
   SOCIAL_TASK_WRITE: {target: 'social_task', action: 'write'},
   SOCIAL_TASK_DELETE: {target: 'social_task', action: 'delete'},
+
+  // 新闻监测
+  NEWS_MONITOR_ACCESS: {target: 'news_monitor', action: 'access'},
+  NEWS_MONITOR_READ: {target: 'news_monitor', action: 'read'},
+  NEWS_MONITOR_WRITE: {target: 'news_monitor', action: 'write'},
+  NEWS_MONITOR_DELETE: {target: 'news_monitor', action: 'delete'},
+
+  // 新闻采集
+  NEWS_TASK_ACCESS: {target: 'news_task', action: 'access'},
+  NEWS_TASK_READ: {target: 'news_task', action: 'read'},
+  NEWS_TASK_WRITE: {target: 'news_task', action: 'write'},
+  NEWS_TASK_DELETE: {target: 'news_task', action: 'delete'},
 
   // 策略定义
   STRATEGY_ACCESS: {target: 'strategy', action: 'access'},
@@ -55,11 +68,9 @@ export const PERMISSIONS = {
   KB_WRITE: {target: 'knowledge_base', action: 'write'},
   KB_DELETE: {target: 'knowledge_base', action: 'delete'},
 
-  // 新闻监测
-  NEWS_MEDIA_ACCESS: {target: 'news_media', action: 'access'},
-  NEWS_MEDIA_READ: {target: 'news_media', action: 'read'},
-  NEWS_MEDIA_WRITE: {target: 'news_media', action: 'write'},
-  NEWS_MEDIA_DELETE: {target: 'news_media', action: 'delete'},
+  // AI 分析统计
+  ANALYSIS_ACCESS: {target: 'analysis', action: 'access'},
+  ANALYSIS_STATS_VIEW: {target: 'analysis', action: 'stats.view'},
 
   // 研究分析
   RESEARCH_AGENT_ACCESS: {target: 'research_agent', action: 'access'},

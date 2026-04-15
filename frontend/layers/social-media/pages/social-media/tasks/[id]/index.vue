@@ -2,6 +2,7 @@
 import { computed, ref, h, type Component, defineAsyncComponent } from 'vue'
 import { UButton } from '#components'
 import ExpandableText from '../../../../analysis/components/shared/ExpandableText.vue'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: "default",
@@ -9,6 +10,7 @@ definePageMeta({
 
 const route = useRoute();
 const taskId = computed(() => Number(route.params.id));
+const { currentUserId, hasPermission } = usePermissions()
 
 // 智能返回路径：根据来源返回到对应页面
 const backPath = computed(() => {
@@ -581,6 +583,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
             清空数据
           </UButton>
           <UButton
+            v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_DELETE) || task?.user_id === currentUserId"
             variant="outline"
             icon="i-heroicons-trash"
             color="error"

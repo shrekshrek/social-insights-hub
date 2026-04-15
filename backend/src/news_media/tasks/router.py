@@ -5,9 +5,13 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import get_current_user
 from src.auth.models import User
 from src.database import get_async_db
+from src.rbac.dependencies import (
+    require_news_task_read,
+    require_news_task_write,
+    require_news_task_delete,
+)
 from src.news_media.monitors.dependencies import validate_news_monitor_exists
 from src.news_media.monitors.models import NewsMonitor
 from src.news_media.tasks import service
@@ -40,7 +44,7 @@ async def list_all_tasks(
     phase: Literal["probe", "collect"] | None = Query(default=None),
     search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(require_news_task_read),
 ):
     tasks, total = await service.get_news_tasks(
         db, page=page, page_size=page_size,
@@ -60,7 +64,7 @@ async def create_task(
     data: NewsTaskCreate,
     monitor: NewsMonitor = Depends(validate_news_monitor_exists),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_news_task_write),
 ):
     task = await service.create_news_task(db, monitor.id, data, current_user.id, phase=data.phase)
     return task
@@ -80,7 +84,7 @@ async def list_monitor_tasks(
     phase: Literal["probe", "collect"] | None = Query(default=None),
     search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(require_news_task_read),
 ):
     tasks, total = await service.get_news_tasks(
         db, page=page, page_size=page_size,
@@ -99,6 +103,7 @@ async def list_monitor_tasks(
 )
 async def get_task(
     task: NewsTask = Depends(validate_news_task_access),
+    _: User = Depends(require_news_task_read),
 ):
     return NewsTaskReadWithRelations.from_orm_full(task)
 
@@ -112,6 +117,7 @@ async def get_task(
 async def delete_task(
     task: NewsTask = Depends(validate_news_task_access),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_news_task_delete),
 ):
     await service.delete_news_task(db, task)
     return MessageResponse(message=f"任务 '{task.name}' 已删除")
@@ -126,7 +132,7 @@ async def delete_task(
 async def execute_task(
     task: NewsTask = Depends(validate_news_task_access),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_news_task_write),
 ):
     """独立 news monitor 场景的一步式全量采集入口。
 
@@ -198,7 +204,7 @@ async def list_task_articles(
     relevance: Literal["high", "medium", "low"] | None = Query(default=None),
     source_tier: Literal["tier1", "tier2", "tier3", "wechat_mp"] | None = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(require_news_task_read),
 ):
     from src.news_media.tasks import crud as tasks_crud
 

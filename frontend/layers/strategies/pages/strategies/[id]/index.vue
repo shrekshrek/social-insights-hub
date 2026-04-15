@@ -63,7 +63,7 @@
           <UButton variant="outline" icon="i-heroicons-arrow-down-tray" @click="handleExport">
             导出 Word
           </UButton>
-          <UButton variant="outline" color="error" icon="i-heroicons-trash" @click="handleDelete">
+          <UButton v-if="canDelete" variant="outline" color="error" icon="i-heroicons-trash" @click="handleDelete">
             删除
           </UButton>
         </div>
@@ -139,7 +139,7 @@
                 <span class="text-gray-400 mx-1.5">·</span>
                 <span class="text-gray-600 dark:text-gray-400">{{ strategy.brand_brief.analysis_goal }}</span>
               </div>
-              <UButton variant="ghost" size="xs" icon="i-heroicons-pencil-square" class="shrink-0" @click="startEditBrief" />
+              <UButton v-if="canEdit" variant="ghost" size="xs" icon="i-heroicons-pencil-square" class="shrink-0" @click="startEditBrief" />
             </div>
             <div v-if="strategy.brand_brief.constraints" class="text-gray-400 mt-1">
               {{ strategy.brand_brief.constraints }}
@@ -207,14 +207,14 @@
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">AI 研究计划</h3>
             <UButton
-              v-if="!editingPlan"
+              v-if="canEdit && !editingPlan"
               variant="ghost" size="xs" icon="i-heroicons-pencil-square"
               @click="editingPlan = true"
             >
               编辑
             </UButton>
             <UButton
-              v-else
+              v-if="canEdit && editingPlan"
               variant="ghost" size="xs" icon="i-heroicons-check"
               @click="editingPlan = false"
             >
@@ -369,7 +369,7 @@
         <template v-if="isBrandStrategyPath">
           <BrandStrategyStageCard
             stage="insight" title="Insight 洞察"
-            :has-result="!!strategy.insight_result" :can-generate="true" :can-edit="true"
+            :has-result="!!strategy.insight_result" :can-generate="true" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'insight'" :saving="savingBrandStrategyStage === 'insight'"
             :result="strategy.insight_result"
             @generate="handleGenerateBrandStrategyStage('insight')"
@@ -380,7 +380,7 @@
 
           <BrandStrategyStageCard
             stage="brand_role" title="Brand Role 品牌角色"
-            :has-result="!!strategy.brand_role_result" :can-generate="canGenerateBrandRole" :can-edit="true"
+            :has-result="!!strategy.brand_role_result" :can-generate="canGenerateBrandRole" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'brand_role'" :saving="savingBrandStrategyStage === 'brand_role'"
             :result="strategy.brand_role_result"
             @generate="handleGenerateBrandStrategyStage('brand_role')"
@@ -391,7 +391,7 @@
 
           <BrandStrategyStageCard
             stage="big_idea" title="Big Idea 创意"
-            :has-result="!!strategy.big_idea_result" :can-generate="canGenerateBigIdea" :can-edit="true"
+            :has-result="!!strategy.big_idea_result" :can-generate="canGenerateBigIdea" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'big_idea'" :saving="savingBrandStrategyStage === 'big_idea'"
             :result="strategy.big_idea_result"
             @generate="handleGenerateBrandStrategyStage('big_idea')"
@@ -479,6 +479,7 @@ import type {
 import type { BrandStrategyStage, MarketReportStage } from '../../../composables/useStrategies'
 import { STATUS_MAP, STATUS_ORDER, formatDate, CHANNEL_LABELS } from '../../../composables/useStrategyConstants'
 import { useStrategyPolling } from '../../../composables/useStrategyPolling'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({ title: '策略详情' })
 
@@ -493,7 +494,13 @@ const STAGES = [
 
 const route = useRoute()
 const strategiesApi = useStrategies()
-const { currentUserId } = usePermissions()
+const { currentUserId, hasPermission } = usePermissions()
+const canEdit = computed(() =>
+  hasPermission(PERMISSIONS.STRATEGY_WRITE) || strategy.value?.user_id === currentUserId.value
+)
+const canDelete = computed(() =>
+  hasPermission(PERMISSIONS.STRATEGY_DELETE) || strategy.value?.user_id === currentUserId.value
+)
 
 const strategyId = computed(() => Number(route.params.id))
 const { data: strategy, pending, refresh: refreshStrategy } = strategiesApi.getStrategy(strategyId)

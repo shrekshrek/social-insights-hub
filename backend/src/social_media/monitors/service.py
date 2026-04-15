@@ -56,7 +56,7 @@ async def create_social_monitor(
     monitor = await crud.create_monitor(
         db,
         monitor_data=monitor_data,
-        owner_id=current_user_id,
+        user_id=current_user_id,
         participant_ids=monitor_in.participant_ids,
     )
 
@@ -165,7 +165,7 @@ async def get_social_monitors_list(
     db: AsyncSession,
     page: int = 1,
     page_size: int = 20,
-    owner_id: Optional[int] = None,
+    user_id: Optional[int] = None,
     participant_id: Optional[int] = None,
     search: Optional[str] = None,
 ) -> tuple[List[SocialMonitor], int]:
@@ -175,7 +175,7 @@ async def get_social_monitors_list(
         db,
         skip=skip,
         limit=page_size,
-        owner_id=owner_id,
+        user_id=user_id,
         participant_id=participant_id,
         search=search,
     )
@@ -231,7 +231,7 @@ async def remove_participant(
 ) -> SocialMonitor:
     """从项目移除参与者"""
     # 不能移除owner
-    if user_id == monitor.owner_id:
+    if user_id == monitor.user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot remove monitor owner from participants",

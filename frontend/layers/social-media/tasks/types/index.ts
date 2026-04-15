@@ -23,7 +23,7 @@ export interface SocialMonitor {
   description: string | null;
   start_date: string | null;
   end_date: string | null;
-  owner_id: number;
+  user_id: number;
   deep_analysis_settings: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -85,7 +85,7 @@ export interface SocialTask {
   description: string | null;
   monitor_id: number;
   platform_id: number;
-  creator_id: number;
+  user_id: number;
   task_type: TaskType;
   keywords: string | null;
   task_params: Record<string, unknown> | null;

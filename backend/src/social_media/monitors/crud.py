@@ -78,7 +78,7 @@ async def get_social_monitors(
     db: AsyncSession,
     skip: int = 0,
     limit: int = 20,
-    owner_id: Optional[int] = None,
+    user_id: Optional[int] = None,
     participant_id: Optional[int] = None,
     search: Optional[str] = None,
 ) -> tuple[List[SocialMonitor], int]:
@@ -88,21 +88,21 @@ async def get_social_monitors(
         db: 数据库会话
         skip: 跳过记录数
         limit: 返回记录数
-        owner_id: 按所有者过滤
+        user_id: 按所有者过滤
         participant_id: 按参与者过滤（包括owner）
         search: 搜索关键词（匹配name或keywords）
     """
     # 构建查询条件
     conditions = []
 
-    if owner_id is not None:
-        conditions.append(SocialMonitor.owner_id == owner_id)
+    if user_id is not None:
+        conditions.append(SocialMonitor.user_id == user_id)
 
     if participant_id is not None:
         # 参与者包括owner和participants
         conditions.append(
             or_(
-                SocialMonitor.owner_id == participant_id,
+                SocialMonitor.user_id == participant_id,
                 SocialMonitor.participants.any(User.id == participant_id),
             )
         )
@@ -138,13 +138,13 @@ async def get_social_monitors(
 async def create_social_monitor(
     db: AsyncSession,
     monitor_data: dict,
-    owner_id: int,
+    user_id: int,
     participant_ids: List[int] = None,
 ) -> SocialMonitor:
     """创建项目"""
 
     # 创建项目
-    monitor = SocialMonitor(**monitor_data, owner_id=owner_id)
+    monitor = SocialMonitor(**monitor_data, user_id=user_id)
     db.add(monitor)
     await db.flush()  # 获取项目ID
 
@@ -201,7 +201,7 @@ async def add_participants_to_monitor(
     # 只添加未关联的参与者
     existing_ids = {u.id for u in monitor.participants}
     for user in new_participants:
-        if user.id not in existing_ids and user.id != monitor.owner_id:
+        if user.id not in existing_ids and user.id != monitor.user_id:
             monitor.participants.append(user)
 
     await db.commit()
@@ -260,7 +260,7 @@ async def check_monitor_access(db: AsyncSession, monitor_id: int, user_id: int) 
         return False
 
     # 检查是否是owner
-    if monitor.owner_id == user_id:
+    if monitor.user_id == user_id:
         return True
 
     # 检查是否是participant

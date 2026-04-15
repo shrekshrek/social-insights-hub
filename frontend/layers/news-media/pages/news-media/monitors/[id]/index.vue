@@ -2,6 +2,7 @@
 import { h, ref, reactive, computed, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UButton, UBadge } from '#components'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: 'default',
@@ -13,7 +14,7 @@ const monitorId = Number(route.params.id)
 const { getMonitor, deleteMonitor: deleteMonitorApi, addParticipant, removeParticipant, updateMonitor } = useNewsMonitors()
 const { getTasks, deleteTask, executeTask } = useNewsTasks()
 const { getSlices, createSlice, deleteSlice: deleteSliceApi } = useNewsSlices()
-const { currentUserId } = usePermissions()
+const { currentUserId, hasPermission } = usePermissions()
 
 const { data: monitor, pending: monitorLoading, refresh: refreshMonitor } = getMonitor(monitorId)
 
@@ -432,6 +433,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
 
         <div class="flex items-center gap-3">
           <UButton
+            v-if="hasPermission(PERMISSIONS.NEWS_MONITOR_DELETE) || monitor?.user_id === currentUserId"
             color="error"
             variant="outline"
             icon="i-heroicons-trash"
@@ -451,7 +453,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             </h2>
             <ClientOnly>
               <UButton
-                v-if="monitor.owner_id === currentUserId"
+                v-if="hasPermission(PERMISSIONS.NEWS_MONITOR_WRITE) || monitor.user_id === currentUserId"
                 size="sm"
                 variant="outline"
                 icon="i-heroicons-pencil-square"
@@ -766,7 +768,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             >
               <ParticipantsManager
                 :participants="(monitor?.participant_ids || []).map((id: number, i: number) => ({ id, username: monitor?.participant_usernames?.[i] || String(id) }))"
-                :owner-id="monitor?.owner_id || 0"
+                :owner-id="monitor?.user_id || 0"
                 :can-manage="true"
                 :on-add="async (ids: number[]) => { await addParticipant(monitorId, ids); await refreshMonitor() }"
                 :on-remove="async (uid: number) => { await removeParticipant(monitorId, uid); await refreshMonitor() }"

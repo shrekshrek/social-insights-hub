@@ -37,19 +37,19 @@ async def get_monitors(
     db: AsyncSession,
     skip: int = 0,
     limit: int = 20,
-    owner_id: int | None = None,
+    user_id: int | None = None,
     participant_id: int | None = None,
     search: str | None = None,
 ) -> tuple[list[NewsMonitor], int]:
     from src.auth.models import User
 
     conditions: list = []
-    if owner_id is not None:
-        conditions.append(NewsMonitor.owner_id == owner_id)
+    if user_id is not None:
+        conditions.append(NewsMonitor.user_id == user_id)
     if participant_id is not None:
         conditions.append(
             or_(
-                NewsMonitor.owner_id == participant_id,
+                NewsMonitor.user_id == participant_id,
                 NewsMonitor.participants.any(User.id == participant_id),
             )
         )
@@ -81,9 +81,9 @@ async def get_monitors(
 
 
 async def create_monitor(
-    db: AsyncSession, monitor_data: dict, owner_id: int, participant_ids: list[int] | None = None
+    db: AsyncSession, monitor_data: dict, user_id: int, participant_ids: list[int] | None = None
 ) -> NewsMonitor:
-    monitor = NewsMonitor(**monitor_data, owner_id=owner_id)
+    monitor = NewsMonitor(**monitor_data, user_id=user_id)
     db.add(monitor)
     await db.flush()
 
@@ -93,7 +93,7 @@ async def create_monitor(
         new_participants = users.scalars().all()
         existing_ids = {u.id for u in monitor.participants}
         for user in new_participants:
-            if user.id not in existing_ids and user.id != owner_id:
+            if user.id not in existing_ids and user.id != user_id:
                 monitor.participants.append(user)
 
     return monitor
@@ -126,7 +126,7 @@ async def add_participants_to_news_monitor(
     new_participants = users.scalars().all()
     existing_ids = {u.id for u in monitor.participants}
     for user in new_participants:
-        if user.id not in existing_ids and user.id != monitor.owner_id:
+        if user.id not in existing_ids and user.id != monitor.user_id:
             monitor.participants.append(user)
     await db.commit()
     await db.refresh(monitor, ["participants"])
@@ -150,7 +150,7 @@ async def set_news_monitor_participants(
     from src.auth.models import User
 
     users = await db.execute(select(User).where(User.id.in_(user_ids)))
-    new_participants = [u for u in users.scalars().all() if u.id != monitor.owner_id]
+    new_participants = [u for u in users.scalars().all() if u.id != monitor.user_id]
     monitor.participants = new_participants
     await db.flush()
     return monitor
@@ -178,6 +178,6 @@ async def check_news_monitor_access(
     monitor = await get_monitor_by_id(db, monitor_id, load_relations=True)
     if not monitor:
         return False
-    if monitor.owner_id == user_id:
+    if monitor.user_id == user_id:
         return True
     return user_id in {p.id for p in monitor.participants}

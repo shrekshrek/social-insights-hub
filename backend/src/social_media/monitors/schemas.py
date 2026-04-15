@@ -107,7 +107,7 @@ class SocialMonitorRead(SocialMonitorBase):
     """社交项目读取模型（返回给客户端）"""
 
     id: int
-    owner_id: int
+    user_id: int
     deep_analysis_settings: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
@@ -124,7 +124,7 @@ class SocialMonitorRead(SocialMonitorBase):
             description=monitor.description,
             start_date=monitor.start_date,
             end_date=monitor.end_date,
-            owner_id=monitor.owner_id,
+            user_id=monitor.user_id,
             deep_analysis_settings=monitor.deep_analysis_settings,
             created_at=monitor.created_at,
             updated_at=monitor.updated_at,

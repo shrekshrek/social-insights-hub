@@ -6,7 +6,7 @@ export interface NewsMonitor {
   id: number
   name: string
   description: string | null
-  owner_id: number
+  user_id: number
   participant_ids: number[]
   created_at: string
   updated_at: string

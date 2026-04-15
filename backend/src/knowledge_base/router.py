@@ -10,9 +10,9 @@ from fastapi.responses import FileResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import get_current_user
 from src.auth.models import User
 from src.database import get_async_db
+from src.rbac.dependencies import require_kb_read, require_kb_write
 from src.rbac.service import check_user_permission
 from src.pagination import PaginationParams, get_pagination_params
 from src.schemas import MessageResponse, PaginatedResponse
@@ -54,7 +54,7 @@ async def upload_document(
     file: UploadFile,
     title: str | None = Form(None, description="文档标题（留空则使用文件名）"),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_write),
 ):
     """上传文档到知识库，触发后台 Celery 处理（解析→分块→向量化）
 
@@ -111,7 +111,7 @@ async def list_documents(
     source_type: str | None = Query(None, description="来源类型过滤"),
     processing_status: str | None = Query(None, description="处理状态过滤"),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_read),
     pagination: PaginationParams = Depends(get_pagination_params),
 ):
     """获取知识库文档列表（平台公共 + 当前用户私有）"""
@@ -140,7 +140,7 @@ async def list_documents(
 async def get_document(
     doc_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_read),
 ):
     """获取指定文档详情（含处理状态）"""
     doc = await service.get_document(db, doc_id)
@@ -166,7 +166,7 @@ async def get_document(
 async def get_document_file(
     doc_id: int = Path(...),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_read),
 ):
     """返回文档原始文件（PDF/DOCX/TXT）供浏览器直接查看"""
     doc = await service.get_document(db, doc_id)
@@ -195,7 +195,7 @@ async def get_document_file(
 async def delete_document(
     doc_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_write),
 ):
     """删除文档及所有向量分块"""
     doc = await service.get_document(db, doc_id)
@@ -224,7 +224,7 @@ async def delete_document(
 async def batch_delete_documents(
     request: BatchDeleteRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_write),
 ):
     """批量删除文档，跳过无权限的条目"""
     is_admin = await check_user_permission(db, current_user.id, "knowledge_base:delete")
@@ -251,7 +251,7 @@ async def batch_delete_documents(
 async def search_documents(
     request: SearchRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_read),
 ):
     """测试 RAG 检索，返回与查询最相关的分块"""
     from .embedding import get_embedding_service
@@ -315,7 +315,7 @@ _CRAWLER_SOURCE_TYPES = {"cnnic", "nbs", "govsite"}
 )
 async def get_crawler_status(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_read),
 ):
     """查询各公开数据来源的文档数量和处理状态统计"""
     items = []
@@ -354,7 +354,7 @@ async def get_crawler_status(
 async def run_crawler(
     background_tasks: BackgroundTasks,
     source_type: str = Path(..., description="数据来源类型：cnnic / nbs / govsite"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_kb_write),
 ):
     """手动触发指定公开数据来源的爬取任务，异步执行"""
     if source_type not in _CRAWLER_SOURCE_TYPES:

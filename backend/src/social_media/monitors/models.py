@@ -83,7 +83,7 @@ class SocialMonitor(Base):
         String(255), unique=True, index=True, nullable=False
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    owner_id: Mapped[int] = mapped_column(
+    user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True
     )
 
@@ -108,7 +108,7 @@ class SocialMonitor(Base):
 
     # 关系
     owner: Mapped["User"] = relationship(
-        "src.auth.models.User", foreign_keys=[owner_id], lazy="selectin"
+        "src.auth.models.User", foreign_keys=[user_id], lazy="selectin"
     )
 
     participants: Mapped[list["User"]] = relationship(
@@ -123,4 +123,4 @@ class SocialMonitor(Base):
     )
 
     def __repr__(self):
-        return f"<SocialMonitor(id={self.id}, name='{self.name}', owner_id={self.owner_id})>"
+        return f"<SocialMonitor(id={self.id}, name='{self.name}', user_id={self.user_id})>"

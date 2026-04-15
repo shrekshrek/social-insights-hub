@@ -3,9 +3,13 @@
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import get_current_user
 from src.auth.models import User
 from src.database import get_async_db
+from src.rbac.dependencies import (
+    require_news_monitor_read,
+    require_news_monitor_write,
+    require_news_monitor_delete,
+)
 from src.news_media.monitors import service
 from src.news_media.monitors.dependencies import (
     validate_news_monitor_access,
@@ -36,7 +40,7 @@ router = APIRouter(prefix="/news-media", tags=["News Media - Monitors"])
 async def create_monitor(
     data: NewsMonitorCreate,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_news_monitor_write),
 ):
     monitor = await service.create_news_monitor(db, data, current_user.id)
     return monitor
@@ -53,7 +57,7 @@ async def list_monitors(
     page_size: int = Query(default=10, ge=1, le=100),
     search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_news_monitor_read),
 ):
     monitors, total = await service.get_news_monitors(
         db, page=page, page_size=page_size,
@@ -71,6 +75,7 @@ async def list_monitors(
 )
 async def get_monitor(
     monitor: NewsMonitor = Depends(validate_news_monitor_access),
+    _: User = Depends(require_news_monitor_read),
 ):
     return NewsMonitorReadWithOwner.from_orm_full(monitor)
 
@@ -85,6 +90,7 @@ async def update_monitor(
     data: NewsMonitorUpdate,
     monitor: NewsMonitor = Depends(validate_news_monitor_owner),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_news_monitor_write),
 ):
     updated = await service.update_news_monitor(db, monitor, data)
     return updated
@@ -99,6 +105,7 @@ async def update_monitor(
 async def delete_monitor(
     monitor: NewsMonitor = Depends(validate_news_monitor_owner),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_news_monitor_delete),
 ):
     await service.delete_news_monitor(db, monitor)
     return MessageResponse(message=f"监测项目 '{monitor.name}' 已删除")
@@ -114,6 +121,7 @@ async def add_participants(
     data: NewsMonitorParticipantAssignment,
     monitor: NewsMonitor = Depends(validate_news_monitor_owner),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_news_monitor_write),
 ):
     updated = await service.add_participants_to_news_monitor(db, monitor, data.user_ids)
     return NewsMonitorReadWithOwner.from_orm_full(updated)
@@ -129,6 +137,7 @@ async def remove_participant(
     user_id: int,
     monitor: NewsMonitor = Depends(validate_news_monitor_owner),
     db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_news_monitor_write),
 ):
     updated = await service.remove_participant_from_news_monitor(db, monitor, user_id)
     return NewsMonitorReadWithOwner.from_orm_full(updated)

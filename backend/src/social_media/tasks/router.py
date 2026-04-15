@@ -5,10 +5,14 @@ from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
-from src.auth.dependencies import get_current_user
 from src.database import get_async_db
 from src.pagination import get_pagination_params, PaginationParams
 from src.schemas import MessageResponse
+from src.rbac.dependencies import (
+    require_social_task_read,
+    require_social_task_write,
+    require_social_task_delete,
+)
 
 from src.social_media.monitors.dependencies import validate_monitor_exists
 from src.social_media.monitors.models import SocialMonitor
@@ -39,7 +43,7 @@ async def create_task(
     task_in: schemas.SocialTaskCreate,
     monitor: SocialMonitor = Depends(validate_monitor_exists),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_task_write),
 ):
     """
     创建新任务（monitor_id 通过 URL 路径传递）。
@@ -64,7 +68,7 @@ async def create_task(
 async def get_tasks(
     pagination: PaginationParams = Depends(get_pagination_params),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_task_read),
     monitor_id: Optional[int] = Query(None, description="按项目过滤"),
     platform_id: Optional[int] = Query(None, description="按平台过滤"),
     task_type: Optional[str] = Query(None, description="按任务类型过滤"),
@@ -193,6 +197,7 @@ async def update_task(
     task_update: schemas.SocialTaskUpdate,
     db: AsyncSession = Depends(get_async_db),
     task: SocialTask = Depends(validate_task_owner),
+    _: User = Depends(require_social_task_write),
 ):
     """
     更新任务信息。
@@ -213,6 +218,7 @@ async def update_task(
 async def delete_task(
     db: AsyncSession = Depends(get_async_db),
     task: SocialTask = Depends(validate_task_owner),
+    _: User = Depends(require_social_task_delete),
 ):
     """
     删除任务（软删除）。
@@ -234,6 +240,7 @@ async def delete_task(
 async def clear_task_data(
     db: AsyncSession = Depends(get_async_db),
     task: SocialTask = Depends(validate_task_owner),
+    _: User = Depends(require_social_task_write),
 ):
     """
     清空任务的所有数据（软删除原文和评论），重置任务状态。
@@ -259,7 +266,7 @@ async def upload_json_data(
     task_id: int,
     upload_data: schemas.JSONUploadData,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_task_write),
 ):
     """
     上传本地JSON数据到任务。
@@ -313,7 +320,7 @@ async def get_task_posts(
     task_id: int,
     pagination: PaginationParams = Depends(get_pagination_params),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_task_read),
     post_id: Optional[int] = Query(None, description="按原文ID精确筛选"),
 ):
     """
@@ -351,7 +358,7 @@ async def get_task_comments(
     task_id: int,
     pagination: PaginationParams = Depends(get_pagination_params),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_task_read),
     post_id: Optional[int] = Query(None, description="按原文ID筛选评论"),
 ):
     """
@@ -393,7 +400,7 @@ async def get_post_with_comments(
     post_id: int,
     pagination: PaginationParams = Depends(get_pagination_params),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_task_read),
 ):
     """
     获取原文及其评论列表。
@@ -428,7 +435,7 @@ async def query_cross_task_posts(
     platform_id: int,
     post_id_on_platform: str,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_social_task_read),
     monitor_id: Optional[int] = Query(None, description="限定项目范围"),
 ):
     """

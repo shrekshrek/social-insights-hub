@@ -49,6 +49,7 @@
               重新研究
             </UButton>
             <UButton
+              v-if="hasPermission(PERMISSIONS.RESEARCH_AGENT_DELETE) || task?.user_id === currentUserId"
               variant="outline"
               color="error"
               icon="i-heroicons-trash"
@@ -365,6 +366,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from 'vue'
+import { PERMISSIONS } from '~/config/permissions'
 
 
 definePageMeta({ layout: 'default' })
@@ -373,6 +375,7 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const taskId = Number(route.params.id)
+const { currentUserId, hasPermission } = usePermissions()
 
 const {
   getTask,

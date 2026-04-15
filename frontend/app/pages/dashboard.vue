@@ -48,13 +48,25 @@
       </div>
     </UCard>
 
-    <!-- 业务模块入口 -->
+    <!-- 核心功能入口 -->
     <UCard>
       <template #header>
-        <h2 class="text-lg font-semibold">业务模块</h2>
+        <h2 class="text-lg font-semibold">核心功能</h2>
       </template>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <NuxtLink
+          v-if="hasPermission(PERMISSIONS.STRATEGY_ACCESS)"
+          to="/strategies"
+          class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          <UIcon name="i-heroicons-light-bulb" class="w-6 h-6 text-yellow-600" />
+          <div>
+            <div class="font-medium">策略研究</div>
+            <div class="text-sm text-gray-500">多渠道策略报告生成</div>
+          </div>
+        </NuxtLink>
+
         <NuxtLink
           v-if="hasPermission(PERMISSIONS.SOCIAL_MONITOR_ACCESS)"
           to="/social-media/monitors"
@@ -64,18 +76,6 @@
           <div>
             <div class="font-medium">社媒监测</div>
             <div class="text-sm text-gray-500">监测项目与舆情分析</div>
-          </div>
-        </NuxtLink>
-
-        <NuxtLink
-          v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_ACCESS)"
-          to="/social-media/tasks"
-          class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-        >
-          <UIcon name="i-heroicons-arrow-down-tray" class="w-6 h-6 text-sky-600" />
-          <div>
-            <div class="font-medium">社媒采集</div>
-            <div class="text-sm text-gray-500">数据采集任务管理</div>
           </div>
         </NuxtLink>
 
@@ -92,18 +92,6 @@
         </NuxtLink>
 
         <NuxtLink
-          v-if="hasPermission(PERMISSIONS.STRATEGY_ACCESS)"
-          to="/strategies"
-          class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-        >
-          <UIcon name="i-heroicons-light-bulb" class="w-6 h-6 text-yellow-600" />
-          <div>
-            <div class="font-medium">策略研究</div>
-            <div class="text-sm text-gray-500">多渠道策略报告生成</div>
-          </div>
-        </NuxtLink>
-
-        <NuxtLink
           v-if="hasPermission(PERMISSIONS.RESEARCH_AGENT_ACCESS)"
           to="/research-agent"
           class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -112,6 +100,39 @@
           <div>
             <div class="font-medium">专题研究</div>
             <div class="text-sm text-gray-500">AI 深度搜索分析</div>
+          </div>
+        </NuxtLink>
+      </div>
+    </UCard>
+
+    <!-- 配套工具 -->
+    <UCard>
+      <template #header>
+        <h2 class="text-lg font-semibold">配套工具</h2>
+      </template>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <NuxtLink
+          v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_ACCESS)"
+          to="/social-media/tasks"
+          class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          <UIcon name="i-heroicons-arrow-down-tray" class="w-6 h-6 text-sky-600" />
+          <div>
+            <div class="font-medium">社媒采集</div>
+            <div class="text-sm text-gray-500">社媒数据采集任务管理</div>
+          </div>
+        </NuxtLink>
+
+        <NuxtLink
+          v-if="hasPermission(PERMISSIONS.NEWS_TASK_ACCESS)"
+          to="/news-media/tasks"
+          class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          <UIcon name="i-heroicons-arrow-down-tray" class="w-6 h-6 text-orange-500" />
+          <div>
+            <div class="font-medium">新闻采集</div>
+            <div class="text-sm text-gray-500">新闻数据采集任务管理</div>
           </div>
         </NuxtLink>
 
@@ -127,17 +148,6 @@
           </div>
         </NuxtLink>
 
-        <NuxtLink
-          v-if="hasPermission(PERMISSIONS.KB_ACCESS)"
-          to="/knowledge-base"
-          class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-        >
-          <UIcon name="i-heroicons-book-open" class="w-6 h-6 text-green-600" />
-          <div>
-            <div class="font-medium">市场知识库</div>
-            <div class="text-sm text-gray-500">文档管理与 RAG 检索</div>
-          </div>
-        </NuxtLink>
       </div>
     </UCard>
 

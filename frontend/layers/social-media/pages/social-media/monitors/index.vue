@@ -2,12 +2,14 @@
 import { h, ref, computed, type Component } from "vue";
 import type { TableColumn } from "@nuxt/ui";
 import { UButton } from "#components";
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: "default",
 });
 
 const { getMonitors, deleteMonitor } = useMonitors();
+const { currentUserId, hasPermission } = usePermissions()
 
 // 分页和搜索
 const currentPage = ref(1);
@@ -127,17 +129,15 @@ const columns = computed<TableColumn<SocialMonitor>[]>(() => {
             },
             () => "查看"
           ),
-          h(
-            Button,
-            {
-              size: "xs",
-              variant: "ghost",
-              icon: "i-heroicons-trash",
-              color: "error",
-              onClick: () => handleDelete(row.original),
-            },
-            () => "删除"
-          ),
+          (hasPermission(PERMISSIONS.SOCIAL_MONITOR_DELETE) || row.original.user_id === currentUserId.value)
+            ? h(Button, {
+                size: "xs",
+                variant: "ghost",
+                icon: "i-heroicons-trash",
+                color: "error",
+                onClick: () => handleDelete(row.original),
+              }, () => "删除")
+            : null,
         ]);
       },
     },

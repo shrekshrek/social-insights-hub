@@ -2,12 +2,14 @@
 import { h, ref, computed, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UButton } from '#components'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: 'default',
 })
 
 const { getMonitors, deleteMonitor } = useNewsMonitors()
+const { currentUserId, hasPermission } = usePermissions()
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -129,17 +131,15 @@ const columns = computed<TableColumn<NewsMonitorWithOwner>[]>(() => {
             },
             () => '查看',
           ),
-          h(
-            Button,
-            {
-              size: 'xs',
-              variant: 'ghost',
-              icon: 'i-heroicons-trash',
-              color: 'error',
-              onClick: () => handleDelete(row.original),
-            },
-            () => '删除',
-          ),
+          (hasPermission(PERMISSIONS.NEWS_MONITOR_DELETE) || row.original.user_id === currentUserId.value)
+            ? h(Button, {
+                size: 'xs',
+                variant: 'ghost',
+                icon: 'i-heroicons-trash',
+                color: 'error',
+                onClick: () => handleDelete(row.original),
+              }, () => '删除')
+            : null,
         ]),
     },
   ]

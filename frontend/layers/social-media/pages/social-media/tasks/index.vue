@@ -2,12 +2,14 @@
 import { h, ref, computed, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge, UButton } from '#components'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({
   layout: 'default',
 })
 
 const { getTasks, deleteTask } = useTasks()
+const { currentUserId, hasPermission } = usePermissions()
 const { getPlatforms } = usePlatforms()
 
 // 获取平台列表用于过滤
@@ -260,13 +262,15 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               to: `/social-media/tasks/${row.original.id}/upload`,
             }, () => '上传')
           : null,
-        h(Button, {
-          size: 'xs',
-          variant: 'ghost',
-          icon: 'i-heroicons-trash',
-          color: 'error',
-          onClick: () => handleDelete(row.original),
-        }, () => '删除'),
+        (hasPermission(PERMISSIONS.SOCIAL_TASK_DELETE) || row.original.user_id === currentUserId.value)
+          ? h(Button, {
+              size: 'xs',
+              variant: 'ghost',
+              icon: 'i-heroicons-trash',
+              color: 'error',
+              onClick: () => handleDelete(row.original),
+            }, () => '删除')
+          : null,
       ].filter(Boolean)),
     },
   ]

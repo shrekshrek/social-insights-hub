@@ -33,7 +33,7 @@
     >
       <template #description>
         <div class="space-y-2">
-          <p><strong>权限定义</strong>：所有权限通过代码定义（<code>backend/src/rbac/init_data.py</code>），确保版本控制和环境一致性。</p>
+          <p><strong>权限定义</strong>：所有权限由开发团队通过代码统一管理，确保版本控制和环境一致性。</p>
           <p><strong>权限分配</strong>：使用角色管理页面为角色分配权限，使用用户管理页面为用户分配角色。</p>
           <div class="flex gap-2 mt-3">
             <UButton size="sm" to="/rbac/roles">管理角色权限</UButton>

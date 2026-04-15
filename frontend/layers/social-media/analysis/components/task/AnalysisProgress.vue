@@ -21,7 +21,7 @@
       </div>
 
       <!-- 进度条 -->
-      <div v-if="status === 'processing'" class="space-y-2">
+      <div v-if="status === 'running'" class="space-y-2">
         <div class="flex items-center justify-between text-sm">
           <span class="text-gray-600 dark:text-gray-400">
             处理进度
@@ -135,7 +135,7 @@
       <!-- 操作按钮 -->
       <div class="flex gap-2 border-t border-gray-200 dark:border-gray-700 pt-4">
         <UButton
-          v-if="status === 'processing'"
+          v-if="status === 'running'"
           color="red"
           variant="soft"
           size="sm"
@@ -222,7 +222,7 @@ const estimatedTimeRemaining = computed(() => {
 })
 
 const estimatedTotalCost = computed(() => {
-  if (status.value !== 'processing') return null
+  if (status.value !== 'running') return null
   return estimateRemainingCost(
     currentCost.value,
     analyzedCount.value,
@@ -233,7 +233,7 @@ const estimatedTotalCost = computed(() => {
 const statusIcon = computed(() => {
   const icons = {
     pending: 'i-heroicons-clock',
-    processing: 'i-heroicons-arrow-path',
+    running: 'i-heroicons-arrow-path',
     completed: 'i-heroicons-check-circle',
     failed: 'i-heroicons-x-circle',
   }
@@ -243,7 +243,7 @@ const statusIcon = computed(() => {
 const statusIconClass = computed(() => {
   const classes = {
     pending: 'h-5 w-5 text-gray-500 animate-pulse',
-    processing: 'h-5 w-5 text-blue-500 animate-spin',
+    running: 'h-5 w-5 text-blue-500 animate-spin',
     completed: 'h-5 w-5 text-green-500',
     failed: 'h-5 w-5 text-red-500',
   }
@@ -253,7 +253,7 @@ const statusIconClass = computed(() => {
 const statusLabel = computed(() => {
   const labels = {
     pending: '等待处理',
-    processing: '正在分析',
+    running: '正在分析',
     completed: '分析完成',
     failed: '分析失败',
   }
@@ -263,7 +263,7 @@ const statusLabel = computed(() => {
 const statusBadgeColor = computed(() => {
   const colors = {
     pending: 'gray',
-    processing: 'blue',
+    running: 'blue',
     completed: 'green',
     failed: 'red',
   }
@@ -273,7 +273,7 @@ const statusBadgeColor = computed(() => {
 const statusBadgeLabel = computed(() => {
   const labels = {
     pending: '排队中',
-    processing: '处理中',
+    running: '处理中',
     completed: '已完成',
     failed: '失败',
   }

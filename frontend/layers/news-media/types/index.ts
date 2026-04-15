@@ -28,6 +28,8 @@ export interface NewsTask {
   search_params: Record<string, unknown> | null
   articles_count: number
   analysis_result: NewsAnalysisResult | null
+  started_at: string | null
+  completed_at: string | null
   error_message: string | null
   user_id: number
   created_at: string

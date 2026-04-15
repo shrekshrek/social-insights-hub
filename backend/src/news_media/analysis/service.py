@@ -91,7 +91,7 @@ async def run_slice_analysis(
         analysis_type=AnalysisType.NEWS_INSIGHT.value,
         source_count=0,
         analysis_config={"slice_id": slice_obj.id},
-        status="processing",
+        status="running",
     )
 
     try:

@@ -13,6 +13,7 @@ _async_run_collect 直接引用。
 import json
 import logging
 import re
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -350,6 +351,7 @@ async def execute_news_probe(
     """
     try:
         task.status = "running"
+        task.started_at = datetime.now(timezone.utc)
         await db.flush()
 
         articles = await _search_and_store_articles(
@@ -368,6 +370,7 @@ async def execute_news_probe(
                     source_samples.append(a.source_name)
 
         task.status = "completed"
+        task.completed_at = datetime.now(timezone.utc)
         task.articles_count = len(articles)
         task.analysis_result = {
             "meta": {
@@ -385,6 +388,7 @@ async def execute_news_probe(
 
     except Exception as e:
         task.status = "failed"
+        task.completed_at = datetime.now(timezone.utc)
         task.error_message = str(e)
         await db.flush()
         logger.error("NewsTask %d: probe failed: %s", task.id, e, exc_info=True)

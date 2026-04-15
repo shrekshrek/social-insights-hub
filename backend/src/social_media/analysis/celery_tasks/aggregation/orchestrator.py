@@ -295,7 +295,7 @@ def aggregate_task_analysis(
                 user_id=user_id,
                 analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
                 source_count=len(posts_data),
-                status="processing",
+                status="running",
             )
 
         if opinion_job_id:
@@ -310,7 +310,7 @@ def aggregate_task_analysis(
                 user_id=user_id,
                 analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
                 source_count=len(posts_data),
-                status="processing",
+                status="running",
             )
 
     # 并行执行实体聚合和话题聚合（两者互相独立）

@@ -110,7 +110,7 @@ const typeOptions = [
 const statusOptions = [
   { label: '全部状态', value: undefined },
   { label: '等待中', value: 'pending' },
-  { label: '进行中', value: 'processing' },
+  { label: '进行中', value: 'running' },
   { label: '已完成', value: 'completed' },
   { label: '失败', value: 'failed' },
 ]
@@ -171,7 +171,7 @@ const getAnalysisTypeLabel = (type: string) => {
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
     pending: 'warning',
-    processing: 'info',
+    running: 'info',
     completed: 'success',
     failed: 'error',
   }
@@ -181,7 +181,7 @@ const getStatusColor = (status: string) => {
 const getStatusLabel = (status: string) => {
   const labels: Record<string, string> = {
     pending: '等待中',
-    processing: '进行中',
+    running: '进行中',
     completed: '已完成',
     failed: '失败',
   }
@@ -253,7 +253,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
             variant: 'solid',
             size: 'xs',
           }, () => getStatusLabel(job.status)),
-          ['pending', 'processing'].includes(job.status) && job.source_count > 0
+          ['pending', 'running'].includes(job.status) && job.source_count > 0
             ? h(Progress, {
                 modelValue: job.source_count ? (job.analyzed_count / job.source_count) * 100 : 0,
                 max: 100,
@@ -416,7 +416,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       header: '操作',
       cell: ({ row }) => {
         const job = row.original
-        const isRunning = ['pending', 'processing'].includes(job.status)
+        const isRunning = ['pending', 'running'].includes(job.status)
 
         return h('div', { class: 'flex items-center gap-2' }, [
           isRunning

@@ -68,7 +68,7 @@ export type AnalysisType =
   | "news_insight"
   | "research";
 
-export type AnalysisStatus = "pending" | "processing" | "completed" | "failed";
+export type AnalysisStatus = "pending" | "running" | "completed" | "failed";
 
 /**
  * 分析任务（跨渠道统一模型）

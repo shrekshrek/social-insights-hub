@@ -246,7 +246,7 @@ async def _clear_analysis_results(
         jobs_stmt = select(AnalysisJob.celery_task_id).where(
             and_(
                 AnalysisJob.social_task_id == task_id,
-                AnalysisJob.status.in_(("pending", "processing")),
+                AnalysisJob.status.in_(("pending", "running")),
             )
         )
         jobs_result = await db.execute(jobs_stmt)

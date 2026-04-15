@@ -59,7 +59,7 @@ def create_analysis_job_sync(
         status=status,
         source_count=source_count,
         analysis_config=analysis_config,
-        started_at=datetime.now(timezone.utc) if status == "processing" else None,
+        started_at=datetime.now(timezone.utc) if status == "running" else None,
     )
     db.add(job)
     db.commit()
@@ -113,7 +113,7 @@ async def create_analysis_job_async(
         status=status,
         source_count=source_count,
         analysis_config=analysis_config,
-        started_at=datetime.now(timezone.utc) if status == "processing" else None,
+        started_at=datetime.now(timezone.utc) if status == "running" else None,
     )
     db.add(job)
     await db.commit()
@@ -232,7 +232,7 @@ def start_analysis_job_sync(
     else:
         job = job_or_id
 
-    job.status = "processing"
+    job.status = "running"
     job.started_at = datetime.now(timezone.utc)
     db.commit()
     return job
@@ -261,7 +261,7 @@ async def start_analysis_job_async(
     else:
         job = job_or_id
 
-    job.status = "processing"
+    job.status = "running"
     job.started_at = datetime.now(timezone.utc)
     await db.commit()
     return job

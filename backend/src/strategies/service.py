@@ -567,7 +567,7 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_INSIGHT.value,
         source_count=len(slices_data) + len(news_slices_data),
-        status="processing",
+        status="running",
         analysis_config={"strategy_id": strategy.id},
     )
 
@@ -644,7 +644,7 @@ async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_BRAND_ROLE.value,
         source_count=len(slices_data) + len(news_slices_data),
-        status="processing",
+        status="running",
         analysis_config={"strategy_id": strategy.id},
     )
 
@@ -721,7 +721,7 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_BIG_IDEA.value,
         source_count=len(slices_data) + len(news_slices_data),
-        status="processing",
+        status="running",
         analysis_config={"strategy_id": strategy.id},
     )
 
@@ -934,7 +934,7 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_AGENDA_MAP.value,
         source_count=len(news_slices_data),
-        status="processing",
+        status="running",
         analysis_config={"strategy_id": strategy.id},
     )
 
@@ -1013,7 +1013,7 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_LANDSCAPE.value,
         source_count=len(news_slices_data),
-        status="processing",
+        status="running",
         analysis_config={"strategy_id": strategy.id},
     )
 
@@ -1092,7 +1092,7 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_STRATEGIC_BRIEF.value,
         source_count=len(news_slices_data),
-        status="processing",
+        status="running",
         analysis_config={"strategy_id": strategy.id},
     )
 
@@ -1885,7 +1885,7 @@ async def _run_probe_review_bg_task(
                     user_id=strategy.user_id,
                     analysis_type=AnalysisType.STRATEGY_NEWS_PROBE_REVIEW.value,
                     source_count=len(news_probe_summaries),
-                    status="processing",
+                    status="running",
                     analysis_config={"strategy_id": strategy.id, "channel": "news"},
                 )
 
@@ -2036,7 +2036,7 @@ async def _run_probe_review(
             user_id=strategy.user_id,
             analysis_type=AnalysisType.STRATEGY_SOCIAL_PROBE_REVIEW.value,
             source_count=len(ambiguous_summaries),
-            status="processing",
+            status="running",
             analysis_config={"strategy_id": strategy.id},
         )
 

@@ -7,6 +7,7 @@ insight 分析由切片（NewsSlice）按需触发，不在采集阶段执行。
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from src.celery_app import celery_app
 
@@ -111,6 +112,7 @@ async def _async_run_collect(
             from src.jobs.factory import start_analysis_job_async, complete_analysis_job_async
 
             task.status = "running"
+            task.started_at = datetime.now(timezone.utc)
             if tagging_job:
                 await start_analysis_job_async(db, tagging_job)
             else:
@@ -124,6 +126,7 @@ async def _async_run_collect(
 
             if not articles:
                 task.status = "completed"
+                task.completed_at = datetime.now(timezone.utc)
                 task.articles_count = 0
                 task.analysis_result = {"meta": {"keywords": task.keywords, "articles_total": 0}}
                 if tagging_job:
@@ -173,6 +176,7 @@ async def _async_run_collect(
             )
 
             task.status = "completed"
+            task.completed_at = datetime.now(timezone.utc)
             task.articles_count = len(all_articles)
             task.analysis_result = {
                 "meta": {
@@ -193,8 +197,9 @@ async def _async_run_collect(
         except Exception as e:
             logger.error("NewsTask %d: collect failed: %s", task_id, e, exc_info=True)
             task.status = "failed"
+            task.completed_at = datetime.now(timezone.utc)
             task.error_message = str(e)
-            if tagging_job and tagging_job.status == "processing":
+            if tagging_job and tagging_job.status == "running":
                 await complete_analysis_job_async(
                     db, tagging_job, error_message=str(e),
                 )

@@ -179,7 +179,7 @@ def _run_pipeline_body(
             "slice_id": slice_id,
             "step": "entity_normalization",
         },
-        status="processing",
+        status="running",
     )
     entity_job.source_task_ids = slice_record.included_task_ids
     db.commit()
@@ -195,7 +195,7 @@ def _run_pipeline_body(
             "slice_id": slice_id,
             "step": "opinion_normalization",
         },
-        status="processing",
+        status="running",
     )
     opinion_job.source_task_ids = slice_record.included_task_ids
     db.commit()
@@ -436,7 +436,7 @@ def _run_pipeline_body(
         analysis_type=AnalysisType.MONITOR_SLICE_SUMMARY.value,
         source_count=1,
         analysis_config={"slice_id": slice_id, "step": "summary"},
-        status="processing",
+        status="running",
     )
     summary_job.source_task_ids = slice_record.included_task_ids
     db.commit()

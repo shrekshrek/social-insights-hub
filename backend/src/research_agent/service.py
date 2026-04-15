@@ -183,8 +183,8 @@ async def delete_research_task(db: AsyncSession, task_id: int) -> bool:
             if job.celery_task_id:
                 celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
                 logger.info("revoked celery task %s for ResearchTask %d", job.celery_task_id, task_id)
-            # 主动标记 AnalysisJob 为失败，避免 revoke 竞态时 job 永远停在 processing
-            if job.status in ("pending", "processing"):
+            # 主动标记 AnalysisJob 为失败，避免 revoke 竞态时 job 永远停在 running
+            if job.status in ("pending", "running"):
                 from datetime import datetime, timezone
                 job.status = "failed"
                 job.error_message = "研究任务已被删除"

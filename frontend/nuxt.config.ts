@@ -47,7 +47,7 @@ const appName =
   process.env.PROJECT_NAME ||
   rootEnv.APP_NAME ||
   rootEnv.PROJECT_NAME ||
-  '全栈脚手架'
+  ''
 
 export default defineNuxtConfig({
   // 启用 Nuxt 4 兼容模式

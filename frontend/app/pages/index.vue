@@ -3,9 +3,9 @@
     <!-- 欢迎横幅 -->
     <UCard class="bg-gradient-to-r from-blue-600 to-indigo-600 border-0">
       <div class="text-center text-white">
-        <h1 class="text-4xl font-bold mb-4">{{ appName }}</h1>
+        <h1 v-if="appName" class="text-4xl font-bold mb-4">{{ appName }}</h1>
         <p class="text-xl text-blue-100 mb-6">
-          社交媒体数据智能分析平台
+          AI 驱动的品牌策略与创意研究平台
         </p>
         <div class="flex flex-wrap gap-2 justify-center">
           <UBadge color="neutral" variant="solid" size="lg" class="bg-white/20 backdrop-blur-sm text-white">
@@ -18,7 +18,10 @@
             📰 新闻监测
           </UBadge>
           <UBadge color="neutral" variant="solid" size="lg" class="bg-white/20 backdrop-blur-sm text-white">
-            🔍 专题研究
+            🔍 行业研究
+          </UBadge>
+          <UBadge color="neutral" variant="solid" size="lg" class="bg-white/20 backdrop-blur-sm text-white">
+            🎨 创意研究
           </UBadge>
         </div>
       </div>
@@ -69,7 +72,7 @@
     </UCard>
 
     <!-- 核心功能 -->
-    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
       <UCard>
         <template #header>
           <div class="flex items-center gap-3">
@@ -79,7 +82,7 @@
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">策略研究</h3>
           </div>
         </template>
-        <p class="text-gray-600 dark:text-gray-400">汇聚多渠道数据，LLM 辅助生成品牌策略分析报告</p>
+        <p class="text-gray-600 dark:text-gray-400">汇聚多渠道数据，LLM 辅助生成品牌策略与市场报告</p>
       </UCard>
 
       <UCard>
@@ -112,10 +115,22 @@
             <div class="w-10 h-10 bg-violet-100 dark:bg-violet-900 rounded-lg flex items-center justify-center">
               <UIcon name="i-heroicons-magnifying-glass" class="w-5 h-5 text-violet-600 dark:text-violet-400" />
             </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">专题研究</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">行业研究</h3>
           </div>
         </template>
-        <p class="text-gray-600 dark:text-gray-400">AI agentic 搜索，针对特定议题进行深度信息挖掘与分析</p>
+        <p class="text-gray-600 dark:text-gray-400">Agentic 搜索权威报告与数据，深度阅读后生成结构化行业洞察</p>
+      </UCard>
+
+      <UCard>
+        <template #header>
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-pink-100 dark:bg-pink-900 rounded-lg flex items-center justify-center">
+              <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-pink-600 dark:text-pink-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">创意研究</h3>
+          </div>
+        </template>
+        <p class="text-gray-600 dark:text-gray-400">检索 campaign 案例与创意评论，提炼视觉/文案钩子与传播机制</p>
       </UCard>
     </div>
   </div>
@@ -126,12 +141,12 @@ const { session, loggedIn } = useUserSession()
 const permissions = usePermissions()
 
 const config = useRuntimeConfig()
-const appName = computed(() => config.public.appName || '脉图智策')
+const appName = computed(() => (config.public.appName as string) || '')
 
 useHead({
-  title: appName.value,
+  title: appName.value || undefined,
   meta: [
-    { name: 'description', content: '社交媒体数据智能分析平台，聚合多平台数据，通过 LLM 提供舆情监测与策略洞察' }
+    { name: 'description', content: 'AI 驱动的品牌策略与创意研究平台：多渠道数据聚合、行业报告搜索、创意案例检索，辅助品牌策略决策与创意策划。' }
   ]
 })
 </script>

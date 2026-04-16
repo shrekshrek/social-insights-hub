@@ -1604,6 +1604,8 @@ async def confirm_research(
             analysis_goal = brief.get("analysis_goal", "")
             search_config = {"context": analysis_goal} if analysis_goal else {}
             # research_questions 不传：Planner 从 channel_brief 自行生成搜索优化的问题
+            # profile_name 固定 "industry"：策略研究产出 brand_strategy/market_report 依赖
+            # 权威报告与数据，创意研究 profile 的输出（案例钩子/视觉风格）不适用于此流程
             await create_research_task(
                 db,
                 user_id=current_user_id,
@@ -1611,6 +1613,7 @@ async def confirm_research(
                 title=research_title,
                 search_config=search_config,
                 strategy_id=strategy.id,
+                profile_name="industry",
             )
             logger.info("策略 %d: 创建 Research Agent 任务", strategy.id)
         except Exception as e:

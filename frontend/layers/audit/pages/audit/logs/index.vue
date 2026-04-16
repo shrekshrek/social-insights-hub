@@ -47,7 +47,7 @@ const handleRefresh = async () => {
 
 // 操作类型选项
 const actionOptions = [
-  { label: '全部操作', value: 'all' },
+  { label: '全部类型', value: 'all' },
   { label: '登录成功', value: 'LOGIN' },
   { label: '登录失败', value: 'LOGIN_FAILED' },
   { label: '登出', value: 'LOGOUT' },
@@ -124,6 +124,17 @@ const RESOURCE_LABELS: Record<string, string> = {
   research_task: '专题研究',
 }
 
+// 组合展示名：优先 operation（route.summary），否则回退到 action + resource
+const getDisplayOperation = (log: AuditLog): string => {
+  if (log.operation) return log.operation
+  const actionLabel = ACTION_LABELS[log.action] || log.action
+  if (log.resource) {
+    const resourceLabel = RESOURCE_LABELS[log.resource] || log.resource
+    return `${actionLabel}${resourceLabel}`
+  }
+  return actionLabel
+}
+
 // 表格列定义
 const columns = computed<TableColumn<AuditLog>[]>(() => {
   const Badge = UBadge as Component
@@ -151,7 +162,8 @@ const columns = computed<TableColumn<AuditLog>[]>(() => {
     },
     {
       accessorKey: 'action',
-      header: '操作',
+      header: '类型',
+      meta: { class: { th: 'w-[80px]', td: 'w-[80px]' } },
       cell: ({ row }) => h(Badge, {
         color: ACTION_COLORS[row.original.action] || 'neutral',
         variant: 'subtle',
@@ -159,14 +171,12 @@ const columns = computed<TableColumn<AuditLog>[]>(() => {
       }, () => ACTION_LABELS[row.original.action] || row.original.action),
     },
     {
-      accessorKey: 'resource',
-      header: '资源',
+      accessorKey: 'operation',
+      header: '操作',
       cell: ({ row }) => {
         const log = row.original
-        if (!log.resource) return h('span', { class: 'text-gray-400' }, '-')
-        const label = RESOURCE_LABELS[log.resource] || log.resource
         return h('div', { class: 'text-sm' }, [
-          h('span', {}, label),
+          h('span', { class: 'font-medium' }, getDisplayOperation(log)),
           log.resource_id
             ? h('span', { class: 'text-xs text-gray-400 ml-1 font-mono' }, `#${log.resource_id}`)
             : null,

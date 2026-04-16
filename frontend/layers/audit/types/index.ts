@@ -33,8 +33,11 @@ export interface AuditLog {
   user_id: number | null
   username: string | null
   action: AuditAction
+  operation: string | null
   resource: AuditResource | null
   resource_id: string | null
+  endpoint: string | null
+  path_template: string | null
   http_method: string | null
   request_path: string | null
   status_code: number | null
@@ -51,6 +54,7 @@ export interface AuditLogFilterParams {
   user_id?: number
   action?: AuditAction
   resource?: AuditResource
+  endpoint?: string
   start_time?: string
   end_time?: string
 }

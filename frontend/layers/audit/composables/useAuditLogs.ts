@@ -20,6 +20,7 @@ export const useAuditLogs = () => {
         if (p.user_id) searchParams.set('user_id', String(p.user_id))
         if (p.action) searchParams.set('action', p.action)
         if (p.resource) searchParams.set('resource', p.resource)
+        if (p.endpoint) searchParams.set('endpoint', p.endpoint)
         if (p.start_time) searchParams.set('start_time', p.start_time)
         if (p.end_time) searchParams.set('end_time', p.end_time)
 

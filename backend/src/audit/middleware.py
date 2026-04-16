@@ -1,12 +1,12 @@
 """审计日志中间件
 
-自动拦截所有写操作（POST/PUT/PATCH/DELETE）和认证事件（登录/登出），
-异步写入 audit_logs 表。
+拦截写操作和认证事件，异步写入 audit_logs 表。
 
 设计原则：
+- 元数据单一来源：从匹配到的 route 上读取 summary/tags/name/path（项目约定每个端点必须有 summary/tags）
 - 仅捕获，不阻塞：审计写入失败不影响主请求
-- fire-and-forget：使用 asyncio.create_task 异步写入
-- 轻量解析：只从 JWT header 提取 user_id，不做完整校验
+- fire-and-forget：用 asyncio.create_task 异步写入
+- 轻量解析：仅从 JWT header 提取 username，不做完整校验
 """
 
 import asyncio
@@ -14,6 +14,7 @@ import logging
 from typing import Callable
 
 from fastapi import Request, Response
+from fastapi.routing import APIRoute
 from jose import jwt, JWTError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
@@ -23,27 +24,29 @@ from src.audit.service import save_audit_log
 
 logger = logging.getLogger(__name__)
 
-# API 路径前缀
-_API_PREFIX = "/api/v1"
+# tag → 资源类型映射（tag 是元数据单一来源）
+# None 表示不对应实体资源（如认证事件），或需要按路径二次消歧
+_TAG_RESOURCE_MAP: dict[str, str | None] = {
+    "Authentication": None,
+    "Audit": None,  # 审计自身不审计
+    "Users": "user",
+    "RBAC": None,  # 按路径二次消歧为 role / permission
+    "Social Media - Monitors": "social_monitor",
+    "Social Media - Tasks": "social_task",
+    "Social Media - Analysis": "social_slice",
+    "News Media - Monitors": "news_monitor",
+    "News Media - Tasks": "news_task",
+    "News Media - Analysis": "news_slice",
+    "Strategies": "strategy",
+    "Analysis Jobs": "analysis_job",
+    "Knowledge Base": "kb_document",
+    "Research Agent": "research_task",
+}
 
-# 路径前缀 → 资源类型（顺序敏感：更具体的前缀放前面）
-_RESOURCE_MAP: list[tuple[str, str]] = [
-    ("social-media/monitors", "social_monitor"),
-    ("social-media/tasks", "social_task"),
-    ("social-media/analysis", "social_slice"),
-    ("news-media/monitors", "news_monitor"),
-    ("news-media/tasks", "news_task"),
-    ("news-media/analysis", "news_slice"),
-    ("strategies", "strategy"),
-    ("jobs", "analysis_job"),
-    ("knowledge-base", "kb_document"),
-    ("users", "user"),
-    ("rbac/roles", "role"),
-    ("rbac/permissions", "permission"),
-    ("research-agent", "research_task"),
-]
+# 不审计的 tag（审计自身）
+_SKIP_TAGS = {"Audit"}
 
-# HTTP 方法 → 默认操作语义
+# HTTP 方法 → 默认 action
 _METHOD_ACTION: dict[str, str] = {
     "POST": "CREATE",
     "PUT": "UPDATE",
@@ -51,11 +54,11 @@ _METHOD_ACTION: dict[str, str] = {
     "DELETE": "DELETE",
 }
 
-# 路径后缀 → TRIGGER 语义（匹配最后一段路径）
-_TRIGGER_SUFFIXES = {"execute", "cancel", "analyze", "run", "refine", "approve", "retry"}
+# 路径末段 → TRIGGER 语义
+_TRIGGER_SUFFIXES = {"execute", "cancel", "analyze", "run", "refine", "approve", "retry", "preview"}
 
-# 不需要审计的路径前缀
-_SKIP_PATHS = {"/health", "/docs", "/redoc", "/openapi.json"}
+# 仅审计写方法
+_WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def _extract_username(request: Request) -> str | None:
@@ -66,90 +69,107 @@ def _extract_username(request: Request) -> str | None:
     token = auth_header[len("Bearer "):]
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        return payload.get("sub")  # sub 存的是 username 字符串
+        return payload.get("sub")
     except JWTError:
         return None
 
 
-def _extract_resource(path_after_prefix: str) -> str | None:
-    """根据路径前缀推断资源类型。"""
-    for prefix, resource in _RESOURCE_MAP:
-        if path_after_prefix.startswith(prefix):
-            return resource
+def _resolve_resource(tags: list[str], path_template: str) -> str | None:
+    """通过 tag 和路径模板推断资源类型。"""
+    for tag in tags:
+        if tag not in _TAG_RESOURCE_MAP:
+            continue
+        # RBAC 歧义：路径含 /permissions 为 permission，否则 role
+        if tag == "RBAC":
+            return "permission" if "/permissions" in path_template else "role"
+        return _TAG_RESOURCE_MAP[tag]
     return None
 
 
-def _extract_resource_id(path_after_prefix: str) -> str | None:
-    """提取路径中第一个数字片段作为 resource_id。"""
-    for segment in path_after_prefix.split("/"):
+def _extract_last_id(path: str) -> str | None:
+    """取路径中最后一个纯数字段作为 resource_id。"""
+    last_id: str | None = None
+    for segment in path.split("/"):
         if segment.isdigit():
-            return segment
-    return None
+            last_id = segment
+    return last_id
 
 
-def _determine_action(method: str, path_after_prefix: str, status_code: int) -> str:
-    """根据方法、路径、状态码推断操作语义。"""
-    # 认证特殊事件（/auth/token 是实际的登录端点）
-    if path_after_prefix == "auth/token":
-        return "LOGIN" if status_code < 400 else "LOGIN_FAILED"
-    if path_after_prefix == "auth/logout":
-        return "LOGOUT"
+def _determine_action(
+    endpoint: str | None,
+    tags: list[str],
+    method: str,
+    path: str,
+    status_code: int,
+) -> str:
+    """基于 endpoint/tag/方法/路径/状态码推断 action。"""
+    # 认证事件：用 endpoint 函数名精确识别（避免路径猜测）
+    if "Authentication" in tags:
+        if endpoint == "login":
+            return "LOGIN" if status_code < 400 else "LOGIN_FAILED"
+        if endpoint == "logout":
+            return "LOGOUT"
 
-    # 路径末段为触发类操作
-    last_segment = path_after_prefix.rstrip("/").rsplit("/", 1)[-1]
+    # 路径末段为触发类动词
+    last_segment = path.rstrip("/").rsplit("/", 1)[-1]
     if last_segment in _TRIGGER_SUFFIXES:
         return "TRIGGER"
 
     return _METHOD_ACTION.get(method, "CREATE")
 
 
-def _should_audit(method: str, path: str) -> bool:
-    """判断该请求是否需要审计。"""
-    if method not in {"POST", "PUT", "PATCH", "DELETE"}:
-        return False
-    for skip in _SKIP_PATHS:
-        if path.startswith(skip):
-            return False
-    return True
-
-
 class AuditMiddleware(BaseHTTPMiddleware):
-    """审计日志中间件：拦截写操作，异步写入 audit_logs。"""
+    """审计日志中间件：拦截写操作，从 route 元数据异步写入 audit_logs。"""
 
     def __init__(self, app: ASGIApp):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        path = request.url.path
         method = request.method
 
-        # 快速跳过不需要审计的请求
-        if not _should_audit(method, path):
+        # 非写方法直接透传
+        if method not in _WRITE_METHODS:
             return await call_next(request)
 
-        # 提前解析 username（JWT sub 字段，token 在请求处理期间仍有效）
+        # 提前捕获（token 在请求处理期间有效）
         username = _extract_username(request)
         ip_address = request.client.host if request.client else None
         user_agent = request.headers.get("user-agent")
+        request_path = request.url.path
 
-        # 执行实际请求
         response = await call_next(request)
 
-        # 解析路径
-        path_after_prefix = path.removeprefix(_API_PREFIX).lstrip("/")
-        action = _determine_action(method, path_after_prefix, response.status_code)
-        resource = _extract_resource(path_after_prefix)
-        resource_id = _extract_resource_id(path_after_prefix)
+        # 登录场景无 Bearer token，从 request.state 读取（由 /auth/token 端点设置）
+        if not username:
+            username = getattr(request.state, "audit_username", None)
 
-        # fire-and-forget 写入审计日志
+        # 从 scope 拿匹配到的 APIRoute
+        route = request.scope.get("route")
+        if not isinstance(route, APIRoute):
+            return response  # 404 / 非 FastAPI 路由，不审计
+
+        tags = list(route.tags or [])
+        if any(tag in _SKIP_TAGS for tag in tags):
+            return response
+
+        operation = route.summary
+        endpoint = route.name
+        path_template = route.path
+        resource = _resolve_resource(tags, path_template)
+        resource_id = _extract_last_id(request_path)
+        action = _determine_action(endpoint, tags, method, request_path, response.status_code)
+
         asyncio.create_task(
             save_audit_log(
                 username=username,
                 action=action,
+                operation=operation,
                 resource=resource,
                 resource_id=resource_id,
+                endpoint=endpoint,
+                path_template=path_template,
                 http_method=method,
-                request_path=path,
+                request_path=request_path,
                 status_code=response.status_code,
                 ip_address=ip_address,
                 user_agent=user_agent,

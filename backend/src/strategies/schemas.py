@@ -159,6 +159,7 @@ class NewsProbeTaskStatus(CustomBaseModel):
     dimension: str = ""
     status: str = Field(..., description="任务状态")
     completed: bool = Field(False, description="是否已完成（搜索落库完毕）")
+    failed: bool = Field(False, description="是否失败")
     articles_count: int = Field(0, description="搜索到的文章数")
 
 

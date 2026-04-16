@@ -18,7 +18,11 @@ logger = logging.getLogger(__name__)
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
 
-    from src.strategies.tasks import check_collecting_strategies, check_probing_strategies
+    from src.strategies.tasks import (
+        check_collecting_strategies,
+        check_probing_strategies,
+        reset_stuck_news_probe_tasks,
+    )
 
     scheduler.add_job(
         check_probing_strategies,
@@ -33,6 +37,14 @@ def create_scheduler() -> AsyncIOScheduler:
         "interval",
         minutes=2,
         id="strategy_collection",
+        max_instances=1,
+        misfire_grace_time=60,
+    )
+    scheduler.add_job(
+        reset_stuck_news_probe_tasks,
+        "interval",
+        minutes=5,
+        id="news_probe_watchdog",
         max_instances=1,
         misfire_grace_time=60,
     )

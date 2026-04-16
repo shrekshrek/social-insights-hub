@@ -167,6 +167,7 @@ export interface NewsProbeTaskStatus {
   dimension: string
   status: string
   completed: boolean
+  failed: boolean
   articles_count: number
 }
 

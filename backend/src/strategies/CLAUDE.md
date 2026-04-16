@@ -174,6 +174,26 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 - **全量任务**（phase="collect"）：采集完整数据（50 条 + 评论）
 - **普通任务**：一次性采集到 max_notes_count 指定数量
 
+## 定时任务（APScheduler）
+
+所有任务定义于 `strategies/tasks.py`，由 `scheduler.py` 注册到 FastAPI asyncio 事件循环。
+
+| Job ID | 函数 | 间隔 | 职责 |
+|--------|------|------|------|
+| `strategy_probe` | `check_probing_strategies` | 2 分钟 | 扫描 `status=probing` 的策略，所有探测任务（社媒 + 新闻）均达到终态后自动触发 LLM probe review |
+| `strategy_collection` | `check_collecting_strategies` | 2 分钟 | 扫描 `status=collecting` 的策略，所有全量任务完成且有分析结果后自动创建切片 + 覆盖度验证 |
+| `news_probe_watchdog` | `reset_stuck_news_probe_tasks` | 5 分钟 | 将策略新闻探测任务中 `running` 超过 20 分钟的记录标记为 `failed`，防止 Celery Worker 崩溃导致策略永久卡住 |
+
+### 终态定义
+
+- **社媒探测任务**：`has_analysis=True`（LLM 已完成打标）
+- **新闻探测任务**：`status in {"completed", "failed"}`（completed=采集成功；failed=失败或被 watchdog 回收）
+  - failed 不阻塞流程——probe review chain 会对失败任务保守判 pass 并标注"人工核查"
+
+### 卡死恢复流程
+
+Celery Worker 崩溃 → 新闻任务状态停留在 `running` → watchdog 在 20 分钟超时后标记 `failed` → `check_probing_strategies` 在下一个 2 分钟周期检测到所有任务终态 → 自动触发 LLM 审查 → 策略恢复正常流程。全程无需人工干预。
+
 ## Important Notes
 
 - Strategy 通过 `strategy_slices` 关联社媒切片（SocialSlice），新闻切片（NewsSlice）通过 `news_monitor_id` 隐式关联

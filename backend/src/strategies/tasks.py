@@ -1,15 +1,23 @@
 """策略定时任务（由 APScheduler 在 FastAPI asyncio 事件循环中调度）
 
 主动检测策略状态，替代原有「前端轮询才能触发」的设计缺陷：
-- check_probing_strategies:    探测任务全部分析完成 → 自动触发 LLM 审查
-- check_collecting_strategies: 全量采集全部完成   → 自动触发建切片 + 覆盖度验证
+- check_probing_strategies:       探测任务全部分析完成 → 自动触发 LLM 审查
+- check_collecting_strategies:    全量采集全部完成   → 自动触发建切片 + 覆盖度验证
+- reset_stuck_news_probe_tasks:   超时的 running 新闻探测任务 → 自动标记为 failed
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, update
 
 from src.database import AsyncSessionLocal
+
+# 新闻探测任务终态：completed（采集成功）或 failed（失败/超时）
+_NEWS_PROBE_TERMINAL = {"completed", "failed"}
+
+# 新闻探测任务超时阈值（分钟）：超过此时长仍为 running 视为卡死
+_NEWS_PROBE_TIMEOUT_MINUTES = 20
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +79,12 @@ async def check_probing_strategies() -> int:
             social_all_analyzed = bool(task_statuses) and all(
                 t.has_analysis for t in task_statuses
             )
-            # 新闻任务全部已分析
-            news_all_analyzed = all(
-                t.status == "completed" and t.analysis_result
-                for t in news_probe_tasks
-            ) if news_probe_tasks else True
+            # 新闻任务全部已终态（completed 或 failed 均视为完成，不再阻塞）
+            news_all_analyzed = (
+                all(t.status in _NEWS_PROBE_TERMINAL for t in news_probe_tasks)
+                if news_probe_tasks
+                else True
+            )
 
             if social_all_analyzed and news_all_analyzed:
                 to_review.append((strategy.id, analyzed_summaries))
@@ -169,3 +178,42 @@ async def check_collecting_strategies() -> int:
                 )
 
     return triggered
+
+
+async def reset_stuck_news_probe_tasks() -> int:
+    """将超时的新闻探测任务（running 超过阈值时间）标记为 failed。
+
+    Celery Worker 崩溃时任务状态可能永远停留在 running，此 watchdog 负责回收，
+    使 check_probing_strategies 能正常检测到"全部终态"并触发 LLM 审查。
+    """
+    from src.news_media.tasks.models import NewsTask
+
+    timeout_before = datetime.now(tz=timezone.utc) - timedelta(minutes=_NEWS_PROBE_TIMEOUT_MINUTES)
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            update(NewsTask)
+            .where(
+                and_(
+                    NewsTask.status == "running",
+                    NewsTask.phase == "probe",
+                    NewsTask.strategy_id.is_not(None),
+                    NewsTask.started_at < timeout_before,
+                )
+            )
+            .values(
+                status="failed",
+                error_message=f"任务超时（>{_NEWS_PROBE_TIMEOUT_MINUTES} 分钟仍未完成，watchdog 自动标记）",
+            )
+            .returning(NewsTask.id)
+        )
+        stuck_ids = list(result.scalars().all())
+        if stuck_ids:
+            await db.commit()
+            logger.warning(
+                "Watchdog: reset %d stuck news probe tasks → failed: %s",
+                len(stuck_ids),
+                stuck_ids,
+            )
+
+    return len(stuck_ids)

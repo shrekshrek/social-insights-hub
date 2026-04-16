@@ -2287,9 +2287,10 @@ async def check_probe_status(
     task_ids = [t.id for t in probe_tasks]
     task_statuses, analyzed_summaries = await _build_probe_task_summaries(db, task_ids)
 
-    # 新闻任务状态（新闻探测已同步完成，直接检查 status）
-    news_all_analyzed = all(t.status == "completed" and t.analysis_result for t in news_probe_tasks)
-    news_analyzed_count = sum(1 for t in news_probe_tasks if t.status == "completed" and t.analysis_result)
+    # 新闻任务状态（进入终态即视为已处理，failed 不阻塞审查触发）
+    _NEWS_PROBE_TERMINAL = {"completed", "failed"}
+    news_all_analyzed = all(t.status in _NEWS_PROBE_TERMINAL for t in news_probe_tasks)
+    news_analyzed_count = sum(1 for t in news_probe_tasks if t.status in _NEWS_PROBE_TERMINAL)
 
     # 构建新闻任务状态列表（供前端展示）
     from src.strategies.schemas import NewsProbeTaskStatus
@@ -2301,6 +2302,7 @@ async def check_probe_status(
             dimension=news_probe_dim_map.get(str(npt.id), ""),
             status=npt.status,
             completed=npt.status == "completed" and bool(npt.analysis_result),
+            failed=npt.status == "failed",
             articles_count=(npt.analysis_result or {}).get("meta", {}).get("articles_total", 0)
             if npt.analysis_result
             else 0,

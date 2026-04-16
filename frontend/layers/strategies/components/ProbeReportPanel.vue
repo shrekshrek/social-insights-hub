@@ -75,8 +75,8 @@
         <div class="flex items-center gap-2">
           <span class="text-xs font-medium text-gray-500">{{ dimName }}</span>
           <span class="text-xs text-gray-400">新闻</span>
-          <span class="text-xs" :class="group.every(t => t.completed) ? 'text-green-500' : 'text-gray-400'">
-            {{ group.filter(t => t.completed).length }}/{{ group.length }} 已完成
+          <span class="text-xs" :class="group.every(t => t.completed || t.failed) ? 'text-green-500' : 'text-gray-400'">
+            {{ group.filter(t => t.completed || t.failed).length }}/{{ group.length }} 已完成
           </span>
         </div>
         <div class="grid grid-cols-3 gap-1.5">
@@ -84,15 +84,16 @@
             v-for="t in group"
             :key="t.task_id"
             class="flex items-center gap-1.5 text-xs p-1.5 rounded"
-            :class="t.completed ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
+            :class="t.completed ? 'bg-green-50 dark:bg-green-900/20' : t.failed ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-800'"
           >
             <UIcon
-              :name="t.completed ? 'i-heroicons-check-circle' : 'i-heroicons-clock'"
-              :class="t.completed ? 'text-green-500' : 'text-gray-400'"
+              :name="t.completed ? 'i-heroicons-check-circle' : t.failed ? 'i-heroicons-x-circle' : 'i-heroicons-clock'"
+              :class="t.completed ? 'text-green-500' : t.failed ? 'text-red-400' : 'text-gray-400'"
               class="shrink-0"
             />
             <span class="font-medium truncate">{{ t.keyword }}</span>
             <span v-if="t.completed" class="text-gray-400 shrink-0">{{ t.articles_count }} 篇</span>
+            <span v-else-if="t.failed" class="text-red-400 shrink-0">失败</span>
           </div>
         </div>
       </div>

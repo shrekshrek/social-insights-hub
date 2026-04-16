@@ -119,7 +119,7 @@ class SocialMonitor(Base):
         "src.social_media.tasks.models.SocialTask",
         back_populates="monitor",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     def __repr__(self):

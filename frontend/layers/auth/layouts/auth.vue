@@ -3,7 +3,7 @@
     <div class="w-full max-w-sm">
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">{{ appName }}</h1>
-        <p class="text-gray-600 dark:text-gray-400">现代化的全栈开发解决方案</p>
+        <p class="text-gray-600 dark:text-gray-400">AI 驱动的品牌策略与创意研究平台</p>
       </div>
       
       <UCard class="shadow-xl">
@@ -12,7 +12,7 @@
       
       <div class="text-center mt-6">
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          © 2024 {{ appName }}. 保留所有权利。
+          © {{ new Date().getFullYear() }} {{ appName }}. 保留所有权利。
         </p>
       </div>
     </div>

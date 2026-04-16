@@ -134,6 +134,13 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     order: 110,
   },
   "/rbac/permissions/[id]": { permission: PERMISSIONS.PERMISSION_READ },
+  // 审计日志
+  "/audit/logs": {
+    permission: PERMISSIONS.AUDIT_ACCESS,
+    label: "操作日志",
+    showInNav: true,
+    order: 120,
+  },
 };
 
 /**

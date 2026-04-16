@@ -275,7 +275,7 @@ const permissions = usePermissions();
 const colorMode = useColorMode();
 
 const config = useRuntimeConfig();
-const appName = computed(() => config.public.appName || '全栈脚手架');
+const appName = computed(() => config.public.appName as string);
 
 // 认证状态和用户数据（用于导航逻辑）
 const status = computed(() => loggedIn.value ? 'authenticated' : 'unauthenticated');

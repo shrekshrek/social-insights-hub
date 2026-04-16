@@ -138,6 +138,24 @@ export function useResearchAgent() {
     return colors[tier] ?? 'neutral'
   }
 
+  // 研究类型标签（内置默认，后端 /research/profiles 返回时以后端为准）
+  function profileLabel(profileName: string): string {
+    const labels: Record<string, string> = {
+      industry: '行业研究',
+      creative: '创意研究',
+    }
+    return labels[profileName] ?? profileName
+  }
+
+  // 研究类型色（用于列表 Badge 区分）
+  function profileColor(profileName: string): 'primary' | 'success' | 'neutral' {
+    const colors: Record<string, 'primary' | 'success' | 'neutral'> = {
+      industry: 'primary',
+      creative: 'success',
+    }
+    return colors[profileName] ?? 'neutral'
+  }
+
   return {
     getProfiles,
     getTasks,
@@ -154,5 +172,7 @@ export function useResearchAgent() {
     confidenceColor,
     tierLabel,
     tierColor,
+    profileLabel,
+    profileColor,
   }
 }

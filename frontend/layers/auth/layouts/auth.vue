@@ -21,5 +21,5 @@
 
 <script setup lang="ts">
 const config = useRuntimeConfig();
-const appName = computed(() => config.public.appName || '全栈脚手架');
+const appName = computed(() => config.public.appName as string);
 </script> 

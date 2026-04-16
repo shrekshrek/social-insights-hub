@@ -121,6 +121,7 @@ async def list_research_tasks(
     strategy_id: int | None = None,
     status: str | None = None,
     search: str | None = None,
+    profile_name: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[ResearchTask], int]:
@@ -133,6 +134,8 @@ async def list_research_tasks(
         base = base.where(ResearchTask.strategy_id == strategy_id)
     if status:
         base = base.where(ResearchTask.status == status)
+    if profile_name:
+        base = base.where(ResearchTask.profile_name == profile_name)
     if search:
         pattern = f"%{search}%"
         base = base.where(

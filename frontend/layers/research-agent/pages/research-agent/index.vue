@@ -40,6 +40,12 @@
               class="w-60"
             />
             <USelect
+              v-model="selectedProfile"
+              :items="profileOptions"
+              value-key="value"
+              class="w-32"
+            />
+            <USelect
               v-model="selectedStatus"
               :items="statusOptions"
               value-key="value"
@@ -110,10 +116,11 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const { currentUserId, hasPermission } = usePermissions()
-const { getTasks, rerunTask, deleteTask, statusLabel, statusColor } = useResearchAgent()
+const { getProfiles, getTasks, rerunTask, deleteTask, statusLabel, statusColor, profileLabel, profileColor } = useResearchAgent()
 
 const searchQuery = ref('')
 const selectedStatus = ref('all')
+const selectedProfile = ref('all')
 const refreshing = ref(false)
 
 const statusOptions = [
@@ -123,6 +130,15 @@ const statusOptions = [
   { label: '已完成', value: 'completed' },
   { label: '失败', value: 'failed' },
 ]
+
+const { data: profilesData } = await getProfiles()
+const profileOptions = computed(() => [
+  { label: '全部类型', value: 'all' },
+  ...(profilesData.value ?? [
+    { name: 'industry', display_name: '行业研究' },
+    { name: 'creative', display_name: '创意研究' },
+  ]).map(p => ({ label: p.display_name, value: p.name })),
+])
 
 const currentPage = computed({
   get: () => parseInt(route.query.page as string) || 1,
@@ -135,6 +151,7 @@ const apiParams = computed(() => ({
   page: currentPage.value,
   page_size: PAGE_SIZE,
   status: selectedStatus.value === 'all' ? undefined : selectedStatus.value,
+  profile_name: selectedProfile.value === 'all' ? undefined : selectedProfile.value,
   search: searchQuery.value || undefined,
 }))
 
@@ -149,6 +166,10 @@ watch(searchQuery, () => {
 })
 
 watch(selectedStatus, () => {
+  if (currentPage.value !== 1) currentPage.value = 1
+})
+
+watch(selectedProfile, () => {
   if (currentPage.value !== 1) currentPage.value = 1
 })
 
@@ -186,6 +207,19 @@ const columns: TableColumn<ResearchTask>[] = [
           class: 'p-0 font-medium text-left whitespace-normal leading-snug line-clamp-2',
         },
         () => displayTitle,
+      )
+    },
+  },
+  {
+    accessorKey: 'profile_name',
+    header: '类型',
+    meta: { class: { th: 'w-[90px]', td: 'w-[90px]' } },
+    cell: ({ row }) => {
+      const profile = (row.getValue('profile_name') as string) || 'industry'
+      return h(
+        UBadge as Component,
+        { color: profileColor(profile), variant: 'soft', size: 'sm' },
+        () => profileLabel(profile),
       )
     },
   },

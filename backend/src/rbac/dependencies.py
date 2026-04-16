@@ -112,6 +112,9 @@ require_analysis_read = create_permission_dependency("analysis:read")
 require_analysis_write = create_permission_dependency("analysis:write")
 require_analysis_delete = create_permission_dependency("analysis:delete")
 
+# 审计日志权限依赖
+require_audit_read = create_permission_dependency("audit:read")
+
 
 async def get_current_user_permissions(
     db: AsyncSession = Depends(get_async_db),

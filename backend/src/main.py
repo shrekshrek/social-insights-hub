@@ -22,6 +22,7 @@ from src.news_media.monitors.router import router as news_monitors_router
 from src.news_media.tasks.router import router as news_tasks_router
 from src.news_media.analysis.router import router as news_slices_router
 from src.research_agent.router import router as research_agent_router
+from src.audit.router import router as audit_router
 from src.config import settings
 from src.database import get_async_db, AsyncSessionLocal
 from src.rbac.init_data import init_rbac_data
@@ -32,6 +33,7 @@ from src.middleware import (
     GlobalExceptionHandlerMiddleware,
     SecurityHeadersMiddleware,
 )
+from src.audit.middleware import AuditMiddleware
 from src.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -143,7 +145,10 @@ app.add_middleware(RequestLoggingMiddleware)
 # 4. GZip 请求体解压中间件（用于爬虫客户端压缩上传）
 app.add_middleware(GZipRequestMiddleware)
 
-# 5. CORS中间件
+# 5. 审计日志中间件（fire-and-forget，拦截写操作写入 audit_logs）
+app.add_middleware(AuditMiddleware)
+
+# 6. CORS中间件
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
@@ -248,3 +253,4 @@ app.include_router(news_monitors_router, prefix=settings.API_PREFIX)
 app.include_router(news_tasks_router, prefix=settings.API_PREFIX)
 app.include_router(news_slices_router, prefix=settings.API_PREFIX)
 app.include_router(research_agent_router, prefix=settings.API_PREFIX)
+app.include_router(audit_router, prefix=settings.API_PREFIX)

@@ -79,6 +79,10 @@ export const PERMISSIONS = {
   RESEARCH_AGENT_READ: {target: 'research_agent', action: 'read'},
   RESEARCH_AGENT_WRITE: {target: 'research_agent', action: 'write'},
   RESEARCH_AGENT_DELETE: {target: 'research_agent', action: 'delete'},
+
+  // 审计日志
+  AUDIT_ACCESS: {target: 'audit', action: 'access'},
+  AUDIT_READ: {target: 'audit', action: 'read'},
 } as const satisfies Record<string, Permission>
 
 // ============================================================================

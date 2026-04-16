@@ -164,14 +164,14 @@ class SocialTask(Base):
         "SocialPost",
         back_populates="task",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     comments: Mapped[list["SocialComment"]] = relationship(
         "SocialComment",
         back_populates="task",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     def __repr__(self):
@@ -273,7 +273,7 @@ class SocialPost(Base):
         "SocialComment",
         back_populates="post",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     # 索引：支持跨任务查询同一原文

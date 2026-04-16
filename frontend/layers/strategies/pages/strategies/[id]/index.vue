@@ -63,7 +63,7 @@
           <UButton variant="outline" icon="i-heroicons-arrow-down-tray" @click="handleExport">
             导出 Word
           </UButton>
-          <UButton v-if="canDelete" variant="outline" color="error" icon="i-heroicons-trash" @click="handleDelete">
+          <UButton v-if="canDelete" variant="ghost" color="error" icon="i-heroicons-trash" @click="handleDelete">
             删除
           </UButton>
         </div>

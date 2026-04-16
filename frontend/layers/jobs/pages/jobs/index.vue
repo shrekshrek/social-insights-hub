@@ -22,8 +22,8 @@ const {
 // 分页和筛选
 const currentPage = ref(1)
 const pageSize = ref(20)
-const selectedType = ref<AnalysisType | undefined>()
-const selectedStatus = ref<AnalysisStatus | undefined>()
+const selectedType = ref<AnalysisType | 'all'>('all')
+const selectedStatus = ref<AnalysisStatus | 'all'>('all')
 const searchMonitorId = ref<number | undefined>()
 const searchTaskId = ref<number | undefined>()
 const refreshing = ref(false)
@@ -32,8 +32,8 @@ const refreshing = ref(false)
 const params = computed(() => ({
   page: currentPage.value,
   page_size: pageSize.value,
-  analysis_type: selectedType.value,
-  status: selectedStatus.value,
+  analysis_type: selectedType.value === 'all' ? undefined : selectedType.value,
+  status: selectedStatus.value === 'all' ? undefined : selectedStatus.value,
   // 处理空值和 NaN（暂时只支持社媒监测 ID 筛选）
   social_monitor_id: typeof searchMonitorId.value === 'number' && !Number.isNaN(searchMonitorId.value)
     ? searchMonitorId.value
@@ -90,7 +90,7 @@ const handleRefresh = async () => {
 
 // 分析类型选项
 const typeOptions = [
-  { label: '全部类型', value: undefined },
+  { label: '全部类型', value: 'all' },
   { label: '原文初筛', value: 'screening_posts' },
   { label: '原文深度', value: 'deep_posts' },
   { label: '评论深度', value: 'deep_comments' },
@@ -111,7 +111,7 @@ const typeOptions = [
 
 // 状态选项
 const statusOptions = [
-  { label: '全部状态', value: undefined },
+  { label: '全部状态', value: 'all' },
   { label: '等待中', value: 'pending' },
   { label: '进行中', value: 'running' },
   { label: '已完成', value: 'completed' },
@@ -173,7 +173,7 @@ const getAnalysisTypeLabel = (type: string) => {
 
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
-    pending: 'warning',
+    pending: 'neutral',
     running: 'info',
     completed: 'success',
     failed: 'error',
@@ -553,6 +553,9 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
               :total="total"
               :items-per-page="pageSize"
               :sibling-count="2"
+              show-first
+              show-last
+              show-edges
             />
           </div>
         </ClientOnly>

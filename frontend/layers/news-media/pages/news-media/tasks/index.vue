@@ -22,8 +22,8 @@ const params = computed(() => ({
   page: currentPage.value,
   page_size: pageSize.value,
   search: searchQuery.value || undefined,
-  ...(statusFilter.value !== 'all' ? { status: statusFilter.value } : {}),
-  ...(phaseFilter.value !== 'all' ? { phase: phaseFilter.value } : {}),
+  status: statusFilter.value === 'all' ? undefined : statusFilter.value,
+  phase: phaseFilter.value === 'all' ? undefined : phaseFilter.value,
 }))
 
 const { data: tasksData, pending: loading, refresh } = getAllTasks(params)
@@ -308,6 +308,9 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
               :total="total"
               :items-per-page="pageSize"
               :sibling-count="2"
+              show-first
+              show-last
+              show-edges
             />
           </div>
         </ClientOnly>

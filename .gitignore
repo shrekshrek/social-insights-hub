@@ -34,7 +34,7 @@ dist/
 .cache/
 
 # Log files
-logs
+/logs/
 *.log
 
 # --- Python / Backend ---

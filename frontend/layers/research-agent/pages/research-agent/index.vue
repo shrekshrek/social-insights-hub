@@ -43,7 +43,6 @@
               v-model="selectedStatus"
               :items="statusOptions"
               value-key="value"
-              placeholder="状态"
               class="w-32"
             />
           </div>

@@ -14,14 +14,14 @@
       </span>
     </div>
 
-    <!-- 等待采集提示 -->
-    <div v-if="!tasks.length && !allAnalyzed" class="text-center py-4">
+    <!-- 等待采集提示（纯新闻策略无社媒任务时，新闻也未完成时才转圈） -->
+    <div v-if="!socialTasks.length && !newsTasks.length && !allAnalyzed" class="text-center py-4">
       <UIcon name="i-heroicons-arrow-path" class="animate-spin text-lg text-primary-400 mb-1" />
-      <p class="text-sm text-gray-400">新的探测任务已创建，等待爬虫采集...</p>
+      <p class="text-sm text-gray-400">新的探测任务已创建，等待采集...</p>
     </div>
 
-    <!-- 任务状态：按维度分组 -->
-    <div v-if="tasks.length">
+    <!-- 社媒任务状态：按维度分组 -->
+    <div v-if="socialTasks.length">
       <!-- 有维度映射：分组展示 -->
       <div v-if="dimensionGroups" class="space-y-3">
         <div v-for="(group, dimName) in dimensionGroups" :key="dimName" class="space-y-1.5">
@@ -53,7 +53,7 @@
       <!-- 无维度映射：平铺展示（兜底） -->
       <div v-else class="grid grid-cols-3 gap-1.5">
         <div
-          v-for="t in tasks"
+          v-for="t in socialTasks"
           :key="t.task_id"
           class="flex items-center gap-1.5 text-xs p-1.5 rounded"
           :class="t.has_analysis ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
@@ -65,6 +65,35 @@
           />
           <span class="font-medium truncate">{{ t.keyword }}</span>
           <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新闻任务状态：按维度分组 -->
+    <div v-if="newsTasks.length" class="space-y-3">
+      <div v-for="(group, dimName) in newsTaskDimensionGroups" :key="dimName" class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-gray-500">{{ dimName }}</span>
+          <span class="text-xs text-gray-400">新闻</span>
+          <span class="text-xs" :class="group.every(t => t.completed) ? 'text-green-500' : 'text-gray-400'">
+            {{ group.filter(t => t.completed).length }}/{{ group.length }} 已完成
+          </span>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5">
+          <div
+            v-for="t in group"
+            :key="t.task_id"
+            class="flex items-center gap-1.5 text-xs p-1.5 rounded"
+            :class="t.completed ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
+          >
+            <UIcon
+              :name="t.completed ? 'i-heroicons-check-circle' : 'i-heroicons-clock'"
+              :class="t.completed ? 'text-green-500' : 'text-gray-400'"
+              class="shrink-0"
+            />
+            <span class="font-medium truncate">{{ t.keyword }}</span>
+            <span v-if="t.completed" class="text-gray-400 shrink-0">{{ t.articles_count }} 篇</span>
+          </div>
         </div>
       </div>
     </div>
@@ -194,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ProbeTaskStatus, ProbeReviewResult, ProbeAssessment } from '../types'
+import type { SocialProbeTaskStatus, NewsProbeTaskStatus, ProbeReviewResult, ProbeAssessment } from '../types'
 import { platformLabel } from '../composables/useStrategyConstants'
 
 const VERDICT_MAP = {
@@ -219,7 +248,8 @@ const VERDICT_MAP = {
 } as const
 
 const props = defineProps<{
-  tasks: ProbeTaskStatus[]
+  socialTasks: SocialProbeTaskStatus[]
+  newsTasks: NewsProbeTaskStatus[]
   analyzedCount: number
   totalCount: number
   allAnalyzed: boolean
@@ -249,15 +279,14 @@ const channelWarnings = computed(() => {
   )
 })
 
-/** 按维度分组的任务状态（用于采集进度展示） */
-const dimensionGroups = computed((): Record<string, ProbeTaskStatus[]> | null => {
-  if (!props.taskDimensionMap || !props.dimensionNames?.length || !props.tasks.length) return null
+/** 按维度分组的社媒任务状态 */
+const dimensionGroups = computed((): Record<string, SocialProbeTaskStatus[]> | null => {
+  if (!props.taskDimensionMap || !props.dimensionNames?.length || !props.socialTasks.length) return null
 
-  const groups: Record<string, ProbeTaskStatus[]> = {}
-  // 按 data_plan 顺序初始化
+  const groups: Record<string, SocialProbeTaskStatus[]> = {}
   for (const dim of props.dimensionNames) groups[dim] = []
 
-  for (const task of props.tasks) {
+  for (const task of props.socialTasks) {
     const dim = props.taskDimensionMap[String(task.task_id)]
     if (dim) {
       if (!groups[dim]) groups[dim] = []
@@ -265,8 +294,18 @@ const dimensionGroups = computed((): Record<string, ProbeTaskStatus[]> | null =>
     }
   }
 
-  // 过滤掉空维度
   return Object.fromEntries(Object.entries(groups).filter(([, tasks]) => tasks.length > 0))
+})
+
+/** 按维度分组的新闻任务状态 */
+const newsTaskDimensionGroups = computed((): Record<string, NewsProbeTaskStatus[]> => {
+  const groups: Record<string, NewsProbeTaskStatus[]> = {}
+  for (const task of props.newsTasks) {
+    const dim = task.dimension || '新闻'
+    if (!groups[dim]) groups[dim] = []
+    groups[dim].push(task)
+  }
+  return groups
 })
 
 /** 按维度分组的审查结果（用于 probeReview 展示） */

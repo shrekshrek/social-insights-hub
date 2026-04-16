@@ -134,11 +134,7 @@
             <div v-else>
               <label class="text-xs text-gray-500 mb-1 block">搜索渠道</label>
               <div class="flex flex-wrap items-center gap-2">
-                <span
-                  v-for="ch in ['百度', '搜狗', 'DuckDuckGo']"
-                  :key="ch"
-                  class="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-xs text-gray-400"
-                >{{ ch }}</span>
+                <span class="px-2 py-1 rounded border border-primary-400 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 text-xs">百度等多渠道</span>
                 <label
                   class="flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer transition-colors"
                   :class="dp.enable_wechat_mp
@@ -256,18 +252,7 @@
     <div class="flex items-center gap-4 p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
       <div class="flex items-center gap-2">
         <span class="text-gray-600 dark:text-gray-400 shrink-0">每任务全量:</span>
-        <div class="flex">
-          <UButton
-            v-for="(opt, oi) in NOTES_OPTIONS"
-            :key="opt"
-            size="xs"
-            :variant="notesPerTask === opt ? 'solid' : 'outline'"
-            :class="oi === 0 ? 'rounded-r-none' : 'rounded-l-none'"
-            @click="$emit('update:notesPerTask', opt)"
-          >
-            {{ opt }} 条
-          </UButton>
-        </div>
+        <span class="text-sm text-gray-700 dark:text-gray-300">50 条</span>
       </div>
       <span class="text-gray-600 dark:text-gray-400">探测: 20 条（固定）</span>
       <span class="text-gray-400">|</span>
@@ -286,7 +271,7 @@ import {
   platformLabel,
 } from '../composables/useStrategyConstants'
 
-const NOTES_OPTIONS = [50, 100] as const
+const NOTES_OPTIONS = [50] as const
 
 const OUTPUT_TYPE_OPTIONS: ReadonlyArray<{ value: OutputType; hint: string }> = [
   {

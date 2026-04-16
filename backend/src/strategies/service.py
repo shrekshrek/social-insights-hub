@@ -85,7 +85,7 @@ from .schemas import (
     DesignResearchResponse,
     ParseBriefResponse,
     ProbeStatusResponse,
-    ProbeTaskStatus,
+    SocialProbeTaskStatus,
     RefineProbeRequest,
     RefineProbeResponse,
     ResearchAgentStatus,
@@ -1640,7 +1640,7 @@ _probe_review_in_progress: set[int] = set()
 async def _build_probe_task_summaries(
     db: AsyncSession,
     task_ids: list[int],
-) -> tuple[list[ProbeTaskStatus], list[dict]]:
+) -> tuple[list[SocialProbeTaskStatus], list[dict]]:
     """查询探测任务状态和分析摘要
 
     Returns:
@@ -1671,7 +1671,7 @@ async def _build_probe_task_summaries(
 
         # 0 条数据：爬虫已完成但无结果，无需 LLM 判断，直接视为已处理（客观规则层会自动 fail）
         statuses.append(
-            ProbeTaskStatus(
+            SocialProbeTaskStatus(
                 task_id=task.id,
                 keyword=task.keywords or "",
                 platform=task.platform.code if task.platform else "",
@@ -2291,6 +2291,23 @@ async def check_probe_status(
     news_all_analyzed = all(t.status == "completed" and t.analysis_result for t in news_probe_tasks)
     news_analyzed_count = sum(1 for t in news_probe_tasks if t.status == "completed" and t.analysis_result)
 
+    # 构建新闻任务状态列表（供前端展示）
+    from src.strategies.schemas import NewsProbeTaskStatus
+    news_probe_dim_map: dict[str, str] = (strategy.research_design or {}).get("_news_task_dimension_map") or {}
+    news_task_statuses = [
+        NewsProbeTaskStatus(
+            task_id=npt.id,
+            keyword=npt.keywords or "",
+            dimension=news_probe_dim_map.get(str(npt.id), ""),
+            status=npt.status,
+            completed=npt.status == "completed" and bool(npt.analysis_result),
+            articles_count=(npt.analysis_result or {}).get("meta", {}).get("articles_total", 0)
+            if npt.analysis_result
+            else 0,
+        )
+        for npt in news_probe_tasks
+    ]
+
     # 新闻 probe 送 LLM 审查：加载每个任务的文章卡片（title/source/tier/snippet）
     # 由 strategy_news_probe_review_chain 基于搜索结果判断关键词相关性与信号质量
     from src.news_media.tasks import crud as news_crud
@@ -2338,7 +2355,8 @@ async def check_probe_status(
     ra_status = await _get_research_agent_status(db, strategy.id)
 
     return ProbeStatusResponse(
-        tasks=task_statuses,
+        social_tasks=task_statuses,
+        news_tasks=news_task_statuses,
         all_analyzed=all_analyzed,
         analyzed_count=analyzed_count,
         total_count=total_count,
@@ -2553,7 +2571,7 @@ async def refine_probe(
             detail="当前没有探测任务，无法调整",
         )
 
-    if data.refinements and not old_tasks_map:
+    if data.social_refinements and not old_tasks_map:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="当前没有社媒探测任务，无法调整",
@@ -2576,10 +2594,10 @@ async def refine_probe(
     # 以现有所有 probe 任务 ID 为基础逐项操作，未提及的任务自动保留
     current_task_ids = list(old_tasks_map.keys())
     new_task_dim_map = dict(old_dim_map)
-    removed_task_ids: list[int] = []
-    created_task_ids: list[int] = []
+    removed_social_task_ids: list[int] = []
+    created_social_task_ids: list[int] = []
 
-    for item in data.refinements:
+    for item in data.social_refinements:
         # 三种操作：
         #   替换：task_id + new_keyword  → 软删旧任务，继承维度，创建新任务
         #   移除：task_id + new_keyword=None → 仅软删旧任务
@@ -2593,7 +2611,7 @@ async def refine_probe(
             if item.task_id in current_task_ids:
                 current_task_ids.remove(item.task_id)
             new_task_dim_map.pop(str(item.task_id), None)
-            removed_task_ids.append(item.task_id)
+            removed_social_task_ids.append(item.task_id)
 
         # 步骤 2：创建新任务（替换/新增时）
         if item.new_keyword is not None:
@@ -2636,7 +2654,7 @@ async def refine_probe(
             )
             new_task.strategy_id = strategy.id
             current_task_ids.append(new_task.id)
-            created_task_ids.append(new_task.id)
+            created_social_task_ids.append(new_task.id)
             new_task_dim_map[str(new_task.id)] = dimension
 
     # ---- 新闻 probe 调整分支 ----
@@ -2719,8 +2737,8 @@ async def refine_probe(
 
     updated = await get_strategy_by_id(db, strategy.id)
     return RefineProbeResponse(
-        removed_task_ids=removed_task_ids,
-        created_task_ids=created_task_ids,
+        removed_social_task_ids=removed_social_task_ids,
+        created_social_task_ids=created_social_task_ids,
         removed_news_task_ids=removed_news_task_ids,
         created_news_task_ids=created_news_task_ids,
         probe_round=updated.probe_round,

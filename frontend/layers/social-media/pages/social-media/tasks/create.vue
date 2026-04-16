@@ -93,7 +93,7 @@ const state = reactive<{
   keywords: '',
   id_list: '',
   // 远程爬虫高级选项默认值
-  max_notes_count: 100,
+  max_notes_count: 50,
   enable_comments: true,
   per_note_max_comments_count: 20,
   publish_time_type: 0,

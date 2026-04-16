@@ -281,7 +281,8 @@
         </template>
 
         <ProbeReportPanel
-          :tasks="probeData.tasks"
+          :social-tasks="probeData.socialTasks"
+          :news-tasks="probeData.newsTasks"
           :analyzed-count="probeData.analyzedCount"
           :total-count="probeData.totalCount"
           :all-analyzed="probeData.allAnalyzed"
@@ -730,7 +731,8 @@ const handleConfirmResearch = async () => {
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
     editingPlan.value = false
     // 重置探测数据，避免旧结果残留
-    probeData.tasks = []
+    probeData.socialTasks = []
+    probeData.newsTasks = []
     probeData.analyzedCount = 0
     probeData.totalCount = 0
     probeData.allAnalyzed = false
@@ -781,7 +783,7 @@ const handleRefineProbe = async () => {
   refineProbeLoading.value = true
   try {
     const result = await strategiesApi.refineProbe(strategyId.value, {
-      refinements: socialSuggestions.map(s => ({
+      social_refinements: socialSuggestions.map(s => ({
         task_id: s.task_id,
         new_keyword: s.suggested_keyword,
         platform: s.platform,

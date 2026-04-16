@@ -1,5 +1,6 @@
 import type {
-  ProbeTaskStatus,
+  SocialProbeTaskStatus,
+  NewsProbeTaskStatus,
   ProbeReviewResult,
   SliceSummary,
   CoverageCheckResult,
@@ -22,7 +23,8 @@ export const useStrategyPolling = (
   // ── 探测轮询 ────────────────────────────────────────────────────────
 
   const probeData = reactive({
-    tasks: [] as ProbeTaskStatus[],
+    socialTasks: [] as SocialProbeTaskStatus[],
+    newsTasks: [] as NewsProbeTaskStatus[],
     analyzedCount: 0,
     totalCount: 0,
     allAnalyzed: false,
@@ -46,7 +48,8 @@ export const useStrategyPolling = (
       const result = await strategiesApi.getProbeStatus(strategyId.value)
       if (isUnmounted) return
 
-      probeData.tasks = result.tasks
+      probeData.socialTasks = result.social_tasks
+      probeData.newsTasks = result.news_tasks
       probeData.analyzedCount = result.analyzed_count
       probeData.totalCount = result.total_count
       probeData.allAnalyzed = result.all_analyzed

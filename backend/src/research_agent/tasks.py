@@ -53,7 +53,7 @@ def _extract_detail(node_name: str, node_output: dict) -> str:
             return "未找到候选内容"
         # 统计各域名出现次数
         from collections import Counter
-        domains = [urlparse(c.get("url", "")).netloc.lstrip("www.") for c in candidates if c.get("url")]
+        domains = [urlparse(c.get("url", "")).netloc.removeprefix("www.") for c in candidates if c.get("url")]
         top = Counter(domains).most_common(5)
         domain_str = "、".join(f"{d}×{n}" if n > 1 else d for d, n in top)
         extra = f"，另 {len(domains) - 5} 个域名" if len(set(domains)) > 5 else ""
@@ -72,7 +72,7 @@ def _extract_detail(node_name: str, node_output: dict) -> str:
         selected = node_output.get("selected", [])
         if not selected:
             return "无内容通过相关性筛选"
-        domains = [urlparse(s.get("url", "")).netloc.lstrip("www.") for s in selected if s.get("url")]
+        domains = [urlparse(s.get("url", "")).netloc.removeprefix("www.") for s in selected if s.get("url")]
         domain_str = "、".join(list(dict.fromkeys(domains))[:5])
         return f"保留 {len(selected)} 条：{domain_str}"
 
@@ -144,6 +144,7 @@ def run_research_task(self, research_task_id: int) -> None:
             "context": (task.search_config or {}).get("context", ""),
             "title": task.title or "",
             "research_questions": task.research_questions or [],
+            "profile_name": task.profile_name or "industry",
             "round": 0,
             "max_rounds": MAX_ROUNDS,
         }

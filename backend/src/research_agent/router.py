@@ -11,9 +11,26 @@ from src.rbac.dependencies import (
     require_research_agent_delete,
 )
 from src.research_agent import schemas, service
+from src.research_agent.profiles import list_profiles
 from src.schemas import PaginatedResponse
 
 router = APIRouter(prefix="/research", tags=["Research Agent"])
+
+
+@router.get(
+    "/profiles",
+    response_model=list[schemas.ProfileOption],
+    status_code=status.HTTP_200_OK,
+    summary="研究类型列表",
+)
+async def list_research_profiles(
+    _: User = Depends(require_research_agent_read),
+):
+    """返回可选的研究类型（industry / creative / ...），供前端选择器使用"""
+    return [
+        {"name": p.name, "display_name": p.display_name}
+        for p in list_profiles()
+    ]
 
 
 @router.post(
@@ -61,6 +78,7 @@ async def preview_task(
         analysis_goal=body.analysis_goal,
         brief=body.brief,
         research_questions=body.research_questions,
+        profile_name=body.profile_name,
     )
     return plan
 
@@ -87,6 +105,7 @@ async def create_task(
         title=body.title,
         research_questions=body.research_questions,
         search_config=search_config,
+        profile_name=body.profile_name,
     )
     return task
 

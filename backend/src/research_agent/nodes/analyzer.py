@@ -38,7 +38,7 @@ def analyze_node(state: ResearchState) -> dict:
     documents = state.get("documents", [])
     questions = state.get("research_questions", [])
     selected = state.get("selected", [])
-    profile = get_profile()
+    profile = get_profile(state.get("profile_name"))
     analyzer_prompt = profile.analyzer_prompt
 
     # documents 跨轮累积（operator.add），只分析本轮新增的文档，避免重复分析

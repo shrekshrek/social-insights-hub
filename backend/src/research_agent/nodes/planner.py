@@ -2,7 +2,7 @@
 
 用户输入可能是随意的自然语言，需要 LLM 理解研究范围、
 提取核心主题，生成关键词 + 目标源 + 搜索角度。
-使用行业报告研究 Profile 的 planner_context。
+planner_context 由 state["profile_name"] 决定（industry / creative / ...）。
 """
 
 import json
@@ -80,14 +80,20 @@ def call_planner_llm(
     query: str,
     context: str = "",
     research_questions: list[str] | None = None,
+    profile_name: str | None = None,
 ) -> tuple[dict, dict]:
     """调用 planner LLM，返回 (结构化研究计划, token_record)（同步，可复用于 preview 接口）
+
+    Parameters
+    ----------
+    profile_name : str | None
+        研究类型（"industry" / "creative"）。None 或未知值时回退到默认 profile。
 
     Returns
     -------
     tuple[dict, dict] : (plan_dict, token_record)
     """
-    profile = get_profile()
+    profile = get_profile(profile_name)
     system_prompt = PLAN_SYSTEM_TEMPLATE.format(planner_context=profile.planner_context)
 
     user_content = f"研究主题：{query}"
@@ -145,14 +151,14 @@ def _build_tried_domains(findings: list[dict], selected: list[dict] | None = Non
         url = f.get("source_url", "")
         if not url:
             continue
-        domain = urlparse(url).netloc.lstrip("www.")
+        domain = urlparse(url).netloc.removeprefix("www.")
         seen[domain] = seen.get(domain, 0) + 1
     # 补充 selected 中尚未出现在 findings 的域名（计入 1 次，不影响已有计数）
     for s in (selected or []):
         url = s.get("url", "")
         if not url:
             continue
-        domain = urlparse(url).netloc.lstrip("www.")
+        domain = urlparse(url).netloc.removeprefix("www.")
         if domain not in seen:
             seen[domain] = 1
     # 按出现次数降序，返回最多15个
@@ -214,6 +220,7 @@ def plan_node(state: ResearchState) -> dict:
         query=query,
         context=extra_context,
         research_questions=questions or None,
+        profile_name=state.get("profile_name"),
     )
 
     result: dict = {

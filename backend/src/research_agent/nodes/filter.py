@@ -1,7 +1,8 @@
 """Filter 节点：LLM 批量评估候选相关性，选出 top N，标注 source_tier
 
 单次 LLM 调用评估所有候选，不逐条评分。
-source_tier 分层：tier1=四大/权威智库, tier2=行业机构, tier3=其他。
+source_tier 分层：tier1 / tier2 / tier3 来自 profile.filter.tier1_domains / tier2_domains。
+system_prompt / strategy_hint / 内容类型优先级 / service_page_patterns / min_llm_score 均读 profile。
 """
 
 import json
@@ -15,13 +16,14 @@ from langchain_deepseek import ChatDeepSeek
 
 from src.config import settings
 from src.research_agent.config import MAX_CANDIDATES_PER_ROUND
+from src.research_agent.profiles import ResearchProfile, get_profile
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
 
 _YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
 
-# 时效分层（相对当前年，运行时计算）
+# 时效分层（相对当前年，运行时计算）—— 对所有 profile 通用
 _RECENCY_TIERS = [
     (0, 1,  +0.1, "最新，高度优先"),
     (2, 2,  +0, "近期"),
@@ -31,81 +33,12 @@ _RECENCY_TIERS = [
 # 硬截止：超过此年限的候选在代码层直接剔除
 _HARD_CUTOFF_AGE = 5
 
-# 域名 → tier 映射（filter 节点自动标注，LLM 可覆盖）
-TIER1_DOMAINS = {
-    # 综合咨询/四大（子域名由父域名 `in` 匹配自动覆盖，无需单独列出）
-    "mckinsey.com", "mckinsey.com.cn",  # 不同 TLD，均需保留
-    "deloitte.com",
-    "pwccn.com", "pwc.com",             # 不同域名，均需保留
-    "ey.com",
-    "kpmg.com",
-    "bcg.com",
-    "bain.com",
-    "rolandberger.com",
-    "accenture.com",
-    "oliverwyman.com",
-    "kearney.com",
-    # 中国政府/权威机构
-    "cssn.cn",
-    "drc.gov.cn",
-    "stats.gov.cn",
-    "cnnic.net.cn",
-    "miit.gov.cn",
-    "mofcom.gov.cn",
-    "pbc.gov.cn",
-    "ndrc.gov.cn",
-    "csrc.gov.cn",
-    # 上市公司披露平台（含付费级行业数据）
-    "cninfo.com.cn",
-    "hkexnews.hk",
-    "sse.com.cn",
-    # 国际权威机构（worldbank.org 覆盖 documents/openknowledge 等所有子域名）
-    "oecd.org",
-    "unctad.org",
-    "worldbank.org",
-    "imf.org",
-    "wto.org",
-    "adb.org",
-}
-
-TIER2_DOMAINS = {
-    # 中国行业研究机构（子域名由父域名 `in` 匹配自动覆盖）
-    "iresearch.cn",
-    "questmobile.com.cn",
-    "caict.ac.cn",
-    "cesi.cn",
-    "aliresearch.com",
-    "mob.com",
-    "research.hktdc.com",
-    # B2B 买方行为研究（发布完整免费报告）
-    "edelman.com",
-    "linkedin.com",       # 覆盖 business.linkedin.com 等所有子域名
-    "datareportal.com",
-    "pewresearch.org",
-    "ourworldindata.org",
-    # 企业服务研究（如搜索到摘要页仍有参考价值）
-    "gartner.com",
-    "forrester.com",
-    # 垂直媒体/深度报道
-    "36kr.com",
-    "latepost.com",
-    "caam.org.cn",
-    "ccfa.org.cn",
-}
-
-# 咨询公司自有营销/服务页面的 URL 路径模式（代码层直接标记，比 prompt 规则更可靠）
-_SERVICE_PAGE_PATTERNS = [
-    "/services/", "/service/", "/about/", "/careers/", "/awards/",
-    "/our-work/", "/industries/", "/solutions/", "/capabilities/",
-    "/who-we-are/", "/join-us/",
-]
-
-# 单域名在 selected 中最多占用的槽位数（防止一家来源垄断结果）
+# 单域名在 selected 中最多占用的槽位数（防止一家来源垄断结果）—— 对所有 profile 通用
 _MAX_SLOTS_PER_DOMAIN = 3
 
 # 已知自动抓取失败的域名（服务端封堵，全文通常为空）
-# 数据来源：实测 findings.key_points chars=0，无论 Crawl4AI 还是 httpx 均失败
-# 这些域名 LLM 打分后额外扣 0.20 分，让可抓取来源优先占槽位
+# 这些域名 LLM 打分后额外扣 _FETCH_BLOCKED_PENALTY 分，让可抓取来源优先占槽位
+# 与 profile 无关：无论什么研究类型，这些站都抓不到内容
 _FETCH_BLOCKED_DOMAINS = {
     "bain.com",
     "bcg.com",
@@ -117,6 +50,13 @@ _FETCH_BLOCKED_DOMAINS = {
 
 # 扣分幅度：够把"相关但抓不到"的来源排在"稍弱但可抓到"的来源后面
 _FETCH_BLOCKED_PENALTY = 0.20
+
+# 跨轮次域名饱和度惩罚：同一域名在历史 findings 中出现越多，本轮新条目扣分越重
+_DOMAIN_SATURATION_PENALTIES: list[tuple[int, float]] = [
+    (3, 0.25),   # ≥3 篇 findings → -0.25
+    (2, 0.15),   # ≥2 篇 findings → -0.15
+    (1, 0.05),   # ≥1 篇 findings → -0.05（轻微，保留高质量二次引用的可能）
+]
 
 
 def _token_record(response) -> dict:
@@ -130,30 +70,19 @@ def _token_record(response) -> dict:
         }
     return {}
 
-# 跨轮次域名饱和度惩罚：同一域名在历史 findings 中出现越多，本轮新条目扣分越重
-# 目的：引导 filter 在后续轮次优先选择尚未深度挖掘的来源
-_DOMAIN_SATURATION_PENALTIES: list[tuple[int, float]] = [
-    (3, 0.25),   # ≥3 篇 findings → -0.25
-    (2, 0.15),   # ≥2 篇 findings → -0.15
-    (1, 0.05),   # ≥1 篇 findings → -0.05（轻微，保留高质量二次引用的可能）
-]
-
-# LLM 基础分最低入选阈值：低于此分数的候选直接丢弃，不进入惩罚/排序阶段
-# 作用：防止内容明显不相关的权威来源（如发改委五年规划、信通院数据要素白皮书）
-# 因 PDF 加分 / tier1 身份而挤占槽位，宁可 selected 为空也不选低质量内容
-_MIN_LLM_SCORE = 0.40
-
 
 def _is_fetch_blocked(url: str) -> bool:
     """判断 URL 是否属于已知抓取失败域名"""
-    netloc = urlparse(url).netloc.lower().lstrip("www.")
+    netloc = urlparse(url).netloc.lower().removeprefix("www.")
     return any(netloc == d or netloc.endswith("." + d) for d in _FETCH_BLOCKED_DOMAINS)
 
 
-def _is_service_page(url: str) -> bool:
-    """检测是否为咨询公司自有服务/营销页面（非研究报告）"""
+def _is_service_page(url: str, patterns: tuple[str, ...]) -> bool:
+    """检测是否为 profile 定义的服务/营销介绍页（非目标内容）"""
+    if not patterns:
+        return False
     path = urlparse(url).path.lower()
-    return any(pat in path for pat in _SERVICE_PAGE_PATTERNS)
+    return any(pat in path for pat in patterns)
 
 
 def _apply_domain_cap(selected: list[dict], max_per_domain: int) -> list[dict]:
@@ -161,30 +90,12 @@ def _apply_domain_cap(selected: list[dict], max_per_domain: int) -> list[dict]:
     domain_count: dict[str, int] = {}
     result = []
     for item in selected:
-        domain = urlparse(item.get("url", "")).netloc.lstrip("www.")
+        domain = urlparse(item.get("url", "")).netloc.removeprefix("www.")
         if domain_count.get(domain, 0) < max_per_domain:
             result.append(item)
             domain_count[domain] = domain_count.get(domain, 0) + 1
     return result
 
-
-FILTER_SYSTEM_PROMPT = """你是一个研究文献筛选专家。给定一组搜索结果和研究问题，请评估每条结果的相关性。
-
-评分原则（按优先级）：
-1. 【内容相关性】文章实质内容是否直接回答研究问题——这是评分的决定性依据
-2. 【来源权威性】权威机构来源仅在内容相关度相近时作为优先选择依据，不能替代内容相关性
-3. 【硬性上限】无论来源多权威，若文章内容与研究问题无直接关联（如咨询公司发布的无关行业报告），评分不超过 0.35
-
-对每条结果打分（0-1），选出最相关的 {max_n} 条。
-
-{strategy_hint}
-
-输出 JSON 数组，每个元素包含：
-- "index": 原始列表中的序号（从 0 开始）
-- "score": 相关性评分（0-1）
-- "reason": 一句话理由（说明内容与研究问题的关联，或说明为何内容不相关）
-
-只输出 JSON 数组，按 score 降序排列，不要其他内容。"""
 
 def _build_recency_hint() -> str:
     """根据当前年份动态生成时效性评分规则文本"""
@@ -205,16 +116,7 @@ def _build_recency_hint() -> str:
     return "\n".join(lines)
 
 
-def _build_report_hint() -> str:
-    return (
-        '辅助评分规则（在内容相关性基础上叠加，不改变相关性主导地位）：\n'
-        '- URL 以 .pdf 结尾或标题含"报告""白皮书""研究""report"等词的结果，加 0.10 分\n'
-        '- 候选列表中标注了"[服务介绍页，非报告]"的结果，减 0.20 分\n'
-        '- 内容仅涉及无关行业/主题（即使来源权威），不加分，并受 0.35 上限约束\n'
-        + _build_recency_hint()
-    )
-
-# 地域关键词 → 提示语映射
+# 地域关键词 → 提示语映射（通用，所有 profile 适用）
 _GEO_KEYWORDS: list[tuple[list[str], str]] = [
     (["中国", "国内", "china", "chinese", "大陆"], "中国市场"),
     (["美国", "us market", "united states", "america"], "美国市场"),
@@ -244,12 +146,7 @@ def _extract_year(text: str) -> int | None:
 
 
 def _is_too_old(candidate: dict) -> bool:
-    """判断候选是否超过硬截止年龄（> _HARD_CUTOFF_AGE 年）
-
-    按优先级检查 URL → 标题 → snippet（snippet 通常含发布年份，
-    可捕获 URL 和标题均无年份的旧文档，如 IDC 白皮书）。
-    三者均无年份信息时保守放行（不误杀）。
-    """
+    """判断候选是否超过硬截止年龄（> _HARD_CUTOFF_AGE 年）"""
     url = candidate.get("url", "")
     title = candidate.get("title", "")
     snippet = candidate.get("snippet", "")
@@ -259,16 +156,34 @@ def _is_too_old(candidate: dict) -> bool:
     return datetime.now().year - year > _HARD_CUTOFF_AGE
 
 
-def _classify_source_tier(domain: str) -> str:
-    """根据域名分类来源层级"""
-    domain_lower = domain.lower().lstrip("www.")
-    for t1 in TIER1_DOMAINS:
+def _classify_source_tier(domain: str, profile: ResearchProfile) -> str:
+    """根据 profile 定义的 tier1/tier2 域名集合分类来源层级"""
+    domain_lower = domain.lower().removeprefix("www.")
+    for t1 in profile.filter.tier1_domains:
         if t1 in domain_lower:
             return "tier1"
-    for t2 in TIER2_DOMAINS:
+    for t2 in profile.filter.tier2_domains:
         if t2 in domain_lower:
             return "tier2"
     return "tier3"
+
+
+def _content_type_sort_key(
+    content_type: str,
+    is_service_page: bool,
+    priority: tuple[str, ...],
+) -> int:
+    """按 profile 的 content_type_priority 生成排序 key
+
+    - 服务介绍页永远后置（数字大）
+    - 命中优先级列表的 content_type 按列表顺序排列（0, 1, 2, ...）
+    - 未命中的 content_type 排在优先级列表末尾之后
+    """
+    if is_service_page:
+        return len(priority) + 10
+    if content_type in priority:
+        return priority.index(content_type)
+    return len(priority)
 
 
 def filter_node(state: ResearchState) -> dict:
@@ -276,15 +191,16 @@ def filter_node(state: ResearchState) -> dict:
     candidates = state.get("candidates", [])
     questions = state.get("research_questions", [])
     query = state["query"]
+    profile = get_profile(state.get("profile_name"))
 
     if not candidates:
         return {"selected": []}
 
-    # 先标注 source_tier（基于域名规则）
+    # 先标注 source_tier（基于 profile 域名集合）
     for c in candidates:
-        c["source_tier"] = _classify_source_tier(c.get("source", ""))
+        c["source_tier"] = _classify_source_tier(c.get("source", ""), profile)
 
-    # 硬截止：剔除明确标注了过旧年份的候选（≤ _HARD_CUTOFF_YEAR）
+    # 硬截止：剔除明确标注了过旧年份的候选
     before_cutoff = len(candidates)
     candidates = [c for c in candidates if not _is_too_old(c)]
     cutoff_removed = before_cutoff - len(candidates)
@@ -295,13 +211,15 @@ def filter_node(state: ResearchState) -> dict:
     if not candidates:
         return {"selected": []}
 
-    # 报告研究模式：PDF 优先，服务介绍页后置（代码层预处理，比 prompt 规则更可靠）
+    # content_type 优先级排序（profile 定义：行业研究 PDF 优先，创意研究 HTML 优先）
+    service_patterns = profile.filter.service_page_patterns
+    priority = profile.filter.content_type_priority
     candidates = sorted(
         candidates,
-        key=lambda c: (
-            2 if _is_service_page(c.get("url", "")) else
-            0 if c.get("content_type") == "pdf" else
-            1
+        key=lambda c: _content_type_sort_key(
+            c.get("content_type", "html"),
+            _is_service_page(c.get("url", ""), service_patterns),
+            priority,
         ),
     )
 
@@ -309,7 +227,7 @@ def filter_node(state: ResearchState) -> dict:
     candidates_text = "\n".join(
         f"[{i}] {c['title']}\n"
         f"    URL: {c['url']}"
-        + (" [服务介绍页，非报告]" if _is_service_page(c.get("url", "")) else "")
+        + (" [服务介绍页，非报告]" if _is_service_page(c.get("url", ""), service_patterns) else "")
         + (" [全文通常不可访问，仅有摘要]" if _is_fetch_blocked(c.get("url", "")) else "")
         + f"\n    类型: {c.get('content_type', 'html')}\n    摘要: {c['snippet'][:200]}"
         for i, c in enumerate(candidates)
@@ -321,7 +239,12 @@ def filter_node(state: ResearchState) -> dict:
     user_content += f"\n\n候选结果（共 {len(candidates)} 条）：\n{candidates_text}"
 
     geo_hint = _build_geo_hint(query, questions)
-    strategy_hint = _build_report_hint() + ("\n" + geo_hint if geo_hint else "")
+    recency_hint = _build_recency_hint()
+    strategy_hint_parts = [profile.filter.strategy_hint.strip()]
+    if geo_hint:
+        strategy_hint_parts.append(geo_hint)
+    strategy_hint_parts.append(recency_hint)
+    strategy_hint = "\n".join(strategy_hint_parts)
 
     llm = ChatDeepSeek(
         api_key=settings.DEEPSEEK_API_KEY,
@@ -335,7 +258,7 @@ def filter_node(state: ResearchState) -> dict:
     response = llm.invoke(
         [
             SystemMessage(
-                content=FILTER_SYSTEM_PROMPT.format(
+                content=profile.filter.system_prompt.format(
                     max_n=MAX_CANDIDATES_PER_ROUND,
                     strategy_hint=strategy_hint,
                 )
@@ -367,18 +290,19 @@ def filter_node(state: ResearchState) -> dict:
     # 统计历史 findings 中各域名已有篇数（用于跨轮次饱和度惩罚）
     domain_finding_count: dict[str, int] = {}
     for f in state.get("findings", []):
-        d = urlparse(f.get("source_url", "")).netloc.lstrip("www.")
+        d = urlparse(f.get("source_url", "")).netloc.removeprefix("www.")
         if d:
             domain_finding_count[d] = domain_finding_count.get(d, 0) + 1
 
+    min_llm_score = profile.filter.min_llm_score
     scored_candidates = []
     low_score_dropped = 0
     for item in scored:
         idx = item.get("index", -1)
         if 0 <= idx < len(candidates):
             score = float(item.get("score", 0.0))
-            # LLM 基础分低于阈值：内容不相关，直接丢弃，不进入后续惩罚/排序
-            if score < _MIN_LLM_SCORE:
+            # LLM 基础分低于 profile 阈值：直接丢弃
+            if score < min_llm_score:
                 low_score_dropped += 1
                 continue
             candidate = candidates[idx]
@@ -386,7 +310,7 @@ def filter_node(state: ResearchState) -> dict:
             if _is_fetch_blocked(candidate.get("url", "")):
                 score = max(0.0, score - _FETCH_BLOCKED_PENALTY)
             # 代码层惩罚②：跨轮次域名饱和度——已有 findings 越多扣分越重
-            domain = urlparse(candidate.get("url", "")).netloc.lstrip("www.")
+            domain = urlparse(candidate.get("url", "")).netloc.removeprefix("www.")
             finding_count = domain_finding_count.get(domain, 0)
             for threshold, penalty in _DOMAIN_SATURATION_PENALTIES:
                 if finding_count >= threshold:

@@ -35,7 +35,7 @@ def synthesize_node(state: ResearchState) -> dict:
     selected = state.get("selected", [])
     query = state["query"]
     questions = state.get("research_questions", [])
-    profile = get_profile()
+    profile = get_profile(state.get("profile_name"))
 
     if not selected:
         empty_findings = {

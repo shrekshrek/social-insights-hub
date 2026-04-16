@@ -37,6 +37,13 @@ class ResearchTask(Base):
     search_config: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="搜索配置：research_angles, focus_domains, context(brief) 等"
     )
+    profile_name: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="industry",
+        server_default="industry",
+        comment="研究类型 profile：industry（行业研究）/ creative（创意研究）",
+    )
 
     # ===== 关联 =====
     strategy_id: Mapped[int | None] = mapped_column(

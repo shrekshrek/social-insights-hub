@@ -13,12 +13,23 @@ class BriefExtractResult(CustomBaseModel):
     text: str
 
 
+class ProfileOption(CustomBaseModel):
+    """研究类型选项（供前端选择器展示）"""
+
+    name: str = Field(..., description="profile 标识（industry / creative）")
+    display_name: str = Field(..., description="展示名")
+
+
 class ResearchPlanPreviewRequest(CustomBaseModel):
     """预览研究计划（不创建任务，仅调用 planner LLM）"""
 
     analysis_goal: str = Field(..., min_length=2, max_length=2000, description="核心研究意图（AI 提炼或用户手填）")
     brief: str | None = Field(default=None, max_length=5000, description="原始 Brief 文本（可选，供 planner 参考）")
     research_questions: list[str] | None = Field(default=None, description="初始研究问题（可选）")
+    profile_name: str = Field(
+        default="industry",
+        description="研究类型：industry（行业研究）/ creative（创意研究）",
+    )
 
 
 class ResearchPlanPreviewResult(CustomBaseModel):
@@ -45,6 +56,10 @@ class ResearchTaskCreate(CustomBaseModel):
     search_config: dict | None = Field(
         default=None, description="搜索配置：research_scope, focus_domains"
     )
+    profile_name: str = Field(
+        default="industry",
+        description="研究类型：industry（行业研究）/ creative（创意研究）",
+    )
 
 
 class ResearchTaskRead(CustomBaseModel):
@@ -58,6 +73,7 @@ class ResearchTaskRead(CustomBaseModel):
     analysis_goal: str
     research_questions: list[str] | None = None
     search_config: dict | None = None
+    profile_name: str = "industry"
     strategy_id: int | None = None
     user_id: int
     job_id: int | None = None

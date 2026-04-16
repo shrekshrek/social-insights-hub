@@ -1,8 +1,8 @@
 """Fetch 节点：下载候选来源的全文内容
 
 HTML 通过 Crawl4AI REST API 获取 markdown，PDF 通过 httpx 下载后提取文本。
-当 HTML 页面判断为"报告介绍页"（内容短且含下载指引）时，尝试从页面中提取
-PDF 直链并直接下载全文，以获取比摘要更完整的报告内容。
+当 profile 允许 pdf_extract 且 HTML 页面判断为"报告介绍页"（内容短且含下载指引）时，
+尝试从页面中提取 PDF 直链并直接下载全文，以获取比摘要更完整的报告内容。
 同步调用（gevent 兼容），per-document 30s 超时，失败不阻塞。
 """
 
@@ -14,19 +14,10 @@ import httpx
 
 from src.config import get_settings
 from src.research_agent.config import FETCH_HTML_TIMEOUT, FETCH_PDF_TIMEOUT
+from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
-
-# 介绍页判断：内容含有这些词时，尝试提取 PDF 链接
-_DOWNLOAD_INDICATORS = [
-    "下载报告", "下载完整报告", "下载全文", "下载 PDF", "点击下载", "立即下载",
-    "获取报告", "查看全文", "阅读全文",
-    "download report", "download pdf", "full report", "get the report",
-    "download the full", "access the report",
-]
-# 介绍页内容长度上限（超过此长度说明页面本身就是正文）
-_LANDING_PAGE_MAX_LEN = 3000
 
 
 def fetch_node(state: ResearchState) -> dict:
@@ -35,8 +26,9 @@ def fetch_node(state: ResearchState) -> dict:
     if not selected:
         return {"documents": []}
 
-    # 报告研究模式：允许更长内容截断，充分利用报告全文
-    max_content_len = 60000
+    profile = get_profile(state.get("profile_name"))
+    fetcher_cfg = profile.fetcher
+    max_content_len = fetcher_cfg.max_content_len
     pdf_timeout = FETCH_PDF_TIMEOUT
 
     documents = []
@@ -82,8 +74,12 @@ def fetch_node(state: ResearchState) -> dict:
                 text = _fetch_pdf(url, timeout=pdf_timeout)
             else:
                 text = _fetch_html(url)
-                # HTML 为介绍页时，尝试从页面提取 PDF 链接下载全文
-                if text and _is_landing_page(text):
+                # profile 允许时，HTML 为介绍页时尝试从页面提取 PDF 链接下载全文
+                if (
+                    text
+                    and fetcher_cfg.enable_pdf_extract
+                    and _is_landing_page(text, fetcher_cfg.landing_page_max_len, fetcher_cfg.download_indicators)
+                ):
                     pdf_text = _extract_and_fetch_pdf(text, base_url=url, timeout=pdf_timeout)
                     if pdf_text:
                         logger.info("从介绍页提取到 PDF 全文: %s", url)
@@ -228,12 +224,14 @@ def _httpx_fetch(url: str) -> str | None:
         return None
 
 
-def _is_landing_page(text: str) -> bool:
+def _is_landing_page(text: str, max_len: int, indicators: tuple[str, ...]) -> bool:
     """判断 HTML markdown 是否为报告介绍页（而非正文）"""
-    if len(text) > _LANDING_PAGE_MAX_LEN:
+    if not indicators:
+        return False
+    if len(text) > max_len:
         return False
     text_lower = text.lower()
-    return any(ind.lower() in text_lower for ind in _DOWNLOAD_INDICATORS)
+    return any(ind.lower() in text_lower for ind in indicators)
 
 
 def _extract_and_fetch_pdf(text: str, base_url: str, timeout: int) -> str | None:

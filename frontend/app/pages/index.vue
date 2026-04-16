@@ -94,7 +94,7 @@
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">社媒监测</h3>
           </div>
         </template>
-        <p class="text-gray-600 dark:text-gray-400">聚合抖音、微博、B站等 7 大平台，追踪品牌声量与舆情动态</p>
+        <p class="text-gray-600 dark:text-gray-400">聚合小红书、抖音、微博等 7 大平台，追踪品牌声量与舆情动态</p>
       </UCard>
 
       <UCard>
@@ -106,7 +106,7 @@
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">新闻监测</h3>
           </div>
         </template>
-        <p class="text-gray-600 dark:text-gray-400">整合多渠道新闻，自动切片分析，生成新闻舆情报告</p>
+        <p class="text-gray-600 dark:text-gray-400">整合多渠道新闻（包括公众号），自动切片分析，生成新闻舆情报告</p>
       </UCard>
 
       <UCard>

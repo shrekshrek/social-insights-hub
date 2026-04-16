@@ -37,6 +37,11 @@ class AuditLog(Base):
         index=True,
         comment="操作类型：LOGIN/LOGIN_FAILED/LOGOUT/CREATE/UPDATE/DELETE/TRIGGER",
     )
+    operation: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="友好操作名（来自 route.summary，如 '创建专题研究'）",
+    )
     resource: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
@@ -47,6 +52,17 @@ class AuditLog(Base):
         String(100),
         nullable=True,
         comment="资源ID（路径中的数字片段）",
+    )
+    endpoint: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="端点函数名（来自 route.name，用于精确过滤）",
+    )
+    path_template: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="路径模板（来自 route.path，如 /tasks/{task_id}）",
     )
 
     # HTTP 信息

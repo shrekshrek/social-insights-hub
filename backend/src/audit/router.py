@@ -30,6 +30,7 @@ async def list_audit_logs(
     user_id: int | None = Query(None, description="按用户ID筛选"),
     action: str | None = Query(None, description="按操作类型筛选（LOGIN/CREATE/UPDATE/DELETE/TRIGGER等）"),
     resource: str | None = Query(None, description="按资源类型筛选（user/social_monitor等）"),
+    endpoint: str | None = Query(None, description="按端点函数名筛选"),
     start_time: datetime | None = Query(None, description="开始时间"),
     end_time: datetime | None = Query(None, description="结束时间"),
     db: AsyncSession = Depends(get_async_db),
@@ -42,6 +43,7 @@ async def list_audit_logs(
         user_id=user_id,
         action=action,
         resource=resource,
+        endpoint=endpoint,
         start_time=start_time,
         end_time=end_time,
     )

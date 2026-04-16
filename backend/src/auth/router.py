@@ -21,7 +21,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     "/register",
     response_model=schemas.UserRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Register new user",
+    summary="用户注册",
 )
 @auth_limiter
 async def register(
@@ -41,7 +41,7 @@ async def register(
     "/token",
     response_model=schemas.Token,
     status_code=status.HTTP_200_OK,
-    summary="User login",
+    summary="用户登录",
 )
 @auth_limiter
 async def login(
@@ -52,6 +52,9 @@ async def login(
     """
     Login and get an access token.
     """
+    # 记录尝试登录的用户名，供审计中间件读取（失败登录也需要）
+    request.state.audit_username = form_data.username
+
     user = await service.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -68,7 +71,7 @@ async def login(
     "/logout",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
-    summary="User logout",
+    summary="用户登出",
 )
 async def logout(
     current_user: schemas.UserRead = Depends(get_current_user),
@@ -89,7 +92,7 @@ async def logout(
     "/change-password",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
-    summary="Change password",
+    summary="修改密码",
 )
 async def change_password_endpoint(
     request: schemas.ChangePassword,

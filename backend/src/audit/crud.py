@@ -12,8 +12,11 @@ async def create_audit_log(
     db: AsyncSession,
     user_id: int | None,
     action: str,
+    operation: str | None = None,
     resource: str | None = None,
     resource_id: str | None = None,
+    endpoint: str | None = None,
+    path_template: str | None = None,
     http_method: str | None = None,
     request_path: str | None = None,
     status_code: int | None = None,
@@ -24,8 +27,11 @@ async def create_audit_log(
     log = AuditLog(
         user_id=user_id,
         action=action,
+        operation=operation,
         resource=resource,
         resource_id=resource_id,
+        endpoint=endpoint,
+        path_template=path_template,
         http_method=http_method,
         request_path=request_path,
         status_code=status_code,
@@ -45,6 +51,7 @@ async def get_audit_logs(
     user_id: int | None = None,
     action: str | None = None,
     resource: str | None = None,
+    endpoint: str | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
 ) -> tuple[list[AuditLog], int]:
@@ -58,6 +65,8 @@ async def get_audit_logs(
         conditions.append(AuditLog.action == action)
     if resource:
         conditions.append(AuditLog.resource == resource)
+    if endpoint:
+        conditions.append(AuditLog.endpoint == endpoint)
     if start_time:
         conditions.append(AuditLog.created_at >= start_time)
     if end_time:

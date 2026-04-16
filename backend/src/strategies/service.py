@@ -2159,6 +2159,14 @@ async def _run_probe_review(
                 "reason": a.get("suggestion_reason", ""),
             })
 
+    # 后处理：检测 brand_voice / competitive 互补平台失败，替换为平台统一建议
+    from src.llm.chains.strategy.social_probe_review_chain import detect_and_replace_symmetry_suggestions
+    all_suggestions = detect_and_replace_symmetry_suggestions(
+        all_assessments=all_assessments,
+        existing_suggestions=all_suggestions,
+        research_design=strategy.research_design or {},
+    )
+
     logger.info(
         "Strategy %d probe review 完成 (verdict=%s, 规则自动=%d, LLM=%d)",
         strategy.id, overall,
@@ -2342,7 +2350,7 @@ async def check_probe_status(
     # 兼容纯新闻策略（无社媒任务时 task_statuses 为空）
     social_all_analyzed = not task_statuses or all(t.has_analysis for t in task_statuses)
     news_check = not news_probe_tasks or news_all_analyzed
-    all_analyzed = social_all_analyzed and news_check and (task_statuses or news_probe_tasks)
+    all_analyzed = bool(social_all_analyzed and news_check and (task_statuses or news_probe_tasks))
     analyzed_count = sum(1 for t in task_statuses if t.has_analysis) + news_analyzed_count
     total_count = len(task_statuses) + len(news_probe_tasks)
 

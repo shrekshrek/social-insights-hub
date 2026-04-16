@@ -59,7 +59,7 @@ build-backend = "hatchling.build"
 packages = ["src"]
 
 [[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+url = "https://pypi.org/simple/"
 default = true
 
 [tool.pytest.ini_options]

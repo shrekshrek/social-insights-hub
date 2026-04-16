@@ -133,7 +133,7 @@ class ConfirmResearchResponse(CustomBaseModel):
 # ==================== 探测验证 Schemas ====================
 
 
-class ProbeTaskStatus(CustomBaseModel):
+class SocialProbeTaskStatus(CustomBaseModel):
     """单个探测任务状态"""
 
     task_id: int
@@ -151,11 +151,23 @@ class ResearchAgentStatus(CustomBaseModel):
     task_id: int | None = Field(None, description="研究任务 ID")
 
 
+class NewsProbeTaskStatus(CustomBaseModel):
+    """单个新闻探测任务状态"""
+
+    task_id: int
+    keyword: str = ""
+    dimension: str = ""
+    status: str = Field(..., description="任务状态")
+    completed: bool = Field(False, description="是否已完成（搜索落库完毕）")
+    articles_count: int = Field(0, description="搜索到的文章数")
+
+
 class ProbeStatusResponse(CustomBaseModel):
     """探测进度响应"""
 
     all_analyzed: bool = Field(False, description="所有探测任务是否都已完成分析")
-    tasks: list[ProbeTaskStatus] = Field(default_factory=list)
+    social_tasks: list[SocialProbeTaskStatus] = Field(default_factory=list)
+    news_tasks: list[NewsProbeTaskStatus] = Field(default_factory=list)
     analyzed_count: int = 0
     total_count: int = 0
     probe_review_result: dict | None = Field(None, description="审查结果（全部分析完成后自动填充）")
@@ -173,8 +185,8 @@ class ApproveProbeResponse(CustomBaseModel):
     strategy: "StrategyRead"
 
 
-class RefinementItem(CustomBaseModel):
-    """关键词调整项，支持三种操作：
+class SocialRefinementItem(CustomBaseModel):
+    """社媒关键词调整项，支持三种操作：
     - 替换：task_id + new_keyword
     - 移除：task_id + new_keyword=None
     - 新增：task_id=None + new_keyword + dimension
@@ -186,7 +198,7 @@ class RefinementItem(CustomBaseModel):
     dimension: str | None = Field(None, description="新增任务所属维度（task_id=None 时必填）")
 
     @model_validator(mode="after")
-    def validate_operation(self) -> "RefinementItem":
+    def validate_operation(self) -> "SocialRefinementItem":
         if self.task_id is None:
             if not self.new_keyword:
                 raise ValueError("新增任务时 new_keyword 不能为空")
@@ -196,7 +208,7 @@ class RefinementItem(CustomBaseModel):
 
 
 class NewsRefinementItem(CustomBaseModel):
-    """新闻 probe 任务的调整项（与 RefinementItem 对齐语义）
+    """新闻 probe 任务的调整项（与 SocialRefinementItem 对齐语义）
 
     - 替换：task_id + new_keyword
     - 移除：task_id + new_keyword=None
@@ -220,7 +232,7 @@ class NewsRefinementItem(CustomBaseModel):
 class RefineProbeRequest(CustomBaseModel):
     """调整关键词请求（社媒 / 新闻两个渠道独立批量调整）"""
 
-    refinements: list[RefinementItem] = Field(
+    social_refinements: list[SocialRefinementItem] = Field(
         default_factory=list, description="社媒任务调整列表"
     )
     news_refinements: list[NewsRefinementItem] = Field(
@@ -229,16 +241,16 @@ class RefineProbeRequest(CustomBaseModel):
 
     @model_validator(mode="after")
     def validate_not_empty(self) -> "RefineProbeRequest":
-        if not self.refinements and not self.news_refinements:
-            raise ValueError("refinements 与 news_refinements 至少提供一项")
+        if not self.social_refinements and not self.news_refinements:
+            raise ValueError("social_refinements 与 news_refinements 至少提供一项")
         return self
 
 
 class RefineProbeResponse(CustomBaseModel):
     """调整关键词响应"""
 
-    removed_task_ids: list[int] = Field(default_factory=list)
-    created_task_ids: list[int] = Field(default_factory=list)
+    removed_social_task_ids: list[int] = Field(default_factory=list)
+    created_social_task_ids: list[int] = Field(default_factory=list)
     removed_news_task_ids: list[int] = Field(default_factory=list)
     created_news_task_ids: list[int] = Field(default_factory=list)
     probe_round: int

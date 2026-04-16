@@ -120,7 +120,7 @@ export interface ResearchDesign {
 
 // ==================== 探测验证 ====================
 
-export interface ProbeTaskStatus {
+export interface SocialProbeTaskStatus {
   task_id: number
   keyword: string
   platform: string
@@ -161,9 +161,19 @@ export interface ProbeReviewResult {
   refinement_suggestions: RefinementSuggestion[]
 }
 
+export interface NewsProbeTaskStatus {
+  task_id: number
+  keyword: string
+  dimension: string
+  status: string
+  completed: boolean
+  articles_count: number
+}
+
 export interface ProbeStatusResponse {
   all_analyzed: boolean
-  tasks: ProbeTaskStatus[]
+  social_tasks: SocialProbeTaskStatus[]
+  news_tasks: NewsProbeTaskStatus[]
   analyzed_count: number
   total_count: number
   probe_review_result: ProbeReviewResult | null
@@ -308,14 +318,14 @@ export interface ConfirmResearchResponse {
  * - 移除：task_id + new_keyword=null
  * - 新增：task_id=null + new_keyword + dimension
  */
-export interface RefinementItem {
+export interface SocialRefinementItem {
   task_id: number | null
   new_keyword: string | null
   platform: string
   dimension?: string | null
 }
 
-/** 新闻 probe 关键词调整项（与 RefinementItem 对齐，无 platform 字段） */
+/** 新闻 probe 关键词调整项（与 SocialRefinementItem 对齐，无 platform 字段） */
 export interface NewsRefinementItem {
   task_id: number | null
   new_keyword: string | null
@@ -323,13 +333,13 @@ export interface NewsRefinementItem {
 }
 
 export interface RefineProbeRequest {
-  refinements: RefinementItem[]
+  social_refinements: SocialRefinementItem[]
   news_refinements: NewsRefinementItem[]
 }
 
 export interface RefineProbeResponse {
-  removed_task_ids: number[]
-  created_task_ids: number[]
+  removed_social_task_ids: number[]
+  created_social_task_ids: number[]
   removed_news_task_ids: number[]
   created_news_task_ids: number[]
   probe_round: number

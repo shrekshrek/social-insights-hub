@@ -173,7 +173,7 @@ export const useStrategies = () => {
         body: request,
       }
     )
-    showSuccess(`已替换 ${result.removed_task_ids.length} 个任务`)
+    showSuccess(`已替换 ${result.removed_social_task_ids.length} 个任务`)
     return result
   }
 

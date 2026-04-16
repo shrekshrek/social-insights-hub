@@ -1,8 +1,8 @@
 """Research Agent 硬编码常量
 
-环境变量（TAVILY_API_KEY、RESEARCH_AGENT_TARGET_DOMAINS）在 src/config.py 中定义。
-RESEARCH_AGENT_TARGET_DOMAINS 仅包含通用兜底域名（政府统计、国际数据平台、广域媒体），
-垂直领域域名由 Planner LLM 根据研究主题从 profiles.py 的候选列表中按需选择。
+环境变量（TAVILY_API_KEY 等）在 src/config.py 中定义。
+各 profile 的兜底域名在 profiles/<name>/__init__.py 中以 `search_fallback_domains` 字段定义，
+Planner LLM 会根据研究主题从 profile 的 planner_context 中按需挑选额外域名。
 本文件仅包含不需要运行时调整的常量。
 """
 

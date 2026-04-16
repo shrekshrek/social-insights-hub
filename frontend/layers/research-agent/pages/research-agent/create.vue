@@ -27,6 +27,26 @@
         <h2 class="text-base font-semibold">研究信息</h2>
       </template>
 
+      <!-- 研究类型选择 -->
+      <div class="mb-5">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">研究类型</label>
+        <div class="flex flex-wrap gap-2">
+          <UButton
+            v-for="opt in profileOptions"
+            :key="opt.name"
+            :variant="formState.profile_name === opt.name ? 'solid' : 'outline'"
+            :color="formState.profile_name === opt.name ? 'primary' : 'neutral'"
+            size="sm"
+            @click="formState.profile_name = opt.name"
+          >
+            {{ opt.display_name }}
+          </UButton>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+          {{ profileHint }}
+        </p>
+      </div>
+
       <!-- Brief 快速填入 -->
       <BriefUploader
         :loading="extracting || previewing"
@@ -44,14 +64,14 @@
       >
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
           <UFormField label="研究标题" name="title" required>
-            <UInput v-model="formState.title" placeholder="例如：新能源汽车市场竞争格局" class="w-full" />
+            <UInput v-model="formState.title" :placeholder="titlePlaceholder" class="w-full" />
           </UFormField>
         </div>
 
         <UFormField label="研究主题" name="analysis_goal" required>
           <UTextarea
             v-model="formState.analysis_goal"
-            placeholder="例如：了解国内新能源汽车市场的主要玩家、竞争策略及消费者偏好变化趋势"
+            :placeholder="goalPlaceholder"
             :rows="2"
             autoresize
             class="w-full"
@@ -115,28 +135,54 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
+import type { ResearchProfileOption } from '../../types'
 
 definePageMeta({ layout: 'default', title: '新建研究' })
 
-const { extractBrief, previewPlan, createTask } = useResearchAgent()
+const { getProfiles, extractBrief, previewPlan, createTask } = useResearchAgent()
 const toast = useToast()
 
 const extracting = ref(false)
 const previewing = ref(false)
 const submitting = ref(false)
 
+// 研究类型列表（后端驱动）
+const { data: profilesData } = await getProfiles()
+const profileOptions = computed<ResearchProfileOption[]>(() => profilesData.value ?? [
+  { name: 'industry', display_name: '行业研究' },
+  { name: 'creative', display_name: '创意研究' },
+])
+
 const schema = z.object({
   title: z.string().min(1, '研究标题不能为空').max(200),
   analysis_goal: z.string().min(1, '研究主题不能为空'),
 })
 
-type FormState = z.output<typeof schema> & { questions: string[] }
+type FormState = z.output<typeof schema> & { questions: string[]; profile_name: string }
 
 const formState = reactive<FormState>({
   title: '',          // 必填，Zod 校验
   analysis_goal: '',  // 必填，Zod 校验
   questions: [],
+  profile_name: 'industry',
 })
+
+// 研究类型影响的展示文案
+const PROFILE_PRESETS: Record<string, { hint: string; title: string; goal: string }> = {
+  industry: {
+    hint: '面向行业报告/白皮书/权威数据，适合市场规模、竞争格局、政策研究等专业分析。',
+    title: '例如：新能源汽车市场竞争格局',
+    goal: '例如：了解国内新能源汽车市场的主要玩家、竞争策略及消费者偏好变化趋势',
+  },
+  creative: {
+    hint: '面向 campaign 案例、创意评论与品牌叙事，适合创意团队与策划找灵感参考。',
+    title: '例如：新消费品牌春节 campaign 创意参考',
+    goal: '例如：收集近年新消费品牌在春节节点的 campaign 创意做法，提炼可借鉴的视觉/文案钩子与传播机制',
+  },
+}
+const profileHint = computed(() => PROFILE_PRESETS[formState.profile_name]?.hint ?? '')
+const titlePlaceholder = computed(() => PROFILE_PRESETS[formState.profile_name]?.title ?? '请输入研究标题')
+const goalPlaceholder = computed(() => PROFILE_PRESETS[formState.profile_name]?.goal ?? '请输入研究主题')
 
 // 原始 Brief 文本（内部存储，提交时作为 query）
 const rawQuery = ref('')
@@ -155,7 +201,10 @@ function addQuestion() {
 async function callPreviewPlan(query: string) {
   previewing.value = true
   try {
-    const result = await previewPlan({ analysis_goal: query.trim() })
+    const result = await previewPlan({
+      analysis_goal: query.trim(),
+      profile_name: formState.profile_name,
+    })
     if (result.title) formState.title = result.title
     if (result.analysis_goal) formState.analysis_goal = result.analysis_goal
     if (result.research_questions.length) formState.questions = [...result.research_questions]
@@ -204,6 +253,7 @@ async function handleSubmit() {
       title: formState.title.trim(),
       brief: rawQuery.value.trim() || undefined,
       research_questions: validQuestions.length ? validQuestions : undefined,
+      profile_name: formState.profile_name,
     })
     toast.add({ title: `研究任务 #${task.id} 已创建，后台执行中`, color: 'success' })
     navigateTo(`/research-agent/${task.id}`)

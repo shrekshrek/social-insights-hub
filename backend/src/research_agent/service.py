@@ -35,6 +35,7 @@ async def preview_research_plan(
     analysis_goal: str,
     brief: str | None = None,
     research_questions: list[str] | None = None,
+    profile_name: str | None = None,
 ) -> dict:
     """调用 planner LLM 生成研究计划预览，不创建任务"""
     from src.research_agent.nodes.planner import call_planner_llm
@@ -44,6 +45,7 @@ async def preview_research_plan(
         analysis_goal,
         brief or "",
         research_questions or None,
+        profile_name,
     )
     return {
         "title": plan.get("title", ""),
@@ -62,6 +64,7 @@ async def create_research_task(
     research_questions: list[str] | None = None,
     search_config: dict | None = None,
     strategy_id: int | None = None,
+    profile_name: str = "industry",
 ) -> ResearchTask:
     """创建研究任务并派发 Celery 执行"""
     task = ResearchTask(
@@ -71,6 +74,7 @@ async def create_research_task(
         search_config=search_config,
         strategy_id=strategy_id,
         user_id=user_id,
+        profile_name=profile_name,
         status="pending",
     )
     db.add(task)
@@ -82,7 +86,10 @@ async def create_research_task(
     await db.commit()
     await db.refresh(task)
 
-    logger.info("创建研究任务 %d: analysis_goal=%s, strategy_id=%s", task.id, analysis_goal, strategy_id)
+    logger.info(
+        "创建研究任务 %d: profile=%s, analysis_goal=%s, strategy_id=%s",
+        task.id, profile_name, analysis_goal, strategy_id,
+    )
     return task
 
 

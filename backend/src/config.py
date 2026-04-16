@@ -208,27 +208,6 @@ class Settings(BaseSettings):
     EXA_API_KEY: str | None = Field(
         default=None, description="Exa Search API key (required when SEARCH_PROVIDER=exa)"
     )
-    RESEARCH_AGENT_TARGET_DOMAINS: list[str] = Field(
-        default=[
-            # 中国政府统计 —— 几乎所有中国市场研究都需要基础数据
-            "stats.gov.cn",       # 国家统计局
-            "ndrc.gov.cn",        # 国家发改委，产业政策/五年规划
-            # 国际数据平台 —— 跨领域通用，提供跨国对标与宏观数据
-            "oecd.org",           # 跨国行业对标与政策比较
-            "ourworldindata.org", # 开放数据，13000+ 图表
-            "pewresearch.org",    # 全球消费者/技术态度调查
-            "datareportal.com",   # 全球数字消费者年度报告
-            # 广域财经媒体 —— 覆盖面宽，适合多数商业研究主题
-            "36kr.com",           # 科技/创投/数字经济
-            "latepost.com",       # 深度商业调查报道
-        ],
-        description=(
-            "Domains always included in Tavily search regardless of topic (universal fallback). "
-            "Vertical/sector-specific domains (consulting firms, industry associations, exchanges, etc.) "
-            "are listed in profiles.py planner_context for the LLM to select topic-specifically."
-        ),
-    )
-
     # ========== Agent API Configuration ==========
     AGENT_API_KEY: str | None = Field(
         default=None, description="API Key for crawler agent authentication"

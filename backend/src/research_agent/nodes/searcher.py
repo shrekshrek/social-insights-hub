@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from src.config import get_settings
 from src.research_agent.config import MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK
 from src.research_agent.nodes.filter import _extract_year
+from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def _saturated_domains(findings: list[dict], min_count: int = 2) -> set[str]:
         url = f.get("source_url", "")
         if not url:
             continue
-        domain = urlparse(url).netloc.lower().lstrip("www.")
+        domain = urlparse(url).netloc.lower().removeprefix("www.")
         domain_count[domain] = domain_count.get(domain, 0) + 1
     return {d for d, cnt in domain_count.items() if cnt >= min_count}
 
@@ -43,9 +44,10 @@ def search_node(state: ResearchState) -> dict:
     current_round = state.get("round", 1)
 
     settings = get_settings()
+    profile = get_profile(state.get("profile_name"))
 
-    # 域名合并：config 全局默认 + LLM 针对本次主题推荐
-    all_domains = list(set(settings.RESEARCH_AGENT_TARGET_DOMAINS + target_domains))
+    # 域名合并：profile 定义的兜底域名 + LLM 针对本次主题推荐
+    all_domains = list(set(list(profile.search_fallback_domains) + target_domains))
 
     # 第 3 轮起：从 target_domains 移除已充分采集的域名（≥2 篇已分析），
     # 强制 Tavily 在尚未充分搜索的来源中寻找内容，避免强势域名持续垄断
@@ -198,7 +200,7 @@ def _cap_candidates_by_domain(candidates: list[dict], max_per_domain: int) -> li
     domain_count: dict[str, int] = {}
     result = []
     for c in candidates:
-        domain = urlparse(c.get("url", "")).netloc.lstrip("www.")
+        domain = urlparse(c.get("url", "")).netloc.removeprefix("www.")
         if domain_count.get(domain, 0) < max_per_domain:
             result.append(c)
             domain_count[domain] = domain_count.get(domain, 0) + 1

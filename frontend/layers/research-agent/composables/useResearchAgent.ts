@@ -1,7 +1,14 @@
-import type { ResearchTask, ResearchTaskCreate, ResearchTaskResult, ResearchPlanPreviewRequest, ResearchPlanPreview, BriefExtractResult } from '../types'
+import type { ResearchProfileOption, ResearchTask, ResearchTaskCreate, ResearchTaskResult, ResearchPlanPreviewRequest, ResearchPlanPreview, BriefExtractResult } from '../types'
 
 export function useResearchAgent() {
   const { apiRequest, useApiData } = useApi()
+
+  // 研究类型列表（industry / creative / ...）
+  const getProfiles = () => {
+    return useApiData<ResearchProfileOption[]>('/research/profiles', {
+      key: 'research-profiles',
+    })
+  }
 
   // 获取任务列表（分页）
   const getTasks = (params?: MaybeRef<Record<string, unknown>>) => {
@@ -132,6 +139,7 @@ export function useResearchAgent() {
   }
 
   return {
+    getProfiles,
     getTasks,
     getTask,
     getTaskResult,

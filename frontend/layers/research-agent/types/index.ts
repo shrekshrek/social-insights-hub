@@ -7,12 +7,20 @@ export interface ProgressEntry {
   detail: string
 }
 
+export type ResearchProfileName = 'industry' | 'creative'
+
+export interface ResearchProfileOption {
+  name: ResearchProfileName | string
+  display_name: string
+}
+
 export interface ResearchTask {
   id: number
   title: string | null
   analysis_goal: string
   research_questions: string[] | null
   search_config: Record<string, unknown> | null
+  profile_name: ResearchProfileName | string
   strategy_id: number | null
   user_id: number
   job_id: number | null
@@ -39,6 +47,7 @@ export interface ResearchPlanPreviewRequest {
   analysis_goal: string
   brief?: string
   research_questions?: string[]
+  profile_name?: ResearchProfileName | string
 }
 
 export interface ResearchPlanPreview {
@@ -55,6 +64,7 @@ export interface ResearchTaskCreate {
   brief?: string
   research_questions?: string[]
   search_config?: Record<string, unknown>
+  profile_name?: ResearchProfileName | string
 }
 
 export interface DataPoint {

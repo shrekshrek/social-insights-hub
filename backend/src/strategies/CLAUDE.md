@@ -182,7 +182,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 |--------|------|------|------|
 | `strategy_probe` | `check_probing_strategies` | 2 分钟 | 扫描 `status=probing` 的策略，所有探测任务（社媒 + 新闻）均达到终态后自动触发 LLM probe review |
 | `strategy_collection` | `check_collecting_strategies` | 2 分钟 | 扫描 `status=collecting` 的策略，所有全量任务完成且有分析结果后自动创建切片 + 覆盖度验证 |
-| `news_probe_watchdog` | `reset_stuck_news_probe_tasks` | 5 分钟 | 将策略新闻探测任务中 `running` 超过 20 分钟的记录标记为 `failed`，防止 Celery Worker 崩溃导致策略永久卡住 |
+| `news_probe_watchdog` | `reset_stuck_news_probe_tasks` | 5 分钟 | 将策略新闻探测任务中 `running`（Worker 崩溃）或 `pending`（Worker 宕机未消费）超过 20 分钟的记录标记为 `failed`，防止策略永久卡住 |
 
 ### 终态定义
 
@@ -192,7 +192,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 ### 卡死恢复流程
 
-Celery Worker 崩溃 → 新闻任务状态停留在 `running` → watchdog 在 20 分钟超时后标记 `failed` → `check_probing_strategies` 在下一个 2 分钟周期检测到所有任务终态 → 自动触发 LLM 审查 → 策略恢复正常流程。全程无需人工干预。
+Celery Worker 崩溃/宕机 → 新闻任务停留在 `running` 或 `pending` → watchdog 在任务创建 20 分钟后标记 `failed` → `check_probing_strategies` 在下一个 2 分钟周期检测到所有任务终态 → 自动触发 LLM 审查 → 策略恢复正常流程。全程无需人工干预。
 
 ## Important Notes
 

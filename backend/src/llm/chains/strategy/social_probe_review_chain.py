@@ -47,9 +47,11 @@ SINGLE_TASK_SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估�
 好的替换关键词应满足：在该平台搜索时，能召回与研究问题核心关注点直接相关的内容。
 结合「已采集到的话题（知道现在收到了什么）」与「研究问题（知道需要什么）」之间的差距来推导建议词。
 **suggested_keyword 是提交给平台的单一搜索查询**（可包含空格），禁止用 `|` 拼接多个备选查询。
-如果 fail 的原因是「该平台本身不适合此类研究」，可将 suggested_keyword 设为 null，表示建议直接移除。
+如果 fail 的原因是「该品牌/话题在该平台的讨论量本身稀少（无论换什么关键词都搜不到足量相关内容）」，可将 suggested_keyword 设为 null，表示平台级数据稀疏，建议移除。这与「关键词不精准」不同——前者换词也无法解决，后者可以通过换词改善。
 
 **竞品维度的平台对称保护**：若当前 fail 任务属于竞品维度（competitive），且其所在平台同时被主品维度（brand_voice）使用，应优先尝试换词（调整 suggested_keyword）而非建议移除该平台（suggested_keyword=null）。主品和竞品在相同平台采集是横向对比的基础，轻易移除竞品在某平台的任务会破坏数据对称性，导致后续对比结论失真。只有在确认该平台对竞品研究完全无效（无论如何换词都无法召回相关内容）时，才允许建议移除。
+
+**注意**：你在评估单个任务，看不到其他任务的结果。主品与竞品跨平台的整体对称性问题（如主品只在平台 A 有数据、竞品只在平台 B 有数据）由系统在汇总所有评估后统一检测处理，你无需承担跨任务的协调责任——聚焦判断当前任务本身是否能召回有价值的内容即可。
 
 各平台替换词格式参考：
 - 知乎：加"怎么样/如何评价"等评价词能精准命中问题标题，纯品牌名召回较泛
@@ -208,4 +210,137 @@ def parse_single_task_probe_review_response(response_text: str) -> dict[str, Any
         raise ValueError(f"响应缺少 verdict 字段: {text[:200]}")
 
     return result
+
+
+def detect_and_replace_symmetry_suggestions(
+    all_assessments: list[dict[str, Any]],
+    existing_suggestions: list[dict[str, Any]],
+    research_design: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """检测 brand_voice 与 competitive 的互补平台失败，将受影响任务的建议替换为平台统一建议。
+
+    互补失败模式：brand_voice 在平台 A 多数失败、在平台 B 多数通过；
+    competitive 在平台 B 多数失败、在平台 A 多数通过。
+    此时逐任务换词无法解决根本问题（平台对该品牌数据天然稀疏），
+    应改为将主品与竞品统一迁移到共同可通过的平台。
+
+    目标平台优先级：
+    1. 主品和竞品均通过的平台（取通过任务最多的）
+    2. 若无共同通过平台，取主品通过最多的平台（保留主品数据完整性）
+    """
+    task_dim_map = research_design.get("_task_dimension_map") or {}
+    data_plan = research_design.get("data_plan", [])
+    research_questions = research_design.get("research_questions", [])
+
+    # dim_name → dimension type（brand_voice / competitive / ...）
+    rq_by_id = {rq.get("id"): rq for rq in research_questions}
+    dim_to_type: dict[str, str] = {}
+    for dp in data_plan:
+        dim_name = dp.get("dimension_name", "")
+        for qid in (dp.get("question_ids") or []):
+            rq = rq_by_id.get(qid)
+            if rq and rq.get("dimension"):
+                dim_to_type[dim_name] = rq["dimension"]
+                break
+
+    # platform_results[dim_type][platform] = {"pass": [...assessments], "fail": [...]}
+    platform_results: dict[str, dict[str, dict[str, list[dict]]]] = {}
+
+    for a in all_assessments:
+        platform = a.get("platform", "")
+        if not platform or platform == "news_media":
+            continue
+        dim_name = task_dim_map.get(str(a.get("task_id", "")), "")
+        dim_type = dim_to_type.get(dim_name, "")
+        if dim_type not in ("brand_voice", "competitive"):
+            continue
+        verdict = a.get("verdict", "pass")
+        platform_results.setdefault(dim_type, {}).setdefault(platform, {"pass": [], "fail": []})
+        platform_results[dim_type][platform][verdict].append(a)
+
+    bv = platform_results.get("brand_voice", {})
+    comp = platform_results.get("competitive", {})
+
+    if not bv or not comp:
+        return existing_suggestions
+
+    def _majority_failing(results: dict[str, dict[str, list]]) -> set[str]:
+        return {p for p, r in results.items() if len(r["fail"]) > len(r["pass"])}
+
+    def _majority_passing(results: dict[str, dict[str, list]]) -> set[str]:
+        return {p for p, r in results.items() if r["pass"] and len(r["pass"]) >= len(r["fail"])}
+
+    bv_failing = _majority_failing(bv)
+    bv_passing = _majority_passing(bv)
+    comp_failing = _majority_failing(comp)
+    comp_passing = _majority_passing(comp)
+
+    # 互补失败：主品失败于竞品通过的平台，且竞品失败于主品通过的平台
+    bv_fails_where_comp_passes = bv_failing & comp_passing
+    comp_fails_where_bv_passes = comp_failing & bv_passing
+
+    if not bv_fails_where_comp_passes or not comp_fails_where_bv_passes:
+        return existing_suggestions
+
+    # 选目标平台
+    common_passing = bv_passing & comp_passing
+    if common_passing:
+        target = max(
+            common_passing,
+            key=lambda p: len(bv.get(p, {}).get("pass", [])) + len(comp.get(p, {}).get("pass", [])),
+        )
+    elif bv_passing:
+        target = max(bv_passing, key=lambda p: len(bv.get(p, {}).get("pass", [])))
+    else:
+        return existing_suggestions
+
+    reason = (
+        f"主品在 {'、'.join(sorted(bv_fails_where_comp_passes))} 数据稀疏，"
+        f"竞品在 {'、'.join(sorted(comp_fails_where_bv_passes))} 数据稀疏，"
+        f"两者呈互补平台失败——换词无法解决平台级稀疏问题。"
+        f"建议将主品与竞品统一迁移至「{target}」以确保横向对比基准一致。"
+        f"注意：已通过的任务不受影响，如需完全统一数据来源，可手动将其一并移除。"
+    )
+
+    # 受影响任务：bv 在非目标平台失败 + comp 在非目标平台失败
+    consolidation: list[dict[str, Any]] = []
+    affected_ids: set[int] = set()
+
+    for platform in bv_fails_where_comp_passes:
+        for a in bv[platform]["fail"]:
+            tid = int(a["task_id"])
+            affected_ids.add(tid)
+            consolidation.append({
+                "task_id": tid,
+                "original_keyword": a.get("keyword", ""),
+                "suggested_keyword": a.get("keyword", ""),
+                "platform": target,
+                "reason": reason,
+            })
+
+    for platform in comp_fails_where_bv_passes:
+        for a in comp[platform]["fail"]:
+            tid = int(a["task_id"])
+            affected_ids.add(tid)
+            consolidation.append({
+                "task_id": tid,
+                "original_keyword": a.get("keyword", ""),
+                "suggested_keyword": a.get("keyword", ""),
+                "platform": target,
+                "reason": reason,
+            })
+
+    # 替换受影响任务的原有建议（原建议是针对同一平台换词，已不适用）
+    kept = [s for s in existing_suggestions if s.get("task_id") not in affected_ids]
+    final = kept + consolidation
+
+    logger.info(
+        "平台对称检测：互补失败（brand_voice↓%s，competitive↓%s）→ 目标平台=%s，替换 %d 条建议",
+        sorted(bv_fails_where_comp_passes),
+        sorted(comp_fails_where_bv_passes),
+        target,
+        len(consolidation),
+    )
+
+    return final
 

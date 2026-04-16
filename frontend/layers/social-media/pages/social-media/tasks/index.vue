@@ -19,7 +19,7 @@ const { data: platforms } = getPlatforms()
 const currentPage = ref(1)
 const pageSize = ref(10)
 const searchQuery = ref('')
-const selectedPlatformId = ref<number | string>('all')
+const selectedPlatformId = ref<number | 'all'>('all')
 const selectedStatus = ref('all')
 const selectedDataSource = ref<string | undefined>()
 const refreshing = ref(false)
@@ -29,8 +29,8 @@ const params = computed(() => ({
   page: currentPage.value,
   page_size: pageSize.value,
   search: searchQuery.value || undefined,
-  ...(selectedPlatformId.value !== 'all' ? { platform_id: selectedPlatformId.value } : {}),
-  ...(selectedStatus.value !== 'all' ? { status: selectedStatus.value } : {}),
+  platform_id: selectedPlatformId.value === 'all' ? undefined : selectedPlatformId.value,
+  status: selectedStatus.value === 'all' ? undefined : selectedStatus.value,
   data_source: selectedDataSource.value,
 }))
 
@@ -331,7 +331,6 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
                 ...(platforms?.map(p => ({ label: p.name, value: p.id })) || [])
               ]"
               value-key="value"
-              placeholder="平台"
               class="w-36"
             />
 
@@ -339,7 +338,6 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               v-model="selectedStatus"
               :items="statusOptions"
               value-key="value"
-              placeholder="状态"
               class="w-32"
             />
           </div>
@@ -386,6 +384,9 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
               :total="total"
               :items-per-page="pageSize"
               :sibling-count="2"
+              show-first
+              show-last
+              show-edges
             />
           </div>
         </ClientOnly>

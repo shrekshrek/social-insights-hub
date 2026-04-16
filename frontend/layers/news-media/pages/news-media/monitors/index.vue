@@ -225,6 +225,9 @@ const columns = computed<TableColumn<NewsMonitorWithOwner>[]>(() => {
               :total="total"
               :items-per-page="pageSize"
               :sibling-count="2"
+              show-first
+              show-last
+              show-edges
             />
           </div>
         </ClientOnly>

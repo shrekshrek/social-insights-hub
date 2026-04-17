@@ -120,7 +120,7 @@ import { UCard, UButton, UFormField, UBadge, UIcon } from '#components'
 definePageMeta({ layout: 'default' })
 useHead({ title: 'RAG 检索测试' })
 
-const { searchDocuments } = useKnowledgeBase()
+const { searchDocuments } = useKnowledgeBaseApi()
 const toast = useToast()
 
 const query = ref('')

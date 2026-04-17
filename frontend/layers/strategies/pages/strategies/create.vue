@@ -191,7 +191,7 @@ const schema = z.object({
 
 type FormState = z.output<typeof schema>
 
-const strategiesApi = useStrategies()
+const strategiesApi = useStrategiesApi()
 
 const parsing = ref(false)
 const submitting = ref(false)

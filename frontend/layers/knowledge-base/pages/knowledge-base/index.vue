@@ -218,7 +218,7 @@ import { UCard, UButton, USelect, UBadge, UIcon, UCheckbox, UPagination } from '
 definePageMeta({ layout: 'default' })
 useHead({ title: '市场知识库' })
 
-const { getDocuments, deleteDocument, deleteDocuments, viewDocument, getCrawlerStatus, runCrawler, sourceTypeLabel, statusColor, statusLabel, formatFileSize } = useKnowledgeBase()
+const { getDocuments, deleteDocument, deleteDocuments, viewDocument, getCrawlerStatus, runCrawler, sourceTypeLabel, statusColor, statusLabel, formatFileSize } = useKnowledgeBaseApi()
 const toast = useToast()
 const { hasPermission } = usePermissions()
 

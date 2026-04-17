@@ -10,7 +10,7 @@ import type {
  * 社媒分析操作 Composable
  *
  * 仅包含社媒渠道本地的分析操作（任务级分析、监测级切片）。
- * 跨渠道 AnalysisJob 的增删改查见 `layers/jobs/composables/useJobs.ts`。
+ * 跨渠道 AnalysisJob 的增删改查见 `layers/jobs/composables/useJobsApi.ts`。
  */
 export const useAnalysis = () => {
   const { apiRequest, useApiData, showSuccess } = useApi();

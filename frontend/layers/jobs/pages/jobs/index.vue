@@ -17,7 +17,7 @@ const {
   getAnalysisJobs,
   cancelAnalysisJob,
   deleteAnalysisJob,
-} = useJobs()
+} = useJobsApi()
 
 // 分页和筛选
 const currentPage = ref(1)

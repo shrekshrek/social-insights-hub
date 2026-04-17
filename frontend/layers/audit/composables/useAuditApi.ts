@@ -3,7 +3,7 @@ import type { AuditLogListResponse, AuditLogFilterParams } from '../types'
 /**
  * 审计日志 Composable
  */
-export const useAuditLogs = () => {
+export const useAuditApi = () => {
   const { useApiData } = useApi()
 
   /**

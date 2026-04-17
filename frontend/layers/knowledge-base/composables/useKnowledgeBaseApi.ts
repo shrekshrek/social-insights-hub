@@ -7,7 +7,7 @@ import type {
   KnowledgeDocument,
 } from '../types'
 
-export function useKnowledgeBase() {
+export function useKnowledgeBaseApi() {
   const { apiRequest, useApiData } = useApi()
 
   // 获取文档列表（使用 useApiData 模式）

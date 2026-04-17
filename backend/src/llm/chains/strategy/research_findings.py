@@ -10,10 +10,14 @@ Route B 集成方案：每个 stage chain 的 USER_TEMPLATE 新增 `{research_fi
 - synthesis: str（markdown 综合报告）
 - information_gaps: list[str]
 
-Token 预算指引：
+Token 预算指引（industry profile）：
 - Layer 1（Insight / Agenda Map）: ~1.5K tokens — 完整 findings + data_points
 - Layer 2（Brand Role / Landscape）: ~800 tokens — synthesis 摘要
 - Layer 3（Big Idea / Strategic Brief）: ~400 tokens — 压缩要点
+
+Token 预算指引（creative profile）：
+- Brand Role 层: ~400 tokens — 竞品已占据的创意角色列表
+- Big Idea 层: ~800 tokens — 完整创意版图（包含空白领域提示）
 """
 
 from __future__ import annotations
@@ -256,4 +260,108 @@ def format_research_for_strategic_brief(result_data: dict | None) -> str:
         parts.append(f"- **{question}**: {first_sentence}")
 
     parts.append("")
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# 创意研究格式化器（creative profile）
+# ---------------------------------------------------------------------------
+
+def format_creative_for_brand_role(result_data: dict | None) -> str:
+    """Brand Role 层的创意研究注入（~400 tokens）：竞品已占据的创意角色
+
+    从创意研究中提取竞品已占据的创意角色，为 Brand Role 推导差异化切入点。
+    核心逻辑：了解"别人已在哪"，才能找到"我们该去哪"。
+    """
+    rd = _load_result(result_data)
+    synthesis = rd.get("synthesis", "")
+    findings = rd.get("findings_by_question")
+
+    if not synthesis and not findings:
+        return ""
+
+    parts = [
+        "## 竞品创意版图（Creative Research）\n",
+        "以下为竞品在品类中已占据的创意角色，品牌角色推导时需明确差异化切入点，"
+        "避免进入竞品已占领的创意领地。\n",
+    ]
+
+    # synthesis 包含跨案例综合分析，是最关键的差异化视角来源
+    if synthesis:
+        # 只取 synthesis 前 600 字（控制 token）
+        truncated = synthesis[:600]
+        if len(synthesis) > 600:
+            truncated += "……（更多详见完整报告）"
+        parts.append(truncated)
+        parts.append("")
+
+    # 补充高置信度问题的答案摘要（竞品角色识别）
+    if findings:
+        occupied_roles = []
+        for question, finding in findings.items():
+            if finding.get("confidence") in ("high", "medium"):
+                summary = finding.get("answer_summary", "")
+                first_sentence = summary.split("。")[0] + "。" if "。" in summary else summary[:80]
+                occupied_roles.append(f"- **{question}**: {first_sentence}")
+
+        if occupied_roles:
+            parts.append("### 竞品已占据的创意角色\n")
+            parts.extend(occupied_roles[:5])
+            parts.append("")
+
+    return "\n".join(parts)
+
+
+def format_creative_for_big_idea(result_data: dict | None) -> str:
+    """Big Idea 层的创意研究注入（~800 tokens）：完整创意版图 + 白空间提示
+
+    从创意研究中提取竞品创意版图全貌，帮助 Big Idea 找到未被占据的创意白空间。
+    核心逻辑：绘制"已有地图"，用排除法找到"没人去的地方"。
+    """
+    rd = _load_result(result_data)
+    synthesis = rd.get("synthesis", "")
+    findings = rd.get("findings_by_question")
+    gaps = rd.get("information_gaps")
+
+    if not synthesis and not findings:
+        return ""
+
+    parts = [
+        "## 创意版图（Creative Research — 竞品案例库）\n",
+        "以下为从数英、广告门、SocialBeta 等创意媒体收集的竞品创意案例综合分析。"
+        "Big Idea 应在此版图中找到**未被占据的白空间**，而非在竞品密集区重复。\n",
+    ]
+
+    if synthesis:
+        # Big Idea 层可注入更完整的 synthesis（最多 1200 字）
+        truncated = synthesis[:1200]
+        if len(synthesis) > 1200:
+            truncated += "……（更多详见完整报告）"
+        parts.append(truncated)
+        parts.append("")
+
+    # 完整 findings（Big Idea 需要最丰富的创意参考）
+    if findings:
+        parts.append("### 具体发现\n")
+        for question, finding in findings.items():
+            confidence = finding.get("confidence", "medium")
+            parts.append(f"**Q: {question}** (置信度: {confidence})")
+            parts.append(f"  {finding.get('answer_summary', '')}")
+
+            data_points = finding.get("data_points") or []
+            if data_points:
+                for dp in data_points[:3]:
+                    source = dp.get("source", "")
+                    parts.append(f"  - {dp.get('metric', '')}: {dp.get('value', '')} ({source})")
+            parts.append("")
+
+    # 创意研究的信息缺口 = 品类创意盲点 = Big Idea 的潜在机会
+    if gaps:
+        parts.append("### 创意盲点（可能的白空间）\n")
+        parts.append("以下是创意研究中发现的信息缺口——品类内罕见或缺失的创意主题，"
+                     "可能是 Big Idea 的白空间方向：\n")
+        for gap in gaps[:5]:
+            parts.append(f"- {gap}")
+        parts.append("")
+
     return "\n".join(parts)

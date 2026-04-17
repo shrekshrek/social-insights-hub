@@ -41,7 +41,7 @@ export interface TokenUsageStats {
  * 分析类型
  * - 社媒: screening_posts, deep_posts, deep_comments, aggregation,
  *        entity_normalization, opinion_normalization, monitor_slice_summary
- * - 策略 brand_strategy 路径: strategy_insight / strategy_brand_role / strategy_big_idea
+ * - 策略 campaign_strategy 路径: strategy_insight / strategy_brand_role / strategy_big_idea
  * - 策略 market_report 路径: strategy_agenda_map / strategy_landscape / strategy_strategic_brief
  * - 策略共享: strategy_social_probe_review, strategy_news_probe_review, strategy_coverage_check
  * - 新闻: news_tagging, news_insight

@@ -5,15 +5,15 @@
       <UIcon :name="primaryIcon" class="size-3 mr-0.5" />
       {{ primaryLabel }}
     </UBadge>
-    <!-- 背景数据源：knowledge_base -->
+    <!-- 行业研究视角 -->
     <UBadge
-      v-if="provenance.background?.knowledge_base"
+      v-if="provenance.research?.industry_research"
       color="neutral"
       variant="soft"
       size="xs"
     >
-      <UIcon name="i-heroicons-book-open" class="size-3 mr-0.5" />
-      知识库背景
+      <UIcon name="i-heroicons-building-library" class="size-3 mr-0.5" />
+      行业研究
     </UBadge>
   </div>
 </template>

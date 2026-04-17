@@ -14,7 +14,7 @@ export type StrategyStatus =
   | 'probing'
   | 'collecting'
   | 'ready'
-  // brand_strategy 产出路径
+  // campaign_strategy 产出路径
   | 'insight_done'
   | 'brand_role_done'
   // market_report 产出路径
@@ -26,21 +26,24 @@ export type StrategyStatus =
 
 /**
  * 产出路径（两条独立路径）
- * - brand_strategy: 消费者洞察主导（依赖 social_media 主源）
+ * - campaign_strategy: 消费者洞察主导（依赖 social_media 主源）
  *     → 第 1 层 Insight → 第 2 层 Brand Role → 第 3 层 Big Idea
  * - market_report:  媒体视角主导（依赖 news_media 主源）
  *     → 第 1 层 Agenda Map → 第 2 层 Landscape → 第 3 层 Strategic Brief
+ * - full_strategy:  双渠道综合（依赖 social_media + news_media）
+ *     → Agenda Map → Landscape → Insight → Brand Role → Big Idea
  */
-export type OutputType = 'brand_strategy' | 'market_report'
+export type OutputType = 'campaign_strategy' | 'market_report' | 'full_strategy'
 
-/** 主数据源：两层模型中的"直接输入层"，knowledge_base 属于背景层不在此 */
+/** 主数据源：直接输入到 prompt 的主数据通道 */
 export type PrimarySource = 'social_media' | 'news_media'
 
 // ==================== 数据来源（两层模型）====================
 
 /**
  * Phase 结果中的 data_provenance 字段，记录本次生成实际使用的数据来源。
- * 两层模型：primary 是直接输入到 prompt 的主数据，background 是 RAG 补充背景。
+ * 两层结构：primary 是直接输入到 prompt 的主数据，research 是行业研究第三视角。
+ * 对齐后端 _build_data_provenance 函数的输出结构。
  */
 export interface DataProvenance {
   primary: {
@@ -48,8 +51,8 @@ export interface DataProvenance {
     social_media_slice_count: number
     news_media_slice_count: number
   }
-  background: {
-    knowledge_base: boolean
+  research: {
+    industry_research: boolean
   }
 }
 
@@ -171,6 +174,12 @@ export interface NewsProbeTaskStatus {
   articles_count: number
 }
 
+export interface ResearchAgentStatus {
+  has_task: boolean
+  status: string
+  task_id: number | null
+}
+
 export interface ProbeStatusResponse {
   all_analyzed: boolean
   social_tasks: SocialProbeTaskStatus[]
@@ -178,6 +187,8 @@ export interface ProbeStatusResponse {
   analyzed_count: number
   total_count: number
   probe_review_result: ProbeReviewResult | null
+  industry_research: ResearchAgentStatus
+  creative_research: ResearchAgentStatus
   strategy: Strategy | null
 }
 
@@ -218,6 +229,8 @@ export interface CollectionStatusResponse {
   completed_count: number
   total_count: number
   coverage_check_result: CoverageCheckResult | null
+  industry_research: ResearchAgentStatus
+  creative_research: ResearchAgentStatus
   strategy: Strategy | null
 }
 
@@ -247,7 +260,7 @@ export interface Strategy {
 
   // ④ 产出生成
   output_type: OutputType | null
-  // brand_strategy 路径：第 1 层 → 第 2 层 → 第 3 层
+  // campaign_strategy 路径：第 1 层 → 第 2 层 → 第 3 层
   insight_result: Record<string, unknown> | null
   brand_role_result: Record<string, unknown> | null
   big_idea_result: Record<string, unknown> | null
@@ -300,7 +313,7 @@ export interface StrategyUpdate {
 
 export interface ConfirmResearchRequest {
   research_design: Record<string, unknown>
-  /** 用户显式选择的产出路径（brand_strategy 需含 social_media 维度，market_report 需含 news_media 维度） */
+  /** 用户显式选择的产出路径（campaign_strategy 需含 social_media 维度，market_report 需含 news_media 维度） */
   output_type: OutputType
   notes_per_task?: number
 }
@@ -363,7 +376,7 @@ export interface AdjustSlicesRequest {
   adjustments: AdjustSliceItem[]
 }
 
-// ==================== brand_strategy 路径结果类型 ====================
+// ==================== campaign_strategy 路径结果类型 ====================
 
 export interface StageEvidence {
   type: string
@@ -386,7 +399,7 @@ export interface BrandOpportunity {
   evidence?: StageEvidence[]
 }
 
-/** brand_strategy 第 1 层 Insight: Social Tension + Brand Opportunity */
+/** campaign_strategy 第 1 层 Insight: Social Tension + Brand Opportunity */
 export interface InsightResult {
   social_tensions: SocialTension[]
   brand_opportunities: BrandOpportunity[]
@@ -406,7 +419,7 @@ export interface SocialStrategy {
   evidence?: StageEvidence[]
 }
 
-/** brand_strategy 第 2 层 Brand Role: Brand Social Role + Social Strategy */
+/** campaign_strategy 第 2 层 Brand Role: Brand Social Role + Social Strategy */
 export interface BrandRoleResult {
   brand_social_role: BrandSocialRole
   social_strategy: SocialStrategy
@@ -431,7 +444,7 @@ export interface ContentStrategy {
   evidence?: StageEvidence[]
 }
 
-/** brand_strategy 第 3 层 Big Idea: Big Idea + Content Strategy */
+/** campaign_strategy 第 3 层 Big Idea: Big Idea + Content Strategy */
 export interface BigIdeaResult {
   big_idea: BigIdea
   content_strategy: ContentStrategy

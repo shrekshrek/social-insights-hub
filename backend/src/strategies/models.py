@@ -97,23 +97,23 @@ class Strategy(Base):
 
     # ④ 产出生成
     # output_type 决定走哪条产出路径（两条路径都是 3 层递进）：
-    #   - brand_strategy: 填充 insight_result → brand_role_result → big_idea_result
+    #   - campaign_strategy: 填充 insight_result → brand_role_result → big_idea_result
     #   - market_report:  填充 agenda_map_result → landscape_result → strategic_brief_result
     output_type: Mapped[str | None] = mapped_column(
         String(30), nullable=True,
-        comment="产出类型: brand_strategy / market_report",
+        comment="产出类型: campaign_strategy(=campaign_strategy) / market_report / full_strategy",
     )
     insight_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True,
-        comment="brand_strategy 第 1 层 Insight: Tension + Opportunity",
+        comment="campaign_strategy 第 1 层 Insight: Tension + Opportunity",
     )
     brand_role_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True,
-        comment="brand_strategy 第 2 层 Brand Role: Role + Strategy",
+        comment="campaign_strategy 第 2 层 Brand Role: Role + Strategy",
     )
     big_idea_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True,
-        comment="brand_strategy 第 3 层 Big Idea: Big Idea + Content Strategy",
+        comment="campaign_strategy 第 3 层 Big Idea: Big Idea + Content Strategy",
     )
     agenda_map_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True,

@@ -271,16 +271,18 @@ import {
   platformLabel,
 } from '../composables/useStrategyConstants'
 
-const NOTES_OPTIONS = [50] as const
-
 const OUTPUT_TYPE_OPTIONS: ReadonlyArray<{ value: OutputType; hint: string }> = [
   {
-    value: 'brand_strategy',
+    value: 'campaign_strategy',
     hint: '消费者洞察主导：社会张力 → 品牌社会角色 → 大创意（要求研究计划含 social_media 维度）',
   },
   {
     value: 'market_report',
     hint: '媒体视角主导：媒体议程图 → 竞争格局 → 战略简报（要求研究计划含 news_media 维度）',
+  },
+  {
+    value: 'full_strategy',
+    hint: '全渠道综合：先完成竞争格局分析，再以格局为背景产出消费者沟通策略（要求同时含 social_media 和 news_media 维度）',
   },
 ] as const
 
@@ -310,24 +312,32 @@ const channelAvailability = computed(() => {
 
 const isOptionAvailable = (opt: OutputType): boolean => {
   const { hasSocial, hasNews } = channelAvailability.value
-  if (opt === 'brand_strategy') return hasSocial
+  if (opt === 'campaign_strategy') return hasSocial
   if (opt === 'market_report') return hasNews
+  if (opt === 'full_strategy') return hasSocial && hasNews
   return false
 }
 
-// 当仅一种路径可选时锁定；优先 brand_strategy（若两者都可选则尊重 props.outputType）
+// 当仅一种路径可选时锁定；优先尊重 props.outputType，再按可用性回退
 const effectiveOutputType = computed<OutputType>(() => {
-  const brandOk = isOptionAvailable('brand_strategy')
+  const campaignOk = isOptionAvailable('campaign_strategy')
   const marketOk = isOptionAvailable('market_report')
-  if (brandOk && !marketOk) return 'brand_strategy'
-  if (!brandOk && marketOk) return 'market_report'
-  return props.outputType ?? 'brand_strategy'
+  const fullOk = isOptionAvailable('full_strategy')
+  // 只有一个选项可用时自动锁定
+  if (campaignOk && !marketOk) return 'campaign_strategy'
+  if (!campaignOk && marketOk) return 'market_report'
+  // 两者都可用：尊重 props.outputType，但若其不合法则回退
+  const current = props.outputType ?? 'campaign_strategy'
+  if (current === 'full_strategy' && !fullOk) return 'campaign_strategy'
+  if (isOptionAvailable(current)) return current
+  return 'campaign_strategy'
 })
 
 const outputTypeLocked = computed(() => {
-  const brandOk = isOptionAvailable('brand_strategy')
+  const campaignOk = isOptionAvailable('campaign_strategy')
   const marketOk = isOptionAvailable('market_report')
-  return brandOk !== marketOk
+  // 仅当只有 social 或只有 news 时锁定
+  return campaignOk !== marketOk
 })
 
 // 当锁定或 data_plan 变化时同步回父组件

@@ -6,7 +6,7 @@ export const STATUS_MAP: Record<StrategyStatus, { label: string; color: 'neutral
   probing: { label: '探测中', color: 'info' },
   collecting: { label: '采集中', color: 'info' },
   ready: { label: '数据就绪', color: 'warning' },
-  // brand_strategy 路径
+  // campaign_strategy 路径
   insight_done: { label: '洞察完成 (Insight)', color: 'warning' },
   brand_role_done: { label: '品牌角色完成 (Brand Role)', color: 'warning' },
   // market_report 路径
@@ -17,7 +17,7 @@ export const STATUS_MAP: Record<StrategyStatus, { label: string; color: 'neutral
 
 /**
  * 状态顺序（两条产出路径共享同一 STATUS_ORDER 数值，便于"≥ready"等通用比较）。
- * brand_strategy: insight_done=5 → brand_role_done=6 → completed=7
+ * campaign_strategy: insight_done=5 → brand_role_done=6 → completed=7
  * market_report:  agenda_map_done=5 → landscape_done=6 → completed=7
  */
 export const STATUS_ORDER: Record<StrategyStatus, number> = {
@@ -29,8 +29,9 @@ export const STATUS_ORDER: Record<StrategyStatus, number> = {
 }
 
 export const OUTPUT_TYPE_LABELS: Record<OutputType, string> = {
-  brand_strategy: '品牌策略 (Insight → Brand Role → Big Idea)',
+  campaign_strategy: '品牌策略 (Insight → Brand Role → Big Idea)',
   market_report: '市场分析报告 (Agenda Map → Landscape → Strategic Brief)',
+  full_strategy: '全渠道综合策略 (Agenda Map → Landscape → Insight → Brand Role → Big Idea)',
 }
 
 const PLATFORM_OPTIONS = [
@@ -58,9 +59,9 @@ export const platformLabel = (code: string): string => PLATFORM_LABEL_MAP[code] 
 
 export const CHANNEL_LABELS: Record<string, string> = {
   social_media: '社交媒体',
-  knowledge_base: '市场知识库',
   news_media: '新闻媒体',
-  research_agent: '专题研究',
+  industry_research: '行业研究',
+  creative_research: '创意研究',
 }
 
 export const formatDate = (dateString: string): string => {

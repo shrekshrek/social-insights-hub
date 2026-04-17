@@ -14,11 +14,13 @@ if TYPE_CHECKING:
 
 
 # 产出路径：
-#   brand_strategy 填充 insight_result / brand_role_result / big_idea_result（三层递进）
+#   campaign_strategy 填充 insight_result / brand_role_result / big_idea_result（三层递进）
 #   market_report  填充 agenda_map_result / landscape_result / strategic_brief_result（三层递进）
-OutputType = Literal["brand_strategy", "market_report"]
+#   full_strategy  先走 market_report 路径（agenda_map → landscape），
+#                  再走 campaign_strategy 路径（insight* → brand_role → big_idea）
+OutputType = Literal["campaign_strategy", "market_report", "full_strategy"]
 
-# 主数据源：决定产出路径（brand_strategy vs market_report）
+# 主数据源：决定产出路径（campaign_strategy vs market_report）
 PrimarySource = Literal["social_media", "news_media"]
 
 
@@ -28,7 +30,7 @@ PrimarySource = Literal["social_media", "news_media"]
 class ChannelPlanItem(CustomBaseModel):
     """渠道分发条目"""
 
-    type: str = Field(description="渠道类型: social_media / news_media / research_agent")
+    type: str = Field(description="渠道类型: social_media / news_media / industry_research / creative_research")
     available: bool = Field(description="当前是否可用")
     solvable: list[str] = Field(default_factory=list, description="该渠道能解决的研究问题")
     unsolvable: list[str] = Field(default_factory=list, description="该渠道的局限")
@@ -82,7 +84,7 @@ class DesignResearchResponse(CustomBaseModel):
     """AI 研究设计响应
 
     primary_sources / output_type 由 research_design_chain 根据决策表硬性推导：
-    - 含 social_media 维度 → primary_sources 含 social_media；默认 output_type=brand_strategy
+    - 含 social_media 维度 → primary_sources 含 social_media；默认 output_type=campaign_strategy
     - 仅含 news_media 维度 → primary_sources=[news_media]；强制 output_type=market_report
     """
 
@@ -92,9 +94,9 @@ class DesignResearchResponse(CustomBaseModel):
     slice_blueprint: list[dict[str, Any]] = Field(default_factory=list)
     primary_sources: list[PrimarySource] = Field(
         default_factory=list,
-        description="本次研究计划的主数据源（按 data_plan 维度推导），brand_strategy 必须含 social_media",
+        description="本次研究计划的主数据源（按 data_plan 维度推导），campaign_strategy 必须含 social_media",
     )
-    output_type: OutputType = Field("brand_strategy")
+    output_type: OutputType = Field("campaign_strategy")
     output_type_rationale: str = Field("")
 
 
@@ -102,7 +104,7 @@ class ConfirmResearchRequest(CustomBaseModel):
     """确认研究计划，创建 SocialMonitor + 探测任务
 
     output_type 由用户在前端显式选择并回传，后端校验其是否满足决策表：
-    - brand_strategy 要求 research_design.primary_sources 包含 social_media
+    - campaign_strategy 要求 research_design.primary_sources 包含 social_media
     - market_report 无社媒硬性要求，news_media-only 场景下会被前端强制选中
     """
 
@@ -172,9 +174,13 @@ class ProbeStatusResponse(CustomBaseModel):
     analyzed_count: int = 0
     total_count: int = 0
     probe_review_result: dict | None = Field(None, description="审查结果（全部分析完成后自动填充）")
-    research_agent: ResearchAgentStatus = Field(
+    industry_research: ResearchAgentStatus = Field(
         default_factory=ResearchAgentStatus,
-        description="Research Agent 研究任务状态���与探测并行，不阻塞）",
+        description="行业研究任务状态（profile_name=industry，与探测并行，不阻塞）",
+    )
+    creative_research: ResearchAgentStatus = Field(
+        default_factory=ResearchAgentStatus,
+        description="创意研究任务状态（profile_name=creative，与探测并行，不阻塞）",
     )
     strategy: "StrategyRead | None" = None
 
@@ -282,9 +288,13 @@ class CollectionStatusResponse(CustomBaseModel):
     completed_count: int = 0
     total_count: int = 0
     coverage_check_result: dict | None = None
-    research_agent: ResearchAgentStatus = Field(
+    industry_research: ResearchAgentStatus = Field(
         default_factory=ResearchAgentStatus,
-        description="Research Agent 研究任务状态（不阻塞采集流程）",
+        description="行业研究任务状态（profile_name=industry，不阻塞采集流程）",
+    )
+    creative_research: ResearchAgentStatus = Field(
+        default_factory=ResearchAgentStatus,
+        description="创意研究任务状态（profile_name=creative，不阻塞采集流程）",
     )
     strategy: "StrategyRead | None" = None
 
@@ -375,7 +385,7 @@ class StrategyRead(CustomBaseModel):
 
     # ④ 产出生成
     output_type: OutputType | None = None
-    # brand_strategy 路径（insight → brand_role → big_idea）
+    # campaign_strategy 路径（insight → brand_role → big_idea）
     insight_result: dict | None = None
     brand_role_result: dict | None = None
     big_idea_result: dict | None = None

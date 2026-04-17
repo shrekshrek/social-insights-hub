@@ -216,6 +216,17 @@ class Settings(BaseSettings):
         default=2.0, description="Hours before accepted task is reset to pending"
     )
 
+    # ========== Feishu Notification Configuration ==========
+    FEISHU_ENABLED: bool = Field(
+        default=False, description="Enable Feishu group bot webhook notifications"
+    )
+    FEISHU_WEBHOOK_URL: str | None = Field(
+        default=None, description="Feishu group bot webhook URL"
+    )
+    FEISHU_FRONTEND_URL: str = Field(
+        default="", description="Frontend base URL for strategy deep links in notifications"
+    )
+
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:

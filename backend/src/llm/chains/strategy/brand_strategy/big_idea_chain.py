@@ -115,6 +115,16 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - 关键引述（key_quotes）中的行业权威发言可作为 Content Strategy 的话题锚点
 - Content Strategy 的支柱可考虑"媒体议题再造"——将新闻中的行业话题转化为社媒可传播的消费者语言
 - 新闻数据作为补充创意灵感，evidence 中标明 source 为"新闻媒体数据"以区分
+
+## 创意版图（creative_references）使用指南
+
+- 创意参考数据来自数英、广告门、SocialBeta 等创意媒体的竞品 Campaign 案例库
+- 核心用途：绘制品类**创意版图全貌**，用排除法找到未被竞品占据的**创意白空间**
+- 使用逻辑：Brand Role 已确定"我们是谁"→ 创意版图告诉你"竞品已在哪"→ Big Idea 找到"没人去的地方"
+- Big Idea 的 statement 应能在创意版图中定位到一个明确的**差异化坐标**
+- information_gaps（创意盲点）往往是品类未被尝试的方向，优先考虑作为 Big Idea 方向
+- 如 `{{creative_references}}` 段落为空，**正常忽略**，不影响创意推导
+- evidence 中引用创意参考时标明 source 为"竞品创意案例"以区分
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -122,6 +132,8 @@ USER_TEMPLATE = """{brief_section}
 {research_context_section}
 
 {research_findings}
+
+{creative_references}
 
 ## 洞察层 (Insight) 结果
 
@@ -196,6 +208,7 @@ def format_data_for_big_idea(
     research_design: dict | None = None,
     news_slices: list[dict] | None = None,
     research_findings: str = "",
+    creative_references: str = "",
 ) -> dict[str, Any]:
     """将 insight + brand_role 结果 + 补充数据格式化为 big_idea 层输入
 
@@ -296,6 +309,7 @@ def format_data_for_big_idea(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
         "research_findings": research_findings,
+        "creative_references": creative_references,
         "news_media_section": news_media_section,
     }
 

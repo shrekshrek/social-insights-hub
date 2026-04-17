@@ -1,6 +1,6 @@
 """审计日志模型
 
-记录用户对系统资源的所有写操作（CREATE/UPDATE/DELETE/TRIGGER）及认证事件（LOGIN/LOGOUT）。
+记录用户对系统资源的所有写操作（CREATE/UPDATE/DELETE/TRIGGER）及认证事件（LOGIN/LOGIN_FAILED）。
 日志不可变，无 updated_at、无软删除。
 """
 
@@ -35,7 +35,7 @@ class AuditLog(Base):
         String(50),
         nullable=False,
         index=True,
-        comment="操作类型：LOGIN/LOGIN_FAILED/LOGOUT/CREATE/UPDATE/DELETE/TRIGGER",
+        comment="操作类型：LOGIN/LOGIN_FAILED/CREATE/UPDATE/DELETE/TRIGGER",
     )
     operation: Mapped[str | None] = mapped_column(
         String(100),
@@ -53,22 +53,8 @@ class AuditLog(Base):
         nullable=True,
         comment="资源ID（路径中的数字片段）",
     )
-    endpoint: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-        comment="端点函数名（来自 route.name，用于精确过滤）",
-    )
-    path_template: Mapped[str | None] = mapped_column(
-        String(500),
-        nullable=True,
-        comment="路径模板（来自 route.path，如 /tasks/{task_id}）",
-    )
 
     # HTTP 信息
-    http_method: Mapped[str | None] = mapped_column(
-        String(10), nullable=True, comment="HTTP方法：POST/PUT/PATCH/DELETE"
-    )
     request_path: Mapped[str | None] = mapped_column(
         String(500), nullable=True, comment="请求路径"
     )
@@ -80,13 +66,10 @@ class AuditLog(Base):
     ip_address: Mapped[str | None] = mapped_column(
         String(50), nullable=True, comment="客户端IP"
     )
-    user_agent: Mapped[str | None] = mapped_column(
-        Text, nullable=True, comment="User-Agent"
-    )
 
-    # 扩展数据（脱敏后的关键参数快照）
+    # 扩展数据（显式 TRIGGER 调用时填入业务上下文）
     extra_data: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="请求关键参数（脱敏后）"
+        JSON, nullable=True, comment="业务上下文（如触发分析的类型、参数等）"
     )
 
     # 时间戳（只读，不记录 updated_at）

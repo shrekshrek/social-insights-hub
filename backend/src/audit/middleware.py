@@ -3,10 +3,11 @@
 拦截写操作和认证事件，异步写入 audit_logs 表。
 
 设计原则：
-- 元数据单一来源：从匹配到的 route 上读取 summary/tags/name/path（项目约定每个端点必须有 summary/tags）
+- 元数据单一来源：从匹配到的 route 上读取 summary/tags/name/path
 - 仅捕获，不阻塞：审计写入失败不影响主请求
 - fire-and-forget：用 asyncio.create_task 异步写入
-- 轻量解析：仅从 JWT header 提取 username，不做完整校验
+- 覆盖范围：LOGIN/LOGIN_FAILED + 所有用户资源的 CREATE/UPDATE/DELETE
+- TRIGGER 操作由 service 层显式调用，不在中间件捕获
 """
 
 import asyncio
@@ -25,10 +26,10 @@ from src.audit.service import save_audit_log
 logger = logging.getLogger(__name__)
 
 # tag → 资源类型映射（tag 是元数据单一来源）
-# None 表示不对应实体资源（如认证事件），或需要按路径二次消歧
+# None 表示认证事件（无具体资源）
 _TAG_RESOURCE_MAP: dict[str, str | None] = {
     "Authentication": None,
-    "Audit": None,  # 审计自身不审计
+    "Audit": None,
     "Users": "user",
     "RBAC": None,  # 按路径二次消歧为 role / permission
     "Social Media - Monitors": "social_monitor",
@@ -43,19 +44,19 @@ _TAG_RESOURCE_MAP: dict[str, str | None] = {
     "Research Agent": "research_task",
 }
 
-# 不审计的 tag（审计自身）
-_SKIP_TAGS = {"Audit"}
+# M2M 机器接口 tag：不产生用户操作审计记录
+_MACHINE_TAGS = {"Agent API"}
 
-# HTTP 方法 → 默认 action
+# 不审计的 tag（审计自身 + 所有机器接口）
+_SKIP_TAGS = {"Audit"} | _MACHINE_TAGS
+
+# HTTP 方法 → action
 _METHOD_ACTION: dict[str, str] = {
     "POST": "CREATE",
     "PUT": "UPDATE",
     "PATCH": "UPDATE",
     "DELETE": "DELETE",
 }
-
-# 路径末段 → TRIGGER 语义
-_TRIGGER_SUFFIXES = {"execute", "cancel", "analyze", "run", "refine", "approve", "retry", "preview"}
 
 # 仅审计写方法
 _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -79,7 +80,6 @@ def _resolve_resource(tags: list[str], path_template: str) -> str | None:
     for tag in tags:
         if tag not in _TAG_RESOURCE_MAP:
             continue
-        # RBAC 歧义：路径含 /permissions 为 permission，否则 role
         if tag == "RBAC":
             return "permission" if "/permissions" in path_template else "role"
         return _TAG_RESOURCE_MAP[tag]
@@ -99,22 +99,12 @@ def _determine_action(
     endpoint: str | None,
     tags: list[str],
     method: str,
-    path: str,
     status_code: int,
 ) -> str:
-    """基于 endpoint/tag/方法/路径/状态码推断 action。"""
-    # 认证事件：用 endpoint 函数名精确识别（避免路径猜测）
+    """基于 endpoint/tag/方法/状态码推断 action。"""
     if "Authentication" in tags:
         if endpoint == "login":
             return "LOGIN" if status_code < 400 else "LOGIN_FAILED"
-        if endpoint == "logout":
-            return "LOGOUT"
-
-    # 路径末段为触发类动词
-    last_segment = path.rstrip("/").rsplit("/", 1)[-1]
-    if last_segment in _TRIGGER_SUFFIXES:
-        return "TRIGGER"
-
     return _METHOD_ACTION.get(method, "CREATE")
 
 
@@ -134,7 +124,6 @@ class AuditMiddleware(BaseHTTPMiddleware):
         # 提前捕获（token 在请求处理期间有效）
         username = _extract_username(request)
         ip_address = request.client.host if request.client else None
-        user_agent = request.headers.get("user-agent")
         request_path = request.url.path
 
         response = await call_next(request)
@@ -152,12 +141,12 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if any(tag in _SKIP_TAGS for tag in tags):
             return response
 
-        operation = route.summary
         endpoint = route.name
         path_template = route.path
+        operation = route.summary
         resource = _resolve_resource(tags, path_template)
         resource_id = _extract_last_id(request_path)
-        action = _determine_action(endpoint, tags, method, request_path, response.status_code)
+        action = _determine_action(endpoint, tags, method, response.status_code)
 
         asyncio.create_task(
             save_audit_log(
@@ -166,13 +155,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 operation=operation,
                 resource=resource,
                 resource_id=resource_id,
-                endpoint=endpoint,
-                path_template=path_template,
-                http_method=method,
                 request_path=request_path,
                 status_code=response.status_code,
                 ip_address=ip_address,
-                user_agent=user_agent,
             )
         )
 

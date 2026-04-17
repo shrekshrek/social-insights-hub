@@ -44,6 +44,7 @@
 | auth/ | JWT 认证、用户注册登录、令牌管理 |
 | rbac/ | 角色权限管理，代码驱动启动时自动同步 |
 | users/ | 用户 CRUD、角色分配 |
+| audit/ | 用户操作日志，记录 CRUD/LOGIN/LOGIN_FAILED/TRIGGER |
 | social_media/monitors/ | 监测项目管理，平台初始化 |
 | social_media/tasks/ | 数据采集任务管理，多平台适配器 |
 | social_media/analysis/ | 社媒 LLM 分析链、批处理 |
@@ -62,6 +63,7 @@
 | auth/ | 登录注册、认证状态管理 |
 | users/ | 用户管理界面 |
 | rbac/ | 角色权限管理界面 |
+| audit/ | 用户操作日志查询界面 |
 | jobs/ | 跨渠道分析任务列表 |
 | social-media/ | 社媒监测/任务/分析界面 (含 monitors/, tasks/, analysis/) |
 | news-media/ | 新闻监测/任务/分析界面 |

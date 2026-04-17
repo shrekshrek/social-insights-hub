@@ -45,6 +45,7 @@ backend/src/
 ├── auth/                    # JWT 认证, 登录注册, 令牌黑名单
 ├── rbac/                    # 角色权限, 代码驱动同步
 ├── users/                   # 用户 CRUD, 角色分配
+├── audit/                   # 用户操作日志（CRUD/LOGIN/LOGIN_FAILED/TRIGGER）
 ├── social_media/
 │   ├── monitors/            # 社媒监测项目, 平台初始化
 │   ├── tasks/               # 社媒数据采集任务, 多平台适配器
@@ -84,6 +85,25 @@ backend/src/
 - **资源型 API 统一使用子资源 URL 风格**：父子关系通过路径表达，例如 `POST /{channel}/monitors/{monitor_id}/tasks`、`/strategies/{id}/participants`、`/news-media/monitors/{id}/participants`。禁止把 parent_id 放 body/query
 
 ## 架构约定
+
+### 审计日志（audit/）
+
+记录所有用户的写操作，供管理员查看。
+
+**覆盖范围**：`CREATE` / `UPDATE` / `DELETE` / `LOGIN` / `LOGIN_FAILED` / `TRIGGER`
+
+**两种写入路径**：
+
+| 路径 | 覆盖场景 | 实现位置 |
+|------|---------|---------|
+| 中间件自动捕获 | 所有用户资源的 CRUD + 登录认证事件 | `audit/middleware.py` → `AuditMiddleware` |
+| service 层显式调用 | 重要 TRIGGER 操作（启动 LLM 分析、触发采集等） | 各 service 调用 `audit.service.log_trigger()` |
+
+**机器接口排除**：`_MACHINE_TAGS = {"Agent API"}`，爬虫代理调用不产生审计记录。
+
+**新增模块接入**：只需在 `_TAG_RESOURCE_MAP` 中注册对应 tag → 资源类型映射，中间件自动覆盖。TRIGGER 操作需在 service 层手动调用 `log_trigger()`。
+
+**不审计**：LOGOUT、系统内部流转（探测/审查等 pipeline 步骤）、Agent API 机器调用。
 
 ### 模块边界（ADR-001 channel-local analysis）
 

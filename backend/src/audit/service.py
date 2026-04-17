@@ -1,7 +1,7 @@
 """审计日志写入服务
 
 使用独立 db session，避免影响主请求事务。
-由中间件以 fire-and-forget 方式调用。
+由中间件以 fire-and-forget 方式调用，或由 service 层显式调用（TRIGGER 操作）。
 
 JWT sub 字段存的是 username，所以 service 负责将 username 解析为 user_id。
 """
@@ -36,16 +36,12 @@ async def save_audit_log(
     operation: str | None = None,
     resource: str | None = None,
     resource_id: str | None = None,
-    endpoint: str | None = None,
-    path_template: str | None = None,
-    http_method: str | None = None,
     request_path: str | None = None,
     status_code: int | None = None,
     ip_address: str | None = None,
-    user_agent: str | None = None,
     extra_data: dict | None = None,
 ) -> None:
-    """写入一条审计日志，异常只记录不上抛。"""
+    """从中间件写入审计日志（username → user_id 解析），异常只记录不上抛。"""
     try:
         user_id = await _resolve_user_id(username)
         async with AsyncSessionLocal() as db:
@@ -56,15 +52,37 @@ async def save_audit_log(
                 operation=operation,
                 resource=resource,
                 resource_id=resource_id,
-                endpoint=endpoint,
-                path_template=path_template,
-                http_method=http_method,
                 request_path=request_path,
                 status_code=status_code,
                 ip_address=ip_address,
-                user_agent=user_agent,
                 extra_data=extra_data,
             )
             await db.commit()
     except Exception as exc:
         logger.error("Failed to save audit log: %s", exc)
+
+
+async def log_trigger(
+    user_id: int,
+    resource: str,
+    resource_id: int | str,
+    operation: str,
+    ip_address: str | None = None,
+    extra_data: dict | None = None,
+) -> None:
+    """显式记录 TRIGGER 操作（由 service 层调用），异常只记录不上抛。"""
+    try:
+        async with AsyncSessionLocal() as db:
+            await create_audit_log(
+                db=db,
+                user_id=user_id,
+                action="TRIGGER",
+                operation=operation,
+                resource=resource,
+                resource_id=str(resource_id),
+                ip_address=ip_address,
+                extra_data=extra_data,
+            )
+            await db.commit()
+    except Exception as exc:
+        logger.error("Failed to save trigger audit log: %s", exc)

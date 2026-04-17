@@ -170,7 +170,7 @@ AI 根据 brief 内容按需分配渠道——简单口碑分析可能只推荐 
   ],
   "slice_blueprint": [...],
   "primary_sources": ["social_media", "news_media"],
-  "output_type": "brand_strategy"
+  "output_type": "campaign_strategy"
 }
 ```
 
@@ -541,7 +541,7 @@ Research Agent 与 news_media **互不冲突**，搜索不同层次的信息：
 
 ### 场景 A：策略渠道模式
 
-策略："小米 SU7 品牌策略"，output_type: brand_strategy
+策略："小米 SU7 品牌策略"，output_type: campaign_strategy
 
 ```
 ① brief_parser_chain → channel_plan:
@@ -705,7 +705,7 @@ MAX_CONCURRENT_TASKS = 3
 | 文件 | 改动 | 状态 |
 |------|------|------|
 | `llm/chains/strategy/research_findings.py` | 新建 per-stage formatter 模块（6 个函数，按 token 预算格式化研究数据） | ✅ |
-| `llm/chains/strategy/brand_strategy/*.py` | `{market_context}` → `{research_findings}`，SYSTEM_TEMPLATE 更新研究数据使用指南 | ✅ |
+| `llm/chains/strategy/brand_strategy/*.py` | `{market_context}` → `{research_findings}`，SYSTEM_TEMPLATE 更新研究数据使用指南（目录名保持 brand_strategy/，output_type 值为 campaign_strategy） | ✅ |
 | `llm/chains/strategy/market_report/*.py` | 同上 | ✅ |
 | `strategies/service.py` | `_retrieve_strategy_market_context` → `_retrieve_research_findings`；6 个 generate 函数注入 research_findings；`_build_data_provenance` 改为 `{primary, research}` 两层 | ✅ |
 | `strategies/schemas.py` | 移除 KB 相关描述 | ✅ |

@@ -1,7 +1,9 @@
 # Knowledge Base 模块
 
 市场知识库：文档上传 → 解析 → 分块 → 向量化（pgvector）→ RAG 检索。
-策略模块通过 `_retrieve_strategy_market_context()` 在各产出 stage 生成前注入市场背景（brand_strategy: Insight/Brand Role/Big Idea；market_report: Agenda Map/Landscape/Strategic Brief）。
+独立功能模块，不与策略研究流程集成（策略产出由社媒/新闻切片 + Research Agent 行业研究驱动）。
+
+`parse_text` 工具函数被 `strategies/service.py` 和 `research_agent/service.py` 复用，用于解析上传的 Brief 文档（PDF/Word → 文本），与知识库 RAG 检索无关。
 
 ## Public Interface
 
@@ -16,18 +18,6 @@
 | POST | `/knowledge-base/search` | RAG 检索测试 |
 | GET | `/knowledge-base/crawlers/status` | 各来源文档数/状态统计（需登录） |
 | POST | `/knowledge-base/crawlers/{source_type}/run` | 手动触发爬取，后台异步执行（需登录） |
-
-### 核心函数
-
-```python
-# strategies/service.py 中的调用方式
-from src.knowledge_base.service import retrieve_market_context
-
-market_context = await retrieve_market_context(
-    db, query="小米SU7 品牌口碑", user_id=strategy.user_id, top_k=6
-)
-# 返回格式化 markdown 字符串，或 "" (无结果/出错时)
-```
 
 ### 权限
 
@@ -53,7 +43,7 @@ market_context = await retrieve_market_context(
 - **Celery 异步处理**: 上传端点仅创建 DB 记录，通过 `process_document_task.delay(doc_id)` 派发处理；`status` 异步更新
 - **RAG 优雅降级**: `retrieve_market_context()` 所有异常静默处理，返回 `""`；策略生成主流程不受 KB 可用性影响
 - **Embedding API**: 通过 OpenAI-compatible API 调用（默认 SiliconFlow BAAI/bge-large-zh-v1.5），无本地模型，无 NVIDIA 依赖；配置项：`EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL`
-- **渠道架构**: `strategy_brief_parser_chain.py` 中 `knowledge_base` 标记为 `available=true`；`ecommerce` 和 `industry_data` 已删除
+- **独立模块**: 不作为策略研究的 channel_plan 渠道，不注入任何产出 stage
 - **文件格式**: 上传支持 PDF / DOCX / TXT / MD，上限 50MB；`title` 参数是 Form field（非 Query string）
 
 ## Crawlers 子模块

@@ -110,6 +110,14 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 研究数据中的**置信度**标记（high/medium/low）反映证据充分程度
 - 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，仅基于洞察层结果和补充数据推导角色
 - evidence 中引用研究数据时标明 source 为"行业研究数据"以区分
+
+## 创意版图（creative_references）使用指南
+
+- 创意参考数据来自数英、广告门、SocialBeta 等创意媒体的竞品 Campaign 案例库
+- 核心用途：了解**竞品已占据的创意角色**，为 Brand Social Role 的差异化提供排除法依据
+- 使用逻辑：先识别"哪些角色已被竞品占领"→ 再确认"我们的角色在版图中的独特位置"
+- 如 `{{creative_references}}` 段落为空，**正常忽略**，不影响角色推导
+- evidence 中引用创意参考时标明 source 为"竞品创意案例"以区分
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -117,6 +125,8 @@ USER_TEMPLATE = """{brief_section}
 {research_context_section}
 
 {research_findings}
+
+{creative_references}
 
 ## 洞察层 (Insight) 结果
 
@@ -146,6 +156,7 @@ def format_data_for_brand_role(
     research_design: dict | None = None,
     news_slices: list[dict] | None = None,
     research_findings: str = "",
+    creative_references: str = "",
 ) -> dict[str, Any]:
     """将 insight 结果 + 补充数据格式化为 brand_role 层输入"""
     from src.llm.chains.strategy.brand_strategy.insight_chain import (
@@ -228,6 +239,7 @@ def format_data_for_brand_role(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
         "research_findings": research_findings,
+        "creative_references": creative_references,
         "news_media_section": news_media_section,
     }
 

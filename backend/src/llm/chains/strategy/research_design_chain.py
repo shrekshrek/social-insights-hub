@@ -4,29 +4,37 @@
 将研究方向分解为结构化的研究计划：
 研究问题 → 数据采集方案（社媒 + 新闻） → 行业研究计划 → 切片蓝图 → 主数据源判定 → 产出类型建议。
 
-## 三渠道架构
+## 四渠道架构
 
-三个数据渠道各代表一种独立视角：
+四个数据渠道各代表一种独立视角：
 - social_media：消费者声音（UGC）→ SocialSlice
 - news_media：媒体报道（新闻）→ NewsSlice
-- research_agent：专家/行业报告（分析层）→ 结构化研究报告
+- industry_research：专家/行业报告（分析层）→ 结构化研究报告，注入 `{research_findings}`
+- creative_research：竞品创意案例（创意层）→ 数英/广告门/SocialBeta，注入 `{creative_references}`
 
-## 两条产出路径
+## 三条产出路径
 
-产出路径由 social_media / news_media 的维度组合决定（research_agent 不影响路径选择）：
+产出路径由 data_plan 中 social_media / news_media 的维度组合决定（industry_research / creative_research 不影响路径选择）：
 
-| data_plan 维度组合                      | primary_sources                   | output_type          |
-|-----------------------------------------|-----------------------------------|----------------------|
-| 含 social_media (有/无 news_media)      | ["social_media", "news_media"]    | brand_strategy       |
-| 仅 news_media（无 social_media）        | ["news_media"]                    | market_report        |
+| data_plan 维度组合                      | primary_sources                   | output_type       |
+|-----------------------------------------|-----------------------------------|-------------------|
+| 同时含 social_media 和 news_media 维度 | ["social_media", "news_media"]    | full_strategy     |
+| 仅含 social_media 维度                 | ["social_media"]                  | campaign_strategy |
+| 仅含 news_media 维度                   | ["news_media"]                    | market_report     |
 
-- brand_strategy 的 insight/brand_role/big_idea prompt 结构性依赖消费者声音（KOL/topic_aspects/pains/gains），
+两者不会混淆：research_design_chain 只有在 brief_parser 推荐了 news_media 渠道时才会收到非空的
+news_channel_brief，进而才会在 data_plan 里生成 news_media 维度。campaign_strategy 的 brief 不含
+news_media 渠道推荐，其 data_plan 中不会出现 news_media 条目。
+
+- full_strategy：先走 market_report 路径（Agenda Map → Landscape），再以 Landscape 结构化结论
+  注入 campaign_strategy 路径（Insight → Brand Role → Big Idea），产出兼顾竞争格局和消费者沟通的完整策略。
+- campaign_strategy 的 insight/brand_role/big_idea prompt 结构性依赖消费者声音（KOL/topic_aspects/pains/gains），
   纯新闻无法跑通——因此仅 news_media 时必须强制走 market_report 路径。
-- Research Agent（行业研究）在 confirm_research 时按 plan 条件创建，其结果通过
-  `{research_findings}` 注入各 stage chain，代表专家/行业视角的第三数据源。
+- industry_research / creative_research 在 confirm_research 时按 channel_plan 条件创建 ResearchTask，
+  结果分别通过 `{research_findings}` / `{creative_references}` 注入各 stage chain，不驱动路径选择。
 
-本链的 `primary_sources` / `output_type` 字段是下游 service.confirm_research
-校验的硬性依据，不能由 LLM 自由发挥。
+本链的 `primary_sources` / `output_type` 字段是下游 service.confirm_research 校验的硬性依据，
+不能由 LLM 自由发挥，由 `_derive_primary_sources_and_output_type` 从 data_plan 强制推导覆盖。
 """
 
 from __future__ import annotations
@@ -47,31 +55,33 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 ## 任务
 根据输入的渠道研究方向，输出结构化的研究计划：研究问题 → 数据采集方案 → 行业研究计划（可选） → 切片蓝图 → 主数据源判定 → 产出类型建议。不需要追问，用你的专业判断补全细节。
 
-输入可能包含"社媒渠道研究方向"、"新闻渠道研究方向"和/或"行业研究方向"——**只为输入中出现的渠道生成对应部分**。社媒/新闻方向生成 data_plan 维度；行业研究方向生成 research_agent 字段。渠道分配已由上游确认，无需重新评估适配度。
+输入可能包含"社媒渠道研究方向"、"新闻渠道研究方向"和/或"行业研究方向"——**只为输入中出现的渠道生成对应部分**。社媒/新闻方向生成 data_plan 维度；行业研究方向仅供参考，不体现在 JSON 输出中（由下游服务按需创建 ResearchTask）。渠道分配已由上游确认，无需重新评估适配度。
 
 ## 产出路径决策表（硬性规则，不可自由发挥）
 
 `primary_sources` 字段枚举本次研究计划实际使用的主数据源（仅看 data_plan 维度），
 `output_type` 字段严格按下表推导：
 
-| data_plan 维度组合                      | primary_sources                   | output_type          |
-|-----------------------------------------|-----------------------------------|----------------------|
-| 同时含 social_media 和 news_media 维度  | ["social_media", "news_media"]    | brand_strategy       |
-| 仅含 social_media 维度                  | ["social_media"]                  | brand_strategy       |
-| 仅含 news_media 维度                    | ["news_media"]                    | market_report        |
+| data_plan 维度组合                      | primary_sources                   | output_type       |
+|-----------------------------------------|-----------------------------------|-------------------|
+| 同时含 social_media 和 news_media 维度 | ["social_media", "news_media"]    | full_strategy     |
+| 仅含 social_media 维度                 | ["social_media"]                  | campaign_strategy |
+| 仅含 news_media 维度                   | ["news_media"]                    | market_report     |
 
 **推导原则**：
 - 只要 data_plan 中有任何 social_media 维度，primary_sources 就必须包含 "social_media"
 - 只要 data_plan 中有任何 news_media 维度，primary_sources 就必须包含 "news_media"
-- 若 primary_sources 包含 social_media → output_type 必须是 brand_strategy（insight/brand_role/big_idea 的 prompt 结构性依赖消费者声音，brand_strategy 是它的承载路径）
-- 若 primary_sources 仅有 news_media（不含 social_media）→ output_type 必须是 market_report（insight/brand_role/big_idea 的消费者声音输入为空，跑不出 Social Tension / Brand Social Role / Big Idea，必须走 market_report 路径）
+- 同时含 social_media 和 news_media → output_type = full_strategy（先走 Agenda Map/Landscape，再走 Insight/Brand Role/Big Idea，两条路径完整执行）
+- 仅含 social_media → output_type = campaign_strategy
+- 仅含 news_media → output_type = market_report（消费者声音输入为空，跑不出 Social Tension / Brand Role / Big Idea）
 
-注意：primary_sources 只包含 social_media / news_media（决定产出路径）。research_agent 是独立的行业研究渠道，其结果通过 `{{research_findings}}` 注入产出各阶段，不影响路径选择。
+注意：primary_sources 只包含 social_media / news_media（决定产出路径）。industry_research 是独立的行业研究渠道，其结果通过 `{{research_findings}}` 注入产出各阶段，不影响路径选择。
 
 **严禁**：
-- 把 research_agent 写进 primary_sources（它不驱动产出路径）
-- 在 data_plan 里只有 news_media 维度的情况下却输出 output_type=brand_strategy
-- 在 primary_sources 没有 social_media 的情况下却输出 output_type=brand_strategy
+- 把 industry_research 写进 primary_sources（它不驱动产出路径）
+- 在 data_plan 里只有 news_media 维度的情况下却输出 output_type=campaign_strategy 或 full_strategy
+- 在 primary_sources 没有 social_media 的情况下却输出 output_type=campaign_strategy 或 full_strategy
+- 在 data_plan 同时含 social_media 和 news_media 的情况下却输出 output_type=campaign_strategy 或 market_report
 
 ## 研究设计原则
 
@@ -136,7 +146,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 通常包含 1 个品牌聚焦切片 + 1 个大盘分析切片。
 - 品牌聚焦切片的 subject 必须是 Brief 中**用户最关心的分析主体**（通常是 subject 或其核心竞品），而非随意选择数据中出现的某个实体
 - 如果 Brief 涉及多个赛道，每个赛道需要独立切片（不同赛道的实体不应混在同一个切片中进行对比）
-- 切片的 `source_dimensions` 可以同时引用社媒和新闻维度——系统会按渠道分别创建独立切片（社媒 SocialSlice + 新闻 NewsSlice），最终在 brand_strategy / market_report 两条路径的三层产出中合并两方数据
+- 切片的 `source_dimensions` 可以同时引用社媒和新闻维度——系统会按渠道分别创建独立切片（社媒 SocialSlice + 新闻 NewsSlice），最终在 campaign_strategy / market_report 两条路径的三层产出中合并两方数据
 - 每个切片建议同时引用社媒和新闻维度，让两个渠道的分析结果能在报告中交叉验证
 - 纯新闻切片（无社媒维度）和纯社媒切片（无新闻维度）都是允许的
 - **competitive 维度建议加入品牌聚焦切片**：若 data_plan 中存在 competitive 维度，建议将其加入品牌聚焦切片的 source_dimensions（供竞品质性对比），以及大盘分析切片（供 SOV 声量对比）。若遗漏，后端会自动将 competitive 维度追加到品牌聚焦切片
@@ -182,7 +192,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
     }}
   ],
   "primary_sources": ["social_media"],
-  "output_type": "brand_strategy",
+  "output_type": "campaign_strategy",
   "output_type_rationale": "选择理由（一句话，必须说明为何依据决策表推导出该 output_type）"
 }}
 
@@ -193,7 +203,7 @@ dimension 可选值: brand_voice / consumer_voice / competitive / industry
 priority 可选值: high / medium / low
 mode 可选值: 品牌聚焦 / 大盘分析
 primary_sources 可选值（数组，按决策表推导）: social_media / news_media
-output_type 可选值（按决策表推导）: brand_strategy / market_report
+output_type 可选值（按决策表推导）: campaign_strategy / market_report / full_strategy
 
 ## 要求
 - understanding_summary: 必填
@@ -206,8 +216,8 @@ output_type 可选值（按决策表推导）: brand_strategy / market_report
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
 - 每个 data_plan 条目的 question_ids 必须引用 research_questions 中存在的 id（该维度的数据采集服务哪些研究问题）
 - primary_sources: 按上文"产出路径决策表"从 data_plan 的 channel 分布推导，非空数组
-- output_type: 按上文"产出路径决策表"从 primary_sources 推导，不得违反决策表
-- output_type_rationale: 必须引用决策表说明为何是 brand_strategy 或 market_report
+- output_type: 按上文"产出路径决策表"从 primary_sources 和策略框架适配度推导，不得违反决策表
+- output_type_rationale: 必须引用决策表说明为何是 campaign_strategy / market_report / full_strategy
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -237,11 +247,13 @@ def format_research_design_inputs(
 
     三个 channel_brief 分别对应 brief_parser 的 channel_plan 中各渠道的定制化描述，
     只有被推荐的渠道才会传入非空值。subject / constraints 作为补充上下文。
+    output_type 由后处理函数 _derive_primary_sources_and_output_type 从 data_plan
+    channel 分布推导，不需要通过 prompt 传入。
     """
     lines: list[str] = []
 
     if social_channel_brief:
-        lines.append(f"## 社媒渠道研究方向\n{social_channel_brief}")
+        lines.append(f"\n## 社媒渠道研究方向\n{social_channel_brief}")
 
     if news_channel_brief:
         lines.append(f"\n## 新闻渠道研究方向\n{news_channel_brief}")
@@ -270,7 +282,16 @@ def _derive_primary_sources_and_output_type(
     """根据决策表从 data_plan 的 channel 分布推导 primary_sources + output_type。
 
     这是硬性规则，不依赖 LLM 的自我申报——LLM 可能写错，后端必须能单独基于 data_plan
-    复核，防止 brand_strategy 路径（Insight/Brand Role/Big Idea）在纯新闻数据上跑。
+    复核，防止 campaign_strategy 路径（Insight/Brand Role/Big Idea）在纯新闻数据上跑。
+
+    推导逻辑：
+    - data_plan 同时含 social_media + news_media → full_strategy
+    - 仅含 social_media → campaign_strategy
+    - 仅含 news_media → market_report
+
+    两者不会混淆：research_design_chain 只有在 brief_parser 推荐了 news_media 渠道时
+    才会收到非空的 news_channel_brief，进而才会在 data_plan 里生成 news_media 维度。
+    campaign_strategy 不含 news_media 渠道推荐，因此其 data_plan 中不会出现 news_media 条目。
     """
     has_social = any(
         (dp.get("channel") or "social_media") == "social_media"
@@ -284,14 +305,17 @@ def _derive_primary_sources_and_output_type(
     if has_news:
         primary_sources.append("news_media")
 
-    # 决策表：含 social_media → brand_strategy；否则 market_report
-    if has_social:
-        output_type = "brand_strategy"
+    # 决策表：
+    # 双渠道 → full_strategy；仅社媒 → campaign_strategy；仅新闻 → market_report
+    if has_social and has_news:
+        output_type = "full_strategy"
+    elif has_social:
+        output_type = "campaign_strategy"
     elif has_news:
         output_type = "market_report"
     else:
         # 空 data_plan 的兜底值，实际会被上游校验拦截
-        output_type = "brand_strategy"
+        output_type = "campaign_strategy"
 
     return primary_sources, output_type
 
@@ -460,7 +484,7 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
 
     # 硬性覆盖 primary_sources + output_type（不信任 LLM 自报）
     derived_sources, derived_type = _derive_primary_sources_and_output_type(
-        result["data_plan"]
+        result["data_plan"],
     )
     llm_reported_type = result.get("output_type")
     if llm_reported_type and llm_reported_type != derived_type:
@@ -479,8 +503,8 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
         result["data_plan"], result["slice_blueprint"], dim_type_map
     )
 
-    # research_agent 字段已从 research_design 输出中移除
-    # 行业研究渠道由 brand_brief.channel_plan 中 research_agent 条目触发
-    result.pop("research_agent", None)
+    # industry_research 字段已从 research_design 输出中移除
+    # 行业研究渠道由 brand_brief.channel_plan 中 industry_research 条目触发
+    result.pop("industry_research", None)
 
     return result

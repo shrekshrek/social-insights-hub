@@ -8,7 +8,7 @@ definePageMeta({
   layout: 'default',
 })
 
-const { getAuditLogs } = useAuditLogs()
+const { getAuditLogs } = useAuditApi()
 
 // 分页与筛选
 const currentPage = ref(1)
@@ -183,6 +183,7 @@ const columns = computed<TableColumn<AuditLog>[]>(() => {
     {
       accessorKey: 'status_code',
       header: '状态',
+      meta: { class: { th: 'w-[64px]', td: 'w-[64px]' } },
       cell: ({ row }) => {
         const code = row.original.status_code
         if (!code) return h('span', { class: 'text-gray-400' }, '-')

@@ -116,7 +116,7 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const { currentUserId, hasPermission } = usePermissions()
-const { getProfiles, getTasks, rerunTask, deleteTask, statusLabel, statusColor, profileLabel, profileColor } = useResearchAgent()
+const { getProfiles, getTasks, rerunTask, deleteTask, statusLabel, statusColor, profileLabel, profileColor } = useResearchAgentApi()
 
 const searchQuery = ref('')
 const selectedStatus = ref('all')

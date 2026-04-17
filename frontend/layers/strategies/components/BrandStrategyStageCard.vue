@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import type { BrandStrategyStage } from '../composables/useStrategies'
+import type { BrandStrategyStage } from '../composables/useStrategiesApi'
 import type {
   InsightResult,
   BrandRoleResult,

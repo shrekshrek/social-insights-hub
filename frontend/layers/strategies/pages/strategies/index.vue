@@ -120,7 +120,7 @@ const pageSize = ref(DEFAULT_PAGE_SIZE)
 
 const { currentUserId, hasPermission } = usePermissions()
 
-const strategiesApi = useStrategies()
+const strategiesApi = useStrategiesApi()
 
 const apiParams = computed(() => ({
   page: currentPage.value,

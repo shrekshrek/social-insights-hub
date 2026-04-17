@@ -71,7 +71,7 @@ import { UCard, UButton, UFormField, UIcon } from '#components'
 definePageMeta({ layout: 'default' })
 useHead({ title: '上传文档' })
 
-const { uploadDocument } = useKnowledgeBase()
+const { uploadDocument } = useKnowledgeBaseApi()
 const toast = useToast()
 
 const fileInputRef = ref<HTMLInputElement | null>(null)

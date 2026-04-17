@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import type { MarketReportStage } from '../composables/useStrategies'
+import type { MarketReportStage } from '../composables/useStrategiesApi'
 import type { DataProvenance } from '../types'
 import { UCard, UBadge, UButton, UIcon } from '#components'
 

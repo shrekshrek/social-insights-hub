@@ -139,7 +139,7 @@ import type { ResearchProfileOption } from '../../types'
 
 definePageMeta({ layout: 'default', title: '新建研究' })
 
-const { getProfiles, extractBrief, previewPlan, createTask } = useResearchAgent()
+const { getProfiles, extractBrief, previewPlan, createTask } = useResearchAgentApi()
 const toast = useToast()
 
 const extracting = ref(false)

@@ -21,7 +21,7 @@ const emit = defineEmits<{
 const toast = useToast()
 const { hasPermission } = usePermissions()
 
-const { getAnalysisJobs } = useJobs()
+const { getAnalysisJobs } = useJobsApi()
 const {
   getTaskPostAnalyses,
   getDeepAnalysisPreview,

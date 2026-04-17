@@ -1,6 +1,6 @@
 import type { ResearchProfileOption, ResearchTask, ResearchTaskCreate, ResearchTaskResult, ResearchPlanPreviewRequest, ResearchPlanPreview, BriefExtractResult } from '../types'
 
-export function useResearchAgent() {
+export function useResearchAgentApi() {
   const { apiRequest, useApiData } = useApi()
 
   // 研究类型列表（industry / creative / ...）

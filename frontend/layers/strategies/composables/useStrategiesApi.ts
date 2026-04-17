@@ -17,7 +17,7 @@ import type {
 } from '../types'
 
 /**
- * brand_strategy 路径三个递进层：
+ * campaign_strategy 路径三个递进层：
  *   insight → brand_role → big_idea
  */
 export type BrandStrategyStage = 'insight' | 'brand_role' | 'big_idea'
@@ -42,7 +42,7 @@ const MARKET_REPORT_STAGE_LABELS: Record<MarketReportStage, string> = {
 
 const toKebab = (stage: string) => stage.replace(/_/g, '-')
 
-export const useStrategies = () => {
+export const useStrategiesApi = () => {
   const { apiRequest, useApiData, apiDownload, showSuccess } = useApi()
 
   // 获取策略列表
@@ -208,7 +208,7 @@ export const useStrategies = () => {
 
   // ==================== ④ 产出生成 ====================
 
-  // 生成 brand_strategy 路径的某一层
+  // 生成 campaign_strategy 路径的某一层
   const generateBrandStrategyStage = async (id: number, stage: BrandStrategyStage) => {
     const result = await apiRequest<Strategy>(
       `/strategies/${id}/generate/${toKebab(stage)}`,
@@ -218,7 +218,7 @@ export const useStrategies = () => {
     return result
   }
 
-  // 编辑 brand_strategy 路径的某一层结果
+  // 编辑 campaign_strategy 路径的某一层结果
   const editBrandStrategyStage = async (
     id: number,
     stage: BrandStrategyStage,

@@ -361,12 +361,15 @@
         <div class="flex items-center gap-2">
           <span class="font-bold text-primary-600">④</span>
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">产出生成</h2>
-          <UBadge variant="soft" size="xs" :color="isBrandStrategyPath ? 'primary' : 'warning'">
-            {{ isBrandStrategyPath ? '品牌策略路径' : '市场分析报告路径' }}
+          <UBadge
+            variant="soft" size="xs"
+            :color="isBrandStrategyPath ? 'primary' : isFullStrategyPath ? 'success' : 'warning'"
+          >
+            {{ isBrandStrategyPath ? '品牌策略路径' : isFullStrategyPath ? '全渠道综合策略路径' : '市场分析报告路径' }}
           </UBadge>
         </div>
 
-        <!-- brand_strategy 路径：Insight → Brand Role → Big Idea -->
+        <!-- campaign_strategy 路径：Insight → Brand Role → Big Idea -->
         <template v-if="isBrandStrategyPath">
           <BrandStrategyStageCard
             stage="insight" title="Insight 洞察"
@@ -431,6 +434,74 @@
             <StrategicBriefContent :result="strategicBriefData" />
           </MarketReportStageCard>
         </template>
+
+        <!-- full_strategy 路径：Agenda Map → Landscape → Insight → Brand Role → Big Idea -->
+        <template v-else-if="isFullStrategyPath">
+          <!-- 第一阶段：市场分析（news_media 主导） -->
+          <div class="flex items-center gap-2 pt-1">
+            <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+            <span class="text-xs text-gray-400 px-2 shrink-0">市场格局分析</span>
+            <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+          </div>
+
+          <MarketReportStageCard
+            stage="agenda_map" title="Agenda Map 媒体议程图"
+            :has-result="!!strategy.agenda_map_result" :can-generate="true"
+            :generating="generatingMarketReportStage === 'agenda_map'" :result="strategy.agenda_map_result"
+            @generate="handleGenerateMarketReportStage('agenda_map')"
+          >
+            <AgendaMapContent :result="agendaMapData" />
+          </MarketReportStageCard>
+
+          <MarketReportStageCard
+            stage="landscape" title="Landscape 竞争格局"
+            :has-result="!!strategy.landscape_result" :can-generate="canGenerateLandscape"
+            :generating="generatingMarketReportStage === 'landscape'" :result="strategy.landscape_result"
+            @generate="handleGenerateMarketReportStage('landscape')"
+          >
+            <LandscapeContent :result="landscapeData" />
+          </MarketReportStageCard>
+
+          <!-- 第二阶段：消费者沟通策略（social_media 主导，以 Landscape 为背景） -->
+          <div class="flex items-center gap-2 pt-1">
+            <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+            <span class="text-xs text-gray-400 px-2 shrink-0">消费者沟通策略</span>
+            <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+          </div>
+
+          <BrandStrategyStageCard
+            stage="insight" title="Insight 洞察"
+            :has-result="!!strategy.insight_result" :can-generate="canGenerateInsightForFull" :can-edit="canEdit"
+            :generating="generatingBrandStrategyStage === 'insight'" :saving="savingBrandStrategyStage === 'insight'"
+            :result="strategy.insight_result"
+            @generate="handleGenerateBrandStrategyStage('insight')"
+            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('insight', r)"
+          >
+            <InsightContent :result="insightData" />
+          </BrandStrategyStageCard>
+
+          <BrandStrategyStageCard
+            stage="brand_role" title="Brand Role 品牌角色"
+            :has-result="!!strategy.brand_role_result" :can-generate="canGenerateBrandRole" :can-edit="canEdit"
+            :generating="generatingBrandStrategyStage === 'brand_role'" :saving="savingBrandStrategyStage === 'brand_role'"
+            :result="strategy.brand_role_result"
+            @generate="handleGenerateBrandStrategyStage('brand_role')"
+            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('brand_role', r)"
+          >
+            <BrandRoleContent :result="brandRoleData" />
+          </BrandStrategyStageCard>
+
+          <BrandStrategyStageCard
+            stage="big_idea" title="Big Idea 创意"
+            :has-result="!!strategy.big_idea_result" :can-generate="canGenerateBigIdea" :can-edit="canEdit"
+            :generating="generatingBrandStrategyStage === 'big_idea'" :saving="savingBrandStrategyStage === 'big_idea'"
+            :result="strategy.big_idea_result"
+            @generate="handleGenerateBrandStrategyStage('big_idea')"
+            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('big_idea', r)"
+          >
+            <BigIdeaContent :result="bigIdeaData" />
+          </BrandStrategyStageCard>
+        </template>
       </div>
     </ClientOnly>
 
@@ -477,7 +548,7 @@ import type {
   AdjustSliceItem,
   OutputType,
 } from '../../../types'
-import type { BrandStrategyStage, MarketReportStage } from '../../../composables/useStrategies'
+import type { BrandStrategyStage, MarketReportStage } from '../../../composables/useStrategiesApi'
 import { STATUS_MAP, STATUS_ORDER, formatDate, CHANNEL_LABELS } from '../../../composables/useStrategyConstants'
 import { useStrategyPolling } from '../../../composables/useStrategyPolling'
 import { PERMISSIONS } from '~/config/permissions'
@@ -494,7 +565,7 @@ const STAGES = [
 // ── 基础数据 ──────────────────────────────────────────────────────────────────
 
 const route = useRoute()
-const strategiesApi = useStrategies()
+const strategiesApi = useStrategiesApi()
 const { currentUserId, hasPermission } = usePermissions()
 const canEdit = computed(() =>
   hasPermission(PERMISSIONS.STRATEGY_WRITE) || strategy.value?.user_id === currentUserId.value
@@ -541,20 +612,30 @@ const currentStageIndex = computed(() => {
   return 3               // ready, insight_done, brand_role_done, agenda_map_done, landscape_done, completed → ④
 })
 
-// brand_strategy 路径门控：Insight → Brand Role → Big Idea
-const canGenerateBrandRole = computed(() => currentStatusOrder.value >= STATUS_ORDER.insight_done)
-const canGenerateBigIdea = computed(() => currentStatusOrder.value >= STATUS_ORDER.brand_role_done)
+/** 策略实际的产出路径（以 strategy.output_type 为准；编辑研究计划时以用户选择为准） */
+const effectivePathType = computed<OutputType>(() =>
+  strategy.value?.output_type ?? selectedOutputType.value,
+)
+const isBrandStrategyPath = computed(() => effectivePathType.value === 'campaign_strategy')
+const isMarketReportPath = computed(() => effectivePathType.value === 'market_report')
+const isFullStrategyPath = computed(() => effectivePathType.value === 'full_strategy')
+
+// campaign_strategy 路径门控：Insight → Brand Role → Big Idea
+const canGenerateBrandRole = computed(() => {
+  if (isFullStrategyPath.value) return !!strategy.value?.insight_result
+  return currentStatusOrder.value >= STATUS_ORDER.insight_done
+})
+const canGenerateBigIdea = computed(() => {
+  if (isFullStrategyPath.value) return !!strategy.value?.brand_role_result
+  return currentStatusOrder.value >= STATUS_ORDER.brand_role_done
+})
 
 // market_report 路径门控：Agenda Map → Landscape → Strategic Brief
 const canGenerateLandscape = computed(() => currentStatusOrder.value >= STATUS_ORDER.agenda_map_done)
 const canGenerateStrategicBrief = computed(() => currentStatusOrder.value >= STATUS_ORDER.landscape_done)
 
-/** 策略实际的产出路径（以 strategy.output_type 为准；编辑研究计划时以用户选择为准） */
-const effectivePathType = computed<OutputType>(() =>
-  strategy.value?.output_type ?? selectedOutputType.value,
-)
-const isBrandStrategyPath = computed(() => effectivePathType.value === 'brand_strategy')
-const isMarketReportPath = computed(() => effectivePathType.value === 'market_report')
+// full_strategy 专属门控：landscape 完成后才能生成 Insight
+const canGenerateInsightForFull = computed(() => !!strategy.value?.landscape_result)
 
 const taskDimensionMap = computed(() => {
   const rd = strategy.value?.research_design as Record<string, unknown> | null | undefined
@@ -600,7 +681,7 @@ const editingPlan = ref(false)
 const editableDataPlan = ref<DataPlanItem[]>([])
 const editableBlueprint = ref<SliceBlueprintItem[]>([])
 const notesPerTask = ref(50)
-const selectedOutputType = ref<OutputType>('brand_strategy')
+const selectedOutputType = ref<OutputType>('campaign_strategy')
 
 /** 确认研究计划的前置校验：output_type 必须与 data_plan 包含的渠道匹配 */
 const confirmResearchIssue = computed<string | null>(() => {
@@ -609,11 +690,14 @@ const confirmResearchIssue = computed<string | null>(() => {
     dp => (dp.channel || 'social_media') === 'social_media',
   )
   const hasNews = editableDataPlan.value.some(dp => dp.channel === 'news_media')
-  if (selectedOutputType.value === 'brand_strategy' && !hasSocial) {
+  if (selectedOutputType.value === 'campaign_strategy' && !hasSocial) {
     return '品牌策略路径需要至少一个 social_media 维度'
   }
   if (selectedOutputType.value === 'market_report' && !hasNews) {
     return '市场分析报告路径需要至少一个 news_media 维度'
+  }
+  if (selectedOutputType.value === 'full_strategy' && (!hasSocial || !hasNews)) {
+    return '全渠道综合策略需要同时包含 social_media 和 news_media 维度'
   }
   return null
 })

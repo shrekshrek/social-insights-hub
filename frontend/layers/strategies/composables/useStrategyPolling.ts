@@ -17,7 +17,7 @@ export const useStrategyPolling = (
   strategyId: Ref<number>,
   strategy: Ref<Strategy | null | undefined>,
 ) => {
-  const strategiesApi = useStrategies()
+  const strategiesApi = useStrategiesApi()
   let isUnmounted = false
 
   // ── 探测轮询 ────────────────────────────────────────────────────────

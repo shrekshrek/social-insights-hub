@@ -8,7 +8,7 @@ import type {
 /**
  * 跨渠道 AnalysisJob 操作 Composable
  */
-export const useJobs = () => {
+export const useJobsApi = () => {
   const { apiRequest, useApiData, showSuccess } = useApi();
 
   /**

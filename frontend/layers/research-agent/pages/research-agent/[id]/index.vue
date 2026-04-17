@@ -388,7 +388,7 @@ const {
   confidenceColor,
   tierLabel,
   tierColor,
-} = useResearchAgent()
+} = useResearchAgentApi()
 
 const { data: task, pending: loadingTask, refresh: refreshTask } = getTask(taskId)
 const { data: result, refresh: refreshResult } = getTaskResult(taskId)

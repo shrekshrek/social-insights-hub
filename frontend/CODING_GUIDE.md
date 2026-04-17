@@ -122,6 +122,7 @@ export default defineNuxtConfig({
 - **组合式函数**:
     - **全局组合式函数**: 跨业务模块复用的工具函数，放在根目录的 `composables/`
     - **业务组合式函数**: 与特定业务逻辑相关的函数，放在对应 Layer 的 `composables/`
+    - **命名规范**: Layer 内封装后端 API 调用的 composable 统一命名为 `use{Domain}Api`，例如 `useUsersApi`、`useAuditApi`、`useJobsApi`。只封装 API 请求，不混入页面级状态逻辑
 - **Layer 专属后端接口**: 每个 Layer 都可以拥有自己的 `server/` 目录，用于创建与该领域紧密相关的 BFF (Backend for Frontend) API 接口
 - **资源路径处理**: 在 Layer 中引用静态资源时，使用 `#assets` 别名或 `import.meta.url` 来构造绝对路径，确保路径在合并后依然正确
 

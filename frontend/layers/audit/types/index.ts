@@ -7,7 +7,6 @@ import type { PaginatedResponse } from '~/types/common'
 export type AuditAction =
   | 'LOGIN'
   | 'LOGIN_FAILED'
-  | 'LOGOUT'
   | 'CREATE'
   | 'UPDATE'
   | 'DELETE'
@@ -36,9 +35,6 @@ export interface AuditLog {
   operation: string | null
   resource: AuditResource | null
   resource_id: string | null
-  endpoint: string | null
-  path_template: string | null
-  http_method: string | null
   request_path: string | null
   status_code: number | null
   ip_address: string | null
@@ -54,7 +50,6 @@ export interface AuditLogFilterParams {
   user_id?: number
   action?: AuditAction
   resource?: AuditResource
-  endpoint?: string
   start_time?: string
   end_time?: string
 }

@@ -50,7 +50,6 @@ const actionOptions = [
   { label: '全部类型', value: 'all' },
   { label: '登录成功', value: 'LOGIN' },
   { label: '登录失败', value: 'LOGIN_FAILED' },
-  { label: '登出', value: 'LOGOUT' },
   { label: '创建', value: 'CREATE' },
   { label: '更新', value: 'UPDATE' },
   { label: '删除', value: 'DELETE' },
@@ -91,7 +90,6 @@ const formatDateTime = (value: string) => {
 const ACTION_LABELS: Record<string, string> = {
   LOGIN: '登录',
   LOGIN_FAILED: '登录失败',
-  LOGOUT: '登出',
   CREATE: '创建',
   UPDATE: '更新',
   DELETE: '删除',
@@ -101,7 +99,6 @@ const ACTION_LABELS: Record<string, string> = {
 const ACTION_COLORS: Record<string, string> = {
   LOGIN: 'success',
   LOGIN_FAILED: 'error',
-  LOGOUT: 'neutral',
   CREATE: 'info',
   UPDATE: 'warning',
   DELETE: 'error',

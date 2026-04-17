@@ -21,9 +21,6 @@ class AuditLogRead(CustomBaseModel):
     operation: str | None = None
     resource: str | None = None
     resource_id: str | None = None
-    endpoint: str | None = None
-    path_template: str | None = None
-    http_method: str | None = None
     request_path: str | None = None
     status_code: int | None = None
     ip_address: str | None = None
@@ -40,9 +37,6 @@ class AuditLogRead(CustomBaseModel):
             operation=log.operation,
             resource=log.resource,
             resource_id=log.resource_id,
-            endpoint=log.endpoint,
-            path_template=log.path_template,
-            http_method=log.http_method,
             request_path=log.request_path,
             status_code=log.status_code,
             ip_address=log.ip_address,
@@ -61,6 +55,5 @@ class AuditLogFilterParams(CustomBaseModel):
     user_id: int | None = Field(None, description="按用户ID筛选")
     action: str | None = Field(None, description="按操作类型筛选")
     resource: str | None = Field(None, description="按资源类型筛选")
-    endpoint: str | None = Field(None, description="按端点函数名筛选")
     start_time: datetime | None = Field(None, description="开始时间")
     end_time: datetime | None = Field(None, description="结束时间")

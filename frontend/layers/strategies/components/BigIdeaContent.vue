@@ -27,9 +27,14 @@
           :key="idx"
           class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
         >
-          <p class="font-semibold text-gray-900 dark:text-white">
-            支柱 {{ idx + 1 }}: {{ pillar.name }}
-          </p>
+          <div class="flex items-center gap-2">
+            <p class="font-semibold text-gray-900 dark:text-white">
+              支柱 {{ idx + 1 }}: {{ pillar.name }}
+            </p>
+            <UBadge v-if="pillar.strategic_role" :color="ROLE_COLOR[pillar.strategic_role] ?? 'neutral'" variant="soft" size="xs">
+              {{ ROLE_LABEL[pillar.strategic_role] ?? pillar.strategic_role }}
+            </UBadge>
+          </div>
           <p v-if="pillar.description" class="mt-1 text-sm text-gray-600 dark:text-gray-400">
             {{ pillar.description }}
           </p>
@@ -49,6 +54,21 @@
 
 <script setup lang="ts">
 import type { BigIdeaResult } from '../types'
+import { UBadge } from '#components'
+
+const ROLE_LABEL: Record<string, string> = {
+  anchor: '核心表达',
+  leverage: '借势扩散',
+  conversion: '行为转变',
+  disruption: '品类颠覆',
+}
+
+const ROLE_COLOR: Record<string, 'info' | 'warning' | 'success' | 'error'> = {
+  anchor: 'info',
+  leverage: 'warning',
+  conversion: 'success',
+  disruption: 'error',
+}
 
 defineProps<{
   result: BigIdeaResult | null

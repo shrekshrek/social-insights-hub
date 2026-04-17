@@ -226,6 +226,10 @@ def _format_agenda_map_section(agenda_map_result: dict | None) -> str:
                 "sentiment": n.get("sentiment"),
                 "heat_rank": n.get("heat_rank"),
                 "credibility": n.get("credibility"),
+                "representative_voices": [
+                    {"quote": v.get("quote"), "source_tier": v.get("source_tier")}
+                    for v in (n.get("representative_voices") or [])[:2]
+                ],
             }
             for n in (agenda_map_result.get("narrative_map") or [])
         ],

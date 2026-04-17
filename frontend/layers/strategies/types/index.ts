@@ -436,6 +436,7 @@ export interface BigIdea {
 export interface ContentPillar {
   name: string
   description?: string
+  strategic_role?: 'anchor' | 'leverage' | 'conversion' | 'disruption'
   reference_examples?: string[]
 }
 

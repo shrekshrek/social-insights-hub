@@ -228,7 +228,27 @@ async def update_strategy(
 
 
 async def delete_strategy(db: AsyncSession, strategy: Strategy) -> None:
-    """删除策略（CASCADE 自动清理 strategy_slices）"""
+    """删除策略及所有系统自动创建的关联资源。
+
+    清理顺序：
+    1. SocialMonitor（策略专属，级联删其下所有 SocialTask）
+    2. NewsMonitor（策略专属，级联删其下所有 NewsTask）
+    3. Strategy（ORM cascade 自动删 StrategySlice + ResearchTask）
+    """
+    if strategy.social_monitor_id:
+        from src.social_media.monitors.crud import get_social_monitor_by_id
+        monitor = await get_social_monitor_by_id(db, strategy.social_monitor_id, load_relations=False)
+        if monitor:
+            await db.delete(monitor)
+            await db.flush()
+
+    if strategy.news_monitor_id:
+        from src.news_media.monitors.crud import get_monitor_by_id as get_news_monitor_by_id
+        news_monitor = await get_news_monitor_by_id(db, strategy.news_monitor_id, load_relations=False)
+        if news_monitor:
+            await db.delete(news_monitor)
+            await db.flush()
+
     await db.delete(strategy)
     await db.commit()
 
@@ -616,13 +636,25 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
     from src.llm.chains.strategy.research_findings import format_research_for_insight
     research_findings_text = format_research_for_insight(research_result)
 
-    # full_strategy 路径：用 Landscape 结构化输出替代原始新闻切片注入 news_media_section，
-    # 让 Insight 获得的不是零散新闻片段，而是已综合分析的竞争格局视角
+    # full_strategy 路径：用 Landscape 结构化输出替代原始新闻切片，
+    # 并提升其在 Insight 分析中的权重——从"补充证据"升级为"共同推导源"。
+    # 这是 full_strategy 与 campaign_strategy 的核心差异：双视角整合洞察。
     if strategy.output_type == "full_strategy" and strategy.landscape_result:
         landscape_as_news_section = (
-            "## 竞争格局视角（来自 Landscape 分析，替代原始新闻切片）\n\n"
-            "以下为已完成的竞争格局分析结果，包含品类玩家定位、媒体份额和议程战场，"
-            "作为 Insight 分析的竞争背景参考（不是消费者声音，不要混淆）。\n\n"
+            "## 竞争格局视角（Landscape 分析产出，full_strategy 双视角整合模式）\n\n"
+            "**重要：本次为 full_strategy 全渠道综合分析。以下竞争格局数据与社媒消费者数据"
+            "是共同推导 Tension 和 Opportunity 的双主源，不是补充证据。**\n\n"
+            "### 整合分析框架（覆盖本 chain 默认的「新闻数据使用指南」）\n\n"
+            "1. **消费者-媒体分歧 = 最高价值 Tension**：当消费者声音（社媒切片）与媒体竞争格局"
+            "（下方 Landscape）出现矛盾时（如消费者不满但媒体正面报道该品牌，或消费者热议"
+            "但媒体完全忽视），这种分歧本身就是核心 Social Tension，应优先挖掘。\n"
+            "2. **竞争格局验证 Brand Opportunity**：Landscape 的 players / positioning_map / "
+            "discourse_battles 直接用于验证 Brand Opportunity——如果一个消费者机会在竞争格局中"
+            "也显示为竞品空白区（positioning_map 上无人占据），则为高置信度机会。\n"
+            "3. **evidence 可直接引用 Landscape 字段**：evidence.source 可标注"
+            "「竞争格局分析:players[X]」「竞争格局分析:positioning_map」等结构化引用，"
+            "与社媒切片证据同等权重。\n\n"
+            "### Landscape 数据\n\n"
             + json.dumps(strategy.landscape_result, ensure_ascii=False, indent=2)
         )
         effective_news_slices = []  # 原始新闻切片不再注入

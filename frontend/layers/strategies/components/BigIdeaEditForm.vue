@@ -47,6 +47,14 @@
               class="w-full"
             />
           </UFormField>
+          <UFormField label="战略角色">
+            <USelect
+              v-model="pillar.strategic_role"
+              :items="ROLE_OPTIONS"
+              placeholder="选择战略角色"
+              class="w-full"
+            />
+          </UFormField>
           <UFormField label="描述">
             <UTextarea
               v-model="pillar.description"
@@ -76,7 +84,14 @@
 
 <script setup lang="ts">
 import type { BigIdeaResult } from '../types'
-import { UInput, UTextarea, UFormField } from '#components'
+import { UInput, UTextarea, UFormField, USelect } from '#components'
+
+const ROLE_OPTIONS = [
+  { label: '核心表达 (anchor)', value: 'anchor' },
+  { label: '借势扩散 (leverage)', value: 'leverage' },
+  { label: '行为转变 (conversion)', value: 'conversion' },
+  { label: '品类颠覆 (disruption)', value: 'disruption' },
+]
 
 const props = defineProps<{
   result: BigIdeaResult

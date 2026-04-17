@@ -69,7 +69,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
   "social_strategy": {{
     "statement": "策略主张（一句话）",
     "core_message": "核心沟通信息",
-    "rhythm": "传播节奏方向（内容类型比例或触发时机类型，不预测具体发布频率）",
+    "rhythm": "传播基调与内容态度（如'真实体验驱动'vs'专家背书驱动'，描述内容的底层态度和触发逻辑，具体内容类型比例由下游 Content Strategy 决定）",
     "evidence": [
       {{"type": "platform_insight", "description": "平台特征支撑", "source": "slice数据"}},
       {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "slice数据"}}
@@ -80,7 +80,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 ## 要求
 - brand_social_role.statement 简洁有力，一句话定义角色
 - brand_social_role.elaboration 必须包含"我们不是 X（品类惯常角色），我们是 Y（数据揭示的差异化角色）"
-- social_strategy.rhythm 基于 KOL 生态风格和平台分布，给出内容节奏方向（如内容类型比例、触发时机类型），不需要预测具体发布频率
+- social_strategy.rhythm 描述传播的底层基调和内容态度（如"真实体验驱动 vs 专家背书驱动""用户共创优先 vs 品牌叙事优先"），不涉及具体内容类型比例或平台选择（这些由下游 Big Idea 的 Content Strategy 决定）
 - evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, brief_alignment, audience_insight
 - 如切片数据中包含 audiences（受众画像），需在 brand_social_role 和 social_strategy 中明确品牌面向的主要目标受众，而非泛泛而谈
 

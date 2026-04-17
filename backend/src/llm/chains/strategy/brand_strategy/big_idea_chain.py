@@ -82,6 +82,7 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
       {{
         "name": "支柱名称",
         "description": "支柱描述和方向",
+        "strategic_role": "anchor|leverage|conversion|disruption",
         "reference_examples": ["参考案例1", "参考案例2"]
       }}
     ],
@@ -95,7 +96,8 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 ## 要求
 - big_idea.statement 简洁、有创意张力，能引起共鸣
 - big_idea.tension_echo 必须说明创意如何回应核心矛盾
-- content_strategy.pillars 2-4 个，每个含 name + description + reference_examples
+- content_strategy.pillars 2-4 个，每个含 name + description + strategic_role + reference_examples
+- strategic_role 含义：anchor=品牌核心价值长期表达, leverage=借势话题/热点扩散, conversion=推动认知或行为转变, disruption=品类颠覆型内容（至少 1 个支柱须为 disruption）
 - reference_examples 基于切片数据中的内容特征（KOL声音风格、实体高频属性）结合品类创意参考推导，可借鉴其他品类形式
 - evidence 至少 2 条，类型可选: tension_ref, role_alignment, strategy_ref, content_insight, kol_ecosystem, audience_insight
 - 如切片数据中包含 audiences（受众画像），content_strategy 的各支柱需明确面向哪类受众，reference_examples 也要考虑受众匹配度
@@ -104,7 +106,7 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 
 **Big Idea** 需通过自我检验：先想象这个品类"最平庸的创意概念"是什么，再确认输出与之有本质差异。Big Idea 应该让看到它的人有轻微的"没想到"感，而不是"嗯，对"感。
 
-**Content Strategy** 中的支柱须包含至少 1 个"品类颠覆型支柱"——内容方向挑战该品类的惯常做法，而非在品类既有框架内执行。具体要求：
+**Content Strategy** 中至少 1 个支柱的 strategic_role 须为 `disruption`——内容方向挑战该品类的惯常做法，而非在品类既有框架内执行。具体要求：
 - 在该支柱的 description 中注明"品类通常如何做 X，我们反其道而行的逻辑是什么"
 - reference_examples 可以借鉴**其他品类**的内容形式，不限于本品类 KOL
 

@@ -268,14 +268,18 @@ def format_research_for_strategic_brief(result_data: dict | None) -> str:
 # ---------------------------------------------------------------------------
 
 def format_creative_for_brand_role(result_data: dict | None) -> str:
-    """Brand Role 层的创意研究注入（~400 tokens）：竞品已占据的创意角色
+    """Brand Role 层的创意研究注入（~450 tokens）：竞品已占据的创意角色 + 创意盲点
 
     从创意研究中提取竞品已占据的创意角色，为 Brand Role 推导差异化切入点。
-    核心逻辑：了解"别人已在哪"，才能找到"我们该去哪"。
+    核心逻辑：了解"别人已在哪" + "哪里没人去"，才能找到"我们该去哪"。
+
+    information_gaps（创意盲点）的作用：弥补 synthesis[:600] 截断可能漏掉的
+    "竞品已尝试但放弃/品类内从未出现"信息，防止 Brand Role 过度排除。
     """
     rd = _load_result(result_data)
     synthesis = rd.get("synthesis", "")
     findings = rd.get("findings_by_question")
+    gaps = rd.get("information_gaps")
 
     if not synthesis and not findings:
         return ""
@@ -308,6 +312,16 @@ def format_creative_for_brand_role(result_data: dict | None) -> str:
             parts.append("### 竞品已占据的创意角色\n")
             parts.extend(occupied_roles[:5])
             parts.append("")
+
+    # 创意盲点：现有案例库中缺乏清晰参考的方向
+    # 可能是"没人做过"也可能是"搜索未覆盖"——Brand Role 排除时需留意
+    if gaps:
+        parts.append("### 创意参考缺口（现有案例未覆盖的方向）\n")
+        parts.append("以下方向在竞品案例库中缺乏清晰参考，可能是尚未被探索的空白，"
+                     "也可能只是搜索覆盖不足——排除竞品角色时应考虑这些方向的不确定性。\n")
+        for gap in gaps[:3]:
+            parts.append(f"- {gap}")
+        parts.append("")
 
     return "\n".join(parts)
 

@@ -29,7 +29,7 @@ export const STATUS_ORDER: Record<StrategyStatus, number> = {
 }
 
 export const OUTPUT_TYPE_LABELS: Record<OutputType, string> = {
-  campaign_strategy: '品牌策略 (Insight → Brand Role → Big Idea)',
+  campaign_strategy: '品牌传播策略 (Insight → Brand Role → Big Idea)',
   market_report: '市场分析报告 (Agenda Map → Landscape → Strategic Brief)',
   full_strategy: '全渠道综合策略 (Agenda Map → Landscape → Insight → Brand Role → Big Idea)',
 }

@@ -5,11 +5,21 @@ brand_strategy 三阶段递进分析的**第 1 层**：insight → brand_role �
 
 从切片数据中提取社会矛盾/未满足需求，及品牌可切入的机会。
 
-## 输入上下文（USER_TEMPLATE 的四个占位符）
+## 两种运行模式
+
+- **campaign_strategy 模式**：社媒切片为主源，新闻数据作为补充证据
+- **full_strategy 模式**：社媒切片 + Landscape 竞争格局分析为**双主源**，
+  service 层在 news_media_section 中注入整合分析框架，覆盖本文件中
+  "新闻数据使用指南"的默认权重（补充→共同推导）。消费者-媒体分歧是
+  full_strategy 模式下最高价值的 Tension 来源。
+
+## 输入上下文（USER_TEMPLATE 的占位符）
 
 - brief_section     : 品牌 Brief（目标/竞品/关注维度），来自 strategy.brand_brief
 - research_context_section: 研究问题 + 需求理解摘要，来自 strategy.research_design
 - slice_data        : 所有关联切片的聚合分析数据，由 format_slice_data_for_insight() 构建
+- news_media_section: campaign_strategy 下为新闻切片补充段落；
+                      full_strategy 下为 Landscape 结构化输出 + 整合分析框架（由 service 层覆盖）
 
 ## 关键设计决策
 

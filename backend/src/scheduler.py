@@ -21,7 +21,7 @@ def create_scheduler() -> AsyncIOScheduler:
     from src.strategies.tasks import (
         check_collecting_strategies,
         check_probing_strategies,
-        reset_stuck_news_probe_tasks,
+        reset_stuck_news_tasks,
     )
 
     scheduler.add_job(
@@ -41,10 +41,10 @@ def create_scheduler() -> AsyncIOScheduler:
         misfire_grace_time=60,
     )
     scheduler.add_job(
-        reset_stuck_news_probe_tasks,
+        reset_stuck_news_tasks,
         "interval",
         minutes=5,
-        id="news_probe_watchdog",
+        id="news_task_watchdog",
         max_instances=1,
         misfire_grace_time=60,
     )

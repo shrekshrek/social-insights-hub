@@ -149,6 +149,6 @@ backend/src/
 ## 注意事项
 
 - 后端命令在 Docker 容器内执行 (pnpm scripts 自动代理)
-- Celery Worker 使用 gevent pool，LLM 调用走异步
-- APScheduler 运行在 FastAPI asyncio 事件循环中，负责所有轻量定时任务；无需 celery-beat 容器。已注册的 job：`strategy_probe`（探测完成→触发 LLM 审查，2 min）/ `strategy_collection`（全量完成→建切片，2 min）/ `news_probe_watchdog`（新闻探测任务超时回收，5 min）/ `agent_timeout_reset`（agent 超时回收，5 min）/ `crawl_nbs`/`crawl_cnnic`/`crawl_govsite`（KB 爬虫，月度/周度）。详见 `strategies/CLAUDE.md § 定时任务`
+- Celery Worker 使用 gevent pool，LLM 调用走异步。**Celery 任务中禁止裸调 `asyncio.run()`**——gevent monkey-patch 后 greenlet 内已有事件循环，直接调用会触发 `RuntimeError: asyncio.run() cannot be called from a running event loop`。必须通过 `gevent.get_hub().threadpool.apply(asyncio.run, (coro,))` 在真实 OS 线程中运行协程（参考 `knowledge_base/tasks.py` 的 `_run_async` 辅助函数）
+- APScheduler 运行在 FastAPI asyncio 事件循环中，负责所有轻量定时任务；无需 celery-beat 容器。已注册的 job：`strategy_probe`（探测完成→触发 LLM 审查，2 min）/ `strategy_collection`（全量完成→建切片，2 min）/ `news_task_watchdog`（新闻任务超时回收，probe + collect，5 min）/ `agent_timeout_reset`（agent 超时回收，5 min）/ `crawl_nbs`/`crawl_cnnic`/`crawl_govsite`（KB 爬虫，月度/周度）。详见 `strategies/CLAUDE.md § 定时任务`
 - 每次 LLM 调用记录 token 用量和费用到 AnalysisJob

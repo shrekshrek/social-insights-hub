@@ -192,7 +192,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 |--------|------|------|------|
 | `strategy_probe` | `check_probing_strategies` | 2 分钟 | 扫描 `status=probing` 的策略，所有探测任务（社媒 + 新闻）均达到终态后自动触发 LLM probe review |
 | `strategy_collection` | `check_collecting_strategies` | 2 分钟 | 扫描 `status=collecting` 的策略，所有全量任务完成且有分析结果后自动创建切片 + 覆盖度验证 |
-| `news_probe_watchdog` | `reset_stuck_news_probe_tasks` | 5 分钟 | 将策略新闻探测任务中 `running`（Worker 崩溃）或 `pending`（Worker 宕机未消费）超过 20 分钟的记录标记为 `failed`，防止策略永久卡住 |
+| `news_task_watchdog` | `reset_stuck_news_tasks` | 5 分钟 | 将策略新闻任务（probe + collect）中 `running`（Worker 崩溃）或 `pending`（Worker 宕机未消费）超过 20 分钟的记录标记为 `failed`，防止策略永久卡住 |
 
 ### 终态定义
 

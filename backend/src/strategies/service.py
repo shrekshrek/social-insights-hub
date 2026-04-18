@@ -235,19 +235,26 @@ async def delete_strategy(db: AsyncSession, strategy: Strategy) -> None:
     2. NewsMonitor（策略专属，级联删其下所有 NewsTask）
     3. Strategy（ORM cascade 自动删 StrategySlice + ResearchTask）
     """
+    social_monitor = None
+    news_monitor = None
+
     if strategy.social_monitor_id:
         from src.social_media.monitors.crud import get_social_monitor_by_id
-        monitor = await get_social_monitor_by_id(db, strategy.social_monitor_id, load_relations=False)
-        if monitor:
-            await db.delete(monitor)
-            await db.flush()
+        social_monitor = await get_social_monitor_by_id(db, strategy.social_monitor_id, load_relations=False)
 
     if strategy.news_monitor_id:
         from src.news_media.monitors.crud import get_monitor_by_id as get_news_monitor_by_id
         news_monitor = await get_news_monitor_by_id(db, strategy.news_monitor_id, load_relations=False)
-        if news_monitor:
-            await db.delete(news_monitor)
-            await db.flush()
+
+    strategy.social_monitor_id = None
+    strategy.news_monitor_id = None
+    await db.flush()
+
+    if social_monitor:
+        await db.delete(social_monitor)
+    if news_monitor:
+        await db.delete(news_monitor)
+    await db.flush()
 
     await db.delete(strategy)
     await db.commit()
@@ -1575,16 +1582,26 @@ async def confirm_research(
         primary_sources.append("news_media")
     research_design["primary_sources"] = primary_sources
 
-    # 预估总任务数，超过 20 个视为异常（提示用户精简，而非静默创建大量任务）
-    # 社媒: keywords × platforms；新闻: keywords（每个关键词 1 个任务，无 platforms）
-    estimated_tasks = sum(
-        len(dp.get("keywords") or []) * max(len(dp.get("platforms") or []), 1)
+    # 预估任务数，社媒和新闻分开校验（新闻任务轻量，不应与社媒共享预算）
+    social_tasks = sum(
+        len(dp.get("keywords") or []) * len(dp.get("platforms") or [])
         for dp in data_plan
+        if (dp.get("channel") or "social_media") == "social_media"
     )
-    if estimated_tasks > 20:
+    news_tasks = sum(
+        len(dp.get("keywords") or [])
+        for dp in data_plan
+        if dp.get("channel") == "news_media"
+    )
+    if social_tasks > 20:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"研究计划预估任务数（{estimated_tasks}）过多，请精简关键词或平台（建议 6-10 个任务）",
+            detail=f"社媒采集任务数（{social_tasks}）过多，请精简关键词或平台（建议 8-12 个）",
+        )
+    if news_tasks > 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"新闻采集任务数（{news_tasks}）过多，请精简关键词（建议 2-4 个）",
         )
 
     # 保存用户编辑后的研究计划 + 用户显式选择的 output_type（覆盖 LLM 建议值）

@@ -49,6 +49,10 @@ SINGLE_TASK_SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估�
 **suggested_keyword 是提交给平台的单一搜索查询**（可包含空格），禁止用 `|` 拼接多个备选查询。
 如果 fail 的原因是「该品牌/话题在该平台的讨论量本身稀少（无论换什么关键词都搜不到足量相关内容）」，可将 suggested_keyword 设为 null，表示平台级数据稀疏，建议移除。这与「关键词不精准」不同——前者换词也无法解决，后者可以通过换词改善。
 
+**替换关键词必须遵守研究设计的维度规则**：
+- **维度词汇隔离**：brand_voice 只用品牌专属词，competitive 只用竞品品牌词，consumer_voice / industry 只用品类通用词——替换关键词不得跨维度混入不属于该维度的词汇
+- **同维度风格一致**：替换关键词的词性结构和语义粒度应与本维度内现有关键词保持一致（输入中会列出本维度现有关键词作为参考），确保跨平台数据可比
+
 **竞品维度的平台对称保护**：若当前 fail 任务属于竞品维度（competitive），且其所在平台同时被主品维度（brand_voice）使用，应优先尝试换词（调整 suggested_keyword）而非建议移除该平台（suggested_keyword=null）。主品和竞品在相同平台采集是横向对比的基础，轻易移除竞品在某平台的任务会破坏数据对称性，导致后续对比结论失真。只有在确认该平台对竞品研究完全无效（无论如何换词都无法召回相关内容）时，才允许建议移除。
 
 **注意**：你在评估单个任务，看不到其他任务的结果。主品与竞品跨平台的整体对称性问题（如主品只在平台 A 有数据、竞品只在平台 B 有数据）由系统在汇总所有评估后统一检测处理，你无需承担跨任务的协调责任——聚焦判断当前任务本身是否能召回有价值的内容即可。
@@ -151,6 +155,20 @@ def format_single_task_probe_review_inputs(
             f"⚠️ 竞品对称保护：主品维度（brand_voice）采集平台为 {', '.join(brand_voice_platforms)}。"
             f"当前平台 {task.get('platform', '')} {'已被主品维度使用，建议换词而非移除' if task.get('platform', '') in brand_voice_platforms else '未被主品维度使用，可视情况移除'}。"
         )
+
+    # 注入同维度的其他关键词，供 LLM 保持替换建议的风格一致性
+    if dim_name:
+        for dp in data_plan:
+            if dp.get("dimension_name") == dim_name and dp.get("channel", "social_media") == "social_media":
+                other_keywords = dp.get("keywords") or []
+                other_platforms = dp.get("platforms") or []
+                if other_keywords:
+                    task_lines.append(
+                        f"本维度（{dim_name}）现有关键词: {', '.join(other_keywords)}"
+                        f" | 平台: {', '.join(other_platforms)}"
+                    )
+                    task_lines.append("↑ 替换建议应与上述关键词风格保持一致，确保跨平台可比性")
+                break
 
     rqs_for_dim = dim_to_rqs.get(dim_name) if dim_name else None
     if rqs_for_dim:

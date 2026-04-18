@@ -56,6 +56,8 @@ class UserRead(CustomBaseModel):
     id: int
     username: str
     email: EmailStr | None
+    oauth_provider: str | None = None
+    avatar_url: str | None = None
     created_at: datetime
     updated_at: datetime
     roles: List[str] = Field(default_factory=list)  # 用户的角色名称列表
@@ -67,6 +69,8 @@ class UserRead(CustomBaseModel):
             id=user.id,
             username=user.username,
             email=user.email,
+            oauth_provider=user.oauth_provider,
+            avatar_url=user.avatar_url,
             created_at=user.created_at,
             updated_at=user.updated_at,
             roles=role_names,
@@ -99,3 +103,20 @@ class ChangePassword(CustomBaseModel):
     def validate_new_password(cls, v: str) -> str:
         """验证新密码强度"""
         return _validate_password_strength(v)
+
+
+# --- Feishu OAuth Schemas ---
+
+
+class FeishuAuthUrlResponse(CustomBaseModel):
+    """飞书授权 URL 响应"""
+
+    authorize_url: str
+    state: str
+
+
+class FeishuCallbackRequest(CustomBaseModel):
+    """飞书 OAuth 回调请求"""
+
+    code: str = Field(..., description="飞书授权码")
+    state: str = Field(..., description="CSRF 防护 state 参数")

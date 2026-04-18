@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   const method = getMethod(event)
   
   // 简化的API认证检查（内联逻辑）
-  const publicPaths = ['/auth/login', '/auth/register', '/auth/token', '/auth/logout', '/auth/request-password-reset', '/auth/reset-password']
+  const publicPaths = ['/auth/login', '/auth/register', '/auth/token', '/auth/logout', '/auth/request-password-reset', '/auth/reset-password', '/auth/feishu/authorize', '/auth/feishu/callback']
   const needsAuth = cleanPath && !publicPaths.some(p => cleanPath === p || cleanPath.startsWith(p + '/'))
   
   // 准备请求头，过滤掉可能有问题的头部

@@ -29,14 +29,29 @@ async def get_user_by_email(db: AsyncSession, email: str):
     return result.scalar_one_or_none()
 
 
+async def get_user_by_open_id(db: AsyncSession, open_id: str):
+    """
+    根据飞书 open_id 获取用户
+    """
+    result = await db.execute(
+        select(models.User)
+        .options(selectinload(models.User.user_roles).selectinload(UserRole.role))
+        .where(models.User.oauth_open_id == open_id)
+    )
+    return result.scalar_one_or_none()
+
+
 async def authenticate_user(
     db: AsyncSession, username: str, password: str
 ) -> models.User | None:
     """
-    验证用户身份
+    验证用户身份（仅密码登录用户）
     """
     user = await get_user_by_username(db, username=username)
     if not user:
+        return None
+    # 飞书用户无密码，不允许密码登录
+    if not user.hashed_password:
         return None
     if not verify_password(password, user.hashed_password):
         return None
@@ -120,3 +135,54 @@ async def change_password(
     await db.refresh(user)
 
     return True
+
+
+async def get_or_create_feishu_user(
+    db: AsyncSession,
+    open_id: str,
+    name: str,
+    avatar_url: str | None,
+    email: str | None,
+) -> models.User:
+    """
+    按飞书 open_id 查找用户，不存在则自动创建。
+
+    - 已存在：更新 avatar_url（飞书头像可能变更）后返回
+    - 不存在：创建新用户，username 取飞书 name（冲突时追加随机后缀），分配默认角色
+    """
+    import secrets
+
+    user = await get_user_by_open_id(db, open_id)
+    if user:
+        # 更新可能变化的头像
+        if user.avatar_url != avatar_url:
+            user.avatar_url = avatar_url
+            await db.commit()
+            await db.refresh(user)
+        return user
+
+    # 生成不冲突的 username
+    base_name = name.lower().replace(" ", "_")[:40]
+    username = base_name
+    existing = await get_user_by_username(db, username)
+    if existing:
+        username = f"{base_name}_{secrets.token_hex(3)}"
+
+    db_user = models.User(
+        username=username,
+        email=email,
+        hashed_password=None,
+        oauth_provider="feishu",
+        oauth_open_id=open_id,
+        avatar_url=avatar_url,
+    )
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+
+    # 分配默认角色
+    default_role = await rbac_service.get_role_by_name(db, SystemRoles.USER)
+    if default_role:
+        await rbac_service.assign_user_roles(db, db_user.id, [default_role.id])
+
+    return db_user

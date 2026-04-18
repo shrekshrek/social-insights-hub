@@ -14,6 +14,8 @@ declare module '#auth-utils' {
     username: string
     is_active: boolean
     is_superuser: boolean
+    oauth_provider?: string | null
+    avatar_url?: string | null
     created_at: string
     updated_at: string
     roles?: string[]

@@ -156,6 +156,35 @@ export const useAuthApi = () => {
     return result
   }
   
+  /**
+   * 飞书扫码登录 - 跳转到飞书授权页
+   */
+  const feishuLogin = async () => {
+    const data = await $fetch<{ authorize_url: string; state: string }>('/api/auth/feishu/authorize')
+    // 跳转到飞书授权页（整页跳转）
+    window.location.href = data.authorize_url
+  }
+
+  /**
+   * 飞书 OAuth 回调处理 - 用 code 换取登录态
+   */
+  const feishuCallback = async (code: string, state: string) => {
+    const result = await $fetch<{ success: boolean; user: User }>('/api/auth/feishu/callback', {
+      method: 'POST',
+      body: { code, state }
+    })
+
+    // 刷新客户端 session 状态
+    await refreshSession()
+
+    // 更新用户 store
+    if (result.user) {
+      userStore.setUser(result.user)
+    }
+
+    return result
+  }
+
   return {
     register,
     login,
@@ -164,5 +193,7 @@ export const useAuthApi = () => {
     requestPasswordReset,
     resetPassword,
     changePassword,
+    feishuLogin,
+    feishuCallback,
   }
 } 

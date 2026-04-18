@@ -2,50 +2,75 @@
   <div>
     <div class="text-center mb-8">
       <h2 class="text-2xl font-bold text-gray-900">登录</h2>
-      <p class="text-gray-600 mt-2">请登录您的账户</p>
+      <p class="text-gray-600 mt-2">使用飞书账号登录系统</p>
     </div>
 
-    <UForm
-      :schema="schema"
-      :state="state"
-      class="space-y-4"
-      @submit="handleLogin"
+    <UButton
+      block
+      size="xl"
+      :loading="isFeishuLoading"
+      @click="handleFeishuLogin"
     >
-      <UFormField label="用户名" name="username">
-        <UInput
-          v-model="state.username"
-          type="text"
-          placeholder="请输入用户名"
-          size="lg"
-          required
-        />
-      </UFormField>
+      <template #leading>
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 7.5L10.5 3L21 13.5L13.5 18L3 7.5Z" fill="#00D6B9" />
+          <path d="M3 7.5L13.5 18L10.5 21L3 7.5Z" fill="#133C9A" />
+          <path d="M10.5 3L21 13.5L13.5 18L10.5 3Z" fill="#3370FF" />
+        </svg>
+      </template>
+      {{ isFeishuLoading ? "跳转中..." : "飞书扫码登录" }}
+    </UButton>
 
-      <UFormField label="密码" name="password">
-        <UInput
-          v-model="state.password"
-          type="password"
-          placeholder="请输入密码"
-          size="lg"
-          required
-        />
-      </UFormField>
+    <div class="mt-8">
+      <button
+        type="button"
+        class="w-full text-center text-sm text-gray-400 hover:text-gray-600 transition-colors"
+        @click="showPasswordLogin = !showPasswordLogin"
+      >
+        {{ showPasswordLogin ? "收起" : "使用账号密码登录" }}
+      </button>
 
-      <UButton type="submit" block size="lg" :loading="isLoading" class="mt-6">
-        {{ isLoading ? "登录中..." : "登录" }}
-      </UButton>
-    </UForm>
+      <Transition
+        enter-active-class="transition-all duration-200 ease-out"
+        enter-from-class="opacity-0 max-h-0"
+        enter-to-class="opacity-100 max-h-80"
+        leave-active-class="transition-all duration-150 ease-in"
+        leave-from-class="opacity-100 max-h-80"
+        leave-to-class="opacity-0 max-h-0"
+      >
+        <div v-if="showPasswordLogin" class="overflow-hidden mt-4">
+          <UForm
+            :schema="schema"
+            :state="state"
+            class="space-y-4"
+            @submit="handleLogin"
+          >
+            <UFormField label="用户名" name="username">
+              <UInput
+                v-model="state.username"
+                type="text"
+                placeholder="请输入用户名"
+                size="lg"
+                required
+              />
+            </UFormField>
 
-    <div class="mt-8 text-center space-y-4">
-      <div class="text-sm text-gray-600">
-        还没有账户？
-        <NuxtLink
-          to="/register"
-          class="text-blue-600 hover:text-blue-500 font-medium"
-        >
-          立即注册
-        </NuxtLink>
-      </div>
+            <UFormField label="密码" name="password">
+              <UInput
+                v-model="state.password"
+                type="password"
+                placeholder="请输入密码"
+                size="lg"
+                required
+              />
+            </UFormField>
+
+            <UButton type="submit" block size="lg" variant="outline" :loading="isLoading">
+              {{ isLoading ? "登录中..." : "登录" }}
+            </UButton>
+          </UForm>
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -56,11 +81,12 @@ import type { FormSubmitEvent } from "@nuxt/ui";
 
 definePageMeta({
   layout: "auth",
-  // 认证保护已由全局认证守卫处理，无需重复定义
 });
 
-const { login } = useAuthApi();
+const { login, feishuLogin } = useAuthApi();
 const isLoading = ref(false);
+const isFeishuLoading = ref(false);
+const showPasswordLogin = ref(false);
 
 const schema = z.object({
   username: z.string().min(1, "用户名不能为空"),
@@ -74,20 +100,24 @@ const state = reactive<Schema>({
   password: "",
 });
 
+async function handleFeishuLogin() {
+  isFeishuLoading.value = true;
+  try {
+    await feishuLogin();
+  } catch {
+    isFeishuLoading.value = false;
+  }
+}
+
 async function handleLogin(event: FormSubmitEvent<Schema>) {
   isLoading.value = true;
   try {
-    // 使用新的login方法
     await login({
       username: event.data.username,
       password: event.data.password,
     });
-    
-    // 登录成功后跳转到工作台
-    // 使用完整页面刷新跳转，确保服务端能正确读取新设置的 session cookie
     await navigateTo("/dashboard", { replace: true });
   } catch (error) {
-    // 错误已经由 useAuthApi 处理并显示toast
     console.error("Login error:", error);
   } finally {
     isLoading.value = false;

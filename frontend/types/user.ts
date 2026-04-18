@@ -16,6 +16,8 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  oauth_provider?: string | null;
+  avatar_url?: string | null;
   roles?: string[]; // 用户的角色名称数组（与后端一致）
   created_at: string; // ISO 8601 格式的时间字符串
   updated_at: string; // ISO 8601 格式的时间字符串

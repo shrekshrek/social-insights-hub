@@ -219,23 +219,15 @@ class Settings(BaseSettings):
         default=2.0, description="Hours before accepted task is reset to pending"
     )
 
-    # ========== Feishu Notification Configuration ==========
-    FEISHU_ENABLED: bool = Field(
-        default=False, description="Enable Feishu group bot webhook notifications"
+    # ========== Feishu Configuration ==========
+    FEISHU_APP_ID: str | None = Field(
+        default=None, description="Feishu app ID for OAuth login and messaging API"
     )
-    FEISHU_WEBHOOK_URL: str | None = Field(
-        default=None, description="Feishu group bot webhook URL"
+    FEISHU_APP_SECRET: str | None = Field(
+        default=None, description="Feishu app secret for OAuth login and messaging API"
     )
     FEISHU_FRONTEND_URL: str = Field(
         default="", description="Frontend base URL for strategy deep links in notifications"
-    )
-
-    # ========== Feishu OAuth Configuration ==========
-    FEISHU_APP_ID: str | None = Field(
-        default=None, description="Feishu app ID for OAuth login"
-    )
-    FEISHU_APP_SECRET: str | None = Field(
-        default=None, description="Feishu app secret for OAuth login"
     )
     FEISHU_OAUTH_REDIRECT_URI: str | None = Field(
         default=None,

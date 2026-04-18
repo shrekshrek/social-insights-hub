@@ -17,7 +17,18 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(
         String(100), unique=True, index=True, nullable=True
     )
-    hashed_password: Mapped[str] = mapped_column(String)
+    hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # OAuth 字段
+    oauth_provider: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="OAuth provider: feishu"
+    )
+    oauth_open_id: Mapped[str | None] = mapped_column(
+        String(128), unique=True, nullable=True, index=True, comment="OAuth provider open_id"
+    )
+    avatar_url: Mapped[str | None] = mapped_column(
+        String(500), nullable=True, comment="User avatar URL from OAuth provider"
+    )
 
     # 时间戳字段
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

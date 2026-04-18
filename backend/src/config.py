@@ -205,6 +205,9 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str | None = Field(
         default=None, description="Tavily Search API key (required when SEARCH_PROVIDER=tavily)"
     )
+    TAVILY_API_KEY_2: str | None = Field(
+        default=None, description="Tavily backup API key, auto-fallback when primary key quota exceeded"
+    )
     EXA_API_KEY: str | None = Field(
         default=None, description="Exa Search API key (required when SEARCH_PROVIDER=exa)"
     )
@@ -225,6 +228,18 @@ class Settings(BaseSettings):
     )
     FEISHU_FRONTEND_URL: str = Field(
         default="", description="Frontend base URL for strategy deep links in notifications"
+    )
+
+    # ========== Feishu OAuth Configuration ==========
+    FEISHU_APP_ID: str | None = Field(
+        default=None, description="Feishu app ID for OAuth login"
+    )
+    FEISHU_APP_SECRET: str | None = Field(
+        default=None, description="Feishu app secret for OAuth login"
+    )
+    FEISHU_OAUTH_REDIRECT_URI: str | None = Field(
+        default=None,
+        description="OAuth callback URL, e.g. https://example.com/auth/feishu/callback",
     )
 
     @field_validator("SECRET_KEY")

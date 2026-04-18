@@ -500,6 +500,7 @@ searcher_node（双轨并行）
 | 控制项 | 值 | 配置方式 |
 |--------|-----|---------|
 | `TAVILY_API_KEY` | — | **环境变量**（必需） |
+| `TAVILY_API_KEY_2` | — | **环境变量**（可选，主 key 额度耗尽时自动切换） |
 | `RESEARCH_AGENT_TARGET_DOMAINS` | 见下方源列表 | **src/config.py**（`Settings` 字段，可通过环境变量覆盖） |
 | `max_rounds` | 4 | `research_agent/config.py` 硬编码常量 |
 | `fetch_timeout` | 30s | `research_agent/config.py` 硬编码常量 |
@@ -680,6 +681,7 @@ task = await db.scalar(
 ```python
 # config.py 新增（仅 2 个环境变量，其余硬编码在 research_agent/config.py）
 TAVILY_API_KEY: str                          # Tavily 搜索 API key
+TAVILY_API_KEY_2: str | None = None          # 备用 key，主 key 额度耗尽自动切换
 RESEARCH_AGENT_TARGET_DOMAINS: list[str] = [  # 定向搜索域名
     "mckinsey.com.cn", "mckinsey.com",
     "deloitte.com",

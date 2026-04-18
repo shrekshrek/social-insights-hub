@@ -2,15 +2,28 @@
 
 同步调用（gevent 兼容），始终使用 include_domains 定向搜索。
 只搜索指定权威域名，不做开放全网搜索。
+支持双 API Key：主 key 额度耗尽时自动切换备用 key。
 """
 
 import logging
 
 from tavily import TavilyClient
+from tavily.errors import UsageLimitExceededError
 
 from src.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _get_api_keys() -> list[str]:
+    """返回可用的 Tavily API key 列表（主 key 在前）"""
+    settings = get_settings()
+    keys: list[str] = []
+    if settings.TAVILY_API_KEY:
+        keys.append(settings.TAVILY_API_KEY)
+    if settings.TAVILY_API_KEY_2:
+        keys.append(settings.TAVILY_API_KEY_2)
+    return keys
 
 
 def tavily_search(
@@ -30,8 +43,8 @@ def tavily_search(
     -------
     list[dict] : [{title, url, snippet, score}]
     """
-    settings = get_settings()
-    if not settings.TAVILY_API_KEY:
+    api_keys = _get_api_keys()
+    if not api_keys:
         logger.warning("TAVILY_API_KEY 未配置，跳过搜索")
         return []
 
@@ -39,26 +52,39 @@ def tavily_search(
         logger.warning("target_domains 为空，跳过搜索")
         return []
 
-    client = TavilyClient(api_key=settings.TAVILY_API_KEY)
+    for i, key in enumerate(api_keys):
+        client = TavilyClient(api_key=key)
+        try:
+            resp = client.search(
+                query=query,
+                include_domains=target_domains,
+                max_results=max_results,
+                search_depth="advanced",
+            )
+            results = resp.get("results", [])
 
-    try:
-        resp = client.search(
-            query=query,
-            include_domains=target_domains,
-            max_results=max_results,
-            search_depth="advanced",
-        )
-        results = resp.get("results", [])
+            return [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "snippet": r.get("content", ""),
+                    "score": r.get("score", 0.0),
+                }
+                for r in results
+            ]
+        except UsageLimitExceededError:
+            key_label = "主" if i == 0 else "备用"
+            if i + 1 < len(api_keys):
+                logger.warning(
+                    "Tavily %s key 额度耗尽，切换到下一个 key: query=%s",
+                    key_label,
+                    query,
+                )
+                continue
+            logger.error("Tavily 所有 key 额度均已耗尽: query=%s", query)
+            return []
+        except Exception:
+            logger.exception("Tavily 搜索失败: query=%s", query)
+            return []
 
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "snippet": r.get("content", ""),
-                "score": r.get("score", 0.0),
-            }
-            for r in results
-        ]
-    except Exception:
-        logger.exception("Tavily 搜索失败: query=%s", query)
-        return []
+    return []

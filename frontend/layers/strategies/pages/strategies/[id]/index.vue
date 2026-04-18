@@ -63,7 +63,7 @@
           <UButton variant="outline" icon="i-heroicons-arrow-down-tray" @click="handleExport">
             导出 Word
           </UButton>
-          <UButton v-if="canDelete" variant="ghost" color="error" icon="i-heroicons-trash" @click="handleDelete">
+          <UButton v-if="canDelete" variant="outline" color="error" icon="i-heroicons-trash" @click="handleDelete">
             删除
           </UButton>
         </div>
@@ -970,7 +970,12 @@ const handleDelete = async () => {
   if (!strategy.value) return
   try {
     const { $confirm } = useNuxtApp()
-    const confirmed = await $confirm(`确定要删除策略「${strategy.value.name}」吗？`)
+    const confirmed = await $confirm({
+      title: '删除策略',
+      message: `确定要删除策略「${strategy.value.name}」吗？此操作不可恢复，关联的监测项目、采集任务及所有数据也将被删除。`,
+      confirmText: '删除',
+      type: 'error',
+    })
     if (!confirmed) return
     await strategiesApi.deleteStrategy(strategyId.value)
     navigateTo('/strategies')

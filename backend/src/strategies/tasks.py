@@ -3,7 +3,7 @@
 主动检测策略状态，替代原有「前端轮询才能触发」的设计缺陷：
 - check_probing_strategies:       探测任务全部分析完成 → 自动触发 LLM 审查
 - check_collecting_strategies:    全量采集全部完成   → 自动触发建切片 + 覆盖度验证
-- reset_stuck_news_probe_tasks:   超时的 running 新闻探测任务 → 自动标记为 failed
+- reset_stuck_news_tasks:         超时的 running/pending 新闻任务（probe + collect）→ 自动标记为 failed
 """
 
 import logging
@@ -180,13 +180,14 @@ async def check_collecting_strategies() -> int:
     return triggered
 
 
-async def reset_stuck_news_probe_tasks() -> int:
-    """将超时的新闻探测任务标记为 failed，覆盖两种卡死场景：
+async def reset_stuck_news_tasks() -> int:
+    """将超时的策略新闻任务（probe + collect）标记为 failed。
 
-    - running 超时：Celery Worker 崩溃，任务执行到一半未完成
-    - pending 超时：Celery Worker 宕机，任务从未被消费（started_at=NULL）
+    覆盖场景：
+    - probe running/pending 超时：Celery Worker 崩溃或宕机
+    - collect running/pending 超时：同上（gevent + asyncio.run 兼容问题等）
 
-    两种情况均以 created_at 超过阈值为判断依据（running 任务 started_at 可能为 NULL）。
+    以 created_at 超过阈值为判断依据（started_at 可能为 NULL）。
     """
     from src.news_media.tasks.models import NewsTask
     from sqlalchemy import or_
@@ -198,7 +199,6 @@ async def reset_stuck_news_probe_tasks() -> int:
             update(NewsTask)
             .where(
                 and_(
-                    NewsTask.phase == "probe",
                     NewsTask.strategy_id.is_not(None),
                     or_(
                         and_(NewsTask.status == "running", NewsTask.created_at < timeout_before),
@@ -210,15 +210,17 @@ async def reset_stuck_news_probe_tasks() -> int:
                 status="failed",
                 error_message=f"任务超时（>{_NEWS_PROBE_TIMEOUT_MINUTES} 分钟仍未完成，watchdog 自动标记）",
             )
-            .returning(NewsTask.id)
+            .returning(NewsTask.id, NewsTask.phase)
         )
-        stuck_ids = list(result.scalars().all())
-        if stuck_ids:
+        stuck_rows = result.all()
+        if stuck_rows:
             await db.commit()
+            stuck_ids = [r[0] for r in stuck_rows]
             logger.warning(
-                "Watchdog: reset %d stuck news probe tasks → failed: %s",
+                "Watchdog: reset %d stuck news tasks → failed: %s",
                 len(stuck_ids),
-                stuck_ids,
+                [(r[0], r[1]) for r in stuck_rows],
             )
+            return len(stuck_ids)
 
-    return len(stuck_ids)
+    return 0

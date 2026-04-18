@@ -239,7 +239,12 @@ const columns: TableColumn<StrategyListItem>[] = [
 const confirmDelete = async (item: StrategyListItem) => {
   try {
     const { $confirm } = useNuxtApp()
-    const confirmed = await $confirm(`确定要删除策略「${item.name}」吗？`)
+    const confirmed = await $confirm({
+      title: '删除策略',
+      message: `确定要删除策略「${item.name}」吗？此操作不可恢复，关联的监测项目、采集任务及所有数据也将被删除。`,
+      confirmText: '删除',
+      type: 'error',
+    })
     if (!confirmed) return
 
     await strategiesApi.deleteStrategy(item.id)

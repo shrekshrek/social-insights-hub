@@ -14,6 +14,17 @@ from src.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
+def _run_async(coro):
+    """在 gevent threadpool 的真实 OS 线程中运行协程。
+
+    gevent monkey-patch 后 worker greenlet 无法直接使用 asyncio.run()；
+    通过 gevent threadpool 在真实 OS 线程中调用，避免
+    "cannot be called from a running event loop" 错误。
+    """
+    from gevent import get_hub
+    return get_hub().threadpool.apply(asyncio.run, (coro,))
+
+
 @celery_app.task(
     name="news_media.run_probe",
     bind=True,
@@ -21,7 +32,7 @@ logger = logging.getLogger(__name__)
 )
 def run_news_probe_task(self, task_id: int) -> None:
     """执行新闻探测 Celery 任务（仅搜索 + 落库，无 LLM）"""
-    asyncio.run(_async_run_probe(task_id=task_id))
+    _run_async(_async_run_probe(task_id=task_id))
 
 
 async def _async_run_probe(task_id: int) -> None:
@@ -72,7 +83,7 @@ def run_news_collect_task(
         tagging_job_id: 逐篇标注的 AnalysisJob ID
         analysis_goal: 分析目标（可选，默认用任务关键词）
     """
-    asyncio.run(_async_run_collect(
+    _run_async(_async_run_collect(
         task_id=task_id,
         tagging_job_id=tagging_job_id,
         analysis_goal=analysis_goal,

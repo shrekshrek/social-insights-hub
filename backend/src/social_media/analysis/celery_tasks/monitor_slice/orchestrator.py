@@ -171,7 +171,6 @@ def _run_pipeline_body(
     entity_job = create_analysis_job_sync(
         db=db,
         social_monitor_id=slice_record.monitor_id,
-        task_id=None,
         user_id=slice_record.user_id,
         analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
         source_count=0,  # 稍后更新为程序归一后的数量
@@ -187,7 +186,6 @@ def _run_pipeline_body(
     opinion_job = create_analysis_job_sync(
         db=db,
         social_monitor_id=slice_record.monitor_id,
-        task_id=None,
         user_id=slice_record.user_id,
         analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
         source_count=0,  # 稍后更新为程序归一后的数量
@@ -431,7 +429,6 @@ def _run_pipeline_body(
     summary_job = create_analysis_job_sync(
         db=db,
         social_monitor_id=slice_record.monitor_id,
-        task_id=None,
         user_id=slice_record.user_id,
         analysis_type=AnalysisType.MONITOR_SLICE_SUMMARY.value,
         source_count=1,

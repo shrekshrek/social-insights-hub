@@ -108,6 +108,17 @@ _strategy_list_item = StrategyListItem.from_orm_full
 logger = logging.getLogger(__name__)
 
 
+def _strategy_open_ids(strategy: Strategy) -> list[str]:
+    """收集策略创建者 + 参与者的飞书 open_id（去重，跳过未绑定用户）。"""
+    ids: list[str] = []
+    if strategy.user and strategy.user.oauth_open_id:
+        ids.append(strategy.user.oauth_open_id)
+    for p in strategy.participants:
+        if p.oauth_open_id and p.oauth_open_id not in ids:
+            ids.append(p.oauth_open_id)
+    return ids
+
+
 async def create_strategy(
     db: AsyncSession, data: StrategyCreate, user_id: int
 ) -> Strategy:
@@ -906,7 +917,7 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
         strategy.status = "completed"
 
         await db.commit()
-        fire_notification(feishu_tmpl.big_idea_done_card(strategy.name, strategy.id))
+        fire_notification(feishu_tmpl.big_idea_done_card(strategy.name, strategy.id), _strategy_open_ids(strategy))
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
         logger.error("Strategy %d Big Idea 生成失败: %s", strategy.id, exc, exc_info=True)
@@ -1318,7 +1329,7 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         strategy.status = "completed"
 
         await db.commit()
-        fire_notification(feishu_tmpl.strategic_brief_done_card(strategy.name, strategy.id))
+        fire_notification(feishu_tmpl.strategic_brief_done_card(strategy.name, strategy.id), _strategy_open_ids(strategy))
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
         logger.error("Strategy %d Strategic Brief 生成失败: %s", strategy.id, exc, exc_info=True)
@@ -1871,6 +1882,9 @@ async def confirm_research(
 
 # 防止多个并发请求同时触发同一策略的 LLM 审查
 _probe_review_in_progress: set[int] = set()
+
+# 防止多个并发请求同时触发同一策略的自动建切片
+_slice_creation_in_progress: set[int] = set()
 
 
 async def _build_probe_task_summaries(
@@ -2457,7 +2471,7 @@ async def _run_probe_review(
     if overall != "all_pass":
         fire_notification(feishu_tmpl.probe_needs_review_card(
             strategy.name, strategy.id, overall_verdict=overall,
-        ))
+        ), _strategy_open_ids(strategy))
 
     return result
 
@@ -3074,13 +3088,17 @@ async def check_collection_status(
             failed_ids,
         )
 
+    # 终态判定：completed 或 failed 均视为终态（failed = 爬虫/Worker 故障，不应永久阻塞策略）
+    _terminal = {"completed", "failed"}
     all_completed = (
-        all(task.status == "completed" for task in tasks)
-        and all(t.status == "completed" for t in news_tasks)
+        all(task.status in _terminal for task in tasks)
+        and all(t.status in _terminal for t in news_tasks)
     )
+    # 已分析判定：所有 completed 的任务都必须有分析结果，且至少有 1 个 completed 社媒任务
+    completed_social = [t for t in tasks if t.status == "completed"]
     all_analyzed = (
-        all(task.analysis_result is not None for task in tasks)
-        and all(t.analysis_result is not None for t in news_tasks)
+        bool(completed_social)
+        and all(t.analysis_result is not None for t in completed_social)
     )
 
     task_statuses = [
@@ -3097,23 +3115,39 @@ async def check_collection_status(
 
     slices_created = False
 
-    # 全部完成且全部已分析 → 自动建切片（若该策略尚未关联切片）
+    # 检查是否已有切片（社媒 + 新闻，两者任一存在即视为已创建）
+    has_social_slices = bool(strategy.slices)
+    has_news_slices = False
+    if strategy.news_monitor_id:
+        from src.news_media.analysis.models import NewsSlice as _NS
+        _ns_result = await db.execute(
+            select(_NS.id).where(_NS.monitor_id == strategy.news_monitor_id).limit(1)
+        )
+        has_news_slices = _ns_result.scalar_one_or_none() is not None
+
+    # 全部终态且已分析 → 自动建切片（若尚无任何切片且未在进行中）
     if all_completed and all_analyzed:
-        has_strategy_slices = bool(strategy.slices)
-        if not has_strategy_slices:
+        if not has_social_slices and not has_news_slices and strategy.id not in _slice_creation_in_progress:
+            _slice_creation_in_progress.add(strategy.id)
             logger.info(
                 "Strategy %s: 所有任务完成且已分析，开始自动建切片", strategy.id
             )
             try:
-                await _create_auto_slices(db, strategy, tasks, current_user_id, news_tasks)
+                completed_tasks = [t for t in tasks if t.status == "completed" and t.analysis_result is not None]
+                completed_news = [t for t in news_tasks if t.status == "completed" and t.analysis_result is not None]
+                await _create_auto_slices(db, strategy, completed_tasks, current_user_id, completed_news)
                 slices_created = True
                 logger.info("Strategy %s: 自动建切片完成", strategy.id)
             except Exception as e:
                 logger.error(
                     "Strategy %s: 自动建切片失败: %s", strategy.id, e, exc_info=True
                 )
+            finally:
+                _slice_creation_in_progress.discard(strategy.id)
         else:
             slices_created = True
+    elif has_social_slices or has_news_slices:
+        slices_created = True
     elif all_completed:
         logger.info("Strategy %s: 所有任务已完成，等待分析", strategy.id)
 
@@ -3440,7 +3474,7 @@ async def _create_auto_slices(
         fire_notification(feishu_tmpl.data_ready_card(
             strategy.name, strategy.id,
             slice_count=len(slice_objs) + len(news_slice_objs),
-        ))
+        ), _strategy_open_ids(strategy))
 
     # commit 之后触发 Stage2/Stage3 celery 任务
     if pipeline_slice_ids:

@@ -176,6 +176,11 @@ export const useStrategyPolling = (
     if (s.coverage_check_result && !collectionData.coverageResult) {
       collectionData.coverageResult = s.coverage_check_result
     }
+    // 状态已过 collecting 阶段时，标记采集已完成（此时不再轮询 collection-status）
+    const statusOrder = STATUS_ORDER[s.status as keyof typeof STATUS_ORDER] ?? 0
+    if (statusOrder >= STATUS_ORDER.ready) {
+      collectionData.allAnalyzed = true
+    }
   }
 
   onUnmounted(() => {

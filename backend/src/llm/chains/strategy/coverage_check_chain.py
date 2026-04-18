@@ -112,34 +112,51 @@ def format_coverage_check_inputs(
     slice_lines = ["## 切片分析摘要"]
     for name, data in slices_data:
         slice_lines.append(f"\n### {name}")
-        # result_data 结构: {meta, foundation, layers, reports, pipeline}
-        foundation = data.get("foundation") or {}
-        landscape = (data.get("layers") or {}).get("landscape") or {}
-        overview = landscape.get("overview") or {}
-        slice_lines.append(f"原文数: {overview.get('total_posts', 0)}")
+        is_news = name.startswith("[新闻]")
 
-        # 实体（在 foundation.aligned_entities）
-        entities = (foundation.get("aligned_entities") or [])[:10]
-        if entities:
-            entity_names = [f"{e.get('name', '')}({e.get('role', '')})" for e in entities]
-            slice_lines.append(f"主要实体: {', '.join(entity_names)}")
+        if is_news:
+            # 新闻切片 result_data 结构: {coverage, sentiment, narratives, ...}
+            coverage = data.get("coverage") or {}
+            sentiment = data.get("sentiment") or {}
+            narratives = data.get("narratives") or []
+            dist = sentiment.get("distribution") or {}
+            total_articles = sum(dist.get(k, 0) for k in ("positive", "neutral", "negative"))
+            slice_lines.append(f"原文数: {total_articles}")
+            if coverage.get("summary"):
+                slice_lines.append(f"覆盖概要: {coverage['summary']}")
+            if narratives:
+                narrative_themes = [n.get("theme", "") for n in narratives[:5]]
+                slice_lines.append(f"主要叙事: {', '.join(narrative_themes)}")
+            overall_sent = sentiment.get("overall")
+            if overall_sent is not None:
+                label = "正面" if overall_sent > 0.6 else "负面" if overall_sent < 0.4 else "中性"
+                slice_lines.append(f"整体情感: {label}（{overall_sent:.2f}）")
+        else:
+            # 社媒切片 result_data 结构: {meta, foundation, layers, reports, pipeline}
+            foundation = data.get("foundation") or {}
+            landscape = (data.get("layers") or {}).get("landscape") or {}
+            overview = landscape.get("overview") or {}
+            slice_lines.append(f"原文数: {overview.get('total_volume', 0) or overview.get('unique_posts', 0)}")
 
-        # 话题（在 foundation.aligned_topics）
-        topics = (foundation.get("aligned_topics") or [])[:10]
-        if topics:
-            topic_names = [t.get("name", "") for t in topics]
-            slice_lines.append(f"主要话题: {', '.join(topic_names)}")
+            entities = (foundation.get("aligned_entities") or [])[:10]
+            if entities:
+                entity_names = [f"{e.get('name', '')}({e.get('role', '')})" for e in entities]
+                slice_lines.append(f"主要实体: {', '.join(entity_names)}")
 
-        # 情感
-        sentiment = overview.get("sentiment_label", "")
-        if sentiment:
-            slice_lines.append(f"整体情感: {sentiment}")
+            topics = (foundation.get("aligned_topics") or [])[:10]
+            if topics:
+                topic_names = [t.get("name", "") for t in topics]
+                slice_lines.append(f"主要话题: {', '.join(topic_names)}")
 
-        # SOV（在 layers.landscape.sov_ranking）
-        sov = (landscape.get("sov_ranking") or [])[:5]
-        if sov:
-            sov_names = [s.get("name", "") for s in sov]
-            slice_lines.append(f"声量排名: {', '.join(sov_names)}")
+            global_nsr = overview.get("global_nsr")
+            if global_nsr is not None:
+                label = "正面" if global_nsr > 0.3 else "负面" if global_nsr < -0.3 else "中性"
+                slice_lines.append(f"整体情感: {label}（NSR={global_nsr:.2f}）")
+
+            sov = (landscape.get("sov_ranking") or [])[:5]
+            if sov:
+                sov_names = [s.get("name", "") for s in sov]
+                slice_lines.append(f"声量排名: {', '.join(sov_names)}")
 
     slices_summary_section = "\n".join(slice_lines)
 

@@ -138,32 +138,43 @@ async def check_collecting_strategies() -> int:
             if not tasks and not news_tasks:
                 continue
 
-            # 社媒任务全部完成且有分析
-            if not all(t.status == "completed" for t in tasks):
+            # 社媒任务全部到达终态（completed / failed）
+            social_terminal = {"completed", "failed"}
+            if not all(t.status in social_terminal for t in tasks):
                 continue
-            if not all(t.analysis_result is not None for t in tasks):
-                continue
-
-            # 新闻任务全部完成且有分析
-            if not all(t.status == "completed" for t in news_tasks):
-                continue
-            if not all(t.analysis_result is not None for t in news_tasks):
+            # 至少有一个 completed 且有分析结果的社媒任务
+            completed_social = [t for t in tasks if t.status == "completed" and t.analysis_result is not None]
+            if not completed_social:
                 continue
 
-            # 已有切片则跳过（幂等保护）
-            existing = await db.execute(
+            # 新闻任务全部到达终态
+            news_terminal = {"completed", "failed"}
+            if not all(t.status in news_terminal for t in news_tasks):
+                continue
+            # 新闻允许全部 failed（新闻是补充数据源，不阻塞）
+            completed_news = [t for t in news_tasks if t.status == "completed" and t.analysis_result is not None]
+
+            # 已有切片则跳过（幂等保护：社媒切片 + 新闻切片任一存在即跳过）
+            existing_social = await db.execute(
                 select(StrategySlice)
                 .where(StrategySlice.strategy_id == strategy.id)
                 .limit(1)
             )
-            if existing.scalar_one_or_none() is not None:
+            if existing_social.scalar_one_or_none() is not None:
                 continue
+            if strategy.news_monitor_id:
+                from src.news_media.analysis.models import NewsSlice as _NS
+                existing_news = await db.execute(
+                    select(_NS.id).where(_NS.monitor_id == strategy.news_monitor_id).limit(1)
+                )
+                if existing_news.scalar_one_or_none() is not None:
+                    continue
 
             try:
                 full_strategy = await get_strategy_by_id(db, strategy.id)
                 await _create_auto_slices(
-                    db, full_strategy, tasks, current_user_id=strategy.user_id,
-                    news_tasks=news_tasks,
+                    db, full_strategy, completed_social, current_user_id=strategy.user_id,
+                    news_tasks=completed_news,
                 )
                 triggered += 1
                 logger.info(

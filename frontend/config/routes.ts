@@ -209,6 +209,7 @@ export function isGuestOnlyPage(path: string): boolean {
     "/register",
     "/reset-password",
     "/request-password-reset",
+    "/auth/feishu/callback",
   ];
   return guestPages.some((page) => path.startsWith(page));
 }

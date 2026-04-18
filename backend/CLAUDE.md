@@ -42,7 +42,7 @@ pnpm be:dev           # uvicorn --reload (port 8000)
 
 ```
 backend/src/
-├── auth/                    # JWT 认证, 登录注册, 令牌黑名单
+├── auth/                    # JWT 认证, 飞书 OAuth 扫码登录, 令牌黑名单
 ├── rbac/                    # 角色权限, 代码驱动同步
 ├── users/                   # 用户 CRUD, 角色分配
 ├── audit/                   # 用户操作日志（CRUD/LOGIN/LOGIN_FAILED/TRIGGER）
@@ -62,6 +62,7 @@ backend/src/
 │   └── chains/              # 19 条分析链
 ├── knowledge_base/          # 市场知识库 + 文档向量化
 ├── strategies/              # 策略研究
+├── feishu/                  # 飞书集成: OAuth 客户端 (oauth.py) + IM 消息通知 (client.py, templates.py)
 ├── agent/                   # 爬虫代理 API, API Key 认证
 ├── config.py, database.py, redis_client.py, celery_app.py
 ├── middleware.py, exceptions.py, pagination.py, schemas.py

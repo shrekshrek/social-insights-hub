@@ -13,7 +13,7 @@
 | 状态管理 | Pinia | 持久化存储 |
 | AI/LLM | LangChain 1.0+ + DeepSeek API | 分析链 |
 | 任务队列 | Celery + Redis + APScheduler | AI 分析/文档处理（Celery）；轻量定时任务（APScheduler） |
-| 认证 | JWT (后端) + nuxt-auth-utils (前端) | RBAC 权限控制 |
+| 认证 | JWT (后端) + nuxt-auth-utils (前端) + 飞书 OAuth | RBAC 权限控制，飞书扫码为主登录入口 |
 | 图表 | ECharts | 必须用 ClientOnly 包装 |
 | 部署 | Docker Compose + Nginx | 开发/生产双配置 |
 | 包管理 | uv (后端) / pnpm (前端) | monorepo |
@@ -41,7 +41,7 @@
 
 | 模块 | 职责 |
 |------|------|
-| auth/ | JWT 认证、用户注册登录、令牌管理 |
+| auth/ | JWT 认证、用户名密码登录、飞书 OAuth 扫码登录、令牌管理 |
 | rbac/ | 角色权限管理，代码驱动启动时自动同步 |
 | users/ | 用户 CRUD、角色分配 |
 | audit/ | 用户操作日志，记录 CRUD/LOGIN/LOGIN_FAILED/TRIGGER |
@@ -60,7 +60,7 @@
 | Layer | 职责 |
 |-------|------|
 | ui-kit/ | 共享 UI 基础组件 |
-| auth/ | 登录注册、认证状态管理 |
+| auth/ | 飞书扫码登录(主)、密码登录(次)、认证状态管理 |
 | users/ | 用户管理界面 |
 | rbac/ | 角色权限管理界面 |
 | audit/ | 用户操作日志查询界面 |

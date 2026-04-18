@@ -35,7 +35,7 @@ export const useUserStore = defineStore('user', {
         this.profile = {
           ...data,
           roles: data.roles || [],
-          avatarUrl: null,
+          avatarUrl: data.avatar_url || null,
         }
         
         // 只在开发模式下显示日志
@@ -64,7 +64,7 @@ export const useUserStore = defineStore('user', {
         this.profile = {
           ...user,
           roles: user.roles || [],
-          avatarUrl: null,
+          avatarUrl: user.avatar_url || null,
         }
       } else {
         this.profile = user as UserProfile

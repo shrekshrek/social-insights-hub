@@ -222,12 +222,13 @@ Strategy ──1:1──▶ NewsMonitor (可 NULL)
 | social_tasks | social_media/tasks | 社媒采集任务 |
 | social_posts, social_comments | social_media/tasks | 原文/评论数据 |
 | post_analysis | social_media/analysis | 原文分析结果（1:1 SocialPost） |
-| analysis_slices | social_media/analysis | 项目级分析切片 |
+| social_slices | social_media/analysis | 社媒项目级合并分析切片 |
 | analysis_jobs | jobs | 跨渠道分析任务状态 + LLM 成本 |
 | news_monitors, news_monitor_participants | news_media | 新闻监测项目 |
 | news_tasks | news_media | 新闻采集任务 |
 | news_articles | news_media | 新闻文章 |
-| strategies, strategy_slices, strategy_participants | strategies | 策略研究 |
+| news_slices | news_media/analysis | 新闻项目级切片（独立 insight 分析） |
+| strategies, strategy_participants | strategies | 策略研究（社媒/新闻切片均通过 monitor_id 隐式关联，无显式关联表） |
 | knowledge_documents, knowledge_chunks | knowledge_base | 知识文档 + 向量嵌入 |
 
 ---

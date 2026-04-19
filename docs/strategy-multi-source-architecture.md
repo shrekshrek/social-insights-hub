@@ -163,18 +163,32 @@ async def load_strategy_inputs(
     """统一加载策略输入，屏蔽数据来源差异"""
     inputs = []
 
-    # 路径 A：社媒切片（现有）
-    for ss in strategy.slices:
-        if ss.slice and ss.slice.result_data:
-            inputs.append(ss.slice.result_data)
+    # 路径 A：社媒切片（按 monitor_id 隐式关联）
+    if strategy.social_monitor_id:
+        result = await db.execute(
+            select(SocialSlice).where(
+                SocialSlice.monitor_id == strategy.social_monitor_id
+            )
+        )
+        for s in result.scalars().all():
+            if s.result_data:
+                inputs.append(s.result_data)
 
-    # 路径 B（未来）：知识库摘要
+    # 路径 B：新闻切片（按 monitor_id 隐式关联）
+    if strategy.news_monitor_id:
+        result = await db.execute(
+            select(NewsSlice).where(
+                NewsSlice.monitor_id == strategy.news_monitor_id,
+                NewsSlice.status == "completed",
+            )
+        )
+        for s in result.scalars().all():
+            if s.result_data:
+                inputs.append(s.result_data)
+
+    # 路径 C（可选）：知识库摘要
     # for kb in strategy.knowledge_summaries:
     #     inputs.append(adapt_knowledge_summary(kb))
-
-    # 路径 C（未来）：新闻媒体摘要
-    # for nm in strategy.news_media_summaries:
-    #     inputs.append(adapt_news_media_summary(nm))
 
     return inputs
 ```

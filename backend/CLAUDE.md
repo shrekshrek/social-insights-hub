@@ -137,6 +137,23 @@ backend/src/
 - **独立 news monitor**：只支持一步式 collect，`/tasks/{id}/execute` 仅接受 `strategy_id IS NULL` 且 `phase != "probe"`；不提供 approve/refine 探测流程
 - **strategy 研究场景**：两段式 probe → collect，每阶段是**独立的 NewsTask 记录**（不做 phase 迁移），probe 只搜索卡片不抓全文不打标；probe/refine/approve 统一由 `strategies/service.py` 的批量端点编排，news_media router 不对外暴露
 
+### 事务策略（ADR）
+
+本项目 **不遵循 Unit of Work**：`create_*` / `update_*` / `delete_*` 等 CRUD 函数内部自带 `await db.commit()`，编排函数（如 `confirm_research` / `approve_probe` / `_create_auto_slices`）在循环中调用它们时事务无法整体原子回滚。这是与下列防御机制协作的**有意设计**，不是疏漏：
+
+| 防御层 | 作用 |
+|---|---|
+| FK `ondelete="CASCADE"` + ORM `cascade="all, delete-orphan"` 双重级联 | 策略/监测删除时，子资源（任务/切片/帖子/文章/分析记录）自动级联清理，孤立数据被顶层删除带走 |
+| `news_task_watchdog` / `agent_timeout_reset` 等超时回收 | Celery/Agent 崩溃场景下任务永久 pending/running 的兜底 |
+| 软删除 `is_deleted` + 查询过滤 | SocialPost / SocialComment 孤立也不出现在业务视图 |
+| 编排函数入口的幂等预清理 | `confirm_research` 从 probing 重试时删旧探测任务，`refine_probe` 软删被替换任务，`approve_probe` 对已 collecting 状态幂等返回 |
+
+**关键约束**：
+
+- **迁移级联配置需评审**。任何把 `ondelete="CASCADE"` 改为 `SET NULL` / `RESTRICT`，或移除 ORM 关系的 `cascade="all, delete-orphan"` 的 PR，都会立即暴露撕裂问题 → 必须同步审视该级联承担的兜底角色
+- **新写编排函数要考虑重试路径幂等**。如果外部可能重复调用（网络重试 / 前端误触），要么在入口检查状态机、要么预清理上一轮残留，不要假设"上一次全都成功"
+- **Celery worker 内自开 session** 的 commit 不在此约束内，那是独立事务
+
 ### 分析编排（channel-local）
 
 分析逻辑归属于所属渠道，没有全局 `analysis/` 模块：

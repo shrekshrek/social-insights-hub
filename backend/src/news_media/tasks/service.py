@@ -51,7 +51,11 @@ async def create_news_task(
     strategy_id: int | None = None,
     phase: str | None = None,
 ) -> NewsTask:
-    """创建新闻任务"""
+    """创建新闻任务。
+
+    Note: 内部 `await db.commit()` 是有意设计。编排函数中途异常时，已 commit
+    的孤立任务由 Monitor CASCADE 级联删除兜底。详见 backend/CLAUDE.md §事务策略。
+    """
     from src.news_media.monitors.crud import get_monitor_by_id
 
     monitor = await get_monitor_by_id(db, monitor_id, load_relations=False)

@@ -23,7 +23,11 @@ async def create_social_task(
     task_in: SocialTaskCreate,
     current_user_id: int,
 ) -> SocialTask:
-    """创建任务（monitor_id 由调用方从 URL 路径提取，不在 body 中）"""
+    """创建任务（monitor_id 由调用方从 URL 路径提取，不在 body 中）。
+
+    Note: 内部 `await db.commit()` 是有意设计。编排函数中途异常时，已 commit
+    的孤立任务由 Monitor CASCADE 级联删除兜底。详见 backend/CLAUDE.md §事务策略。
+    """
     from src.social_media.monitors import crud as social_crud
 
     monitor = await social_crud.get_monitor_by_id(

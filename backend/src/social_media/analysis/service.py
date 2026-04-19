@@ -202,7 +202,12 @@ async def create_monitor_slice(
     competitors: list[str] | None = None,
     platform_weights: dict[str, float] | None = None,
 ) -> SocialSlice:
-    """手动生成项目级合并分析切片（同步完成，写入 social_slices 表）。"""
+    """手动生成项目级合并分析切片（同步完成，写入 social_slices 表）。
+
+    Note: 内部 `await db.commit()` 是有意设计。在 `_create_auto_slices` 等编排
+    函数的 for 循环中被调用时，若中途异常，已 commit 的孤立 SocialSlice 由
+    Monitor CASCADE 级联删除兜底。详见 backend/CLAUDE.md §事务策略。
+    """
     from src.social_media.monitors import crud as monitor_crud
     from src.social_media.tasks.models import SocialTask as SocialTask
 

@@ -57,7 +57,7 @@ async def create_strategy(
 ):
     """创建新策略，关联指定切片"""
     strategy = await service.create_strategy(db, data, current_user.id)
-    return StrategyRead.from_orm_full(strategy)
+    return await service._strategy_read(db, strategy)
 
 
 @router.get(
@@ -82,8 +82,9 @@ async def list_strategies(
         limit=pagination.limit,
         search=search,
     )
+    rendered = [await service._strategy_list_item(db, s) for s in items]
     return PaginatedResponse[StrategyListItem].create(
-        items=[StrategyListItem.from_orm_full(s) for s in items],
+        items=rendered,
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -98,10 +99,11 @@ async def list_strategies(
 )
 async def get_strategy(
     strategy: Strategy = Depends(validate_strategy_access),
+    db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_strategy_read),
 ):
     """获取策略详情"""
-    return StrategyRead.from_orm_full(strategy)
+    return await service._strategy_read(db, strategy)
 
 
 @router.put(
@@ -118,7 +120,7 @@ async def update_strategy(
 ):
     """更新策略基本信息（名称/Brief）"""
     updated = await service.update_strategy(db, strategy, data)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.delete(
@@ -150,7 +152,7 @@ async def add_participants(
     _: User = Depends(require_strategy_write),
 ):
     updated = await service.add_participants_to_strategy(db, strategy, data.user_ids)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.delete(
@@ -166,7 +168,7 @@ async def remove_participant(
     _: User = Depends(require_strategy_write),
 ):
     updated = await service.remove_participant_from_strategy(db, strategy, user_id)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 # ==================== ① 研究设计 ====================
@@ -334,7 +336,7 @@ async def adjust_slices(
         [item.model_dump() for item in data.adjustments],
         current_user.id,
     )
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 # ==================== 生成端点 ====================
@@ -355,7 +357,7 @@ async def generate_insight(
 ):
     """AI 生成 Insight: Social Tension + Brand Opportunity"""
     updated = await service.generate_insight(db, strategy)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.post(
@@ -371,7 +373,7 @@ async def generate_brand_role(
 ):
     """AI 生成 Brand Role: Brand Social Role + Social Strategy"""
     updated = await service.generate_brand_role(db, strategy)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.post(
@@ -387,7 +389,7 @@ async def generate_big_idea(
 ):
     """AI 生成 Big Idea: Big Idea + Content Strategy"""
     updated = await service.generate_big_idea(db, strategy)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 # ---- market_report 路径产出生成（agenda_map → landscape → strategic_brief，三层递进） ----
@@ -406,7 +408,7 @@ async def generate_agenda_map(
 ):
     """AI 生成 Agenda Map: 媒体议程图"""
     updated = await service.generate_agenda_map(db, strategy)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.post(
@@ -422,7 +424,7 @@ async def generate_landscape(
 ):
     """AI 生成 Landscape: 竞争格局"""
     updated = await service.generate_landscape(db, strategy)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.post(
@@ -438,7 +440,7 @@ async def generate_strategic_brief(
 ):
     """AI 生成 Strategic Brief: 战略简报"""
     updated = await service.generate_strategic_brief(db, strategy)
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 # ==================== 编辑端点 ====================
@@ -462,7 +464,7 @@ async def edit_insight(
     updated = await service.edit_brand_strategy_result(
         db, strategy, stage="insight", result=data.result
     )
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.put(
@@ -481,7 +483,7 @@ async def edit_brand_role(
     updated = await service.edit_brand_strategy_result(
         db, strategy, stage="brand_role", result=data.result
     )
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.put(
@@ -500,7 +502,7 @@ async def edit_big_idea(
     updated = await service.edit_brand_strategy_result(
         db, strategy, stage="big_idea", result=data.result
     )
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 # ---- market_report 路径编辑端点 ----
@@ -522,7 +524,7 @@ async def edit_agenda_map(
     updated = await service.edit_market_report_result(
         db, strategy, stage="agenda_map", result=data.result
     )
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.put(
@@ -541,7 +543,7 @@ async def edit_landscape(
     updated = await service.edit_market_report_result(
         db, strategy, stage="landscape", result=data.result
     )
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 @router.put(
@@ -560,7 +562,7 @@ async def edit_strategic_brief(
     updated = await service.edit_market_report_result(
         db, strategy, stage="strategic_brief", result=data.result
     )
-    return StrategyRead.from_orm_full(updated)
+    return await service._strategy_read(db, updated)
 
 
 # ==================== 导出端点 ====================

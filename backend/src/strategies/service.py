@@ -101,9 +101,15 @@ from .schemas import (
 
 _MAX_BRIEF_TEXT_CHARS = 10000
 
-# 便捷别名，service 内部直接用
-_strategy_read = StrategyRead.from_orm_full
-_strategy_list_item = StrategyListItem.from_orm_full
+# schema 响应组装：async helper，为后续引入 I/O（按 monitor_id 查切片）预留接口
+async def _strategy_read(db: AsyncSession, strategy: Strategy) -> StrategyRead:
+    return StrategyRead.from_orm_full(strategy)
+
+
+async def _strategy_list_item(
+    db: AsyncSession, strategy: Strategy
+) -> StrategyListItem:
+    return StrategyListItem.from_orm_full(strategy)
 
 logger = logging.getLogger(__name__)
 
@@ -1491,7 +1497,7 @@ async def reset_to_design(
         len(deleted_social_tasks),
         deleted_news_count,
     )
-    return _strategy_read(updated)
+    return await _strategy_read(db, updated)
 
 
 async def confirm_research(
@@ -1874,7 +1880,7 @@ async def confirm_research(
         created_task_count=len(created_task_ids),
         created_news_task_count=len(created_news_task_ids),
         partial_errors=partial_errors,
-        strategy=_strategy_read(updated),
+        strategy=await _strategy_read(db, updated),
     )
 
 
@@ -2657,7 +2663,7 @@ async def check_probe_status(
         probe_review_result=strategy.probe_review_result,
         industry_research=industry_status,
         creative_research=creative_status,
-        strategy=_strategy_read(strategy),
+        strategy=await _strategy_read(db, strategy),
     )
 
 
@@ -2813,7 +2819,7 @@ async def approve_probe(
     updated = await get_strategy_by_id(db, strategy.id)
     return ApproveProbeResponse(
         approved_task_count=len(collect_task_ids),
-        strategy=_strategy_read(updated),
+        strategy=await _strategy_read(db, updated),
     )
 
 async def refine_probe(
@@ -3037,7 +3043,7 @@ async def refine_probe(
         removed_news_task_ids=removed_news_task_ids,
         created_news_task_ids=created_news_task_ids,
         probe_round=updated.probe_round,
-        strategy=_strategy_read(updated),
+        strategy=await _strategy_read(db, updated),
     )
 
 async def check_collection_status(
@@ -3170,7 +3176,7 @@ async def check_collection_status(
         coverage_check_result=strategy.coverage_check_result,
         industry_research=industry_status,
         creative_research=creative_status,
-        strategy=_strategy_read(strategy),
+        strategy=await _strategy_read(db, strategy),
     )
 
 
@@ -3515,7 +3521,7 @@ async def get_data_overview(
     return DataOverviewResponse(
         slices=slice_summaries,
         coverage_check_result=strategy.coverage_check_result,
-        strategy=_strategy_read(strategy),
+        strategy=await _strategy_read(db, strategy),
     )
 
 

@@ -147,27 +147,25 @@
                 {{ group.assessments.length - group.failCount }}/{{ group.assessments.length }} 通过
               </span>
             </div>
-            <div class="space-y-1">
+            <div class="grid md:grid-cols-2 gap-1.5">
               <div
                 v-for="a in group.assessments"
                 :key="a.task_id"
-                class="text-sm p-2 rounded border"
+                class="text-xs p-2 rounded border"
                 :class="a.verdict === 'pass'
                   ? 'border-green-200 bg-green-50 dark:bg-green-900/10'
                   : 'border-amber-200 bg-amber-50 dark:bg-amber-900/10'"
               >
-                <div class="flex items-center gap-2">
-                  <UBadge
-                    :color="a.verdict === 'pass' ? 'success' : 'warning'"
-                    variant="soft"
-                    size="xs"
-                  >
-                    {{ a.verdict === 'pass' ? '通过' : '待调整' }}
-                  </UBadge>
-                  <span class="font-medium">{{ a.keyword }}</span>
-                  <span class="text-xs text-gray-400">{{ platformLabel(a.platform) }}</span>
+                <div class="flex items-center gap-1.5">
+                  <UIcon
+                    :name="a.verdict === 'pass' ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-triangle'"
+                    :class="a.verdict === 'pass' ? 'text-green-500' : 'text-amber-500'"
+                    class="shrink-0 size-3.5"
+                  />
+                  <span class="font-medium truncate">{{ a.keyword }}</span>
+                  <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(a.platform) }}</UBadge>
                 </div>
-                <p v-if="a.note" class="text-xs text-gray-500 mt-1">{{ a.note }}</p>
+                <p v-if="a.note" class="text-gray-500 mt-0.5 line-clamp-2">{{ a.note }}</p>
               </div>
             </div>
           </div>
@@ -176,27 +174,25 @@
         <!-- 兜底：无维度映射时平铺 -->
         <template v-else>
           <h4 class="text-xs font-medium text-gray-500">逐任务评估</h4>
-          <div class="space-y-1.5">
+          <div class="grid md:grid-cols-2 gap-1.5">
             <div
               v-for="a in probeReview.assessments"
               :key="a.task_id"
-              class="text-sm p-2 rounded border"
+              class="text-xs p-2 rounded border"
               :class="a.verdict === 'pass'
                 ? 'border-green-200 bg-green-50 dark:bg-green-900/10'
                 : 'border-amber-200 bg-amber-50 dark:bg-amber-900/10'"
             >
-              <div class="flex items-center gap-2">
-                <UBadge
-                  :color="a.verdict === 'pass' ? 'success' : 'warning'"
-                  variant="soft"
-                  size="xs"
-                >
-                  {{ a.verdict === 'pass' ? '通过' : '待调整' }}
-                </UBadge>
-                <span class="font-medium">{{ a.keyword }}</span>
-                <span class="text-xs text-gray-400">{{ platformLabel(a.platform) }}</span>
+              <div class="flex items-center gap-1.5">
+                <UIcon
+                  :name="a.verdict === 'pass' ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-triangle'"
+                  :class="a.verdict === 'pass' ? 'text-green-500' : 'text-amber-500'"
+                  class="shrink-0 size-3.5"
+                />
+                <span class="font-medium truncate">{{ a.keyword }}</span>
+                <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(a.platform) }}</UBadge>
               </div>
-              <p v-if="a.note" class="text-xs text-gray-500 mt-1">{{ a.note }}</p>
+              <p v-if="a.note" class="text-gray-500 mt-0.5 line-clamp-2">{{ a.note }}</p>
             </div>
           </div>
         </template>

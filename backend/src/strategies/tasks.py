@@ -102,12 +102,13 @@ async def check_probing_strategies() -> int:
 async def check_collecting_strategies() -> int:
     """找出全量采集完成但尚未建切片的策略，触发自动建切片 + 覆盖度验证。
 
-    1. 查询 status=collecting 且无 StrategySlice 的策略
+    1. 查询 status=collecting 的策略
     2. 确认所有 collect 任务（社媒 + 新闻）均 completed 且已有分析结果
-    3. 调用 _create_auto_slices（内部 commit，不需要外层提交）
+    3. 按 monitor_id 判定社媒/新闻切片均未创建才调用 _create_auto_slices
     """
     from src.social_media.tasks.models import SocialTask
-    from src.strategies.models import Strategy, StrategySlice
+    from src.social_media.analysis.models import SocialSlice
+    from src.strategies.models import Strategy
     from src.strategies.service import _create_auto_slices, get_strategy_by_id
     from src.news_media.tasks.service import get_news_tasks_by_strategy
 
@@ -154,21 +155,31 @@ async def check_collecting_strategies() -> int:
             # 新闻允许全部 failed（新闻是补充数据源，不阻塞）
             completed_news = [t for t in news_tasks if t.status == "completed" and t.analysis_result is not None]
 
-            # 已有切片则跳过（幂等保护：社媒切片 + 新闻切片任一存在即跳过）
-            existing_social = await db.execute(
-                select(StrategySlice)
-                .where(StrategySlice.strategy_id == strategy.id)
-                .limit(1)
-            )
-            if existing_social.scalar_one_or_none() is not None:
-                continue
+            # 幂等保护：社媒切片 + 新闻切片都已建才跳过
+            # （与 confirm_research/approve_probe 的两渠道对称语义一致）
+            has_social = False
+            if strategy.social_monitor_id:
+                existing_social = await db.execute(
+                    select(SocialSlice.id)
+                    .where(SocialSlice.monitor_id == strategy.social_monitor_id)
+                    .limit(1)
+                )
+                has_social = existing_social.scalar_one_or_none() is not None
+            else:
+                has_social = not completed_social  # 无社媒 monitor 视为已"完成"
+
+            has_news = False
             if strategy.news_monitor_id:
                 from src.news_media.analysis.models import NewsSlice as _NS
                 existing_news = await db.execute(
                     select(_NS.id).where(_NS.monitor_id == strategy.news_monitor_id).limit(1)
                 )
-                if existing_news.scalar_one_or_none() is not None:
-                    continue
+                has_news = existing_news.scalar_one_or_none() is not None
+            else:
+                has_news = not completed_news  # 无新闻 monitor 视为已"完成"
+
+            if has_social and has_news:
+                continue
 
             try:
                 full_strategy = await get_strategy_by_id(db, strategy.id)

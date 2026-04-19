@@ -53,7 +53,6 @@ class StrategyCreate(CustomBaseModel):
     """创建策略请求"""
 
     name: str = Field(..., min_length=1, max_length=255, description="策略名称")
-    slice_ids: list[int] = Field(default_factory=list, description="关联切片ID列表（可选）")
     brand_brief: BrandBrief | None = Field(None, description="结构化 Brand Brief（可选）")
     participant_ids: list[int] = Field(default_factory=list, description="参与者用户ID列表")
 
@@ -352,12 +351,12 @@ class StrategyListItem(CustomBaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_orm_full(cls, strategy: "Strategy") -> "StrategyListItem":
+    def from_orm_full(cls, strategy: "Strategy", slice_count: int) -> "StrategyListItem":
         return cls(
             id=strategy.id,
             name=strategy.name,
             status=strategy.status,
-            slice_count=len(strategy.slices),
+            slice_count=slice_count,
             user_id=strategy.user_id,
             user_username=strategy.user.username if strategy.user else "",
             created_at=strategy.created_at,
@@ -410,21 +409,14 @@ class StrategyRead(CustomBaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_orm_full(cls, strategy: "Strategy") -> "StrategyRead":
+    def from_orm_full(
+        cls, strategy: "Strategy", slices: list[SliceSummary]
+    ) -> "StrategyRead":
         """从 ORM Strategy 对象构造，处理所有跨关联字段。
-        要求 strategy.slices → .slice → .monitor 已预加载（selectinload）。
+
+        slices 由调用方（service 层 loader）按 monitor_id 预查后传入，
+        schema 不做 I/O。
         """
-        slices = [
-            SliceSummary(
-                slice_id=ss.slice_id,
-                slice_name=ss.slice.name if ss.slice else None,
-                monitor_id=ss.slice.monitor_id if ss.slice else 0,
-                monitor_name=(
-                    ss.slice.monitor.name if ss.slice and ss.slice.monitor else ""
-                ),
-            )
-            for ss in strategy.slices
-        ]
         participants = getattr(strategy, "participants", []) or []
         return cls(
             id=strategy.id,

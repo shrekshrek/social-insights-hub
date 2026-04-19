@@ -302,7 +302,6 @@ export type StrategyListResponse = PaginatedResponse<StrategyListItem>
 
 export interface StrategyCreate {
   name: string
-  slice_ids?: number[]
   brand_brief?: BrandBrief | null
 }
 

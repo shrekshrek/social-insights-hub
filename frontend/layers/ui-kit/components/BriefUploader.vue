@@ -20,6 +20,7 @@
         v-model="pasteText"
         :placeholder="placeholder"
         :rows="2"
+        autoresize
         class="flex-1"
         :disabled="loading"
       />

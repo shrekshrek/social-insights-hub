@@ -2,7 +2,7 @@
   <div v-if="result" class="space-y-6">
     <!-- Big Idea -->
     <div v-if="result.big_idea">
-      <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">Big Idea</h4>
+      <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">创意概念 Big Idea</h4>
       <div class="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border-l-4 border-green-500">
         <p class="font-bold text-xl text-gray-900 dark:text-white">
           {{ result.big_idea.statement }}
@@ -20,7 +20,7 @@
 
     <!-- Content Strategy -->
     <div v-if="result.content_strategy">
-      <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">Content Strategy</h4>
+      <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">内容策略 Content Strategy</h4>
       <div class="space-y-3">
         <div
           v-for="(pillar, idx) in result.content_strategy.pillars"

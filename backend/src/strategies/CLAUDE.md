@@ -42,7 +42,7 @@
   - market_report 路径：`agenda_map_result` / `landscape_result` / `strategic_brief_result`
   - 路由字段：`status` / `output_type`（`campaign_strategy` | `market_report` | `full_strategy`，用户在 confirm-research 时显式选择）
   - 监测关联：`social_monitor_id` / `news_monitor_id`（两条路径分别对应）
-- `strategy_slices`: 关联表（strategy_id → slice_id），切片由系统自动创建
+- `social_slices` / `news_slices`: 通过 `monitor_id` 隐式关联到策略（社媒走 `social_monitor_id`，新闻走 `news_monitor_id`）；切片由系统自动创建，无显式关联表
 - `social_tasks` / `news_tasks`: 通过 `strategy_id` FK 反向关联策略（nullable，策略任务专用）
 
 ### 状态流转
@@ -206,7 +206,7 @@ Celery Worker 崩溃/宕机 → 新闻任务停留在 `running` 或 `pending` �
 
 ## Important Notes
 
-- Strategy 通过 `strategy_slices` 关联社媒切片（SocialSlice），新闻切片（NewsSlice）通过 `news_monitor_id` 隐式关联
+- Strategy 的社媒切片（SocialSlice）与新闻切片（NewsSlice）均通过 `monitor_id` 隐式关联（`SocialSlice.monitor_id == strategy.social_monitor_id` / `NewsSlice.monitor_id == strategy.news_monitor_id`），无显式关联表；`service._load_strategy_slice_summaries` / `_count_strategy_slices` 统一查询入口
 - `_create_auto_slices` 按 `slice_blueprint` 自动创建：社媒维度 → SocialSlice，新闻维度 → NewsSlice，互不侵入
 - `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor（同渠道所有任务共享一个 Monitor）+ 条件创建 ResearchTask（brand_brief.channel_plan 含 `industry_research` 或 `creative_research` 渠道时）
 - `_task_dimension_map` / `_news_task_dimension_map` 存在 `research_design` 中，分别记录社媒 / 新闻 task_id → dimension_name 映射，供 probe 审查注入研究问题 + 自动建切片使用

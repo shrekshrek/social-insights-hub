@@ -10,7 +10,6 @@ from sqlalchemy import (
     DateTime,
     JSON,
     CheckConstraint,
-    Index,
     Table,
     func,
 )
@@ -21,7 +20,6 @@ from src.database import Base
 if TYPE_CHECKING:
     from src.auth.models import User
     from src.research_agent.models import ResearchTask
-    from src.social_media.analysis.models import SocialSlice
     from src.social_media.monitors.models import SocialMonitor
     from src.social_media.tasks.models import SocialTask
     from src.news_media.monitors.models import NewsMonitor
@@ -179,11 +177,6 @@ class Strategy(Base):
         back_populates="strategy",
         lazy="select",
     )
-    slices: Mapped[list["StrategySlice"]] = relationship(
-        back_populates="strategy",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
     research_tasks: Mapped[list["ResearchTask"]] = relationship(
         "src.research_agent.models.ResearchTask",
         foreign_keys="ResearchTask.strategy_id",
@@ -201,32 +194,3 @@ class Strategy(Base):
     )
 
 
-class StrategySlice(Base):
-    """策略-切片关联表
-
-    记录策略引用了哪些项目级分析切片，可跨项目引用。
-    """
-
-    __tablename__ = "strategy_slices"
-
-    strategy_id: Mapped[int] = mapped_column(
-        ForeignKey("strategies.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    slice_id: Mapped[int] = mapped_column(
-        ForeignKey("social_slices.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-
-    # 关系
-    strategy: Mapped["Strategy"] = relationship(
-        back_populates="slices",
-    )
-    slice: Mapped["SocialSlice"] = relationship(
-        "src.social_media.analysis.models.SocialSlice",
-        lazy="selectin",
-    )
-
-    __table_args__ = (
-        Index("idx_strategy_slices_slice_id", "slice_id"),
-    )

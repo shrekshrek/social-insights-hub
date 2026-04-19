@@ -1572,10 +1572,11 @@ async def confirm_research(
             detail="全量采集已启动，无法重新确认研究计划",
         )
 
-    # 从 probing 状态重新确认：清理旧探测数据，重新创建任务
+    # 从 probing 状态重新确认：清理旧探测数据（社媒 + 新闻），重新创建任务
     if strategy.status == "probing":
         from src.social_media.tasks import crud as task_crud
         from src.social_media.tasks.models import SocialTask as _DataTask
+        from src.news_media.tasks.models import NewsTask as _NewsTask
 
         old_tasks = await db.execute(
             select(_DataTask).where(
@@ -1585,6 +1586,15 @@ async def confirm_research(
         )
         for _task in old_tasks.scalars().all():
             await task_crud.delete_task(db, _task)
+
+        old_news = await db.execute(
+            select(_NewsTask).where(
+                _NewsTask.strategy_id == strategy.id,
+                _NewsTask.phase == "probe",
+            )
+        )
+        for _nt in old_news.scalars().all():
+            await db.delete(_nt)
 
         strategy.probe_review_result = None
         flag_modified(strategy, "probe_review_result")
@@ -2718,10 +2728,33 @@ async def approve_probe(
     strategy: Strategy,
     current_user_id: int,
 ) -> ApproveProbeResponse:
-    """手动确认探测，为每个探测任务创建独立的全量采集任务（phase="collect"）"""
+    """手动确认探测，为每个探测任务创建独立的全量采集任务（phase="collect"）。
+
+    幂等：若已进入 collecting 及以后阶段，直接返回已存在的 collect 任务数，
+    避免网络重试 / 前端重复点击导致重复建任务。
+    """
     from src.social_media.tasks.models import SocialTask as SocialTask
     from src.social_media.tasks.schemas import SocialTaskCreate as SocialTaskCreate
     from src.social_media.tasks.service import create_task
+
+    # 入口幂等：已推进到 collecting/ready/产出阶段时，不重复建 collect 任务
+    if STATUS_ORDER.get(strategy.status, 0) >= STATUS_ORDER["collecting"]:
+        existing = await db.execute(
+            select(func.count()).select_from(SocialTask).where(
+                and_(
+                    SocialTask.strategy_id == strategy.id,
+                    SocialTask.phase == "collect",
+                    SocialTask.is_deleted.is_(False),
+                )
+            )
+        )
+        social_count = int(existing.scalar() or 0)
+        from src.news_media.tasks.service import get_news_tasks_by_strategy as _get_news
+        existing_news = await _get_news(db, strategy.id, phase="collect")
+        return ApproveProbeResponse(
+            approved_task_count=social_count + len(existing_news),
+            strategy=await _strategy_read(db, strategy),
+        )
 
     # 获取当前所有社媒 probe 任务
     probe_tasks_stmt = select(SocialTask).where(

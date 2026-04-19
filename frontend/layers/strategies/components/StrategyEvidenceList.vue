@@ -1,7 +1,16 @@
 <template>
   <div v-if="evidence && evidence.length > 0" class="mt-2">
-    <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">数据论据</p>
-    <div class="space-y-1">
+    <button
+      class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1 cursor-pointer"
+      @click="expanded = !expanded"
+    >
+      <UIcon
+        :name="expanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
+        class="size-3"
+      />
+      数据论据（{{ evidence.length }}）
+    </button>
+    <div v-if="expanded" class="mt-1.5 space-y-1">
       <div
         v-for="(item, idx) in evidence"
         :key="idx"
@@ -17,7 +26,7 @@
           {{ item.type }}
         </UBadge>
         <span>{{ item.description }}</span>
-        <span v-if="item.source" class="text-gray-400">({{ item.source }})</span>
+        <span v-if="item.source" class="text-gray-400 shrink-0">({{ item.source }})</span>
       </div>
     </div>
   </div>
@@ -25,9 +34,11 @@
 
 <script setup lang="ts">
 import type { StageEvidence } from '../types'
-import { UBadge } from '#components'
+import { UBadge, UIcon } from '#components'
 
 defineProps<{
   evidence?: StageEvidence[]
 }>()
+
+const expanded = ref(false)
 </script>

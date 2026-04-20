@@ -91,7 +91,6 @@
               >
                 登录
               </NuxtLink>
-              <UButton to="/register" size="sm"> 注册 </UButton>
             </template>
           </div>
 
@@ -228,13 +227,6 @@
                 @click="isMobileMenuOpen = false"
               >
                 登录
-              </NuxtLink>
-              <NuxtLink
-                to="/register"
-                class="block px-3 py-2 text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
-                @click="isMobileMenuOpen = false"
-              >
-                注册
               </NuxtLink>
             </template>
           </div>

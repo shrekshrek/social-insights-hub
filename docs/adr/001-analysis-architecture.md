@@ -1,7 +1,7 @@
 # ADR-001:分析架构选型
 
 > 决策日期:2026-04-20
-> 状态:**Investigating**(Phase 0 完成,Phase 1 分析中,待 Option B Beta 验证后可升级 Accepted)
+> 状态:**Closed(v6,4 模块全部结案)**
 > 相关实验:[path-b-insight-comparison.md](../experiments/path-b-insight-comparison.md)
 > Feature Inventory:[docs/inventory/](../inventory/)(4 模块完整盘点)
 
@@ -11,7 +11,14 @@
 - **2026-04-20 v2**:Strategy #7(大魔王素毛肚)实验结果与 v1 相反,揭示 Path B 在品牌聚焦场景下会被 IP 泛化内容带偏。修订为"场景化混合架构"
 - **2026-04-20 v3**:落地 Prompt Caching 修复 + 评估 harness MVP。n=2 自动评分验证手动结论(Strategy 18 Δ +0.47,Strategy 7 Δ +0.38)
 - **2026-04-20 v4**:**状态降级为 Investigating**。自我反思发现证据基础不足,新增 Phase 0 Feature Inventory,原"场景化混合"方案降级为初步假设
-- **2026-04-20 v5(当前)**:**Phase 0 完成**(4 份 inventory 已产出)。v3 阶段的"各模块架构选型"被 inventory 事实否定(社媒前端硬依赖比预期多、跨 stage evidence_refs 是硬约束、Research Agent 已是解耦典范)。新增 **Phase 1 架构选项分析**(Options A-F + 选项矩阵 + 推荐路径),v3 的单一"场景化混合"方案被拆成 6 个可叠加的 Options,**推荐 Option A + B 先行**
+- **2026-04-20 v5**:**Phase 0 完成**(4 份 inventory 已产出)。新增 Phase 1 架构选项分析(Options A-F + 推荐路径)
+- **2026-04-20 v6(当前)**:**4 模块全部结案(Closed),ADR 状态 Closed**。
+  - **社媒**:batch post_extraction PoC 验证 batch 改造速度反而慢 4 倍不值得;两层设计合理。落地 `CELERY_AI_POSTS_BATCH_SIZE` 5→15
+  - **新闻**:两层 + Probe/Collect 设计精巧。落地 `_TAGGING_BATCH_SIZE` 5→10 + 迁移到根 Settings(`CELERY_AI_NEWS_TAGGING_BATCH_SIZE`)
+  - **专题研究**:架构已是 LLM-native/Agentic 典范,**无改动**
+  - **策略研究**:4 阶段状态机 + 3 条产出路径 + 10 链 + 级联清空 + evidence_refs 均合理。落地清理测试残留数据(5 条旧 strategy + 5 monitor + 级联 114 tasks / 3,600 posts / 34,779 comments)
+  - **工程清理**:移除 3 个 dead config + 并发机制文档化(`backend/CODING_GUIDE.md`)+ 测试去硬编码化(`test_module0.py` 从 6 个 pre-existing 失败 → 18/18 全绿)
+  - **总结**:经过从 v1 到 v6 的多轮迭代 + n=2 实验 + 4 份 inventory + 多个 PoC 验证,**当前架构合理,无重构必要**。后续若有新需求(如定期监控、品类扩展),在现有架构上增量叠加即可
 
 ## 证据局限性声明(必读)
 
@@ -82,9 +89,140 @@
 | Phase | 状态 | 产出 |
 |-------|-----|-----|
 | 0. Feature Inventory | ✅ 完成 | [docs/inventory/](../inventory/) 4 份 |
-| 1. 架构选项评估 | 🟡 进行中 | 本节 |
+| 1. 架构选项评估 | 🟡 进行中(社媒结案,其他 3 模块审阅中) | 本节 |
 | 2. 架构决策(Accepted) | ⏳ 待做 | - |
 | 3. 执行重构 | ⏳ 待做 | - |
+
+### 模块结案状态
+
+| 模块 | 状态 | 结论 |
+|------|-----|-----|
+| **社媒监控** | ✅ **Closed** | 两层设计合理,不重构;唯一优化:`CELERY_AI_POSTS_BATCH_SIZE` 5→15 |
+| **新闻监控** | ✅ **Closed** | 两层 + Probe/Collect 设计精巧,保留现状;唯一优化:`_TAGGING_BATCH_SIZE` 5→10 + 进 config |
+| **专题研究** | ✅ **Closed** | 架构已是 LLM-native/Agentic 典范(LangGraph 循环 + profile 参数化 + per-stage formatter),功能合理,**无改动** |
+| **策略研究** | ✅ **Closed** | 4 阶段状态机 + 3 条产出路径 + 10 条链 + 级联清空 + evidence_refs 硬引用,架构合理。唯一操作:清理测试残留数据(5 条旧 strategy + 5 个 monitor) |
+
+### 社媒模块结案摘要(v6)
+
+**决定的改动**:
+- ✅ `.env` 改 `CELERY_AI_POSTS_BATCH_SIZE` 5→15(screening 批大小;`config.py` 的 default 保持 5 不变,仅环境变量覆盖)
+- ✅ 清理 3 个 dead config(`CELERY_AI_SCREENING_CONCURRENT_STREAMS` / `CELERY_AI_DEEP_ANALYSIS_CONCURRENCY` / `CELERY_AI_COMMENTS_BATCH_SIZE`)
+  - 这 3 个原本是为"按 task 类型分 queue 限流"设计,但从未实现
+  - 实际并发由 docker-compose 命令 `--concurrency=100` 统一控制(100 greenlet 共享 pool)
+  - 同步更新:`config.py` / `.env` / `.env.test` / `.env.example` / `.env.production*` / `tests/test_module0.py` / `backend/CODING_GUIDE.md`
+
+**验证后放弃的改动**:
+- ❌ **`post_extraction` 批处理**(5 帖/批)—— [PoC 结果](#poc-task-84--94-batch-post_extraction):质量指标过线(F1 0.68-0.82)但 wall-clock 速度慢 4 倍(60s vs 15s),容错更差(API 单次失败丢 5 帖 vs 1 帖),ROI 负
+- ❌ **`comment_extraction` 批处理/全局采样** —— 同上理由,不跑 PoC 直接 skip
+- ❌ **`attribute_normalization` 7→2 次合并** —— Prompt Caching 已消化大部分重复 input,真实 token 节省约 ¥0.002/task,不值得 2-3 天开发 + 质量风险
+- ❌ **`opinion_normalization` 多类别合并** —— 同上
+- ❌ **`entity_normalization` Review 阶段砍** —— Review 专门防"华为手机 + 华为冰箱"跨品类错误合并,砍了可能打坏下游 SOV/SWOT 精度,风险>收益
+
+**核心判定**:
+1. 两层架构(Task keyword anchor + Slice subject anchor)是**语义分治,不是冗余**,保留
+2. Task 派生(IPA/ContextGraph/竞品雷达/KOL)是纯代码零 LLM 成本,**故意独立于 Slice 分析以防污染**,保留
+3. 9 条 LLM 链各司其职,**没有冗余**;Prompt Caching 已自动消化 system prompt 重复开销
+4. 前端 10+ 图表重度依赖结构化字段(SOV / organic/promo 分层 / SWOT / 剪刀差 等),LLM-native 一把梭**无法可靠产出精确百分比/统计量**
+5. 定期监控需求(未来)通过 APScheduler 周期性创建 Task + 自动 Slice 规则可轻量支持,**现有架构天然适配**
+
+**经过的验证**:
+- 2 次 batch PoC(task 84 MFGM + task 94 宠物)见 [docs/experiments/](../experiments/)
+- 2 份 feature inventory 对比([social_media.md](../inventory/social_media.md))
+- 多轮架构反思和修正(v1→v6)
+
+---
+
+### 新闻监测模块结案摘要(v6)
+
+**架构判定:两层设计 + Probe/Collect 两阶段,合理,保留**。
+
+**核心观察**:
+- 只 2 条 LLM 链(`NEWS_TAGGING` 逐文批量标注 + `NEWS_INSIGHT` 切片级聚合),**明显比社媒简洁**
+- **Probe/Collect 两阶段设计**是独特优势:probe 阶段只搜索不抓全文不标注,低成本验证关键词;collect 阶段才做全文 + 标注
+- 输出结构以 narrative 为主(自然语言),前端硬依赖字段比社媒少(~10 vs 15+)
+- 数据流线性,Task 做标注 + Slice 做聚合,**不重复**
+
+**决定的改动**:
+- ✅ `_TAGGING_BATCH_SIZE` 5→10 + **从 module 常量迁移到 Settings**(`CELERY_AI_NEWS_TAGGING_BATCH_SIZE`),与社媒 `CELERY_AI_POSTS_BATCH_SIZE` 风格统一,运行时可调
+- 配套更新:`config.py` 新增字段、`.env` / `.env.example` / `.env.test` / `.env.production*` 全部同步加配置
+- `_PROBE_MAX_RESULTS=20` 保留为模块常量(业务策略级,非性能调优)
+
+**评估过但不做的**:
+- ❌ `NEWS_INSIGHT` 批处理/拆分:单切片一次调用已是最优,切片量小(50-100 篇),无需细拆
+- ❌ probe review 链并发优化:当前每任务独立调用已用 gevent 100 并发承载
+- ❌ source_tier 动态化:硬编码字典比 LLM 更稳定,规模 <500 维持现状
+- ❌ 架构性重构:两层 + 两阶段已是最佳实践,无空间
+
+**核心判定**:
+1. 两层架构(Task keyword anchor + Slice subject anchor)合理,保留
+2. Probe/Collect 两阶段是新闻模块独有的成本控制设计,**必须保留**
+3. 2 条 LLM 链分工明确,无冗余
+4. `NEWS_INSIGHT` 被"独立新闻监测"和"策略 probe review"两路复用,进一步降低架构复杂度
+
+**与社媒的关键差异**:
+- 新闻模块**天然更接近 LLM-native**(输出自由度高)
+- 没有社媒的"多层归一化 + 结构化图表硬依赖"问题
+- 未来若策略研究重构,新闻通过 formatter 解耦的成本远低于社媒
+
+---
+
+### 专题研究 (Research Agent) 结案摘要(v6)
+
+**架构判定:已是 LLM-native/Agentic 典范,无改动**。
+
+**核心观察**:
+- **LangGraph 6 节点循环图**(plan → search → filter → fetch → analyze → evaluate → synthesize),evaluate 可回到 plan 多轮迭代
+- **2 个 profile(industry / creative)参数化实现**,不是两套图,扩展性好
+- **per-stage token 预算 formatter**(`research_findings.py`)按消费 stage 分层注入策略 chain,是三个上游模块里**唯一"正确姿势"的解耦**
+- 无 pre-LLM 遗产,本模块没有"归一化链冗余"问题
+- 并发模型与其他模块不同:**节点内并发**(analyzer 10 并发),而非任务级
+
+**无改动理由**:
+1. 架构已经是现代 Agent 范式的参考实现,不存在结构性可优化点
+2. 模块有独立的 `src/research_agent/config.py` 自管 `MAX_ROUNDS=4` / `MAX_CANDIDATES_PER_ROUND=15` / `MAX_CONCURRENT_TASKS=10` 等,**保持 module-local 配置符合单体模块自洽原则**,不强行进根 Settings
+3. 外部依赖(Tavily / Crawl4AI / DeepSeek)属基础设施,与本 ADR 范围无关
+4. prompt 中也无破坏 Prompt Caching 前缀的动态模板(社媒 v3 做过的清理不需要在这里再做一遍)
+
+**与社媒/新闻的架构互补**:
+- Research Agent 承担**外部搜索/抓取/综合**角色,与本地数据分析(社媒/新闻)互补
+- 通过 formatter 与策略研究解耦,策略 chain 不关心 Research Agent 内部实现
+- **未来策略研究重构时,Research Agent 作为"已经做对了"的模板参考**
+
+---
+
+### 策略研究模块结案摘要(v6)
+
+**架构判定:下游薄层 + 复杂状态机 + 跨 stage 硬引用 均合理,保留现状**。
+
+**核心观察**:
+- **4 阶段状态机**(draft → planned → probing → collecting → ready → 3 路径)有意的渐进式设计,非冗余
+- **3 条产出路径**职责清晰:
+  - `campaign_strategy`:消费者驱动 → Insight → Brand Role → Big Idea,服务创意 campaign
+  - `market_report`:媒体驱动 → Agenda Map → Landscape → Strategic Brief,服务战略决策
+  - `full_strategy`:Landscape 结构化作为 Insight 输入,让创意基于完整竞争格局背景
+- **10 条 LLM 链**职责明确,无冗余:
+  - `brief_parser` / `research_design` 触发时机不同(parse-brief vs design-research),不合并
+  - `social_probe_review` / `news_probe_review` 语义不同,不合并
+  - `coverage_check` 难以用规则替代,保留
+- **Cache 前缀检查**:10 条 SYSTEM_TEMPLATE 全部静态,Prompt Caching 开箱即用
+- **`evidence_refs` 硬引用**(`strategic_brief.evidence_refs` → `agenda_map` / `landscape`):不是过度工程,是让策略简报可审计、可跳转的**有价值设计**
+- **级联清空语义**:数据一致性硬保证,必要
+
+**决定的操作**:
+- ✅ **测试残留数据清理**:删除 5 条旧 strategy(id 6, 7, 11, 12, 13)+ 5 个关联 social_monitor + 级联的 114 tasks / 3,600 posts / 34,779 comments / 3,533 post_analysis
+  - strategy 12, 13 使用了废弃值 `output_type='insight_report'`
+  - strategy 11 是未完成的 probing,其余是早期测试
+  - **保留 strategy 18**(乐虎,`full_strategy` completed,Path B 实验主要 baseline)
+
+**评估过但不做的**:
+- ❌ `full_strategy` 是否应包含 `Strategic Brief`——产品决策而非技术问题,当前设计"Landscape 赋能创意"有其合理性
+- ❌ 合并任何 chain——触发时机 + 输入语义不同,强行合并破坏工作流
+- ❌ 砍 coverage_check_chain——难以用规则替代"研究问题是否被切片覆盖"
+- ❌ 改 evidence_refs / 级联清空——二者都是数据一致性保证,改动风险大
+
+**与其他模块的架构协同**:
+- 策略研究是**下游消费者**,上游变动(社媒/新闻/专题研究)都通过稳定接口隔离
+- Research Agent 的 `research_findings.py` per-stage formatter 是标杆,未来若要进一步解耦社媒/新闻可参考
 
 ---
 

@@ -18,16 +18,14 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.news_media.tasks import crud
 from src.news_media.tasks.models import NewsTask
 from src.news_media.tasks.schemas import NewsTaskCreate
 
 logger = logging.getLogger(__name__)
 
-# 逐篇标注的批次大小
-_TAGGING_BATCH_SIZE = 5
-
-# probe 搜索每渠道最大条数
+# probe 搜索每渠道最大条数(业务策略,不进 config)
 _PROBE_MAX_RESULTS = 20
 _DEFAULT_CHANNELS: tuple[str, ...] = ("baidu", "sogou", "duckduckgo")
 _ALL_VALID_CHANNELS = {"baidu", "sogou", "duckduckgo", "wechat_mp"}
@@ -187,7 +185,7 @@ async def _tag_articles_batch(
     analysis_goal: str,
     use_full_text: bool = False,
 ) -> tuple[list[dict], dict | None]:
-    """逐篇轻量标注（批量，_TAGGING_BATCH_SIZE 篇一组）—— 仅 collect 阶段调用
+    """逐篇轻量标注（批量，settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE 篇一组）—— 仅 collect 阶段调用
 
     Returns:
         (tags_list, token_usage) — token_usage 为累加后的 LLM 用量统计
@@ -202,8 +200,9 @@ async def _tag_articles_batch(
     total_input_tokens = 0
     total_output_tokens = 0
 
-    for i in range(0, len(articles), _TAGGING_BATCH_SIZE):
-        batch = articles[i:i + _TAGGING_BATCH_SIZE]
+    batch_size = settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE
+    for i in range(0, len(articles), batch_size):
+        batch = articles[i:i + batch_size]
         batch_dicts = [
             {
                 "title": a.title,

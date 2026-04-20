@@ -65,15 +65,20 @@ class TestConfiguration:
         print("✓ Celery配置正确")
 
     def test_ai_task_config(self):
-        """测试AI任务配置"""
-        assert settings.CELERY_AI_SCREENING_CONCURRENT_STREAMS == 100
-        assert settings.CELERY_AI_DEEP_ANALYSIS_CONCURRENCY == 100
-        assert settings.CELERY_AI_POSTS_BATCH_SIZE == 5
-        assert settings.CELERY_AI_COMMENTS_BATCH_SIZE == 10
-        assert settings.CELERY_TASK_MAX_ITEMS_LIMIT == 20000
-        assert settings.DB_COMMIT_AFTER_BATCH_COUNT == 20
+        """测试AI任务配置字段存在且类型正确
+
+        注: 并发度由 docker-compose 的 `--concurrency=100` 统一控制,
+        不在 Settings 里定义。具体数值由环境变量决定(dev/test 可能不同),
+        此测试仅校验字段存在 + 类型合法,不断言具体值。
+        """
+        assert isinstance(settings.CELERY_AI_POSTS_BATCH_SIZE, int)
+        assert settings.CELERY_AI_POSTS_BATCH_SIZE >= 1
+        assert isinstance(settings.CELERY_TASK_MAX_ITEMS_LIMIT, int)
+        assert settings.CELERY_TASK_MAX_ITEMS_LIMIT >= 1
+        assert isinstance(settings.DB_COMMIT_AFTER_BATCH_COUNT, int)
+        assert settings.DB_COMMIT_AFTER_BATCH_COUNT >= 1
         print(
-            f"✓ AI任务配置正确 (并发流={settings.CELERY_AI_SCREENING_CONCURRENT_STREAMS}, 批次大小={settings.CELERY_AI_POSTS_BATCH_SIZE})"
+            f"✓ AI任务配置正确 (screening 批次大小={settings.CELERY_AI_POSTS_BATCH_SIZE})"
         )
 
     def test_deepseek_config(self):
@@ -89,13 +94,22 @@ class TestConfiguration:
         )
 
     def test_deepseek_pricing_config(self):
-        """测试DeepSeek价格配置"""
-        assert settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION == 2.0
-        assert settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION == 3.0
-        assert settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION == 2.0
-        assert settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION == 3.0
+        """测试DeepSeek价格配置字段存在且为正数
+
+        注: 具体价格由环境变量决定(会随 DeepSeek 官方调价更新),
+        此测试仅校验字段存在 + 类型合法,不断言具体数值。
+        """
+        assert isinstance(settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION, float)
+        assert settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION > 0
+        assert isinstance(settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION, float)
+        assert settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION > 0
+        assert isinstance(settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION, float)
+        assert settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION > 0
+        assert isinstance(settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION, float)
+        assert settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION > 0
         print(
-            "✓ DeepSeek价格配置正确 (chat: ¥2/¥3, reasoner: ¥2/¥3 per million tokens)"
+            f"✓ DeepSeek价格配置正确 (chat: ¥{settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION}"
+            f"/¥{settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION})"
         )
 
     def test_batch_analysis_config(self):
@@ -170,24 +184,28 @@ class TestLangChainModule:
             raise AssertionError(f"Reasoner LLM实例创建失败: {e}")
 
     def test_calculate_cost_chat(self):
-        """测试Chat模型成本计算"""
+        """测试Chat模型成本计算(用当前 settings 价格,不硬编码)"""
         from src.llm import calculate_cost
 
-        # Test chat model: 1000 input + 500 output tokens
         cost = calculate_cost(input_tokens=1000, output_tokens=500, model_type="chat")
-        expected_cost = (1000 / 1_000_000 * 2.0) + (500 / 1_000_000 * 3.0)
+        expected_cost = (
+            1000 / 1_000_000 * settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION
+            + 500 / 1_000_000 * settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION
+        )
         assert abs(cost - expected_cost) < 0.000001
         print(f"✓ Chat模型成本计算正确: 1000输入+500输出 = ¥{cost:.6f}")
 
     def test_calculate_cost_reasoner(self):
-        """测试Reasoner模型成本计算"""
+        """测试Reasoner模型成本计算(用当前 settings 价格,不硬编码)"""
         from src.llm import calculate_cost
 
-        # Test reasoner model: 2000 input + 1000 output tokens
         cost = calculate_cost(
             input_tokens=2000, output_tokens=1000, model_type="reasoner"
         )
-        expected_cost = (2000 / 1_000_000 * 2.0) + (1000 / 1_000_000 * 3.0)
+        expected_cost = (
+            2000 / 1_000_000 * settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION
+            + 1000 / 1_000_000 * settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION
+        )
         assert abs(cost - expected_cost) < 0.000001
         print(f"✓ Reasoner模型成本计算正确: 2000输入+1000输出 = ¥{cost:.6f}")
 
@@ -222,7 +240,7 @@ class TestDeepSeekAPI:
     )
     def test_api_connectivity_chat(self):
         """测试Chat模型API连通性 (LangChain 1.0)"""
-        from src.llm_module import get_deepseek_chat, extract_token_usage
+        from src.llm import get_deepseek_chat, extract_token_usage
         from langchain_core.messages import HumanMessage
 
         try:
@@ -233,16 +251,18 @@ class TestDeepSeekAPI:
             assert response is not None
             assert hasattr(response, "content")
 
-            # Test token usage extraction
+            # Test token usage extraction (TokenUsageStats schema: {summary, call_details})
             usage = extract_token_usage(response)
-            assert "input_tokens" in usage
-            assert "output_tokens" in usage
-            assert usage["input_tokens"] > 0 or usage["output_tokens"] > 0
+            assert "summary" in usage
+            summary = usage["summary"]
+            assert "total_input_tokens" in summary
+            assert "total_output_tokens" in summary
+            assert summary["total_input_tokens"] > 0 or summary["total_output_tokens"] > 0
 
             print("✓ Chat模型API连通性测试成功")
             print(f"  - 响应内容: {response.content[:50]}...")
             print(
-                f"  - Token使用: 输入={usage['input_tokens']}, 输出={usage['output_tokens']}"
+                f"  - Token使用: 输入={summary['total_input_tokens']}, 输出={summary['total_output_tokens']}"
             )
         except Exception as e:
             pytest.fail(f"Chat模型API连通性测试失败: {e}")
@@ -253,26 +273,27 @@ class TestDeepSeekAPI:
     )
     def test_api_connectivity_reasoner(self):
         """测试Reasoner模型API连通性 (LangChain 1.0)"""
-        from src.llm_module import get_deepseek_reasoner, extract_token_usage
+        from src.llm import get_deepseek_reasoner, extract_token_usage
         from langchain_core.messages import HumanMessage
 
         try:
             llm = get_deepseek_reasoner()
-            # LangChain 1.0: Use invoke with messages
             response = llm.invoke([HumanMessage(content="计算1+1，请直接回答数字")])
 
             assert response is not None
             assert hasattr(response, "content")
 
-            # Test token usage extraction
+            # Test token usage extraction (TokenUsageStats schema: {summary, call_details})
             usage = extract_token_usage(response)
-            assert "input_tokens" in usage
-            assert "output_tokens" in usage
+            assert "summary" in usage
+            summary = usage["summary"]
+            assert "total_input_tokens" in summary
+            assert "total_output_tokens" in summary
 
             print("✓ Reasoner模型API连通性测试成功")
             print(f"  - 响应内容: {response.content[:50]}...")
             print(
-                f"  - Token使用: 输入={usage['input_tokens']}, 输出={usage['output_tokens']}"
+                f"  - Token使用: 输入={summary['total_input_tokens']}, 输出={summary['total_output_tokens']}"
             )
         except Exception as e:
             pytest.fail(f"Reasoner模型API连通性测试失败: {e}")

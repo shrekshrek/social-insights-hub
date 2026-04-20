@@ -25,7 +25,7 @@
 - **核心职责**:批量给新闻打 6 维结构化标注
 - **输入**:
   - `analysis_goal`:研究背景,用于 context 化标注
-  - `article_count`:本批文章数(默认 5 篇)
+  - `article_count`:本批文章数(当前配置 **10 篇**)
   - `articles_content`:格式化的文章内容(title/source/snippet 或 full_text 截断 2000 字)
 - **输出**(JSON 数组,每文一条):
   - `relevance`: high / medium / low
@@ -34,7 +34,7 @@
   - `mentioned_entities`: `[{name, role: target/competitor/context}]`
   - `key_quotes`: `[{speaker, quote}]`
   - `summary`:一句话摘要(≤80 字)
-- **调用频次**:每文 1 次,以 **5 篇/批** 批处理(`_TAGGING_BATCH_SIZE=5`)
+- **调用频次**:每文 1 次,以 **10 篇/批** 批处理(由 `settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE` 配置,默认 10)
 - **执行阶段**:**仅 collect 阶段**(probe 阶段不调)
 - **调用方**:
   - [`tasks/tasks.py::_async_run_collect()`](../../backend/src/news_media/tasks/tasks.py)(collect 流水线)
@@ -111,7 +111,7 @@
 |-----|-------|---------|
 | 搜索结果数 | ≤20 篇(`_PROBE_MAX_RESULTS`) | ≤20 篇(`max_results=20`) |
 | 全文抓取 | ❌ 无 | ✅ Crawl4AI 并发(=5) |
-| 逐篇标注 | ❌ 无 | ✅ NEWS_TAGGING,5 篇/批 |
+| 逐篇标注 | ❌ 无 | ✅ NEWS_TAGGING,10 篇/批(`CELERY_AI_NEWS_TAGGING_BATCH_SIZE`) |
 | 任务 `analysis_result` | ✅ meta 统计(来源分布等) | ❌ 不用(迁移到 NewsSlice) |
 | 触发场景 | 策略 probe 阶段 / refine 关键词 | 策略 collect / 独立 monitor collect |
 | 成本 | 极低(仅搜索 + 爬虫) | 中等(爬虫 + LLM) |
@@ -294,7 +294,7 @@ POST /tasks/{id}/execute
   → Worker(gevent) → _async_run_collect()
       ├─ _search_and_store_articles() 多渠道聚合 + 去重
       ├─ crawl_articles() Crawl4AI 并发抓全文
-      ├─ _tag_articles_batch() NEWS_TAGGING (5/批)
+      ├─ _tag_articles_batch() NEWS_TAGGING (10/批,由 `CELERY_AI_NEWS_TAGGING_BATCH_SIZE` 配置)
       ├─ _apply_tags_to_articles() 回写标注
       └─ task.status=completed
 
@@ -396,7 +396,7 @@ Collect:每个 probe task 创建对应 collect task
 
 ### 7.4 潜在优化空间(未验证)
 
-- `NEWS_TAGGING` 现在 5 篇/批,是否能 10+ 篇/批?(节省 Prompt caching 以外的 overhead)
+- ~~`NEWS_TAGGING` 现在 5 篇/批,是否能 10+ 篇/批?~~ **已落地(2026-04-20)**:提升到 10 篇/批 + 迁移到 `settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE`,详见 [ADR-001](../adr/001-analysis-architecture.md#新闻监测模块结案摘要v6)
 - `NEWS_INSIGHT` 在策略 probe review 时可能过重——probe 只是关键词验证,用更轻的审查链可能够用?
 - `source_tier` 目前是硬编码字典——规模扩大后能否动态学习?(长期优化)
 

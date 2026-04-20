@@ -108,7 +108,7 @@ class KnowledgeChunk(Base):
     )
     content: Mapped[str] = mapped_column(Text(), nullable=False, comment="原文分块内容")
     embedding: Mapped[list[float]] = mapped_column(
-        Vector(1024), nullable=False, comment="BAAI/bge-large-zh 向量嵌入（1024 维）"
+        Vector(1024), nullable=False, comment="BAAI/bge-m3 向量嵌入（1024 维）"
     )
     chunk_index: Mapped[int] = mapped_column(
         Integer(), nullable=False, comment="块序号（从 0 开始）"

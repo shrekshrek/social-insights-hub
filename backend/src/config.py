@@ -181,7 +181,7 @@ class Settings(BaseSettings):
         description="Embedding API Base URL",
     )
     EMBEDDING_MODEL: str = Field(
-        default="BAAI/bge-large-zh-v1.5",
+        default="BAAI/bge-m3",
         description="Embedding model name (1024-dim output)",
     )
 

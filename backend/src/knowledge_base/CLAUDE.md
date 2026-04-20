@@ -33,7 +33,7 @@
 - `source_meta._file_bytes_b64`: 文件字节临时存储（Base64），处理完成后自动清除
 
 ### `knowledge_chunks`
-- `embedding`: `vector(1024)`，BAAI/bge-large-zh，`normalize_embeddings=True`
+- `embedding`: `vector(1024)`，BAAI/bge-m3，`normalize_embeddings=True`
 - IVFFlat 索引（`lists=100`），余弦距离（`vector_cosine_ops`）
 - `chunk_meta`: 页码等元信息（注意：不能命名为 `metadata`，SQLAlchemy 保留字）
 
@@ -42,7 +42,7 @@
 - **pgvector 依赖**: 需要 `pgvector/pgvector:pg16` 镜像（已在 `docker-compose.yml` 与 `docker-compose.prod.yml` 配置），`postgres:16-alpine` 不含该扩展
 - **Celery 异步处理**: 上传端点仅创建 DB 记录，通过 `process_document_task.delay(doc_id)` 派发处理；`status` 异步更新
 - **RAG 优雅降级**: `retrieve_market_context()` 所有异常静默处理，返回 `""`；策略生成主流程不受 KB 可用性影响
-- **Embedding API**: 通过 OpenAI-compatible API 调用（默认 SiliconFlow BAAI/bge-large-zh-v1.5），无本地模型，无 NVIDIA 依赖；配置项：`EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL`
+- **Embedding API**: 通过 OpenAI-compatible API 调用（默认 SiliconFlow BAAI/bge-m3），无本地模型，无 NVIDIA 依赖；配置项：`EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL`
 - **独立模块**: 不作为策略研究的 channel_plan 渠道，不注入任何产出 stage
 - **文件格式**: 上传支持 PDF / DOCX / TXT / MD，上限 50MB；`title` 参数是 Form field（非 Query string）
 

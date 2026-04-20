@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # 文档大小上限（50MB）
 _MAX_FILE_SIZE = 50 * 1024 * 1024
 
-# 分块参数（SiliconFlow BAAI/bge-large-zh 上限 512 tokens，中文约 1字/token，留余量取 400）
+# 分块参数（BAAI/bge-m3 支持 8192 tokens，为检索召回粒度取 400 字符，可按需放大）
 _CHUNK_SIZE = 400
 _CHUNK_OVERLAP = 50
 

@@ -37,7 +37,12 @@ def synthesize_node(state: ResearchState) -> dict:
     questions = state.get("research_questions", [])
     profile = get_profile(state.get("profile_name"))
 
-    if not selected:
+    # findings 跨轮累积（state.py 中 operator.add），而 selected 每轮替换；
+    # 只要任一非空就走综合分析。避免"末轮 filter 跨轮去重后 selected=[] 但
+    # 前轮已累积 findings"的场景下丢弃全部分析结果。
+    findings = state.get("findings", [])
+
+    if not selected and not findings:
         empty_findings = {
             q: {
                 "answer_summary": "未找到相关数据",
@@ -53,9 +58,6 @@ def synthesize_node(state: ResearchState) -> dict:
             "coverage": _build_coverage(empty_findings, selected),
             "information_gaps": [f"所有研究问题均缺乏数据：{', '.join(questions)}"],
         }
-
-    # 优先使用 findings（Phase 2+ 深度分析产出），回退到 snippets
-    findings = state.get("findings", [])
 
     sources_for_prompt = []
     if findings:

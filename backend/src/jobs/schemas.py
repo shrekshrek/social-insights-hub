@@ -24,6 +24,9 @@ class CallDetail(CustomBaseModel):
     cost_cny: float
     duration_seconds: float
     timestamp: datetime | None = None
+    # DeepSeek Context Caching 字段（旧记录无此字段时默认 0）
+    cache_hit_tokens: int = 0
+    cache_miss_tokens: int = 0
 
 
 class TokenUsageSummary(CustomBaseModel):
@@ -37,6 +40,10 @@ class TokenUsageSummary(CustomBaseModel):
     total_duration_seconds: float = 0.0
     avg_tokens_per_call: float = 0.0
     avg_cost_per_call: float = 0.0
+    # DeepSeek Context Caching 字段（旧记录无此字段时默认 0）
+    total_cache_hit_tokens: int = 0
+    total_cache_miss_tokens: int = 0
+    cache_hit_ratio: float = 0.0
 
 
 class TokenUsageStats(CustomBaseModel):

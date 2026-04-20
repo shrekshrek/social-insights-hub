@@ -1,6 +1,6 @@
 """知识库向量嵌入服务
 
-通过 OpenAI-compatible Embedding API（默认：SiliconFlow BAAI/bge-large-zh-v1.5）
+通过 OpenAI-compatible Embedding API（默认：SiliconFlow BAAI/bge-m3）
 将文本向量化，输出维度 1024，适用于余弦相似度检索。
 """
 
@@ -18,7 +18,7 @@ class EmbeddingService:
     """OpenAI-compatible Embedding API 客户端
 
     使用 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL 配置。
-    默认指向 SiliconFlow 的 BAAI/bge-large-zh-v1.5（1024 维）。
+    默认指向 SiliconFlow 的 BAAI/bge-m3（1024 维）。
     """
 
     def __init__(self) -> None:

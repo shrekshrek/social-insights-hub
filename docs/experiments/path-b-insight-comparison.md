@@ -3,7 +3,20 @@
 > 实验日期:2026-04-20
 > 样本:Strategy #18(乐虎功能饮料)+ Strategy #7(大魔王素毛肚世界杯)
 > 样本数:n=2(需扩展到 n≥5 方可定论)
-> 相关决策:[ADR-001 分析架构的分场景选型](../adr/001-analysis-architecture.md)
+> 相关决策:[ADR-001 分析架构选型](../adr/001-analysis-architecture.md)
+
+## ⚠️ 适用范围声明
+
+**本实验仅对比 `insight_chain` 一条链的产出**,不构成对整体架构的最终判断。
+
+明确**不能**从本实验直接推出的结论:
+- 其他策略产出链(brand_role / big_idea / agenda_map / landscape / strategic_brief)是否有同样的 Path A vs Path B 差异
+- 社媒监测/新闻监测/专题研究场景下 Pipeline 架构是否该改
+- 前端 UI 依赖的结构化字段(如 `player.media_sov_pct` / `evidence_refs`)在 Path B 架构下如何维护
+- 跨模块工程依赖(Celery 任务图、AnalysisJob source_count、auto-slice 触发逻辑)的影响
+
+本实验的价值是**证明"架构选择值得深入调研"**,不是**给出最终答案**。
+完整架构决策必须在 [4 模块 Feature Inventory](../adr/001-analysis-architecture.md#phase-0-feature-inventory当前阶段) 完成后再做。
 
 ## 实验结果摘要(n=2)
 

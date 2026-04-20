@@ -15,6 +15,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
 
 from src.config import settings
+from src.llm.utils import build_flat_token_record
 from src.research_agent.config import MAX_CANDIDATES_PER_ROUND
 from src.research_agent.profiles import ResearchProfile, get_profile
 from src.research_agent.state import ResearchState
@@ -59,16 +60,6 @@ _DOMAIN_SATURATION_PENALTIES: list[tuple[int, float]] = [
 ]
 
 
-def _token_record(response) -> dict:
-    """从 LLM 响应中提取 token 用量（最小结构，供 state 累积）"""
-    if hasattr(response, "usage_metadata") and response.usage_metadata:
-        um = response.usage_metadata
-        return {
-            "input_tokens": um.get("input_tokens", 0),
-            "output_tokens": um.get("output_tokens", 0),
-            "total_tokens": um.get("total_tokens", 0),
-        }
-    return {}
 
 
 def _is_fetch_blocked(url: str) -> bool:
@@ -283,7 +274,7 @@ def filter_node(state: ResearchState) -> dict:
         )
         return {
             "selected": candidates[:MAX_CANDIDATES_PER_ROUND],
-            "token_usage_records": [_token_record(response)],
+            "token_usage_records": [build_flat_token_record(response)],
         }
 
     # 按 LLM 打分重建候选列表（取全部打过分的条目，后续再截取 top N）
@@ -346,4 +337,4 @@ def filter_node(state: ResearchState) -> dict:
         "filter 节点: %d → %d 条（低分丢弃 %d）",
         len(candidates), len(selected), low_score_dropped,
     )
-    return {"selected": selected, "token_usage_records": [_token_record(response)]}
+    return {"selected": selected, "token_usage_records": [build_flat_token_record(response)]}

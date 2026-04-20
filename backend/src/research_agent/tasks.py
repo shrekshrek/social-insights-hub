@@ -15,6 +15,7 @@ from src.jobs.factory import (
     complete_analysis_job_sync,
 )
 from src.jobs.models import AnalysisJob
+from src.llm.utils import sum_cost_from_flat_records
 from src.research_agent.models import ResearchTask
 
 logger = logging.getLogger(__name__)
@@ -262,23 +263,30 @@ def run_research_task(self, research_task_id: int) -> None:
         }
         task.status = "completed"
 
-        # 汇总所有节点的 token 用量
+        # 汇总所有节点的 token 用量(含 DeepSeek Context Caching 字段)
         token_records = result_state.get("token_usage_records", [])
         total_input = sum(r.get("input_tokens", 0) for r in token_records)
         total_output = sum(r.get("output_tokens", 0) for r in token_records)
         total_tokens = sum(r.get("total_tokens", 0) for r in token_records)
+        total_cache_hit = sum(r.get("cache_hit_tokens", 0) for r in token_records)
+        total_cache_miss = sum(r.get("cache_miss_tokens", 0) for r in token_records)
         total_calls = sum(1 for r in token_records if r.get("total_tokens", 0) > 0)
-        from src.config import settings as _settings
-        cost = (
-            total_input * _settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION / 1_000_000
-            + total_output * _settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION / 1_000_000
+
+        # 成本按命中/未命中分别计价(Research Agent 全部走 chat 模型)
+        cost = sum_cost_from_flat_records(token_records, llm_type="chat")
+        cache_hit_ratio = (
+            total_cache_hit / total_input if total_input > 0 else 0.0
         )
+
         token_usage = {
             "summary": {
                 "total_calls": total_calls,
                 "total_input_tokens": total_input,
                 "total_output_tokens": total_output,
                 "total_tokens": total_tokens,
+                "total_cache_hit_tokens": total_cache_hit,
+                "total_cache_miss_tokens": total_cache_miss,
+                "cache_hit_ratio": round(cache_hit_ratio, 4),
                 "total_cost_cny": round(cost, 6),
                 "total_duration_seconds": 0.0,
                 "avg_tokens_per_call": round(total_tokens / total_calls, 1) if total_calls else 0.0,

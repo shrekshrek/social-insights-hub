@@ -1,0 +1,27 @@
+# Exclude node_modules to avoid overwriting pnpm install inside Docker
+# The symlinks in local node_modules point to paths that don't exist in the container
+node_modules
+frontend/node_modules
+
+# Exclude Python artifacts
+backend/__pycache__
+backend/.venv
+backend/.pytest_cache
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.egg-info
+
+# Exclude local environment files
+.env
+.env.local
+.env.*.local
+.env.development
+
+# Exclude development artifacts
+.git
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo

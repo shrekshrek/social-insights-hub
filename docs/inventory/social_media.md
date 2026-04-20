@@ -23,9 +23,9 @@
 
 #### `screening_chain.py`
 - **职责**:批量对原文评分(广告度/价值/相关度/情感)
-- **输入**:5 帖/批 × (`post_id`, `title`, `content`) + 项目关键词
+- **输入**:`settings.CELERY_AI_POSTS_BATCH_SIZE` 帖/批(当前配置 **15**)× (`post_id`, `title`, `content`) + 项目关键词
 - **输出**:`spam_score` (0-10) / `value_score` (0-10) / `relevance_score` (0-10) / `sentiment` (-2~+2)
-- **调用频次**:每批 5 帖一次,总帖数 / 5 次调用
+- **调用频次**:每批 15 帖一次,总帖数 / 15 次调用
 - **调用方**:[`screening_tasks.py:_analyze_batch_posts`](../../backend/src/social_media/analysis/celery_tasks/screening_tasks.py)
 - **🔑 独有价值**:`spam_score` 是后续所有"有机/推广分层"分析的唯一来源——LLM-native 一把梭做不到给每帖一个独立的广告度评分
 
@@ -210,7 +210,7 @@ result_data = {
 # Task-level 分析流(用户触发)
 POST /tasks/{id}/screening
   → screening_coordinator (AnalysisJob: SCREENING)
-  → screening_batch_subtask × N (5帖/批)
+  → screening_batch_subtask × N (15帖/批,由 `CELERY_AI_POSTS_BATCH_SIZE` 配置)
   → finalizer (标记完成)
   → [可选 auto-trigger] deep_posts_coordinator
 

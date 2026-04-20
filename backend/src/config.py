@@ -84,18 +84,15 @@ class Settings(BaseSettings):
     )
 
     # ========== Celery Task Configuration ==========
-    # AI Task Concurrency Configuration
-    CELERY_AI_SCREENING_CONCURRENT_STREAMS: int = Field(
-        default=100, description="Concurrent streams for AI screening tasks"
-    )
-    CELERY_AI_DEEP_ANALYSIS_CONCURRENCY: int = Field(
-        default=100, description="Concurrent LLM calls for deep analysis"
-    )
+    # 并发度由 docker-compose 的 celery-worker 命令 `--concurrency=100` 统一控制:
+    # 所有 task 类型共享 100 个 gevent greenlet,不按 task 类型细分。
+    # LLM 调用是 I/O 阻塞,gevent 自动 yield → 100 并发 ≈ 100 倍吞吐。
+    # 若未来需按 task 类型限流,改用多 queue 架构,不要在 Settings 加字段。
     CELERY_AI_POSTS_BATCH_SIZE: int = Field(
-        default=5, description="Batch size for AI post processing"
+        default=5, description="Batch size for AI screening (screening_chain)"
     )
-    CELERY_AI_COMMENTS_BATCH_SIZE: int = Field(
-        default=10, description="Batch size for AI comment processing"
+    CELERY_AI_NEWS_TAGGING_BATCH_SIZE: int = Field(
+        default=10, description="Batch size for news tagging (NEWS_TAGGING chain)"
     )
     CELERY_TASK_MAX_ITEMS_LIMIT: int = Field(
         default=20000, description="Max items per Celery task"

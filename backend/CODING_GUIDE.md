@@ -331,6 +331,15 @@ async def get_user(user_id: int):
 
 ##### ① Celery 任务（AI 分析流水线 + 文档处理）
 
+**并发机制（统一 gevent pool）**：
+
+- Worker 启动命令(`docker-compose.yml`):`celery worker --pool=gevent --concurrency=100`
+- **所有 task 类型共享同一个 100 greenlet 的 pool**,不按 task 类型细分 queue
+- 每个 greenlet 完成一个任务后自动从 Redis 队列拉下一个,无需等待其他任务
+- 任务之间**无隐式等待**;显式等待仅存在于 `chord`/`group` 编排(如 coordinator-subtasks-finalizer 模式)
+- gevent 对 I/O 阻塞(LLM HTTP 调用)自动 yield,100 个 greenlet 可**真正同时**等 100 个 LLM 响应
+- **不要在 Settings 里定义"按 task 类型限流"的 config**。若未来出现某类 task 长期饥饿其他 task 的问题,应改用 Celery multi-queue 架构(per-queue 的 worker 进程,命令行传 `--queues` 和 `--concurrency`),而非 Settings 字段
+
 **适用条件**：
 - 执行时间超过 30 秒，或需要独立进程隔离
 - 需要结果持久化、任务重试、优先级队列

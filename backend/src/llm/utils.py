@@ -18,6 +18,55 @@ from langchain_core.messages import BaseMessage
 logger = logging.getLogger(__name__)
 
 
+def build_flat_token_record(response: Any) -> Dict[str, int]:
+    """构造扁平的 token 记录(适合 LangGraph state 累积场景)。
+
+    Research Agent 等 LangGraph 工作流使用 ``state["token_usage_records"]`` 配合
+    ``operator.add`` 跨节点累积 token,每次调用需要一个扁平 dict 而非嵌套结构。
+    本函数是 Research Agent 各节点共享的 token 记录生成器,统一纳入 Context
+    Caching 字段,避免每个节点各自维护私有 `_token_record`。
+
+    Args:
+        response: LangChain LLM 调用的响应对象
+
+    Returns:
+        空响应时返回空 dict,用于 `[token_rec] if token_rec else []` 模式。
+        否则返回:
+        ``{input_tokens, output_tokens, total_tokens, cache_hit_tokens, cache_miss_tokens}``
+    """
+    input_tokens, output_tokens, total_tokens, cache_hit, cache_miss = (
+        _extract_token_counts(response)
+    )
+    if not (input_tokens or output_tokens or total_tokens):
+        return {}
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "cache_hit_tokens": cache_hit,
+        "cache_miss_tokens": cache_miss,
+    }
+
+
+def sum_cost_from_flat_records(
+    records: list[Dict[str, int]], llm_type: str = "chat"
+) -> float:
+    """从扁平 token 记录列表按 Context Caching 定价累加成本。
+
+    记录若含 ``cache_hit_tokens`` / ``cache_miss_tokens``(非 0)则按命中/未命中分别计价;
+    否则退化为"全部按 miss 价"保持向前兼容。
+    """
+    total_hit = sum(r.get("cache_hit_tokens", 0) or 0 for r in records)
+    total_miss = sum(r.get("cache_miss_tokens", 0) or 0 for r in records)
+    total_output = sum(r.get("output_tokens", 0) or 0 for r in records)
+
+    # 无 cache 字段时,miss 记为全部 input
+    if not (total_hit or total_miss):
+        total_miss = sum(r.get("input_tokens", 0) or 0 for r in records)
+
+    return _calculate_cost_with_cache(total_hit, total_miss, total_output, llm_type)
+
+
 def _extract_token_counts(response: Any) -> Tuple[int, int, int, int, int]:
     """从 LangChain 响应中提取 token 计数（含 DeepSeek Context Caching 字段）。
 

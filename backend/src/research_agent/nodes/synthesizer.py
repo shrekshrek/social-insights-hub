@@ -12,22 +12,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
 
 from src.config import settings
+from src.llm.utils import build_flat_token_record
 from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
-
-
-def _token_record(response) -> dict:
-    """从 LLM 响应中提取 token 用量（最小结构，供 state 累积）"""
-    if hasattr(response, "usage_metadata") and response.usage_metadata:
-        um = response.usage_metadata
-        return {
-            "input_tokens": um.get("input_tokens", 0),
-            "output_tokens": um.get("output_tokens", 0),
-            "total_tokens": um.get("total_tokens", 0),
-        }
-    return {}
 
 
 def synthesize_node(state: ResearchState) -> dict:
@@ -115,7 +104,7 @@ def synthesize_node(state: ResearchState) -> dict:
         ]
     )
 
-    token_rec = _token_record(response)
+    token_rec = build_flat_token_record(response)
     # 解析 LLM 结构化输出
     result = _parse_synthesis_response(response.content, questions, selected)
 

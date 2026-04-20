@@ -14,23 +14,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
 
 from src.config import settings
+from src.llm.utils import build_flat_token_record
 from src.research_agent.config import MAX_CONCURRENT_TASKS
 from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
 
 logger = logging.getLogger(__name__)
-
-
-def _token_record(response) -> dict:
-    """从 LLM 响应中提取 token 用量（最小结构，供 state 累积）"""
-    if hasattr(response, "usage_metadata") and response.usage_metadata:
-        um = response.usage_metadata
-        return {
-            "input_tokens": um.get("input_tokens", 0),
-            "output_tokens": um.get("output_tokens", 0),
-            "total_tokens": um.get("total_tokens", 0),
-        }
-    return {}
 
 
 def analyze_node(state: ResearchState) -> dict:
@@ -99,7 +88,7 @@ def analyze_node(state: ResearchState) -> dict:
                     HumanMessage(content=user_content),
                 ]
             )
-            token_rec = _token_record(response)
+            token_rec = build_flat_token_record(response)
             parsed = _parse_analyze_response(response.content)
         except SoftTimeLimitExceeded:
             raise  # 软超时必须向上传播，让任务层更新 DB 状态

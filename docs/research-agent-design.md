@@ -507,7 +507,7 @@ searcher_node（双轨并行）
 | `task_hard_timeout` | 600s | Celery `time_limit` |
 | `max_concurrent_tasks` | 10 | `research_agent/config.py` 硬编码常量 |
 
-Token 用量通过 AnalysisJob 记录和追踪，不在 LangGraph State 中管理。Phase 3 的 evaluate 节点可通过查询 AnalysisJob 累积 token 判断是否终止循环。
+Token 用量在 LangGraph State 的 `token_usage_records` 字段(扁平 dict 列表,operator.add 跨轮累积)中记录,每个 LLM 节点调用 `src.llm.utils.build_flat_token_record(response)` 产出一条记录(含 `cache_hit_tokens` / `cache_miss_tokens`)。任务完成时 `tasks.py` 调用 `sum_cost_from_flat_records` 按 DeepSeek Context Caching 定价汇总,写入 AnalysisJob 的 `token_usage` 字段。前端通过 `/jobs` 可查看 cache 命中率和成本。
 
 ### 6. 与 knowledge_base 的关系
 
@@ -775,3 +775,129 @@ MAX_CONCURRENT_TASKS = 3
 - confirm-research：条件创建 ResearchTask（plan 里有才创建）
 - collection-status：加入 ResearchTask 完成状态检查
 - 前端：ResearchPlanEditor 适配、采集状态页三渠道并列
+
+---
+
+## 决策历史 & 明确不做的事
+
+> 本节记录每次对 Research Agent 的调整及其**理由**,以及**讨论过但决定不做**的
+> 优化项。目的是避免后人(或未来的自己)重复同样的讨论,或在不了解背景的
+> 情况下"改出新 bug"。时间倒序。
+
+### 2026-04-20 · 修复 synthesizer 末轮 selected 清零时丢弃跨轮 findings
+
+**Commit**: `fec365c`
+
+**背景**:Strategy 18 关联的 Task 38 出现异常 — progress 日志显示 round 1 成功
+分析了 10 篇文档,但 `result_data.findings_by_question` 的 5 个研究问题全部
+`confidence: low`、`answer_summary: "未找到相关数据"`。10 篇 findings "凭空消失"。
+
+**根因**:
+- `state.py` 中 `findings` 字段是 `Annotated[list, operator.add]` — 跨轮累积
+- `selected` 字段**不是** operator.add — 每轮替换
+- round 1:fetch+analyze 成功 10 篇 → findings += 10,selected=10
+- round 2:filter 跨轮去重(`already_processed` 剔除已 fetch URL)后 selected=[] → fetch 0 → analyze 0
+- evaluator 看到 selected=[] → `should_continue=False` → 转 synthesize
+- synthesizer 早返回分支 `if not selected:` 只看 selected,**忽略累积的 findings**,直接把所有问题标为 low
+
+**修复**:条件改为 `if not selected and not findings`,两者都空才真的走空返回。
+后续代码(`if findings:` 分支)已能正确消费 findings-only 的情况,不需要额外改动。
+
+**为何过去没发现**:B2B 类研究每轮都能找到足够多新候选,filter 跨轮去重后
+selected 仍非空,该分支从未被触发。乐虎这种**小品牌窄主题**在 round 1 几乎穷尽
+可用源,round 2 才会踩坑。
+
+**防回归**:`tests/test_research_synthesizer.py` 三个用例覆盖了
+(selected=[], findings 非空)/ 两者都空 / selected 非空 findings 为空 三个边界。
+
+---
+
+### 2026-04-20 · 4 节点 `_token_record` 合并为共享函数 + tasks.py 成本计算对齐
+
+**Commit**: `72895c2`
+
+**背景**:四个节点(plan / filter / analyzer / synthesizer)各自定义了
+**一模一样**的 `_token_record(response) -> dict`,返回
+`{input_tokens, output_tokens, total_tokens}` 三字段。同时 `tasks.py` 汇总
+成本时硬编码"全部按 miss 价"(`DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION × total_input + output_price × total_output`),没有享受 DeepSeek Context Caching 的分层计价。
+
+**具体现状**:
+- 4 份完全相同的私有函数(经典 duplicate)
+- `cache_hit_tokens` / `cache_miss_tokens` 既没采集也没记录
+- `AnalysisJob.token_usage` 的 Research Agent 记录里看不到 cache 命中率
+
+**改动**:
+- `src/llm/utils.py` 新增两个共享 helper:
+  - `build_flat_token_record(response)` — 返回扁平 dict,含 cache 字段
+  - `sum_cost_from_flat_records(records, llm_type)` — 按 Context Caching 分层计价
+- 4 个节点 `import build_flat_token_record` 替换各自的私有 `_token_record`
+- `tasks.py` 汇总改用 `sum_cost_from_flat_records`,`token_usage.summary`
+  新增 `total_cache_hit_tokens` / `total_cache_miss_tokens` / `cache_hit_ratio`
+
+**向前兼容**:若响应未返回 cache 字段(理论上不会,但防御式编程),helper 退化为"全部按 miss 价"——和旧行为一致。
+
+**收益**:
+- 未来改 DeepSeek 定价公式只需动 `llm/utils.py` 一处
+- Research Agent 开始正确观测 cache 命中(跟社媒/策略对齐)
+- 删除 60+ 行 duplicate 代码
+
+---
+
+### 明确不做的优化(及理由)
+
+以下优化项**讨论过、评估过,暂不实施**。未来若需要重新评估,先读这里再开工,避免重复讨论。
+
+#### 1. Tavily `search_depth` basic/advanced 混合策略
+
+**讨论背景**:代码里硬编码 `search_depth="advanced"`,比 `basic` 贵 2x。
+
+**A/B 实测结论**(3 个真实 query 各 10 条结果):
+- avg snippet 长度:basic 2171-3443 字,advanced 2036-2177 字——**advanced 不是更长**
+- snippet 长度范围:basic 77-12890 字(方差极大),advanced 1530-2397 字(稳定)
+- URL 重合率:0% / 25% / 54% — 两种 depth 返回的**结果集本质不同**
+
+**真实价值**:advanced 的价值是**稳定的 snippet 长度**——filter 节点用 snippet 给 LLM 评分,basic 的 77 字残片会让评分失效。不是"更长"。
+
+**为何不做**:
+- Tavily 成本占 Research Agent 总成本约 30-50%,Research Agent 又占总成本约 30%,算下来 Tavily 占总 10-15%
+- 基于 10-15% 的成本项做复杂混合策略,优化收益不足以支付实施复杂度 + 新 bug 风险
+- Exa 迁移有更大收益空间(见 §设计决策 1 的"未来方向"),优先级更高
+
+**触发重新评估的条件**:Tavily 月费超预算,或 basic/advanced 价差拉大到 3x+。
+
+#### 2. `min_sources=2` 最后一轮放宽
+
+**讨论背景**:observer 观察到"大部分 task 跑满 3 轮,少数 4 轮,极少 2 轮",
+有人提议"最后一轮把 min_sources 降到 1,减少 gap_questions"。
+
+**为何不做**:
+- 跑满 3 轮是 evaluator 的**设计意图**,见 [`nodes/evaluator.py`](../../backend/src/research_agent/nodes/evaluator.py#L74-L76) 注释:"不对 round 1 放宽——若 round 1 只找到 1 条就停止,质量往往不够,应继续搜索"
+- 研究问题必须有 ≥2 条实质性来源互相印证是质量控制,单条来源无法排除偶然
+- 若确实某问题只有 1 条权威资料,它会作为 `information_gaps` 优雅降级,**不会丢失**
+- 放宽阈值 = 降低产出质量,解决的是"感觉循环太多"的伪问题
+
+**触发重新评估的条件**:出现大量"明知有权威数据但被判为 gap"的误杀案例。
+
+#### 3. Grounding 验证(synthesize 引用真实性检查)
+
+**讨论背景**:synthesize 节点输出的 `source_refs` 是 LLM 基于 documents 生成的,理论上 LLM 可能"凭记忆"编造引用而非真正来自 fetched content。
+
+**为何不做**:
+- 这是所有 RAG 系统的通病,当前没有观察到具体的误引用案例
+- Tavily 的 include_domains 已经保证来源权威性,LLM 幻觉空间小
+- 实施成本(需要在 synthesize 后加一层 URL→正文检索 + 字符串核验)中等
+- 属于 nice-to-have 的质量增强,而非 bug 修复
+
+**触发重新评估的条件**:用户/业务方反馈"引用的数据在原报告找不到"的真实案例出现 ≥3 次。
+
+#### 4. Observability 埋点(round 完成率、fetch 成功率、tavily 调用数等)
+
+**讨论背景**:当前没有聚合的"跑满 X 轮的比例"、"fetch 失败率"、"平均 candidates 衰减率"等指标,所有判断基于 ad-hoc SQL 查询 `stats` 字段。
+
+**为何不做**:
+- Research Agent 总量不大(7 天 9 次任务),样本不足以支撑指标的统计意义
+- 现有 `progress`/`stats` 字段已能满足单任务的 debug 需求
+- 加埋点 = 增加系统复杂度 + 需要维护 Grafana/看板,ROI 低
+
+**触发重新评估的条件**:任务量增长 10 倍以上,或运营方需要定期健康检查报表。
+

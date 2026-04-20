@@ -24,9 +24,10 @@ logger = logging.getLogger(__name__)
 PROJECT_ENTITY_MERGE_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责处理社交媒体实体数据（项目级合并场景）。
 
 ## 输入说明
+用户消息会提供：
 - 实体列表：每行包含实体名、类型、重要度与线索。
-- subject（主体）：{subject}
-- competitors（竞品列表）：{competitors}
+- subject（主体）：本次分析的锚点品牌。
+- competitors（竞品列表）：subject 的直接竞品。
 
 ## 你的任务
 1) **归一化**：合并指向同一事物的同义词实体。
@@ -34,7 +35,7 @@ PROJECT_ENTITY_MERGE_SYSTEM_TEMPLATE = """你是一位语义分析专家，负�
 
 ## 关键规则（严格遵守）
 1. **严禁跨品类合并**：即使品牌相同，也不要将不同品类的产品合并。
-   - 错误示例：在分析“智能手机”时，将同品牌的“充电器”、“手机壳”或“耳机”合并进“手机”实体中。
+   - 错误示例：在分析"智能手机"时，将同品牌的"充电器"、"手机壳"或"耳机"合并进"手机"实体中。
    - 正确做法：它们应作为两个独立实体。
 2. **Role 仲裁**：
    - 若 subject 非空，指向该品牌的实体必须为 `Target`。
@@ -57,7 +58,12 @@ PROJECT_ENTITY_MERGE_SYSTEM_TEMPLATE = """你是一位语义分析专家，负�
 ```
 """
 
-PROJECT_ENTITY_MERGE_USER_TEMPLATE = """请处理以下实体：
+# subject / competitors 移到 USER 以保持 SYSTEM prefix 静态，启用 DeepSeek Context Caching
+PROJECT_ENTITY_MERGE_USER_TEMPLATE = """## 本次分析上下文
+- subject（主体）：{subject}
+- competitors（竞品列表）：{competitors}
+
+请处理以下实体：
 
 {entities}
 """
@@ -66,16 +72,17 @@ PROJECT_ENTITY_MERGE_USER_TEMPLATE = """请处理以下实体：
 # ==================== 第二阶段：审计与纠错 (Review) ====================
 
 PROJECT_ENTITY_REVIEW_SYSTEM_TEMPLATE = """你是一位严厉的数据审计员。你的任务是审查并修正实体归一化的结果。
+用户消息会提供 subject（主体）和 competitors（竞品列表），据此做 role 强制校验。
 
 ## 审计重点（必须修正以下错误）
 1. **拆分跨品类错误**：
    - 检查每个分组的 `original_names`。
-   - 如果发现 **明显不同品类/性质** 的实体混入（例如在“主产品”组中混入了“配件”、“周边”、“完全不相关的同名物品”），**必须**将它们从该组中剔除，恢复为独立实体。
+   - 如果发现 **明显不同品类/性质** 的实体混入（例如在"主产品"组中混入了"配件"、"周边"、"完全不相关的同名物品"），**必须**将它们从该组中剔除，恢复为独立实体。
    - 例子：若 [某品牌手机] 组包含了 "某品牌冰箱" 或 "某品牌数据线"，请将其移出。
 
 2. **强制 Role 校验**：
-   - Subject: 【{subject}】 -> 必须是 `Target`
-   - Competitors: 【{competitors}】 -> 必须是 `Competitor`
+   - 用户消息中指定的 Subject -> 必须是 `Target`
+   - 用户消息中指定的 Competitors -> 必须是 `Competitor`
    - 任何违反此规则的实体，强制修正 role。
 
 3. **Parent 逻辑检查**：
@@ -89,7 +96,12 @@ PROJECT_ENTITY_REVIEW_SYSTEM_TEMPLATE = """你是一位严厉的数据审计员�
 修正后的完整 JSON，格式不变。
 """
 
-PROJECT_ENTITY_REVIEW_USER_TEMPLATE = """请审核并修正以下结果：
+# subject / competitors 移到 USER 以保持 SYSTEM prefix 静态，启用 DeepSeek Context Caching
+PROJECT_ENTITY_REVIEW_USER_TEMPLATE = """## 本次分析上下文
+- Subject（主体）：【{subject}】
+- Competitors（竞品列表）：【{competitors}】
+
+请审核并修正以下结果：
 
 {first_pass_result}
 """

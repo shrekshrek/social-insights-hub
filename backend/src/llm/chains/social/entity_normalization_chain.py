@@ -21,11 +21,10 @@ logger = logging.getLogger(__name__)
 # ==================== 第一阶段：初步归一化与打标 ====================
 
 ENTITY_CLUSTERING_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责处理社交媒体实体数据。
-当前分析的核心主题（锚点）是：【{task_keywords}】。
 
 你的任务是：
 1. **归一化**：合并指向同一事物的同义词实体，减少冗余。
-2. **打标**：基于核心主题和提供的[线索]，为每个实体输出两个维度的标签。
+2. **打标**：基于用户消息中指定的"核心主题（锚点）"和提供的[线索]，为每个实体输出两个维度的标签。
 
 ## 标签定义
 
@@ -61,7 +60,10 @@ ENTITY_CLUSTERING_SYSTEM_TEMPLATE = """你是一位语义分析专家，负责�
 只输出JSON，不要有其他文字。
 """
 
-ENTITY_CLUSTERING_USER_TEMPLATE = """请对以下实体列表进行处理：
+# task_keywords 移到 USER 以保持 SYSTEM prefix 静态，启用 DeepSeek Context Caching
+ENTITY_CLUSTERING_USER_TEMPLATE = """当前分析的核心主题（锚点）是：【{task_keywords}】。
+
+请对以下实体列表进行处理：
 
 {entities}
 """
@@ -70,9 +72,9 @@ ENTITY_CLUSTERING_USER_TEMPLATE = """请对以下实体列表进行处理：
 # ==================== 第二阶段：复查与标签修正 ====================
 
 ENTITY_REVIEW_SYSTEM_TEMPLATE = """你是一位实体归一化审核专家。
-当前分析的核心主题（锚点）是：【{task_keywords}】。
 
 你的任务是审核第一阶段的结果，重点检查**合并错误**和**标签准确性**。
+用户消息会提供"核心主题（锚点）"，据此做审核判断。
 
 ## 审核清单
 
@@ -107,7 +109,10 @@ ENTITY_REVIEW_SYSTEM_TEMPLATE = """你是一位实体归一化审核专家。
 只输出JSON，不要有其他文字。
 """
 
-ENTITY_REVIEW_USER_TEMPLATE = """请审核以下处理结果：
+# task_keywords 移到 USER 以保持 SYSTEM prefix 静态，启用 DeepSeek Context Caching
+ENTITY_REVIEW_USER_TEMPLATE = """当前分析的核心主题（锚点）是：【{task_keywords}】。
+
+请审核以下处理结果：
 
 ## 原始实体列表（含线索）
 {original_entities}

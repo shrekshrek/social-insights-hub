@@ -18,6 +18,105 @@ from langchain_core.messages import BaseMessage
 logger = logging.getLogger(__name__)
 
 
+def _extract_token_counts(response: Any) -> Tuple[int, int, int, int, int]:
+    """从 LangChain 响应中提取 token 计数（含 DeepSeek Context Caching 字段）。
+
+    Returns:
+        (input_tokens, output_tokens, total_tokens, cache_hit_tokens, cache_miss_tokens)
+
+    DeepSeek 的 Context Caching 默认启用；命中部分按官方价格的 1/10 计费。
+    缓存字段优先从原始 `response_metadata.token_usage` 读（保留 DeepSeek 原生字段），
+    其次尝试 LangChain 1.0 的 `usage_metadata.input_token_details.cache_read`。
+    """
+    input_tokens = 0
+    output_tokens = 0
+    total_tokens = 0
+    cache_hit = 0
+    cache_miss = 0
+
+    try:
+        # 1) 标准 LangChain 字段
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            usage = response.usage_metadata
+            input_tokens = usage.get("input_tokens", 0) or 0
+            output_tokens = usage.get("output_tokens", 0) or 0
+            total_tokens = usage.get("total_tokens", 0) or 0
+            # LangChain 1.0 标准化的缓存字段
+            details = usage.get("input_token_details") or {}
+            if isinstance(details, dict):
+                cache_hit = int(details.get("cache_read", 0) or 0)
+
+        # 2) 兜底 + DeepSeek 原生缓存字段
+        if isinstance(response, BaseMessage):
+            meta = response.response_metadata or {}
+            raw_usage = meta.get("token_usage") or meta.get("usage") or {}
+            if isinstance(raw_usage, dict):
+                if not input_tokens:
+                    input_tokens = int(
+                        raw_usage.get("prompt_tokens")
+                        or raw_usage.get("input_tokens", 0)
+                        or 0
+                    )
+                if not output_tokens:
+                    output_tokens = int(
+                        raw_usage.get("completion_tokens")
+                        or raw_usage.get("output_tokens", 0)
+                        or 0
+                    )
+                if not total_tokens:
+                    total_tokens = int(raw_usage.get("total_tokens", 0) or 0)
+                # DeepSeek 原生缓存字段（优先级高于 LangChain 字段）
+                hit = raw_usage.get("prompt_cache_hit_tokens")
+                miss = raw_usage.get("prompt_cache_miss_tokens")
+                if hit is not None:
+                    cache_hit = int(hit or 0)
+                if miss is not None:
+                    cache_miss = int(miss or 0)
+
+        # 3) 推导 miss（当只拿到 hit 时用 input - hit）
+        if cache_hit and not cache_miss and input_tokens:
+            cache_miss = max(input_tokens - cache_hit, 0)
+    except Exception as e:
+        logger.warning("提取 token 计数失败: %s", e)
+
+    return input_tokens, output_tokens, total_tokens, cache_hit, cache_miss
+
+
+def _calculate_cost_with_cache(
+    cache_hit_tokens: int,
+    cache_miss_tokens: int,
+    output_tokens: int,
+    llm_type: str,
+) -> float:
+    """按 DeepSeek Context Caching 定价计算成本（命中部分按 1/10 价计费）。
+
+    若响应未返回 cache 字段（hit=miss=0），退化为"全部按 miss 价"计算，与旧行为一致。
+    """
+    try:
+        from src.config import get_settings
+
+        settings = get_settings()
+        if llm_type == "reasoner":
+            miss_price = settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION
+            hit_price = settings.DEEPSEEK_REASONER_INPUT_CACHE_HIT_PRICE_PER_MILLION
+            out_price = settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION
+        else:
+            miss_price = settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION
+            hit_price = settings.DEEPSEEK_CHAT_INPUT_CACHE_HIT_PRICE_PER_MILLION
+            out_price = settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION
+
+        # 无 cache 字段时，miss 记为全部 input（由调用方在 _extract_token_counts 里推导）
+        total_input_cost = (
+            cache_hit_tokens * hit_price / 1_000_000
+            + cache_miss_tokens * miss_price / 1_000_000
+        )
+        output_cost = output_tokens * out_price / 1_000_000
+        return total_input_cost + output_cost
+    except Exception as e:
+        logger.warning("成本计算失败: %s", e)
+        return 0.0
+
+
 def extract_token_usage(
     response: Any,
     duration_seconds: float = 0.0,
@@ -25,6 +124,9 @@ def extract_token_usage(
 ) -> Dict[str, Any]:
     """
     从LLM响应中提取token使用信息，返回符合 TokenUsageStats schema 的结构。
+
+    含 DeepSeek Context Caching 字段 (cache_hit_tokens / cache_miss_tokens)，
+    成本按命中/未命中分别计价。
 
     Args:
         response: LLM响应对象
@@ -34,52 +136,22 @@ def extract_token_usage(
     Returns:
         Dict: 符合 TokenUsageStats schema 的字典 {summary, call_details}
     """
-    input_tokens = 0
-    output_tokens = 0
-    total_tokens = 0
+    (
+        input_tokens,
+        output_tokens,
+        total_tokens,
+        cache_hit,
+        cache_miss,
+    ) = _extract_token_counts(response)
 
-    try:
-        # 优先从 usage_metadata 提取（LangChain 标准化字段，DeepSeek 使用此字段）
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            usage = response.usage_metadata
-            input_tokens = usage.get("input_tokens", 0)
-            output_tokens = usage.get("output_tokens", 0)
-            total_tokens = usage.get("total_tokens", 0)
+    if not (input_tokens or output_tokens or total_tokens):
+        logger.warning("无法从响应中提取token使用信息")
 
-        # 兜底：从 response_metadata["usage"] 提取（部分旧版 LangChain 格式）
-        elif isinstance(response, BaseMessage):
-            metadata = response.response_metadata
-            if "usage" in metadata:
-                usage = metadata["usage"]
-                input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
-                output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
-                total_tokens = usage.get("total_tokens", 0)
-            else:
-                logger.warning("无法从响应中提取token使用信息")
-
-        else:
-            logger.warning("无法从响应中提取token使用信息")
-
-    except Exception as e:
-        logger.error("提取token使用信息时出错: %s", e, exc_info=True)
-
-    # 计算成本（与 llm_utils.invoke_chain_with_stats_sync 保持一致）
-    cost_cny = 0.0
-    try:
-        from src.config import get_settings
-        settings = get_settings()
-        if llm_type == "reasoner":
-            cost_cny = (
-                input_tokens * settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION / 1_000_000
-                + output_tokens * settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION / 1_000_000
-            )
-        else:
-            cost_cny = (
-                input_tokens * settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION / 1_000_000
-                + output_tokens * settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION / 1_000_000
-            )
-    except Exception as e:
-        logger.warning("成本计算失败: %s", e)
+    # 若响应未提供 cache 字段，退化为 "全部 miss" 保持旧定价行为
+    effective_miss = cache_miss if (cache_hit or cache_miss) else input_tokens
+    cost_cny = _calculate_cost_with_cache(
+        cache_hit, effective_miss, output_tokens, llm_type
+    )
 
     return {
         "summary": {
@@ -87,6 +159,8 @@ def extract_token_usage(
             "total_input_tokens": input_tokens,
             "total_output_tokens": output_tokens,
             "total_tokens": total_tokens,
+            "total_cache_hit_tokens": cache_hit,
+            "total_cache_miss_tokens": cache_miss,
             "total_cost_cny": round(cost_cny, 6),
             "total_duration_seconds": round(duration_seconds, 2),
             "avg_tokens_per_call": float(total_tokens),
@@ -98,6 +172,8 @@ def extract_token_usage(
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "total_tokens": total_tokens,
+                "cache_hit_tokens": cache_hit,
+                "cache_miss_tokens": cache_miss,
                 "cost_cny": round(cost_cny, 6),
                 "duration_seconds": round(duration_seconds, 2),
             }
@@ -367,6 +443,8 @@ class CallDetail:
     cost_cny: float
     duration_seconds: float
     timestamp: str
+    cache_hit_tokens: int = 0  # DeepSeek Context Caching 命中 tokens
+    cache_miss_tokens: int = 0  # DeepSeek Context Caching 未命中 tokens
 
 
 @dataclass
@@ -379,6 +457,8 @@ class TokenUsageStats:
     model_calls: int = 0  # 模型调用次数
     total_cost_cny: float = 0.0  # 基于真实token使用量计算的总成本（人民币）
     duration_seconds: float = 0.0  # 调用耗时（秒）
+    cache_hit_tokens: int = 0  # DeepSeek Context Caching 命中 tokens
+    cache_miss_tokens: int = 0  # DeepSeek Context Caching 未命中 tokens
 
 
 @dataclass
@@ -391,6 +471,8 @@ class TaskAnalysisStats:
     total_tokens: int = 0
     total_cost_cny: float = 0.0
     total_duration_seconds: float = 0.0
+    total_cache_hit_tokens: int = 0  # DeepSeek Context Caching 命中 tokens 汇总
+    total_cache_miss_tokens: int = 0  # DeepSeek Context Caching 未命中 tokens 汇总
 
     call_details: List[CallDetail] = field(default_factory=list)
 
@@ -405,6 +487,8 @@ class TaskAnalysisStats:
             cost_cny=stats.total_cost_cny,
             duration_seconds=stats.duration_seconds,
             timestamp=datetime.now().isoformat(),
+            cache_hit_tokens=stats.cache_hit_tokens,
+            cache_miss_tokens=stats.cache_miss_tokens,
         )
         self.call_details.append(call_detail)
 
@@ -415,6 +499,8 @@ class TaskAnalysisStats:
         self.total_tokens += stats.total_tokens
         self.total_cost_cny += stats.total_cost_cny
         self.total_duration_seconds += stats.duration_seconds
+        self.total_cache_hit_tokens += stats.cache_hit_tokens
+        self.total_cache_miss_tokens += stats.cache_miss_tokens
 
     def merge_task_stats(self, other: "TaskAnalysisStats"):
         """合并另一个任务的统计数据"""
@@ -424,6 +510,8 @@ class TaskAnalysisStats:
         self.total_tokens += other.total_tokens
         self.total_cost_cny += other.total_cost_cny
         self.total_duration_seconds += other.total_duration_seconds
+        self.total_cache_hit_tokens += other.total_cache_hit_tokens
+        self.total_cache_miss_tokens += other.total_cache_miss_tokens
         self.call_details.extend(other.call_details)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -434,6 +522,12 @@ class TaskAnalysisStats:
             if self.total_calls > 0
             else 0.0
         )
+        # 缓存命中率（基于输入 tokens）
+        cache_hit_ratio = (
+            self.total_cache_hit_tokens / self.total_input_tokens
+            if self.total_input_tokens > 0
+            else 0.0
+        )
 
         return {
             "summary": {
@@ -441,6 +535,9 @@ class TaskAnalysisStats:
                 "input_tokens": self.total_input_tokens,
                 "output_tokens": self.total_output_tokens,
                 "total_tokens": self.total_tokens,
+                "cache_hit_tokens": self.total_cache_hit_tokens,
+                "cache_miss_tokens": self.total_cache_miss_tokens,
+                "cache_hit_ratio": round(cache_hit_ratio, 4),
                 "cost_cny": round(self.total_cost_cny, 4),
                 "duration_seconds": round(self.total_duration_seconds, 2),
                 "avg_duration_per_call": round(avg_duration_per_call, 2),
@@ -452,6 +549,8 @@ class TaskAnalysisStats:
                     "input_tokens": detail.input_tokens,
                     "output_tokens": detail.output_tokens,
                     "total_tokens": detail.total_tokens,
+                    "cache_hit_tokens": detail.cache_hit_tokens,
+                    "cache_miss_tokens": detail.cache_miss_tokens,
                     "cost_cny": round(detail.cost_cny, 4),
                     "duration_seconds": round(detail.duration_seconds, 2),
                     "timestamp": detail.timestamp,
@@ -483,11 +582,6 @@ async def invoke_llm_with_stats(
         >>> print(f"使用了 {stats.total_tokens} 个token，花费 ¥{stats.total_cost_cny:.4f}")
     """
     try:
-        # 导入配置（延迟导入避免循环依赖）
-        from src.config import get_settings
-
-        settings = get_settings()
-
         # 记录开始时间
         start_time = datetime.now()
 
@@ -498,53 +592,20 @@ async def invoke_llm_with_stats(
         end_time = datetime.now()
         duration_seconds = (end_time - start_time).total_seconds()
 
-        # 提取token统计（从API响应中）
-        real_input_tokens = 0
-        real_output_tokens = 0
-        real_total_tokens = 0
+        # 提取 token 统计（含 DeepSeek Context Caching 字段）
+        (
+            real_input_tokens,
+            real_output_tokens,
+            real_total_tokens,
+            cache_hit,
+            cache_miss,
+        ) = _extract_token_counts(response)
 
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            usage = response.usage_metadata
-            real_input_tokens = usage.get("input_tokens", 0)
-            real_output_tokens = usage.get("output_tokens", 0)
-            real_total_tokens = usage.get("total_tokens", 0)
-        elif hasattr(response, "response_metadata") and response.response_metadata:
-            metadata = response.response_metadata
-            if "usage" in metadata:
-                usage = metadata["usage"]
-                real_input_tokens = usage.get(
-                    "prompt_tokens", usage.get("input_tokens", 0)
-                )
-                real_output_tokens = usage.get(
-                    "completion_tokens", usage.get("output_tokens", 0)
-                )
-                real_total_tokens = usage.get("total_tokens", 0)
-
-        # 计算成本
-        if llm_type == "reasoner":
-            input_cost = (
-                real_input_tokens
-                * settings.DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION
-                / 1_000_000
-            )
-            output_cost = (
-                real_output_tokens
-                * settings.DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION
-                / 1_000_000
-            )
-        else:
-            input_cost = (
-                real_input_tokens
-                * settings.DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION
-                / 1_000_000
-            )
-            output_cost = (
-                real_output_tokens
-                * settings.DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION
-                / 1_000_000
-            )
-
-        real_cost = input_cost + output_cost
+        # 若响应未提供 cache 字段，退化为"全部按 miss 价"保持旧行为
+        effective_miss = cache_miss if (cache_hit or cache_miss) else real_input_tokens
+        real_cost = _calculate_cost_with_cache(
+            cache_hit, effective_miss, real_output_tokens, llm_type
+        )
 
         stats = TokenUsageStats(
             input_tokens=real_input_tokens,
@@ -553,6 +614,8 @@ async def invoke_llm_with_stats(
             model_calls=1,
             total_cost_cny=real_cost,
             duration_seconds=duration_seconds,
+            cache_hit_tokens=cache_hit,
+            cache_miss_tokens=cache_miss,
         )
 
         return response, stats

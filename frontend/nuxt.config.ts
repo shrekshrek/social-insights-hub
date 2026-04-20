@@ -38,15 +38,19 @@ function readEnvFileSafe(envFilePath: string): Record<string, string> {
   }
 }
 
-// 应用显示名称：优先使用 APP_NAME，其次 PROJECT_NAME
-// 说明：本地前端 dev（nuxt dev）默认只会加载 frontend/.env，因此这里额外读取根目录 ../.env 作为 fallback，
-// 以便 dev/prod 行为更一致（只读取展示名相关字段，不引入敏感配置到前端进程）。
+// 统一环境变量来源：nuxt dev 默认只读 frontend/.env，这里把根目录 ../.env 作为
+// 唯一 source of truth 注入 process.env（已存在的变量不覆盖，保留 shell/CI 显式设置）。
+// 注入后 Nuxt 的 runtimeConfig 自动映射机制即可读到 NUXT_* 变量，无需 frontend/.env。
 const rootEnv = readEnvFileSafe(resolve('../.env'))
+for (const [key, value] of Object.entries(rootEnv)) {
+  if (process.env[key] === undefined) {
+    process.env[key] = value
+  }
+}
+
 const appName =
   process.env.APP_NAME ||
   process.env.PROJECT_NAME ||
-  rootEnv.APP_NAME ||
-  rootEnv.PROJECT_NAME ||
   ''
 
 export default defineNuxtConfig({

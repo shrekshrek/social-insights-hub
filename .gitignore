@@ -6,10 +6,8 @@
 .env.production
 .env.production.local
 backend/.env.production
-frontend/.env.production
 !.env.example
 !.env.production.example
-!frontend/.env.example
 !backend/.env.production.example
 
 # IDE / Editor specific

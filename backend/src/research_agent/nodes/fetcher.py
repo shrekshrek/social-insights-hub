@@ -1,16 +1,17 @@
 """Fetch 节点：下载候选来源的全文内容
 
-HTML 通过 Crawl4AI REST API 获取 markdown，PDF 通过 httpx 下载后提取文本。
+HTML 通过 Crawl4AI REST API 获取 markdown，PDF 通过 requests 下载后提取文本。
 当 profile 允许 pdf_extract 且 HTML 页面判断为"报告介绍页"（内容短且含下载指引）时，
 尝试从页面中提取 PDF 直链并直接下载全文，以获取比摘要更完整的报告内容。
-同步调用（gevent 兼容），per-document 30s 超时，失败不阻塞。
+同步调用（Celery gevent worker，requests 被 monkey-patch 自动协作式让出），
+per-document 30s 超时，失败不阻塞。
 """
 
 import logging
 import re
 from urllib.parse import urljoin
 
-import httpx
+import requests
 
 from src.config import get_settings
 from src.research_agent.config import FETCH_HTML_TIMEOUT, FETCH_PDF_TIMEOUT
@@ -176,11 +177,12 @@ def _crawl4ai_fetch(url: str) -> str | None:
         headers["Authorization"] = f"Bearer {settings.CRAWL4AI_TOKEN}"
 
     try:
-        with httpx.Client(timeout=FETCH_HTML_TIMEOUT + 15) as client:
-            resp = client.post(
+        with requests.Session() as session:
+            resp = session.post(
                 f"{base_url}/crawl",
                 json=payload,
                 headers=headers,
+                timeout=FETCH_HTML_TIMEOUT + 15,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -191,36 +193,35 @@ def _crawl4ai_fetch(url: str) -> str | None:
 
         markdown = results[0].get("markdown", {})
         return markdown.get("fit_markdown") or markdown.get("raw_markdown", "")
-    except (httpx.HTTPError, KeyError, ValueError):
+    except (requests.RequestException, KeyError, ValueError):
         logger.warning("Crawl4AI 调用失败: %s", url, exc_info=True)
         return None
 
 
 def _httpx_fetch(url: str) -> str | None:
-    """httpx 直接 GET，用于 Crawl4AI 失败时的静态页兜底
+    """requests 直接 GET，用于 Crawl4AI 失败时的静态页兜底
 
     仅对静态页有效；JS 渲染站（McKinsey、BCG 等）会超时，属预期行为。
-    超时故意设短（8s），避免对必定失败的站点白白等待。
+    超时故意设短（10s），避免对必定失败的站点白白等待。
     """
     try:
-        with httpx.Client(
+        resp = requests.get(
+            url,
             timeout=10,
-            follow_redirects=True,
+            allow_redirects=True,
             headers={"User-Agent": _CRAWLER_UA},
-        ) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            # 只处理 HTML，二进制文件交给 _fetch_pdf
-            content_type = resp.headers.get("content-type", "")
-            if "html" not in content_type:
-                return None
-            # 粗提取：去掉 HTML 标签返回纯文本（简单但够用作兜底）
-            import re
-            text = re.sub(r"<[^>]+>", " ", resp.text)
-            text = re.sub(r"\s+", " ", text).strip()
-            return text if len(text) >= _MIN_CRAWL_CONTENT_LEN else None
+        )
+        resp.raise_for_status()
+        # 只处理 HTML，二进制文件交给 _fetch_pdf
+        content_type = resp.headers.get("content-type", "")
+        if "html" not in content_type:
+            return None
+        # 粗提取：去掉 HTML 标签返回纯文本（简单但够用作兜底）
+        text = re.sub(r"<[^>]+>", " ", resp.text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text if len(text) >= _MIN_CRAWL_CONTENT_LEN else None
     except Exception:
-        logger.debug("httpx 直接获取失败（JS站或超时，正常降级）: %s", url, exc_info=False)
+        logger.debug("requests 直接获取失败（JS站或超时，正常降级）: %s", url, exc_info=False)
         return None
 
 
@@ -273,14 +274,13 @@ def _fetch_pdf(url: str, timeout: int = FETCH_PDF_TIMEOUT) -> str | None:
         return None
 
     def _download(u: str) -> bytes:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            resp = client.get(u)
-            resp.raise_for_status()
-            return resp.content
+        resp = requests.get(u, timeout=timeout, allow_redirects=True)
+        resp.raise_for_status()
+        return resp.content
 
     try:
         content = _download(url)
-    except httpx.HTTPStatusError:
+    except requests.HTTPError:
         # 4xx/5xx（如 429 限流、403 封锁）：重试无意义，直接放弃
         logger.warning("PDF 下载失败（HTTP 错误，不重试）: %s", url, exc_info=True)
         return None

@@ -8,7 +8,7 @@ import logging
 import re
 from urllib.parse import quote_plus, urlparse
 
-import httpx
+import requests
 
 from src.config import get_settings
 from src.research_agent.config import FETCH_HTML_TIMEOUT
@@ -88,8 +88,13 @@ def _search_via_engine(query: str, search_url: str, max_results: int) -> list[di
         headers["Authorization"] = f"Bearer {settings.CRAWL4AI_TOKEN}"
 
     try:
-        with httpx.Client(timeout=FETCH_HTML_TIMEOUT + 15) as client:
-            resp = client.post(f"{base_url}/crawl", json=payload, headers=headers)
+        with requests.Session() as session:
+            resp = session.post(
+                f"{base_url}/crawl",
+                json=payload,
+                headers=headers,
+                timeout=FETCH_HTML_TIMEOUT + 15,
+            )
             resp.raise_for_status()
             data = resp.json()
 

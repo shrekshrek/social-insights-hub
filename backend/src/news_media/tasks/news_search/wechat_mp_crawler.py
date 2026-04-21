@@ -31,7 +31,7 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-import httpx
+import requests
 
 from src.config import settings
 
@@ -176,7 +176,7 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
 _PAGE_SIZE = 10  # 搜狗微信每页约 10 条
 
 
-async def _fetch_one_page(client: httpx.AsyncClient, url: str, headers: dict) -> str:
+def _fetch_one_page(session: requests.Session, url: str, headers: dict) -> str:
     """抓取单页并返回 cleaned_html，失败返回空字符串"""
     payload: dict = {
         "urls": [url],
@@ -187,10 +187,11 @@ async def _fetch_one_page(client: httpx.AsyncClient, url: str, headers: dict) ->
             "wait_until": "networkidle",
         },
     }
-    resp = await client.post(
+    resp = session.post(
         f"{settings.CRAWL4AI_BASE_URL}/crawl",
         json=payload,
         headers=headers,
+        timeout=40.0,
     )
     resp.raise_for_status()
     results = resp.json().get("results", [])
@@ -199,8 +200,8 @@ async def _fetch_one_page(client: httpx.AsyncClient, url: str, headers: dict) ->
     return results[0].get("cleaned_html", "")
 
 
-async def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
-    """通过 Crawl4AI 爬取搜狗微信公众号搜索结果（自动分页）
+def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
+    """通过 Crawl4AI 爬取搜狗微信公众号搜索结果（自动分页，同步版）
 
     Args:
         query: 搜索关键词
@@ -219,7 +220,7 @@ async def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
     seen_urls: set[str] = set()
 
     try:
-        async with httpx.AsyncClient(timeout=40.0) as client:
+        with requests.Session() as session:
             page = 1
             while len(all_articles) < max_results:
                 target_url = (
@@ -227,7 +228,7 @@ async def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
                     f"&ie=utf8&_sug_type_=&s_from=input&_sug_=n&page={page}"
                 )
 
-                cleaned_html = await _fetch_one_page(client, target_url, headers)
+                cleaned_html = _fetch_one_page(session, target_url, headers)
                 if not cleaned_html.strip():
                     logger.warning("搜狗微信: 第 %d 页 cleaned_html 为空, query=%r", page, query)
                     break
@@ -246,6 +247,6 @@ async def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
         logger.info("搜狗微信: query=%r, 提取文章数=%d (翻页=%d)", query, len(all_articles), page - 1)
         return all_articles
 
-    except httpx.HTTPError as e:
+    except requests.RequestException as e:
         logger.error("Crawl4AI 请求失败 (搜狗微信): %s", e)
         raise

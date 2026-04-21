@@ -1,11 +1,13 @@
-"""DuckDuckGo 新闻搜索封装
+"""DuckDuckGo 新闻搜索封装（同步版）
 
 使用 duckduckgo_search 库（ddgs）搜索新闻，region="cn-zh" 优先中文结果。
 DDG 会限速，采用指数退避重试，失败时返回空列表（不影响主流程）。
+
+本模块运行在 Celery gevent worker 下，gevent monkey-patch 会让底层 socket 自动协作式让出。
 """
 
-import asyncio
 import logging
+import time
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -19,15 +21,14 @@ def _parse_ddg_date(date_str: str | None) -> datetime | None:
     if not date_str:
         return None
     try:
-        # DDG 通常返回 ISO 格式
         return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
     except ValueError:
         pass
     return None
 
 
-async def search_ddg_news(query: str, max_results: int = 50) -> list[dict]:
-    """DuckDuckGo 新闻搜索
+def search_ddg_news(query: str, max_results: int = 50) -> list[dict]:
+    """DuckDuckGo 新闻搜索（同步版，供 Celery gevent worker 调用）
 
     Args:
         query: 搜索关键词
@@ -40,13 +41,7 @@ async def search_ddg_news(query: str, max_results: int = 50) -> list[dict]:
     """
     for attempt in range(_MAX_RETRIES):
         try:
-            # 在线程池中运行同步 ddgs 调用（避免阻塞事件循环）
-            results = await asyncio.get_running_loop().run_in_executor(
-                None,
-                _ddg_news_sync,
-                query,
-                max_results,
-            )
+            results = _ddg_news_sync(query, max_results)
             logger.info("DuckDuckGo: query=%r, 结果数=%d", query, len(results))
             return results
 
@@ -59,7 +54,7 @@ async def search_ddg_news(query: str, max_results: int = 50) -> list[dict]:
                     attempt + 1, _MAX_RETRIES, delay, e,
                 )
                 if attempt < _MAX_RETRIES - 1:
-                    await asyncio.sleep(delay)
+                    time.sleep(delay)  # gevent monkey-patch 下会让出 greenlet
             else:
                 logger.warning("DDG 搜索失败，降级返回空列表: %s", e)
                 return []
@@ -69,7 +64,7 @@ async def search_ddg_news(query: str, max_results: int = 50) -> list[dict]:
 
 
 def _ddg_news_sync(query: str, max_results: int) -> list[dict]:
-    """同步执行 DDG 搜索（在线程池中调用）"""
+    """同步执行 DDG 搜索"""
     from duckduckgo_search import DDGS
 
     raw_results = DDGS().news(

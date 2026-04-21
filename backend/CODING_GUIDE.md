@@ -345,39 +345,37 @@ async def get_user(user_id: int):
 - 需要结果持久化、任务重试、优先级队列
 - 是 AI LLM 调用链的一部分
 
-**定义规范**（`src/<module>/tasks.py`）：
+**定义规范**（`src/<module>/tasks.py`）—— **同步 + `SyncSessionLocal`**：
 
 ```python
 from src.celery_app import celery_app
+from src.database import SyncSessionLocal
 
 @celery_app.task(name="module.task_name", bind=True, max_retries=3)
 def my_celery_task(self, arg: int) -> None:
-    """任务说明。"""
-    from src.database import AsyncSessionLocal, async_engine
-
-    async def _run() -> None:
+    """任务说明。纯同步代码，由 gevent monkey-patch 协作式让出。"""
+    with SyncSessionLocal() as db:
         try:
-            async with AsyncSessionLocal() as db:
-                await do_work(db, arg)
-        finally:
-            # 必须：避免 asyncpg pool 跨事件循环复用
-            await async_engine.dispose()
-
-    _run_async(_run())
-
-
-def _run_async(coro):
-    """在 gevent threadpool 真实 OS 线程中运行协程。"""
-    from gevent import get_hub
-    return get_hub().threadpool.apply(asyncio.run, (coro,))
+            do_work(db, arg)      # 普通 sync 函数，用 sync SQLAlchemy API
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 ```
 
-**注意事项**：
-- gevent worker greenlet 没有 asyncio 事件循环，**必须**通过 `get_hub().threadpool.apply(asyncio.run, coro)` 桥接
-- 每个 `_run()` 协程末尾**必须** `await async_engine.dispose()`，否则下次调用时 asyncpg pool 会绑定已关闭的事件循环
-- 在 `celery_app.py` 的 `include` 列表中注册模块，**不要**添加到 `beat_schedule`
+**为什么是同步而不是 `async def + asyncio.run()`**：
 
-**Celery 任务内部并发（I/O 密集子任务）**：
+- Celery worker 用 `--pool=gevent --concurrency=100`。gevent monkey-patch 会替换底层 `socket` 和 `threading.Lock`，让同步代码在 I/O 阻塞时自动 yield 给其他 greenlet
+- `SyncSessionLocal` 走 `psycopg`（同步 driver），每个 greenlet 独立拿连接、独立释放，零共享状态、零竞态
+- 若改用 async：每个 Celery task 要在 gevent threadpool 新开 OS 线程跑新 asyncio loop，新 loop 拿不到绑定旧 loop 的 asyncpg 连接 → 必须 `async_engine.dispose()` 重建池 → **多 greenlet 同时 dispose 共享全局 engine 引发竞态，greenlet 永久卡死**（2026-04-20 事故根因）
+
+**HTTP 库选择**：
+
+- Celery task 内做 HTTP 调用 → 用 `requests`（gevent 黄金搭档，monkey-patch 下自动协作）
+- 禁止在 Celery task 内用 `httpx`（无论 `AsyncClient` 还是 `Client`）：`AsyncClient` 需要 event loop，`Client` 的内部锁机制与 gevent 兼容但非最佳
+- FastAPI 路由 / APScheduler / BackgroundTasks（asyncio 原生环境）→ 用 `httpx.AsyncClient`
+
+**Celery task 内部并发子任务**：
 
 任务内部需要并发执行多个 I/O 子任务（如并发调 LLM、并发抓取多个 URL）时，**必须使用 `gevent.pool.Pool`，禁止使用 `ThreadPoolExecutor`**。
 
@@ -385,25 +383,67 @@ def _run_async(coro):
 
 ```python
 from gevent.pool import Pool as GeventPool
+from billiard.exceptions import SoftTimeLimitExceeded
 
-def my_celery_task(self, items: list) -> None:
-    def process_one(item):
-        # I/O 操作（LLM 调用、HTTP 请求等）
-        # SoftTimeLimitExceeded 会正确传播到任务层
-        from billiard.exceptions import SoftTimeLimitExceeded
+@celery_app.task(name="module.batch", bind=True)
+def process_batch(self, items: list) -> None:
+    def _process_one(item):
         try:
-            return do_io(item)
+            return requests.get(item["url"]).text  # gevent 自动让出 I/O
         except SoftTimeLimitExceeded:
-            raise  # 必须向上传播
+            raise  # 必须向上传播到任务层
         except Exception:
             logger.warning("处理失败: %s", item, exc_info=True)
             return None
 
     pool = GeventPool(5)  # 并发数根据模块 config.py 中的常量配置
-    results = list(pool.map(process_one, items))
+    results = list(pool.imap_unordered(_process_one, items))
 ```
 
-> Celery task 内部一律使用 `gevent.pool.Pool`，禁止使用 `ThreadPoolExecutor`。
+**注意事项**：
+
+- Celery task 函数是 `def`（不是 `async def`），数据库用 `SyncSessionLocal`，HTTP 用 `requests`
+- 在 `celery_app.py` 的 `include` 列表中注册模块，**不要**添加到 `beat_schedule`
+- 事务手动 `db.commit()` / `db.rollback()`；没有 async context manager 的自动提交
+
+**例外：`knowledge_base/tasks.py`（有意保留 async）**
+
+KB 的 `process_document_task` 保留 async 是因为其依赖链（`EmbeddingService.embed` 基于 `httpx.AsyncClient`）改造代价大。它通过**每 task 创建本地 engine** 规避共享池竞态：
+
+```python
+# knowledge_base/tasks.py - 仅在别无选择时参考此模式
+engine = create_async_engine(db_url, poolclass=NullPool)  # 本地 engine
+async with AsyncSession(engine) as db:
+    await process_document(db, doc_id)
+await engine.dispose()  # dispose 本地 engine，不触碰全局
+```
+
+**新增 Celery task 时不要参考 KB 模式**——优先用同步 + `SyncSessionLocal`。只有当任务依赖**不可改造的 async 库**（如某些只提供 async API 的 SDK）才考虑 KB 模式。
+
+**Celery task 模式决策树**（gevent pool 下）：
+
+```
+任务所有依赖都能用 sync 库？
+├─ 是 → 模式 A：def + SyncSessionLocal + requests（默认，90% 场景）
+│        参考：social_media/analysis/celery_tasks/*、news_media/tasks/tasks.py
+│
+└─ 否（必须用 async-only 库）
+   └─ 模式 B：asyncio.run() via gevent threadpool
+              + per-task 本地 create_async_engine(poolclass=NullPool)
+              参考：knowledge_base/tasks.py
+```
+
+**反模式：`asgiref.async_to_sync`（gevent pool 下禁用）**
+
+社区常见文章会推荐用 `async_to_sync` 桥接 async SQLAlchemy 到 sync Celery task（例如 DEV 社区的 "Using Async SQLAlchemy Inside Sync Celery Tasks"），但这些方案是针对 **prefork pool**。在我们的 **gevent pool** 下，`async_to_sync` 有已知问题：
+
+- asgiref 在每次调用时创建临时 event loop
+- gevent 管理多 greenlet 时，这些临时 loop 无法被正确关闭
+- 高负载下触发 `RuntimeError: You cannot use AsyncToSync in the same thread as an async event loop`
+- Celery 维护者明确表示这是 asgiref + gevent 的交叉问题，Celery 层面不 fix
+- 详见 [celery/celery#7485](https://github.com/celery/celery/discussions/7485)
+
+**Pool 选择（我们为什么用 gevent）**：任务画像绝大多数是 I/O 密集（LLM 调用、HTTP 爬取、搜索引擎请求），gevent 单 worker 100 greenlet 可真正同时等 100 个 I/O 响应，吞吐量比 prefork（典型 4-16 并发）高一个数量级。代价是 async 库兼容性需要模式 A/B 区分，以及少数库（如 `httpx`）有 gevent 兼容 gotcha。新增任务按上述决策树走即可，不要自行引入 `async_to_sync`。
 
 **触发方式**：
 ```python
@@ -498,8 +538,10 @@ async def trigger(
 ##### 禁止事项
 
 - ❌ 不在 `celery_app.py` 的 `beat_schedule` 中添加任何条目（已删除，由 APScheduler 统一管理）
+- ❌ **Celery task 不用 `async def` + `asyncio.run()` + `async_engine.dispose()`**。gevent worker 下多 task 并发 dispose 共享全局 `async_engine` 会造成连接池竞态，greenlet 永久卡死（2026-04-20 事故根因）。Celery task 一律用 `def` + `SyncSessionLocal`
+- ❌ **Celery task 内 HTTP 调用不用 `httpx`**（`AsyncClient` 需 event loop，`Client` 内部锁机制与 gevent 兼容但非最佳）。用 `requests`
 - ❌ 不在 APScheduler / BackgroundTasks 的 `async def` 函数中调用 `await async_engine.dispose()`（asyncio 原生环境无需此操作）
-- ❌ 不在 Celery task 的 `_run()` 协程中省略 `await async_engine.dispose()`（gevent 环境必须）
+- ❌ Celery task 内部并发必须用 `gevent.pool.Pool`，禁止使用 `ThreadPoolExecutor`（后者无法传播 `SoftTimeLimitExceeded`）
 - ❌ 不把 APScheduler 任务分散注册到各模块，统一在 `scheduler.py` 管理
 
 #### LLM 应用开发 (LangChain)

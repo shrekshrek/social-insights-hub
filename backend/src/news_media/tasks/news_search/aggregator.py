@@ -1,12 +1,16 @@
-"""新闻搜索多渠道聚合器
+"""新闻搜索多渠道聚合器（同步版）
 
 并发调用百度新闻、搜狗新闻（Crawl4AI）和 DuckDuckGo，按 URL 去重合并，
 返回统一结构的文章列表（含 source_tier 分类）。
+
+使用 gevent.pool 做多渠道并发（gevent monkey-patch 下底层 socket 自动协作让出）。
+本模块由 Celery gevent worker 调用，全路径无 asyncio。
 """
 
-import asyncio
 import logging
 from urllib.parse import parse_qs, urlparse, urlencode
+
+from gevent.pool import Pool
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +81,12 @@ def _normalize_url(url: str) -> str:
         return url
 
 
-async def search_news(
+def search_news(
     query: str,
     max_results: int = 50,
     channels: list[str] | None = None,
 ) -> list[dict]:
-    """多渠道并发搜索，URL 去重合并，附加 source_tier
+    """多渠道并发搜索，URL 去重合并，附加 source_tier（同步版）
 
     Args:
         query: 搜索关键词
@@ -95,25 +99,35 @@ async def search_news(
     if channels is None:
         channels = ["baidu", "sogou", "duckduckgo"]
 
-    tasks = []
+    # 构造 (fn, args) 列表，用 gevent.pool 并发执行
+    jobs: list = []
     if "baidu" in channels:
         from src.news_media.tasks.news_search.baidu_crawler import search_baidu_news
-        tasks.append(search_baidu_news(query, max_results=max_results))
+        jobs.append((search_baidu_news, (query,), {"max_results": max_results}))
     if "sogou" in channels:
         from src.news_media.tasks.news_search.sogou_crawler import search_sogou_news
-        tasks.append(search_sogou_news(query, max_results=max_results))
+        jobs.append((search_sogou_news, (query,), {"max_results": max_results}))
     if "duckduckgo" in channels:
         from src.news_media.tasks.news_search.ddg_searcher import search_ddg_news
-        tasks.append(search_ddg_news(query, max_results=max_results))
+        jobs.append((search_ddg_news, (query,), {"max_results": max_results}))
     if "wechat_mp" in channels:
         from src.news_media.tasks.news_search.wechat_mp_crawler import search_wechat_mp
-        tasks.append(search_wechat_mp(query, max_results=max_results))
+        jobs.append((search_wechat_mp, (query,), {"max_results": max_results}))
 
-    if not tasks:
+    if not jobs:
         return []
 
-    # 并发执行，DDG 失败不影响百度
-    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    def _safe_call(job: tuple) -> list[dict] | Exception:
+        fn, args, kwargs = job
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            return e
+
+    # gevent.pool 并发执行，DDG 失败不影响百度
+    # 并发度 = len(jobs)，单任务内渠道数量有限（<=4）
+    pool = Pool(len(jobs))
+    raw_results = list(pool.imap_unordered(_safe_call, jobs))
 
     all_articles: list[dict] = []
     for result in raw_results:

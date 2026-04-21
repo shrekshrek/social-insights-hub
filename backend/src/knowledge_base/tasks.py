@@ -12,11 +12,22 @@ def _run_async(coro):
     """在 gevent threadpool 的真实 OS 线程中运行协程。
 
     gevent monkey-patch 后 worker greenlet 无法直接使用 asyncio；
-    通过 gevent threadpool 在真实 OS 线程中调用 asyncio.run()，
-    避免 "cannot be called from a running event loop" 和
-    "There is no current event loop in thread" 错误。
-    每个协程末尾须调用 await async_engine.dispose() 以避免
-    跨事件循环复用 asyncpg 连接池导致的 "Future attached to a different loop" 错误。
+    通过 gevent threadpool 在真实 OS 线程中调用 asyncio.run()。
+
+    **为什么 KB 用 async + local engine，而 news_media/social_media 改为同步 SyncSessionLocal？**
+
+    共享全局 `async_engine` 在 Celery gevent worker 下存在并发 dispose 竞态风险
+    （多 greenlet 同时 dispose 会让 asyncpg 连接池进入损坏状态，greenlet 永久卡住）。
+    两种合法规避策略：
+
+    1. **同步路径**（social_media / news_media celery 任务）: 用 `SyncSessionLocal`
+       + psycopg driver，gevent monkey-patch 底层 socket 自动让出。零 event loop 切换。
+    2. **隔离 async 路径**（KB）: 每个任务在 `process_document_task` 里创建独立的
+       `create_async_engine(poolclass=NullPool)`，用完 dispose。不接触共享的全局
+       `async_engine`，因此没有竞态。
+
+    KB 走 2 是因为其依赖（EmbeddingService 的 httpx.AsyncClient）是 async，改同步
+    牵连较大；且 KB 并发度低（单文档处理），每任务一次 engine 握手开销可接受。
     """
     from gevent import get_hub
     return get_hub().threadpool.apply(asyncio.run, (coro,))

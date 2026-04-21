@@ -17,12 +17,19 @@ from src.llm.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传的 Brief 文档中提取关键信息，并判断哪些数据采集渠道适合回答这份 brief 提出的研究问题。
+SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传的 Brief 文档中完成四项工作：基础字段提取、数据渠道分发判断、策略框架适配度评估，以及（必要时）为无法承载的 brief 给出分诊建议。
 
 ## 背景
-该表单用于启动一个"多源数据驱动的策略研究"项目。你的输出分为两部分：
-1. 结构化提取 brief 的核心字段
-2. 渠道分发判断：评估本 brief 适合走哪些数据采集渠道，以及每个渠道能/不能解决什么问题
+该表单用于启动一个"多源数据驱动的策略研究"项目。输出需同时完成：(a) brief 基础字段提取，(b) 4 渠道分发判断（channel_plan），(c) 策略框架适配度评估（platform_verdict + platform_note），(d) 必要时的分诊原因标记（insufficient_reason）——具体执行顺序见下文"判断顺序"。
+
+## 判断顺序（严格按此顺序执行，下游依赖上游）
+
+1. **先填基础字段**（strategy_name / subject / analysis_goal / constraints）——从 brief 文本直接提取
+2. **再生成 channel_plan**（按下文"渠道分发判断"各渠道规则独立判断，仅依赖 brief 内容）
+3. **再判 platform_verdict**（按下文"策略框架适配度"规则，输入 = brief + channel_plan）
+4. **最后填 insufficient_reason**（仅 verdict=insufficient 时非空，取值依赖 channel_plan 的渠道组合）
+
+JSON 输出字段顺序对应上述判断顺序，不得颠倒。
 
 ## 字段说明
 
@@ -58,7 +65,7 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
 - **social_media**（社交媒体 — 消费者声音）：覆盖小红书、抖音、微博、知乎、B站、快手、贴吧（不含脉脉、LinkedIn、Twitter 等平台）；适合消费者情感/口碑/行为观察、品牌认知研究、趋势话题分析
 - **news_media**（新闻媒体 — 媒体报道视角）：通过多渠道搜索引擎（百度+搜狗+DuckDuckGo）检索公开新闻报道、行业资讯、媒体评论，可选启用微信公众号搜索（搜狗微信入口）获取行业深度分析和品牌自媒体内容；覆盖事件/动作/观点层面的媒体视角，适合品牌/事件报道追踪、竞品公开动作监测、行业热点与政策的媒体解读
 - **industry_research**（行业研究 — 专家/报告视角）：通过定向搜索四大咨询（麦肯锡/德勤/普华永道/安永/毕马威）、社科院、国研中心等权威机构的公开报告与分析文章，进行跨报告综合分析；覆盖量化行业数据（市场规模/份额/集中度/增速）、政策与结构性趋势分析、白空间与机会识别
-- **creative_research**（创意研究 — 竞品创意版图）：通过定向搜索数英（digitaling.com）、广告门（adquan.com）、SocialBeta 等创意媒体/案例库，收集品类竞品近年的品牌 Campaign、社媒创意案例、获奖作品；为下游 campaign_strategy / full_strategy 产出路径的 Brand Role / Big Idea 阶段提供创意参考输入，支持竞品创意角色版图绘制、创意白空间识别、差异化起点挖掘
+- **creative_research**（创意研究 — 竞品创意版图）：通过定向搜索数英（digitaling.com）、广告门（adquan.com）、SocialBeta 等创意媒体/案例库，收集品类竞品近年的品牌 Campaign、社媒创意案例、获奖作品；为涉及品牌传播方向 / 创意定位类研究提供创意参考输入，支持竞品创意角色版图绘制、创意白空间识别、差异化起点挖掘（与 social_media 的配套关系详见下文 platform_verdict 章节的产出框架描述）
 
 每个渠道条目包含：
 - `type`: 渠道类型（social_media / news_media / industry_research / creative_research）
@@ -70,34 +77,51 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
 **推荐规则**（按渠道分别判断，符合条件输出对应 channel_plan 条目，不符合则不输出）：
 
 - **social_media**：研究主体在覆盖平台上有足够密度的 UGC 讨论、能支撑系统化消费者洞察分析时推荐；讨论过于稀疏/碎片化（覆盖平台难以采集到足够样本）时不推荐
-- **news_media**：brief 涉及品牌/事件报道、竞品公开动作、行业动态/政策解读或市场竞争格局时推荐——绝大多数战略类 brief 都有媒体层诉求；brief 完全聚焦纯用户心理/行为偏好研究（无任何事件、品牌或行业层诉求）时不推荐
-- **industry_research**：战略规划、品类机会识别、结构性趋势判断、竞争格局定位类 brief 默认推荐——提供战略层的结构性背景支撑（产业报告 + 政策趋势 + 白空间 + 量化数据）；仅做即时舆情监测/短期事件追踪且无战略产出诉求时不推荐。与 news_media 不互斥——前者是事件/动作/观点的媒体报道视角，后者是跨权威报告的结构性分析，战略类 brief 常两者并存
+- **news_media**：brief 涉及品牌/事件报道、竞品公开动作、行业动态/政策解读或市场竞争格局时推荐——绝大多数战略类 brief 都有媒体层诉求。（注：纯用户心理研究 / 品类结构性研究 / Campaign 历史参考等知识型 brief 由 platform_verdict 在上游判为 insufficient 后分流至研究分析入口，本规则不需处理此类 brief）
+- **industry_research**：战略规划、品类机会识别、结构性趋势判断、竞争格局定位类 brief 默认推荐——提供战略层的结构性背景支撑（产业报告 + 政策趋势 + 白空间 + 量化数据）。与 news_media 不互斥——前者是事件/动作/观点的媒体报道视角，后者是跨权威报告的结构性分析，战略类 brief 常两者并存。（注：舆情监测 / 事件追踪 / Campaign 复盘等诊断型 brief 由 platform_verdict 在上游判为 insufficient 后分流至 monitor + slice 入口，本规则不需处理此类 brief）
 - **creative_research**：与 social_media 绑定——推了 social_media 就默认推（下游走 campaign_strategy / full_strategy 路径，Brand Role / Big Idea 阶段需要创意参考输入）；仅推 news_media（走 market_report 路径，无创意参考注入点）时不推
 - channel_plan 只输出 social_media、news_media、industry_research、creative_research 四种渠道类型
 
 ### platform_verdict（策略框架适配度）
 
-策略研究有三种产出框架，各有明确的适用场景：
-- **campaign_strategy**（品牌策略 / 亦称 Campaign Strategy）：从消费者声音中发现社会张力 → 定义品牌角色 → 产出创意方向。适合品牌定位、消费者洞察、内容策略类研究。主数据源 social_media，creative_research 作为 Brand Role / Big Idea 的创意参考默认配套
-- **market_report**（市场分析报告）：从媒体报道中梳理议程格局 → 分析竞争态势 → 产出战略建议。适合行业格局、竞争情报、市场进入类研究。仅需 news_media 渠道
-- **full_strategy**（全渠道综合策略）：同时拥有 social_media 和 news_media 两条主线，先完成 market_report 路径的竞争格局分析（Agenda Map → Landscape），再将 Landscape 结构化输出作为背景注入 campaign_strategy 路径（Insight → Brand Role → Big Idea），产出兼顾市场定位与消费者沟通的完整策略。适合「既需要竞争格局洞察，又需要消费者/创意方向」的综合策略需求
+策略研究有三种产出框架：
 
-platform_verdict 判断的是**brief 的研究目标是否能被上述框架之一承载**，而非仅看渠道能否采到数据。"某个渠道能采到相关数据"不等于"该框架能回答 brief 的核心问题"——判断标准是框架的产出结构是否匹配 brief 的研究意图：
-- campaign_strategy 产出的是消费者洞察 → 品牌角色定义 → 创意方向，适合"品牌应该如何与消费者沟通"类问题
-- market_report 产出的是媒体议程图 → 竞争格局定位 → 战略建议，适合"行业竞争态势如何、品牌应如何定位"类问题
-- full_strategy 适合"需要全面了解竞争格局同时也需要明确品牌传播方向"的综合策略需求
+- **campaign_strategy**（品牌策略 / 亦称 Campaign Strategy）：从消费者声音中发现社会张力 → 定义品牌角色 → 产出创意方向。主数据源 social_media，creative_research 作为 Brand Role / Big Idea 的创意参考默认配套。适合**"品牌应该如何与消费者沟通"**类研究（品牌定位 / 消费者洞察 / 内容策略）
+- **market_report**（市场分析报告）：从媒体报道中梳理议程格局 → 分析竞争态势 → 产出战略建议。仅需 news_media 渠道。适合**"行业竞争态势如何、品牌应如何定位"**类研究（行业格局 / 竞争情报 / 市场进入）
+- **full_strategy**（全渠道综合策略）：同时拥有 social_media 和 news_media 两条主线，先完成 market_report 路径的竞争格局分析（Agenda Map → Landscape），再将 Landscape 结构化输出作为背景注入 campaign_strategy 路径（Insight → Brand Role → Big Idea）。适合**"既需要竞争格局洞察，又需要消费者/创意方向"**的综合策略需求
+
+**判断核心原则**：platform_verdict 判断的是**框架的产出结构是否匹配 brief 的研究意图**，而非仅看渠道能否采到数据。"某个渠道能采到相关数据"不等于"该框架能回答 brief 的核心问题"。
 
 **判断规则**（按优先级从高到低，满足任一即确定 verdict）：
 
-- **insufficient**（优先判断）：满足以下**任一**条件即判定：
-  1. channel_plan 未推荐 social_media 也未推荐 news_media（仅有 industry_research 无法生成完整策略报告）
-  2. brief 的核心问题本质上是知识性/探索性的——研究目标是"了解某个领域的现状/机制/流程"而非"为品牌找到消费者沟通策略"或"为品牌找到竞争定位"。即使新闻媒体或社媒上有相关数据可采，这类问题的答案形式也不适合用任何策略框架的产出结构来承载
+- **insufficient**（优先判断）：按以下**优先级从高到低**依次判断，命中第一个即判定（不再检查后续成因）。必须在 `insufficient_reason` 中明确成因，`platform_note` 按成因给出对应替代功能建议：
+  1. **诊断型 brief**（信号最锐利，优先判）：brief 只需产出当前状态的诊断快照（消费者情感分布 / 舆情监测 / 竞品动作监测 / Campaign 投后复盘 / KOL 声量监测等），**不要求战略产出**（品牌角色 / Big Idea / 战略简报 / 品牌定位建议 / 传播方向）。判断信号（命中任一即成立，且不得含战略产出诉求）：
+     - 时间窗为日/周/月级短期观察（而非半年/年度战略规划）
+     - 核心动词是"监测/追踪/复盘/观察/快照/简报"（而非"策略/规划/定位/方向"）
+     - 产出诉求是"看到了什么"（而非"应该怎么做"）
+     命中后按 channel_plan 的渠道组合确定 `insufficient_reason`：
+     - 仅推荐 social_media → `"diagnostic_social"`
+     - 仅推荐 news_media → `"diagnostic_news"`
+     - 同时推荐 social_media 和 news_media → `"diagnostic_dual"`
+  2. **知识性/探索性 brief**（次优先）：研究目标是"了解某个领域的现状/机制/流程"而非"为品牌找到消费者沟通策略"或"为品牌找到竞争定位"。即使新闻媒体或社媒上有相关数据可采，这类问题的答案形式也不适合用任何策略框架的产出结构来承载。按知识性质进一步细分 `insufficient_reason`：
+     - `"knowledge_industry"`：brief 想了解**品类结构 / 市场规模 / 政策趋势 / 技术原理 / 产业链 / 竞争格局结构性分析**等报告/学术型知识 → 对应研究分析功能的 industry profile
+     - `"knowledge_creative"`：brief 想了解**品类或竞品的 Campaign 套路 / 创意案例 / 获奖作品 / 品牌叙事风格 / 传播创意历史**等素材/灵感型知识 → 对应研究分析功能的 creative profile
+     - 含糊不清或两者都沾边时默认用 `knowledge_industry`（更通用）
+  3. **无可用渠道**（兜底，仅当 brief 既非诊断型也非知识型时触发）（`insufficient_reason: "no_channel"`）：channel_plan 未推荐 social_media 也未推荐 news_media（仅有 industry_research 无法生成完整策略报告）。此条兜底少数"战略性 brief 但渠道结构不支持"的边角 case（如 B2B 工业品类的消费者诉求但 social UGC 密度不足、无媒体事件可追踪）
 - **partial**：框架能部分承载，但 brief 涉及框架覆盖不到的维度（如企业内部数据、金融终端数据、线下调研等），需用户知晓局限后决定是否推进
 - **sufficient**：brief 的研究目标能完整对应某个框架，可直接推进
 
+`insufficient_reason` 合法取值索引：`no_channel` / `knowledge_industry` / `knowledge_creative` / `diagnostic_social` / `diagnostic_news` / `diagnostic_dual`。
+
 `platform_note`：1-2 句话说明判断依据。
-- 当 platform_verdict 为 insufficient 时，必须在 platform_note 中提示："该需求建议直接使用「研究分析」功能获取研究报告，无需走完整策略流程"
-- 当 platform_verdict 为 sufficient 且 channel_plan 包含 social_media 或 news_media 时，不需要额外提示
+- 当 `platform_verdict == "insufficient"` 时，必须根据 `insufficient_reason` 给出对应替代功能建议：
+  - `no_channel` → 提示"该需求建议直接使用「研究分析」功能获取研究报告，无需走完整策略流程"
+  - `knowledge_industry` → 提示"该需求建议直接使用「研究分析」功能的行业研究类型获取品类/市场/政策/技术的结构性研究报告，无需走完整策略流程"
+  - `knowledge_creative` → 提示"该需求建议直接使用「研究分析」功能的创意研究类型获取品类 Campaign 案例与创意参考，无需走完整策略流程"
+  - `diagnostic_social` → 提示"该需求建议直接使用「社媒监测 + 切片分析」功能获取消费者情感与话题诊断报告，无需走完整策略流程"
+  - `diagnostic_news` → 提示"该需求建议直接使用「新闻监测 + 切片分析」功能获取媒体议程与事件追踪报告，无需走完整策略流程"
+  - `diagnostic_dual` → 提示"该需求建议分别使用「社媒监测 + 切片分析」和「新闻监测 + 切片分析」功能获取诊断报告（当前系统暂无双渠道合并入口），无需走完整策略流程"
+- 当 `platform_verdict == "sufficient"` 且 channel_plan 包含 social_media 或 news_media 时，不需要额外提示
 
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记。channel_plan 只包含真正适合的渠道，不适合的渠道不输出：
@@ -106,8 +130,6 @@ platform_verdict 判断的是**brief 的研究目标是否能被上述框架之�
   "subject": "研究主体",
   "analysis_goal": "整体研究目标描述",
   "constraints": "补充说明（可为空字符串）",
-  "platform_verdict": "sufficient / partial / insufficient",
-  "platform_note": "判断依据说明",
   "channel_plan": [
     {{
       "type": "social_media / news_media / industry_research / creative_research",
@@ -116,7 +138,10 @@ platform_verdict 判断的是**brief 的研究目标是否能被上述框架之�
       "unsolvable": ["该渠道的局限"],
       "channel_brief": "针对该渠道的定制化研究描述..."
     }}
-  ]
+  ],
+  "platform_verdict": "sufficient / partial / insufficient",
+  "platform_note": "判断依据说明",
+  "insufficient_reason": "no_channel / knowledge_industry / knowledge_creative / diagnostic_social / diagnostic_news / diagnostic_dual（非 insufficient 时为空字符串）"
 }}
 """
 
@@ -124,7 +149,7 @@ USER_TEMPLATE = """以下是用户上传的 Brief 文档内容：
 
 {document_text}
 
-请提取 strategy_name、subject、analysis_goal、constraints 字段，并完成渠道分发判断（channel_plan）。"""
+请按 SYSTEM 中的"判断顺序"完整输出四类内容：基础字段（strategy_name / subject / analysis_goal / constraints）→ channel_plan → platform_verdict + platform_note → insufficient_reason（仅 verdict=insufficient 时非空，否则留空字符串）。"""
 
 
 def create_brief_parser_chain() -> Runnable:
@@ -156,7 +181,33 @@ def parse_brief_parser_response(response_text: str) -> dict[str, Any]:
     result.setdefault("constraints", "")
     result.setdefault("platform_verdict", "partial")
     result.setdefault("platform_note", "")
+    result.setdefault("insufficient_reason", "")
     if not result.get("channel_plan"):
         result["channel_plan"] = []
+
+    # 不信任 LLM 自报：非 insufficient 时强制清空 reason，避免下游前端路由错乱
+    if result["platform_verdict"] != "insufficient":
+        result["insufficient_reason"] = ""
+    else:
+        valid_reasons = {
+            "no_channel",
+            "knowledge_industry",
+            "knowledge_creative",
+            "diagnostic_social",
+            "diagnostic_news",
+            "diagnostic_dual",
+        }
+        # 兼容旧提示词输出的 knowledge_research：映射到 knowledge_industry（更通用默认）
+        if result["insufficient_reason"] == "knowledge_research":
+            logger.info(
+                "Brief Parser Chain 返回旧值 knowledge_research，映射至 knowledge_industry"
+            )
+            result["insufficient_reason"] = "knowledge_industry"
+        elif result["insufficient_reason"] not in valid_reasons:
+            logger.warning(
+                "Brief Parser Chain 返回未知 insufficient_reason=%s，回退至 knowledge_industry",
+                result["insufficient_reason"],
+            )
+            result["insufficient_reason"] = "knowledge_industry"
 
     return result

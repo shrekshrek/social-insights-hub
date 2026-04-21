@@ -470,6 +470,18 @@ class ParseBriefResponse(CustomBaseModel):
         description="当前平台支持度: sufficient / partial / insufficient",
     )
     platform_note: str = Field("", description="支持度说明（1-2句）")
+    insufficient_reason: str = Field(
+        "",
+        description=(
+            "insufficient 分诊原因（仅 platform_verdict=insufficient 时非空）："
+            "no_channel → 引导至研究分析（默认 profile）；"
+            "knowledge_industry → 引导至研究分析 industry profile；"
+            "knowledge_creative → 引导至研究分析 creative profile；"
+            "diagnostic_social → 引导至社媒监测+切片；"
+            "diagnostic_news → 引导至新闻监测+切片；"
+            "diagnostic_dual → 引导至两个监测入口"
+        ),
+    )
     channel_plan: list[ChannelPlanItem] = Field(
         default_factory=list, description="渠道分发建议"
     )

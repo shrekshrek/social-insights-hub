@@ -169,7 +169,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 | Chain | 角色 | 触发时机 | 路径 |
 |-------|------|---------|------|
-| brief_parser_chain | Brief 摄入 + 四渠道分发判断（social_media / news_media / industry_research / creative_research） | 新建策略时（`parse-brief` 端点） | shared |
+| brief_parser_chain | Brief 摄入 + 四渠道分发判断（social_media / news_media / industry_research / creative_research）+ `platform_verdict` 分诊（sufficient / partial / insufficient，insufficient 附 `insufficient_reason` 引导至三层产出架构对应入口，详见 `docs/adr/002-output-tier-routing.md`） | 新建策略时（`parse-brief` 端点） | shared |
 | research_design_chain | 研究规划师（产出社媒/新闻 data_plan，不含 industry_research） | ① | shared |
 | strategy_social_probe_review_chain | 社媒数据质检员 | ② | shared |
 | strategy_news_probe_review_chain | 新闻数据质检员（单任务并行） | ② | shared |

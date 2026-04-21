@@ -2004,8 +2004,12 @@ async def _build_probe_task_summaries(
 
             top_topics_raw = insights.get("top_topics") or []
             top_topics = [
-                {"name": t.get("name", ""), "mentions": t.get("mentions", 0)}
-                for t in top_topics_raw[:10]
+                {
+                    "name": t.get("name", ""),
+                    "mentions": t.get("mentions", 0),
+                    "post_source_count": t.get("post_source_count", 0),
+                }
+                for t in top_topics_raw[:20]
             ]
 
             summary = {

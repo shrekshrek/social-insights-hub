@@ -209,7 +209,8 @@
           <div class="flex items-center gap-2">
             <span class="text-gray-500 line-through">{{ s.original_keyword }}</span>
             <UIcon name="i-heroicons-arrow-right" class="text-gray-400 text-xs shrink-0" />
-            <span class="font-medium text-amber-700 dark:text-amber-300">{{ s.suggested_keyword }}</span>
+            <span v-if="s.suggested_keyword" class="font-medium text-amber-700 dark:text-amber-300">{{ s.suggested_keyword }}</span>
+            <UBadge v-else variant="soft" size="xs" color="error" class="shrink-0">建议移除</UBadge>
             <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(s.platform) }}</UBadge>
           </div>
           <p v-if="s.reason" class="text-xs text-gray-500 mt-1">{{ s.reason }}</p>

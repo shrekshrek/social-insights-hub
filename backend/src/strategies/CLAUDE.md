@@ -87,10 +87,24 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
    - 新闻：`run_news_probe_task` 三渠道搜索（baidu + sogou + duckduckgo），每渠道上限 20 条，URL 去重后落库元数据，不抓全文、不打标
 2. 所有任务准备就绪后后台自动运行 probe 审查
    - 社媒：规则分流 + `strategy_social_probe_review_chain`（LLM 判定模糊案例）
+     - 规则层（`_auto_verdict_probe_task`）：`posts<5` / `promotion_ratio>85%` 直接 fail 并建议移除（`suggested_keyword=null`）；`deep_analyzed<8` 样本不足直接 pass 待全量验证；其余送 LLM
+     - LLM 层：单任务并行评估，输入含 `top_topics[:20]`（每个话题带 `mentions + post_source_count`，帮 LLM 识别单帖垄断）
    - 新闻：`strategy_news_probe_review_chain` 对每个任务并行 LLM 评估（基于卡片 title/source/tier/snippet + 维度→研究问题映射）
    - 社媒创建 `STRATEGY_SOCIAL_PROBE_REVIEW` AnalysisJob、新闻创建 `STRATEGY_NEWS_PROBE_REVIEW` AnalysisJob，独立记录 token/cost；LLM 失败时保守判 pass + 人工核查提示
 3. `all_pass` → 自动调用 approve_probe，为每个探测任务创建 phase="collect" 全量任务（社媒 + 新闻），策略 → collecting
 4. `partial_pass/fail` → 用户可 `approve-probe`（跳过审查直接全量）或 `refine-probe`（batch 替换/新增/移除关键词，`refinements` 调社媒、`news_refinements` 调新闻，两个列表至少填一个，probe_round++，最多 3 轮）
+   - `suggested_keyword=null` 的建议条目表示"建议移除"（平台级数据稀疏，换词也无效），refine_probe 识别后仅软删旧任务、不创建新任务
+   - 系统级后处理 [`detect_and_replace_symmetry_suggestions`](../llm/chains/strategy/social_probe_review_chain.py)：检测 consumer_voice / competitive 维度的平台互补失败模式，自动合并为"统一迁移至共同平台"建议
+
+**关键词设计原则**（三条链共享，详见各链 prompt 源文件）：
+
+- **研究主题锚定优先于泛属性词**：品牌关键词默认采用"品牌 + 研究主题/事件锚"（如 "3M 车衣"、"索尼 降噪耳机"），不要依赖 LLM 判断品牌"广谱 vs 专精"，统一加锚即可
+- **维度词汇隔离**：brand_voice / consumer_voice / competitive / media_narrative / industry 各自有严格的词汇边界
+- **同维度结构语义双重一致**：同维度所有品牌关键词共享主题锚，召回数据落在同一研究主题范围，保证横向对比公平
+- **情绪中立**：同维度关键词需覆盖正/中/负三类情绪表达
+- **保守偏置**：存疑时判 pass，让全量阶段验证；尤其在 `deep_analyzed < 10` 或话题池被单帖垄断时
+
+修改规则应同步三个 chain 的 prompt：[`research_design_chain.py`](../llm/chains/strategy/research_design_chain.py)（源头） → [`social_probe_review_chain.py`](../llm/chains/strategy/social_probe_review_chain.py) / [`news_probe_review_chain.py`](../llm/chains/strategy/news_probe_review_chain.py)（修复建议）。
 
 ### ③ 数据就绪 (collecting → ready)
 

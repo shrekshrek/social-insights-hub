@@ -17,10 +17,11 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from src.config import settings
 from src.news_media.tasks import crud
-from src.news_media.tasks.models import NewsTask
+from src.news_media.tasks.models import NewsArticle, NewsTask
 from src.news_media.tasks.schemas import NewsTaskCreate
 
 logger = logging.getLogger(__name__)
@@ -144,137 +145,6 @@ def _parse_llm_json(content: str) -> list | dict:
     return json.loads(content)
 
 
-async def _search_and_store_articles(
-    db: AsyncSession,
-    task: NewsTask,
-    max_results: int = 10,
-    channels: tuple = ("baidu",),
-) -> list:
-    """搜索 + 创建 NewsArticle（绑定 task_id），返回本次创建的文章列表"""
-    from src.news_media.tasks.news_search.aggregator import search_news
-
-    search_results = await search_news(
-        query=task.keywords,
-        max_results=max_results,
-        channels=list(channels),
-    )
-    if not search_results:
-        return []
-
-    articles_data = [
-        {
-            "task_id": task.id,
-            "url": r["url"],
-            "title": r["title"],
-            "snippet": r.get("snippet"),
-            "source_name": r["source_name"],
-            "source_tier": r["source_tier"],
-            "search_source": r.get("search_source", "baidu"),
-            "published_at": r.get("published_at"),
-            "image_url": r.get("image_url"),
-            "raw_data": r.get("raw_data"),
-        }
-        for r in search_results
-    ]
-
-    return await crud.bulk_create_articles(db, articles_data)
-
-
-async def _tag_articles_batch(
-    articles: list,
-    analysis_goal: str,
-    use_full_text: bool = False,
-) -> tuple[list[dict], dict | None]:
-    """逐篇轻量标注（批量，settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE 篇一组）—— 仅 collect 阶段调用
-
-    Returns:
-        (tags_list, token_usage) — token_usage 为累加后的 LLM 用量统计
-    """
-    from src.llm.chains.news.tagging_chain import (
-        create_tagging_chain,
-        format_articles_for_tagging,
-    )
-
-    chain = create_tagging_chain()
-    all_tags: list[dict] = []
-    total_input_tokens = 0
-    total_output_tokens = 0
-
-    batch_size = settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE
-    for i in range(0, len(articles), batch_size):
-        batch = articles[i:i + batch_size]
-        batch_dicts = [
-            {
-                "title": a.title,
-                "source_name": a.source_name,
-                "snippet": a.snippet,
-                "full_text": a.full_text if use_full_text else None,
-            }
-            for a in batch
-        ]
-
-        articles_content = format_articles_for_tagging(batch_dicts, use_full_text=use_full_text)
-        response = await chain.ainvoke({
-            "analysis_goal": analysis_goal,
-            "article_count": len(batch),
-            "articles_content": articles_content,
-        })
-
-        # 累加 token 用量
-        usage = (response.response_metadata or {}).get("token_usage") or {}
-        total_input_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
-        total_output_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
-
-        try:
-            tags = _parse_llm_json(response.content)
-            if isinstance(tags, list):
-                for tag in tags:
-                    if isinstance(tag, dict) and "article_index" in tag:
-                        tag["article_index"] = i + tag["article_index"]
-                all_tags.extend(tags)
-            else:
-                logger.warning("news_tagging_chain returned non-list: %s", type(tags))
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error("Failed to parse tagging response: %s", e)
-
-    token_usage = {
-        "input_tokens": total_input_tokens,
-        "output_tokens": total_output_tokens,
-        "total_tokens": total_input_tokens + total_output_tokens,
-    } if (total_input_tokens or total_output_tokens) else None
-
-    return all_tags, token_usage
-
-
-async def _apply_tags_to_articles(
-    db: AsyncSession,
-    articles: list,
-    tags: list[dict],
-) -> None:
-    """将标注结果写回 NewsArticle —— 仅 collect 阶段调用"""
-    for tag in tags:
-        idx = tag.get("article_index")
-        if idx is None or idx >= len(articles):
-            continue
-        article = articles[idx]
-        update_data = {}
-        if "relevance" in tag:
-            update_data["relevance"] = tag["relevance"]
-        if "sentiment" in tag:
-            update_data["sentiment"] = tag["sentiment"]
-        if "article_type" in tag:
-            update_data["article_type"] = tag["article_type"]
-        if "mentioned_entities" in tag:
-            update_data["mentioned_entities"] = tag["mentioned_entities"]
-        if "key_quotes" in tag:
-            update_data["key_quotes"] = tag["key_quotes"]
-        if "summary" in tag:
-            update_data["summary"] = tag["summary"]
-        if update_data:
-            await crud.update_article(db, article, update_data)
-    await db.flush()
-
-
 async def _run_insight_analysis(
     articles: list,
     analysis_goal: str,
@@ -338,26 +208,211 @@ async def _run_insight_analysis(
         return {"error": str(e)}, token_usage
 
 
-# ==================== Task Execution ====================
+# ==================== Sync helpers for Celery gevent worker ====================
+# Celery 任务（gevent pool）直接调用这些同步函数，走 SyncSessionLocal + psycopg。
+# 避免在 gevent worker 里引入 asyncio event loop（asyncpg 连接绑定 loop 会造成
+# 跨 loop 并发 dispose 竞态，导致 greenlet 永久卡死）。
+# FastAPI 路由的 async 调用路径使用上面的 _run_insight_analysis（async 版本）。
 
 
-async def execute_news_probe(
-    db: AsyncSession,
+def _search_and_store_articles_sync(
+    db: Session,
+    task: NewsTask,
+    max_results: int = 10,
+    channels: tuple = ("baidu",),
+) -> list[NewsArticle]:
+    """搜索 + 创建 NewsArticle（同步版）"""
+    from src.news_media.tasks.news_search.aggregator import search_news
+
+    search_results = search_news(
+        query=task.keywords,
+        max_results=max_results,
+        channels=list(channels),
+    )
+    if not search_results:
+        return []
+
+    articles: list[NewsArticle] = []
+    for r in search_results:
+        article = NewsArticle(
+            task_id=task.id,
+            url=r["url"],
+            title=r["title"],
+            snippet=r.get("snippet"),
+            source_name=r["source_name"],
+            source_tier=r["source_tier"],
+            search_source=r.get("search_source", "baidu"),
+            published_at=r.get("published_at"),
+            image_url=r.get("image_url"),
+            raw_data=r.get("raw_data"),
+        )
+        db.add(article)
+        articles.append(article)
+    db.flush()
+    return articles
+
+
+def _tag_articles_batch_sync(
+    articles: list,
+    analysis_goal: str,
+    use_full_text: bool = False,
+) -> tuple[list[dict], dict | None]:
+    """逐篇轻量标注（同步版，chain.invoke）"""
+    from src.llm.chains.news.tagging_chain import (
+        create_tagging_chain,
+        format_articles_for_tagging,
+    )
+
+    chain = create_tagging_chain()
+    all_tags: list[dict] = []
+    total_input_tokens = 0
+    total_output_tokens = 0
+
+    batch_size = settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE
+    for i in range(0, len(articles), batch_size):
+        batch = articles[i:i + batch_size]
+        batch_dicts = [
+            {
+                "title": a.title,
+                "source_name": a.source_name,
+                "snippet": a.snippet,
+                "full_text": a.full_text if use_full_text else None,
+            }
+            for a in batch
+        ]
+
+        articles_content = format_articles_for_tagging(batch_dicts, use_full_text=use_full_text)
+        response = chain.invoke({
+            "analysis_goal": analysis_goal,
+            "article_count": len(batch),
+            "articles_content": articles_content,
+        })
+
+        usage = (response.response_metadata or {}).get("token_usage") or {}
+        total_input_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
+        total_output_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
+
+        try:
+            tags = _parse_llm_json(response.content)
+            if isinstance(tags, list):
+                for tag in tags:
+                    if isinstance(tag, dict) and "article_index" in tag:
+                        tag["article_index"] = i + tag["article_index"]
+                all_tags.extend(tags)
+            else:
+                logger.warning("news_tagging_chain returned non-list: %s", type(tags))
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error("Failed to parse tagging response: %s", e)
+
+    token_usage = {
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "total_tokens": total_input_tokens + total_output_tokens,
+    } if (total_input_tokens or total_output_tokens) else None
+
+    return all_tags, token_usage
+
+
+def _apply_tags_to_articles_sync(
+    db: Session,
+    articles: list,
+    tags: list[dict],
+) -> None:
+    """将标注结果写回 NewsArticle（同步版）"""
+    for tag in tags:
+        idx = tag.get("article_index")
+        if idx is None or idx >= len(articles):
+            continue
+        article = articles[idx]
+        if "relevance" in tag:
+            article.relevance = tag["relevance"]
+        if "sentiment" in tag:
+            article.sentiment = tag["sentiment"]
+        if "article_type" in tag:
+            article.article_type = tag["article_type"]
+        if "mentioned_entities" in tag:
+            article.mentioned_entities = tag["mentioned_entities"]
+        if "key_quotes" in tag:
+            article.key_quotes = tag["key_quotes"]
+        if "summary" in tag:
+            article.summary = tag["summary"]
+    db.flush()
+
+
+def _run_insight_analysis_sync(
+    articles: list,
+    analysis_goal: str,
+    subject: str,
+) -> tuple[dict, dict | None]:
+    """整体分析（同步版，chain.invoke）"""
+    from src.llm.chains.news.insight_chain import (
+        create_insight_chain as create_news_insight_chain,
+        format_tagged_articles_for_insight,
+    )
+
+    relevant = [
+        a for a in articles
+        if a.relevance in ("high", "medium") or a.relevance is None
+    ]
+
+    article_dicts = [
+        {
+            "title": a.title,
+            "source_name": a.source_name,
+            "source_tier": a.source_tier,
+            "published_at": str(a.published_at) if a.published_at else "未知",
+            "relevance": a.relevance,
+            "sentiment": a.sentiment,
+            "article_type": a.article_type,
+            "mentioned_entities": a.mentioned_entities,
+            "key_quotes": a.key_quotes,
+            "summary": a.summary,
+        }
+        for a in relevant
+    ]
+
+    tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
+    for a in relevant:
+        tier = a.source_tier or "tier3"
+        tier_counts[tier] = tier_counts.get(tier, 0) + 1
+
+    tagged_content = format_tagged_articles_for_insight(article_dicts)
+
+    chain = create_news_insight_chain()
+    response = chain.invoke({
+        "analysis_goal": analysis_goal,
+        "subject": subject,
+        "article_count": len(relevant),
+        "tagged_articles": tagged_content,
+        "tier1_count": tier_counts["tier1"],
+        "tier2_count": tier_counts["tier2"],
+        "tier3_count": tier_counts["tier3"],
+        "wechat_mp_count": tier_counts["wechat_mp"],
+    })
+
+    token_usage = (response.response_metadata or {}).get("token_usage")
+
+    try:
+        return _parse_llm_json(response.content), token_usage
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error("Failed to parse insight response: %s", e)
+        return {"error": str(e)}, token_usage
+
+
+def execute_news_probe_sync(
+    db: Session,
     task: NewsTask,
 ) -> None:
-    """执行新闻探测：仅搜索 + 落库，不抓全文、不打标。
+    """执行新闻探测（同步版）：仅搜索 + 落库，不抓全文、不打标。
 
-    语义：让用户/策略快速判断关键词是否合理。用户在前端看 NewsArticle 卡片
-    （title / source_name / source_tier / snippet）决定 approve 或 refine。
-
-    调用者负责 commit。
+    调用者负责 commit。本函数运行在 Celery gevent worker 里。
     """
     try:
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
-        await db.flush()
+        db.flush()
 
-        articles = await _search_and_store_articles(
+        articles = _search_and_store_articles_sync(
             db, task, max_results=_PROBE_MAX_RESULTS, channels=_resolve_channels(task)
         )
 
@@ -383,7 +438,7 @@ async def execute_news_probe(
                 "source_samples": source_samples,
             },
         }
-        await db.flush()
+        db.flush()
         logger.info(
             "NewsTask %d: probe completed, %d articles",
             task.id, task.articles_count,
@@ -393,7 +448,7 @@ async def execute_news_probe(
         task.status = "failed"
         task.completed_at = datetime.now(timezone.utc)
         task.error_message = str(e)
-        await db.flush()
+        db.flush()
         logger.error("NewsTask %d: probe failed: %s", task.id, e, exc_info=True)
         raise
 

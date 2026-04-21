@@ -1,13 +1,16 @@
-"""Crawl4AI 新闻文章抓取器
+"""Crawl4AI 新闻文章抓取器（同步版）
 
-复用 knowledge_base.crawlers.base._crawl_url 的 Crawl4AI REST API 模式，
+复用 knowledge_base.crawlers.base 的 Crawl4AI REST API 模式，
 批量并发抓取新闻全文。
+
+本模块由 Celery gevent worker 调用，用 requests + gevent.pool 并发；
+gevent monkey-patch 让底层 socket 自动协作式让出。
 """
 
-import asyncio
 import logging
 
-import httpx
+import requests
+from gevent.pool import Pool
 
 from src.config import settings
 
@@ -18,7 +21,7 @@ _CONCURRENCY_LIMIT = 5
 _PER_URL_TIMEOUT = 20.0
 
 
-async def _crawl_single_url(url: str) -> str | None:
+def _crawl_single_url(url: str) -> str | None:
     """调用 Crawl4AI REST API 抓取单个 URL 的正文
 
     Returns:
@@ -38,14 +41,14 @@ async def _crawl_single_url(url: str) -> str | None:
         headers["Authorization"] = f"Bearer {settings.CRAWL4AI_TOKEN}"
 
     try:
-        async with httpx.AsyncClient(timeout=_PER_URL_TIMEOUT + 10) as client:
-            resp = await client.post(
-                f"{settings.CRAWL4AI_BASE_URL}/crawl",
-                json=payload,
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = requests.post(
+            f"{settings.CRAWL4AI_BASE_URL}/crawl",
+            json=payload,
+            headers=headers,
+            timeout=_PER_URL_TIMEOUT + 10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         results = data.get("results", [])
         if not results:
@@ -60,13 +63,13 @@ async def _crawl_single_url(url: str) -> str | None:
 
         return content
 
-    except (httpx.HTTPError, KeyError, ValueError) as e:
+    except (requests.RequestException, KeyError, ValueError) as e:
         logger.warning("Crawl4AI failed for %s: %s", url, e)
         return None
 
 
-async def crawl_articles(urls: list[str]) -> dict[str, str | None]:
-    """批量并发抓取文章全文
+def crawl_articles(urls: list[str]) -> dict[str, str | None]:
+    """批量并发抓取文章全文（同步版）
 
     Args:
         urls: 文章 URL 列表
@@ -74,14 +77,20 @@ async def crawl_articles(urls: list[str]) -> dict[str, str | None]:
     Returns:
         {url: full_text_or_None} 字典
     """
-    semaphore = asyncio.Semaphore(_CONCURRENCY_LIMIT)
-    results: dict[str, str | None] = {}
+    if not urls:
+        return {}
 
-    async def _task(url: str) -> None:
-        async with semaphore:
-            results[url] = await _crawl_single_url(url)
+    pool = Pool(_CONCURRENCY_LIMIT)
 
-    await asyncio.gather(*[_task(url) for url in urls], return_exceptions=True)
+    def _task(url: str) -> tuple[str, str | None]:
+        try:
+            return url, _crawl_single_url(url)
+        except Exception as e:
+            logger.warning("Unexpected error crawling %s: %s", url, e)
+            return url, None
+
+    pairs = list(pool.imap_unordered(_task, urls))
+    results: dict[str, str | None] = dict(pairs)
 
     success = sum(1 for v in results.values() if v is not None)
     logger.info(

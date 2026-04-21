@@ -223,7 +223,7 @@
 <script setup lang="ts">
 import type { PermissionWithMeta as Permission } from "../../../../types";
 import { isCoreRole } from "../../../../utils/permissions";
-import { TARGET_ORDER } from "~/config/routes";
+import { TARGET_ORDER, TARGET_LABEL } from "~/config/routes";
 // 注意：权限分组现在通过API动态获取，无需导入静态配置
 
 // 页面元数据
@@ -269,18 +269,6 @@ const filteredPermissions = computed(() => {
   );
 });
 
-const MODULE_LABELS: Record<string, string> = {
-  dashboard: '仪表盘',
-  social_monitor: '社媒监测',
-  social_task: '社媒采集任务',
-  news_monitor: '新闻监测',
-  news_task: '新闻采集任务',
-  analysis: 'AI 分析',
-  strategy: '策略研究',
-  knowledge_base: '知识库',
-  research_agent: '专题研究',
-}
-
 // 权限分类 - 基于业务逻辑重新设计
 const permissionCategories = computed(() => {
   const categories: Record<string, { label: string; permissions: Permission[]; priority: number }> = {};
@@ -306,8 +294,7 @@ const permissionCategories = computed(() => {
     // 业务功能权限
     else {
       categoryKey = `business_${permission.target}`;
-      const moduleName = MODULE_LABELS[permission.target] ?? permission.target;
-      categoryLabel = `${moduleName}`;
+      categoryLabel = TARGET_LABEL[permission.target] ?? permission.target;
       priority = 3;
     }
     
@@ -323,13 +310,19 @@ const permissionCategories = computed(() => {
     categories[categoryKey]?.permissions.push(permission);
   });
 
-  // 按优先级排序类别，类别内部按导航顺序（TARGET_ORDER）排序
+  // 类别之间：按 priority 排；同 priority 下（业务类别）按导航顺序
+  // 类别内部：按导航顺序（对单 target 的业务类别是 no-op，对页面访问/RBAC核心生效）
   const byNavOrder = (a: Permission, b: Permission) =>
     (TARGET_ORDER[a.target] ?? 999) - (TARGET_ORDER[b.target] ?? 999);
 
   return Object.entries(categories)
     .filter(([_, category]) => category.permissions.length > 0)
-    .sort(([_, a], [__, b]) => a.priority - b.priority)
+    .sort(([keyA, a], [keyB, b]) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      const targetA = keyA.replace(/^business_/, '');
+      const targetB = keyB.replace(/^business_/, '');
+      return (TARGET_ORDER[targetA] ?? 999) - (TARGET_ORDER[targetB] ?? 999);
+    })
     .map(([name, category]) => ({
       name,
       label: category.label,

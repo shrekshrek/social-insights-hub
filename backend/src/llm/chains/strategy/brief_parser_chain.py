@@ -53,12 +53,12 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
 
 ### channel_plan（渠道分发判断）
 
-针对每种数据渠道，评估本 brief 的适合度。四种渠道各代表一种独立视角：
+针对每种数据渠道，评估本 brief 的适合度。四种渠道各代表一种独立视角，以下是能力描述：
 
-- **social_media**（社交媒体 — 消费者声音）：覆盖小红书、抖音、微博、知乎、B站、快手、贴吧（不含脉脉、LinkedIn、Twitter 等平台）；适合消费者情感/口碑/行为观察、品牌认知研究、趋势话题分析。**推荐判断**：关键问题是"研究主体在覆盖平台上是否有足够密度的用户讨论，能支撑系统化的消费者洞察分析"。有足够讨论密度时应推荐；讨论过于稀疏或碎片化、在覆盖平台上难以采集到足够样本进行系统化分析时不应推荐
+- **social_media**（社交媒体 — 消费者声音）：覆盖小红书、抖音、微博、知乎、B站、快手、贴吧（不含脉脉、LinkedIn、Twitter 等平台）；适合消费者情感/口碑/行为观察、品牌认知研究、趋势话题分析
 - **news_media**（新闻媒体 — 媒体报道视角）：通过多渠道搜索引擎（百度+搜狗+DuckDuckGo）检索公开新闻报道、行业资讯、媒体评论，可选启用微信公众号搜索（搜狗微信入口）获取行业深度分析和品牌自媒体内容；覆盖事件/动作/观点层面的媒体视角，适合品牌/事件报道追踪、竞品公开动作监测、行业热点与政策的媒体解读
-- **industry_research**（行业研究 — 专家/报告视角）：通过定向搜索四大咨询（麦肯锡/德勤/普华永道/安永/毕马威）、社科院、国研中心等权威机构的公开报告与分析文章，进行跨报告综合分析；适合量化行业数据（市场规模/份额/集中度/增速）、政策与结构性趋势分析、白空间与机会识别
-- **creative_research**（创意研究 — 竞品创意版图）：通过定向搜索数英（digitaling.com）、广告门（adquan.com）、SocialBeta 等创意媒体/案例库，收集品类竞品近年的品牌 Campaign、社媒创意案例、获奖作品；适合绘制竞品已占据的创意角色版图、发现创意白空间、为 Big Idea 提供差异化起点。**推荐判断**：研究目标涉及品牌传播策略、内容创意方向、Campaign 规划时推荐；纯市场分析/行业格局研究不需要
+- **industry_research**（行业研究 — 专家/报告视角）：通过定向搜索四大咨询（麦肯锡/德勤/普华永道/安永/毕马威）、社科院、国研中心等权威机构的公开报告与分析文章，进行跨报告综合分析；覆盖量化行业数据（市场规模/份额/集中度/增速）、政策与结构性趋势分析、白空间与机会识别
+- **creative_research**（创意研究 — 竞品创意版图）：通过定向搜索数英（digitaling.com）、广告门（adquan.com）、SocialBeta 等创意媒体/案例库，收集品类竞品近年的品牌 Campaign、社媒创意案例、获奖作品；为下游 campaign_strategy / full_strategy 产出路径的 Brand Role / Big Idea 阶段提供创意参考输入，支持竞品创意角色版图绘制、创意白空间识别、差异化起点挖掘
 
 每个渠道条目包含：
 - `type`: 渠道类型（social_media / news_media / industry_research / creative_research）
@@ -67,17 +67,18 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
 - `unsolvable`: 该渠道对本 brief 有哪些明显局限（0-2条；若无明显局限则为空数组）
 - `channel_brief`: 针对该渠道的定制化研究描述（1-2句；聚焦该渠道能做的部分，是该渠道后续研究设计的输入）
 
-**规则**：
-- 按需分配渠道，只输出与本 brief 研究目标真正匹配的渠道，不匹配则不输出该条目
-- social_media 的判断标准是"研究主体在覆盖平台上的用户讨论密度是否足以支撑系统化分析"，而非"平台上是否存在任何相关内容"。有充足 UGC 讨论的主题应推荐，讨论过于稀疏的主题不应推荐
-- news_media 与 industry_research 消歧：brief 提到"竞争格局/行业趋势/竞品动向"时默认归 news_media；只有 brief 明确要求量化数据（规模/份额/集中度）或跨报告综合分析时才追加 industry_research
-- creative_research 仅在研究目标涉及品牌传播策略或创意方向时推荐；如果 brief 是纯市场分析/竞争格局研究，不输出该渠道
+**推荐规则**（按渠道分别判断，符合条件输出对应 channel_plan 条目，不符合则不输出）：
+
+- **social_media**：研究主体在覆盖平台上有足够密度的 UGC 讨论、能支撑系统化消费者洞察分析时推荐；讨论过于稀疏/碎片化（覆盖平台难以采集到足够样本）时不推荐
+- **news_media**：brief 涉及品牌/事件报道、竞品公开动作、行业动态/政策解读或市场竞争格局时推荐——绝大多数战略类 brief 都有媒体层诉求；brief 完全聚焦纯用户心理/行为偏好研究（无任何事件、品牌或行业层诉求）时不推荐
+- **industry_research**：战略规划、品类机会识别、结构性趋势判断、竞争格局定位类 brief 默认推荐——提供战略层的结构性背景支撑（产业报告 + 政策趋势 + 白空间 + 量化数据）；仅做即时舆情监测/短期事件追踪且无战略产出诉求时不推荐。与 news_media 不互斥——前者是事件/动作/观点的媒体报道视角，后者是跨权威报告的结构性分析，战略类 brief 常两者并存
+- **creative_research**：与 social_media 绑定——推了 social_media 就默认推（下游走 campaign_strategy / full_strategy 路径，Brand Role / Big Idea 阶段需要创意参考输入）；仅推 news_media（走 market_report 路径，无创意参考注入点）时不推
 - channel_plan 只输出 social_media、news_media、industry_research、creative_research 四种渠道类型
 
 ### platform_verdict（策略框架适配度）
 
 策略研究有三种产出框架，各有明确的适用场景：
-- **campaign_strategy**（品牌策略 / 亦称 Campaign Strategy）：从消费者声音中发现社会张力 → 定义品牌角色 → 产出创意方向。适合品牌定位、消费者洞察、内容策略类研究。仅需 social_media 渠道（creative_research 可选增强）
+- **campaign_strategy**（品牌策略 / 亦称 Campaign Strategy）：从消费者声音中发现社会张力 → 定义品牌角色 → 产出创意方向。适合品牌定位、消费者洞察、内容策略类研究。主数据源 social_media，creative_research 作为 Brand Role / Big Idea 的创意参考默认配套
 - **market_report**（市场分析报告）：从媒体报道中梳理议程格局 → 分析竞争态势 → 产出战略建议。适合行业格局、竞争情报、市场进入类研究。仅需 news_media 渠道
 - **full_strategy**（全渠道综合策略）：同时拥有 social_media 和 news_media 两条主线，先完成 market_report 路径的竞争格局分析（Agenda Map → Landscape），再将 Landscape 结构化输出作为背景注入 campaign_strategy 路径（Insight → Brand Role → Big Idea），产出兼顾市场定位与消费者沟通的完整策略。适合「既需要竞争格局洞察，又需要消费者/创意方向」的综合策略需求
 
@@ -89,7 +90,7 @@ platform_verdict 判断的是**brief 的研究目标是否能被上述框架之�
 **判断规则**（按优先级从高到低，满足任一即确定 verdict）：
 
 - **insufficient**（优先判断）：满足以下**任一**条件即判定：
-  1. channel_plan 未推荐 social_media 也未推荐 news_media（仅有 industry_research 或 creative_research 无法生成完整策略报告）
+  1. channel_plan 未推荐 social_media 也未推荐 news_media（仅有 industry_research 无法生成完整策略报告）
   2. brief 的核心问题本质上是知识性/探索性的——研究目标是"了解某个领域的现状/机制/流程"而非"为品牌找到消费者沟通策略"或"为品牌找到竞争定位"。即使新闻媒体或社媒上有相关数据可采，这类问题的答案形式也不适合用任何策略框架的产出结构来承载
 - **partial**：框架能部分承载，但 brief 涉及框架覆盖不到的维度（如企业内部数据、金融终端数据、线下调研等），需用户知晓局限后决定是否推进
 - **sufficient**：brief 的研究目标能完整对应某个框架，可直接推进

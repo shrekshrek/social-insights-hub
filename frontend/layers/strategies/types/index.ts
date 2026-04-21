@@ -466,6 +466,7 @@ export interface NarrativeRepresentativeVoice {
   source_name: string
   tier: string
   quote: string
+  speaker?: string
 }
 
 export interface NarrativeMapItem {
@@ -488,11 +489,28 @@ export interface AgendaBattle {
   note?: string
 }
 
-export interface MediaVoicePatterns {
-  authoritative_consensus: string[]
-  industry_debate: string[]
-  emerging_narratives: string[]
+/** 媒体声量模式条目。后端可能返回纯文本或结构化对象。 */
+export interface VoicePatternItem {
+  topic: string
+  stance?: string
 }
+
+export type VoicePatternEntry = string | VoicePatternItem
+
+export interface MediaVoicePatterns {
+  authoritative_consensus: VoicePatternEntry[]
+  industry_debate: VoicePatternEntry[]
+  emerging_narratives: VoicePatternEntry[]
+}
+
+/** 注意力缺口条目。后端可能返回纯文本或结构化对象。 */
+export interface AttentionGapItem {
+  topic: string
+  risk_or_opportunity?: 'risk' | 'opportunity' | string
+  why_matters?: string
+}
+
+export type AttentionGapEntry = string | AttentionGapItem
 
 /** market_report 第 1 层 Agenda Map: 媒体议程图 */
 export interface AgendaMapResult {
@@ -500,11 +518,17 @@ export interface AgendaMapResult {
   narrative_map: NarrativeMapItem[]
   agenda_battles: AgendaBattle[]
   media_voice_patterns: MediaVoicePatterns
-  attention_gaps: string[]
+  attention_gaps: AttentionGapEntry[]
   data_provenance?: DataProvenance
 }
 
 // —— 第 2 层 Landscape: 竞争格局 ——
+
+export interface EvidenceQuote {
+  quote: string
+  source?: string
+  speaker?: string
+}
 
 export interface CompetitivePlayer {
   name: string
@@ -513,7 +537,7 @@ export interface CompetitivePlayer {
   media_sentiment: 'positive' | 'neutral' | 'negative' | string
   source_count: number
   narrative_position: string
-  evidence_quote?: string
+  evidence_quote?: string | EvidenceQuote
 }
 
 export interface PositioningMap {
@@ -535,10 +559,20 @@ export interface DiscourseBattle {
   note?: string
 }
 
+/** 市场动态条目。后端可能返回纯文本或结构化对象。 */
+export interface MarketDynamicItem {
+  player?: string
+  shift?: string
+  signal?: string
+  implication?: string
+}
+
+export type MarketDynamicEntry = string | MarketDynamicItem
+
 export interface MarketDynamics {
-  momentum_gainers: string[]
-  momentum_losers: string[]
-  structural_shifts: string[]
+  momentum_gainers: MarketDynamicEntry[]
+  momentum_losers: MarketDynamicEntry[]
+  structural_shifts: MarketDynamicEntry[]
 }
 
 /** market_report 第 2 层 Landscape: 竞争格局 + 话语权 */

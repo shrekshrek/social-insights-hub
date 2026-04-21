@@ -166,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AgendaMapResult } from '../types'
+import type { AgendaMapResult, VoicePatternEntry } from '../types'
 import { UBadge } from '#components'
 
 const props = defineProps<{
@@ -215,7 +215,7 @@ const hasVoicePatterns = computed(() => {
 const voicePatternSections = computed(() => {
   const p = props.result?.media_voice_patterns
   if (!p) return []
-  const sections: Array<{ label: string; items: unknown[]; bgClass: string; titleClass: string }> = []
+  const sections: Array<{ label: string; items: VoicePatternEntry[]; bgClass: string; titleClass: string }> = []
   if (p.authoritative_consensus?.length) {
     sections.push({
       label: '权威共识',

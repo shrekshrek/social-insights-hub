@@ -87,10 +87,11 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 
 ### 1. 先拆问题，再定数据
 将分析目标拆解为 2-4 个具体的研究问题，每个问题对应一个数据维度：
-- **brand_voice**: 品牌在社媒中的声音（口碑、认知、评价）
-- **consumer_voice**: 消费者需求和行为（痛点、场景、偏好）
-- **competitive**: 竞品格局（竞品声量、差异化、定位对比）
-- **industry**: 行业/品类趋势（大盘热度、新兴话题、消费趋势）
+- **brand_voice**: 品牌自身发出的声音（官方账号、PR 稿、Campaign 内容、企业自媒体）
+- **consumer_voice**: 消费者的声音（对品牌/产品的评价、情绪反应、使用场景、需求痛点）——社媒 UGC 讨论默认归此类
+- **competitive**: 竞品对比视角（竞品声量、竞品 UGC、差异化、定位对比）
+- **media_narrative**: 媒体叙事视角（新闻媒体如何报道/框架化事件、舆论态势、议程设置）——news_media 渠道的"媒体如何报道"类问题默认归此类
+- **industry**: 行业/品类结构趋势（市场规模、格局演化、政策监管、品类消费趋势）
 
 ### 2. 数据源与关键词质量
 
@@ -99,17 +100,19 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 **社交媒体（channel = "social_media"，默认）**：
 - 需指定 `platforms`（1-2 个，最多 3 个）
 - 每个数据维度 1-3 个关键词（关键词在平台上按 OR 组合搜索）
-- 品牌维度（brand_voice）只用品牌专属词，不混入品类通用词或竞品词
-- 竞品维度（competitive）只放竞品品牌词，不和自有品牌混在一起
-- 消费需求维度（consumer_voice）用品类通用需求词（痛点/场景/决策），不混入具体品牌名——品牌讨论归 brand_voice/competitive
-- 行业维度（industry）用品类通用词，不混入具体品牌名
-- **主品维度与竞品维度的平台建议对称**：当研究计划同时包含主品维度（brand_voice）和竞品维度（competitive）时，建议两者选取相同的平台，以便横向数据对比。若某平台不适合其中一方，应同时从两者的方案中移除，而非单独调整（后端会自动取交集修正）
+- 品牌自发声维度（brand_voice）用品牌官方账号名、Campaign 名、发布会主题等，限于品牌主动传播内容
+- 消费者维度（consumer_voice）是社媒 UGC 的主要入口：讨论主品时用「主品名 + 评价/体验/怎么样」类词；调研通用品类需求时用需求词（痛点/场景/决策），两类用法不要混在同一组 keywords
+- 竞品维度（competitive）只放竞品品牌词，不和主品混在一起
+- 媒体叙事维度（media_narrative）用事件关键词 + 报道/评论类词（如"事件 媒体解读"、"行业 观察"），主要面向新闻搜索引擎
+- 行业维度（industry）用品类通用词 + 结构化数据词（市场规模/格局/集中度/政策），不混入具体品牌名
+- **主品 UGC 维度与竞品维度的平台建议对称**：当研究计划同时包含讨论主品的 consumer_voice 维度（keywords 含主品名）和 competitive 维度时，建议两者选取相同的平台，以便横向数据对比。若某平台不适合其中一方，应同时从两者的方案中移除，而非单独调整（后端会自动取交集修正）
 - **同维度内关键词风格统一**：同一维度的多个关键词应保持一致的词性结构和语义粒度，这些关键词会在同一组平台上搜索，风格不一致会导致召回内容类型混杂、跨平台对比数据不可比
 - **同一维度的关键词必须属于同一赛道/品类**。如果 Brief 涉及多个不同赛道，必须拆成独立维度分别采集，不要混在同一组关键词中——混合搜索会导致数据噪音，实体提取和竞品对比无法正确归类
 - **关键词必须对目标平台有效**——对每个关键词×平台组合，想象一个真实用户在该平台搜索栏输入该词，能否返回足够多的相关内容？如果一个关键词在某平台上大概率搜不到有意义的结果，就不要选这个平台。宁可少一个平台也不要采一堆噪音
 - 避免过于宽泛的行业热词（如"数字化转型""商业决策"）——这类词在任何平台都返回海量不相关内容，信噪比极低。关键词应精确到能圈定目标讨论群体
 - **每条关键词是提交给平台的单一搜索查询**（可包含空格，如"某品牌 用户评价"）。禁止用 `|` 在同一条目内拼接多个备选查询；如需多个备选查询，各自单独列为 keywords 数组的独立条目
 - **关键词设计核心原则**：先想清楚"我希望采集到谁在讨论什么"，再反推哪个词能召回这类内容。同一品牌的不同关键词，召回的可能是消费者、求职者、从业者或媒体——目标受众决定关键词类型
+- **情绪中立**：关键词不应预设情绪倾向。当研究目标是观察消费者对事件/策略变化的态度时，关键词需覆盖正面/中性/负面多种表达（如同时包含"会员券 值得"、"最近 怎么样"、"涨价 吐槽"），禁止全部使用单一情绪词（如只用"吐槽/退场/没了"）——否则会系统性过采某一情绪的帖子，使情绪分布分析偏离真实
 - **各平台搜索特点**（关键词格式需适配平台机制）：
   - 知乎：问题型关键词效果最好（"如何选择X""X怎么样"）；注意"品牌名+怎么样"可能召回求职/雇主评价而非产品讨论，需根据研究目标判断是否适合
   - 微博：事件/热点驱动，品牌名 + 口碑类词（口碑/评价/怎么样）或新闻/事件类词（品牌名 + 合作/战略/发布）；纯品牌名噪音大，需加限定词
@@ -133,7 +136,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 - 每个社媒维度选 **1-2 个平台**，最多 3 个（质量优先，宁精不滥）
 - 每个新闻维度 **1-2 个关键词**（无需选平台）
 - **社媒总任务数 = Σ(各社媒维度关键词数 × 平台数)，目标 8-12 个；生成后自行验算，超过则删减关键词或平台**
-- **对称代价**：brand_voice 与 competitive 维度共用同一组平台时，两者各自独立贡献任务数（合计 = 2 × 关键词数 × 平台数），建议将这两个维度的关键词控制在 1-2 个、平台控制在 1-2 个，再为其他维度分配剩余预算
+- **对称代价**：讨论主品的 consumer_voice 维度与 competitive 维度共用同一组平台时，两者各自独立贡献任务数（合计 = 2 × 关键词数 × 平台数），建议将这两个维度的关键词控制在 1-2 个、平台控制在 1-2 个，再为其他维度分配剩余预算
 - **社媒平台选择必须同时考虑品类特点和关键词适配性**（只能从以下 5 个平台中选择，策略研究不使用 kuaishou / tieba）：
   - 知乎：问答式深度讨论、行业分析、专业评价。用户偏理性，适合需要深度观点和专业判断的主题
   - 微博：新闻热点驱动、品牌公关、大众舆论。内容短平快，适合有公众讨论度和时效性的话题
@@ -201,7 +204,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 channel 可选值: social_media（默认，需 platforms）/ news_media（无 platforms，需 enable_wechat_mp）
 enable_wechat_mp 可选值（仅 news_media）: true / false
 platforms 可选值（仅 social_media）: douyin / weibo / bilibili / xiaohongshu / zhihu
-dimension 可选值: brand_voice / consumer_voice / competitive / industry
+dimension 可选值: brand_voice / consumer_voice / competitive / media_narrative / industry
 priority 可选值: high / medium / low
 mode 可选值: 品牌聚焦 / 大盘分析
 primary_sources 可选值（数组，按决策表推导）: social_media / news_media
@@ -348,14 +351,16 @@ def _fix_platform_symmetry(
     data_plan: list[dict[str, Any]],
     dim_type_map: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """将社媒 brand_voice 与 competitive 维度的平台集合统一为交集。
+    """将社媒 consumer_voice 与 competitive 维度的平台集合统一为交集。
 
+    consumer_voice 维度（主品 UGC 讨论）与 competitive 维度（竞品 UGC）的横向可比
+    要求两者采集平台一致，否则 Landscape 阶段的声量/情感对比基准不齐。
     交集为空时跳过（宁可不对称也不清空平台），并写 warning 日志。
     """
-    brand_voice_dims = [
+    consumer_voice_dims = [
         dp for dp in data_plan
         if (dp.get("channel") or "social_media") == "social_media"
-        and dim_type_map.get(dp.get("dimension_name", "")) == "brand_voice"
+        and dim_type_map.get(dp.get("dimension_name", "")) == "consumer_voice"
     ]
     competitive_dims = [
         dp for dp in data_plan
@@ -363,29 +368,29 @@ def _fix_platform_symmetry(
         and dim_type_map.get(dp.get("dimension_name", "")) == "competitive"
     ]
 
-    if not brand_voice_dims or not competitive_dims:
+    if not consumer_voice_dims or not competitive_dims:
         return data_plan
 
-    # 取所有 brand_voice 维度平台的并集，再与所有 competitive 维度平台的并集求交集
-    bv_platforms: set[str] = set()
-    for dp in brand_voice_dims:
-        bv_platforms.update(dp.get("platforms") or [])
+    # 取所有 consumer_voice 维度平台的并集，再与所有 competitive 维度平台的并集求交集
+    cv_platforms: set[str] = set()
+    for dp in consumer_voice_dims:
+        cv_platforms.update(dp.get("platforms") or [])
 
     comp_platforms: set[str] = set()
     for dp in competitive_dims:
         comp_platforms.update(dp.get("platforms") or [])
 
-    common = bv_platforms & comp_platforms
+    common = cv_platforms & comp_platforms
     if not common:
         logger.warning(
-            "brand_voice 平台 %s 与 competitive 平台 %s 无交集，跳过对称修正",
-            bv_platforms,
+            "consumer_voice 平台 %s 与 competitive 平台 %s 无交集，跳过对称修正",
+            cv_platforms,
             comp_platforms,
         )
         return data_plan
 
     # 保留原有顺序，统一为交集
-    common_ordered = [p for p in (bv_platforms | comp_platforms) if p in common]
+    common_ordered = [p for p in (cv_platforms | comp_platforms) if p in common]
 
     fixed_names = set()
     result = []
@@ -394,7 +399,7 @@ def _fix_platform_symmetry(
         dim_type = dim_type_map.get(dim_name)
         if (
             (dp.get("channel") or "social_media") == "social_media"
-            and dim_type in ("brand_voice", "competitive")
+            and dim_type in ("consumer_voice", "competitive")
             and set(dp.get("platforms") or []) != common
         ):
             dp = {**dp, "platforms": common_ordered}

@@ -50,10 +50,10 @@ SINGLE_TASK_SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估�
 如果 fail 的原因是「该品牌/话题在该平台的讨论量本身稀少（无论换什么关键词都搜不到足量相关内容）」，可将 suggested_keyword 设为 null，表示平台级数据稀疏，建议移除。这与「关键词不精准」不同——前者换词也无法解决，后者可以通过换词改善。
 
 **替换关键词必须遵守研究设计的维度规则**：
-- **维度词汇隔离**：brand_voice 只用品牌专属词，competitive 只用竞品品牌词，consumer_voice / industry 只用品类通用词——替换关键词不得跨维度混入不属于该维度的词汇
+- **维度词汇隔离**：brand_voice 只用品牌自发声相关词（官方账号/Campaign名），competitive 只用竞品品牌词，consumer_voice 可用「主品名+评价词」或通用需求词（不与竞品混用），media_narrative 用事件+报道类词，industry 只用品类通用词——替换关键词不得跨维度混入不属于该维度的词汇
 - **同维度风格一致**：替换关键词的词性结构和语义粒度应与本维度内现有关键词保持一致（输入中会列出本维度现有关键词作为参考），确保跨平台数据可比
 
-**竞品维度的平台对称保护**：若当前 fail 任务属于竞品维度（competitive），且其所在平台同时被主品维度（brand_voice）使用，应优先尝试换词（调整 suggested_keyword）而非建议移除该平台（suggested_keyword=null）。主品和竞品在相同平台采集是横向对比的基础，轻易移除竞品在某平台的任务会破坏数据对称性，导致后续对比结论失真。只有在确认该平台对竞品研究完全无效（无论如何换词都无法召回相关内容）时，才允许建议移除。
+**竞品维度的平台对称保护**：若当前 fail 任务属于竞品维度（competitive），且其所在平台同时被主品 UGC 维度（consumer_voice）使用，应优先尝试换词（调整 suggested_keyword）而非建议移除该平台（suggested_keyword=null）。主品和竞品在相同平台采集是横向对比的基础，轻易移除竞品在某平台的任务会破坏数据对称性，导致后续对比结论失真。只有在确认该平台对竞品研究完全无效（无论如何换词都无法召回相关内容）时，才允许建议移除。
 
 **注意**：你在评估单个任务，看不到其他任务的结果。主品与竞品跨平台的整体对称性问题（如主品只在平台 A 有数据、竞品只在平台 B 有数据）由系统在汇总所有评估后统一检测处理，你无需承担跨任务的协调责任——聚焦判断当前任务本身是否能召回有价值的内容即可。
 
@@ -119,15 +119,15 @@ def format_single_task_probe_review_inputs(
             if rqs:
                 dim_to_type[dim_name] = rqs[0].get("dimension", "")
 
-    # brand_voice 维度的平台集合（供竞品对称保护判断）
-    brand_voice_platforms: list[str] = []
+    # consumer_voice 维度（主品 UGC）的平台集合（供竞品对称保护判断）
+    consumer_voice_platforms: list[str] = []
     for dp in data_plan:
         dp_type = dim_to_type.get(dp.get("dimension_name", ""), "")
-        if dp_type == "brand_voice" and dp.get("channel", "social_media") == "social_media":
-            brand_voice_platforms.extend(dp.get("platforms") or [])
+        if dp_type == "consumer_voice" and dp.get("channel", "social_media") == "social_media":
+            consumer_voice_platforms.extend(dp.get("platforms") or [])
     # 去重保序
     seen: set[str] = set()
-    brand_voice_platforms = [p for p in brand_voice_platforms if not (p in seen or seen.add(p))]  # type: ignore[func-returns-value]
+    consumer_voice_platforms = [p for p in consumer_voice_platforms if not (p in seen or seen.add(p))]  # type: ignore[func-returns-value]
 
     lines = ["## 研究背景"]
     if brief:
@@ -150,10 +150,10 @@ def format_single_task_probe_review_inputs(
         + (f" | 维度: {dim_name}" if dim_name else "")
     )
     # 竞品维度时注入主品平台，供对称保护判断
-    if current_dim_type == "competitive" and brand_voice_platforms:
+    if current_dim_type == "competitive" and consumer_voice_platforms:
         task_lines.append(
-            f"⚠️ 竞品对称保护：主品维度（brand_voice）采集平台为 {', '.join(brand_voice_platforms)}。"
-            f"当前平台 {task.get('platform', '')} {'已被主品维度使用，建议换词而非移除' if task.get('platform', '') in brand_voice_platforms else '未被主品维度使用，可视情况移除'}。"
+            f"⚠️ 竞品对称保护：主品 UGC 维度（consumer_voice）采集平台为 {', '.join(consumer_voice_platforms)}。"
+            f"当前平台 {task.get('platform', '')} {'已被主品维度使用，建议换词而非移除' if task.get('platform', '') in consumer_voice_platforms else '未被主品维度使用，可视情况移除'}。"
         )
 
     # 注入同维度的其他关键词，供 LLM 保持替换建议的风格一致性
@@ -235,9 +235,9 @@ def detect_and_replace_symmetry_suggestions(
     existing_suggestions: list[dict[str, Any]],
     research_design: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """检测 brand_voice 与 competitive 的互补平台失败，将受影响任务的建议替换为平台统一建议。
+    """检测 consumer_voice（主品 UGC）与 competitive 的互补平台失败，将受影响任务的建议替换为平台统一建议。
 
-    互补失败模式：brand_voice 在平台 A 多数失败、在平台 B 多数通过；
+    互补失败模式：consumer_voice 在平台 A 多数失败、在平台 B 多数通过；
     competitive 在平台 B 多数失败、在平台 A 多数通过。
     此时逐任务换词无法解决根本问题（平台对该品牌数据天然稀疏），
     应改为将主品与竞品统一迁移到共同可通过的平台。
@@ -270,16 +270,16 @@ def detect_and_replace_symmetry_suggestions(
             continue
         dim_name = task_dim_map.get(str(a.get("task_id", "")), "")
         dim_type = dim_to_type.get(dim_name, "")
-        if dim_type not in ("brand_voice", "competitive"):
+        if dim_type not in ("consumer_voice", "competitive"):
             continue
         verdict = a.get("verdict", "pass")
         platform_results.setdefault(dim_type, {}).setdefault(platform, {"pass": [], "fail": []})
         platform_results[dim_type][platform][verdict].append(a)
 
-    bv = platform_results.get("brand_voice", {})
+    cv = platform_results.get("consumer_voice", {})
     comp = platform_results.get("competitive", {})
 
-    if not bv or not comp:
+    if not cv or not comp:
         return existing_suggestions
 
     def _majority_failing(results: dict[str, dict[str, list]]) -> set[str]:
@@ -288,44 +288,44 @@ def detect_and_replace_symmetry_suggestions(
     def _majority_passing(results: dict[str, dict[str, list]]) -> set[str]:
         return {p for p, r in results.items() if r["pass"] and len(r["pass"]) >= len(r["fail"])}
 
-    bv_failing = _majority_failing(bv)
-    bv_passing = _majority_passing(bv)
+    cv_failing = _majority_failing(cv)
+    cv_passing = _majority_passing(cv)
     comp_failing = _majority_failing(comp)
     comp_passing = _majority_passing(comp)
 
     # 互补失败：主品失败于竞品通过的平台，且竞品失败于主品通过的平台
-    bv_fails_where_comp_passes = bv_failing & comp_passing
-    comp_fails_where_bv_passes = comp_failing & bv_passing
+    cv_fails_where_comp_passes = cv_failing & comp_passing
+    comp_fails_where_cv_passes = comp_failing & cv_passing
 
-    if not bv_fails_where_comp_passes or not comp_fails_where_bv_passes:
+    if not cv_fails_where_comp_passes or not comp_fails_where_cv_passes:
         return existing_suggestions
 
     # 选目标平台
-    common_passing = bv_passing & comp_passing
+    common_passing = cv_passing & comp_passing
     if common_passing:
         target = max(
             common_passing,
-            key=lambda p: len(bv.get(p, {}).get("pass", [])) + len(comp.get(p, {}).get("pass", [])),
+            key=lambda p: len(cv.get(p, {}).get("pass", [])) + len(comp.get(p, {}).get("pass", [])),
         )
-    elif bv_passing:
-        target = max(bv_passing, key=lambda p: len(bv.get(p, {}).get("pass", [])))
+    elif cv_passing:
+        target = max(cv_passing, key=lambda p: len(cv.get(p, {}).get("pass", [])))
     else:
         return existing_suggestions
 
     reason = (
-        f"主品在 {'、'.join(sorted(bv_fails_where_comp_passes))} 数据稀疏，"
-        f"竞品在 {'、'.join(sorted(comp_fails_where_bv_passes))} 数据稀疏，"
+        f"主品在 {'、'.join(sorted(cv_fails_where_comp_passes))} 数据稀疏，"
+        f"竞品在 {'、'.join(sorted(comp_fails_where_cv_passes))} 数据稀疏，"
         f"两者呈互补平台失败——换词无法解决平台级稀疏问题。"
         f"建议将主品与竞品统一迁移至「{target}」以确保横向对比基准一致。"
         f"注意：已通过的任务不受影响，如需完全统一数据来源，可手动将其一并移除。"
     )
 
-    # 受影响任务：bv 在非目标平台失败 + comp 在非目标平台失败
+    # 受影响任务：cv 在非目标平台失败 + comp 在非目标平台失败
     consolidation: list[dict[str, Any]] = []
     affected_ids: set[int] = set()
 
-    for platform in bv_fails_where_comp_passes:
-        for a in bv[platform]["fail"]:
+    for platform in cv_fails_where_comp_passes:
+        for a in cv[platform]["fail"]:
             tid = int(a["task_id"])
             affected_ids.add(tid)
             consolidation.append({
@@ -336,7 +336,7 @@ def detect_and_replace_symmetry_suggestions(
                 "reason": reason,
             })
 
-    for platform in comp_fails_where_bv_passes:
+    for platform in comp_fails_where_cv_passes:
         for a in comp[platform]["fail"]:
             tid = int(a["task_id"])
             affected_ids.add(tid)
@@ -353,9 +353,9 @@ def detect_and_replace_symmetry_suggestions(
     final = kept + consolidation
 
     logger.info(
-        "平台对称检测：互补失败（brand_voice↓%s，competitive↓%s）→ 目标平台=%s，替换 %d 条建议",
-        sorted(bv_fails_where_comp_passes),
-        sorted(comp_fails_where_bv_passes),
+        "平台对称检测：互补失败（consumer_voice↓%s，competitive↓%s）→ 目标平台=%s，替换 %d 条建议",
+        sorted(cv_fails_where_comp_passes),
+        sorted(comp_fails_where_cv_passes),
         target,
         len(consolidation),
     )

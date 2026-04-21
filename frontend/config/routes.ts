@@ -10,6 +10,9 @@ export interface RouteConfig {
   label?: string;
   showInNav?: boolean;
   order?: number;
+  // 模块顶层路由声明对应的权限 target（仅首级模块需要），
+  // 作为 TARGET_ORDER / TARGET_LABEL 的单一来源
+  target?: string;
 }
 
 export interface NavigationItem {
@@ -18,24 +21,6 @@ export interface NavigationItem {
   order: number;
 }
 
-// 权限 target → 展示顺序（与导航顺序一致）
-// 新增模块时：同步更新 ROUTE_CONFIG 的 order 和这里
-export const TARGET_ORDER: Record<string, number> = {
-  dashboard: 10,
-  strategy: 20,
-  social_monitor: 30,
-  social_task: 40,
-  news_monitor: 50,
-  news_task: 60,
-  research_agent: 65,
-  analysis: 70,
-  knowledge_base: 80,
-  user: 90,
-  role: 100,
-  permission: 110,
-  audit: 120,
-};
-
 // 每个路由集中声明权限与导航元信息，新增模块时只需要在此补充一条记录
 export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/dashboard": {
@@ -43,6 +28,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "工作台",
     showInNav: true,
     order: 10,
+    target: "dashboard",
   },
   "/profile": { permission: null },
   "/settings": { permission: null },
@@ -52,6 +38,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "策略研究",
     showInNav: true,
     order: 20,
+    target: "strategy",
   },
   "/strategies/create": { permission: PERMISSIONS.STRATEGY_WRITE },
   "/strategies/[id]": { permission: PERMISSIONS.STRATEGY_READ },
@@ -61,6 +48,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "社媒监测",
     showInNav: true,
     order: 30,
+    target: "social_monitor",
   },
   "/social-media/monitors/create": { permission: PERMISSIONS.SOCIAL_MONITOR_WRITE },
   "/social-media/monitors/[id]": { permission: PERMISSIONS.SOCIAL_MONITOR_READ },
@@ -69,6 +57,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "社媒采集",
     showInNav: true,
     order: 40,
+    target: "social_task",
   },
   "/social-media/tasks/create": { permission: PERMISSIONS.SOCIAL_TASK_WRITE },
   "/social-media/tasks/[id]": { permission: PERMISSIONS.SOCIAL_TASK_READ },
@@ -82,6 +71,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "新闻监测",
     showInNav: true,
     order: 50,
+    target: "news_monitor",
   },
   "/news-media/monitors/create": { permission: PERMISSIONS.NEWS_MONITOR_WRITE },
   "/news-media/monitors/[id]": { permission: PERMISSIONS.NEWS_MONITOR_READ },
@@ -90,6 +80,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "新闻采集",
     showInNav: true,
     order: 60,
+    target: "news_task",
   },
   "/news-media/tasks/create": { permission: PERMISSIONS.NEWS_TASK_WRITE },
   "/news-media/tasks/[id]": { permission: PERMISSIONS.NEWS_TASK_READ },
@@ -100,6 +91,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "专题研究",
     showInNav: true,
     order: 65,
+    target: "research_agent",
   },
   "/research-agent/create": { permission: PERMISSIONS.RESEARCH_AGENT_WRITE },
   "/research-agent/[id]": { permission: PERMISSIONS.RESEARCH_AGENT_READ },
@@ -109,6 +101,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "AI 统计",
     showInNav: true,
     order: 70,
+    target: "analysis",
   },
   // 知识库模块
   "/knowledge-base": {
@@ -116,6 +109,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "市场知识库",
     showInNav: true,
     order: 80,
+    target: "knowledge_base",
   },
   "/knowledge-base/upload": {
     permission: PERMISSIONS.KB_WRITE,
@@ -130,6 +124,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "用户管理",
     showInNav: true,
     order: 90,
+    target: "user",
   },
   "/users/create": { permission: PERMISSIONS.USER_WRITE },
   "/users/[id]": { permission: PERMISSIONS.USER_READ },
@@ -140,6 +135,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "角色管理",
     showInNav: true,
     order: 100,
+    target: "role",
   },
   "/rbac/roles/create": { permission: PERMISSIONS.ROLE_WRITE },
   "/rbac/roles/[id]": { permission: PERMISSIONS.ROLE_READ },
@@ -150,6 +146,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "权限管理",
     showInNav: true,
     order: 110,
+    target: "permission",
   },
   "/rbac/permissions/[id]": { permission: PERMISSIONS.PERMISSION_READ },
   // 审计日志
@@ -158,8 +155,26 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     label: "操作日志",
     showInNav: true,
     order: 120,
+    target: "audit",
   },
 };
+
+// 从 ROUTE_CONFIG 派生：权限 target → 展示顺序 / 显示名称
+// 单一来源：新增模块只需在 ROUTE_CONFIG 补充 target 字段即可
+type TargetRoute = RouteConfig & { target: string; label: string; order: number };
+
+const targetRoutes: readonly TargetRoute[] = Object.values(ROUTE_CONFIG).filter(
+  (c): c is TargetRoute =>
+    typeof c.target === "string" && typeof c.label === "string" && typeof c.order === "number",
+);
+
+export const TARGET_ORDER: Record<string, number> = Object.fromEntries(
+  targetRoutes.map((c) => [c.target, c.order]),
+);
+
+export const TARGET_LABEL: Record<string, string> = Object.fromEntries(
+  targetRoutes.map((c) => [c.target, c.label]),
+);
 
 /**
  * 获取路由所需权限

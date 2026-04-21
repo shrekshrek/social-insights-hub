@@ -104,20 +104,57 @@
             }"
           >{{ platformVerdict === 'sufficient' ? '当前平台可满足该研究' : platformVerdict === 'partial' ? '当前平台部分支持该研究' : '当前平台暂不适合该研究' }}</span>
           <p v-if="platformNote" class="text-gray-600 dark:text-gray-400 mt-0.5">{{ platformNote }}</p>
-          <UButton
-            v-if="platformVerdict === 'insufficient'"
-            to="/research-agent/create"
-            label="前往专题研究"
-            icon="i-heroicons-arrow-right"
-            trailing
-            variant="subtle"
-            size="xs"
-            class="mt-2"
-          />
+          <div v-if="platformVerdict === 'insufficient'" class="mt-2 flex flex-wrap gap-2">
+            <UButton
+              v-if="insufficientReason === 'no_channel' || insufficientReason === ''"
+              to="/research-agent/create"
+              label="前往专题研究"
+              icon="i-heroicons-arrow-right"
+              trailing
+              variant="subtle"
+              size="xs"
+            />
+            <UButton
+              v-if="insufficientReason === 'knowledge_industry'"
+              :to="{ path: '/research-agent/create', query: { profile: 'industry' } }"
+              label="前往专题研究 · 行业研究"
+              icon="i-heroicons-arrow-right"
+              trailing
+              variant="subtle"
+              size="xs"
+            />
+            <UButton
+              v-if="insufficientReason === 'knowledge_creative'"
+              :to="{ path: '/research-agent/create', query: { profile: 'creative' } }"
+              label="前往专题研究 · 创意研究"
+              icon="i-heroicons-arrow-right"
+              trailing
+              variant="subtle"
+              size="xs"
+            />
+            <UButton
+              v-if="insufficientReason === 'diagnostic_social' || insufficientReason === 'diagnostic_dual'"
+              to="/social-media/monitors/create"
+              label="前往社媒监测 + 切片分析"
+              icon="i-heroicons-arrow-right"
+              trailing
+              variant="subtle"
+              size="xs"
+            />
+            <UButton
+              v-if="insufficientReason === 'diagnostic_news' || insufficientReason === 'diagnostic_dual'"
+              to="/news-media/monitors/create"
+              label="前往新闻监测 + 切片分析"
+              icon="i-heroicons-arrow-right"
+              trailing
+              variant="subtle"
+              size="xs"
+            />
+          </div>
         </div>
       </div>
 
-      <div class="space-y-3">
+      <div v-if="platformVerdict !== 'insufficient'" class="space-y-3">
         <div
           v-for="item in parsedChannelPlan"
           :key="item.type"
@@ -174,7 +211,7 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import type { ChannelPlanItem, ParseBriefResponse } from '../../types'
+import type { ChannelPlanItem, InsufficientReason, ParseBriefResponse } from '../../types'
 import { CHANNEL_LABELS } from '../../composables/useStrategyConstants'
 
 definePageMeta({
@@ -198,6 +235,7 @@ const submitting = ref(false)
 const parsedChannelPlan = ref<ChannelPlanItem[] | null>(null)
 const platformVerdict = ref<ParseBriefResponse['platform_verdict'] | null>(null)
 const platformNote = ref('')
+const insufficientReason = ref<InsufficientReason>('')
 
 const formState = reactive<FormState>({
   name: '',
@@ -214,6 +252,7 @@ const applyResult = (result: Partial<ParseBriefResponse>) => {
   if (result.channel_plan?.length) parsedChannelPlan.value = result.channel_plan
   if (result.platform_verdict) platformVerdict.value = result.platform_verdict
   platformNote.value = result.platform_note ?? ''
+  insufficientReason.value = result.insufficient_reason ?? ''
 }
 
 const handleParseText = async (text: string) => {

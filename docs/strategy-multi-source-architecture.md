@@ -102,7 +102,9 @@
 - `social_media` 是默认渠道，除非 brief 完全不涉及用户/消费者讨论
 - `available=false` 的渠道仍输出，用于告知用户该数据源能补充哪些问题
 
-**实现**：`strategy_brief_parser_chain.py`
+**`platform_verdict` 分诊**：除渠道分发外，brief_parser 同时输出 `platform_verdict`（`sufficient` / `partial` / `insufficient`）判断 brief 的研究目标是否适合被 strategies pipeline 的产出框架承载。当判定 `insufficient` 时，新增 `insufficient_reason` 字段按**判断优先级**细分分诊方向（诊断型 → 知识型 → 无渠道兜底，共 6 种取值：`diagnostic_social` / `diagnostic_news` / `diagnostic_dual` / `knowledge_industry` / `knowledge_creative` / `no_channel`），前端按 reason 引导用户跳转至对应的替代功能入口（研究分析的 industry/creative profile / 社媒监测 + 切片分析 / 新闻监测 + 切片分析）——对应系统的**三层产出架构**。详见 [ADR-002](adr/002-output-tier-routing.md)。
+
+**实现**：`brief_parser_chain.py`
 
 ---
 

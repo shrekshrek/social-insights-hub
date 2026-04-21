@@ -160,11 +160,20 @@ const schema = z.object({
 
 type FormState = z.output<typeof schema> & { questions: string[]; profile_name: string }
 
+// 支持从 URL query 预选 profile（如策略页 insufficient 分诊跳转时指定）
+const route = useRoute()
+const initialProfile = (() => {
+  const q = route.query.profile
+  const requested = Array.isArray(q) ? q[0] : q
+  const valid = profileOptions.value.some((opt) => opt.name === requested)
+  return valid && typeof requested === 'string' ? requested : 'industry'
+})()
+
 const formState = reactive<FormState>({
   title: '',          // 必填，Zod 校验
   analysis_goal: '',  // 必填，Zod 校验
   questions: [],
-  profile_name: 'industry',
+  profile_name: initialProfile,
 })
 
 // 研究类型影响的展示文案

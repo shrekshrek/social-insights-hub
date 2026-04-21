@@ -636,6 +636,24 @@ export interface StrategicBriefResult {
 
 // ==================== Brief 文档解析 ====================
 
+/**
+ * insufficient 分诊原因（仅 platform_verdict === 'insufficient' 时非空）
+ * - no_channel → 引导至研究分析（默认 profile）
+ * - knowledge_industry → 引导至研究分析 industry profile（品类结构/市场/政策/技术型知识）
+ * - knowledge_creative → 引导至研究分析 creative profile（Campaign 案例/创意参考型知识）
+ * - diagnostic_social → 引导至社媒监测 + 切片分析
+ * - diagnostic_news → 引导至新闻监测 + 切片分析
+ * - diagnostic_dual → 引导至社媒和新闻两个监测入口
+ */
+export type InsufficientReason =
+  | ''
+  | 'no_channel'
+  | 'knowledge_industry'
+  | 'knowledge_creative'
+  | 'diagnostic_social'
+  | 'diagnostic_news'
+  | 'diagnostic_dual'
+
 export interface ParseBriefResponse {
   strategy_name: string
   subject: string
@@ -643,5 +661,6 @@ export interface ParseBriefResponse {
   constraints: string
   platform_verdict: 'sufficient' | 'partial' | 'insufficient'
   platform_note: string
+  insufficient_reason: InsufficientReason
   channel_plan: ChannelPlanItem[]
 }

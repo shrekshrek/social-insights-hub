@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-8">
     <!-- 欢迎横幅 -->
-    <UCard class="bg-gradient-to-br from-gray-900 to-black border-0">
+    <UCard class="bg-gradient-to-br from-slate-900 via-blue-900 to-cyan-800 border-0">
       <div class="text-center text-white py-4">
         <h1 v-if="appName" class="text-4xl font-bold tracking-wide mb-4">{{ appName }}</h1>
         <p class="text-xl text-white/70 font-light">

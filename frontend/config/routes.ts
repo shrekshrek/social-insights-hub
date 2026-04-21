@@ -18,6 +18,24 @@ export interface NavigationItem {
   order: number;
 }
 
+// 权限 target → 展示顺序（与导航顺序一致）
+// 新增模块时：同步更新 ROUTE_CONFIG 的 order 和这里
+export const TARGET_ORDER: Record<string, number> = {
+  dashboard: 10,
+  strategy: 20,
+  social_monitor: 30,
+  social_task: 40,
+  news_monitor: 50,
+  news_task: 60,
+  research_agent: 65,
+  analysis: 70,
+  knowledge_base: 80,
+  user: 90,
+  role: 100,
+  permission: 110,
+  audit: 120,
+};
+
 // 每个路由集中声明权限与导航元信息，新增模块时只需要在此补充一条记录
 export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/dashboard": {

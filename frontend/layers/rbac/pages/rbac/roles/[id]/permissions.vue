@@ -223,6 +223,7 @@
 <script setup lang="ts">
 import type { PermissionWithMeta as Permission } from "../../../../types";
 import { isCoreRole } from "../../../../utils/permissions";
+import { TARGET_ORDER } from "~/config/routes";
 // 注意：权限分组现在通过API动态获取，无需导入静态配置
 
 // 页面元数据
@@ -322,14 +323,17 @@ const permissionCategories = computed(() => {
     categories[categoryKey]?.permissions.push(permission);
   });
 
-  // 按优先级排序并返回
+  // 按优先级排序类别，类别内部按导航顺序（TARGET_ORDER）排序
+  const byNavOrder = (a: Permission, b: Permission) =>
+    (TARGET_ORDER[a.target] ?? 999) - (TARGET_ORDER[b.target] ?? 999);
+
   return Object.entries(categories)
     .filter(([_, category]) => category.permissions.length > 0)
     .sort(([_, a], [__, b]) => a.priority - b.priority)
     .map(([name, category]) => ({
       name,
       label: category.label,
-      permissions: category.permissions
+      permissions: [...category.permissions].sort(byNavOrder)
     }));
 });
 

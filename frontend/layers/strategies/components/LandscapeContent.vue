@@ -130,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import type { LandscapeResult } from '../types'
+import type { LandscapeResult, MarketDynamicEntry } from '../types'
 import { UBadge } from '#components'
 
 const props = defineProps<{
@@ -153,7 +153,7 @@ const hasMarketDynamics = computed(() => {
 const marketDynamicSections = computed(() => {
   const d = props.result?.market_dynamics
   if (!d) return []
-  const sections: Array<{ key: string; label: string; items: unknown[]; bgClass: string; titleClass: string }> = []
+  const sections: Array<{ key: string; label: string; items: MarketDynamicEntry[]; bgClass: string; titleClass: string }> = []
   if (d.momentum_gainers?.length) {
     sections.push({
       key: 'gainers', label: '势能上扬', items: d.momentum_gainers,

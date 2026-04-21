@@ -2497,7 +2497,7 @@ async def _run_probe_review(
                 "reason": a.get("suggestion_reason", ""),
             })
 
-    # 后处理：检测 brand_voice / competitive 互补平台失败，替换为平台统一建议
+    # 后处理：检测 consumer_voice / competitive 互补平台失败，替换为平台统一建议
     from src.llm.chains.strategy.social_probe_review_chain import detect_and_replace_symmetry_suggestions
     all_suggestions = detect_and_replace_symmetry_suggestions(
         all_assessments=all_assessments,

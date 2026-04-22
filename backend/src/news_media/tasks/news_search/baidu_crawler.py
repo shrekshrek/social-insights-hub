@@ -149,6 +149,7 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
 
 
 _PAGE_SIZE = 10  # 百度新闻每页实际返回约 10 条
+_MAX_PAGES = 5  # 最多翻 5 页（50 条）兜底——防止百度在结果耗尽后返回重复内容导致的无限翻页
 
 
 def _fetch_one_page(session: requests.Session, url: str, headers: dict) -> str:
@@ -185,7 +186,7 @@ def search_baidu_news(query: str, max_results: int = 10) -> list[dict]:
     try:
         with requests.Session() as session:
             page = 0
-            while len(all_articles) < max_results:
+            while len(all_articles) < max_results and page < _MAX_PAGES:
                 pn = page * _PAGE_SIZE
                 target_url = (
                     f"{_BAIDU_NEWS_URL}?word={encoded_query}"
@@ -201,10 +202,20 @@ def search_baidu_news(query: str, max_results: int = 10) -> list[dict]:
                 if not page_articles:
                     break
 
+                added_this_page = 0
                 for a in page_articles:
                     if a["url"] not in seen_urls and len(all_articles) < max_results:
                         seen_urls.add(a["url"])
                         all_articles.append(a)
+                        added_this_page += 1
+
+                # 本页无新增（全是已见 URL）→ 百度已无新结果，防止在重复页上空转
+                if added_this_page == 0:
+                    logger.info(
+                        "百度新闻: 第 %d 页无新增 URL（%d 条全为重复），判定结果已耗尽, query=%r",
+                        page + 1, len(page_articles), query,
+                    )
+                    break
 
                 page += 1
 

@@ -175,6 +175,7 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
 
 
 _PAGE_SIZE = 10  # 搜狗微信每页约 10 条
+_MAX_PAGES = 5  # 最多翻 5 页（50 条）兜底——防止结果耗尽后的重复页导致无限翻页
 
 
 def _fetch_one_page(session: requests.Session, url: str, headers: dict) -> str:
@@ -216,7 +217,7 @@ def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
     try:
         with requests.Session() as session:
             page = 1
-            while len(all_articles) < max_results:
+            while len(all_articles) < max_results and page <= _MAX_PAGES:
                 target_url = (
                     f"{_WEIXIN_SOGOU_URL}?type=2&query={encoded_query}"
                     f"&ie=utf8&_sug_type_=&s_from=input&_sug_=n&page={page}"
@@ -231,10 +232,19 @@ def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
                 if not page_articles:
                     break
 
+                added_this_page = 0
                 for a in page_articles:
                     if a["url"] not in seen_urls and len(all_articles) < max_results:
                         seen_urls.add(a["url"])
                         all_articles.append(a)
+                        added_this_page += 1
+
+                if added_this_page == 0:
+                    logger.info(
+                        "搜狗微信: 第 %d 页无新增 URL（%d 条全为重复），判定结果已耗尽, query=%r",
+                        page, len(page_articles), query,
+                    )
+                    break
 
                 page += 1
 

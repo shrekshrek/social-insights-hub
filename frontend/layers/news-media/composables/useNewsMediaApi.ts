@@ -11,6 +11,7 @@ import type {
   NewsTask,
   NewsTaskWithRelations,
   NewsTaskCreate,
+  NewsTaskChannelStats,
   NewsSlice,
   NewsSliceCreate,
   NewsSliceWithRelations,
@@ -163,6 +164,13 @@ export const useNewsTasks = () => {
     )
   }
 
+  const getTaskChannelStats = (taskId: number) => {
+    return useApiData<NewsTaskChannelStats>(
+      `/news-media/tasks/${taskId}/channel-stats`,
+      { key: `news-task-channel-stats-${taskId}` },
+    )
+  }
+
   return {
     getAllTasks,
     getTasks,
@@ -171,6 +179,7 @@ export const useNewsTasks = () => {
     deleteTask,
     executeTask,
     getTaskArticles,
+    getTaskChannelStats,
   }
 }
 

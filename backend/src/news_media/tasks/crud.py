@@ -168,6 +168,25 @@ async def create_article(db: AsyncSession, article_data: dict) -> NewsArticle:
     return article
 
 
+async def get_channel_stats_by_task(
+    db: AsyncSession, task_id: int
+) -> dict[str, int]:
+    """按搜索渠道聚合统计任务的文章数量
+
+    SELECT search_source, COUNT(*) FROM news_articles
+    WHERE task_id = ? GROUP BY search_source
+
+    返回 {search_source: count} 字典，未出现的渠道不会进入字典（由上层填 0）。
+    """
+    stmt = (
+        select(NewsArticle.search_source, func.count(NewsArticle.id))
+        .where(NewsArticle.task_id == task_id)
+        .group_by(NewsArticle.search_source)
+    )
+    result = await db.execute(stmt)
+    return {row[0]: row[1] for row in result.all()}
+
+
 async def bulk_create_articles(
     db: AsyncSession, articles_data: list[dict]
 ) -> list[NewsArticle]:

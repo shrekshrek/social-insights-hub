@@ -18,7 +18,9 @@ from src.news_media.tasks import service
 from src.news_media.tasks.dependencies import validate_news_task_access
 from src.news_media.tasks.models import NewsTask
 from src.news_media.tasks.schemas import (
+    ChannelCount,
     NewsArticleRead,
+    NewsTaskChannelStats,
     NewsTaskCreate,
     NewsTaskRead,
     NewsTaskReadWithRelations,
@@ -215,3 +217,42 @@ async def list_task_articles(
     )
     items = [NewsArticleRead.model_validate(a) for a in articles]
     return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get(
+    "/tasks/{task_id}/channel-stats",
+    response_model=NewsTaskChannelStats,
+    status_code=status.HTTP_200_OK,
+    summary="获取任务的渠道采集量分布（原始召回 vs 去重入库）",
+)
+async def get_task_channel_stats(
+    task: NewsTask = Depends(validate_news_task_access),
+    db: AsyncSession = Depends(get_async_db),
+    _current_user: User = Depends(require_news_task_read),
+):
+    """返回各搜索渠道的两个数字：
+    - raw: 该渠道去重前的原始召回量（从 task.analysis_result.meta.channel_raw_counts 读）
+    - deduped: 该渠道在 URL 跨渠道去重后实际入库的文章数（实时 SQL group by）
+
+    任务尚未完成、或采集前创建的旧任务（无 channel_raw_counts），raw 字段为 0。
+    """
+    from src.news_media.tasks import crud as tasks_crud
+
+    deduped_counts = await tasks_crud.get_channel_stats_by_task(db, task.id)
+    meta = (task.analysis_result or {}).get("meta", {})
+    raw_counts: dict = meta.get("channel_raw_counts") or {}
+
+    def _count(ch: str) -> ChannelCount:
+        return ChannelCount(
+            raw=int(raw_counts.get(ch, 0)),
+            deduped=deduped_counts.get(ch, 0),
+        )
+
+    return NewsTaskChannelStats(
+        baidu=_count("baidu"),
+        sogou=_count("sogou"),
+        bing=_count("bing"),
+        wechat_mp=_count("wechat_mp"),
+        raw_total=sum(int(v) for v in raw_counts.values()),
+        deduped_total=sum(deduped_counts.values()),
+    )

@@ -12,9 +12,27 @@ const route = useRoute()
 const taskId = Number(route.params.id)
 const { currentUserId, hasPermission } = usePermissions()
 
-const { getTask, executeTask, deleteTask, getTaskArticles } = useNewsTasks()
+const { getTask, executeTask, deleteTask, getTaskArticles, getTaskChannelStats } = useNewsTasks()
 
 const { data: task, pending: taskLoading, refresh: refreshTask } = getTask(taskId)
+const { data: channelStats, refresh: refreshChannelStats } = getTaskChannelStats(taskId)
+
+type ChannelKey = 'baidu' | 'sogou' | 'bing' | 'wechat_mp'
+
+const channelBreakdown: { key: ChannelKey; label: string }[] = [
+  { key: 'baidu', label: '百度' },
+  { key: 'sogou', label: '搜狗' },
+  { key: 'bing', label: 'Bing' },
+  { key: 'wechat_mp', label: '微信公众号' },
+]
+
+const getChannelRaw = (key: ChannelKey): number => {
+  return channelStats.value?.[key]?.raw ?? 0
+}
+
+const getChannelDeduped = (key: ChannelKey): number => {
+  return channelStats.value?.[key]?.deduped ?? 0
+}
 
 const executing = ref(false)
 const refreshing = ref(false)
@@ -59,6 +77,7 @@ const handleExecute = async () => {
     await executeTask(taskId)
     await refreshTask()
     await refreshArticles()
+    await refreshChannelStats()
   } catch {
     // error already handled
   } finally {
@@ -68,7 +87,7 @@ const handleExecute = async () => {
 
 const handleRefresh = async () => {
   refreshing.value = true
-  await Promise.all([refreshTask(), refreshArticles()])
+  await Promise.all([refreshTask(), refreshArticles(), refreshChannelStats()])
   refreshing.value = false
 }
 
@@ -167,12 +186,12 @@ const getTierColor = (tier: string) => {
 }
 
 const getSearchSourceText = (source: string) => {
-  const map: Record<string, string> = { baidu: '百度', sogou: '搜狗', duckduckgo: 'DDG', wechat_mp: '公众号' }
+  const map: Record<string, string> = { baidu: '百度', sogou: '搜狗', bing: 'Bing', wechat_mp: '公众号' }
   return map[source] || source
 }
 
 const getSearchSourceColor = (source: string) => {
-  const map: Record<string, string> = { baidu: 'info', sogou: 'warning', duckduckgo: 'success', wechat_mp: 'success' }
+  const map: Record<string, string> = { baidu: 'info', sogou: 'warning', bing: 'success', wechat_mp: 'success' }
   return map[source] || 'neutral'
 }
 
@@ -473,6 +492,30 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
           class="mt-4"
         />
       </UCard>
+
+      <!-- 渠道采集量分布（紧凑行内展示） -->
+      <div
+        v-if="channelStats && (channelStats.raw_total > 0 || channelStats.deduped_total > 0)"
+        class="flex items-center gap-x-5 gap-y-2 flex-wrap px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-800/50 text-sm"
+      >
+        <span class="font-medium text-gray-700 dark:text-gray-300 shrink-0">渠道分布</span>
+
+        <span
+          v-for="ch in channelBreakdown"
+          :key="ch.key"
+          class="inline-flex items-baseline gap-1"
+          :class="getChannelRaw(ch.key) > 0 ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'"
+        >
+          <span class="text-gray-500 dark:text-gray-400">{{ ch.label }}</span>
+          <span class="font-semibold">{{ getChannelRaw(ch.key) }}</span>
+          <span class="text-xs text-gray-400">/ 入库 {{ getChannelDeduped(ch.key) }}</span>
+        </span>
+
+        <span class="ml-auto text-xs text-gray-500 shrink-0">
+          合计 原始 <span class="font-semibold text-gray-900 dark:text-white">{{ channelStats.raw_total }}</span>
+          · 入库 <span class="font-semibold text-gray-900 dark:text-white">{{ channelStats.deduped_total }}</span>
+        </span>
+      </div>
 
       <!-- 文章列表 -->
       <UCard>

@@ -48,7 +48,7 @@ backend/src/
 ├── news_media/
 │   ├── monitors/            # 新闻监测项目
 │   ├── tasks/               # 新闻采集任务 + Celery 任务
-│   │   └── news_search/     # 百度/搜狗/DuckDuckGo/微信公众号多渠道搜索
+│   │   └── news_search/     # 百度/搜狗/Bing/微信公众号多渠道搜索
 │   └── analysis/            # 新闻切片分析（NewsSlice）+ AnalysisJob 封装
 ├── strategies/              # 策略研究引擎
 ├── knowledge_base/          # 市场知识库 + 文档向量化

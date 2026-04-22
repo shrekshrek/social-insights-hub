@@ -57,7 +57,7 @@ KB 模块已从策略产出流程中移除（模块本身保留，作为独立�
 │→ SocialSlice│→ NewsSlice │→ 结构化研究报告      │
 └────────────┴────────────┴────────────────────┘
   抖音/微博       百度/搜狗     四大/麦肯锡
-  小红书等        DDG/微信      社科院等
+  小红书等        Bing/微信     社科院等
 ```
 
 - **social_media**：消费者怎么说（UGC）— probe → collect → SocialSlice
@@ -522,7 +522,7 @@ Research Agent 与 news_media **互不冲突**，搜索不同层次的信息：
 
 | | news_media | research_agent |
 |---|---|---|
-| 搜什么 | 新闻报道（百度/搜狗/DDG/微信） | 专业报告（Tavily 定向四大/智库） |
+| 搜什么 | 新闻报道（百度/搜狗/Bing/微信） | 专业报告（Tavily 定向四大/智库） |
 | 内容性质 | **事实层**：正在发生什么（事件、舆论、声量） | **分析层**：深层分析是什么（趋势、框架、数据） |
 | 分析方式 | tagging（实体/情感/tier）→ 切片 insight | 逐篇深度阅读 → 跨报告综合 |
 | 人工介入 | probe_review → approve/refine | 全自动循环（内部 evaluate） |

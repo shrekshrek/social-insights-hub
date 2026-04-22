@@ -25,6 +25,7 @@ from urllib.parse import quote
 import requests
 
 from src.config import settings
+from src.news_media.tasks.news_search._crawl4ai_client import fetch_via_crawl4ai
 
 logger = logging.getLogger(__name__)
 
@@ -151,26 +152,15 @@ _PAGE_SIZE = 10  # 百度新闻每页实际返回约 10 条
 
 
 def _fetch_one_page(session: requests.Session, url: str, headers: dict) -> str:
-    """抓取单页并返回 cleaned_html，失败返回空字符串"""
-    payload: dict = {
-        "urls": [url],
-        "crawler_config": {
-            "cache_mode": "bypass",
-            "scan_full_page": True,
-            "page_timeout": 20000,
-        },
-    }
-    resp = session.post(
-        f"{settings.CRAWL4AI_BASE_URL}/crawl",
-        json=payload,
-        headers=headers,
-        timeout=30.0,
-    )
-    resp.raise_for_status()
-    results = resp.json().get("results", [])
-    if not results:
+    """抓取单页并返回 cleaned_html，失败返回空字符串
+
+    通过共享的 fetch_via_crawl4ai helper 访问 crawl4ai，自动对 5xx + 网络错误做
+    指数退避重试，抹平百度反爬的瞬时抖动。
+    """
+    result = fetch_via_crawl4ai(session, url, headers, page_timeout=20000)
+    if not result:
         return ""
-    return results[0].get("cleaned_html", "")
+    return result.get("cleaned_html", "")
 
 
 def search_baidu_news(query: str, max_results: int = 10) -> list[dict]:

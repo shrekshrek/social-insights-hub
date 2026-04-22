@@ -59,6 +59,29 @@ export interface NewsTaskCreate {
   search_params?: Record<string, unknown> | null
 }
 
+/**
+ * 单渠道的采集量（原始召回 vs 去重入库）
+ * - raw：去重前原始召回量（渠道健康度指标）
+ * - deduped：URL 跨渠道去重后实际入库的文章数（最终可用数据）
+ */
+export interface ChannelCount {
+  raw: number
+  deduped: number
+}
+
+/**
+ * 新闻任务的渠道采集量分布
+ * 每渠道含 raw + deduped 两个数字；任务未完成或旧任务 raw 可能为 0
+ */
+export interface NewsTaskChannelStats {
+  baidu: ChannelCount
+  sogou: ChannelCount
+  bing: ChannelCount
+  wechat_mp: ChannelCount
+  raw_total: number
+  deduped_total: number
+}
+
 // ==================== Analysis Result Types ====================
 
 export interface NewsAnalysisMeta {
@@ -159,7 +182,7 @@ export interface NewsArticle {
   snippet: string | null
   source_name: string
   source_tier: string
-  search_source: 'baidu' | 'sogou' | 'duckduckgo' | 'wechat_mp'
+  search_source: 'baidu' | 'sogou' | 'bing' | 'wechat_mp'
   author: string | null
   published_at: string | null
   image_url: string | null

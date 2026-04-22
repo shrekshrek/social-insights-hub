@@ -53,7 +53,7 @@
               <span v-if="dp.rationale" class="text-gray-500 ml-1">&mdash; {{ dp.rationale }}</span>
               <div class="flex flex-wrap gap-x-3 text-xs text-gray-400 mt-0.5">
                 <span v-if="dp.channel === 'news_media'">
-                  渠道: 百度 + 搜狗 + DuckDuckGo<span v-if="dp.enable_wechat_mp"> + 微信公众号</span>
+                  渠道: 百度 + 搜狗 + Bing<span v-if="dp.enable_wechat_mp"> + 微信公众号</span>
                 </span>
                 <span v-else-if="dp.platforms?.length">
                   平台: {{ dp.platforms.map(p => platformLabel(p)).join('、') }}

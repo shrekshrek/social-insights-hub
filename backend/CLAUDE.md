@@ -55,7 +55,7 @@ backend/src/
 ├── news_media/
 │   ├── monitors/            # 新闻监测项目
 │   ├── tasks/               # 新闻采集任务 + celery 任务
-│   │   └── news_search/     # 百度/搜狗/DuckDuckGo/微信公众号 多渠道搜索
+│   │   └── news_search/     # 百度/搜狗/Bing/微信公众号 多渠道搜索
 │   └── analysis/            # 新闻切片分析（NewsSlice 模型/CRUD/service + tagging job 封装）
 ├── jobs/                    # 跨渠道 AnalysisJob: models, schemas, crud, factory, router
 ├── llm/                     # LLM 实例管理 + 分析链定义（原 langchain/）

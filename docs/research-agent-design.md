@@ -79,7 +79,7 @@ src/
 │   ├── graph.py         → LangGraph 状态图定义（sync invoke）
 │   ├── nodes/           → 各节点实现
 │   │   ├── planner.py       → 搜索策略规划（注入 profile.planner_context）
-│   │   ├── searcher.py      → 定向域名搜索 + 域名限流（仅走 Tavily/Exa）
+│   │   ├── searcher.py      → Tavily 定向域名搜索 + 域名限流
 │   │   ├── filter.py        → 候选结果批量筛选
 │   │   ├── fetcher.py       → 全文获取（内联 httpx PDF + Crawl4AI HTML，含 30s 超时）
 │   │   ├── analyzer.py      → 逐篇深度阅读（profile 专属 analyzer_prompt）
@@ -90,8 +90,7 @@ src/
 │   │   ├── industry/        → 行业研究：四大/麦肯锡/智库/政府门户
 │   │   └── creative/        → 创意研究：数英/TOPYS/广告门/SocialBeta/梅花网
 │   ├── tools/           → 搜索 API 封装（同步）
-│   │   ├── web_search.py    → Tavily 包装（include_domains 定向搜索，主力）
-│   │   └── exa_search.py    → Exa 包装（备选，SEARCH_PROVIDER=exa 时启用）
+│   │   └── web_search.py    → Tavily 包装（include_domains 定向搜索，主+备双 key）
 │   ├── models.py        → ResearchTask 模型（独立表，含 profile_name 字段）
 │   ├── state.py         → TypedDict 状态定义（含 reducer 注解）
 │   ├── schemas.py       → Pydantic 模型（继承 CustomBaseModel）
@@ -422,90 +421,23 @@ class ResearchState(TypedDict):
 
 | 工具 | 角色 | 实现方式 | 依赖 |
 |------|------|---------|------|
-| **Tavily** | 搜索层主力：`include_domains` 定向搜索（仅 profile 规定的权威域名） | 同步调用 | `tavily-python`，API key |
-| **Exa** | 搜索层备选：`SEARCH_PROVIDER=exa` 时启用（详见"未来方向：迁移至 Exa"） | 同步调用 | `exa-py`，API key |
+| **Tavily** | 搜索层**唯一主力**：`include_domains` 定向搜索（仅 profile 规定的权威域名），`TAVILY_API_KEY` 主 + `TAVILY_API_KEY_2` 备用双 key 自动切换 | 同步调用 | `tavily-python`，API key |
 | **Crawl4AI** | 全文获取：HTML 抓取（fetcher 节点内联调用） | 同步 HTTP 调用 Crawl4AI REST API | 现有 Docker 服务 |
 | **httpx** | 全文获取：PDF 下载（fetcher 节点内联调用） | 同步调用 | 现有依赖 |
 | **pdfplumber** | PDF 解析 | 同步 | 现有依赖（KB 模块已用） |
 
-**关于 fallback 的立场（2026-04 清理）：**
+**关于 fallback 的明确立场（2026-04）：**
 
-- **不引入通用搜索引擎结果页爬取作为兜底**——曾短期试过用 crawl4ai 爬 `baidu.com/s` 和 `bing.com/search` 补量，实测均已被反爬降级为"导航噪声"，产出几乎为 0 但照样消耗 crawl4ai 配额。代码已移除（2026-04 清理 `tools/crawl4ai_search.py` + searcher 的 fallback 分支）
-- **也不加 SerpAPI / Bing Search API**——Tavily 中文覆盖对专业报告场景够用，四大/麦肯锡官网中英双语；Bing Search API 将于 2026-08-11 停服，SerpAPI 价差 3-5×，均不作考虑
-- **若将来 Tavily 额度耗尽或稳定性下降，fallback 走 "站点独立适配" 路线**——针对 profile 里定向的具体内容源（麦肯锡 insights 页、艾瑞报告列表、数英案例库、SocialBeta 观察页等），各自写一个 crawl4ai adapter，参考 `news_media/tasks/news_search/` 的 baidu_crawler / sogou_crawler / wechat_mp_crawler 模式（每个站点独立 DOM 选择器 + 独立翻页逻辑）。详见下方"未来方向：双轨搜索（Tavily + 站点独立适配）"
+搜索后端**只用 Tavily**，不做任何 fallback：
 
-#### 未来方向：迁移至 Exa
+- **不做 Exa 切换**——Exa 单价 $7-12/千次比 Tavily $8 略贵，为 1-2× 价差维护双后端代码 + 两份迁移风险不值得。以前文档里的"迁移至 Exa"未来方向已作废
+- **不做通用搜索引擎结果页爬取**——曾短期试过 crawl4ai 爬 `baidu.com/s` 和 `bing.com/search`，实测均被反爬降级为"导航噪声"，产出几乎 0 但照样消耗 crawl4ai 配额
+- **不做站点独立适配 adapter fallback**——这是成本极高的工程（~10 个站点 DOM + 翻页 + 反爬各自维护，对标 `news_media/tasks/news_search/` 的难度），而且 McKinsey/Deloitte/PwC 等大头根本没列表页，覆盖率远不及 Tavily；价值密度太低，为概率极低的"Tavily 全挂"事件买保险不划算
+- **不做 SerpAPI / Bing Search API**——SerpAPI 价差 3-5×；Bing Search API 2026-08-11 停服（Microsoft 付费产品层面停，与新闻模块里 `bing.com/news/search` 的爬虫反爬是两回事）
 
-> **当前不实施**，在此记录决策依据。
+**两 key 耗尽的处理**：`tavily_search` 抛 `TavilyQuotaExhaustedError`；`research_agent/tasks.py` 的异常分支捕获后把任务标为 `failed`，`error_message` 写入清晰提示"Tavily 搜索配额已耗尽（主 key 与备用 key 均不可用），请联系管理员充值或等待下月配额刷新"，前端任务详情页直接显示该 error_message。日志按 `WARNING` 而非 `ERROR` 打（属于运维事件不是代码 bug，避免告警误报）。
 
-调研结论：**Exa 在研究报告发现场景下优于 Tavily**。
-
-| 维度 | Tavily（当前） | Exa |
-|------|--------------|-----|
-| 域名限制 | 最多 300 个 | 最多 1,200 个 |
-| 研究报告发现 | 通用语义搜索 | 专用 `research_paper` 分类，索引 1 亿+ 研究文档 |
-| 响应包含全文 | ✓ | ✓（最高 10K+ 字符，可省略 fetch 节点） |
-| 检索准确率（复杂查询） | 71% | 81% |
-| 速度 | 基准 | 2–3× 更快 |
-| 价格 / 千次查询 | $8 | $7–12 |
-
-**Exa 的核心价值**：响应直接携带页面全文，HTML 来源可跳过 fetcher 节点，每轮减少 30–60s；`research_paper` 分类更适合定向报告检索；域名白名单上限 4 倍于 Tavily。
-
-**触发迁移的条件**：
-- Tavily 中文报告检索质量明显下降，或
-- 需要研究报告的专项分类（`research_paper`），或
-- 每月 Tavily 费用超出预算
-
-**迁移工作量**：低——Exa Python SDK 接口结构与 Tavily 相近，主要改动在 `searcher.py`；fetcher 节点可为 Exa 已含全文的结果增加快速路径（跳过 HTTP 抓取）。
-
-⚠️ **Bing Search API 将于 2026-08-11 停服**（指 Microsoft 的付费 Bing Search API 产品，和新闻模块里爬 `bing.com/news/search` 结果页是两回事）；SerpAPI 价格 3–5 倍于 Exa。两者均不作考虑。
-
-#### 未来方向：双轨搜索（Tavily/Exa + 站点独立适配）
-
-> **当前不实施**，记录在此供后续参考。**"搜索引擎结果页通用爬取"已被明确排除**（见"设计决策 1"的 fallback 立场）——若真需要补量，走这里的"站点独立适配"路线。
-
-**问题背景**：Tavily 是语义搜索引擎，只返回关键词匹配的结果，可能漏掉"已知某域名存在但与关键词表述不符"的报告。对于有固定报告列表页 / 案例索引页的专业内容源，直接爬取列表能获得完整覆盖。这条路比通用搜索引擎爬取更可靠——列表页 DOM 稳定、反爬弱、信号密度高。
-
-**触发条件（满足其一时值得实施）**：
-1. **Tavily 月度额度耗尽**成为主路 fallback 的刚需（主力搜索不可用时不能啥都没有）
-2. Tavily 按查询计费积累后成本显著
-3. 多轮搜索后信息缺口依然大量存在，且明确是"已知域名有相关报告但 Tavily 未检索到"——即卡点是搜索工具，而非报告本身稀缺
-
-**设计方案**：
-
-```
-searcher_node（双轨并行）
-  ├── track_a: Tavily 语义搜索（处理抽象主题、跨域发现）
-  └── track_b: 列表页直抓（Crawl4AI 抓固定入口，覆盖已知优质来源）
-       ↓ 合并去重 → filter（现有逻辑不变）
-```
-
-**已确认有独立报告列表页/子域名的来源**（track_b 候选）：
-
-**行业研究（industry profile）**
-
-| 来源 | 列表页入口 | 说明 |
-|------|-----------|------|
-| KPMG | `assets.kpmg.com` | PDF 资产库（已加入搜索域名列表） |
-| BCG | `media-publications.bcg.com` | BCG 报告 PDF 库 |
-| Bain | `media.bain.com` | Bain 报告 PDF 库 |
-| 艾瑞咨询 | `report.iresearch.cn` | 报告专页（已加入搜索域名列表） |
-| 信通院 | `caict.ac.cn/kxyj/qwfb/` | 研究报告发布页 |
-| CNNIC | `cnnic.net.cn/IDR/ReportDownloads/` | 报告下载页 |
-
-行业研究其余域名（McKinsey、Deloitte、PwC、EY、Roland Berger 等）报告分散在路径下，无独立列表页，不适合 track_b。
-
-**创意研究（creative profile）**
-
-| 来源 | 列表页入口 | 说明 |
-|------|-----------|------|
-| 数英 | `digitaling.com/projects/` | 案例索引页（分类筛选） |
-| TOPYS | `topys.cn/article/` / `topys.cn/case/` | 品牌创意与案例分类 |
-| 广告门 | `adquan.com/post-cat-id-?.html` | 案例分类页 |
-| SocialBeta | `socialbeta.com/t/case-?` | 案例专题 |
-| 梅花网 | `meihua.info/works` | 创意作品库 |
-
-**为何现在不做**：当前 Tavily 额度充足且覆盖面够用；信噪比问题（服务页混入、单域名垄断）已通过 filter 代码层修复；主要信息缺口（如买方视角研究）属于报告本身稀缺，换工具也解决不了。**Tavily 额度若耗尽则必做**——届时按上表站点独立写 adapter（参考 `news_media/tasks/news_search/` 的现成模式）。
+**运维信号**：Tavily 双 key 先后耗尽时任务会明确失败并展示给用户，充值或等下月即可。如果未来真出现"Tavily 周期性不可用但业务不能断"的场景再重新评估兜底方案，在此之前**不做降级兜底**是有意识的决定。
 
 ### 2. 定向搜索目标源（Tavily `include_domains`）
 
@@ -756,9 +688,8 @@ task = await db.scalar(
 ```python
 # src/config.py（环境变量 / Settings）
 TAVILY_API_KEY: str                          # Tavily 搜索 API key（必需）
-TAVILY_API_KEY_2: str | None = None          # 备用 key，主 key 额度耗尽自动切换
-EXA_API_KEY: str | None = None               # Exa 备选搜索
-SEARCH_PROVIDER: str = "tavily"              # "tavily" | "exa"，切换搜索后端
+TAVILY_API_KEY_2: str | None = None          # 备用 key，主 key 额度耗尽自动切换；
+                                             # 两 key 都耗尽 → 任务 failed + error_message 给前端
 
 # research_agent/config.py 硬编码常量（不暴露到 Settings）
 MAX_ROUNDS = 4
@@ -933,7 +864,6 @@ selected 仍非空,该分支从未被触发。乐虎这种**小品牌窄主题**
 **为何不做**:
 - Tavily 成本占 Research Agent 总成本约 30-50%,Research Agent 又占总成本约 30%,算下来 Tavily 占总 10-15%
 - 基于 10-15% 的成本项做复杂混合策略,优化收益不足以支付实施复杂度 + 新 bug 风险
-- Exa 迁移有更大收益空间(见 §设计决策 1 的"未来方向"),优先级更高
 
 **触发重新评估的条件**:Tavily 月费超预算,或 basic/advanced 价差拉大到 3x+。
 

@@ -15,7 +15,7 @@
 原 brief_parser 对所有非战略型 brief 统一判定 `platform_verdict=insufficient` 并单路推至 research_agent（专题研究）。实际发现两类错配：
 
 1. **诊断型 brief 被硬塞进 strategies pipeline**：类似"最近一周 XX 舆情监测"、"Campaign 投后消费者反馈复盘"这类 brief，只要数据源充足 LLM 就判 `sufficient`，用户被导入 full_strategy / campaign_strategy 路径，触发 creative_research + industry_research 的完整采集，最终跑到 Brand Role / Big Idea / Strategic Brief 阶段——但 brief 根本没要求战略产出，采集和生成都是浪费
-2. **insufficient 错分至 research_agent**：诊断型 brief 即便判为 insufficient，被统一推至 research_agent；但 research_agent 只有 `industry` / `creative` 两个 profile，数据源是 Tavily/Exa 开放 Web 搜索，**不访问 social/news 数据库**——结构上无法承接"消费者情感诊断"或"媒体舆情简报"这类需要 4 渠道管道能力的需求
+2. **insufficient 错分至 research_agent**：诊断型 brief 即便判为 insufficient，被统一推至 research_agent；但 research_agent 只有 `industry` / `creative` 两个 profile，数据源是 Tavily 开放 Web 搜索，**不访问 social/news 数据库**——结构上无法承接"消费者情感诊断"或"媒体舆情简报"这类需要 4 渠道管道能力的需求
 
 问题根因：系统实际已经具备**三种不同的产出能力**，但 brief_parser 只认识其中一种（strategies pipeline），把其它需求要么强行塞进来、要么单路甩出去。
 
@@ -31,7 +31,7 @@
 |---|---|---|---|---|
 | **strategies pipeline** | 战略产出（Brand Role / Big Idea / Strategic Brief / 品牌定位） | `/strategies/*`（brief_parser → research_design → 4 阶段流水线） | 4 渠道全上（social + news + industry + creative） | 端到端策略报告（campaign_strategy / market_report / full_strategy） |
 | **monitor + slice** | **诊断产出**（情感快照 / 舆情监测 / 竞品对标 / Campaign 复盘 / KOL 声量监测） | `/social-media/monitors/*` + `/news-media/monitors/*`（独立入口，不经 brief_parser） | 单渠道（social 或 news） | 结构化诊断切片（foundation / layers / reports） |
-| **research_agent** | 知识性研究（领域综述 / 机制 / 流程 / 行业报告） | `/research-agent/*` | 开放 Web（Tavily / Exa / Crawl4AI） | 研究综述 + findings_by_question |
+| **research_agent** | 知识性研究（领域综述 / 机制 / 流程 / 行业报告） | `/research-agent/*` | 开放 Web（Tavily 定向搜索 + Crawl4AI/httpx 全文抓取） | 研究综述 + findings_by_question |
 
 三层职责严格区分：
 - 只有**策略产出**（需要 Brand Role / Big Idea / Strategic Brief）走 strategies pipeline
@@ -120,7 +120,7 @@ diagnostic_dual      → 同时显示社媒 + 新闻两个按钮
 
 **结构不匹配**：research_agent 的：
 - Profile 只有 `industry` / `creative`，无通用诊断 profile
-- 数据源是 Tavily / Exa / Crawl4AI 开放 Web 搜索，**不访问 social/news 数据库**
+- 数据源是 Tavily 定向搜索 + Crawl4AI/httpx 全文抓取开放 Web，**不访问 social/news 数据库**
 - 产出是"研究综述 + findings_by_question"形态，不是"情感分布 + KOL + Entity + Landscape"等诊断切片结构
 
 扩展出第三个 profile 的代价（新 domain tiers + planner prompt + analyzer/synthesizer prompt）远超在 brief_parser 做分诊的代价。

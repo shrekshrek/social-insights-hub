@@ -56,11 +56,48 @@ async def list_all_tasks(
     return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)
 
 
+async def _dispatch_news_collect_task(
+    task: NewsTask,
+    db: AsyncSession,
+    user_id: int,
+) -> NewsTask:
+    """派发新闻全量采集 Celery 任务（create 时自动调用 + execute 手动重试共用此 helper）
+
+    假设 caller 已完成业务校验（phase != probe / strategy_id is None / status 允许执行）。
+    职责：切换任务状态 → 按需创建 tagging job → 派发 celery → 回写 celery_task_id。
+    """
+    from src.jobs import crud as jobs_crud
+    from src.news_media.analysis.jobs import create_news_tagging_job
+    from src.news_media.tasks.tasks import run_news_collect_task
+
+    task.status = "running"
+    task.error_message = None
+    await db.commit()
+    await db.refresh(task)
+
+    tagging_job_id: int | None = None
+    if task.auto_analyze:
+        tagging_job = await create_news_tagging_job(db=db, task=task, user_id=user_id)
+        tagging_job_id = tagging_job.id
+        await db.commit()
+
+    celery_result = run_news_collect_task.delay(
+        task_id=task.id,
+        tagging_job_id=tagging_job_id,
+    )
+
+    if tagging_job_id is not None:
+        await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
+        await db.commit()
+
+    return task
+
+
 @router.post(
     "/monitors/{monitor_id}/tasks",
     response_model=NewsTaskRead,
     status_code=status.HTTP_201_CREATED,
-    summary="创建新闻任务",
+    summary="创建新闻任务（独立 monitor 场景自动派发执行）",
 )
 async def create_task(
     data: NewsTaskCreate,
@@ -68,7 +105,16 @@ async def create_task(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_news_task_write),
 ):
+    """独立 monitor 场景：创建后立即自动派发执行（对齐社媒 Pull 模式的 UX，用户无需二次点击）。
+
+    仅 phase != "probe" 的独立任务（strategy_id is None）会自动派发；probe 任务仍由
+    strategies 模块编排（走 strategies/service.py 的批量端点），此处不自动触发。
+    """
     task = await service.create_news_task(db, monitor.id, data, current_user.id, phase=data.phase)
+
+    if task.strategy_id is None and task.phase != "probe":
+        task = await _dispatch_news_collect_task(task, db, current_user.id)
+
     return task
 
 
@@ -129,21 +175,20 @@ async def delete_task(
     "/tasks/{task_id}/execute",
     response_model=NewsTaskRead,
     status_code=status.HTTP_200_OK,
-    summary="执行新闻任务（collect 全量流水线）",
+    summary="执行新闻任务（手动重试/重跑入口）",
 )
 async def execute_task(
     task: NewsTask = Depends(validate_news_task_access),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_news_task_write),
 ):
-    """独立 news monitor 场景的一步式全量采集入口。
+    """手动执行入口：主要用于 **失败重试** 或 **历史 pending 任务重跑**。
 
-    独立场景不走 probe/collect 两段式 —— probe 只在 strategy 研究流程里用，
-    由 strategies 模块内部派发。这里只接受 phase=="collect" 或 phase 未设的任务。
+    正常流程中，独立 monitor 任务在 create 时已自动派发（见 create_task），用户无需调用本端点。
+    独立场景不走 probe/collect 两段式 —— probe 只在 strategy 研究流程里用，由 strategies 模块
+    内部派发，本端点拒绝。
     """
     from fastapi import HTTPException
-
-    from src.news_media.tasks.tasks import run_news_collect_task
 
     if task.strategy_id is not None:
         raise HTTPException(
@@ -161,33 +206,7 @@ async def execute_task(
             detail=f"任务当前状态为 {task.status}，无法执行",
         )
 
-    task.status = "running"
-    task.error_message = None
-    await db.commit()
-    await db.refresh(task)
-
-    from src.news_media.analysis.jobs import create_news_tagging_job
-
-    tagging_job_id: int | None = None
-    if task.auto_analyze:
-        tagging_job = await create_news_tagging_job(
-            db=db, task=task, user_id=current_user.id
-        )
-        tagging_job_id = tagging_job.id
-        await db.commit()
-
-    celery_result = run_news_collect_task.delay(
-        task_id=task.id,
-        tagging_job_id=tagging_job_id,
-    )
-
-    if tagging_job_id is not None:
-        from src.jobs import crud as jobs_crud
-
-        await jobs_crud.set_celery_task_id(db, tagging_job_id, celery_result.id)
-        await db.commit()
-
-    return task
+    return await _dispatch_news_collect_task(task, db, current_user.id)
 
 
 # ==================== Article Endpoints ====================

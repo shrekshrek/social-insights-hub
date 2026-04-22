@@ -1,6 +1,6 @@
 # Research Agent 设计方案
 
-> 状态：Phase 1-3 已实现，Phase 4（策略集成）进行中
+> 状态：Phase 1-4 已实现并稳定运行（搜索层 2026-04 收敛为 Tavily-only，详见设计决策 1）
 > 日期：2026-04-12（更新：2026-04-14）
 
 ## 背景与动机
@@ -726,9 +726,9 @@ MAX_CONCURRENT_TASKS = 10   # analyze 节点并发度
 | `llm/chains/strategy/brief_parser_chain.py` | channel_plan 新增 `research_agent` 渠道类型 + prompt 描述 | ✅ |
 | `llm/chains/strategy/research_design_chain.py` | 只产出社媒/新闻 data_plan，移除 research_agent 字段 | ✅ |
 | `strategies/service.py confirm_research` | 触发条件改为 channel_plan 含 research_agent，query=channel_brief，context=analysis_goal | ✅ |
-| `strategies/service.py collection-status` | 加入 ResearchTask 完成状态检查 |
-| `strategies/schemas.py` | ChannelPlanItem.type 描述更新、ConfirmResearchRequest/Response 适配 |
-| `strategies/CLAUDE.md` | 更新流程文档 |
+| `strategies/service.py collection-status` | 加入 ResearchTask 完成状态检查（`_get_research_agent_status` 分别统计 industry + creative） | ✅ |
+| `strategies/schemas.py` | ChannelPlanItem.type 覆盖 4 种渠道类型 + `CollectionStatusResponse.industry_research/creative_research` 字段 | ✅ |
+| `strategies/CLAUDE.md` | 模块流程文档已写入 Research Agent 两类任务的触发条件、编排与占位符注入规则 | ✅ |
 
 ## 前端改动
 
@@ -763,21 +763,23 @@ MAX_CONCURRENT_TASKS = 10   # analyze 节点并发度
 - max_rounds=3 控制最大循环次数
 - E2E 验证：78 data points，5 tier1 sources，1574 字综合报告，288s 完成
 
-### Phase 4: 策略集成（进行中）
+### Phase 4: 策略集成 ✅ 已完成
 
-**已完成**：
 - KB RAG 从策略产出流程中完全移除（`market_context` → `research_findings`）
-- `_retrieve_research_findings` 读取 ResearchTask 结构化结果
-- per-stage formatter 模块（`research_findings.py`，6 个函数，分层 token 预算）
+- `_retrieve_research_findings` / `_retrieve_creative_research_findings` 分别读取
+  `profile_name=industry` / `profile_name=creative` 的 ResearchTask 结构化结果
+- per-stage formatter 模块（`research_findings.py`，6 个函数分层 token 预算 +
+  creative 专属 `format_creative_for_brand_role` / `format_creative_for_big_idea`）
 - 6 条 stage chain 的 prompt 更新（research_findings 使用指南 + 三位一体交叉验证）
-- `data_provenance` 重构为 `{primary, research}` 两层
-
-**待实施**：
-- brief_parser_chain：channel_plan 新增 research_agent 渠道
-- research_design_chain：新增 research_agent 顶层字段
-- confirm-research：条件创建 ResearchTask（plan 里有才创建）
-- collection-status：加入 ResearchTask 完成状态检查
-- 前端：ResearchPlanEditor 适配、采集状态页三渠道并列
+- `data_provenance` 重构为 `{primary, research}` 两层，research 内含 industry_research /
+  creative_research 两个布尔标志
+- `brief_parser_chain` channel_plan 输出 4 渠道类型（social_media / news_media /
+  industry_research / creative_research）
+- `research_design_chain` 只产出社媒/新闻 data_plan（research 两类由 brief_parser 直接触发）
+- `confirm-research` 按 channel_plan 条件创建 ResearchTask（industry 无条件，
+  creative 限 campaign_strategy / full_strategy 路径）
+- `collection-status` 返回 industry_research + creative_research 两个独立进度
+- 前端 ResearchPlanEditor 适配 + 采集状态页四渠道并列展示
 
 ---
 

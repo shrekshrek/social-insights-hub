@@ -66,7 +66,6 @@ class NewsTaskChannelStats(CustomBaseModel):
 
     baidu: ChannelCount = ChannelCount()
     sogou: ChannelCount = ChannelCount()
-    bing: ChannelCount = ChannelCount()
     wechat_mp: ChannelCount = ChannelCount()
     raw_total: int = 0
     deduped_total: int = 0

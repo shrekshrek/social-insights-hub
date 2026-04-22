@@ -1,6 +1,7 @@
 """Crawl4AI HTTP 客户端（带重试 + 退避）
 
-所有新闻渠道爬虫（baidu / sogou / bing / wechat_mp）共享此 helper 与 crawl4ai 服务通信。
+所有新闻渠道爬虫（baidu / sogou / wechat_mp）共享此 helper 与 crawl4ai 服务通信。
+bing_crawler.py 保留作备用但不接入聚合器，也复用本 helper。
 失败模式共享：target 站反爬 → crawl4ai 返回 5xx；网络层 connect/timeout。
 抹平瞬时抖动，避免因为单次偶发就让该渠道本轮贡献 0 条。
 
@@ -36,7 +37,7 @@ def fetch_via_crawl4ai(
 ) -> dict | None:
     """通过 crawl4ai 抓取一个页面，返回第一个 result 字典（含 cleaned_html / markdown / links 等）
 
-    调用方按需从 result 里取 cleaned_html（百度/搜狗/微信）或 markdown（Bing）。
+    调用方按需从 result 里取 cleaned_html（百度/搜狗/微信）或 markdown（Bing 爬虫，备用）。
 
     Args:
         session: 调用方复用的 requests.Session

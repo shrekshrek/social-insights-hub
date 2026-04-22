@@ -270,7 +270,6 @@ async def get_task_channel_stats(
     return NewsTaskChannelStats(
         baidu=_count("baidu"),
         sogou=_count("sogou"),
-        bing=_count("bing"),
         wechat_mp=_count("wechat_mp"),
         raw_total=sum(int(v) for v in raw_counts.values()),
         deduped_total=sum(deduped_counts.values()),

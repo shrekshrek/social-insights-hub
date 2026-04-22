@@ -1,7 +1,7 @@
 """Strategy News Probe Review Chain — 新闻探测数据质量审查
 
 对应 social_probe_review_chain 的新闻媒体版本：基于 probe 阶段多渠道搜索
-（默认 baidu + sogou + bing，可选 wechat_mp；单渠道上限 20 条）
+（默认 baidu + sogou，可选 wechat_mp；单渠道上限 20 条）
 合并去重后落库的文章卡片（title / source_name / source_tier / snippet），
 判断关键词是否能召回与研究问题相关的新闻内容。
 
@@ -30,7 +30,7 @@ SINGLE_TASK_SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估�
 
 ## 字段说明
 
-- **文章卡片**：多渠道搜索（默认 baidu + sogou + bing，可选 wechat_mp）合并去重后的结果，
+- **文章卡片**：多渠道搜索（默认 baidu + sogou，可选 wechat_mp）合并去重后的结果，
   单渠道上限 20 条，合计最多数十条；仅含元数据（标题、来源媒体、权威度分层、摘要片段），尚未抓取全文
 - **source_tier**：
   - tier1 = 央媒/权威中央级媒体（新华社、人民网、央视、澎湃、中国新闻网等）

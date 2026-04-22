@@ -230,7 +230,9 @@ class TestSearchAndStoreArticlesDualChannel:
 
         assert captured["max_results"] == 20
         assert "baidu" in captured["channels"]
-        assert "bing" in captured["channels"]
+        assert "sogou" in captured["channels"]
+        # Bing 渠道已下线（2026-04），不再出现在默认渠道里
+        assert "bing" not in captured["channels"]
 
 
 class TestRunNewsProbeReviewOne:

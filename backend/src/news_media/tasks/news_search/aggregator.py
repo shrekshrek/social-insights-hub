@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 # 跨渠道通用的非新闻 title 识别——这些模式来自**源网站的页面标题格式**（标签页 / 资料库页 /
-# SEO 产品聚合页 / 特定服务比较页），不依赖特定搜索引擎。不管 baidu/sogou/bing 哪个
+# SEO 产品聚合页 / 特定服务比较页），不依赖特定搜索引擎。不管 baidu/sogou/wechat_mp 哪个
 # 索引到同一页面，title 都是这个 pattern。保守过滤：只打**极高置信度**的明显垃圾，
 # 其他栏目页/排行页/跑题内容交给下游 LLM tagging 判断（正则 blacklist 无法穷尽搜索引擎
 # 填充 pattern，继续扩充走向维护深渊）。

@@ -76,7 +76,6 @@ export interface ChannelCount {
 export interface NewsTaskChannelStats {
   baidu: ChannelCount
   sogou: ChannelCount
-  bing: ChannelCount
   wechat_mp: ChannelCount
   raw_total: number
   deduped_total: number
@@ -182,6 +181,7 @@ export interface NewsArticle {
   snippet: string | null
   source_name: string
   source_tier: string
+  // 'bing' 保留：历史文章（下线前的采集数据）仍可能带此值；新任务只会出 baidu/sogou/wechat_mp
   search_source: 'baidu' | 'sogou' | 'bing' | 'wechat_mp'
   author: string | null
   published_at: string | null

@@ -1771,7 +1771,7 @@ async def confirm_research(
             from src.news_media.tasks.tasks import run_news_probe_task
 
             enable_wechat_mp = dimension.get("enable_wechat_mp", False)
-            news_channels = ["baidu", "sogou", "duckduckgo"]
+            news_channels = ["baidu", "sogou", "bing"]
             if enable_wechat_mp:
                 news_channels.append("wechat_mp")
 
@@ -2075,6 +2075,49 @@ def _build_channel_summary(assessments: list[dict]) -> dict[str, dict]:
             "note": note,
         }
     return summary
+
+
+def _override_suggestions_for_all_fail_channels(
+    suggestions: list[dict],
+    channel_summary: dict[str, dict],
+    probe_round: int,
+) -> list[dict]:
+    """当某渠道 channel_verdict=all_fail 且已经 refine 过至少一次时，覆盖该渠道所有换词建议为 null。
+
+    区分两种 all_fail 场景：
+    - 首轮 all_fail（probe_round=0）：多为关键词质量问题，LLM 换词建议往往有价值，不覆盖
+    - 重复 all_fail（probe_round≥1，即至少 refine 过一次）：换词已经试过仍全失败，
+      说明是结构性数据稀疏，继续换词无济于事，统一覆盖为 null（建议移除任务）
+      避免决策层冲突：banner 提示"建议移除渠道"，底部还在给换词建议。
+    """
+    if probe_round < 1:
+        return suggestions
+
+    fail_channels = {
+        ch for ch, info in channel_summary.items()
+        if info.get("channel_verdict") == "all_fail"
+    }
+    if not fail_channels:
+        return suggestions
+
+    result: list[dict] = []
+    for s in suggestions:
+        platform = s.get("platform", "")
+        channel = "news_media" if platform == "news_media" else "social_media"
+        if channel in fail_channels:
+            total = channel_summary[channel].get("total", 0)
+            channel_label = "社交媒体" if channel == "social_media" else "新闻媒体"
+            result.append({
+                **s,
+                "suggested_keyword": None,
+                "reason": (
+                    f"{channel_label}渠道已 refine 过仍 {total} 个任务全部未通过，"
+                    f"判定为结构性数据稀疏，换词无法突破，建议移除该任务"
+                ),
+            })
+        else:
+            result.append(s)
+    return result
 
 
 def _auto_verdict_probe_task(summary: dict) -> tuple[str, str] | None:
@@ -2509,14 +2552,20 @@ async def _run_probe_review(
         research_design=strategy.research_design or {},
     )
 
+    # 按渠道聚合 verdict，生成渠道级摘要
+    channel_summary = _build_channel_summary(all_assessments)
+
+    # 渠道 all_fail 覆盖（仅 probe_round≥1，即至少 refine 过一次）：
+    # 首轮 all_fail 保留 LLM 换词建议（多为关键词质量问题）；重复 all_fail 才判定结构性稀疏，统一建议移除
+    all_suggestions = _override_suggestions_for_all_fail_channels(
+        all_suggestions, channel_summary, strategy.probe_round or 0,
+    )
+
     logger.info(
         "Strategy %d probe review 完成 (verdict=%s, 规则自动=%d, LLM=%d)",
         strategy.id, overall,
         len(auto_assessments or []), len(llm_assessments),
     )
-
-    # 按渠道聚合 verdict，生成渠道级摘要
-    channel_summary = _build_channel_summary(all_assessments)
 
     result: dict = {
         "assessments": all_assessments,

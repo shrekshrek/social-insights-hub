@@ -2,10 +2,12 @@
 
 通过 Crawl4AI REST API 爬取百度新闻搜索结果页，返回结构化文章列表。
 
-目标 URL：https://news.baidu.com/ns?word={query}&rn={n}&tn=news
-该 URL 会 301 重定向到新版资讯搜索页
-https://www.baidu.com/s?rtt=1&bsst=1&cl=2&tn=news&word=...，
-crawl4ai 会自动跟随重定向。
+目标 URL：https://www.baidu.com/s?rtt=1&bsst=1&cl=2&tn=news&word={query}&pn={offset}
+直接命中百度新版资讯搜索页，`pn` 翻页参数生效（pn=0/10/20/... 对应第 1/2/3 页）。
+
+**为什么不用老版 news.baidu.com/ns**：曾经老版会 301 到新版资讯页、由 crawl4ai 自动
+跟随，但百度后来改成老端点直接返回内容**且忽略 pn 参数**——所有页都回第 1 页，
+翻页彻底失效（2026-04 实测每页返回一致的 10 条）。新版 URL 的 pn 正常工作。
 
 解析策略：
 新版百度资讯页的新闻结果项在 markdown 转换后无法被识别为 markdown link
@@ -29,7 +31,7 @@ from src.news_media.tasks.news_search._crawl4ai_client import fetch_via_crawl4ai
 
 logger = logging.getLogger(__name__)
 
-_BAIDU_NEWS_URL = "https://news.baidu.com/ns"
+_BAIDU_NEWS_URL = "https://www.baidu.com/s"
 
 # 每个 result 块匹配：<div class="result-op c-container ..." id="N">...</div>
 # 用 lookahead 切到下一个 result-op 或页脚
@@ -189,8 +191,8 @@ def search_baidu_news(query: str, max_results: int = 10) -> list[dict]:
             while len(all_articles) < max_results and page < _MAX_PAGES:
                 pn = page * _PAGE_SIZE
                 target_url = (
-                    f"{_BAIDU_NEWS_URL}?word={encoded_query}"
-                    f"&rn={_PAGE_SIZE}&pn={pn}&tn=news&cl=2&ie=utf-8"
+                    f"{_BAIDU_NEWS_URL}?rtt=1&bsst=1&cl=2&tn=news"
+                    f"&word={encoded_query}&pn={pn}"
                 )
 
                 cleaned_html = _fetch_one_page(session, target_url, headers)

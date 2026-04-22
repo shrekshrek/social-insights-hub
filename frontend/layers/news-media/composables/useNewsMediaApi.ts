@@ -117,9 +117,10 @@ export const useNewsTasks = () => {
     )
   }
 
-  const getTask = (taskId: number) => {
+  const getTask = (taskId: number, options: { silent404?: boolean } = {}) => {
     return useApiData<NewsTaskWithRelations>(`/news-media/tasks/${taskId}`, {
       key: `news-task-${taskId}`,
+      silent404: options.silent404,
     })
   }
 
@@ -151,7 +152,11 @@ export const useNewsTasks = () => {
     return result
   }
 
-  const getTaskArticles = (taskId: number, params?: MaybeRef<Record<string, unknown>>) => {
+  const getTaskArticles = (
+    taskId: number,
+    params?: MaybeRef<Record<string, unknown>>,
+    options: { silent404?: boolean } = {},
+  ) => {
     return useApiData<PaginatedResponse<NewsArticle>>(
       `/news-media/tasks/${taskId}/articles`,
       {
@@ -160,14 +165,18 @@ export const useNewsTasks = () => {
           const p = unref(params)
           return `news-articles-${taskId}-${p?.page || 1}-${p?.page_size || 20}`
         }),
+        silent404: options.silent404,
       },
     )
   }
 
-  const getTaskChannelStats = (taskId: number) => {
+  const getTaskChannelStats = (taskId: number, options: { silent404?: boolean } = {}) => {
     return useApiData<NewsTaskChannelStats>(
       `/news-media/tasks/${taskId}/channel-stats`,
-      { key: `news-task-channel-stats-${taskId}` },
+      {
+        key: `news-task-channel-stats-${taskId}`,
+        silent404: options.silent404,
+      },
     )
   }
 

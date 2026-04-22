@@ -169,7 +169,9 @@ async def run_slice_analysis(
 def _compute_stats(articles: list) -> dict:
     """从文章列表计算统计摘要"""
     tier_counts: dict[str, int] = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
-    source_dist: dict[str, int] = {"baidu": 0, "sogou": 0, "bing": 0, "wechat_mp": 0}
+    # 初始化常规渠道为 0；历史文章若 search_source='bing'（下线前数据）会在循环中自动补键，
+    # source_dist.get(src, 0) + 1 保证不丢旧数据，只是不把 bing 列成默认展示位。
+    source_dist: dict[str, int] = {"baidu": 0, "sogou": 0, "wechat_mp": 0}
     sentiment_dist = {"positive": 0, "neutral": 0, "negative": 0}
     sentiment_scores: list[float] = []
     entity_mentions: dict[str, int] = {}

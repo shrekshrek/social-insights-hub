@@ -21,12 +21,11 @@ const { getTask, executeTask, deleteTask, getTaskArticles, getTaskChannelStats }
 const { data: task, pending: taskLoading, refresh: refreshTask } = getTask(taskId, { silent404: true })
 const { data: channelStats, refresh: refreshChannelStats } = getTaskChannelStats(taskId, { silent404: true })
 
-type ChannelKey = 'baidu' | 'sogou' | 'bing' | 'wechat_mp'
+type ChannelKey = 'baidu' | 'sogou' | 'wechat_mp'
 
 const channelBreakdown: { key: ChannelKey; label: string }[] = [
   { key: 'baidu', label: '百度' },
   { key: 'sogou', label: '搜狗' },
-  { key: 'bing', label: 'Bing' },
   { key: 'wechat_mp', label: '微信公众号' },
 ]
 

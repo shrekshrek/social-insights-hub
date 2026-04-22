@@ -9,8 +9,6 @@ Planner LLM 会根据研究主题从 profile 的 planner_context 中按需挑选
 # 搜索控制
 MAX_ROUNDS = 4
 MAX_CANDIDATES_PER_ROUND = 15
-# Tavily 候选低于此数时，触发 Crawl4AI 全网补充搜索
-MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK = 5
 
 # 超时（秒）
 FETCH_HTML_TIMEOUT = 45  # HTML 抓取（Crawl4AI + httpx 渲染）

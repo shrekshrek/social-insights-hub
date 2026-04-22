@@ -1,4 +1,4 @@
-"""Search 节点：执行搜索，候选不足时降级到 Crawl4AI
+"""Search 节点：执行定向域名搜索
 
 支持两个 search provider（由 SEARCH_PROVIDER 环境变量控制）：
 - tavily（默认）：snippet 模式，fetcher 节点负责抓取全文
@@ -6,14 +6,20 @@
 
 执行流程：
 1. 按 provider 对每个关键词做定向域名搜索
-2. 若候选总量低于阈值，追加 Crawl4AI 全网搜索（Baidu/Bing）作为补充
+2. 候选池按域名限流（_MAX_CANDIDATES_PER_DOMAIN），防止单域霸占
+
+设计约定（2026-04 清理）：
+- 不做**搜索引擎结果页通用爬取**（老版本曾用 crawl4ai 爬 baidu.com/s 和 bing.com/search
+  作为兜底，实测都已被反爬降级为导航噪声，产出几乎 0，白耗配额）
+- 若将来需要补量，应该走**站点独立适配**的路子——针对具体内容源（麦肯锡 insights、
+  statista 搜索、指定智库等）各写一个 adapter，参考 news_media 的
+  baidu_crawler / sogou_crawler / wechat_mp_crawler 模式，而不是再套通用搜索引擎
 """
 
 import logging
 from urllib.parse import urlparse
 
 from src.config import get_settings
-from src.research_agent.config import MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK
 from src.research_agent.nodes.filter import _extract_year
 from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
@@ -72,7 +78,8 @@ def search_node(state: ResearchState) -> dict:
 
     # planner 已强制每个关键词含报告类修饰词，无需再追加变体
     provider = settings.SEARCH_PROVIDER.lower()
-    all_candidates, seen_urls = _run_search(provider, keywords, all_domains)
+    # 内部 dedup 在各 provider 内完成，这里不再需要 seen_urls
+    all_candidates, _ = _run_search(provider, keywords, all_domains)
 
     # 候选池域名限流：单域名最多 _MAX_CANDIDATES_PER_DOMAIN 条
     # 防止 assets.kpmg.com 等高产域名霸占候选池，挤占其他来源的曝光机会
@@ -91,27 +98,6 @@ def search_node(state: ResearchState) -> dict:
         len(keywords),
         len(all_candidates),
     )
-
-    # 候选不足时，降级到 Crawl4AI 全网搜索补充
-    if len(all_candidates) < MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK:
-        logger.info(
-            "候选数 %d < %d，启动 Crawl4AI 补充搜索",
-            len(all_candidates),
-            MIN_CANDIDATES_BEFORE_CRAWL4AI_FALLBACK,
-        )
-        from src.research_agent.tools.crawl4ai_search import crawl4ai_search
-
-        for kw in keywords[:3]:
-            extra = crawl4ai_search(kw, max_results=15)
-            for r in extra:
-                if r["url"] not in seen_urls:
-                    seen_urls.add(r["url"])
-                    all_candidates.append(r)
-
-        logger.info(
-            "search 节点 [Crawl4AI 补充]: 总计 %d 条候选",
-            len(all_candidates),
-        )
 
     return {"candidates": all_candidates}
 

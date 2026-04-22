@@ -48,21 +48,24 @@ KB 模块已从策略产出流程中移除（模块本身保留，作为独立�
 ┌──────────────────────────────────────────────┐
 │                策略产出生成                      │
 ├────────────┬────────────┬────────────────────┤
-│  消费者声音   │  媒体报道    │  专业报告/行业研究   │
-│  (UGC 层)   │  (事实层)   │  (分析层)           │
+│  消费者声音   │  媒体报道    │  专业内容 / Agent   │
+│  (UGC 层)   │  (事实层)   │  (分析 + 创意层)     │
 ├────────────┼────────────┼────────────────────┤
 │social_media │ news_media │ research_agent     │
 │ 爬虫采集     │ 搜索引擎    │ Tavily 定向搜索     │
 │ probe→collect│ probe→collect│ 自动循环，无探测    │
 │→ SocialSlice│→ NewsSlice │→ 结构化研究报告      │
 └────────────┴────────────┴────────────────────┘
-  抖音/微博       百度/搜狗     四大/麦肯锡
-  小红书等        Bing/微信     社科院等
+  抖音/微博       百度/搜狗     industry: 四大/麦肯锡/政府智库
+  小红书等        微信公众号    creative: 数英/TOPYS/广告门/SocialBeta
 ```
 
 - **social_media**：消费者怎么说（UGC）— probe → collect → SocialSlice
 - **news_media**：媒体怎么报（新闻）— probe → collect → NewsSlice
-- **research_agent**：专家怎么分析（报告）— 全自动循环 → 结构化研究报告（无探测/审核阶段）
+- **research_agent**：两类专业内容，同一张 LangGraph 图、参数化 profile 驱动：
+  - **industry**（行业研究）：专家/机构怎么分析 — 四大/麦肯锡/政府智库 → 注入 `{research_findings}`
+  - **creative**（创意研究）：同类品牌做过什么 — 数英/TOPYS/广告门/SocialBeta → 注入 `{creative_references}`（campaign_strategy 路径专属）
+  - 全自动循环，无探测/审核阶段
 
 ### 目录结构
 
@@ -72,27 +75,30 @@ src/
 ├── social_media/        → 消费者数据（UGC 层），不变
 ├── news_media/          → 新闻数据（事实层），不变
 ├── knowledge_base/      → 独立模块：私有文档管理 + 基础统计预存（不参与策略产出）
-├── research_agent/      → 新模块：agentic 搜索分析引擎（LangGraph）
+├── research_agent/      → agentic 搜索分析引擎（LangGraph）
 │   ├── graph.py         → LangGraph 状态图定义（sync invoke）
 │   ├── nodes/           → 各节点实现
-│   │   ├── planner.py       → 搜索策略规划
-│   │   ├── searcher.py      → 多源搜索执行
+│   │   ├── planner.py       → 搜索策略规划（注入 profile.planner_context）
+│   │   ├── searcher.py      → 定向域名搜索 + 域名限流（仅走 Tavily/Exa）
 │   │   ├── filter.py        → 候选结果批量筛选
-│   │   ├── fetcher.py       → 全文获取（PDF/HTML），含超时控制
-│   │   ├── analyzer.py      → 逐篇深度阅读（智能截取）
+│   │   ├── fetcher.py       → 全文获取（内联 httpx PDF + Crawl4AI HTML，含 30s 超时）
+│   │   ├── analyzer.py      → 逐篇深度阅读（profile 专属 analyzer_prompt）
 │   │   ├── evaluator.py     → 覆盖度评估 + 缺口发现
-│   │   └── synthesizer.py   → 跨报告综合分析
-│   ├── tools/           → 搜索工具集（全部同步实现）
-│   │   ├── web_search.py    → Tavily 包装（include_domains 定向搜索）
-│   │   ├── web_fetch.py     → Crawl4AI HTML 抓取
-│   │   └── pdf_fetch.py     → httpx PDF 下载 + pdfplumber 解析
-│   ├── models.py        → ResearchTask 模型（独立表）
+│   │   └── synthesizer.py   → 跨报告综合分析（profile 专属 synthesizer_prompt）
+│   ├── profiles/        → 研究类型参数化（同一张图，两套 prompt/域名/规则）
+│   │   ├── base.py          → ResearchProfile dataclass
+│   │   ├── industry/        → 行业研究：四大/麦肯锡/智库/政府门户
+│   │   └── creative/        → 创意研究：数英/TOPYS/广告门/SocialBeta/梅花网
+│   ├── tools/           → 搜索 API 封装（同步）
+│   │   ├── web_search.py    → Tavily 包装（include_domains 定向搜索，主力）
+│   │   └── exa_search.py    → Exa 包装（备选，SEARCH_PROVIDER=exa 时启用）
+│   ├── models.py        → ResearchTask 模型（独立表，含 profile_name 字段）
 │   ├── state.py         → TypedDict 状态定义（含 reducer 注解）
 │   ├── schemas.py       → Pydantic 模型（继承 CustomBaseModel）
-│   ├── service.py       → 对外接口
+│   ├── service.py       → 对外接口（create_research_task / create_strategy_research）
 │   ├── router.py        → API 端点
 │   ├── tasks.py         → Celery 任务
-│   └── config.py        → 源配置、搜索参数
+│   └── config.py        → 硬编码搜索参数（MAX_ROUNDS / FETCH_TIMEOUT 等）
 ├── llm/                 → 共享 LLM 实例
 └── jobs/                → 共享 AnalysisJob（research_agent 每任务创建一个）
 ```
@@ -120,7 +126,7 @@ src/
 
 ### ① brief 阶段：渠道分发判断
 
-`brief_parser_chain` 的 `channel_plan` 输出三种渠道类型：`social_media` / `news_media` / `research_agent`。
+`brief_parser_chain` 的 `channel_plan` 输出**四种**渠道类型：`social_media` / `news_media` / `industry_research` / `creative_research`。后两种都由 Research Agent 承接，通过 `profile_name` 区分（industry / creative），走同一张 LangGraph 图。
 
 ```json
 {
@@ -140,23 +146,30 @@ src/
       "channel_brief": "搜索小米汽车及竞品的新闻报道与行业资讯..."
     },
     {
-      "type": "research_agent",
+      "type": "industry_research",
       "available": true,
       "solvable": ["行业市场格局与份额数据", "专业机构的竞争分析与趋势预测"],
       "unsolvable": ["实时消费者声音"],
       "channel_brief": "聚焦新能源汽车行业竞争格局、价格带分析与市场趋势..."
+    },
+    {
+      "type": "creative_research",
+      "available": true,
+      "solvable": ["同品类竞品 Campaign 案例", "获奖创意参考"],
+      "unsolvable": ["市场规模数据"],
+      "channel_brief": "搜索新能源汽车品类近 2 年的品牌 Campaign 与创意案例..."
     }
   ]
 }
 ```
 
-AI 根据 brief 内容按需分配渠道——简单口碑分析可能只推荐 social_media；行业格局分析推荐全部三个。不强制全开。
+AI 根据 brief 内容按需分配渠道——简单口碑分析可能只推荐 social_media；品牌策略生成会同时用到全部四种。不强制全开。注意 `creative_research` 只在 `output_type ∈ {campaign_strategy, full_strategy}` 路径下才有意义（注入给 Brand Role / Big Idea 的 `{creative_references}`）。
 
-### ② 研究设计：data_plan（不含 research_agent）
+### ② 研究设计：data_plan（不含 research 两类）
 
-`research_design_chain` 只负责社媒 / 新闻渠道的采集设计（`data_plan`、`slice_blueprint`、`output_type`），**不再输出 `research_agent` 字段**。
+`research_design_chain` 只负责社媒 / 新闻渠道的采集设计（`data_plan`、`slice_blueprint`、`output_type`），**不输出 industry_research / creative_research 字段**。
 
-行业研究渠道由 `brief_parser_chain` 的 `channel_plan` 决定（存在 `type: "research_agent"` 条目即触发），`research_design_chain` 无需重复规划。
+Research Agent 两类任务由 `brief_parser_chain` 的 `channel_plan` 直接触发（`type == industry_research` 创建 profile="industry" 的 ResearchTask；`type == creative_research` 创建 profile="creative" 的 ResearchTask），`research_design_chain` 无需重复规划。
 
 ```json
 {
@@ -174,40 +187,46 @@ AI 根据 brief 内容按需分配渠道——简单口碑分析可能只推荐 
 }
 ```
 
-- `primary_sources` 只含 `social_media` / `news_media`（决定产出路径），research_agent 不影响路径选择
-- 若 brief_parser 未推荐 research_agent，confirm-research 不创建 ResearchTask
+- `primary_sources` 只含 `social_media` / `news_media`（决定产出路径），Research Agent 两类任务都不影响路径选择
+- 若 brief_parser 未推荐 industry_research / creative_research，confirm-research 不创建对应 ResearchTask
 
 ### ③ confirm-research：按 plan 条件创建
 
 ```
 confirm-research:
-  有 social_media 维度 → 创建 SocialMonitor + probe 任务（等爬虫）
-  有 news_media 维度   → 创建 NewsMonitor + probe 任务（Celery 搜索）
-  channel_plan 含 research_agent → 创建 ResearchTask（Celery 立即启动 LangGraph）
+  有 social_media 维度        → 创建 SocialMonitor + probe 任务（等爬虫）
+  有 news_media 维度          → 创建 NewsMonitor + probe 任务（Celery 搜索）
+  channel_plan 含 industry_research
+                              → 创建 ResearchTask(profile="industry")（Celery 启 LangGraph）
+  channel_plan 含 creative_research 且 output_type ∈ {campaign_strategy, full_strategy}
+                              → 创建 ResearchTask(profile="creative")（Celery 启 LangGraph）
 ```
 
-Research Agent **不是每次都创建**——只有 research_design 中包含 `research_agent` 字段时才创建。
+Research Agent **按需创建**——两类任务各自独立触发，可能同时存在 industry + creative 两个 ResearchTask。
 
 Research Agent **没有探测/审核阶段**——内部 evaluate 节点自动循环，全自动完成。因此它通常比社媒/新闻更快完成。
 
 ### ④ 状态流转
 
 ```
-                    social_media:   probing → collecting → done
-planned → confirm → news_media:     probing → collecting → done    → 全部 done → ready → 产出
-                    research_agent: running → done（无 probe）
+                    social_media:    probing → collecting → done
+planned → confirm → news_media:      probing → collecting → done    → 全部 done → ready → 产出
+                    research(×N):    running → done（无 probe，N=0/1/2 取决于 plan）
 ```
 
-`collection-status` 端点同时检查三个渠道的完成状态。Research Agent 无 probe 阶段，但若未完成也不阻塞——产出生成时无结果则优雅降级。
+`collection-status` 端点同时检查全部渠道的完成状态。Research Agent 无 probe 阶段；若未完成也不阻塞——产出生成时无结果则优雅降级（`{research_findings}` / `{creative_references}` 注入空字符串）。
 
 ### ⑤ 产出生成（已实现）
 
 ```
-primary: social_media slices / news_media slices（驱动产出路径选择）
-research: research_agent → {research_findings}（第三视角，与 primary 分析权重平等）
+primary:  social_media slices / news_media slices（驱动产出路径选择）
+research: ResearchTask(industry) → {research_findings}        （第三视角，所有 stage 都注入）
+creative: ResearchTask(creative) → {creative_references}      （仅 campaign_strategy / full_strategy 的 Brand Role / Big Idea 注入）
 ```
 
-`_retrieve_research_findings` 加载策略关联的最新已完成 ResearchTask 的 result_data，per-stage formatter 按 token 预算注入 `{research_findings}`：
+`_retrieve_research_findings` 加载策略关联、最新已完成、`profile_name="industry"` 的 ResearchTask 的 result_data；`_retrieve_creative_research_findings` 同理读 `profile_name="creative"` 的任务。两组 per-stage formatter 各自按 token 预算注入对应占位符：
+
+**industry（`{research_findings}`，所有 stage 都注入）**
 
 | 层级 | Stage | Token 预算 | 注入内容 |
 |------|-------|-----------|---------|
@@ -215,8 +234,15 @@ research: research_agent → {research_findings}（第三视角，与 primary �
 | 第 2 层 | Brand Role / Landscape | ~800 | synthesis + 高置信度 data_points |
 | 第 3 层 | Big Idea / Strategic Brief | ~400 | 压缩后的关键要点 |
 
+**creative（`{creative_references}`，仅 campaign_strategy / full_strategy 路径的 Brand Role / Big Idea 注入）**
+
+| 层级 | Stage | Token 预算 | 注入内容 |
+|------|-------|-----------|---------|
+| 第 2 层 | Brand Role | ~400 | 排除法差异化：竞品做过什么、白空间在哪 |
+| 第 3 层 | Big Idea | ~800 | 完整创意版图 + 竞品 Campaign 清单 + 白空间 |
+
 - 无研究结果时所有 formatter 返回空字符串，chain 正常运行
-- `data_provenance` 记录实际数据来源：`{primary: {channel, slice_counts}, research: {research_agent: bool}}`
+- `data_provenance` 记录实际数据来源：`{primary: {channel, slice_counts}, research: {industry_research: bool, creative_research: bool}}`
 
 ## LangGraph 状态图
 
@@ -396,12 +422,17 @@ class ResearchState(TypedDict):
 
 | 工具 | 角色 | 实现方式 | 依赖 |
 |------|------|---------|------|
-| **Tavily** | 搜索层：`include_domains` 定向搜索（仅权威域名） | 同步调用 | `tavily-python`，API key |
-| **Crawl4AI** | 全文获取：HTML 文章抓取 | 同步 HTTP 调用 Crawl4AI REST API | 现有 Docker 服务 |
-| **httpx** | 全文获取：PDF 下载 | 同步调用 | 现有依赖 |
+| **Tavily** | 搜索层主力：`include_domains` 定向搜索（仅 profile 规定的权威域名） | 同步调用 | `tavily-python`，API key |
+| **Exa** | 搜索层备选：`SEARCH_PROVIDER=exa` 时启用（详见"未来方向：迁移至 Exa"） | 同步调用 | `exa-py`，API key |
+| **Crawl4AI** | 全文获取：HTML 抓取（fetcher 节点内联调用） | 同步 HTTP 调用 Crawl4AI REST API | 现有 Docker 服务 |
+| **httpx** | 全文获取：PDF 下载（fetcher 节点内联调用） | 同步调用 | 现有依赖 |
 | **pdfplumber** | PDF 解析 | 同步 | 现有依赖（KB 模块已用） |
 
-不加 SerpAPI 百度引擎——Tavily 中文覆盖对专业报告场景够用，四大/麦肯锡官网中英双语。
+**关于 fallback 的立场（2026-04 清理）：**
+
+- **不引入通用搜索引擎结果页爬取作为兜底**——曾短期试过用 crawl4ai 爬 `baidu.com/s` 和 `bing.com/search` 补量，实测均已被反爬降级为"导航噪声"，产出几乎为 0 但照样消耗 crawl4ai 配额。代码已移除（2026-04 清理 `tools/crawl4ai_search.py` + searcher 的 fallback 分支）
+- **也不加 SerpAPI / Bing Search API**——Tavily 中文覆盖对专业报告场景够用，四大/麦肯锡官网中英双语；Bing Search API 将于 2026-08-11 停服，SerpAPI 价差 3-5×，均不作考虑
+- **若将来 Tavily 额度耗尽或稳定性下降，fallback 走 "站点独立适配" 路线**——针对 profile 里定向的具体内容源（麦肯锡 insights 页、艾瑞报告列表、数英案例库、SocialBeta 观察页等），各自写一个 crawl4ai adapter，参考 `news_media/tasks/news_search/` 的 baidu_crawler / sogou_crawler / wechat_mp_crawler 模式（每个站点独立 DOM 选择器 + 独立翻页逻辑）。详见下方"未来方向：双轨搜索（Tavily + 站点独立适配）"
 
 #### 未来方向：迁移至 Exa
 
@@ -427,17 +458,18 @@ class ResearchState(TypedDict):
 
 **迁移工作量**：低——Exa Python SDK 接口结构与 Tavily 相近，主要改动在 `searcher.py`；fetcher 节点可为 Exa 已含全文的结果增加快速路径（跳过 HTTP 抓取）。
 
-⚠️ **Bing Search API 将于 2026-08-11 停服**，SerpAPI 价格 3–5 倍于 Exa，均不作考虑。
+⚠️ **Bing Search API 将于 2026-08-11 停服**（指 Microsoft 的付费 Bing Search API 产品，和新闻模块里爬 `bing.com/news/search` 结果页是两回事）；SerpAPI 价格 3–5 倍于 Exa。两者均不作考虑。
 
-#### 未来方向：双轨搜索（Tavily/Exa + 列表页直抓）
+#### 未来方向：双轨搜索（Tavily/Exa + 站点独立适配）
 
-> **当前不实施**，记录在此供后续参考。
+> **当前不实施**，记录在此供后续参考。**"搜索引擎结果页通用爬取"已被明确排除**（见"设计决策 1"的 fallback 立场）——若真需要补量，走这里的"站点独立适配"路线。
 
-**问题背景**：Tavily 是语义搜索引擎，只返回关键词匹配的结果，可能漏掉"已知某域名存在但与关键词表述不符"的报告。对于有固定报告列表页的域名，直接爬取列表能获得完整覆盖。
+**问题背景**：Tavily 是语义搜索引擎，只返回关键词匹配的结果，可能漏掉"已知某域名存在但与关键词表述不符"的报告。对于有固定报告列表页 / 案例索引页的专业内容源，直接爬取列表能获得完整覆盖。这条路比通用搜索引擎爬取更可靠——列表页 DOM 稳定、反爬弱、信号密度高。
 
 **触发条件（满足其一时值得实施）**：
-1. Tavily 按查询计费积累后成本显著
-2. 多轮搜索后信息缺口依然大量存在，且明确是"已知域名有相关报告但 Tavily 未检索到"——即卡点是搜索工具，而非报告本身稀缺
+1. **Tavily 月度额度耗尽**成为主路 fallback 的刚需（主力搜索不可用时不能啥都没有）
+2. Tavily 按查询计费积累后成本显著
+3. 多轮搜索后信息缺口依然大量存在，且明确是"已知域名有相关报告但 Tavily 未检索到"——即卡点是搜索工具，而非报告本身稀缺
 
 **设计方案**：
 
@@ -450,6 +482,8 @@ searcher_node（双轨并行）
 
 **已确认有独立报告列表页/子域名的来源**（track_b 候选）：
 
+**行业研究（industry profile）**
+
 | 来源 | 列表页入口 | 说明 |
 |------|-----------|------|
 | KPMG | `assets.kpmg.com` | PDF 资产库（已加入搜索域名列表） |
@@ -459,13 +493,25 @@ searcher_node（双轨并行）
 | 信通院 | `caict.ac.cn/kxyj/qwfb/` | 研究报告发布页 |
 | CNNIC | `cnnic.net.cn/IDR/ReportDownloads/` | 报告下载页 |
 
-其余域名（McKinsey、Deloitte、PwC、EY、Roland Berger 等）报告分散在路径下，无独立列表页，不适合 track_b。
+行业研究其余域名（McKinsey、Deloitte、PwC、EY、Roland Berger 等）报告分散在路径下，无独立列表页，不适合 track_b。
 
-**为何现在不做**：当前搜索噪音问题（服务页混入、单域名垄断）已通过 filter 代码层修复；主要信息缺口（如买方视角研究）属于报告本身稀缺，多搜一轮也找不到，不是搜索工具的问题。
+**创意研究（creative profile）**
+
+| 来源 | 列表页入口 | 说明 |
+|------|-----------|------|
+| 数英 | `digitaling.com/projects/` | 案例索引页（分类筛选） |
+| TOPYS | `topys.cn/article/` / `topys.cn/case/` | 品牌创意与案例分类 |
+| 广告门 | `adquan.com/post-cat-id-?.html` | 案例分类页 |
+| SocialBeta | `socialbeta.com/t/case-?` | 案例专题 |
+| 梅花网 | `meihua.info/works` | 创意作品库 |
+
+**为何现在不做**：当前 Tavily 额度充足且覆盖面够用；信噪比问题（服务页混入、单域名垄断）已通过 filter 代码层修复；主要信息缺口（如买方视角研究）属于报告本身稀缺，换工具也解决不了。**Tavily 额度若耗尽则必做**——届时按上表站点独立写 adapter（参考 `news_media/tasks/news_search/` 的现成模式）。
 
 ### 2. 定向搜索目标源（Tavily `include_domains`）
 
-完整列表配置在 `src/config.py` 的 `RESEARCH_AGENT_TARGET_DOMAINS`，运行时与 planner LLM 推荐域名合并后传给 Tavily `include_domains`。
+两套 profile 各有独立的兜底域名列表，定义在 `research_agent/profiles/<name>/__init__.py` 的 `SEARCH_FALLBACK_DOMAINS` 常量里；运行时与 planner LLM 针对本次主题推荐的域名合并后传给 Tavily `include_domains`。
+
+**industry profile（行业研究）**
 
 | 分类 | 代表域名 | 内容形式 | 说明 |
 |------|---------|----------|------|
@@ -476,6 +522,12 @@ searcher_node（双轨并行）
 | 中国行业研究 | iresearch.cn, questmobile.com.cn, aliresearch.com, mob.com, research.hktdc.com, caict.ac.cn, cesi.cn | PDF + HTML | 有完整免费报告（艾瑞/QuestMobile 注册可下载） |
 | 消费者/买方研究 | edelman.com, datareportal.com, pewresearch.org, ourworldindata.org | PDF | 完全免费，可直接下载 |
 | 垂直媒体/深度报道 | 36kr.com, latepost.com, caam.org.cn, ccfa.org.cn | HTML | 深度分析内容，免费 |
+
+**creative profile（创意研究）**
+
+| 分类 | 代表域名 | 内容形式 | 说明 |
+|------|---------|----------|------|
+| 创意/案例库 | digitaling.com（数英）, topys.cn（TOPYS）, adquan.com（广告门）, socialbeta.com（SocialBeta）, meihua.info（梅花网） | HTML | 竞品 Campaign / 获奖案例 / 品牌叙事素材，免费可爬 |
 
 > ⚠️ 付费墙域名不纳入列表（euromonitor、frost、grandviewresearch、gartner、forrester、analysys、askci 等订阅制平台报告正文无法下载）。如需其数据，优先通过 `cninfo.com.cn` 招股书间接获取。
 
@@ -522,7 +574,7 @@ Research Agent 与 news_media **互不冲突**，搜索不同层次的信息：
 
 | | news_media | research_agent |
 |---|---|---|
-| 搜什么 | 新闻报道（百度/搜狗/Bing/微信） | 专业报告（Tavily 定向四大/智库） |
+| 搜什么 | 新闻报道（百度/搜狗，可选微信公众号） | 专业报告（Tavily 定向四大/智库） |
 | 内容性质 | **事实层**：正在发生什么（事件、舆论、声量） | **分析层**：深层分析是什么（趋势、框架、数据） |
 | 分析方式 | tagging（实体/情感/tier）→ 切片 insight | 逐篇深度阅读 → 跨报告综合 |
 | 人工介入 | probe_review → approve/refine | 全自动循环（内部 evaluate） |
@@ -619,38 +671,61 @@ Research Agent 与 news_media **互不冲突**，搜索不同层次的信息：
   Big Idea 层 → format_research_for_big_idea(result_data) → 压缩关键要点（~400 tokens）
 ```
 
-### 场景 B：独立研究模式
+### 场景 B：独立研究模式（industry）
 
 ```
 用户创建：
   POST /research/tasks
   {
-    "query": "2025 中国新能源汽车行业格局",
-    "research_questions": ["头部玩家市场份额？", "技术路线分化趋势？"]
+    "title": "2025 中国新能源汽车行业格局",
+    "analysis_goal": "摸清头部玩家份额 + 价格带竞争 + 技术路线分化趋势",
+    "research_questions": ["头部玩家市场份额？", "技术路线分化趋势？"],
+    "profile_name": "industry"   // 可省略，默认 industry
   }
 
 Agent 自主执行（同上流程）→ 用户查看研究报告 + 引用源列表 + findings
+```
+
+### 场景 C：独立研究模式（creative）
+
+```
+用户创建：
+  POST /research/tasks
+  {
+    "title": "新能源汽车品牌 Campaign 扫描 2024",
+    "analysis_goal": "梳理同品类竞品近两年的主要 Campaign、创意切入点、获奖作品",
+    "research_questions": ["头部品牌的情感锚点？", "哪些创意手法获奖？"],
+    "profile_name": "creative"
+  }
+
+Agent 走 creative profile 的 planner/analyzer/synthesizer，在数英 / TOPYS / 广告门 /
+SocialBeta / 梅花网等源里搜案例 → 产出创意版图（而非行业数据结构），作为
+Brand Role / Big Idea 的 {creative_references} 输入
 ```
 
 ## 数据模型
 
 ### research_tasks 表
 
+以代码为准，见 [`backend/src/research_agent/models.py`](../backend/src/research_agent/models.py)。关键字段：
+
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| id | UUID | PK |
-| query | Text | 研究主题 |
-| research_questions | JSONB | 研究问题列表 |
-| strategy_id | UUID, FK, nullable | 关联策略（策略模式下非空） |
-| user_id | UUID, FK | 创建者 |
+| id | Integer | PK |
+| title | String(200) | 研究标题，可选，planner 自动生成 |
+| analysis_goal | Text | 核心研究意图（原 query） |
+| research_questions | JSON | 研究问题列表 |
+| search_config | JSON | research_angles / focus_domains / context 等 |
+| profile_name | String(32) | **`industry` / `creative`**，决定用哪套 planner_context / analyzer_prompt / 兜底域名 |
+| strategy_id | Integer, FK nullable | 关联策略（策略模式下非空；ondelete CASCADE） |
+| user_id | Integer, FK | 创建者 |
+| job_id | Integer, FK nullable | 关联 AnalysisJob（token/cost 追踪） |
 | status | String(20) | pending / running / completed / failed |
-| error_message | Text, nullable | 失败原因 |
-| search_config | JSONB | research_angles, focus_domains 等 |
-| result_data | JSONB | synthesis + findings + sources + evaluation |
-| stats | JSONB | token_usage, rounds, documents_analyzed 等统计 |
-| job_id | UUID, FK, nullable | 关联 AnalysisJob（token/cost 追踪） |
-| created_at | DateTime | 创建时间 |
-| updated_at | DateTime | 更新时间 |
+| error_message | Text nullable | 失败原因 |
+| result_data | JSON | synthesis + findings + sources |
+| stats | JSON | rounds / documents_analyzed / candidates_total 等 |
+| progress | JSON | 执行进度日志，每个节点完成后追加一条 |
+| created_at / updated_at | DateTime | — |
 
 语义字段遵循项目规范：`user_id`、`status`、`error_message`、`result_data`、`stats`。
 
@@ -676,28 +751,25 @@ task = await db.scalar(
 
 现有依赖复用：`langchain`、`httpx`、`pdfplumber`、`crawl4ai`（Docker 服务）。
 
-## 配置项（新增）
+## 配置项
 
 ```python
-# config.py 新增（仅 2 个环境变量，其余硬编码在 research_agent/config.py）
-TAVILY_API_KEY: str                          # Tavily 搜索 API key
+# src/config.py（环境变量 / Settings）
+TAVILY_API_KEY: str                          # Tavily 搜索 API key（必需）
 TAVILY_API_KEY_2: str | None = None          # 备用 key，主 key 额度耗尽自动切换
-RESEARCH_AGENT_TARGET_DOMAINS: list[str] = [  # 定向搜索域名
-    "mckinsey.com.cn", "mckinsey.com",
-    "deloitte.com",
-    "pwccn.com",
-    "ey.com",
-    "kpmg.com",
-    "cssn.cn",
-    "drc.gov.cn",
-]
+EXA_API_KEY: str | None = None               # Exa 备选搜索
+SEARCH_PROVIDER: str = "tavily"              # "tavily" | "exa"，切换搜索后端
 
 # research_agent/config.py 硬编码常量（不暴露到 Settings）
-MAX_ROUNDS = 3
-MAX_CANDIDATES_PER_ROUND = 8
-FETCH_TIMEOUT = 30   # 秒
-LLM_TIMEOUT = 60     # 秒
-MAX_CONCURRENT_TASKS = 3
+MAX_ROUNDS = 4
+MAX_CANDIDATES_PER_ROUND = 15
+FETCH_HTML_TIMEOUT = 45     # 秒，HTML 抓取（Crawl4AI + httpx 渲染）
+FETCH_PDF_TIMEOUT = 120     # 秒，PDF 下载（5-20MB 常见）
+MAX_CONCURRENT_TASKS = 10   # analyze 节点并发度
+
+# 各 profile 的兜底域名：research_agent/profiles/<name>/__init__.py 的 SEARCH_FALLBACK_DOMAINS
+# industry → 四大 / 麦肯锡 / 政府智库 / 国际机构 等
+# creative → 数英 / TOPYS / 广告门 / SocialBeta / 梅花网
 ```
 
 ## 对现有模块的改动

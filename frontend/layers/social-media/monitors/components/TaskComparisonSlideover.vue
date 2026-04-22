@@ -97,7 +97,7 @@ const formatPercent = (val: number) => {
     <template #title>
       <div class="flex items-center gap-2">
         <span class="text-gray-900 dark:text-white font-medium">任务数据对比分析</span>
-        <UBadge color="neutral" variant="subtle" size="xs">
+        <UBadge color="neutral" variant="subtle" size="sm">
           {{ props.taskIds.length }} 个任务
         </UBadge>
       </div>
@@ -200,7 +200,7 @@ const formatPercent = (val: number) => {
         <section>
           <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             评论互补性分析
-            <UBadge size="xs" color="primary" variant="subtle">
+            <UBadge size="sm" color="primary" variant="subtle">
               针对重合原文
             </UBadge>
           </h4>

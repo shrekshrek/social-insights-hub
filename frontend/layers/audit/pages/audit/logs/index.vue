@@ -164,7 +164,7 @@ const columns = computed<TableColumn<AuditLog>[]>(() => {
       cell: ({ row }) => h(Badge, {
         color: ACTION_COLORS[row.original.action] || 'neutral',
         variant: 'subtle',
-        size: 'xs',
+        size: 'sm',
       }, () => ACTION_LABELS[row.original.action] || row.original.action),
     },
     {
@@ -191,7 +191,7 @@ const columns = computed<TableColumn<AuditLog>[]>(() => {
         return h(Badge, {
           color: isError ? 'error' : 'success',
           variant: 'outline',
-          size: 'xs',
+          size: 'sm',
         }, () => String(code))
       },
     },

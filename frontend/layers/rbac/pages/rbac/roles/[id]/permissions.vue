@@ -48,7 +48,7 @@
           <h2 class="text-lg font-semibold">角色信息</h2>
           <UBadge
             :color="isCoreRole(roleData?.name) ? 'warning' : 'neutral'"
-            variant="soft"
+            variant="subtle"
           >
             {{ isCoreRole(roleData?.name) ? '核心角色' : '自定义角色' }}
           </UBadge>
@@ -174,8 +174,8 @@
                   </div>
                   <UBadge
                     :color="['user', 'role', 'permission'].includes(permission.target) ? 'warning' : 'primary'"
-                    variant="soft"
-                    size="xs"
+                    variant="subtle"
+                    size="sm"
                   >
                     {{ ['user', 'role', 'permission'].includes(permission.target) ? 'RBAC核心' : '业务权限' }}
                   </UBadge>

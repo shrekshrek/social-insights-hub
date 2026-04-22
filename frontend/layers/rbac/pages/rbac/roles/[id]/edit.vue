@@ -57,7 +57,7 @@
             <UBadge
               v-if="role"
               :color="isCoreRole(role?.name) ? 'warning' : 'neutral'"
-              variant="soft"
+              variant="subtle"
             >
               {{ isCoreRole(role?.name) ? '核心角色' : '自定义角色' }}
             </UBadge>

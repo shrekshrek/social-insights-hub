@@ -248,13 +248,13 @@ const columns: TableColumn<Role>[] = [
     cell: ({ row }) => {
       const strategy = row.original.permission_strategy;
       if (strategy === 'all') {
-        return h(UBadge as Component, { color: "warning", variant: "soft" }, () => "全部权限");
+        return h(UBadge as Component, { color: "warning", variant: "subtle" }, () => "全部权限");
       }
       if (strategy === 'admin') {
-        return h(UBadge as Component, { color: "warning", variant: "soft" }, () => "管理员权限");
+        return h(UBadge as Component, { color: "warning", variant: "subtle" }, () => "管理员权限");
       }
       const permissions = row.getValue("permissions") as Permission[] || [];
-      return h(UBadge as Component, { color: "primary", variant: "soft" }, () => `${permissions.length} 个`);
+      return h(UBadge as Component, { color: "primary", variant: "subtle" }, () => `${permissions.length} 个`);
     },
   },
   {

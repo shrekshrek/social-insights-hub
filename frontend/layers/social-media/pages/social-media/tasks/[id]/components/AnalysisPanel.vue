@@ -683,13 +683,13 @@ defineExpose({
 
       <!-- 右侧：阈值与统计显示 -->
       <div v-if="preview" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-        <UBadge color="neutral" variant="subtle" size="xs" title="广告分上限（≤）">
+        <UBadge color="neutral" variant="subtle" size="sm" title="广告分上限（≤）">
           广告≤{{ thresholds.spamMax }}
         </UBadge>
-        <UBadge color="info" variant="subtle" size="xs" title="价值分下限（≥）">
+        <UBadge color="info" variant="subtle" size="sm" title="价值分下限（≥）">
           价值≥{{ thresholds.valueMin }}
         </UBadge>
-        <UBadge color="success" variant="subtle" size="xs" title="相关分下限（≥）">
+        <UBadge color="success" variant="subtle" size="sm" title="相关分下限（≥）">
           相关≥{{ thresholds.relevanceMin }}
         </UBadge>
         <span class="text-primary-600 dark:text-primary-400 font-medium" title="符合阈值条件的原文数 / 已完成初筛的原文数">
@@ -711,7 +711,7 @@ defineExpose({
           <span class="text-sm font-medium">原文初筛任务</span>
           <UBadge
             :color="screeningTask.status === 'completed' ? 'success' : screeningTask.status === 'failed' ? 'error' : 'primary'"
-            size="xs"
+            size="sm"
           >
             {{ screeningTask.status === 'completed' ? '已完成' : screeningTask.status === 'failed' ? '失败' : '进行中' }}
           </UBadge>
@@ -741,7 +741,7 @@ defineExpose({
           <span class="text-sm font-medium">原文深度分析任务</span>
           <UBadge
             :color="deepPostsTask.status === 'completed' ? 'success' : deepPostsTask.status === 'failed' ? 'error' : 'success'"
-            size="xs"
+            size="sm"
           >
             {{ deepPostsTask.status === 'completed' ? '已完成' : deepPostsTask.status === 'failed' ? '失败' : '进行中' }}
           </UBadge>
@@ -771,7 +771,7 @@ defineExpose({
           <span class="text-sm font-medium">评论深度分析任务</span>
           <UBadge
             :color="deepCommentsTask.status === 'completed' ? 'success' : deepCommentsTask.status === 'failed' ? 'error' : 'warning'"
-            size="xs"
+            size="sm"
           >
             {{ deepCommentsTask.status === 'completed' ? '已完成' : deepCommentsTask.status === 'failed' ? '失败' : '进行中' }}
           </UBadge>
@@ -1047,7 +1047,7 @@ defineExpose({
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <h2 class="text-lg font-semibold">分析报告</h2>
-          <UBadge v-if="reportGeneratedAt" color="success" variant="subtle" size="xs">
+          <UBadge v-if="reportGeneratedAt" color="success" variant="subtle" size="sm">
             {{ reportGeneratedAt }} 生成
           </UBadge>
         </div>
@@ -1081,7 +1081,7 @@ defineExpose({
           <UBadge
             :color="entityNormalizationTask ? (entityNormalizationTask.status === 'completed' ? 'success' : entityNormalizationTask.status === 'failed' ? 'error' : 'primary') : 'neutral'"
             variant="solid"
-            size="xs"
+            size="sm"
           >
             {{ entityNormalizationTask ? (entityNormalizationTask.status === 'completed' ? '已完成' : entityNormalizationTask.status === 'failed' ? '失败' : '进行中') : '等待中' }}
           </UBadge>
@@ -1098,7 +1098,7 @@ defineExpose({
           <UBadge
             :color="opinionNormalizationTask ? (opinionNormalizationTask.status === 'completed' ? 'success' : opinionNormalizationTask.status === 'failed' ? 'error' : 'primary') : 'neutral'"
             variant="solid"
-            size="xs"
+            size="sm"
           >
             {{ opinionNormalizationTask ? (opinionNormalizationTask.status === 'completed' ? '已完成' : opinionNormalizationTask.status === 'failed' ? '失败' : '进行中') : '等待中' }}
           </UBadge>

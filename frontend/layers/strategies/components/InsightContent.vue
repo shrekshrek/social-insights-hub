@@ -17,7 +17,7 @@
               v-if="tension.confidence"
               :color="tension.confidence === 'high' ? 'success' : tension.confidence === 'medium' ? 'warning' : 'neutral'"
               variant="subtle"
-              size="xs"
+              size="sm"
               class="shrink-0"
             >
               {{ confidenceLabel(tension.confidence) }}

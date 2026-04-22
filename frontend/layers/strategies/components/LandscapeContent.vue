@@ -22,13 +22,13 @@
           <div class="flex items-center justify-between gap-1">
             <div class="flex items-center gap-1.5 min-w-0">
               <span class="font-medium text-sm text-gray-900 dark:text-white truncate">{{ player.name }}</span>
-              <UBadge :color="roleColor(player.role)" variant="subtle" size="xs" class="shrink-0">
+              <UBadge :color="roleColor(player.role)" variant="subtle" size="sm" class="shrink-0">
                 {{ roleLabel(player.role) }}
               </UBadge>
             </div>
             <div class="flex items-center gap-1.5 text-[11px] text-gray-500 shrink-0">
               <span>SoV {{ formatPct(player.media_sov_pct) }}</span>
-              <UBadge :color="sentimentColor(player.media_sentiment)" variant="subtle" size="xs">
+              <UBadge :color="sentimentColor(player.media_sentiment)" variant="subtle" size="sm">
                 {{ sentimentLabel(player.media_sentiment) }}
               </UBadge>
               <span>{{ player.source_count }} 源</span>
@@ -84,7 +84,7 @@
         >
           <div class="flex items-center justify-between gap-2">
             <p class="font-medium text-sm text-gray-900 dark:text-white">{{ battle.topic }}</p>
-            <UBadge v-if="battle.winner" color="warning" variant="subtle" size="xs">
+            <UBadge v-if="battle.winner" color="warning" variant="subtle" size="sm">
               胜方：{{ battle.winner }}
             </UBadge>
           </div>

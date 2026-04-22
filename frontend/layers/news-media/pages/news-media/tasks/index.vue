@@ -147,7 +147,7 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
       header: '阶段',
       meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
       cell: ({ row }) =>
-        h(Badge, { color: getPhaseColor(row.original.phase), size: 'xs', variant: 'subtle' }, () =>
+        h(Badge, { color: getPhaseColor(row.original.phase), size: 'sm', variant: 'subtle' }, () =>
           getPhaseText(row.original.phase),
         ),
     },
@@ -156,7 +156,7 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
       header: '状态',
       meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
       cell: ({ row }) =>
-        h(Badge, { color: getStatusColor(row.original.status), size: 'xs', variant: 'solid' }, () =>
+        h(Badge, { color: getStatusColor(row.original.status), size: 'sm', variant: 'solid' }, () =>
           getStatusText(row.original.status),
         ),
     },

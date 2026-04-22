@@ -190,7 +190,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       accessorKey: 'platform_name',
       header: '平台',
       meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
-      cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
+      cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'sm' }, () => row.original.platform_name || '-'),
     },
     {
       accessorKey: 'phase',
@@ -200,7 +200,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         const phase = row.original.phase
         const text = phase === 'probe' ? '探测' : phase === 'collect' ? '全量' : '-'
         const color = phase === 'probe' ? 'info' : phase === 'collect' ? 'warning' : 'neutral'
-        return h(Badge, { color, size: 'xs', variant: 'subtle' }, () => text)
+        return h(Badge, { color, size: 'sm', variant: 'subtle' }, () => text)
       },
     },
     {
@@ -211,7 +211,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         const collectBadge = h(Badge, {
           color: getStatusColor(row.original.status),
           variant: 'solid',
-          size: 'xs',
+          size: 'sm',
         }, () => getStatusText(row.original.status))
 
         const s = row.original.aggregation_status
@@ -220,7 +220,7 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
         const analysisBadge = h(Badge, {
           color: getAnalysisColor(s),
           variant: 'subtle',
-          size: 'xs',
+          size: 'sm',
         }, () => getAnalysisText(s))
 
         return h('div', { class: 'flex flex-wrap items-center gap-1' }, [collectBadge, analysisBadge])

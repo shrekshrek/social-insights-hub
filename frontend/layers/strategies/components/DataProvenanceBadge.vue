@@ -1,7 +1,7 @@
 <template>
   <div v-if="provenance" class="flex items-center gap-1.5 flex-wrap text-xs">
     <!-- 主数据源：显示渠道 + 切片数 -->
-    <UBadge :color="primaryColor" variant="subtle" size="xs">
+    <UBadge :color="primaryColor" variant="subtle" size="sm">
       <UIcon :name="primaryIcon" class="size-3 mr-0.5" />
       {{ primaryLabel }}
     </UBadge>
@@ -9,8 +9,8 @@
     <UBadge
       v-if="provenance.research?.industry_research"
       color="neutral"
-      variant="soft"
-      size="xs"
+      variant="subtle"
+      size="sm"
     >
       <UIcon name="i-heroicons-building-library" class="size-3 mr-0.5" />
       行业研究

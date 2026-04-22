@@ -21,7 +21,7 @@
               <UBadge
                 v-if="strategy"
                 :color="statusInfo.color"
-                variant="soft"
+                variant="subtle"
                 size="sm"
               >
                 {{ statusInfo.label }}
@@ -39,7 +39,7 @@
                   v-for="(pid, i) in strategy.participant_ids"
                   :key="pid"
                   color="neutral"
-                  variant="soft"
+                  variant="subtle"
                   size="sm"
                 >
                   {{ strategy.participant_usernames?.[i] || pid }}
@@ -274,7 +274,7 @@
           <div class="flex items-center gap-2">
             <span class="font-bold text-primary-600">②</span>
             <h2 class="text-lg font-semibold">探测验证</h2>
-            <UBadge v-if="strategy.probe_round > 0" variant="soft" size="xs" color="neutral">
+            <UBadge v-if="strategy.probe_round > 0" variant="subtle" size="sm" color="neutral">
               第 {{ strategy.probe_round + 1 }} 轮
             </UBadge>
           </div>
@@ -362,7 +362,7 @@
           <span class="font-bold text-primary-600">④</span>
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">产出生成</h2>
           <UBadge
-            variant="soft" size="xs"
+            variant="subtle" size="sm"
             :color="isBrandStrategyPath ? 'primary' : isFullStrategyPath ? 'success' : 'warning'"
           >
             {{ isBrandStrategyPath ? '品牌策略路径' : isFullStrategyPath ? '全渠道综合策略路径' : '市场分析报告路径' }}

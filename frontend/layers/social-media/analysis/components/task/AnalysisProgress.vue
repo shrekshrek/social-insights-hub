@@ -65,7 +65,7 @@
           <UBadge
             v-if="estimatedTotalCost"
             color="gray"
-            size="xs"
+            size="sm"
             variant="subtle"
           >
             预计总成本: {{ formatCost(estimatedTotalCost) }}

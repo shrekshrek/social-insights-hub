@@ -50,7 +50,7 @@
                 v-for="role in user.roles"
                 :key="role"
                 :color="getRoleColor(role)"
-                variant="soft"
+                variant="subtle"
                 size="sm"
               >
                 {{ getRoleLabel(role) }}
@@ -169,7 +169,7 @@
                     </p>
                     <UBadge
                       :color="isCoreRole(role.name) ? 'warning' : 'neutral'"
-                      variant="soft"
+                      variant="subtle"
                       size="sm"
                     >
                       {{ isCoreRole(role.name) ? '核心' : '自定义' }}

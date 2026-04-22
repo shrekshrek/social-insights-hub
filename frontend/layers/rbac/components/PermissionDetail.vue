@@ -17,17 +17,17 @@
         <div class="flex flex-wrap items-center gap-2">
           <UBadge
             :color="getPermissionTypeColor(permission)"
-            variant="soft"
+            variant="subtle"
             size="sm"
           >
             {{ getPermissionTypeLabel(permission) }}
           </UBadge>
           <div class="flex items-center space-x-1">
-            <UBadge color="primary" variant="soft" size="sm">
+            <UBadge color="primary" variant="subtle" size="sm">
               {{ permission.target }}
             </UBadge>
             <span class="text-gray-400 text-xs">:</span>
-            <UBadge color="success" variant="soft" size="sm">
+            <UBadge color="success" variant="subtle" size="sm">
               {{ permission.action }}
             </UBadge>
           </div>
@@ -59,14 +59,14 @@
         
         <div class="space-y-1">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">目标</label>
-          <UBadge color="primary" variant="soft">
+          <UBadge color="primary" variant="subtle">
             {{ permission.target }}
           </UBadge>
         </div>
         
         <div class="space-y-1">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">操作</label>
-          <UBadge color="success" variant="soft">
+          <UBadge color="success" variant="subtle">
             {{ permission.action }}
           </UBadge>
         </div>
@@ -75,7 +75,7 @@
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">类型</label>
           <UBadge
             :color="getPermissionTypeColor(permission)"
-            variant="soft"
+            variant="subtle"
             size="sm"
           >
             {{ getPermissionTypeLabel(permission) }}

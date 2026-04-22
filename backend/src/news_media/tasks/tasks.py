@@ -103,7 +103,7 @@ def run_news_collect_task(
             raw_counts: dict[str, int] = {}
             articles = _search_and_store_articles_sync(
                 db, task,
-                max_results=20,
+                max_results=30,
                 channels=_resolve_channels(task),
                 raw_counts_out=raw_counts,
             )

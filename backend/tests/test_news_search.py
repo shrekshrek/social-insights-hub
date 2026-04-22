@@ -3,16 +3,13 @@
 测试重点：
 - aggregator URL 去重逻辑（含 query string 归一化）
 - source_tier 分类（tier1/tier2/tier3）
-- Bing/搜狗 失败降级（返回空列表，不抛异常）
+- 单渠道失败降级（返回空列表，不抛异常）
 - 多渠道并发合并结果
 - 搜狗 HTML 解析（标题/来源/时间提取）
 """
 
-from unittest.mock import AsyncMock, patch
-
-import pytest
-
 from pathlib import Path
+from unittest.mock import patch
 
 from src.news_media.tasks.news_search.aggregator import (
     _normalize_url,
@@ -27,6 +24,10 @@ from src.news_media.tasks.news_search.sogou_crawler import (
     _extract_source_time,
     _parse_sogou_date,
     _resolve_url,
+)
+from src.news_media.tasks.news_search.wechat_mp_crawler import (
+    _extract_articles_from_html as _extract_wechat_articles,
+    _parse_time_convert,
 )
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -153,8 +154,7 @@ def test_normalize_url_handles_no_query():
 # ==================== search_news (aggregator) ====================
 
 
-@pytest.mark.asyncio
-async def test_search_news_deduplicates_same_url():
+def test_search_news_deduplicates_same_url():
     """同一 URL 来自两个渠道，只保留一条"""
     shared_url = "https://example.com/news/shared-article"
     baidu_result = [{
@@ -162,41 +162,40 @@ async def test_search_news_deduplicates_same_url():
         "source_name": "人民网", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
-    bing_result = [{
+    sogou_result = [{
         "title": "共同文章", "url": shared_url, "snippet": "...",
         "source_name": "人民网", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "bing",
+        "image_url": None, "raw_data": {}, "search_source": "sogou",
     }]
 
     with (
-        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=bing_result)),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", return_value=baidu_result),
+        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", return_value=sogou_result),
     ):
-        results = await search_news("测试", channels=["baidu", "bing"])
+        results = search_news("测试", channels=["baidu", "sogou"])
 
     assert len(results) == 1
     assert results[0]["url"] == shared_url
 
 
-@pytest.mark.asyncio
-async def test_search_news_merges_unique_articles():
+def test_search_news_merges_unique_articles():
     """两个渠道各有独立文章，合并后全部保留"""
     baidu_result = [{
         "title": "百度独有", "url": "https://xinhua.com/a1", "snippet": None,
         "source_name": "新华网", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
-    bing_result = [{
-        "title": "Bing独有", "url": "https://bloomberg.com/a2", "snippet": None,
+    sogou_result = [{
+        "title": "搜狗独有", "url": "https://bloomberg.com/a2", "snippet": None,
         "source_name": "Bloomberg", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "bing",
+        "image_url": None, "raw_data": {}, "search_source": "sogou",
     }]
 
     with (
-        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=bing_result)),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", return_value=baidu_result),
+        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", return_value=sogou_result),
     ):
-        results = await search_news("测试", channels=["baidu", "bing"])
+        results = search_news("测试", channels=["baidu", "sogou"])
 
     assert len(results) == 2
     urls = {r["url"] for r in results}
@@ -204,8 +203,7 @@ async def test_search_news_merges_unique_articles():
     assert "https://bloomberg.com/a2" in urls
 
 
-@pytest.mark.asyncio
-async def test_search_news_adds_source_tier():
+def test_search_news_adds_source_tier():
     """聚合后每条文章都有 source_tier 字段"""
     baidu_result = [{
         "title": "新华社报道", "url": "https://xinhua.com/a1", "snippet": None,
@@ -213,34 +211,14 @@ async def test_search_news_adds_source_tier():
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
 
-    with patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)):
-        results = await search_news("测试", channels=["baidu"])
+    with patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", return_value=baidu_result):
+        results = search_news("测试", channels=["baidu"])
 
     assert results[0]["source_tier"] == "tier1"
 
 
-@pytest.mark.asyncio
-async def test_search_news_bing_failure_degrades_gracefully():
-    """Bing 失败时只返回百度结果，不抛异常"""
-    baidu_result = [{
-        "title": "百度结果", "url": "https://xinhua.com/a1", "snippet": None,
-        "source_name": "新华网", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "baidu",
-    }]
-
-    with (
-        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(side_effect=Exception("Bing error"))),
-    ):
-        results = await search_news("测试", channels=["baidu", "bing"])
-
-    assert len(results) == 1
-    assert results[0]["source_name"] == "新华网"
-
-
-@pytest.mark.asyncio
-async def test_search_news_baidu_only_channel():
-    """channels=["baidu"] 时不调用 Bing"""
+def test_search_news_baidu_only_channel():
+    """channels=["baidu"] 时不调用搜狗"""
     baidu_result = [{
         "title": "百度结果", "url": "https://example.com/a1", "snippet": None,
         "source_name": "人民网", "published_at": None,
@@ -248,35 +226,34 @@ async def test_search_news_baidu_only_channel():
     }]
 
     with (
-        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)) as mock_baidu,
-        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock()) as mock_bing,
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", return_value=baidu_result) as mock_baidu,
+        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news") as mock_sogou,
     ):
-        results = await search_news("测试", channels=["baidu"])
+        results = search_news("测试", channels=["baidu"])
 
     mock_baidu.assert_called_once()
-    mock_bing.assert_not_called()
+    mock_sogou.assert_not_called()
     assert len(results) == 1
 
 
-@pytest.mark.asyncio
-async def test_search_news_url_dedup_with_tracking_params():
+def test_search_news_url_dedup_with_tracking_params():
     """同一文章不同追踪参数的 URL 视为重复"""
     baidu_result = [{
         "title": "文章A", "url": "https://example.com/news?id=1&from=baidu",
         "snippet": None, "source_name": "新华网", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
-    bing_result = [{
-        "title": "文章A", "url": "https://example.com/news?id=1&utm_source=bing",
+    sogou_result = [{
+        "title": "文章A", "url": "https://example.com/news?id=1&utm_source=sogou",
         "snippet": None, "source_name": "新华网", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "bing",
+        "image_url": None, "raw_data": {}, "search_source": "sogou",
     }]
 
     with (
-        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=bing_result)),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", return_value=baidu_result),
+        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", return_value=sogou_result),
     ):
-        results = await search_news("测试", channels=["baidu", "bing"])
+        results = search_news("测试", channels=["baidu", "sogou"])
 
     # 追踪参数去掉后 id=1 相同，应去重
     assert len(results) == 1
@@ -430,11 +407,57 @@ def test_sogou_extract_filters_short_titles():
     assert articles[0]["title"] == "这是一个足够长的新闻标题"
 
 
+# ==================== wechat_mp_crawler ====================
+
+
+def test_wechat_parse_time_from_rendered_span():
+    """crawl4ai cleaned_html 剥掉 <script> 后，日期落在 <span class="s2">YYYY-M-D</span>"""
+    block = '<div class="s-p"><span class="all-time-y2">某公众号</span><span class="s2">2026-1-30</span></div>'
+    dt = _parse_time_convert(block)
+    assert dt is not None
+    assert (dt.year, dt.month, dt.day) == (2026, 1, 30)
+
+
+def test_wechat_parse_time_falls_back_to_timeconvert_script():
+    """rendered span 缺失时，降级到 timeConvert('unix_ts')"""
+    block = "<script>document.write(timeConvert('1735689600'))</script>"  # 2025-01-01 UTC
+    dt = _parse_time_convert(block)
+    assert dt is not None
+    assert dt.year == 2025 and dt.month == 1 and dt.day == 1
+
+
+def test_wechat_parse_time_returns_none_when_missing():
+    assert _parse_time_convert("<div>no date here</div>") is None
+
+
+def test_wechat_extract_li_with_attrs():
+    """搜狗微信结果项是 <li id="sogou_vr_..."> 带属性，必须能匹配"""
+    html = """
+    <ul class="news-list">
+      <li id="sogou_vr_11002601_box_0">
+        <h3><a href="/link?url=abc123">公众号文章标题足够长</a></h3>
+        <p class="txt-info">这是摘要内容</p>
+        <div class="s-p">
+          <span class="all-time-y2">独立出海联合体</span>
+          <span class="s2">2026-1-30</span>
+        </div>
+      </li>
+    </ul>
+    """
+    articles = _extract_wechat_articles(html, max_results=10)
+    assert len(articles) == 1
+    a = articles[0]
+    assert a["title"] == "公众号文章标题足够长"
+    assert a["source_name"] == "独立出海联合体"
+    assert a["url"].endswith("/link?url=abc123")
+    assert a["published_at"] is not None
+    assert a["search_source"] == "wechat_mp"
+
+
 # ==================== aggregator: 三渠道 ====================
 
 
-@pytest.mark.asyncio
-async def test_search_news_sogou_channel():
+def test_search_news_sogou_channel():
     """channels=["sogou"] 时只调用搜狗"""
     sogou_result = [{
         "title": "搜狗结果", "url": "https://example.com/sg1", "snippet": None,
@@ -443,21 +466,18 @@ async def test_search_news_sogou_channel():
     }]
 
     with (
-        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock()) as mock_baidu,
-        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", new=AsyncMock(return_value=sogou_result)) as mock_sogou,
-        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock()) as mock_bing,
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news") as mock_baidu,
+        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", return_value=sogou_result) as mock_sogou,
     ):
-        results = await search_news("测试", channels=["sogou"])
+        results = search_news("测试", channels=["sogou"])
 
     mock_baidu.assert_not_called()
     mock_sogou.assert_called_once()
-    mock_bing.assert_not_called()
     assert len(results) == 1
     assert results[0]["search_source"] == "sogou"
 
 
-@pytest.mark.asyncio
-async def test_search_news_sogou_failure_degrades_gracefully():
+def test_search_news_sogou_failure_degrades_gracefully():
     """搜狗失败时不影响百度结果"""
     baidu_result = [{
         "title": "百度结果", "url": "https://xinhua.com/a1", "snippet": None,
@@ -466,42 +486,40 @@ async def test_search_news_sogou_failure_degrades_gracefully():
     }]
 
     with (
-        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", new=AsyncMock(side_effect=Exception("Sogou error"))),
-        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=[])),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", return_value=baidu_result),
+        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", side_effect=Exception("Sogou error")),
     ):
-        results = await search_news("测试", channels=["baidu", "sogou", "bing"])
+        results = search_news("测试", channels=["baidu", "sogou"])
 
     assert len(results) == 1
     assert results[0]["source_name"] == "新华网"
 
 
-@pytest.mark.asyncio
-async def test_search_news_three_channels_merge():
-    """三渠道结果合并去重"""
+def test_search_news_three_channels_merge():
+    """三渠道（baidu + sogou + wechat_mp）结果合并去重"""
     baidu_result = [{
         "title": "百度独有", "url": "https://xinhua.com/a1", "snippet": None,
         "source_name": "新华网", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
     sogou_result = [{
-        "title": "搜狗独有", "url": "https://weixin.qq.com/a2", "snippet": None,
-        "source_name": "某公众号", "published_at": None,
+        "title": "搜狗独有", "url": "https://thepaper.cn/a2", "snippet": None,
+        "source_name": "澎湃新闻", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "sogou",
     }]
-    bing_result = [{
-        "title": "Bing独有", "url": "https://reuters.com/a3", "snippet": None,
-        "source_name": "Reuters", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "bing",
+    wechat_result = [{
+        "title": "公众号独有", "url": "https://mp.weixin.qq.com/a3", "snippet": None,
+        "source_name": "某公众号", "published_at": None,
+        "image_url": None, "raw_data": {}, "search_source": "wechat_mp",
     }]
 
     with (
-        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", new=AsyncMock(return_value=sogou_result)),
-        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=bing_result)),
+        patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", return_value=baidu_result),
+        patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", return_value=sogou_result),
+        patch("src.news_media.tasks.news_search.wechat_mp_crawler.search_wechat_mp", return_value=wechat_result),
     ):
-        results = await search_news("测试", channels=["baidu", "sogou", "bing"])
+        results = search_news("测试", channels=["baidu", "sogou", "wechat_mp"])
 
     assert len(results) == 3
     sources = {r["search_source"] for r in results}
-    assert sources == {"baidu", "sogou", "bing"}
+    assert sources == {"baidu", "sogou", "wechat_mp"}

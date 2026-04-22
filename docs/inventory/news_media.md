@@ -79,12 +79,15 @@
 
 ### 2.1 搜索器清单([`src/news_media/tasks/news_search/`](../../backend/src/news_media/tasks/news_search/))
 
-| 搜索器 | 数据源 | 技术方案 | 备注 |
-|------|------|--------|-----|
-| `baidu_crawler` | news.baidu.com | Crawl4AI HTML 解析 | 主力中文源 |
-| `sogou_crawler` | news.sogou.com | Crawl4AI + JS 渲染 | 特殊优势:覆盖微信公众号 |
-| `bing_crawler` | Bing 新闻（news 端点） | Crawl4AI + markdown link 提取 | 英文补充，替代 DDG（2026-04 DDG 因 403 rate limit 停用） |
-| `wechat_mp_crawler` | 微信公众号 | 搜狗微信入口 | 独立分层 |
+三个渠道**统一通过 [`_crawl4ai_client.fetch_via_crawl4ai`](../../backend/src/news_media/tasks/news_search/_crawl4ai_client.py)** 调用 Crawl4AI(底层 Playwright headless 浏览器,会执行 JS),取 `cleaned_html` 后用 **Python 正则**抽结构化块。差异只在 wait 策略和超时上:
+
+| 搜索器 | 数据源 | wait_until | 解析锚点 | 备注 |
+|------|------|--------|---------|-----|
+| `baidu_crawler` | www.baidu.com 资讯页 | `None`(只等 DOMContentLoaded) | `.result-op.c-container` | SSR 渲染,不依赖 JS,早返回省时;主力中文源 |
+| `sogou_crawler` | news.sogou.com | `networkidle` | `.vrwrap` | JS 延迟反爬必须等 networkidle |
+| `wechat_mp_crawler` | weixin.sogou.com 微信入口 | `networkidle` | `<li id="sogou_vr_..._box_X">` | 时间解析优先吃渲染后 `<span class="s2">YYYY-M-D</span>`(crawl4ai 剥 `<script>`,`timeConvert(...)` 永远匹配不到,留作降级) |
+
+**为什么不用 markdown / LLM 解析**:搜索结果页结构稳定、字段密集,正则便宜准确;markdown 转换会把"标题/来源/时间/摘要"打散成单独的 link/text 节点,反而难还原。
 
 各搜索器返回字段结构统一:`{title, url, snippet, source_name, published_at, image_url, raw_data}`。
 
@@ -109,7 +112,7 @@
 
 | 维度 | Probe | Collect |
 |-----|-------|---------|
-| 搜索结果数 | ≤20 篇(`_PROBE_MAX_RESULTS`) | ≤20 篇(`max_results=20`) |
+| 搜索结果数 | ≤20 篇(`_PROBE_MAX_RESULTS`) | ≤30 篇(`max_results=30`) |
 | 全文抓取 | ❌ 无 | ✅ Crawl4AI 并发(=5) |
 | 逐篇标注 | ❌ 无 | ✅ NEWS_TAGGING,10 篇/批(`CELERY_AI_NEWS_TAGGING_BATCH_SIZE`) |
 | 任务 `analysis_result` | ✅ meta 统计(来源分布等) | ❌ 不用(迁移到 NewsSlice) |
@@ -135,7 +138,7 @@
 
 **元数据(搜索即得)**:
 - `url, title, snippet, source_name, source_tier, author, published_at, image_url`
-- `search_source`: baidu / sogou / bing / wechat_mp
+- `search_source`: baidu / sogou / wechat_mp
 
 **标注结果(仅 collect 阶段,来自 `NEWS_TAGGING`)**:
 - `relevance`: high / medium / low
@@ -191,7 +194,7 @@ result_data = {
 stats = {
   articles_total: int,
   source_tier_distribution: {tier1, tier2, tier3, wechat_mp},
-  search_source_distribution: {baidu, sogou, bing, wechat_mp},
+  search_source_distribution: {baidu, sogou, wechat_mp},
   sentiment_distribution: {positive, neutral, negative},
   sentiment_overall: float,
   top_entities: [{name, mention_count}] × 10

@@ -84,7 +84,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 
 1. 前端轮询 `probe-status`
    - 社媒：爬虫采集约 20 条，跳过评论，LLM 打标（NEWS/POST 分析链）
-   - 新闻：`run_news_probe_task` 三渠道搜索（baidu + sogou + bing），每渠道上限 20 条，URL 去重后落库元数据，不抓全文、不打标
+   - 新闻：`run_news_probe_task` 双渠道搜索（baidu + sogou），每渠道上限 20 条，URL 去重后落库元数据，不抓全文、不打标
 2. 所有任务准备就绪后后台自动运行 probe 审查
    - 社媒：规则分流 + `strategy_social_probe_review_chain`（LLM 判定模糊案例）
      - 规则层（`_auto_verdict_probe_task`）：`posts<5` / `promotion_ratio>85%` 直接 fail 并建议移除（`suggested_keyword=null`）；`deep_analyzed<8` 样本不足直接 pass 待全量验证；其余送 LLM
@@ -227,7 +227,7 @@ Celery Worker 崩溃/宕机 → 新闻任务停留在 `running` 或 `pending` �
 - `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）；两个端点同时返回 `industry_research` 和 `creative_research` 状态（ResearchTask 进度，不阻塞主流程）
 - Research Agent 通过 `research_tasks.strategy_id` FK 关联策略，不在 Strategy 表上加冗余字段。`_retrieve_research_findings` 读取最新已完成的 profile_name="industry" ResearchTask；`_retrieve_creative_research_findings` 读取 profile_name="creative" ResearchTask
 - 新闻 insight 粒度：独立监测和策略研究都通过 NewsSlice 切片触发 insight（按 blueprint 条目分组新闻任务创建切片），采集阶段仅做 tagging 不做 insight
-- 新闻搜索渠道：baidu / sogou / bing（默认三渠道，均通过 Crawl4AI）+ wechat_mp（可选，通过搜狗微信专用入口）；source_tier 分层：tier1(权威) / tier2(行业) / tier3(其他) / wechat_mp(公众号)
+- 新闻搜索渠道：baidu / sogou（默认两渠道，均通过 Crawl4AI）+ wechat_mp（可选，通过搜狗微信专用入口）；source_tier 分层：tier1(权威) / tier2(行业) / tier3(其他) / wechat_mp(公众号)
 - `output_type` 由用户在 confirm-research 时**显式选择**，前端 `ResearchPlanEditor` 根据 data_plan 的渠道组成阻塞不合法的组合（campaign_strategy 需含 social_media 维度；market_report 需含 news_media 维度；full_strategy 需同时含两者）。后端 `_validate_market_report_output_type` 在生成时二次校验
 - `generate_brand_strategy_stage` 和 `generate_market_report_stage` 都遵循**下游级联清空**语义：重新生成 Insight / Agenda Map 会清空下游结果 + 回退状态到 `ready`；重新生成 Brand Role / Landscape 会清空 Big Idea / Strategic Brief；full_strategy 重生成 Agenda Map / Landscape 还会同时清空 insight/brand_role/big_idea_result
 - `edit_brand_strategy_stage` 和 `edit_market_report_stage` 同样会级联清空下游结果，避免上下游不一致

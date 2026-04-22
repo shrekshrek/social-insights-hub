@@ -112,7 +112,7 @@ const handleMonitorInputBlur = () => {
 
 const buildSearchParams = () => {
   if (!includeWechatMp.value) return null
-  return { channels: ['baidu', 'sogou', 'bing', 'wechat_mp'] }
+  return { channels: ['baidu', 'sogou', 'wechat_mp'] }
 }
 
 const handleSubmit = async () => {
@@ -134,7 +134,7 @@ const handleSubmit = async () => {
 
 const phaseOptions = [
   { label: '探测 (快速，每渠道 20 条摘要)', value: 'probe' },
-  { label: '全量 (每渠道 20 条 + 全文抓取 + 分析)', value: 'collect' },
+  { label: '全量 (每渠道 30 条 + 全文抓取 + 分析)', value: 'collect' },
 ]
 </script>
 
@@ -321,7 +321,7 @@ const phaseOptions = [
             <div class="space-y-3">
               <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                 <UIcon name="i-lucide-check-circle" class="text-green-500" />
-                <span>网页新闻搜索（百度 + 搜狗 + Bing，默认开启）</span>
+                <span>网页新闻搜索（百度 + 搜狗，默认开启）</span>
               </div>
               <label
                 class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors"
@@ -341,7 +341,7 @@ const phaseOptions = [
                     微信公众号
                   </div>
                   <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    额外搜索微信公众号文章（通过搜狗微信入口）
+                    额外搜索微信公众号文章
                   </div>
                 </div>
               </label>

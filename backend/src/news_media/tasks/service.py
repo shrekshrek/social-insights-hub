@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 # probe 搜索每渠道最大条数(业务策略,不进 config)
 _PROBE_MAX_RESULTS = 20
-_DEFAULT_CHANNELS: tuple[str, ...] = ("baidu", "sogou", "bing")
-_ALL_VALID_CHANNELS = {"baidu", "sogou", "bing", "wechat_mp"}
+_DEFAULT_CHANNELS: tuple[str, ...] = ("baidu", "sogou")
+_ALL_VALID_CHANNELS = {"baidu", "sogou", "wechat_mp"}
 
 
 def _resolve_channels(task: "NewsTask") -> tuple[str, ...]:

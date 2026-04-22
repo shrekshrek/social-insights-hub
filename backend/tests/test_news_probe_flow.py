@@ -19,7 +19,7 @@ from src.llm.chains.strategy.news_probe_review_chain import (
 from src.strategies.schemas import (
     NewsRefinementItem,
     RefineProbeRequest,
-    RefinementItem,
+    SocialRefinementItem,
 )
 
 
@@ -58,35 +58,35 @@ class TestNewsRefinementItem:
 class TestRefineProbeRequest:
     def test_empty_both_rejected(self):
         with pytest.raises(ValidationError) as exc:
-            RefineProbeRequest(refinements=[], news_refinements=[])
+            RefineProbeRequest(social_refinements=[], news_refinements=[])
         assert "至少提供一项" in str(exc.value)
 
     def test_social_only_ok(self):
         req = RefineProbeRequest(
-            refinements=[
-                RefinementItem(task_id=1, new_keyword="kw", platform="wb")
+            social_refinements=[
+                SocialRefinementItem(task_id=1, new_keyword="kw", platform="wb")
             ],
             news_refinements=[],
         )
-        assert len(req.refinements) == 1
+        assert len(req.social_refinements) == 1
         assert req.news_refinements == []
 
     def test_news_only_ok(self):
         req = RefineProbeRequest(
-            refinements=[],
+            social_refinements=[],
             news_refinements=[NewsRefinementItem(task_id=1, new_keyword="kw")],
         )
-        assert req.refinements == []
+        assert req.social_refinements == []
         assert len(req.news_refinements) == 1
 
     def test_both_ok(self):
         req = RefineProbeRequest(
-            refinements=[
-                RefinementItem(task_id=1, new_keyword="s", platform="wb")
+            social_refinements=[
+                SocialRefinementItem(task_id=1, new_keyword="s", platform="wb")
             ],
             news_refinements=[NewsRefinementItem(task_id=2, new_keyword="n")],
         )
-        assert len(req.refinements) == 1
+        assert len(req.social_refinements) == 1
         assert len(req.news_refinements) == 1
 
 
@@ -204,29 +204,34 @@ class TestParseSingleNewsProbeReviewResponse:
 
 
 class TestSearchAndStoreArticlesDualChannel:
-    """验证 execute_news_probe 通过 _PROBE_CHANNELS 传递双渠道参数"""
+    """验证 execute_news_probe_sync 以默认渠道（baidu+sogou）调用搜索
 
-    @pytest.mark.asyncio
-    async def test_execute_news_probe_uses_dual_channel(self):
+    execute_news_probe_sync 运行在 Celery gevent worker 里，故为同步函数 + SyncSession；
+    本测试 mock 掉底层 _search_and_store_articles_sync，只断言参数传递。
+    """
+
+    def test_execute_news_probe_sync_uses_default_channels(self):
         from src.news_media.tasks import service as news_service
 
         task = MagicMock()
         task.id = 1
         task.keywords = "测试"
         task.status = "pending"
+        task.search_params = None  # 触发 fallback 到 _DEFAULT_CHANNELS
+        task.analysis_result = None
 
         captured = {}
 
-        async def fake_search(db, t, max_results, channels):
+        def fake_search(db, t, max_results, channels, raw_counts_out=None):
             captured["max_results"] = max_results
             captured["channels"] = channels
             return []
 
+        db = MagicMock()
         with patch.object(
-            news_service, "_search_and_store_articles", side_effect=fake_search
+            news_service, "_search_and_store_articles_sync", side_effect=fake_search
         ):
-            db = AsyncMock()
-            await news_service.execute_news_probe(db, task)
+            news_service.execute_news_probe_sync(db, task)
 
         assert captured["max_results"] == 20
         assert "baidu" in captured["channels"]

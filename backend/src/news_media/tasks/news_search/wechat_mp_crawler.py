@@ -45,9 +45,11 @@ _SOGOU_BASE = "https://weixin.sogou.com"
 # 正则匹配：基于搜狗微信搜索结果页 DOM
 # ---------------------------------------------------------------------------
 
-# 每个结果项：<li> inside <ul class="news-list">
+# 每个结果项：<li ...> inside <ul class="news-list">
+# 实际 DOM 是 `<li id="sogou_vr_11002601_box_0">` 这种带属性的形式，
+# 早先版本写死 `<li>` 导致长期 0 提取（搜狗没改结构，是正则一直没对上）。
 _LIST_ITEM_RE = re.compile(
-    r"<li>(.*?)</li>",
+    r"<li[^>]*>(.*?)</li>",
     re.DOTALL,
 )
 
@@ -69,7 +71,10 @@ _ACCOUNT_RE = re.compile(
     re.DOTALL,
 )
 
-# 发布时间：timeConvert('unix_ts')
+# 发布时间有两种形式：
+#   1) crawl4ai 跑过 JS → 渲染结果直接写进 <span class="s2">2026-1-30</span>（首选）
+#   2) 原始 timeConvert('unix_ts') 脚本（cleaned_html 一般会被剥掉 <script>，几乎匹配不到，留作降级）
+_RENDERED_DATE_RE = re.compile(r'<span[^>]*class="[^"]*\bs2\b[^"]*"[^>]*>([^<]+)</span>')
 _TIME_CONVERT_RE = re.compile(r"timeConvert\(['\"](\d+)['\"]\)")
 
 
@@ -81,7 +86,22 @@ def _clean_html_text(s: str) -> str:
 
 
 def _parse_time_convert(html_block: str) -> datetime | None:
-    """从 timeConvert('unix_ts') 中提取并转换时间"""
+    """优先从渲染后的 <span class="s2"> 文本里取日期（如 "2026-1-30"），
+    再降级到 timeConvert('unix_ts') 脚本。crawl4ai cleaned_html 会剥 <script>，
+    脚本路径几乎走不到，但保留以防 crawl4ai 配置变化。"""
+    # 路径 1：渲染后的字面日期（cleaned_html 实际场景）
+    rendered = _RENDERED_DATE_RE.search(html_block)
+    if rendered:
+        date_str = rendered.group(1).strip()
+        # 形如 2026-1-30 / 2026-01-30 / 2026/1/30
+        m = re.match(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", date_str)
+        if m:
+            try:
+                return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc)
+            except ValueError:
+                pass
+
+    # 路径 2：原始 timeConvert 脚本（降级）
     match = _TIME_CONVERT_RE.search(html_block)
     if match:
         try:

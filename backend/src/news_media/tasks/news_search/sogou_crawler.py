@@ -146,6 +146,7 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
     """从 Crawl4AI 的 cleaned_html 中提取搜狗新闻结果项
 
     按 vrwrap 结果块逐条提取，每块内独立匹配标题/来源/时间/摘要。
+    非新闻内容（栏目页/SEO 垃圾）过滤在 aggregator 层统一处理，此处仅负责抽取。
     """
     articles: list[dict] = []
     seen_urls: set[str] = set()

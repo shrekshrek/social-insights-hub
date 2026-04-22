@@ -1,76 +1,74 @@
 /**
  * 全局错误处理插件
- * 
- * 捕获并处理所有Vue运行时错误，提升应用稳定性
+ *
+ * 原则：错误处理器必须是**纯函数**，只做 console/log 记录，不触发任何会引发 Vue 渲染
+ * 或 reactivity 更新的副作用（比如 toast.add / reactive ref 赋值 / navigateTo）。
+ * 违反此原则会在某些 null-deref 场景下形成"渲染→error→副作用→再渲染→再 error"
+ * 的无限循环，最终 Nuxt 显示 500 兜底页（参见 2026-04-22 事故：已删除新闻任务详情
+ * 页 404 后，vue:error hook 里的 toast.add 和 Nuxt UI 组件的 getComponentPublicInstance
+ * null-deref 互相触发，6000+ 次循环后 Nuxt 放弃兜底）。
+ *
+ * 如果业务需要在特定错误发生时通知用户（如 401/403），请走路由中间件 `error-handler.global.ts`
+ * 的显式分派，而不是放在这里。
  */
-export default defineNuxtPlugin((nuxtApp) => {
-  // Vue错误处理器
-  nuxtApp.vueApp.config.errorHandler = (error, instance, info) => {
-    console.error('[Vue Error]', error)
-    
-    // 开发环境显示详细信息
-    if (import.meta.dev) {
-      console.error('Error details:', {
-        component: instance?.$options?.name || instance?.$?.type?.name || 'Unknown',
-        info,
-        error
-      })
+
+/** 重入守卫：防止错误处理器自己触发错误导致递归。 */
+const createReentryGuard = () => {
+  let active = false
+  return (fn: () => void, skipLabel: string) => {
+    if (active) {
+      // 用原生 console.warn，避免依赖可能已经挂掉的 Nuxt 上下文
+      console.warn(`[error-handler] ${skipLabel} reentry skipped`)
+      return
     }
-    
-    // 生产环境可以发送到错误追踪服务
-    if (!import.meta.dev) {
-      // 简单的错误记录，不过度设计
-      console.error('Error context:', {
-        component: instance?.$options?.name || instance?.$?.type?.name || 'Unknown',
-        errorInfo: info,
-        message: error instanceof Error ? error.message : String(error)
-      })
-      
-      // 未来可以集成 Sentry 或其他错误追踪服务
-      // window.Sentry?.captureException(error, { extra: { info } })
+    active = true
+    try {
+      fn()
+    } catch (handlerError) {
+      console.error('[error-handler] handler itself threw, swallowing:', handlerError)
+    } finally {
+      active = false
     }
   }
+}
 
-  // Nuxt错误钩子
-  nuxtApp.hook('vue:error', (error, _instance, _info) => {
-    console.error('[Nuxt Hook] Vue error:', error)
-    
-    // 可以在这里添加额外的错误处理逻辑
-    // 例如：显示全局错误提示
-    if (import.meta.dev) {
-      // 开发环境显示错误提示
-      nuxtApp.runWithContext(() => {
-        const toast = useToast()
-        toast.add({
-          title: '运行时错误',
-          description: error instanceof Error ? error.message : '发生了未知错误',
-          color: 'error',
-          duration: 5000
+export default defineNuxtPlugin((nuxtApp) => {
+  const vueGuard = createReentryGuard()
+  const rejectionGuard = createReentryGuard()
+
+  // Vue 错误处理器——只记录，不触发任何 reactive 副作用
+  nuxtApp.vueApp.config.errorHandler = (error, instance, info) => {
+    vueGuard(() => {
+      console.error('[Vue Error]', error)
+
+      if (import.meta.dev) {
+        console.error('Error details:', {
+          component: instance?.$options?.name || instance?.$?.type?.name || 'Unknown',
+          info,
+          error,
         })
-      })
-    }
-  })
-  
-  // 捕获未处理的Promise rejection
+      } else {
+        console.error('Error context:', {
+          component: instance?.$options?.name || instance?.$?.type?.name || 'Unknown',
+          errorInfo: info,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        // 未来接入 Sentry 等错误追踪服务时放在这里（调用必须同步/纯副作用于外部服务）
+      }
+    }, 'Vue errorHandler')
+  }
+
+  // Nuxt 的 vue:error hook 和 vueApp.config.errorHandler 会被同一个错误触发，
+  // config.errorHandler 已经记录了全部信息，这里不再重复——尤其不能调用 toast.add
+  // 之类会进入 Vue 渲染流程的 API，否则就是重现 2026-04-22 的事故。
+
+  // 未处理的 Promise rejection——只记录，不 toast
   if (import.meta.client) {
     window.addEventListener('unhandledrejection', (event) => {
-      console.error('[Unhandled Promise Rejection]', event.reason)
-      
-      // 开发环境显示警告
-      if (import.meta.dev) {
-        nuxtApp.runWithContext(() => {
-          const toast = useToast()
-          toast.add({
-            title: 'Promise Rejection',
-            description: event.reason?.message || '未处理的Promise错误',
-            color: 'warning',
-            duration: 5000
-          })
-        })
-      }
-      
-      // 阻止默认行为（防止控制台报错）
-      event.preventDefault()
+      rejectionGuard(() => {
+        console.error('[Unhandled Promise Rejection]', event.reason)
+      }, 'unhandledrejection')
+      // 不 preventDefault：让浏览器 devtools 照常标红，dev 可见性有保障
     })
   }
 })

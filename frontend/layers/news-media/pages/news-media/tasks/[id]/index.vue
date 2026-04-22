@@ -14,8 +14,12 @@ const { currentUserId, hasPermission } = usePermissions()
 
 const { getTask, executeTask, deleteTask, getTaskArticles, getTaskChannelStats } = useNewsTasks()
 
-const { data: task, pending: taskLoading, refresh: refreshTask } = getTask(taskId)
-const { data: channelStats, refresh: refreshChannelStats } = getTaskChannelStats(taskId)
+// silent404: 任务可能被级联删除（Monitor 删除 → news_tasks cascade）导致路由残留。
+// 静默处理 404，避免三条并发 404 各弹一条 error toast 触发 vue:error hook 级联
+// （error-handler.client.ts 的 toast 再次挂载会把同一个坏 render 再跑一次，形成
+// 渲染→error→toast→渲染 的无限循环，最终 Nuxt 显示 500 兜底）。
+const { data: task, pending: taskLoading, refresh: refreshTask } = getTask(taskId, { silent404: true })
+const { data: channelStats, refresh: refreshChannelStats } = getTaskChannelStats(taskId, { silent404: true })
 
 type ChannelKey = 'baidu' | 'sogou' | 'bing' | 'wechat_mp'
 
@@ -53,10 +57,30 @@ const {
   data: articlesData,
   pending: articlesLoading,
   refresh: refreshArticles,
-} = getTaskArticles(taskId, articleParams)
+} = getTaskArticles(taskId, articleParams, { silent404: true })
 
 const articles = computed(() => articlesData.value?.items || [])
 const totalArticles = computed(() => articlesData.value?.total || 0)
+
+// 404 守护：任务已被删除时，提示并跳回列表，避免下游组件在 task=null 时进入
+// 无限 error toast → vue:error hook → 再渲染的循环（详见上面 silent404 说明）。
+const notFoundRedirected = ref(false)
+const toast = useToast()
+watch(
+  [task, taskLoading],
+  ([t, loading]) => {
+    if (!loading && t === null && !notFoundRedirected.value) {
+      notFoundRedirected.value = true
+      toast.add({
+        title: '任务不存在',
+        description: '该任务可能已被删除，返回任务列表',
+        color: 'warning',
+      })
+      navigateTo('/news-media/tasks')
+    }
+  },
+  { immediate: true },
+)
 
 // ========== 返回路径 ==========
 

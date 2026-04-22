@@ -140,12 +140,12 @@ knowledge_base（✅ 已接入）:
   KnowledgeDocument/Chunk（平台公共 + 用户私有）→ 向量检索 → market_context 注入产出 stage
 
 news_media（✅ 已完成）:
-  NewsTask(probe) → baidu+sogou+duckduckgo 三渠道搜索卡片 → LLM probe review
+  NewsTask(probe) → baidu+sogou+bing 三渠道搜索卡片 → LLM probe review
   → refine/approve → NewsTask(collect) → 全文抓取(Crawl4AI) + tagging + insight
   → 策略建切片时：按 _news_task_dimension_map 分维度 → 跨任务文章 URL 去重 + relevance 筛选
     → 每维度一次 news_insight_chain → 维度级 insight 注入 slice result_data["news_insights"]
 
-  搜索渠道: baidu / sogou / duckduckgo（默认） + wechat_mp（可选，搜狗微信入口）
+  搜索渠道: baidu / sogou / bing（默认） + wechat_mp（可选，搜狗微信入口）
   来源分层: tier1(权威央媒) / tier2(行业门户) / tier3(其他) / wechat_mp(微信公众号)
 ```
 
@@ -262,7 +262,7 @@ Brief 摄入作为 `draft` 阶段内的步骤，不新增状态。
 
 ### 阶段三：News Media 数据源 ✅ 已完成
 
-8. ✅ News Media 模块：`news_media/monitors` + `news_media/tasks`，baidu+sogou+duckduckgo+wechat_mp 多渠道
+8. ✅ News Media 模块：`news_media/monitors` + `news_media/tasks`，baidu+sogou+bing+wechat_mp 多渠道
 9. ✅ 两段式 probe→collect：各自为独立 NewsTask 记录（硬删除，ondelete CASCADE 到 NewsArticle）
 10. ✅ `strategy_news_probe_review_chain` + 并行 LLM 评估，包裹在 STRATEGY_NEWS_PROBE_REVIEW AnalysisJob 内统一追踪成本（社媒对应 STRATEGY_SOCIAL_PROBE_REVIEW / `strategy_social_probe_review_chain`）
 11. ✅ `refine_probe` 批量端点同时处理 social/news 两路 refinements

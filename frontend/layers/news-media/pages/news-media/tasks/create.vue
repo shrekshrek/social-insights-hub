@@ -112,7 +112,7 @@ const handleMonitorInputBlur = () => {
 
 const buildSearchParams = () => {
   if (!includeWechatMp.value) return null
-  return { channels: ['baidu', 'sogou', 'duckduckgo', 'wechat_mp'] }
+  return { channels: ['baidu', 'sogou', 'bing', 'wechat_mp'] }
 }
 
 const handleSubmit = async () => {
@@ -321,7 +321,7 @@ const phaseOptions = [
             <div class="space-y-3">
               <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                 <UIcon name="i-lucide-check-circle" class="text-green-500" />
-                <span>网页新闻搜索（百度 + 搜狗 + DuckDuckGo，默认开启）</span>
+                <span>网页新闻搜索（百度 + 搜狗 + Bing，默认开启）</span>
               </div>
               <label
                 class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors"

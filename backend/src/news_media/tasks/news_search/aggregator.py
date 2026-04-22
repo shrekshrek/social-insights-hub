@@ -1,7 +1,7 @@
 """新闻搜索多渠道聚合器（同步版）
 
-并发调用百度新闻、搜狗新闻（Crawl4AI）和 DuckDuckGo，按 URL 去重合并，
-返回统一结构的文章列表（含 source_tier 分类）。
+并发调用百度新闻、搜狗新闻、Bing 新闻（均通过 Crawl4AI）和可选微信公众号，
+按 URL 去重合并，返回统一结构的文章列表（含 source_tier 分类）。
 
 使用 gevent.pool 做多渠道并发（gevent monkey-patch 下底层 socket 自动协作让出）。
 本模块由 Celery gevent worker 调用，全路径无 asyncio。
@@ -85,19 +85,23 @@ def search_news(
     query: str,
     max_results: int = 50,
     channels: list[str] | None = None,
+    raw_counts_out: dict[str, int] | None = None,
 ) -> list[dict]:
     """多渠道并发搜索，URL 去重合并，附加 source_tier（同步版）
 
     Args:
         query: 搜索关键词
         max_results: 每个渠道的最大结果数
-        channels: 启用的渠道列表，默认 ["baidu", "sogou", "duckduckgo"]
+        channels: 启用的渠道列表，默认 ["baidu", "sogou", "bing"]
+        raw_counts_out: 可选的输出字典。若提供，填充**去重前**每渠道的原始召回量，
+            形如 `{"baidu": 15, "sogou": 20, "bing": 8, "wechat_mp": 3}`。
+            用于让调用方了解各渠道的真实 yield（区别于"入库数量 = 去重后"）。
 
     Returns:
         去重后的文章列表，每条含标准字段 + source_tier + search_source
     """
     if channels is None:
-        channels = ["baidu", "sogou", "duckduckgo"]
+        channels = ["baidu", "sogou", "bing"]
 
     # 构造 (fn, args) 列表，用 gevent.pool 并发执行
     jobs: list = []
@@ -107,9 +111,9 @@ def search_news(
     if "sogou" in channels:
         from src.news_media.tasks.news_search.sogou_crawler import search_sogou_news
         jobs.append((search_sogou_news, (query,), {"max_results": max_results}))
-    if "duckduckgo" in channels:
-        from src.news_media.tasks.news_search.ddg_searcher import search_ddg_news
-        jobs.append((search_ddg_news, (query,), {"max_results": max_results}))
+    if "bing" in channels:
+        from src.news_media.tasks.news_search.bing_crawler import search_bing_news
+        jobs.append((search_bing_news, (query,), {"max_results": max_results}))
     if "wechat_mp" in channels:
         from src.news_media.tasks.news_search.wechat_mp_crawler import search_wechat_mp
         jobs.append((search_wechat_mp, (query,), {"max_results": max_results}))
@@ -124,16 +128,21 @@ def search_news(
         except Exception as e:
             return e
 
-    # gevent.pool 并发执行，DDG 失败不影响百度
+    # gevent.pool 并发执行，单渠道失败不影响其他渠道
     # 并发度 = len(jobs)，单任务内渠道数量有限（<=4）
     pool = Pool(len(jobs))
     raw_results = list(pool.imap_unordered(_safe_call, jobs))
 
+    # 同时统计每渠道**去重前**的原始召回量（用于评估渠道 yield 健康度）
+    raw_counts: dict[str, int] = {}
     all_articles: list[dict] = []
     for result in raw_results:
         if isinstance(result, Exception):
             logger.warning("搜索渠道异常（已忽略）: %s", result)
             continue
+        for article in result:
+            src = article.get("search_source", "unknown")
+            raw_counts[src] = raw_counts.get(src, 0) + 1
         all_articles.extend(result)
 
     # URL 归一化去重（保留先出现的）
@@ -153,7 +162,11 @@ def search_news(
         deduped.append(article)
 
     logger.info(
-        "聚合搜索: query=%r, channels=%s, 原始=%d, 去重后=%d",
-        query, channels, len(all_articles), len(deduped),
+        "聚合搜索: query=%r, channels=%s, 原始=%d, 去重后=%d, per_channel_raw=%s",
+        query, channels, len(all_articles), len(deduped), raw_counts,
     )
+
+    if raw_counts_out is not None:
+        raw_counts_out.update(raw_counts)
+
     return deduped

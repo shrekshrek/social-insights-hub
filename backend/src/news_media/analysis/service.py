@@ -169,7 +169,7 @@ async def run_slice_analysis(
 def _compute_stats(articles: list) -> dict:
     """从文章列表计算统计摘要"""
     tier_counts: dict[str, int] = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
-    source_dist: dict[str, int] = {"baidu": 0, "sogou": 0, "duckduckgo": 0, "wechat_mp": 0}
+    source_dist: dict[str, int] = {"baidu": 0, "sogou": 0, "bing": 0, "wechat_mp": 0}
     sentiment_dist = {"positive": 0, "neutral": 0, "negative": 0}
     sentiment_scores: list[float] = []
     entity_mentions: dict[str, int] = {}

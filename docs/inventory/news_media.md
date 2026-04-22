@@ -83,7 +83,7 @@
 |------|------|--------|-----|
 | `baidu_crawler` | news.baidu.com | Crawl4AI HTML 解析 | 主力中文源 |
 | `sogou_crawler` | news.sogou.com | Crawl4AI + JS 渲染 | 特殊优势:覆盖微信公众号 |
-| `ddg_searcher` | DuckDuckGo | duckduckgo_search 库 + 线程池异步 | 英文补充 |
+| `bing_crawler` | Bing 新闻（news 端点） | Crawl4AI + markdown link 提取 | 英文补充，替代 DDG（2026-04 DDG 因 403 rate limit 停用） |
 | `wechat_mp_crawler` | 微信公众号 | 搜狗微信入口 | 独立分层 |
 
 各搜索器返回字段结构统一:`{title, url, snippet, source_name, published_at, image_url, raw_data}`。
@@ -135,7 +135,7 @@
 
 **元数据(搜索即得)**:
 - `url, title, snippet, source_name, source_tier, author, published_at, image_url`
-- `search_source`: baidu / sogou / duckduckgo / wechat_mp
+- `search_source`: baidu / sogou / bing / wechat_mp
 
 **标注结果(仅 collect 阶段,来自 `NEWS_TAGGING`)**:
 - `relevance`: high / medium / low
@@ -191,7 +191,7 @@ result_data = {
 stats = {
   articles_total: int,
   source_tier_distribution: {tier1, tier2, tier3, wechat_mp},
-  search_source_distribution: {baidu, sogou, duckduckgo, wechat_mp},
+  search_source_distribution: {baidu, sogou, bing, wechat_mp},
   sentiment_distribution: {positive, neutral, negative},
   sentiment_overall: float,
   top_entities: [{name, mention_count}] × 10

@@ -44,6 +44,34 @@ class NewsTaskRead(CustomBaseModel):
     updated_at: datetime
 
 
+class ChannelCount(CustomBaseModel):
+    """单渠道的采集量（原始 vs 入库）
+
+    - raw: 去重前原始召回量（从 task.analysis_result.meta.channel_raw_counts 读取）
+    - deduped: 去重后入库量（SQL group by search_source 实时统计）
+    raw 更能反映渠道健康度；deduped 反映最终可用数据。
+    """
+
+    raw: int = 0
+    deduped: int = 0
+
+
+class NewsTaskChannelStats(CustomBaseModel):
+    """新闻任务的渠道采集量分布
+
+    按 NewsArticle.search_source 分组统计，用于在任务详情页直观展示
+    各搜索渠道的实际贡献，评估渠道健康度与 yield。
+    raw_total 反映所有渠道去重前的总召回量，deduped_total 是最终入库总数。
+    """
+
+    baidu: ChannelCount = ChannelCount()
+    sogou: ChannelCount = ChannelCount()
+    bing: ChannelCount = ChannelCount()
+    wechat_mp: ChannelCount = ChannelCount()
+    raw_total: int = 0
+    deduped_total: int = 0
+
+
 class NewsTaskReadWithRelations(NewsTaskRead):
     """新闻任务详情（含关联信息）"""
 

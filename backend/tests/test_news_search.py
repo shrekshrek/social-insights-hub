@@ -3,7 +3,7 @@
 测试重点：
 - aggregator URL 去重逻辑（含 query string 归一化）
 - source_tier 分类（tier1/tier2/tier3）
-- DDG/搜狗 失败降级（返回空列表，不抛异常）
+- Bing/搜狗 失败降级（返回空列表，不抛异常）
 - 多渠道并发合并结果
 - 搜狗 HTML 解析（标题/来源/时间提取）
 """
@@ -162,17 +162,17 @@ async def test_search_news_deduplicates_same_url():
         "source_name": "人民网", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
-    ddg_result = [{
+    bing_result = [{
         "title": "共同文章", "url": shared_url, "snippet": "...",
         "source_name": "人民网", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "duckduckgo",
+        "image_url": None, "raw_data": {}, "search_source": "bing",
     }]
 
     with (
         patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
+        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=bing_result)),
     ):
-        results = await search_news("测试", channels=["baidu", "duckduckgo"])
+        results = await search_news("测试", channels=["baidu", "bing"])
 
     assert len(results) == 1
     assert results[0]["url"] == shared_url
@@ -186,22 +186,22 @@ async def test_search_news_merges_unique_articles():
         "source_name": "新华网", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
-    ddg_result = [{
-        "title": "DDG独有", "url": "https://36kr.com/a2", "snippet": None,
-        "source_name": "36氪", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "duckduckgo",
+    bing_result = [{
+        "title": "Bing独有", "url": "https://bloomberg.com/a2", "snippet": None,
+        "source_name": "Bloomberg", "published_at": None,
+        "image_url": None, "raw_data": {}, "search_source": "bing",
     }]
 
     with (
         patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
+        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=bing_result)),
     ):
-        results = await search_news("测试", channels=["baidu", "duckduckgo"])
+        results = await search_news("测试", channels=["baidu", "bing"])
 
     assert len(results) == 2
     urls = {r["url"] for r in results}
     assert "https://xinhua.com/a1" in urls
-    assert "https://36kr.com/a2" in urls
+    assert "https://bloomberg.com/a2" in urls
 
 
 @pytest.mark.asyncio
@@ -220,8 +220,8 @@ async def test_search_news_adds_source_tier():
 
 
 @pytest.mark.asyncio
-async def test_search_news_ddg_failure_degrades_gracefully():
-    """DDG 失败时只返回百度结果，不抛异常"""
+async def test_search_news_bing_failure_degrades_gracefully():
+    """Bing 失败时只返回百度结果，不抛异常"""
     baidu_result = [{
         "title": "百度结果", "url": "https://xinhua.com/a1", "snippet": None,
         "source_name": "新华网", "published_at": None,
@@ -230,9 +230,9 @@ async def test_search_news_ddg_failure_degrades_gracefully():
 
     with (
         patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(side_effect=Exception("DDG error"))),
+        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(side_effect=Exception("Bing error"))),
     ):
-        results = await search_news("测试", channels=["baidu", "duckduckgo"])
+        results = await search_news("测试", channels=["baidu", "bing"])
 
     assert len(results) == 1
     assert results[0]["source_name"] == "新华网"
@@ -240,7 +240,7 @@ async def test_search_news_ddg_failure_degrades_gracefully():
 
 @pytest.mark.asyncio
 async def test_search_news_baidu_only_channel():
-    """channels=["baidu"] 时不调用 DDG"""
+    """channels=["baidu"] 时不调用 Bing"""
     baidu_result = [{
         "title": "百度结果", "url": "https://example.com/a1", "snippet": None,
         "source_name": "人民网", "published_at": None,
@@ -249,12 +249,12 @@ async def test_search_news_baidu_only_channel():
 
     with (
         patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)) as mock_baidu,
-        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock()) as mock_ddg,
+        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock()) as mock_bing,
     ):
         results = await search_news("测试", channels=["baidu"])
 
     mock_baidu.assert_called_once()
-    mock_ddg.assert_not_called()
+    mock_bing.assert_not_called()
     assert len(results) == 1
 
 
@@ -266,17 +266,17 @@ async def test_search_news_url_dedup_with_tracking_params():
         "snippet": None, "source_name": "新华网", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "baidu",
     }]
-    ddg_result = [{
-        "title": "文章A", "url": "https://example.com/news?id=1&utm_source=ddg",
+    bing_result = [{
+        "title": "文章A", "url": "https://example.com/news?id=1&utm_source=bing",
         "snippet": None, "source_name": "新华网", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "duckduckgo",
+        "image_url": None, "raw_data": {}, "search_source": "bing",
     }]
 
     with (
         patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
-        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
+        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=bing_result)),
     ):
-        results = await search_news("测试", channels=["baidu", "duckduckgo"])
+        results = await search_news("测试", channels=["baidu", "bing"])
 
     # 追踪参数去掉后 id=1 相同，应去重
     assert len(results) == 1
@@ -445,13 +445,13 @@ async def test_search_news_sogou_channel():
     with (
         patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock()) as mock_baidu,
         patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", new=AsyncMock(return_value=sogou_result)) as mock_sogou,
-        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock()) as mock_ddg,
+        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock()) as mock_bing,
     ):
         results = await search_news("测试", channels=["sogou"])
 
     mock_baidu.assert_not_called()
     mock_sogou.assert_called_once()
-    mock_ddg.assert_not_called()
+    mock_bing.assert_not_called()
     assert len(results) == 1
     assert results[0]["search_source"] == "sogou"
 
@@ -468,9 +468,9 @@ async def test_search_news_sogou_failure_degrades_gracefully():
     with (
         patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
         patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", new=AsyncMock(side_effect=Exception("Sogou error"))),
-        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=[])),
+        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=[])),
     ):
-        results = await search_news("测试", channels=["baidu", "sogou", "duckduckgo"])
+        results = await search_news("测试", channels=["baidu", "sogou", "bing"])
 
     assert len(results) == 1
     assert results[0]["source_name"] == "新华网"
@@ -489,19 +489,19 @@ async def test_search_news_three_channels_merge():
         "source_name": "某公众号", "published_at": None,
         "image_url": None, "raw_data": {}, "search_source": "sogou",
     }]
-    ddg_result = [{
-        "title": "DDG独有", "url": "https://reuters.com/a3", "snippet": None,
+    bing_result = [{
+        "title": "Bing独有", "url": "https://reuters.com/a3", "snippet": None,
         "source_name": "Reuters", "published_at": None,
-        "image_url": None, "raw_data": {}, "search_source": "duckduckgo",
+        "image_url": None, "raw_data": {}, "search_source": "bing",
     }]
 
     with (
         patch("src.news_media.tasks.news_search.baidu_crawler.search_baidu_news", new=AsyncMock(return_value=baidu_result)),
         patch("src.news_media.tasks.news_search.sogou_crawler.search_sogou_news", new=AsyncMock(return_value=sogou_result)),
-        patch("src.news_media.tasks.news_search.ddg_searcher.search_ddg_news", new=AsyncMock(return_value=ddg_result)),
+        patch("src.news_media.tasks.news_search.bing_crawler.search_bing_news", new=AsyncMock(return_value=bing_result)),
     ):
-        results = await search_news("测试", channels=["baidu", "sogou", "duckduckgo"])
+        results = await search_news("测试", channels=["baidu", "sogou", "bing"])
 
     assert len(results) == 3
     sources = {r["search_source"] for r in results}
-    assert sources == {"baidu", "sogou", "duckduckgo"}
+    assert sources == {"baidu", "sogou", "bing"}

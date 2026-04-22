@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 # probe 搜索每渠道最大条数(业务策略,不进 config)
 _PROBE_MAX_RESULTS = 20
-_DEFAULT_CHANNELS: tuple[str, ...] = ("baidu", "sogou", "duckduckgo")
-_ALL_VALID_CHANNELS = {"baidu", "sogou", "duckduckgo", "wechat_mp"}
+_DEFAULT_CHANNELS: tuple[str, ...] = ("baidu", "sogou", "bing")
+_ALL_VALID_CHANNELS = {"baidu", "sogou", "bing", "wechat_mp"}
 
 
 def _resolve_channels(task: "NewsTask") -> tuple[str, ...]:
@@ -220,14 +220,21 @@ def _search_and_store_articles_sync(
     task: NewsTask,
     max_results: int = 10,
     channels: tuple = ("baidu",),
+    raw_counts_out: dict[str, int] | None = None,
 ) -> list[NewsArticle]:
-    """搜索 + 创建 NewsArticle（同步版）"""
+    """搜索 + 创建 NewsArticle（同步版）
+
+    Args:
+        raw_counts_out: 可选输出字典。若提供，aggregator 会填入去重前的
+            每渠道原始召回量（调用方可用于持久化到 task.analysis_result）。
+    """
     from src.news_media.tasks.news_search.aggregator import search_news
 
     search_results = search_news(
         query=task.keywords,
         max_results=max_results,
         channels=list(channels),
+        raw_counts_out=raw_counts_out,
     )
     if not search_results:
         return []
@@ -412,8 +419,12 @@ def execute_news_probe_sync(
         task.started_at = datetime.now(timezone.utc)
         db.flush()
 
+        raw_counts: dict[str, int] = {}
         articles = _search_and_store_articles_sync(
-            db, task, max_results=_PROBE_MAX_RESULTS, channels=_resolve_channels(task)
+            db, task,
+            max_results=_PROBE_MAX_RESULTS,
+            channels=_resolve_channels(task),
+            raw_counts_out=raw_counts,
         )
 
         tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
@@ -436,6 +447,7 @@ def execute_news_probe_sync(
                 "articles_total": len(articles),
                 "source_tier_distribution": tier_counts,
                 "source_samples": source_samples,
+                "channel_raw_counts": raw_counts,
             },
         }
         db.flush()

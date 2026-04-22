@@ -100,8 +100,12 @@ def run_news_collect_task(
             else:
                 db.commit()
 
+            raw_counts: dict[str, int] = {}
             articles = _search_and_store_articles_sync(
-                db, task, max_results=20, channels=_resolve_channels(task)
+                db, task,
+                max_results=20,
+                channels=_resolve_channels(task),
+                raw_counts_out=raw_counts,
             )
 
             if not articles:
@@ -109,7 +113,11 @@ def run_news_collect_task(
                 task.completed_at = datetime.now(timezone.utc)
                 task.articles_count = 0
                 task.analysis_result = {
-                    "meta": {"keywords": task.keywords, "articles_total": 0},
+                    "meta": {
+                        "keywords": task.keywords,
+                        "articles_total": 0,
+                        "channel_raw_counts": raw_counts,
+                    },
                 }
                 if tagging_job:
                     complete_analysis_job_sync(db, tagging_job, analyzed_count=0)
@@ -171,6 +179,7 @@ def run_news_collect_task(
                     "articles_crawled": articles_crawled,
                     "articles_analyzed": relevant_count,
                     "source_tier_distribution": tier_counts,
+                    "channel_raw_counts": raw_counts,
                 },
             }
             db.commit()

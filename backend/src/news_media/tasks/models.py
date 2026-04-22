@@ -161,7 +161,7 @@ class NewsArticle(Base):
     # 搜索渠道
     search_source: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="baidu",
-        comment="搜索渠道: baidu / sogou / duckduckgo / wechat_mp"
+        comment="搜索渠道: baidu / sogou / bing / wechat_mp"
     )
 
     # 原始数据

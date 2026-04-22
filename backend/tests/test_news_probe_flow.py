@@ -230,7 +230,7 @@ class TestSearchAndStoreArticlesDualChannel:
 
         assert captured["max_results"] == 20
         assert "baidu" in captured["channels"]
-        assert "duckduckgo" in captured["channels"]
+        assert "bing" in captured["channels"]
 
 
 class TestRunNewsProbeReviewOne:

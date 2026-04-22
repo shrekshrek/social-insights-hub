@@ -203,18 +203,14 @@ class Settings(BaseSettings):
     )
 
     # ========== Research Agent Configuration ==========
-    # Search provider: "tavily" (default) or "exa"
-    SEARCH_PROVIDER: str = Field(
-        default="tavily", description="Search provider for Research Agent: tavily | exa"
-    )
+    # 搜索后端：只用 Tavily；两个 key 都耗尽时任务会明确失败（error_message 给到前端）。
+    # 不做 Exa / 通用搜索引擎 fallback，不做站点独立适配——额度耗尽属于运维事件，
+    # 提醒充值或等下月刷新即可。
     TAVILY_API_KEY: str | None = Field(
-        default=None, description="Tavily Search API key (required when SEARCH_PROVIDER=tavily)"
+        default=None, description="Tavily Search API key (required for Research Agent)"
     )
     TAVILY_API_KEY_2: str | None = Field(
         default=None, description="Tavily backup API key, auto-fallback when primary key quota exceeded"
-    )
-    EXA_API_KEY: str | None = Field(
-        default=None, description="Exa Search API key (required when SEARCH_PROVIDER=exa)"
     )
     # ========== Agent API Configuration ==========
     AGENT_API_KEY: str | None = Field(

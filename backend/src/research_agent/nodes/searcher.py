@@ -1,25 +1,22 @@
-"""Search 节点：执行定向域名搜索
-
-支持两个 search provider（由 SEARCH_PROVIDER 环境变量控制）：
-- tavily（默认）：snippet 模式，fetcher 节点负责抓取全文
-- exa：直接返回全文（20k chars），可跳过 fetcher 节点抓取
+"""Search 节点：Tavily 定向域名搜索
 
 执行流程：
-1. 按 provider 对每个关键词做定向域名搜索
-2. 候选池按域名限流（_MAX_CANDIDATES_PER_DOMAIN），防止单域霸占
+1. 合并 profile 的兜底域名 + planner LLM 针对本次主题推荐的域名
+2. 第 3 轮起剔除已充分采集（≥2 篇）的饱和域名，避免强势域名垄断
+3. 对每个关键词调 Tavily include_domains 定向搜索
+4. 候选池按域名限流（_MAX_CANDIDATES_PER_DOMAIN），防止单域霸占
 
-设计约定（2026-04 清理）：
-- 不做**搜索引擎结果页通用爬取**（老版本曾用 crawl4ai 爬 baidu.com/s 和 bing.com/search
-  作为兜底，实测都已被反爬降级为导航噪声，产出几乎 0，白耗配额）
-- 若将来需要补量，应该走**站点独立适配**的路子——针对具体内容源（麦肯锡 insights、
-  statista 搜索、指定智库等）各写一个 adapter，参考 news_media 的
-  baidu_crawler / sogou_crawler / wechat_mp_crawler 模式，而不是再套通用搜索引擎
+设计约定（2026-04）：
+- **搜索只走 Tavily**——不再做 Exa 切换、不做通用搜索引擎结果页爬取（baidu.com/s
+  / bing.com/search 实测均被反爬降级为导航噪声），也不做站点独立适配
+- 两个 TAVILY_API_KEY 都耗尽时：tavily_search 抛 TavilyQuotaExhaustedError，
+  由 tasks.py 捕获后把任务标记为 failed + 明确的 error_message，让前端给用户明确提示
+  （属于运维事件，提醒充值或等下月刷新即可，不做优雅降级）
 """
 
 import logging
 from urllib.parse import urlparse
 
-from src.config import get_settings
 from src.research_agent.nodes.filter import _extract_year
 from src.research_agent.profiles import get_profile
 from src.research_agent.state import ResearchState
@@ -49,7 +46,6 @@ def search_node(state: ResearchState) -> dict:
     target_domains = plan.get("target_domains", [])
     current_round = state.get("round", 1)
 
-    settings = get_settings()
     profile = get_profile(state.get("profile_name"))
 
     # 域名合并：profile 定义的兜底域名 + LLM 针对本次主题推荐
@@ -76,10 +72,7 @@ def search_node(state: ResearchState) -> dict:
                 )
                 all_domains = reduced
 
-    # planner 已强制每个关键词含报告类修饰词，无需再追加变体
-    provider = settings.SEARCH_PROVIDER.lower()
-    # 内部 dedup 在各 provider 内完成，这里不再需要 seen_urls
-    all_candidates, _ = _run_search(provider, keywords, all_domains)
+    all_candidates = _search_tavily(keywords, all_domains)
 
     # 候选池域名限流：单域名最多 _MAX_CANDIDATES_PER_DOMAIN 条
     # 防止 assets.kpmg.com 等高产域名霸占候选池，挤占其他来源的曝光机会
@@ -93,8 +86,7 @@ def search_node(state: ResearchState) -> dict:
         )
 
     logger.info(
-        "search 节点 [%s]: %d 个关键词 → %d 条候选",
-        provider,
+        "search 节点: %d 个关键词 → %d 条候选",
         len(keywords),
         len(all_candidates),
     )
@@ -102,21 +94,12 @@ def search_node(state: ResearchState) -> dict:
     return {"candidates": all_candidates}
 
 
-def _run_search(
-    provider: str,
-    keywords: list[str],
-    target_domains: list[str],
-) -> tuple[list[dict], set[str]]:
-    """按 provider 执行搜索，返回 (candidates, seen_urls)"""
-    if provider == "exa":
-        return _search_exa(keywords, target_domains)
-    return _search_tavily(keywords, target_domains)
+def _search_tavily(keywords: list[str], target_domains: list[str]) -> list[dict]:
+    """对每个关键词调 Tavily 定向搜索，URL 去重后返回候选列表
 
-
-def _search_tavily(
-    keywords: list[str],
-    target_domains: list[str],
-) -> tuple[list[dict], set[str]]:
+    两 key 都耗尽时 tavily_search 抛 TavilyQuotaExhaustedError，不在此处吞异常——
+    让它冒泡到 Celery 任务入口，由 tasks.py 标 failed + error_message。
+    """
     from src.research_agent.tools.web_search import tavily_search
 
     candidates: list[dict] = []
@@ -125,60 +108,26 @@ def _search_tavily(
     for kw in keywords:
         for r in tavily_search(query=kw, target_domains=target_domains, max_results=10):
             url = r["url"]
-            if url not in seen_urls:
-                seen_urls.add(url)
-                title = r["title"]
-                snippet = r["snippet"]
-                # snippet 通常含发布年份，作为 URL/标题都无年份时的兜底
-                year = _extract_year(url) or _extract_year(title) or _extract_year(snippet)
-                candidates.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": r["snippet"],
-                    "full_text": "",  # fetcher 节点负责填充
-                    "source": _extract_domain(url),
-                    "content_type": _guess_content_type(url),
-                    "source_tier": "",
-                    "relevance_score": r.get("score", 0.0),
-                    "published_date": str(year) if year else "",
-                })
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            title = r["title"]
+            snippet = r["snippet"]
+            # snippet 通常含发布年份，作为 URL/标题都无年份时的兜底
+            year = _extract_year(url) or _extract_year(title) or _extract_year(snippet)
+            candidates.append({
+                "title": title,
+                "url": url,
+                "snippet": snippet,
+                "full_text": "",  # fetcher 节点负责填充
+                "source": _extract_domain(url),
+                "content_type": _guess_content_type(url),
+                "source_tier": "",
+                "relevance_score": r.get("score", 0.0),
+                "published_date": str(year) if year else "",
+            })
 
-    return candidates, seen_urls
-
-
-def _search_exa(
-    keywords: list[str],
-    target_domains: list[str],
-) -> tuple[list[dict], set[str]]:
-    from src.research_agent.tools.exa_search import exa_search
-
-    candidates: list[dict] = []
-    seen_urls: set[str] = set()
-
-    for kw in keywords:
-        for r in exa_search(query=kw, target_domains=target_domains, max_results=10):
-            url = r["url"]
-            if url not in seen_urls:
-                seen_urls.add(url)
-                title = r["title"]
-                pub_date = r.get("published_date", "")
-                # Exa 日期格式为 ISO（2024-05-01），截取年份作为回退
-                if not pub_date:
-                    year = _extract_year(url) or _extract_year(title)
-                    pub_date = str(year) if year else ""
-                candidates.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": r["snippet"],
-                    "full_text": r.get("full_text", ""),  # Exa 直接返回全文
-                    "source": _extract_domain(url),
-                    "content_type": _guess_content_type(url),
-                    "source_tier": "",
-                    "relevance_score": r.get("score", 0.0),
-                    "published_date": pub_date,
-                })
-
-    return candidates, seen_urls
+    return candidates
 
 
 def _cap_candidates_by_domain(candidates: list[dict], max_per_domain: int) -> list[dict]:

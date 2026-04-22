@@ -29,7 +29,7 @@ Research Agent 是 4 个模块里**架构最独特**的——不是 pipeline 也
 └───┬──┘
     ↓
 ┌───▼──┐
-│search│ Tavily / Exa / Crawl4AI 多源搜索
+│search│ Tavily 定向搜索（双 key 自动切换）
 └───┬──┘
     ↓
 ┌───▼──┐
@@ -61,7 +61,7 @@ Research Agent 是 4 个模块里**架构最独特**的——不是 pipeline 也
 | 节点 | 文件 | 输入 state | 输出 state | LLM | 外部 API |
 |------|------|---------|---------|-----|--------|
 | `plan` | [`nodes/planner.py`](../../backend/src/research_agent/nodes/planner.py) | query, context, research_questions, profile_name | search_plan, title(round=0), round, research_questions(round=0) | ChatDeepSeek(注入 profile.planner_context) | 无 |
-| `search` | [`nodes/searcher.py`](../../backend/src/research_agent/nodes/searcher.py) | search_plan, profile_name, findings, selected | candidates(跨轮累积) | 无 | **Tavily**(默认)/ Exa(可选)/ Crawl4AI(降级) |
+| `search` | [`nodes/searcher.py`](../../backend/src/research_agent/nodes/searcher.py) | search_plan, profile_name, findings, selected | candidates(跨轮累积) | 无 | **Tavily**(TAVILY_API_KEY 主 + _2 备用双 key 切换；两个都耗尽抛 `TavilyQuotaExhaustedError`) |
 | `filter` | [`nodes/filter.py`](../../backend/src/research_agent/nodes/filter.py) | candidates, profile_name, selected(上轮) | selected(本轮 ≤15) | ChatDeepSeek(批量评分) | 无 |
 | `fetch` | [`nodes/fetcher.py`](../../backend/src/research_agent/nodes/fetcher.py) | selected, profile_name | documents(跨轮累积) | 无 | **Crawl4AI**(HTML)/ **httpx**(PDF / 直下) |
 | `analyze` | [`nodes/analyzer.py`](../../backend/src/research_agent/nodes/analyzer.py) | documents, research_questions, profile_name | findings(跨轮累积) | ChatDeepSeek(per-doc,**并发 10**) | 无 |

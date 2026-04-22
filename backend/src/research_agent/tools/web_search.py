@@ -2,7 +2,9 @@
 
 同步调用（gevent 兼容），始终使用 include_domains 定向搜索。
 只搜索指定权威域名，不做开放全网搜索。
-支持双 API Key：主 key 额度耗尽时自动切换备用 key。
+支持双 API Key：主 key 额度耗尽时自动切换备用 key；两个 key 都耗尽时抛
+`TavilyQuotaExhaustedError`，由 Celery 任务入口捕获后把任务标为 failed +
+明确的 error_message 提示用户（属于运维事件，不做优雅降级）。
 """
 
 import logging
@@ -13,6 +15,14 @@ from tavily.errors import UsageLimitExceededError
 from src.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+class TavilyQuotaExhaustedError(Exception):
+    """所有 Tavily API key 的配额都已耗尽。
+
+    用户可见错误：由 tasks.py 捕获后写入 ResearchTask.error_message，
+    前端任务详情页会直接显示。
+    """
 
 
 def _get_api_keys() -> list[str]:
@@ -42,6 +52,10 @@ def tavily_search(
     Returns
     -------
     list[dict] : [{title, url, snippet, score}]
+
+    Raises
+    ------
+    TavilyQuotaExhaustedError : 两个 API key 都配额耗尽时抛出
     """
     api_keys = _get_api_keys()
     if not api_keys:
@@ -82,7 +96,10 @@ def tavily_search(
                 )
                 continue
             logger.error("Tavily 所有 key 额度均已耗尽: query=%s", query)
-            return []
+            raise TavilyQuotaExhaustedError(
+                "Tavily 搜索配额已耗尽（主 key 与备用 key 均不可用）。"
+                "请联系管理员充值或等待下月配额刷新。"
+            ) from None
         except Exception:
             logger.exception("Tavily 搜索失败: query=%s", query)
             return []

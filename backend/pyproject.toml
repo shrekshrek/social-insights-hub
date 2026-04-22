@@ -38,7 +38,6 @@ dependencies = [
     "apscheduler>=3.10,<4.0",
     "langgraph>=1.0.1",
     "tavily-python>=0.7.23",
-    "exa-py>=2.11.0",
 ]
 
 [project.optional-dependencies]

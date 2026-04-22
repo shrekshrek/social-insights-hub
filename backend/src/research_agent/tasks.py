@@ -315,10 +315,25 @@ def run_research_task(self, research_task_id: int) -> None:
     except Exception as exc:
         # SoftTimeLimitExceeded 需要快速处理，hard limit (SIGKILL) 即将到来
         from billiard.exceptions import SoftTimeLimitExceeded
+        from src.research_agent.tools.web_search import TavilyQuotaExhaustedError
+
         is_timeout = isinstance(exc, SoftTimeLimitExceeded)
-        error_msg = "任务超时（执行时间超过限制）" if is_timeout else str(exc)[:500]
-        log_level = logger.warning if is_timeout else logger.error
-        log_level("ResearchTask %d 失败: %s", research_task_id, exc, exc_info=not is_timeout)
+        is_quota_exhausted = isinstance(exc, TavilyQuotaExhaustedError)
+        if is_timeout:
+            error_msg = "任务超时（执行时间超过限制）"
+        elif is_quota_exhausted:
+            # 运维事件而非代码 bug，保留异常 message 原文给前端展示
+            error_msg = str(exc)
+        else:
+            error_msg = str(exc)[:500]
+        # quota 耗尽 / timeout 都属于正常业务事件，不打 ERROR + 堆栈（避免告警系统误报）
+        log_level = logger.warning if (is_timeout or is_quota_exhausted) else logger.error
+        log_level(
+            "ResearchTask %d 失败: %s",
+            research_task_id,
+            exc,
+            exc_info=not (is_timeout or is_quota_exhausted),
+        )
         db.rollback()
         try:
             task = db.get(ResearchTask, research_task_id)

@@ -8,11 +8,39 @@
 """
 
 import logging
+import re
 from urllib.parse import parse_qs, urlparse, urlencode
 
 from gevent.pool import Pool
 
 logger = logging.getLogger(__name__)
+
+
+# 跨渠道通用的非新闻 title 识别——这些模式来自**源网站的页面标题格式**（标签页 / 资料库页 /
+# SEO 产品聚合页 / 特定服务比较页），不依赖特定搜索引擎。不管 baidu/sogou/bing 哪个
+# 索引到同一页面，title 都是这个 pattern。保守过滤：只打**极高置信度**的明显垃圾，
+# 其他栏目页/排行页/跑题内容交给下游 LLM tagging 判断（正则 blacklist 无法穷尽搜索引擎
+# 填充 pattern，继续扩充走向维护深渊）。
+_JUNK_TITLE_PATTERNS = [
+    # SEO 垃圾 / 色情内容（异常字符，明确非新闻）
+    re.compile(r"www\.\.com|国产a片|\.\.com国产"),
+    # 纯日期 / 时间戳标题（无实质文字内容）
+    re.compile(r"^\s*\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?\s*(?:\d{1,2}[:：]\d{1,2})?\s*$"),
+    # 明确的标签页 / 资料库聚合页（title 模式非常独特，几乎不会误伤真新闻）
+    re.compile(r"_标签_"),                  # "宇多田光_标签_网易出品"
+    re.compile(r"资料库-"),                 # "明星资料库-搜狐娱乐"
+    # 典型 SEO 堆砌的产品聚合页
+    re.compile(r"最新报价_参数_图片"),      # "索尼A37_最新报价_参数_图片_论坛..."
+    # 特定服务的比较页（豆包 AI 比较服务，不是新闻）
+    re.compile(r"哪个好问豆包"),            # "索尼 WX30与索尼 A7R III哪个好问豆包"
+]
+
+
+def _is_junk_title(title: str) -> bool:
+    """跨渠道通用：识别**极高置信度**的非新闻垃圾 title"""
+    if not title:
+        return True
+    return any(pat.search(title) for pat in _JUNK_TITLE_PATTERNS)
 
 # 中国新闻来源权威度分层
 _SOURCE_TIERS: dict[str, list[str]] = {
@@ -145,10 +173,16 @@ def search_news(
             raw_counts[src] = raw_counts.get(src, 0) + 1
         all_articles.extend(result)
 
-    # URL 归一化去重（保留先出现的）
+    # URL 归一化去重 + 跨渠道通用 junk title 过滤（保留先出现的）
     seen_normalized: set[str] = set()
     deduped: list[dict] = []
+    junk_by_src: dict[str, int] = {}
     for article in all_articles:
+        if _is_junk_title(article.get("title", "")):
+            src = article.get("search_source", "unknown")
+            junk_by_src[src] = junk_by_src.get(src, 0) + 1
+            continue
+
         norm = _normalize_url(article["url"])
         if norm in seen_normalized:
             continue
@@ -162,8 +196,8 @@ def search_news(
         deduped.append(article)
 
     logger.info(
-        "聚合搜索: query=%r, channels=%s, 原始=%d, 去重后=%d, per_channel_raw=%s",
-        query, channels, len(all_articles), len(deduped), raw_counts,
+        "聚合搜索: query=%r, channels=%s, 原始=%d, junk过滤=%s, 去重后=%d, per_channel_raw=%s",
+        query, channels, len(all_articles), junk_by_src, len(deduped), raw_counts,
     )
 
     if raw_counts_out is not None:

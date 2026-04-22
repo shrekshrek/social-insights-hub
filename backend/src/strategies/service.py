@@ -1771,7 +1771,7 @@ async def confirm_research(
             from src.news_media.tasks.tasks import run_news_probe_task
 
             enable_wechat_mp = dimension.get("enable_wechat_mp", False)
-            news_channels = ["baidu", "sogou", "bing"]
+            news_channels = ["baidu", "sogou"]
             if enable_wechat_mp:
                 news_channels.append("wechat_mp")
 
@@ -2776,21 +2776,102 @@ async def check_probe_status(
 
 # ==================== 探测任务审批和调整 ====================
 
+
+async def _advance_probe_task_to_collect(
+    db: AsyncSession,
+    task: "SocialTask",
+    collect_task_params: dict,
+) -> None:
+    """把一条 SocialTask 从 probe 阶段原地推进到 collect 阶段。
+
+    - phase: probe → collect
+    - status: probe_ready → pending（重新进入 agent 认领队列）
+    - task_params: 覆写为全量采集参数
+    - 重置执行态字段（accepted/started/completed/error），供 agent 重新认领
+    - 清除自动分析的 Redis 幂等锁并撤销进行中的 probe 分析作业，让 collect 完成后能重新触发分析
+
+    已采集的 posts/comments 保留在同一 task 下（它们是最终 50 条的一部分）。
+    爬虫侧通过相同 cloud_task_id 的历史 checkpoint 自动续采，无需额外传参。
+    """
+    from src.social_media.tasks.models import SocialTask as _SocialTask  # noqa: F401
+
+    task.phase = "collect"
+    task.status = "pending"
+    task.task_params = collect_task_params
+    task.accepted_at = None
+    task.accepted_by = None
+    task.started_at = None
+    task.completed_at = None
+    task.error_message = None
+    task.crawled_count = 0
+    # posts_count / comments_count 保留：probe 阶段已入库的 20 条不能被遗忘
+    # analysis_result 清空：collect 完成后会重新聚合全量分析
+    task.analysis_result = None
+    task.analysis_result_at = None
+    flag_modified(task, "task_params")
+
+    # 清除自动分析幂等锁 + 撤销进行中的 probe 分析 celery 任务
+    # 参考 agent.service._clear_analysis_results 的做法，但这里 posts/comments 要保留，
+    # 所以不调用完整的 clear 函数（它会删除 PostAnalysis 记录）
+    try:
+        import redis.asyncio as redis
+        from src.redis_client import redis_pool
+
+        async with redis.Redis(connection_pool=redis_pool) as redis_client:
+            await redis_client.delete(f"analysis:auto:{task.id}:triggered")
+            await redis_client.delete(f"analysis:auto:{task.id}:running")
+    except Exception as e:
+        logger.warning(
+            "Task %s: failed to clear auto-analysis redis lock during probe→collect advance: %s",
+            task.id,
+            e,
+        )
+
+    try:
+        from celery import current_app as celery_app  # type: ignore[import-not-found]
+        from src.jobs.models import AnalysisJob
+
+        jobs_stmt = select(AnalysisJob.celery_task_id).where(
+            and_(
+                AnalysisJob.social_task_id == task.id,
+                AnalysisJob.status.in_(("pending", "running")),
+            )
+        )
+        jobs_result = await db.execute(jobs_stmt)
+        celery_task_ids = [row[0] for row in jobs_result.all() if row and row[0]]
+        for celery_task_id in celery_task_ids:
+            celery_app.control.revoke(celery_task_id, terminate=True)
+        if celery_task_ids:
+            logger.info(
+                "Task %s: revoked %d in-flight probe analysis celery tasks before advance",
+                task.id,
+                len(celery_task_ids),
+            )
+    except Exception as e:
+        logger.warning(
+            "Task %s: failed to revoke probe analysis celery tasks: %s", task.id, e
+        )
+
+
 async def approve_probe(
     db: AsyncSession,
     strategy: Strategy,
     current_user_id: int,
 ) -> ApproveProbeResponse:
-    """手动确认探测，为每个探测任务创建独立的全量采集任务（phase="collect"）。
+    """手动确认探测，把每个社媒探测任务原地推进到全量采集阶段（phase 由 probe → collect）。
 
-    幂等：若已进入 collecting 及以后阶段，直接返回已存在的 collect 任务数，
-    避免网络重试 / 前端重复点击导致重复建任务。
+    单任务多阶段模型：同一条 SocialTask 记录承载探测与全量两个阶段，通过 phase 字段区分。
+    `task_id` 在两个阶段保持不变，爬虫侧据此自动续采探测阶段产生的 checkpoint。
+
+    幂等：若策略已进入 collecting 及以后阶段，直接返回当前 collect 任务数，
+    避免网络重试 / 前端重复点击触发重复推进。
+
+    新闻任务仍按旧模型（创建独立的 collect NewsTask），因为新闻走 Celery push 模型，
+    不存在 checkpoint 复用需求。
     """
     from src.social_media.tasks.models import SocialTask as SocialTask
-    from src.social_media.tasks.schemas import SocialTaskCreate as SocialTaskCreate
-    from src.social_media.tasks.service import create_task
 
-    # 入口幂等：已推进到 collecting/ready/产出阶段时，不重复建 collect 任务
+    # 入口幂等：已推进到 collecting/ready/产出阶段时，直接返回当前 collect 任务数
     if STATUS_ORDER.get(strategy.status, 0) >= STATUS_ORDER["collecting"]:
         existing = await db.execute(
             select(func.count()).select_from(SocialTask).where(
@@ -2830,7 +2911,7 @@ async def approve_probe(
             detail="当前没有探测任务，无法确认",
         )
 
-    # 维度映射是自动建切片的唯一依据：必须完整存在
+    # 维度映射必须完整存在（社媒自动建切片的唯一依据）
     research_design = strategy.research_design or {}
     if not isinstance(research_design, dict):
         raise HTTPException(
@@ -2845,18 +2926,10 @@ async def approve_probe(
             detail="缺少任务维度映射，请重新确认研究计划后再批准探测",
         )
 
-    # 创建全量采集任务，并同步重建 collect 阶段的 task_id -> dimension 映射
-    collect_task_ids = []
+    # 原地推进社媒 probe 任务至 collect 阶段（task_id 保持不变）
+    collect_task_ids: list[int] = []
     collect_dim_map: dict[str, str] = {}
     for pt in probe_tasks:
-        # 构造任务参数
-        collect_task_params = {
-            "max_notes_count": 50,  # 全量采集默认 50 条
-            "enable_comments": 1,  # 启用评论
-            "per_note_max_comments_count": 20,  # 每帖最多 20 条评论
-            # max_pages: 不设置，表示不限制翻页
-        }
-
         dim = probe_dim_map.get(str(pt.id))
         if not dim:
             raise HTTPException(
@@ -2864,24 +2937,25 @@ async def approve_probe(
                 detail=f"探测任务 {pt.id} 缺少维度映射，请重新确认研究计划",
             )
 
-        collect_task = await create_task(
-            db,
-            strategy.social_monitor_id,
-            SocialTaskCreate(
-                name=f"{pt.keywords}-{pt.platform.name}",
-                platform_id=pt.platform_id,
-                task_type="search",
-                keywords=pt.keywords,
-                data_source="remote_crawler",
-                task_params=collect_task_params,
-                auto_analyze=True,
-                phase="collect",  # 标记为全量采集任务
-            ),
-            current_user_id,
-        )
-        collect_task.strategy_id = strategy.id
-        collect_task_ids.append(collect_task.id)
-        collect_dim_map[str(collect_task.id)] = dim
+        # 构造 collect 阶段参数，保留原 probe 任务的平台专属参数（sort_type / publish_time_type 等）
+        existing_params = dict(pt.task_params or {})
+        # 移除仅探测阶段使用的参数
+        existing_params.pop("probe_size", None)
+        existing_params.pop("max_pages", None)
+        # 覆写 collect 阶段默认参数（用户侧可通过配置页后续调整）
+        collect_task_params = {
+            **existing_params,
+            "max_notes_count": 50,
+            "enable_comments": 1,
+            "per_note_max_comments_count": 20,
+        }
+
+        # 原地推进：phase → collect，status → pending（供 agent 重新认领），重置执行字段
+        await _advance_probe_task_to_collect(db, pt, collect_task_params)
+
+        collect_task_ids.append(pt.id)
+        # task_id 不变，直接复用 probe 阶段的维度映射
+        collect_dim_map[str(pt.id)] = dim
 
     # 为新闻 probe 任务创建全量采集任务
     news_collect_dim_map: dict[str, str] = {}

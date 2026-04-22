@@ -1,6 +1,6 @@
 """新闻搜索多渠道聚合器（同步版）
 
-并发调用百度新闻、搜狗新闻、Bing 新闻（均通过 Crawl4AI）和可选微信公众号，
+并发调用百度新闻、搜狗新闻（均通过 Crawl4AI）和可选微信公众号，
 按 URL 去重合并，返回统一结构的文章列表（含 source_tier 分类）。
 
 使用 gevent.pool 做多渠道并发（gevent monkey-patch 下底层 socket 自动协作让出）。
@@ -120,16 +120,16 @@ def search_news(
     Args:
         query: 搜索关键词
         max_results: 每个渠道的最大结果数
-        channels: 启用的渠道列表，默认 ["baidu", "sogou", "bing"]
+        channels: 启用的渠道列表，默认 ["baidu", "sogou"]
         raw_counts_out: 可选的输出字典。若提供，填充**去重前**每渠道的原始召回量，
-            形如 `{"baidu": 15, "sogou": 20, "bing": 8, "wechat_mp": 3}`。
+            形如 `{"baidu": 28, "sogou": 27, "wechat_mp": 30}`。
             用于让调用方了解各渠道的真实 yield（区别于"入库数量 = 去重后"）。
 
     Returns:
         去重后的文章列表，每条含标准字段 + source_tier + search_source
     """
     if channels is None:
-        channels = ["baidu", "sogou", "bing"]
+        channels = ["baidu", "sogou"]
 
     # 构造 (fn, args) 列表，用 gevent.pool 并发执行
     jobs: list = []
@@ -139,9 +139,6 @@ def search_news(
     if "sogou" in channels:
         from src.news_media.tasks.news_search.sogou_crawler import search_sogou_news
         jobs.append((search_sogou_news, (query,), {"max_results": max_results}))
-    if "bing" in channels:
-        from src.news_media.tasks.news_search.bing_crawler import search_bing_news
-        jobs.append((search_bing_news, (query,), {"max_results": max_results}))
     if "wechat_mp" in channels:
         from src.news_media.tasks.news_search.wechat_mp_crawler import search_wechat_mp
         jobs.append((search_wechat_mp, (query,), {"max_results": max_results}))

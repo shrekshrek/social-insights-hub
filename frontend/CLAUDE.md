@@ -75,6 +75,8 @@ frontend/
 - Options API Store 比 Setup Store 更 SSR 友好
 - ECharts 必须通过 `useCharts` composable 使用
 - 新增 Layer 必须在 `nuxt.config.ts` 的 `extends` 中注册
+- 全局错误处理器（`vueApp.config.errorHandler` / `vue:error` hook / `window.unhandledrejection`）**禁止触发任何 reactive 副作用**——不得 `toast.add`、不得写 reactive ref、不得 `navigateTo`。否则会在渲染错误时形成"error→副作用→再渲染→再 error"无限循环（2026-04 事故根因）。用户可见的运行时通知请走路由中间件 `error-handler.global.ts` 的显式分派。详见 [`app/plugins/error-handler.client.ts`](../app/plugins/error-handler.client.ts) 头注释
+- 详情页面对"资源不存在"（404）必须在 composable 层用 `silent404: true` 抑制 toast + 显式 watch `data===null` 后 `navigateTo` 到列表。残留失效链接不能进入 broken render 路径
 
 ## 注意事项
 

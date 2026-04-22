@@ -21,8 +21,8 @@
         >
           <UBadge
             :color="rq.priority === 'high' ? 'error' : rq.priority === 'medium' ? 'warning' : 'neutral'"
-            variant="soft"
-            size="xs"
+            variant="subtle"
+            size="sm"
           >
             {{ rq.priority }}
           </UBadge>
@@ -215,9 +215,9 @@
         <span class="text-xs font-medium text-gray-600 dark:text-gray-400">产出路径</span>
         <UBadge
           v-if="outputTypeLocked"
-          variant="soft"
+          variant="subtle"
           color="warning"
-          size="xs"
+          size="sm"
         >
           当前数据计划仅支持 {{ OUTPUT_TYPE_LABELS[effectiveOutputType] }}
         </UBadge>

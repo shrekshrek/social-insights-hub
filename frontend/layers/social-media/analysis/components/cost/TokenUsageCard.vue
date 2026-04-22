@@ -60,7 +60,7 @@
           <div class="flex items-center gap-1">
             <UBadge
               :color="getCostLevel(stats.total_cost_cny).color"
-              size="xs"
+              size="sm"
               variant="subtle"
             >
               {{ getCostLevel(stats.total_cost_cny).label }}

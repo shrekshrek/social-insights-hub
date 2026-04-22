@@ -140,7 +140,7 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-medium text-gray-900 dark:text-white">{{ entry.label }}</span>
-                  <UBadge v-if="entry.round > 1" :label="`第 ${entry.round} 轮`" size="xs" variant="subtle" color="neutral" />
+                  <UBadge v-if="entry.round > 1" :label="`第 ${entry.round} 轮`" size="sm" variant="subtle" color="neutral" />
                 </div>
                 <p class="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{{ entry.detail }}</p>
               </div>
@@ -190,7 +190,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ entry.label }}</span>
-                    <UBadge v-if="entry.round > 1" :label="`第 ${entry.round} 轮`" size="xs" variant="subtle" color="neutral" />
+                    <UBadge v-if="entry.round > 1" :label="`第 ${entry.round} 轮`" size="sm" variant="subtle" color="neutral" />
                   </div>
                   <p class="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{{ entry.detail }}</p>
                 </div>

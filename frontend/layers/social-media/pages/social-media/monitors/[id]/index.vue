@@ -566,8 +566,8 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
             h('span', { class: 'font-medium text-gray-900 dark:text-white leading-snug line-clamp-2' }, s.name || `切片 ${s.id}`),
             h('span', { class: 'text-xs text-gray-400 font-normal shrink-0' }, `#${s.id}`),
             hasFocus
-              ? h(Badge, { size: 'xs', variant: 'subtle', color: 'primary' }, () => 'Focus')
-              : h(Badge, { size: 'xs', variant: 'subtle', color: 'neutral' }, () => '无 Focus'),
+              ? h(Badge, { size: 'sm', variant: 'subtle', color: 'primary' }, () => 'Focus')
+              : h(Badge, { size: 'sm', variant: 'subtle', color: 'neutral' }, () => '无 Focus'),
           ]),
           h('div', { class: 'mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate' },
             `主体：${subject ? String(subject) : '-'} · 竞品：${competitors}`
@@ -602,8 +602,8 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
         const stage2 = s.result_data?.pipeline?.stage2?.status
         const stage3 = s.result_data?.pipeline?.stage3?.status
         return h('div', { class: 'flex flex-col gap-1 items-start' }, [
-          h(Badge, { size: 'xs', variant: 'solid', color: getSliceStageColor(stage2) }, () => `归一化：${getSliceStageText(stage2)}`),
-          h(Badge, { size: 'xs', variant: 'solid', color: getSliceStageColor(stage3) }, () => `报告：${getSliceStageText(stage3)}`),
+          h(Badge, { size: 'sm', variant: 'solid', color: getSliceStageColor(stage2) }, () => `归一化：${getSliceStageText(stage2)}`),
+          h(Badge, { size: 'sm', variant: 'solid', color: getSliceStageColor(stage3) }, () => `报告：${getSliceStageText(stage3)}`),
         ])
       },
     },
@@ -694,7 +694,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
       accessorKey: 'platform_name',
       meta: { class: { th: 'w-18', td: 'w-18 whitespace-nowrap' } },
       header: '平台',
-      cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'xs' }, () => row.original.platform_name || '-'),
+      cell: ({ row }) => h(Badge, { variant: 'subtle', size: 'sm' }, () => row.original.platform_name || '-'),
     },
     {
       accessorKey: 'task_type',
@@ -710,7 +710,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
         const phase = row.original.phase
         if (!phase) return h('span', { class: 'text-xs text-gray-400' }, '-')
         return h(Badge, {
-          size: 'xs',
+          size: 'sm',
           variant: 'subtle',
           color: phase === 'probe' ? 'info' : 'warning',
         }, () => phase === 'probe' ? '探测' : '全量')
@@ -724,7 +724,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
         const collectBadge = h(Badge, {
           color: getStatusColor(row.original.status),
           variant: 'solid',
-          size: 'xs',
+          size: 'sm',
         }, () => getStatusText(row.original.status))
 
         const s = row.original.aggregation_status
@@ -733,7 +733,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
         const analysisBadge = h(Badge, {
           color: getAnalysisColor(s),
           variant: 'subtle',
-          size: 'xs',
+          size: 'sm',
         }, () => getAnalysisText(s))
 
         return h('div', { class: 'flex flex-wrap items-center gap-1' }, [collectBadge, analysisBadge])
@@ -906,7 +906,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
                   v-for="(pid, i) in monitor.participant_ids"
                   :key="pid"
                   color="neutral"
-                  variant="soft"
+                  variant="subtle"
                   size="sm"
                 >
                   {{ monitor.participant_usernames?.[i] || pid }}

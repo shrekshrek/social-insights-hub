@@ -161,6 +161,11 @@ const getRelevanceColor = (relevance: string | null) => {
   return map[relevance || ''] || 'neutral'
 }
 
+const getRelevanceLabel = (relevance: string | null) => {
+  const map: Record<string, string> = { high: '高', medium: '中', low: '低' }
+  return map[relevance || ''] || (relevance ?? '-')
+}
+
 const getSentimentColor = (sentiment: number | null) => {
   if (sentiment === null) return 'neutral'
   if (sentiment > 0) return 'success'
@@ -232,6 +237,9 @@ const formatSentimentScore = (s: number | null | undefined) => {
 
 // ========== 文章表格列 ==========
 
+// 空值统一占位：灰色 "-" 纯文本（不裹 Badge），所有列共享
+const emptyCell = () => h('span', { class: 'text-gray-400' }, '-')
+
 const columns = computed<TableColumn<NewsArticle>[]>(() => {
   const Badge = UBadge as Component
 
@@ -256,22 +264,28 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
       accessorKey: 'source_name',
       header: '来源',
       meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
-      cell: ({ row }) =>
-        h('div', { class: 'flex items-center gap-1' }, [
-          h('span', { class: 'truncate text-sm' }, row.original.source_name),
-          h(Badge, { color: getTierColor(row.original.source_tier), size: 'xs' }, () =>
+      cell: ({ row }) => {
+        const name = row.original.source_name
+        if (!name) return emptyCell()
+        return h('div', { class: 'flex items-center gap-1' }, [
+          h('span', { class: 'truncate text-sm' }, name),
+          h(Badge, { color: getTierColor(row.original.source_tier), size: 'sm' }, () =>
             getTierLabel(row.original.source_tier),
           ),
-        ]),
+        ])
+      },
     },
     {
       accessorKey: 'search_source',
       header: '搜索渠道',
       meta: { class: { th: 'w-[80px]', td: 'w-[80px]' } },
-      cell: ({ row }) =>
-        h(Badge, { color: getSearchSourceColor(row.original.search_source), size: 'xs' }, () =>
-          getSearchSourceText(row.original.search_source),
-        ),
+      cell: ({ row }) => {
+        const src = row.original.search_source
+        if (!src) return emptyCell()
+        return h(Badge, { color: getSearchSourceColor(src), size: 'sm' }, () =>
+          getSearchSourceText(src),
+        )
+      },
     },
     {
       accessorKey: 'relevance',
@@ -279,46 +293,59 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
       meta: { class: { th: 'w-[70px]', td: 'w-[70px]' } },
       cell: ({ row }) =>
         row.original.relevance
-          ? h(Badge, { color: getRelevanceColor(row.original.relevance), size: 'sm' }, () => row.original.relevance)
-          : h('span', { class: 'text-gray-400' }, '-'),
+          ? h(Badge, { color: getRelevanceColor(row.original.relevance), size: 'sm' }, () =>
+              getRelevanceLabel(row.original.relevance),
+            )
+          : emptyCell(),
     },
     {
       accessorKey: 'sentiment',
       header: '情感',
       meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
-      cell: ({ row }) =>
-        h(Badge, { color: getSentimentColor(row.original.sentiment), size: 'sm' }, () =>
-          getSentimentText(row.original.sentiment),
-        ),
+      cell: ({ row }) => {
+        const s = row.original.sentiment
+        if (s === null || s === undefined) return emptyCell()
+        return h(Badge, { color: getSentimentColor(s), size: 'sm' }, () =>
+          getSentimentText(s),
+        )
+      },
     },
     {
       accessorKey: 'article_type',
       header: '类型',
       meta: { class: { th: 'w-[60px]', td: 'w-[60px]' } },
-      cell: ({ row }) =>
-        h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, getTypeText(row.original.article_type)),
+      cell: ({ row }) => {
+        const t = row.original.article_type
+        if (!t) return emptyCell()
+        return h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, getTypeText(t))
+      },
     },
     {
       accessorKey: 'summary',
       header: '摘要',
       meta: { class: { th: 'w-[200px]', td: 'w-[200px] whitespace-normal' } },
-      cell: ({ row }) =>
-        h(
+      cell: ({ row }) => {
+        const text = row.original.summary || row.original.snippet
+        if (!text) return emptyCell()
+        return h(
           'div',
           { class: 'text-sm text-gray-600 dark:text-gray-400 leading-snug line-clamp-2' },
-          row.original.summary || row.original.snippet || '-',
-        ),
+          text,
+        )
+      },
     },
     {
       accessorKey: 'published_at',
       header: '发布时间',
       meta: { class: { th: 'w-[90px]', td: 'w-[90px]' } },
-      cell: ({ row }) =>
-        h(
+      cell: ({ row }) => {
+        if (!row.original.published_at) return emptyCell()
+        return h(
           'span',
           { class: 'text-sm text-gray-500 whitespace-nowrap' },
           formatDate(row.original.published_at),
-        ),
+        )
+      },
     },
   ]
 })
@@ -704,7 +731,7 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
                   <span class="font-medium">{{ narrative.theme }}</span>
                   <div class="flex items-center gap-2 text-sm text-gray-500">
                     <span>{{ narrative.article_count }} 篇</span>
-                    <UBadge :color="getSentimentColor(narrative.sentiment)" size="xs">
+                    <UBadge :color="getSentimentColor(narrative.sentiment)" size="sm">
                       {{ formatSentimentScore(narrative.sentiment) }}
                     </UBadge>
                   </div>
@@ -742,7 +769,7 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
                     <td class="py-2 px-3">
                       <UBadge
                         :color="entity.role === 'target' ? 'primary' : entity.role === 'competitor' ? 'warning' : 'neutral'"
-                        size="xs"
+                        size="sm"
                       >
                         {{ entity.role }}
                       </UBadge>
@@ -750,7 +777,7 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
                     <td class="py-2 px-3 text-right">{{ entity.mention_count }}</td>
                     <td class="py-2 px-3 text-right">{{ entity.source_count }}</td>
                     <td class="py-2 px-3 text-right">
-                      <UBadge :color="getSentimentColor(entity.sentiment)" size="xs">
+                      <UBadge :color="getSentimentColor(entity.sentiment)" size="sm">
                         {{ formatSentimentScore(entity.sentiment) }}
                       </UBadge>
                     </td>
@@ -777,7 +804,7 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
               >
                 <span class="font-medium">{{ ce.name }}</span>
                 <span class="text-gray-500 ml-1">{{ ce.mentions }}次</span>
-                <UBadge :color="getSentimentColor(ce.sentiment)" size="xs" class="ml-1">
+                <UBadge :color="getSentimentColor(ce.sentiment)" size="sm" class="ml-1">
                   {{ formatSentimentScore(ce.sentiment) }}
                 </UBadge>
               </div>

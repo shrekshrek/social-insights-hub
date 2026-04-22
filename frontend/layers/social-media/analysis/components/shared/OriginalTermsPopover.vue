@@ -26,7 +26,7 @@ const displayTerms = computed(() => (props.originalTerms || []).slice(0, props.m
   >
     <span class="cursor-pointer underline decoration-dotted underline-offset-2">
       {{ text }}
-      <UBadge :color="badgeColor" variant="subtle" size="xs" class="ml-1">
+      <UBadge :color="badgeColor" variant="subtle" size="sm" class="ml-1">
         {{ originalsCount }}
       </UBadge>
     </span>

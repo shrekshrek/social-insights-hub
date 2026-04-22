@@ -18,7 +18,7 @@
           class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
         >
           <div class="flex items-start gap-2">
-            <UBadge color="primary" variant="solid" size="xs">{{ idx + 1 }}</UBadge>
+            <UBadge color="primary" variant="solid" size="sm">{{ idx + 1 }}</UBadge>
             <div class="flex-1 min-w-0">
               <p class="font-medium text-gray-900 dark:text-white">{{ priority.priority }}</p>
               <p v-if="priority.rationale" class="mt-1 text-sm text-gray-600 dark:text-gray-300">
@@ -30,7 +30,7 @@
                   :key="qid"
                   color="info"
                   variant="subtle"
-                  size="xs"
+                  size="sm"
                 >
                   {{ qid }}
                 </UBadge>
@@ -89,7 +89,7 @@
         >
           <div class="flex items-start justify-between gap-2">
             <p class="font-medium text-gray-900 dark:text-white">{{ idx + 1 }}. {{ risk.risk }}</p>
-            <UBadge :color="likelihoodColor(risk.likelihood)" variant="subtle" size="xs">
+            <UBadge :color="likelihoodColor(risk.likelihood)" variant="subtle" size="sm">
               {{ likelihoodLabel(risk.likelihood) }}
             </UBadge>
           </div>

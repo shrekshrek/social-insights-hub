@@ -1148,12 +1148,12 @@ const handleExport = async () => {
             <div class="flex items-center gap-3 mt-1 text-sm">
               <div v-if="subject" class="flex items-center gap-1.5">
                 <span class="text-gray-500">主体:</span>
-                <UBadge color="primary" variant="subtle" size="xs">{{ subject }}</UBadge>
+                <UBadge color="primary" variant="subtle" size="sm">{{ subject }}</UBadge>
               </div>
               <div v-if="competitors?.length" class="flex items-center gap-1.5">
                 <span class="text-gray-500">竞品:</span>
                 <div class="flex gap-1">
-                  <UBadge v-for="c in competitors" :key="c" color="amber" variant="subtle" size="xs">{{ c }}</UBadge>
+                  <UBadge v-for="c in competitors" :key="c" color="amber" variant="subtle" size="sm">{{ c }}</UBadge>
                 </div>
               </div>
               <span v-if="!subject && !competitors?.length" class="text-gray-500">
@@ -1190,16 +1190,16 @@ const handleExport = async () => {
           </div>
           <!-- summary row -->
           <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <UBadge :color="getStatusColor((stage2?.steps as any)?.entity_normalization?.status)" variant="subtle" size="xs">
+            <UBadge :color="getStatusColor((stage2?.steps as any)?.entity_normalization?.status)" variant="subtle" size="sm">
               实体归一：{{ getStatusLabel((stage2?.steps as any)?.entity_normalization?.status) }}
             </UBadge>
-            <UBadge :color="getStatusColor((stage2?.steps as any)?.opinion_normalization?.status)" variant="subtle" size="xs">
+            <UBadge :color="getStatusColor((stage2?.steps as any)?.opinion_normalization?.status)" variant="subtle" size="sm">
               观点归一：{{ getStatusLabel((stage2?.steps as any)?.opinion_normalization?.status) }}
             </UBadge>
-            <UBadge :color="getStatusColor((stage2?.steps as any)?.derived_analysis?.status)" variant="subtle" size="xs">
+            <UBadge :color="getStatusColor((stage2?.steps as any)?.derived_analysis?.status)" variant="subtle" size="sm">
               程序化：{{ getStatusLabel((stage2?.steps as any)?.derived_analysis?.status) }}
             </UBadge>
-            <UBadge :color="getStatusColor(stage3?.status)" variant="subtle" size="xs">
+            <UBadge :color="getStatusColor(stage3?.status)" variant="subtle" size="sm">
               报告：{{ getStatusLabel(stage3?.status) }}
             </UBadge>
             <span class="ml-auto">
@@ -1224,7 +1224,7 @@ const handleExport = async () => {
                   <span class="font-medium text-gray-900 dark:text-white">数据聚合</span>
                   <span class="text-xs text-gray-400">{{ pipeline.stage1.entities_count }} 实体 / {{ pipeline.stage1.topics_count }} 话题</span>
                 </div>
-                <UBadge color="success" variant="solid" size="xs">完成</UBadge>
+                <UBadge color="success" variant="solid" size="sm">完成</UBadge>
               </div>
               <div class="p-3 rounded bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
@@ -1233,7 +1233,7 @@ const handleExport = async () => {
                     job={{ (stage2.steps as any).entity_normalization.job_id }}
                   </span>
                 </div>
-                <UBadge :color="getStatusColor((stage2.steps as any).entity_normalization?.status)" variant="solid" size="xs">
+                <UBadge :color="getStatusColor((stage2.steps as any).entity_normalization?.status)" variant="solid" size="sm">
                   {{ getStatusLabel((stage2.steps as any).entity_normalization?.status) }}
                 </UBadge>
               </div>
@@ -1244,7 +1244,7 @@ const handleExport = async () => {
                     job={{ (stage2.steps as any).opinion_normalization.job_id }}
                   </span>
                 </div>
-                <UBadge :color="getStatusColor((stage2.steps as any).opinion_normalization?.status)" variant="solid" size="xs">
+                <UBadge :color="getStatusColor((stage2.steps as any).opinion_normalization?.status)" variant="solid" size="sm">
                   {{ getStatusLabel((stage2.steps as any).opinion_normalization?.status) }}
                 </UBadge>
               </div>
@@ -1252,7 +1252,7 @@ const handleExport = async () => {
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-gray-900 dark:text-white">程序化分析</span>
                 </div>
-                <UBadge :color="getStatusColor((stage2.steps as any).derived_analysis?.status)" variant="solid" size="xs">
+                <UBadge :color="getStatusColor((stage2.steps as any).derived_analysis?.status)" variant="solid" size="sm">
                   {{ getStatusLabel((stage2.steps as any).derived_analysis?.status) }}
                 </UBadge>
               </div>
@@ -1263,7 +1263,7 @@ const handleExport = async () => {
                     job={{ stage3.job_id }}
                   </span>
                 </div>
-                <UBadge :color="getStatusColor(stage3?.status)" variant="solid" size="xs">
+                <UBadge :color="getStatusColor(stage3?.status)" variant="solid" size="sm">
                   {{ getStatusLabel(stage3?.status) }}
                 </UBadge>
               </div>
@@ -1276,7 +1276,7 @@ const handleExport = async () => {
                 <div v-if="stage2.alias_normalization.entities">
                   <div class="text-gray-500 dark:text-gray-400 mb-1">实体</div>
                   <div class="flex items-center gap-2">
-                    <UBadge :color="stage2.alias_normalization.entities.used ? 'success' : 'neutral'" variant="subtle" size="xs">
+                    <UBadge :color="stage2.alias_normalization.entities.used ? 'success' : 'neutral'" variant="subtle" size="sm">
                       {{ stage2.alias_normalization.entities.used ? 'LLM 已用' : '未用 LLM' }}
                     </UBadge>
                     <span class="font-mono text-gray-600 dark:text-gray-400">
@@ -1294,7 +1294,7 @@ const handleExport = async () => {
                 <div v-if="stage2.alias_normalization.topics">
                   <div class="text-gray-500 dark:text-gray-400 mb-1">话题</div>
                   <div class="flex items-center gap-2">
-                    <UBadge :color="stage2.alias_normalization.topics.used ? 'success' : 'neutral'" variant="subtle" size="xs">
+                    <UBadge :color="stage2.alias_normalization.topics.used ? 'success' : 'neutral'" variant="subtle" size="sm">
                       {{ stage2.alias_normalization.topics.used ? 'LLM 已用' : '未用 LLM' }}
                     </UBadge>
                     <span class="font-mono text-gray-600 dark:text-gray-400">
@@ -1315,7 +1315,7 @@ const handleExport = async () => {
             <div v-if="stage2?.category_alignment" class="mt-2 p-3 rounded bg-gray-50 dark:bg-gray-800 space-y-1 text-xs">
               <div class="flex items-center gap-2">
                 <span class="font-medium text-gray-700 dark:text-gray-300">话题类别对齐</span>
-                <UBadge :color="stage2.category_alignment.used ? 'success' : 'neutral'" variant="subtle" size="xs">
+                <UBadge :color="stage2.category_alignment.used ? 'success' : 'neutral'" variant="subtle" size="sm">
                   {{ stage2.category_alignment.used ? 'LLM 已用' : '未用 LLM' }}
                 </UBadge>
                 <span v-if="stage2.category_alignment.category_map" class="text-gray-500 dark:text-gray-400 font-mono">
@@ -1808,10 +1808,10 @@ const handleExport = async () => {
           <template #title>
             <div class="flex items-center gap-2">
               <span class="text-gray-900 dark:text-white font-medium">证据面板</span>
-              <UBadge color="neutral" variant="subtle" size="xs">
+              <UBadge color="neutral" variant="subtle" size="sm">
                 观点 {{ topTopics.length }}
               </UBadge>
-              <UBadge color="neutral" variant="subtle" size="xs">
+              <UBadge color="neutral" variant="subtle" size="sm">
                 实体 {{ topEntities.length }}
               </UBadge>
             </div>
@@ -1832,10 +1832,10 @@ const handleExport = async () => {
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 flex-wrap">
                           <span class="text-gray-900 dark:text-white font-medium">{{ t.name }}</span>
-                          <UBadge v-if="t.category" color="neutral" variant="subtle" size="xs">{{ t.category }}</UBadge>
-                          <UBadge v-if="(t.sentiment ?? 0) < 0" color="error" variant="subtle" size="xs">负面</UBadge>
-                          <UBadge v-else-if="(t.sentiment ?? 0) > 0" color="success" variant="subtle" size="xs">正面</UBadge>
-                          <UBadge v-else color="neutral" variant="subtle" size="xs">中性</UBadge>
+                          <UBadge v-if="t.category" color="neutral" variant="subtle" size="sm">{{ t.category }}</UBadge>
+                          <UBadge v-if="(t.sentiment ?? 0) < 0" color="error" variant="subtle" size="sm">负面</UBadge>
+                          <UBadge v-else-if="(t.sentiment ?? 0) > 0" color="success" variant="subtle" size="sm">正面</UBadge>
+                          <UBadge v-else color="neutral" variant="subtle" size="sm">中性</UBadge>
                         </div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(t.platform_distribution) }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">关键词：{{ formatDist(t.keyword_distribution) }}</div>
@@ -1890,8 +1890,8 @@ const handleExport = async () => {
                         <button class="text-left" @click="openEntityPanel(e.name)">
                           <div class="flex items-center gap-2 flex-wrap">
                             <span class="text-gray-900 dark:text-white font-medium">{{ e.name }}</span>
-                            <UBadge v-if="e.role" color="neutral" variant="subtle" size="xs">{{ e.role }}</UBadge>
-                            <UBadge v-if="e.type" color="info" variant="subtle" size="xs">{{ e.type }}</UBadge>
+                            <UBadge v-if="e.role" color="neutral" variant="subtle" size="sm">{{ e.role }}</UBadge>
+                            <UBadge v-if="e.type" color="info" variant="subtle" size="sm">{{ e.type }}</UBadge>
                           </div>
                         </button>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">平台：{{ formatDist(e.platform_distribution) }}</div>
@@ -1943,13 +1943,13 @@ const handleExport = async () => {
           <template #title>
             <div class="flex items-center gap-2 min-w-0">
               <span class="text-gray-900 dark:text-white font-medium truncate">{{ entityPanelName }}</span>
-              <UBadge v-if="(entityPanelEntity as any)?.role" color="neutral" variant="subtle" size="xs">
+              <UBadge v-if="(entityPanelEntity as any)?.role" color="neutral" variant="subtle" size="sm">
                 {{ (entityPanelEntity as any)?.role }}
               </UBadge>
-              <UBadge v-if="(entityPanelEntity as any)?.type" color="info" variant="subtle" size="xs">
+              <UBadge v-if="(entityPanelEntity as any)?.type" color="info" variant="subtle" size="sm">
                 {{ (entityPanelEntity as any)?.type }}
               </UBadge>
-              <UBadge v-if="(entityPanelEntity as any)?.parent" color="neutral" variant="subtle" size="xs">
+              <UBadge v-if="(entityPanelEntity as any)?.parent" color="neutral" variant="subtle" size="sm">
                 {{ (entityPanelEntity as any)?.parent }}
               </UBadge>
             </div>
@@ -2177,7 +2177,7 @@ const handleExport = async () => {
               <span class="text-gray-900 dark:text-white font-medium truncate">
                 {{ focusPanelItem?.dimension || '维度详情' }}
               </span>
-              <UBadge v-if="focusPanelType" color="neutral" variant="subtle" size="xs">
+              <UBadge v-if="focusPanelType" color="neutral" variant="subtle" size="sm">
                 {{ focusPanelType === 'swot' ? 'SWOT' : 'Gap' }}
               </UBadge>
             </div>

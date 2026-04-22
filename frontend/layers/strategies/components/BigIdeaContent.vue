@@ -31,7 +31,7 @@
             <p class="font-semibold text-gray-900 dark:text-white">
               支柱 {{ idx + 1 }}: {{ pillar.name }}
             </p>
-            <UBadge v-if="pillar.strategic_role" :color="ROLE_COLOR[pillar.strategic_role] ?? 'neutral'" variant="soft" size="xs">
+            <UBadge v-if="pillar.strategic_role" :color="ROLE_COLOR[pillar.strategic_role] ?? 'neutral'" variant="subtle" size="sm">
               {{ ROLE_LABEL[pillar.strategic_role] ?? pillar.strategic_role }}
             </UBadge>
           </div>

@@ -174,7 +174,7 @@
               :label="item.available ? '当前可用' : '暂未开通'"
               :color="item.available ? 'primary' : 'neutral'"
               variant="subtle"
-              size="xs"
+              size="sm"
             />
             <span
               v-if="item.solvable.length > 0"

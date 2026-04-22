@@ -45,9 +45,9 @@ const getEntityTypeLabel = (type: string) => {
           <div class="flex justify-between items-center mb-1.5">
             <div class="flex items-center gap-1.5">
               <span class="font-medium text-sm text-gray-900 dark:text-white">{{ entity.name }}</span>
-              <UBadge variant="soft" size="xs">{{ getEntityTypeLabel(entity.type) }}</UBadge>
+              <UBadge variant="subtle" size="sm">{{ getEntityTypeLabel(entity.type) }}</UBadge>
             </div>
-            <UBadge :color="getSentimentColor(entity.sentiment)" variant="soft">
+            <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle">
               {{ getSentimentLabel(entity.sentiment) }}
             </UBadge>
           </div>
@@ -97,7 +97,7 @@ const getEntityTypeLabel = (type: string) => {
         >
           <div class="flex justify-between items-center mb-1.5">
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ opinion.category }}</span>
-            <UBadge :color="getSentimentColor(opinion.sentiment)" variant="soft">
+            <UBadge :color="getSentimentColor(opinion.sentiment)" variant="subtle">
               {{ getSentimentLabel(opinion.sentiment) }}
             </UBadge>
           </div>

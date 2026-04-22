@@ -242,7 +242,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       cell: ({ row }) => h(Badge, {
         color: 'neutral',
         variant: 'subtle',
-        size: 'xs',
+        size: 'sm',
       }, () => getAnalysisTypeLabel(row.original.analysis_type)),
     },
     {
@@ -254,7 +254,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
           h(Badge, {
             color: getStatusColor(job.status),
             variant: 'solid',
-            size: 'xs',
+            size: 'sm',
           }, () => getStatusLabel(job.status)),
           ['pending', 'running'].includes(job.status) && job.source_count > 0
             ? h(Progress, {

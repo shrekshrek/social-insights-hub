@@ -44,7 +44,7 @@
                 class="shrink-0"
               />
               <span class="font-medium truncate">{{ t.keyword }}</span>
-              <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
+              <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
             </div>
           </div>
         </div>
@@ -64,7 +64,7 @@
             class="shrink-0"
           />
           <span class="font-medium truncate">{{ t.keyword }}</span>
-          <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
+          <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
         </div>
       </div>
     </div>
@@ -163,7 +163,7 @@
                     class="shrink-0 size-3.5"
                   />
                   <span class="font-medium truncate">{{ a.keyword }}</span>
-                  <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(a.platform) }}</UBadge>
+                  <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(a.platform) }}</UBadge>
                 </div>
                 <p v-if="a.note" class="text-gray-500 mt-0.5 line-clamp-2">{{ a.note }}</p>
               </div>
@@ -190,7 +190,7 @@
                   class="shrink-0 size-3.5"
                 />
                 <span class="font-medium truncate">{{ a.keyword }}</span>
-                <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(a.platform) }}</UBadge>
+                <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(a.platform) }}</UBadge>
               </div>
               <p v-if="a.note" class="text-gray-500 mt-0.5 line-clamp-2">{{ a.note }}</p>
             </div>
@@ -210,8 +210,8 @@
             <span class="text-gray-500 line-through">{{ s.original_keyword }}</span>
             <UIcon name="i-heroicons-arrow-right" class="text-gray-400 text-xs shrink-0" />
             <span v-if="s.suggested_keyword" class="font-medium text-amber-700 dark:text-amber-300">{{ s.suggested_keyword }}</span>
-            <UBadge v-else variant="soft" size="xs" color="error" class="shrink-0">建议移除</UBadge>
-            <UBadge variant="soft" size="xs" color="neutral" class="shrink-0">{{ platformLabel(s.platform) }}</UBadge>
+            <UBadge v-else variant="subtle" size="sm" color="error" class="shrink-0">建议移除</UBadge>
+            <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(s.platform) }}</UBadge>
           </div>
           <p v-if="s.reason" class="text-xs text-gray-500 mt-1">{{ s.reason }}</p>
         </div>

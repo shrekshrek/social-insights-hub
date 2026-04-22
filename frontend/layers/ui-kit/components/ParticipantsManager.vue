@@ -12,7 +12,7 @@
         v-for="p in currentParticipants"
         :key="p.id"
         color="primary"
-        variant="soft"
+        variant="subtle"
         class="flex items-center gap-1 pr-1"
       >
         {{ p.username }}

@@ -354,7 +354,7 @@ const hasAnySpamData = computed(() =>
             <UIcon name="i-heroicons-tag" class="w-4 h-4 text-blue-500" />
             <span class="text-gray-500 dark:text-gray-400">关键词:</span>
             <div class="flex gap-1">
-              <UBadge v-for="kw in data.meta.keywords.slice(0, 5)" :key="kw" color="primary" variant="subtle" size="xs">
+              <UBadge v-for="kw in data.meta.keywords.slice(0, 5)" :key="kw" color="primary" variant="subtle" size="sm">
                 {{ kw }}
               </UBadge>
             </div>
@@ -413,7 +413,7 @@ const hasAnySpamData = computed(() =>
         <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
           <div class="flex items-center justify-between mb-2">
             <span class="text-sm text-gray-500 dark:text-gray-400">NSR 净情感率</span>
-            <UBadge :color="getNsrColor(data.metrics.nsr)" variant="subtle" size="xs">
+            <UBadge :color="getNsrColor(data.metrics.nsr)" variant="subtle" size="sm">
               {{ data.metrics.nsr >= 0 ? '+' : '' }}{{ data.metrics.nsr.toFixed(2) }}
             </UBadge>
           </div>
@@ -442,7 +442,7 @@ const hasAnySpamData = computed(() =>
         <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
           <div class="flex items-center justify-between mb-2">
             <span class="text-sm text-gray-500 dark:text-gray-400">SERP 健康度</span>
-            <UBadge :color="getSerpColor(data.metrics.serp_health)" variant="subtle" size="xs">
+            <UBadge :color="getSerpColor(data.metrics.serp_health)" variant="subtle" size="sm">
               {{ data.metrics.serp_health.toFixed(0) }}
             </UBadge>
           </div>
@@ -473,7 +473,7 @@ const hasAnySpamData = computed(() =>
         <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
           <div class="flex items-center justify-between mb-2">
             <span class="text-sm text-gray-500 dark:text-gray-400">舆论反差度</span>
-            <UBadge :color="getRiskColor(data.metrics.sentiment_conflict.risk_level)" variant="subtle" size="xs">
+            <UBadge :color="getRiskColor(data.metrics.sentiment_conflict.risk_level)" variant="subtle" size="sm">
               {{ getRiskLabel(data.metrics.sentiment_conflict.risk_level) }}
             </UBadge>
           </div>
@@ -765,11 +765,11 @@ const hasAnySpamData = computed(() =>
           <div class="flex items-center justify-between flex-wrap gap-2">
             <div class="flex items-center gap-2">
               <span class="font-medium text-gray-900 dark:text-white">{{ entity.name }}</span>
-              <UBadge color="neutral" variant="subtle" size="xs">{{ entity.type }}</UBadge>
+              <UBadge color="neutral" variant="subtle" size="sm">{{ entity.type }}</UBadge>
               <UBadge
                 :color="entity.role === 'target' ? 'primary' : entity.role === 'competitor' ? 'warning' : 'neutral'"
                 variant="subtle"
-                size="xs"
+                size="sm"
               >
                 {{ entity.role === 'target' ? '本品' : entity.role === 'competitor' ? '竞品' : '其他' }}
               </UBadge>
@@ -784,7 +784,7 @@ const hasAnySpamData = computed(() =>
                 :label="entity.name"
                 @click="openPostListModal"
               />
-              <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="xs">
+              <UBadge :color="getSentimentColor(entity.sentiment)" variant="subtle" size="sm">
                 {{ getSentimentLabel(entity.sentiment) }}
               </UBadge>
               <!-- 推广 vs 有机情感对比：两组均有数据且差值 > 0.3 时展示 -->
@@ -902,10 +902,10 @@ const hasAnySpamData = computed(() =>
               <span class="font-medium text-gray-900 dark:text-white">{{ item.author }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <UBadge :color="getSentimentColor(item.sentiment / 2)" variant="subtle" size="xs">
+              <UBadge :color="getSentimentColor(item.sentiment / 2)" variant="subtle" size="sm">
                 {{ getSentimentLabel(item.sentiment / 2) }}
               </UBadge>
-              <UBadge v-if="getSpamGroupLabel(item.spam_group)" :color="getSpamGroupColor(item.spam_group)" variant="subtle" size="xs">
+              <UBadge v-if="getSpamGroupLabel(item.spam_group)" :color="getSpamGroupColor(item.spam_group)" variant="subtle" size="sm">
                 {{ getSpamGroupLabel(item.spam_group) }}
               </UBadge>
               <span class="text-xs text-gray-500 dark:text-gray-400">CII: {{ item.cii.toFixed(1) }}</span>

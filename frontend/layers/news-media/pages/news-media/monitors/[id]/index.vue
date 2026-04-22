@@ -336,7 +336,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
       header: '阶段',
       meta: { class: { th: 'w-[70px]', td: 'w-[70px]' } },
       cell: ({ row }) =>
-        h(Badge, { color: getPhaseColor(row.original.phase), size: 'xs', variant: 'subtle' }, () =>
+        h(Badge, { color: getPhaseColor(row.original.phase), size: 'sm', variant: 'subtle' }, () =>
           getPhaseText(row.original.phase),
         ),
     },
@@ -345,7 +345,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
       header: '状态',
       meta: { class: { th: 'w-[80px]', td: 'w-[80px]' } },
       cell: ({ row }) =>
-        h(Badge, { color: getStatusColor(row.original.status), size: 'xs', variant: 'solid' }, () =>
+        h(Badge, { color: getStatusColor(row.original.status), size: 'sm', variant: 'solid' }, () =>
           getStatusText(row.original.status),
         ),
     },
@@ -529,7 +529,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
                     v-for="(pid, i) in monitor.participant_ids"
                     :key="pid"
                     color="neutral"
-                    variant="soft"
+                    variant="subtle"
                     size="sm"
                   >
                     {{ monitor.participant_usernames?.[i] || pid }}
@@ -695,7 +695,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
                   <span class="font-medium text-sm truncate">{{ slice.name }}</span>
                   <UBadge
                     :color="getSliceStatusColor(slice.status)"
-                    size="xs"
+                    size="sm"
                     variant="subtle"
                   >
                     {{ getSliceStatusText(slice.status) }}

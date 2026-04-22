@@ -167,7 +167,7 @@ export function usePostAnalysisColumns(options: PostAnalysisColumnsOptions = {})
             [2]: { color: 'success', label: '强烈正面' },
           }
           const config = sentimentMap[sentiment] || { color: 'neutral', label: '中性' }
-          return h(Badge, { size: 'xs', color: config.color, variant: 'subtle' }, () => config.label)
+          return h(Badge, { size: 'sm', color: config.color, variant: 'subtle' }, () => config.label)
         },
       },
       // CII 列

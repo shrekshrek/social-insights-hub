@@ -20,7 +20,7 @@
           v-if="item.type"
           color="neutral"
           variant="subtle"
-          size="xs"
+          size="sm"
           class="shrink-0 mt-0.5"
         >
           {{ item.type }}

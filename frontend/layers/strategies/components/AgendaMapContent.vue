@@ -24,10 +24,10 @@
               <span class="font-medium text-gray-900 dark:text-white truncate">{{ narrative.theme }}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              <UBadge :color="sentimentColor(narrative.sentiment)" variant="subtle" size="xs">
+              <UBadge :color="sentimentColor(narrative.sentiment)" variant="subtle" size="sm">
                 {{ sentimentLabel(narrative.sentiment) }}
               </UBadge>
-              <UBadge :color="credibilityColor(narrative.credibility)" variant="subtle" size="xs">
+              <UBadge :color="credibilityColor(narrative.credibility)" variant="subtle" size="sm">
                 {{ narrative.credibility === 'high' ? '高可信' : narrative.credibility === 'medium' ? '中可信' : '低可信' }}
               </UBadge>
               <!-- 来源分布内联 -->
@@ -137,7 +137,7 @@
                   v-if="gap.risk_or_opportunity"
                   :color="gap.risk_or_opportunity === 'risk' ? 'error' : 'success'"
                   variant="subtle"
-                  size="xs"
+                  size="sm"
                   class="shrink-0"
                 >
                   {{ gap.risk_or_opportunity === 'risk' ? '风险' : '机会' }}

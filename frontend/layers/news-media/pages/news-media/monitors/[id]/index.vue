@@ -298,12 +298,20 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
       cell: ({ row }) => {
         const task = row.original
         const selectable = task.status === 'completed' && task.phase === 'collect'
-        if (!selectable) return null
+        const disabledReason = !selectable
+          ? task.phase === 'probe'
+            ? '探测任务数据量小，不可用于生成切片'
+            : '仅"已完成"的全量任务可生成切片'
+          : ''
         return h('input', {
           type: 'checkbox',
-          checked: isTaskSelected(task.id),
-          class: 'rounded border-gray-300 cursor-pointer',
-          onChange: () => toggleTaskSelection(task.id),
+          checked: selectable && isTaskSelected(task.id),
+          disabled: !selectable,
+          title: disabledReason,
+          class: selectable
+            ? 'rounded border-gray-300 cursor-pointer'
+            : 'rounded border-gray-300 cursor-not-allowed opacity-40',
+          onChange: () => selectable && toggleTaskSelection(task.id),
         })
       },
     },

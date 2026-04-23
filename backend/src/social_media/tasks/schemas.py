@@ -38,7 +38,11 @@ class SocialTaskCreate(SocialTaskBase):
         description="数据源: remote_crawler/local_upload",
     )
     auto_analyze: bool = Field(False, description="数据上传完成后自动执行全流程分析")
-    phase: Optional[str] = Field(None, description="采集阶段: probe（探测）/ collect（全量）")
+    phase: str = Field(
+        "collect",
+        pattern="^(probe|collect)$",
+        description="采集阶段: probe（探测，仅策略流程）/ collect（全量，独立任务默认）",
+    )
 
 
 class SocialTaskUpdate(CustomBaseModel):
@@ -59,7 +63,7 @@ class SocialTaskRead(SocialTaskBase):
     user_id: int
     data_source: str
     status: str
-    phase: Optional[str] = None
+    phase: str
     posts_count: int
     comments_count: int
     started_at: Optional[datetime]

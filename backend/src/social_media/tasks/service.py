@@ -433,32 +433,43 @@ async def query_cross_task_posts(
 
 async def clear_task_data(db: AsyncSession, task: SocialTask) -> SocialTask:
     """
-    清空任务的所有数据（软删除原文和评论），重置任务状态
+    清空任务的所有数据，把任务彻底还原到刚创建的状态。
 
-    用于重新上传或重新采集数据
+    清理范围（全部硬删除，不留软删幽灵行）：
+    - social_posts / social_comments
+    - PostAnalysis（per-post 分析结果）
+    - AnalysisJob（分析作业历史）
+    - Redis 自动分析幂等锁（确保后续重传能重新触发分析）
+    - 进行中的 Celery 分析任务（避免老任务污染新数据）
+    - task 自身：status / counts / 时间字段 / analysis_result 全部重置
+
+    设计：硬删除 + 完整分析状态重置
+    - 与 PostAnalysis 的硬删除保持一致（避免一半软一半硬的逻辑割裂）
+    - 软删的"可恢复性"事实上从未被业务使用，徒增存储和索引负担
+    - 完整重置 Redis 锁 + Celery 是为了让"清空 → 重新上传 → 重新分析"工作流真正可靠
+      （之前只删 PostAnalysis 不清锁，导致重新上传后分析触发被锁阻断）
+    - 误操作的灾难恢复应该走 PostgreSQL 备份层（pg_dump / WAL），而非应用层软删
     """
-    from sqlalchemy import delete
-    from src.social_media.analysis.models import PostAnalysis
+    from src.social_media.analysis.service import reset_task_analysis_state
 
-    # 先删除分析结果（因为原文是软删除，CASCADE 不会触发）
-    await db.execute(delete(PostAnalysis).where(PostAnalysis.task_id == task.id))
+    # 先清分析状态（Redis 锁 + Celery 撤销 + 删 PostAnalysis/AnalysisJob + 清 task.analysis_result）
+    await reset_task_analysis_state(
+        db, task.id,
+        task=task,
+        delete_post_analysis=True,
+        delete_analysis_jobs=True,
+    )
 
-    # 软删除该任务的所有原文
-    await crud.soft_delete_task_posts(db, task.id)
+    # 再硬删原文 + 评论（delete_task_posts_and_comments 内部也会再删 PostAnalysis，幂等）
+    await crud.delete_task_posts_and_comments(db, task.id)
 
-    # 软删除该任务的所有评论
-    await crud.soft_delete_task_comments(db, task.id)
-
-    # 重置任务状态和计数
+    # 最后重置 task 状态字段
     task.status = "pending"
     task.posts_count = 0
     task.comments_count = 0
     task.started_at = None
     task.completed_at = None
     task.error_message = None
-    # 清空聚合分析报告
-    task.analysis_result = None
-    task.analysis_result_at = None
 
     await db.commit()
     await db.refresh(task)

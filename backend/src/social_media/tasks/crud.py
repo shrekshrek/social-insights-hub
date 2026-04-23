@@ -585,52 +585,6 @@ async def bulk_create_tasks(
     return list(refreshed_tasks)
 
 
-async def soft_delete_task_posts(db: AsyncSession, task_id: int) -> int:
-    """
-    软删除指定任务的所有原文
-
-    Args:
-        db: 数据库会话
-        task_id: 任务ID
-
-    Returns:
-        删除的记录数
-    """
-    from sqlalchemy import update
-
-    result = await db.execute(
-        update(SocialPost)
-        .where(SocialPost.task_id == task_id)
-        .where(SocialPost.is_deleted.is_(False))
-        .values(is_deleted=True)
-    )
-
-    await db.flush()
-    return result.rowcount
-
-
-async def soft_delete_task_comments(db: AsyncSession, task_id: int) -> int:
-    """
-    软删除指定任务的所有评论
-
-    Args:
-        db: 数据库会话
-        task_id: 任务ID
-
-    Returns:
-        删除的记录数
-    """
-    from sqlalchemy import update
-
-    result = await db.execute(
-        update(SocialComment)
-        .where(SocialComment.task_id == task_id)
-        .where(SocialComment.is_deleted.is_(False))
-        .values(is_deleted=True)
-    )
-
-    await db.flush()
-    return result.rowcount
 
 
 # ==================== Backward-compatible aliases ====================

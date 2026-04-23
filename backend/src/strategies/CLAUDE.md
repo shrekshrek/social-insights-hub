@@ -91,7 +91,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
      - LLM 层：单任务并行评估，输入含 `top_topics[:20]`（每个话题带 `mentions + post_source_count`，帮 LLM 识别单帖垄断）
    - 新闻：`strategy_news_probe_review_chain` 对每个任务并行 LLM 评估（基于卡片 title/source/tier/snippet + 维度→研究问题映射）
    - 社媒创建 `STRATEGY_SOCIAL_PROBE_REVIEW` AnalysisJob、新闻创建 `STRATEGY_NEWS_PROBE_REVIEW` AnalysisJob，独立记录 token/cost；LLM 失败时保守判 pass + 人工核查提示
-3. `all_pass` → 自动调用 approve_probe，为每个探测任务创建 phase="collect" 全量任务（社媒 + 新闻），策略 → collecting
+3. `all_pass` → 自动调用 approve_probe，**社媒任务原地推进 phase=probe → collect**（同一 SocialTask 记录承载两个阶段，task_id 不变；爬虫侧通过相同 cloud_task_id 自动续采 probe 阶段的 checkpoint，避免重复抓 probe 已采的笔记）；新闻任务仍创建独立 collect NewsTask（新闻走 Celery push 模型，无 checkpoint 复用需求）；策略 → collecting
 4. `partial_pass/fail` → 用户可 `approve-probe`（跳过审查直接全量）或 `refine-probe`（batch 替换/新增/移除关键词，`refinements` 调社媒、`news_refinements` 调新闻，两个列表至少填一个，probe_round++，最多 3 轮）
    - `suggested_keyword=null` 的建议条目表示"建议移除"（平台级数据稀疏，换词也无效），refine_probe 识别后仅软删旧任务、不创建新任务
    - 系统级后处理 [`detect_and_replace_symmetry_suggestions`](../llm/chains/strategy/social_probe_review_chain.py)：检测 consumer_voice / competitive 维度的平台互补失败模式，自动合并为"统一迁移至共同平台"建议
@@ -197,6 +197,12 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 - **探测任务**（phase="probe"）：max_pages 限制翻页，跳过评论，约 20 条
 - **全量任务**（phase="collect"）：采集完整数据（50 条 + 评论）
 - **普通任务**：一次性采集到 max_notes_count 指定数量
+
+**社媒单任务多阶段模型**（v2026.04 起）：
+- 一条 `SocialTask` 记录承载 probe → collect 全生命周期，phase 字段标识当前阶段
+- `approve_probe` 不再创建新 collect 记录，而是将 probe 任务原地推进：phase 改 collect、status 重置为 pending、task_params 覆写为全量参数；agent 重新认领同 cloud_task_id 时，通过本地 SQLite 历史 checkpoint 自动续采
+- agent 端会按 cloud_task_id 聚合多次本地执行的 JSON 后整包上传，云端用 dedup 模型保证幂等：相同 post_id_on_platform / comment_id_on_platform 跳过创建，仅有真实新增数据时才触发 auto_analysis
+- "清空数据" (`POST /tasks/{id}/clear-data`) 是硬删除 + 完整分析状态重置（Redis 锁 / Celery 撤销 / PostAnalysis / AnalysisJob 全清），重置后任务回 pending，agent 自动重接
 
 ## 定时任务（APScheduler）
 

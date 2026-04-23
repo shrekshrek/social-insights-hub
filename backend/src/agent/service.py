@@ -216,72 +216,6 @@ async def update_progress(
     )
 
 
-async def _clear_analysis_results(
-    db: AsyncSession,
-    task_id: int,
-    task: SocialTask,
-) -> None:
-    """清空任务的分析结果（保留原文/评论数据），用于追加上传前重置"""
-    # 清理自动分析幂等锁
-    try:
-        import redis.asyncio as redis
-        from src.redis_client import redis_pool
-
-        async with redis.Redis(connection_pool=redis_pool) as redis_client:
-            await redis_client.delete(f"analysis:auto:{task_id}:triggered")
-            await redis_client.delete(f"analysis:auto:{task_id}:running")
-    except Exception as e:
-        logger.warning(
-            "Task %s: Failed to clear auto analysis lock: %s",
-            task_id,
-            e,
-            exc_info=True,
-        )
-
-    # 撤销/终止旧的分析 Celery 任务
-    try:
-        from celery import current_app as celery_app  # type: ignore[import-not-found]
-        from src.jobs.models import AnalysisJob
-
-        jobs_stmt = select(AnalysisJob.celery_task_id).where(
-            and_(
-                AnalysisJob.social_task_id == task_id,
-                AnalysisJob.status.in_(("pending", "running")),
-            )
-        )
-        jobs_result = await db.execute(jobs_stmt)
-        celery_task_ids = [row[0] for row in jobs_result.all() if row and row[0]]
-        for celery_task_id in celery_task_ids:
-            celery_app.control.revoke(celery_task_id, terminate=True)
-        if celery_task_ids:
-            logger.info(
-                "Task %s: Revoked %s analysis celery tasks",
-                task_id,
-                len(celery_task_ids),
-            )
-    except Exception as e:
-        logger.warning(
-            "Task %s: Failed to revoke previous analysis celery tasks: %s",
-            task_id,
-            e,
-            exc_info=True,
-        )
-
-    # 清空聚合分析报告
-    task.analysis_result = None
-    task.analysis_result_at = None
-
-    # 清空分析任务记录 + PostAnalysis
-    from sqlalchemy import delete as sa_delete
-    from src.jobs.models import AnalysisJob
-    from src.social_media.analysis.models import PostAnalysis
-
-    await db.execute(sa_delete(PostAnalysis).where(PostAnalysis.task_id == task_id))
-    await db.execute(sa_delete(AnalysisJob).where(AnalysisJob.social_task_id == task_id))
-    await db.flush()
-    logger.info("Task %s: Analysis results cleared (posts/comments preserved)", task_id)
-
-
 async def upload_result(
     db: AsyncSession,
     task_id: int,
@@ -329,22 +263,17 @@ async def upload_result(
             },
         )
 
+    # 单任务多阶段 + 聚合上传模型下：
+    # - 每次 upload 都是 cloud_task_id 的"完整数据快照"（agent 已聚合多个本地 task 的 JSON）
+    # - 已存在的 posts / comments 通过下面的 mapping 去重跳过，不会创建重复
+    # - 真正有新数据时才会触发 INSERT 和 auto-analysis；无变化时整个流程是 no-op
+    # 因此不再需要 "is_reupload 清空再插入" 的覆盖模式 —— 自然幂等。
     is_reupload = task.status == "completed"
-
-    # 如果是已完成的任务，先清空现有数据（覆盖模式）
     if is_reupload:
-        logger.info("Task %s: Re-uploading data, clearing existing data...", task_id)
-        await _clear_analysis_results(db, task_id, task)
-        await task_crud.delete_task_posts_and_comments(db, task_id)
-        # 重置任务统计与时间字段
-        task.posts_count = 0
-        task.comments_count = 0
-        task.crawled_count = 0
-        task.started_at = None
-        task.completed_at = None
-        task.error_message = None
-        await db.flush()
-        logger.info("Task %s: Existing data cleared", task_id)
+        logger.info(
+            "Task %s: re-upload detected (status=completed); using upsert/dedup mode (no clear)",
+            task_id,
+        )
 
     # 验证平台
     platform_code = task.platform.code if task.platform else None
@@ -375,7 +304,17 @@ async def upload_result(
         await db.flush()
 
         # 转换并导入原文数据（按 post_id_on_platform 去重）
-        existing_post_mapping: dict[str, int] = {}
+        # 单任务多阶段模型：同一 task_id 在 probe / collect / comment 多个阶段被多次 upload。
+        # 必须从 DB 加载已有原文映射，否则 collect 阶段重复 upload 同一笔记会创建重复记录。
+        from src.social_media.tasks.models import SocialPost as _ExistingPost
+        existing_posts_stmt = select(_ExistingPost.id, _ExistingPost.post_id_on_platform).where(
+            _ExistingPost.task_id == task.id,
+            _ExistingPost.is_deleted.is_(False),
+        )
+        existing_posts_result = await db.execute(existing_posts_stmt)
+        existing_post_mapping: dict[str, int] = {
+            row.post_id_on_platform: row.id for row in existing_posts_result.all()
+        }
         contents = request.data.get("contents", [])
         posts_data_dict: dict[str, dict] = {}
 
@@ -409,6 +348,22 @@ async def upload_result(
             post_id_mapping[post.post_id_on_platform] = post.id
 
         # 转换并导入评论数据（按 comment_id_on_platform 去重）
+        # 与 posts 同理：从 DB 加载已有评论映射，重复 upload 同一评论时跳过创建。
+        from src.social_media.tasks.models import SocialComment as _ExistingComment
+        existing_comments_stmt = select(
+            _ExistingComment.id,
+            _ExistingComment.comment_id_on_platform,
+        ).where(
+            _ExistingComment.task_id == task.id,
+            _ExistingComment.is_deleted.is_(False),
+        )
+        existing_comments_result = await db.execute(existing_comments_stmt)
+        existing_comment_mapping: dict[str, int] = {
+            row.comment_id_on_platform: row.id
+            for row in existing_comments_result.all()
+            if row.comment_id_on_platform
+        }
+
         comments_raw = request.data.get("comments", [])
         comments_dict: dict[str, tuple[int, dict]] = {}
 
@@ -430,7 +385,12 @@ async def upload_result(
                     continue
 
             comment_platform_id = transformed.get("comment_id_on_platform")
-            if comment_platform_id and comment_platform_id not in comments_dict:
+            if not comment_platform_id:
+                continue
+            # 跳过已存在的评论（DB 历史 + 本次 batch 内部）
+            if comment_platform_id in existing_comment_mapping:
+                continue
+            if comment_platform_id not in comments_dict:
                 comments_dict[comment_platform_id] = (post_id, transformed)
 
         comments_to_create = list(comments_dict.values())
@@ -442,12 +402,35 @@ async def upload_result(
             comments_data=comments_to_create,
         )
 
-        # 更新任务统计和状态
+        # 本次上传新增的数量（用于日志和返回值）
         posts_count = len(created_posts)
         comments_count = len(created_comments)
 
+        # 更新任务统计：从 DB 实际查询累计总数（自愈，不会因覆写丢数）
+        # 单任务多阶段模型下，同一 task_id 会经历 probe → collect 多次 upload，
+        # 每次 upload 仅是增量；用 SQL count 得到的是历史累计真实总数。
+        from sqlalchemy import select as _select, func as _func
+        from src.social_media.tasks.models import (
+            SocialPost as _SocialPost,
+            SocialComment as _SocialComment,
+        )
+        total_posts_result = await db.execute(
+            _select(_func.count(_SocialPost.id)).where(
+                _SocialPost.task_id == task.id,
+                _SocialPost.is_deleted.is_(False),
+            )
+        )
+        total_comments_result = await db.execute(
+            _select(_func.count(_SocialComment.id)).where(
+                _SocialComment.task_id == task.id,
+                _SocialComment.is_deleted.is_(False),
+            )
+        )
+        total_posts = int(total_posts_result.scalar() or 0)
+        total_comments = int(total_comments_result.scalar() or 0)
+
         await task_crud.update_task_counts(
-            db, task, posts_count=posts_count, comments_count=comments_count
+            db, task, posts_count=total_posts, comments_count=total_comments
         )
 
         # 决定最终状态
@@ -476,8 +459,12 @@ async def upload_result(
         )
 
         # 如果启用了自动分析，触发分析任务链（probe_ready 也需要分析以供审查）
+        # 触发条件：本次新插入了 posts 或 comments 任意一种
+        # —— 单任务多阶段 + 上传幂等化模型下，可能出现 "只补评论无新 post" 的场景
+        # （例如 collect 阶段补抓 probe 漏掉的笔记评论），此时也应让分析重新跑
         new_posts_count = len(created_posts)
-        if task.auto_analyze and new_posts_count > 0:
+        new_comments_count = len(created_comments)
+        if task.auto_analyze and (new_posts_count > 0 or new_comments_count > 0):
             from src.social_media.analysis.celery_tasks.auto_analysis_tasks import (
                 run_auto_analysis,
             )
@@ -503,7 +490,10 @@ async def upload_result(
                         user_id=user_id,
                         monitor_keywords=monitor_keywords,
                     )
-                    logger.info("Task %s: Auto analysis triggered", task_id)
+                    logger.info(
+                        "Task %s: Auto analysis triggered (new_posts=%s, new_comments=%s)",
+                        task_id, new_posts_count, new_comments_count,
+                    )
                 else:
                     logger.info(
                         "Task %s: Auto analysis already triggered (lock exists), skip",

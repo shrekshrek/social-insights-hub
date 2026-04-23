@@ -83,7 +83,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 ### ② 探测验证 (probing → collecting)
 
 1. 前端轮询 `probe-status`
-   - 社媒：爬虫采集约 20 条，跳过评论，LLM 打标（NEWS/POST 分析链）
+   - 社媒：爬虫采集约 20 条，跳过评论，LLM 打标（screening + deep_posts 分析链）；**聚合走 probe_lite 轻量路径**（[`aggregation/probe_lite.py`](../social_media/analysis/celery_tasks/aggregation/probe_lite.py)，纯 SQL/Python，不调 entity/opinion LLM 归一化，~5s），只产出 probe review chain 需要的 4 个字段（posts_count / deep_analyzed / entity_match / top_topics / promotion_ratio）；phase 推进到 collect 后完整 aggregation 覆写 `task.analysis_result`
    - 新闻：`run_news_probe_task` 双渠道搜索（baidu + sogou），每渠道上限 20 条，URL 去重后落库元数据，不抓全文、不打标
 2. 所有任务准备就绪后后台自动运行 probe 审查
    - 社媒：规则分流 + `strategy_social_probe_review_chain`（LLM 判定模糊案例）

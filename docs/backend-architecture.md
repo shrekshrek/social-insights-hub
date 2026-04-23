@@ -157,6 +157,8 @@ Stage 3 aggregation  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → So
         monitor_slice → 监测切片: 跨任务合并 + LLM 报告 → AnalysisSlice.result_data
 ```
 
+> **Probe 阶段例外**：strategy probe 任务（`task.phase == "probe"`）走轻量聚合路径 [`aggregation/probe_lite.py`](../backend/src/social_media/analysis/celery_tasks/aggregation/probe_lite.py)，跳过 entity/opinion LLM 归一化 + 不计算 NSR/IPA/象限/KOL 等完整指标；只产出 probe review chain 需要的 4 个字段，聚合 wall time 从 60-90s 降到 <5s。Collect 阶段仍走完整 Stage 3，覆写 `SocialTask.analysis_result`。
+
 关键指标：**NSR**（净情感率 [-2,+2]）、**CII**（内容互动指数）、**SERP**（搜索健康度 [0,100]）、营销浓度、4D Spam 分布。
 
 **任务触发模型**：Pull（外部爬虫通过 `agent/` API 认领任务，social_media 无 `/execute` 端点）。

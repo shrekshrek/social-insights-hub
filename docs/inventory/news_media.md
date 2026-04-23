@@ -130,7 +130,7 @@
 | 表 | 关键字段 |
 |---|---------|
 | `news_monitors` | id, name, user_id, participants(M2M) |
-| `news_tasks` | id, name, keywords, monitor_id, **strategy_id**, **phase**(probe/collect/null), status, search_params, articles_count, analysis_result, auto_analyze, started_at, completed_at |
+| `news_tasks` | id, name, keywords, monitor_id, **strategy_id**, **phase**(probe\|collect, NOT NULL DEFAULT 'collect'；独立 monitor 一律 'collect'), status, search_params, articles_count, analysis_result, auto_analyze, started_at, completed_at |
 | `news_articles` | 见下 |
 | `news_slices` | id, monitor_id, name, status, **included_task_ids**[], **result_data**, **stats** |
 
@@ -291,7 +291,8 @@ stats.top_entities
 
 ```
 # 独立 Collect 流程
-POST /tasks/{id}/execute
+POST /monitors/{id}/tasks  (create 即派发; phase 默认 'collect',router 拒绝 phase='probe')
+  → POST /tasks/{id}/execute  (仅失败重试/历史 pending 重跑)
   → router.py 检查 strategy_id IS NULL, phase != "probe"
   → Celery: run_news_collect_task.delay(task_id, tagging_job_id)
   → Worker(gevent) → _async_run_collect()
@@ -328,9 +329,9 @@ strategy_collection APScheduler (2 min)
 **典型用户**:品牌/公关监测,周期性采集媒体报道
 
 **流程**:
-1. 创建 NewsMonitor → 创建 NewsTask(`strategy_id=NULL`, `phase=NULL` 或 `collect`)
-2. 点击执行 → 采集+全文+标注 → 看文章列表 + 任务级统计
-3. 手动勾选多个 completed task → 建 NewsSlice → 看切片 insight
+1. 创建 NewsMonitor → 创建 NewsTask(`strategy_id=NULL`, `phase='collect'`);create 即派发,无需二次点击
+2. 采集+全文+标注 → 看文章列表 + 任务级统计(失败可通过 `/tasks/{id}/execute` 重试)
+3. 手动勾选多个 completed task(仅 `phase='collect'` 可选)→ 建 NewsSlice → 看切片 insight
 
 **产出**:媒体覆盖指数 + 舆论倾向 + 关键叙事 + 引述 + 竞品识别
 
@@ -367,7 +368,7 @@ Collect:每个 probe task 创建对应 collect task
 |-----|---------|--------|
 | Monitor 来源 | 用户手建 | 策略自动创建 |
 | 任务 `strategy_id` | NULL | 非空 |
-| `phase` | NULL 或 `collect` | `probe` + `collect` 两段 |
+| `phase` | 一律 `collect`(create 强制) | `probe` + `collect` 两段 |
 | Slice 创建 | 用户手动勾选 task | 按 blueprint 自动建(维度分组) |
 | APScheduler 介入 | 仅 `news_task_watchdog` 超时回收 | `strategy_probe` / `strategy_collection` 主动推进 |
 | 产出消费者 | 前端切片页 | 策略报告引擎 |

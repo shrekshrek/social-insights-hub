@@ -38,7 +38,6 @@ const schema = z.object({
   name: z.string().min(1, '任务名称不能为空').max(255, '任务名称不能超过255个字符'),
   keywords: z.string().min(1, '关键词不能为空'),
   monitor_id: z.number({ message: '请选择所属项目' }),
-  phase: z.enum(['probe', 'collect']).optional(),
 })
 
 const includeWechatMp = ref(false)
@@ -47,12 +46,10 @@ const state = reactive<{
   name: string
   keywords: string
   monitor_id: number | undefined
-  phase: 'probe' | 'collect' | undefined
 }>({
   name: '',
   keywords: '',
   monitor_id: preselectedMonitorId,
-  phase: 'probe',
 })
 
 // ========== 项目搜索 ==========
@@ -121,7 +118,6 @@ const handleSubmit = async () => {
     const result = await createTask(state.monitor_id!, {
       name: state.name,
       keywords: state.keywords,
-      phase: state.phase || null,
       search_params: buildSearchParams(),
     })
     await navigateTo(`/news-media/tasks/${result.id}`)
@@ -132,10 +128,6 @@ const handleSubmit = async () => {
   }
 }
 
-const phaseOptions = [
-  { label: '探测 (快速，每渠道 20 条摘要)', value: 'probe' },
-  { label: '全量 (每渠道 30 条 + 全文抓取 + 分析)', value: 'collect' },
-]
 </script>
 
 <template>
@@ -284,34 +276,6 @@ const phaseOptions = [
               placeholder="例如：新能源汽车 市场份额"
               class="w-full"
             />
-          </UFormField>
-
-          <!-- 采集阶段 -->
-          <UFormField
-            label="采集阶段"
-            name="phase"
-            help="探测阶段用于快速验证关键词效果，全量阶段采集完整数据"
-          >
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label
-                v-for="opt in phaseOptions"
-                :key="opt.value"
-                class="relative flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                :class="{
-                  'ring-2 ring-primary-500 border-primary-500': state.phase === opt.value,
-                }"
-              >
-                <input
-                  v-model="state.phase"
-                  type="radio"
-                  :value="opt.value"
-                  class="mt-0.5 h-4 w-4 rounded-full border-gray-300 text-primary-600 focus:ring-primary-500"
-                >
-                <div class="ml-3 flex-1 text-sm">
-                  {{ opt.label }}
-                </div>
-              </label>
-            </div>
           </UFormField>
 
           <!-- 搜索渠道 -->

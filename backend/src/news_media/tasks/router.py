@@ -105,16 +105,21 @@ async def create_task(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_news_task_write),
 ):
-    """独立 monitor 场景：创建后立即自动派发执行（对齐社媒 Pull 模式的 UX，用户无需二次点击）。
+    """独立 monitor 场景：创建后立即自动派发执行（对齐社媒 Pull 模式的 UX）。
 
-    仅 phase != "probe" 的独立任务（strategy_id is None）会自动派发；probe 任务仍由
-    strategies 模块编排（走 strategies/service.py 的批量端点），此处不自动触发。
+    独立 monitor 一律 phase=collect。probe 仅在策略研究流程内由 strategies 模块
+    显式创建（走 strategies/service.py 的批量端点），此 API 拒绝独立 probe。
     """
+    from fastapi import HTTPException
+
+    if data.phase == "probe":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="独立 monitor 不支持 probe 任务，probe 仅用于策略研究流程",
+        )
+
     task = await service.create_news_task(db, monitor.id, data, current_user.id, phase=data.phase)
-
-    if task.strategy_id is None and task.phase != "probe":
-        task = await _dispatch_news_collect_task(task, db, current_user.id)
-
+    task = await _dispatch_news_collect_task(task, db, current_user.id)
     return task
 
 

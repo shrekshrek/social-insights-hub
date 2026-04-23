@@ -35,8 +35,12 @@ class NewsTask(Base):
         comment="所属策略ID（策略流程专用）",
     )
     keywords: Mapped[str] = mapped_column(Text, nullable=False, comment="搜索关键词")
-    phase: Mapped[str | None] = mapped_column(
-        String(20), nullable=True, index=True, comment="采集阶段: probe / collect"
+    phase: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="collect",
+        index=True,
+        comment="采集阶段: probe(策略探测) / collect(全量,独立任务默认)",
     )
     status: Mapped[str] = mapped_column(
         String(50),

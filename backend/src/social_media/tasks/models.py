@@ -70,12 +70,13 @@ class SocialTask(Base):
         comment="所属策略 ID（策略流程专用，普通任务为 NULL）",
     )
 
-    # 采集阶段（策略流程专用）
-    phase: Mapped[str | None] = mapped_column(
+    # 采集阶段
+    phase: Mapped[str] = mapped_column(
         String(20),
-        nullable=True,
+        nullable=False,
+        server_default="collect",
         index=True,
-        comment="采集阶段: probe（探测）/ collect（全量）",
+        comment="采集阶段: probe(策略探测,仅策略流程) / collect(全量,独立任务默认)",
     )
 
     # 任务状态

@@ -52,8 +52,18 @@ async def create_task(
     - remote_crawler: 通过 Agent API 由外部爬虫认领并执行
     - local_upload: 本地 JSON 文件上传
 
+    独立 monitor 一律 phase=collect。probe 仅在策略研究流程内由 strategies 模块
+    显式创建（走 strategies/service.py 的批量端点），此 API 拒绝独立 probe。
     需要项目访问权限（owner 或 participant）。
     """
+    from fastapi import HTTPException
+
+    if task_in.phase == "probe":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="独立 monitor 不支持 probe 任务，probe 仅用于策略研究流程",
+        )
+
     task = await service.create_task(db, monitor.id, task_in, current_user.id)
     return task
 

@@ -81,8 +81,6 @@ const state = reactive<{
   sort_type: string // 小红书专属
   // 自动分析
   auto_analyze: boolean
-  // 采集阶段
-  phase: 'probe' | 'collect'
 }>({
   name: '',
   description: '',
@@ -100,8 +98,6 @@ const state = reactive<{
   sort_type: 'popularity_descending',
   // 自动分析（仅远程爬虫）
   auto_analyze: true,
-  // 采集阶段
-  phase: 'probe',
 })
 
 // 项目搜索相关
@@ -205,12 +201,6 @@ const taskTypeOptions = [
   { label: '详情任务', value: 'detail', description: '获取特定原文的详细信息' },
   { label: '作者任务', value: 'creator', description: '获取特定作者的原文列表' },
   { label: '首页动态', value: 'homefeed', description: '获取首页推荐动态' },
-]
-
-// 采集阶段选项
-const phaseOptions = [
-  { label: '探测 (快速验证关键词效果)', value: 'probe' },
-  { label: '全量 (完整数据采集)', value: 'collect' },
 ]
 
 // 数据源选项
@@ -425,7 +415,6 @@ const handleSubmit = async () => {
       task_params: Object.keys(taskParams).length > 0 ? taskParams : undefined,
       // 远程爬虫支持自动分析
       auto_analyze: state.data_source === 'remote_crawler' ? state.auto_analyze : false,
-      phase: state.phase,
     }
 
     const result = await createTask(state.monitor_id!, taskData)
@@ -662,33 +651,6 @@ const handleSubmit = async () => {
               :disabled="!state.platform_id"
               class="w-full font-mono text-sm"
             />
-          </UFormField>
-
-          <!-- 采集阶段 -->
-          <UFormField
-            label="采集阶段"
-            help="探测阶段用于快速验证关键词效果，全量阶段采集完整数据"
-          >
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label
-                v-for="opt in phaseOptions"
-                :key="opt.value"
-                class="relative flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                :class="{
-                  'ring-2 ring-primary-500 border-primary-500': state.phase === opt.value,
-                }"
-              >
-                <input
-                  v-model="state.phase"
-                  type="radio"
-                  :value="opt.value"
-                  class="mt-0.5 h-4 w-4 rounded-full border-gray-300 text-primary-600 focus:ring-primary-500"
-                >
-                <div class="ml-3 flex-1 text-sm">
-                  {{ opt.label }}
-                </div>
-              </label>
-            </div>
           </UFormField>
 
           <!-- 目标平台 - 复选框网格 -->

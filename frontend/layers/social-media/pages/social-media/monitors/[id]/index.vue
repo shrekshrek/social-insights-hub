@@ -59,10 +59,20 @@ const setTaskSelected = (taskId: number, checked: boolean) => {
   else s.delete(taskId)
   selectedTaskIds.value = Array.from(s)
 }
-const allTaskIds = computed(() => (tasks.value as SocialTaskWithRelations[]).map(t => t.id))
-const allSelected = computed(() => allTaskIds.value.length > 0 && allTaskIds.value.every(id => selectedTaskIds.value.includes(id)))
+
+// 切片可选规则：仅"已完成"且"全量"任务可参与切片（与新闻对齐）
+const isSelectableForSlice = (task: SocialTaskWithRelations) =>
+  task.status === 'completed' && task.phase === 'collect'
+
+const selectableTaskIds = computed(() =>
+  (tasks.value as SocialTaskWithRelations[]).filter(isSelectableForSlice).map(t => t.id),
+)
+const allSelected = computed(() =>
+  selectableTaskIds.value.length > 0
+  && selectableTaskIds.value.every(id => selectedTaskIds.value.includes(id)),
+)
 const toggleSelectAll = (checked: boolean) => {
-  selectedTaskIds.value = checked ? Array.from(new Set(allTaskIds.value)) : []
+  selectedTaskIds.value = checked ? Array.from(new Set(selectableTaskIds.value)) : []
 }
 
 interface MonitorSliceListResponse {
@@ -669,14 +679,28 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
       header: () => h('input', {
         type: 'checkbox',
         checked: allSelected.value,
+        disabled: selectableTaskIds.value.length === 0,
         onChange: (e: Event) => toggleSelectAll((e.target as HTMLInputElement).checked),
-        title: '全选',
+        title: selectableTaskIds.value.length === 0 ? '当前页无可选任务' : '全选可生成切片的任务',
       }),
-      cell: ({ row }) => h('input', {
-        type: 'checkbox',
-        checked: selectedTaskIds.value.includes(row.original.id),
-        onChange: (e: Event) => setTaskSelected(row.original.id, (e.target as HTMLInputElement).checked),
-      }),
+      cell: ({ row }) => {
+        const task = row.original
+        const selectable = isSelectableForSlice(task)
+        const disabledReason = !selectable
+          ? task.phase === 'probe'
+            ? '探测任务数据量小，不可用于生成切片'
+            : '仅"已完成"的全量任务可生成切片'
+          : ''
+        return h('input', {
+          type: 'checkbox',
+          checked: selectable && selectedTaskIds.value.includes(task.id),
+          disabled: !selectable,
+          title: disabledReason,
+          class: selectable ? 'cursor-pointer' : 'cursor-not-allowed opacity-40',
+          onChange: (e: Event) =>
+            selectable && setTaskSelected(task.id, (e.target as HTMLInputElement).checked),
+        })
+      },
     },
     {
       accessorKey: 'id',

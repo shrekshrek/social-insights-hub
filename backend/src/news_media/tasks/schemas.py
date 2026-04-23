@@ -11,11 +11,15 @@ from src.schemas import CustomBaseModel
 
 
 class NewsTaskCreate(CustomBaseModel):
-    """创建新闻任务"""
+    """创建新闻任务
+
+    phase 默认 collect。独立 monitor 创建一律走 collect；probe 仅由
+    strategies 模块编排时显式传入（service 层签名上的 phase 参数会覆盖）。
+    """
 
     name: str = Field(..., min_length=1, max_length=255)
     keywords: str = Field(..., min_length=1)
-    phase: str | None = Field(None, pattern=r"^(probe|collect)$")
+    phase: str = Field("collect", pattern=r"^(probe|collect)$")
     search_params: dict | None = None
     auto_analyze: bool = Field(
         True, description="collect 阶段采集完成后是否自动触发逐篇标注（NEWS_TAGGING）"
@@ -30,7 +34,7 @@ class NewsTaskRead(CustomBaseModel):
     monitor_id: int
     strategy_id: int | None
     keywords: str
-    phase: str | None
+    phase: str
     status: str
     search_params: dict | None
     articles_count: int

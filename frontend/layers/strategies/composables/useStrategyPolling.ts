@@ -73,7 +73,21 @@ export const useStrategyPolling = (
         startCollectionPolling()
       }
     } catch {
-      // 静默失败，下次轮询重试
+      // probe-status 失败时主动拉一次 strategy，检测阶段是否已推进
+      // 场景：APScheduler 自动 approve 后 probe 任务被原地推进到 collect 阶段，
+      // probe-status 查不到 phase=probe 任务会返回 400；此时应停止 probe 轮询，
+      // 必要时切换到 collection 轮询，避免 10s 一次死循环弹错
+      try {
+        const latest = await strategiesApi.fetchStrategy(strategyId.value)
+        if (isUnmounted) return
+        strategy.value = latest
+        if (latest.status !== 'probing') {
+          stopProbePolling()
+          if (latest.status === 'collecting') startCollectionPolling()
+        }
+      } catch {
+        // 策略本身也拉不到（网络问题/权限问题），下次轮询再试
+      }
     }
   }
 

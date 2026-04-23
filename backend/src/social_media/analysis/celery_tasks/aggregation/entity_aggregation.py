@@ -467,7 +467,6 @@ def _merge_entity_data(
 def build_entity_name_mapping(
     raw_entities: list[dict[str, Any]],
     task_keywords: list[str],
-    enable_llm: bool = True,
     max_entities: int = 60,
 ) -> tuple[dict[str, str], dict[str, dict], dict[str, Any] | None]:
     """构建实体名称映射与标签
@@ -498,62 +497,61 @@ def build_entity_name_mapping(
         f"[实体归一化] 程序相似度: {raw_count} -> {after_similarity_count} 个 (合并了 {similarity_merged} 个)"
     )
 
-    # 3. LLM 同义词映射（可选）
-    if enable_llm:
-        try:
-            # 预合并：利用程序映射和通用合并函数生成“预合并实体列表”
-            # 构建一个临时字典适配 _merge_entity_data 的输入格式
-            raw_data_map = {e["name"]: e for e in raw_entities}
+    # LLM 同义词映射
+    try:
+        # 预合并：利用程序映射和通用合并函数生成"预合并实体列表"
+        # 构建一个临时字典适配 _merge_entity_data 的输入格式
+        raw_data_map = {e["name"]: e for e in raw_entities}
 
-            # 调用通用合并函数 (无 post_impact_map，total_impact 是近似累加，用于 Top 50 排序足够)
-            pre_merged_data = _merge_entity_data(raw_data_map, similarity_mapping)
+        # 调用通用合并函数 (无 post_impact_map，total_impact 是近似累加，用于 Top 50 排序足够)
+        pre_merged_data = _merge_entity_data(raw_data_map, similarity_mapping)
 
-            # 构建 LLM 输入列表
-            llm_input_entities = []
-            for canonical, entity in pre_merged_data.items():
-                impact = entity.get("total_impact", 0.0)
-                mentions = len(entity["post_ids"])
+        # 构建 LLM 输入列表
+        llm_input_entities = []
+        for canonical, entity in pre_merged_data.items():
+            impact = entity.get("total_impact", 0.0)
+            mentions = len(entity["post_ids"])
 
-                # 创建副本用于 LLM 输入
-                new_entity = {
-                    "name": canonical,
-                    "type": entity["type"],
-                    "mentions": mentions,
-                    "heat": impact,  # LLM 输入仍用 heat 字段名（对外接口）
-                    "score": calculate_score(impact, mentions),
-                    "hint": "",
-                }
-                llm_input_entities.append(new_entity)
+            # 创建副本用于 LLM 输入
+            new_entity = {
+                "name": canonical,
+                "type": entity["type"],
+                "mentions": mentions,
+                "heat": impact,  # LLM 输入仍用 heat 字段名（对外接口）
+                "score": calculate_score(impact, mentions),
+                "hint": "",
+            }
+            llm_input_entities.append(new_entity)
 
-            # 按重新计算后的 Score 排序
-            llm_input_entities.sort(key=lambda x: x.get("score", 0), reverse=True)
+        # 按重新计算后的 Score 排序
+        llm_input_entities.sort(key=lambda x: x.get("score", 0), reverse=True)
 
-            # 只有当预合并后的实体数量足够多时才调用 LLM
-            if len(llm_input_entities) >= 5:
-                llm_mapping, llm_tags_mapping, token_stats = _build_llm_mapping(
-                    llm_input_entities, task_keywords, max_entities
-                )
-
-                # 保存 tags 映射
-                tags_mapping = llm_tags_mapping
-
-                if llm_mapping:
-                    # 合并映射：将 LLM 的映射叠加到 程序映射 上
-                    # 逻辑：Name -> [Similarity] -> Prog_Canonical -> [LLM] -> Final_Canonical
-                    for name, prog_canonical in similarity_mapping.items():
-                        if prog_canonical in llm_mapping:
-                            final_canonical = llm_mapping[prog_canonical]
-                            similarity_mapping[name] = final_canonical
-
-                    final_unique = len(set(similarity_mapping.values()))
-                    llm_merged = after_similarity_count - final_unique
-                    logger.info(
-                        f"[名称映射] LLM 归一化后: {final_unique} 个唯一实体 (合并了 {llm_merged} 个)"
-                    )
-        except Exception as e:
-            logger.warning(
-                f"[名称映射] LLM 归一化失败，使用程序映射: {e}", exc_info=True
+        # 只有当预合并后的实体数量足够多时才调用 LLM
+        if len(llm_input_entities) >= 5:
+            llm_mapping, llm_tags_mapping, token_stats = _build_llm_mapping(
+                llm_input_entities, task_keywords, max_entities
             )
+
+            # 保存 tags 映射
+            tags_mapping = llm_tags_mapping
+
+            if llm_mapping:
+                # 合并映射：将 LLM 的映射叠加到 程序映射 上
+                # 逻辑：Name -> [Similarity] -> Prog_Canonical -> [LLM] -> Final_Canonical
+                for name, prog_canonical in similarity_mapping.items():
+                    if prog_canonical in llm_mapping:
+                        final_canonical = llm_mapping[prog_canonical]
+                        similarity_mapping[name] = final_canonical
+
+                final_unique = len(set(similarity_mapping.values()))
+                llm_merged = after_similarity_count - final_unique
+                logger.info(
+                    f"[名称映射] LLM 归一化后: {final_unique} 个唯一实体 (合并了 {llm_merged} 个)"
+                )
+    except Exception as e:
+        logger.warning(
+            f"[名称映射] LLM 归一化失败，使用程序映射: {e}", exc_info=True
+        )
 
     return similarity_mapping, tags_mapping, token_stats
 
@@ -767,7 +765,6 @@ def _clean_entity_attributes_sync(
 def aggregate_entities(
     posts_data: list[dict[str, Any]],
     task_keywords: list[str] | None = None,
-    enable_llm_normalization: bool = True,
     top_n: int = 10,
     top_k_attrs: int = 50,  # 新增参数
     spam_threshold: float = SPAM_HIGH_THRESHOLD,
@@ -794,7 +791,6 @@ def aggregate_entities(
     name_mapping, tags_mapping, llm_token_stats = build_entity_name_mapping(
         raw_entities_list,
         task_keywords,
-        enable_llm=enable_llm_normalization,
     )
 
     # ========================================
@@ -805,7 +801,7 @@ def aggregate_entities(
     )
 
     # 只保留 LLM 处理过的实体（有 tags 的）
-    if enable_llm_normalization and tags_mapping:
+    if tags_mapping:
         before_filter = len(entity_data)
         entity_data = {k: v for k, v in entity_data.items() if v.get("tags")}
         logger.info(
@@ -828,16 +824,15 @@ def aggregate_entities(
     top_n_scores = set(all_scores[:top_n])
     top_3_scores = set(all_scores[:3])  # Top 3 实体清洗所有属性字段
 
-    if enable_llm_normalization:
-        entity_data, cleaning_stats = _clean_entity_attributes_sync(
-            entity_data, top_n_scores, top_3_scores, top_k_attrs=top_k_attrs
-        )
+    entity_data, cleaning_stats = _clean_entity_attributes_sync(
+        entity_data, top_n_scores, top_3_scores, top_k_attrs=top_k_attrs
+    )
 
-        # 合并 token 统计
-        if cleaning_stats and llm_token_stats:
-            merge_token_stats(llm_token_stats, cleaning_stats)
-        elif cleaning_stats:
-            llm_token_stats = cleaning_stats
+    # 合并 token 统计
+    if cleaning_stats and llm_token_stats:
+        merge_token_stats(llm_token_stats, cleaning_stats)
+    elif cleaning_stats:
+        llm_token_stats = cleaning_stats
 
     # ========================================
     # 5. 提取竞品名称、角色分类 (Legacy / Helper)

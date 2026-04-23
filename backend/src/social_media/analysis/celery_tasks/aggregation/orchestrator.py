@@ -162,7 +162,6 @@ def aggregate_task_analysis(
     task_id: int,
     monitor_id: int | None = None,
     user_id: int | None = None,
-    enable_entity_normalization: bool = True,
     entity_job_id: int | None = None,
     opinion_job_id: int | None = None,
     spam_threshold: float = SPAM_HIGH_THRESHOLD,
@@ -174,7 +173,6 @@ def aggregate_task_analysis(
         task_id: 任务ID
         monitor_id: 项目ID（用于创建 AnalysisJob 记录）
         user_id: 用户ID（用于创建 AnalysisJob 记录）
-        enable_entity_normalization: 是否启用 LLM 实体归一化（会增加成本）
         entity_job_id: 预创建的实体归一化 AnalysisJob ID
         opinion_job_id: 预创建的观点归一化 AnalysisJob ID
         spam_threshold: spam 分组阈值（默认 6.0，>= 此值为高广告组）
@@ -282,36 +280,35 @@ def aggregate_task_analysis(
     # 使用预创建的 AnalysisJob（由 service.py 创建），或创建新的（向后兼容）
     entity_job = None
     opinion_job = None
-    if enable_entity_normalization:
-        if entity_job_id:
-            # 使用预创建的 job，更新状态为 processing
-            entity_job = start_analysis_job_sync(db, entity_job_id)
-        elif monitor_id and user_id:
-            # 向后兼容：内部创建 job
-            entity_job = create_analysis_job_sync(
-                db=db,
-                social_monitor_id=monitor_id,
-                social_task_id=task_id,
-                user_id=user_id,
-                analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
-                source_count=len(posts_data),
-                status="running",
-            )
+    if entity_job_id:
+        # 使用预创建的 job，更新状态为 processing
+        entity_job = start_analysis_job_sync(db, entity_job_id)
+    elif monitor_id and user_id:
+        # 向后兼容：内部创建 job
+        entity_job = create_analysis_job_sync(
+            db=db,
+            social_monitor_id=monitor_id,
+            social_task_id=task_id,
+            user_id=user_id,
+            analysis_type=AnalysisType.ENTITY_NORMALIZATION.value,
+            source_count=len(posts_data),
+            status="running",
+        )
 
-        if opinion_job_id:
-            # 使用预创建的 job，更新状态为 processing
-            opinion_job = start_analysis_job_sync(db, opinion_job_id)
-        elif monitor_id and user_id:
-            # 向后兼容：内部创建 job
-            opinion_job = create_analysis_job_sync(
-                db=db,
-                social_monitor_id=monitor_id,
-                social_task_id=task_id,
-                user_id=user_id,
-                analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
-                source_count=len(posts_data),
-                status="running",
-            )
+    if opinion_job_id:
+        # 使用预创建的 job，更新状态为 processing
+        opinion_job = start_analysis_job_sync(db, opinion_job_id)
+    elif monitor_id and user_id:
+        # 向后兼容：内部创建 job
+        opinion_job = create_analysis_job_sync(
+            db=db,
+            social_monitor_id=monitor_id,
+            social_task_id=task_id,
+            user_id=user_id,
+            analysis_type=AnalysisType.OPINION_NORMALIZATION.value,
+            source_count=len(posts_data),
+            status="running",
+        )
 
     # 并行执行实体聚合和话题聚合（两者互相独立）
     entity_stats = {}
@@ -321,7 +318,6 @@ def aggregate_task_analysis(
         return aggregate_entities(
             posts_data,
             task_keywords=task_keywords,
-            enable_llm_normalization=enable_entity_normalization,
             spam_threshold=spam_threshold,
         )
 
@@ -329,7 +325,6 @@ def aggregate_task_analysis(
         return aggregate_opinions(
             posts_data,
             # task_keywords=task_keywords, # 话题聚合暂不需要 task_keywords
-            # enable_llm_normalization=enable_entity_normalization,
         )
 
     # gevent.spawn：gevent monkey-patch 后的原生 greenlet，信号（SoftTimeLimitExceeded）可正常传播

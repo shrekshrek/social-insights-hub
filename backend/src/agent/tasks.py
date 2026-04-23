@@ -7,7 +7,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import or_, select, update
 
 from src.config import settings
 from src.database import AsyncSessionLocal
@@ -19,11 +19,14 @@ logger = logging.getLogger(__name__)
 async def reset_timed_out_tasks() -> int:
     """将超时的 accepted/running 任务重置为 pending。
 
-    三种场景：
-    - accepted + accepted_at 超时：爬虫接收后未启动（崩溃/重启）
-    - running + accepted_at 超时：爬虫启动后中途崩溃，进度上报随之停止
-    - running + accepted_at 为空：异常状态（如代码路径直接设 running 但未经 agent claim），
-      以 updated_at 作为回退计时基准
+    活跃度信号：`updated_at`（progress report / status 变更都会通过 SQLAlchemy
+    onupdate 自动推进）。用 `updated_at < cutoff` 替代原先的 `accepted_at < cutoff`：
+
+    - **正常跑的长任务**：progress report 持续推进 updated_at → 不会被错杀
+      （旧逻辑用 accepted_at，跑满 2h 的大任务会被错杀）
+    - **agent 崩溃 / 网络中断**：progress 停止上报 → updated_at 不再推进 → 按 timeout 重置
+    - **爬虫端平台暂停超过 timeout**：updated_at 同样停滞 → 会被重置为 pending。
+      配合 upload_result 白名单对 pending 状态的兜底（带告警），暂停恢复后仍能上传
 
     Returns:
         int: 重置的任务数量
@@ -40,13 +43,7 @@ async def reset_timed_out_tasks() -> int:
                     SocialTask.status == "accepted",
                     SocialTask.status == "running",
                 ),
-                or_(
-                    # 正常路径：accepted_at 超时
-                    and_(SocialTask.accepted_at.isnot(None), SocialTask.accepted_at < cutoff),
-                    # 异常路径：running 但 accepted_at 为空，用 updated_at 回退
-                    and_(SocialTask.status == "running", SocialTask.accepted_at.is_(None),
-                         SocialTask.updated_at < cutoff),
-                ),
+                SocialTask.updated_at < cutoff,
                 SocialTask.is_deleted.is_(False),
             )
         )
@@ -65,11 +62,11 @@ async def reset_timed_out_tasks() -> int:
 
     now = datetime.now(timezone.utc)
     for row in timed_out:
-        ref_time = row.accepted_at or row.updated_at
+        ref_time = row.updated_at
         hours_stuck = (now - ref_time).total_seconds() / 3600 if ref_time else 0
         logger.warning(
-            "Task %d (keywords=%r, status=%s) reset to pending after %.1fh (accepted_at=%s)",
-            row.id, row.keywords, row.status, hours_stuck, row.accepted_at,
+            "Task %d (keywords=%r, status=%s) reset to pending after %.1fh idle (updated_at=%s)",
+            row.id, row.keywords, row.status, hours_stuck, row.updated_at,
         )
 
     logger.info("Reset %d timed-out tasks to pending", len(task_ids))

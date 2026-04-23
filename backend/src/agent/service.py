@@ -250,7 +250,17 @@ async def upload_result(
         )
 
     # 验证状态
-    if task.status not in ("accepted", "running", "completed"):
+    # pending 兜底：agent 长时间没活动时 `reset_timed_out_tasks` 会把 task 打回 pending，
+    # 此时若 worker 恰好在首次 progress_report 之前完成上传（例如即时失败场景），
+    # 云端仍应接收数据——拒绝会导致爬虫端重试循环因 409 立即中止、数据丢失。
+    # 记 warning 以便追踪这种"超时反向修复"路径的频率。
+    if task.status == "pending":
+        logger.warning(
+            "Task %s: upload received while status=pending "
+            "(likely timeout-reset recovery path); accepting to avoid data loss",
+            task_id,
+        )
+    elif task.status not in ("accepted", "running", "completed"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -258,7 +268,7 @@ async def upload_result(
                 "error_code": "INVALID_TASK_STATUS",
                 "message": (
                     f"Task status is {task.status}, "
-                    "expected accepted, running or completed"
+                    "expected accepted, running, completed or pending"
                 ),
             },
         )
@@ -484,15 +494,21 @@ async def upload_result(
                     acquired = await redis_client.set(
                         lock_key, "triggered", nx=True, ex=7200
                     )
+                # probe 阶段走轻量聚合路径（跳过 entity/opinion LLM 归一化，
+                # 把 aggregation 从 60-90s 压到 <5s）；collect 阶段走完整路径，
+                # 切片消费需要的 aggregated_opinions / aggregated_entities 完整生成
+                skip_llm_normalization = task.phase == "probe"
+
                 if acquired:
                     run_auto_analysis.delay(
                         task_id=task.id,
                         user_id=user_id,
                         monitor_keywords=monitor_keywords,
+                        skip_llm_normalization=skip_llm_normalization,
                     )
                     logger.info(
-                        "Task %s: Auto analysis triggered (new_posts=%s, new_comments=%s)",
-                        task_id, new_posts_count, new_comments_count,
+                        "Task %s: Auto analysis triggered (phase=%s, new_posts=%s, new_comments=%s)",
+                        task_id, task.phase, new_posts_count, new_comments_count,
                     )
                 else:
                     logger.info(
@@ -511,6 +527,7 @@ async def upload_result(
                     task_id=task.id,
                     user_id=user_id,
                     monitor_keywords=monitor_keywords,
+                    skip_llm_normalization=task.phase == "probe",
                 )
 
         return StoredCounts(posts=posts_count, comments=comments_count)

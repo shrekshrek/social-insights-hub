@@ -733,6 +733,113 @@ async def preview_deep_analysis_candidates(
 # ==================== Delete Analysis Results ====================
 
 
+import logging as _logging  # noqa: E402
+
+_logger = _logging.getLogger(__name__)
+
+
+async def reset_task_analysis_state(
+    db: AsyncSession,
+    task_id: int,
+    *,
+    task: "Optional[SocialTask]" = None,  # noqa: F821 — runtime imported
+    delete_post_analysis: bool = True,
+    delete_analysis_jobs: bool = True,
+) -> dict[str, int]:
+    """完整重置一个任务的分析状态，确保后续分析能干净地重新触发。
+
+    覆盖以下副作用，分散写法很容易遗漏：
+    - 清除 Redis 自动分析幂等锁（不清就算有新数据也无法重新触发）
+    - 撤销进行中的 Celery 分析任务（不撤就可能用旧数据污染新数据）
+    - 可选：删除 PostAnalysis 记录（per-post 分析结果）
+    - 可选：删除 AnalysisJob 记录（分析作业历史）
+    - 如果传入 task 对象：清空 task.analysis_result / analysis_result_at（聚合结果）
+
+    使用场景：
+    - "清空数据" (clear_task_data)：全部清，相当于把任务还原到刚创建时
+    - "清空结果" (delete_task_analyses)：清分析但保留 posts/comments
+    - phase 推进 (probe → collect)：只清锁和 Celery，PostAnalysis 保留
+      （让后续分析能基于已有 per-post 结果增量做，省 LLM 成本）
+
+    所有动作都是幂等的：重复调用安全。Redis / Celery 故障会记日志但不抛异常，
+    不阻断主流程（因为它们都是"清理"而非"业务"动作）。
+
+    Returns:
+        {
+          "post_analysis_deleted": int,
+          "analysis_jobs_deleted": int,
+          "celery_tasks_revoked": int,
+        }
+    """
+    from sqlalchemy import delete as sa_delete
+
+    summary = {
+        "post_analysis_deleted": 0,
+        "analysis_jobs_deleted": 0,
+        "celery_tasks_revoked": 0,
+    }
+
+    # 1) 清除 Redis 自动分析幂等锁
+    try:
+        import redis.asyncio as redis
+        from src.redis_client import redis_pool
+
+        async with redis.Redis(connection_pool=redis_pool) as redis_client:
+            await redis_client.delete(f"analysis:auto:{task_id}:triggered")
+            await redis_client.delete(f"analysis:auto:{task_id}:running")
+    except Exception as e:
+        _logger.warning(
+            "Task %s: failed to clear auto-analysis Redis lock: %s",
+            task_id, e, exc_info=True,
+        )
+
+    # 2) 撤销进行中的 Celery 分析任务
+    try:
+        from celery import current_app as celery_app  # type: ignore[import-not-found]
+
+        jobs_stmt = select(AnalysisJob.celery_task_id).where(
+            AnalysisJob.social_task_id == task_id,
+            AnalysisJob.status.in_(("pending", "running")),
+        )
+        jobs_result = await db.execute(jobs_stmt)
+        celery_task_ids = [row[0] for row in jobs_result.all() if row and row[0]]
+        for celery_task_id in celery_task_ids:
+            celery_app.control.revoke(celery_task_id, terminate=True)
+        summary["celery_tasks_revoked"] = len(celery_task_ids)
+        if celery_task_ids:
+            _logger.info(
+                "Task %s: revoked %d in-flight analysis celery task(s)",
+                task_id, len(celery_task_ids),
+            )
+    except Exception as e:
+        _logger.warning(
+            "Task %s: failed to revoke analysis celery tasks: %s",
+            task_id, e, exc_info=True,
+        )
+
+    # 3) 可选：清空聚合分析报告（需要传入 task 对象）
+    if task is not None:
+        task.analysis_result = None
+        task.analysis_result_at = None
+
+    # 4) 可选：删除 PostAnalysis 记录
+    if delete_post_analysis:
+        result = await db.execute(
+            sa_delete(PostAnalysis).where(PostAnalysis.task_id == task_id)
+        )
+        summary["post_analysis_deleted"] = result.rowcount or 0
+
+    # 5) 可选：删除 AnalysisJob 记录
+    if delete_analysis_jobs:
+        result = await db.execute(
+            sa_delete(AnalysisJob).where(AnalysisJob.social_task_id == task_id)
+        )
+        summary["analysis_jobs_deleted"] = result.rowcount or 0
+
+    await db.flush()
+    return summary
+
+
 async def delete_task_analyses(
     db: AsyncSession,
     task_id: int,
@@ -740,16 +847,11 @@ async def delete_task_analyses(
 ) -> dict[str, Any]:
     """删除任务下所有原文的分析结果，方便重新分析
 
-    Args:
-        task_id: 任务ID
-        current_user_id: 当前用户ID
-
-    Returns:
-        删除结果，包含删除的记录数
+    保留 posts/comments，但清空所有分析相关状态：
+    PostAnalysis、AnalysisJob、Redis 幂等锁、进行中的 Celery 任务、task.analysis_result。
     """
     from src.social_media.tasks import crud as task_crud
     from src.social_media.monitors import crud as monitor_crud
-    from sqlalchemy import delete
 
     # 验证任务是否存在
     task = await task_crud.get_task_by_id(db, task_id, load_relations=False)
@@ -759,29 +861,32 @@ async def delete_task_analyses(
         )
 
     # 验证用户权限
-    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
+    await monitor_crud.assert_monitor_access(
+        db, task.monitor_id, current_user_id,
+        detail="You don't have access to this task",
+    )
 
-    # 查询要删除的记录数
-    count_stmt = select(func.count()).where(PostAnalysis.task_id == task_id)
-    count_result = await db.execute(count_stmt)
-    deleted_count = count_result.scalar() or 0
+    summary = await reset_task_analysis_state(
+        db, task_id,
+        task=task,
+        delete_post_analysis=True,
+        delete_analysis_jobs=True,
+    )
+    await db.commit()
 
-    if deleted_count == 0:
+    deleted_count = summary["post_analysis_deleted"]
+    if deleted_count == 0 and summary["analysis_jobs_deleted"] == 0:
         return {
             "success": True,
             "deleted_count": 0,
             "message": "没有需要删除的分析结果",
         }
 
-    # 删除所有分析结果
-    delete_stmt = delete(PostAnalysis).where(PostAnalysis.task_id == task_id)
-    await db.execute(delete_stmt)
-    await db.commit()
-
     return {
         "success": True,
         "deleted_count": deleted_count,
         "message": f"已删除 {deleted_count} 条分析结果",
+        "details": summary,
     }
 
 

@@ -2788,12 +2788,13 @@ async def _advance_probe_task_to_collect(
     - status: probe_ready → pending（重新进入 agent 认领队列）
     - task_params: 覆写为全量采集参数
     - 重置执行态字段（accepted/started/completed/error），供 agent 重新认领
-    - 清除自动分析的 Redis 幂等锁并撤销进行中的 probe 分析作业，让 collect 完成后能重新触发分析
+    - 清除 Redis 自动分析锁 + 撤销进行中的 probe 分析作业，让 collect 完成后能重新触发分析
+    - 保留 PostAnalysis：probe 阶段已分析的笔记结果可被 collect 阶段增量复用，省 LLM 成本
 
     已采集的 posts/comments 保留在同一 task 下（它们是最终 50 条的一部分）。
     爬虫侧通过相同 cloud_task_id 的历史 checkpoint 自动续采，无需额外传参。
     """
-    from src.social_media.tasks.models import SocialTask as _SocialTask  # noqa: F401
+    from src.social_media.analysis.service import reset_task_analysis_state
 
     task.phase = "collect"
     task.status = "pending"
@@ -2805,52 +2806,17 @@ async def _advance_probe_task_to_collect(
     task.error_message = None
     task.crawled_count = 0
     # posts_count / comments_count 保留：probe 阶段已入库的 20 条不能被遗忘
-    # analysis_result 清空：collect 完成后会重新聚合全量分析
-    task.analysis_result = None
-    task.analysis_result_at = None
     flag_modified(task, "task_params")
 
-    # 清除自动分析幂等锁 + 撤销进行中的 probe 分析 celery 任务
-    # 参考 agent.service._clear_analysis_results 的做法，但这里 posts/comments 要保留，
-    # 所以不调用完整的 clear 函数（它会删除 PostAnalysis 记录）
-    try:
-        import redis.asyncio as redis
-        from src.redis_client import redis_pool
-
-        async with redis.Redis(connection_pool=redis_pool) as redis_client:
-            await redis_client.delete(f"analysis:auto:{task.id}:triggered")
-            await redis_client.delete(f"analysis:auto:{task.id}:running")
-    except Exception as e:
-        logger.warning(
-            "Task %s: failed to clear auto-analysis redis lock during probe→collect advance: %s",
-            task.id,
-            e,
-        )
-
-    try:
-        from celery import current_app as celery_app  # type: ignore[import-not-found]
-        from src.jobs.models import AnalysisJob
-
-        jobs_stmt = select(AnalysisJob.celery_task_id).where(
-            and_(
-                AnalysisJob.social_task_id == task.id,
-                AnalysisJob.status.in_(("pending", "running")),
-            )
-        )
-        jobs_result = await db.execute(jobs_stmt)
-        celery_task_ids = [row[0] for row in jobs_result.all() if row and row[0]]
-        for celery_task_id in celery_task_ids:
-            celery_app.control.revoke(celery_task_id, terminate=True)
-        if celery_task_ids:
-            logger.info(
-                "Task %s: revoked %d in-flight probe analysis celery tasks before advance",
-                task.id,
-                len(celery_task_ids),
-            )
-    except Exception as e:
-        logger.warning(
-            "Task %s: failed to revoke probe analysis celery tasks: %s", task.id, e
-        )
+    # 复用统一的分析状态重置逻辑：清 Redis 锁 + 撤销 Celery + 清 task.analysis_result
+    # delete_post_analysis=False：probe 已经做过的 per-post 分析保留，collect 完成后增量复用
+    # delete_analysis_jobs=False：保留作业历史，便于追溯
+    await reset_task_analysis_state(
+        db, task.id,
+        task=task,
+        delete_post_analysis=False,
+        delete_analysis_jobs=False,
+    )
 
 
 async def approve_probe(

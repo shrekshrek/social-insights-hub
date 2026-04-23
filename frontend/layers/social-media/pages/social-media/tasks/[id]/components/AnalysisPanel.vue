@@ -141,7 +141,7 @@ const totalPostsCount = computed(() => preview.value?.total_posts ?? 0)
 
 const processingTasks = computed<AnalysisJob[]>(() =>
   (analysisHistory.value?.items || []).filter((item) =>
-    ['pending', 'processing'].includes(item.status),
+    ['pending', 'running'].includes(item.status),
   ),
 )
 const hasRunningTask = computed(() => processingTasks.value.length > 0)
@@ -151,7 +151,7 @@ const screeningTask = computed<AnalysisJob | undefined>(() =>
   (analysisHistory.value?.items || []).find(
     (item) =>
       item.analysis_type === 'screening_posts' &&
-      ['pending', 'processing'].includes(item.status)
+      ['pending', 'running'].includes(item.status)
   ),
 )
 
@@ -160,7 +160,7 @@ const deepPostsTask = computed<AnalysisJob | undefined>(() =>
   (analysisHistory.value?.items || []).find(
     (item) =>
       item.analysis_type === 'deep_posts' &&
-      ['pending', 'processing'].includes(item.status)
+      ['pending', 'running'].includes(item.status)
   ),
 )
 
@@ -169,7 +169,7 @@ const deepCommentsTask = computed<AnalysisJob | undefined>(() =>
   (analysisHistory.value?.items || []).find(
     (item) =>
       item.analysis_type === 'deep_comments' &&
-      ['pending', 'processing'].includes(item.status)
+      ['pending', 'running'].includes(item.status)
   ),
 )
 
@@ -178,7 +178,7 @@ const entityNormalizationTask = computed<AnalysisJob | undefined>(() =>
   (analysisHistory.value?.items || []).find(
     (item) =>
       item.analysis_type === 'entity_normalization' &&
-      ['pending', 'processing'].includes(item.status)
+      ['pending', 'running'].includes(item.status)
   ),
 )
 
@@ -187,7 +187,7 @@ const opinionNormalizationTask = computed<AnalysisJob | undefined>(() =>
   (analysisHistory.value?.items || []).find(
     (item) =>
       item.analysis_type === 'opinion_normalization' &&
-      ['pending', 'processing'].includes(item.status)
+      ['pending', 'running'].includes(item.status)
   ),
 )
 
@@ -196,7 +196,7 @@ const aggregationTask = computed<AnalysisJob | undefined>(() =>
   (analysisHistory.value?.items || []).find(
     (item) =>
       item.analysis_type === 'aggregation' &&
-      ['pending', 'processing'].includes(item.status)
+      ['pending', 'running'].includes(item.status)
   ),
 )
 

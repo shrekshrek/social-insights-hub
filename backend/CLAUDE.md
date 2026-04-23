@@ -147,6 +147,8 @@ backend/src/
 | `news_task_watchdog` / `agent_timeout_reset` 等超时回收 | Celery/Agent 崩溃场景下任务永久 pending/running 的兜底 |
 | 软删除 `is_deleted` + 查询过滤 | SocialPost / SocialComment 孤立也不出现在业务视图 |
 | 编排函数入口的幂等预清理 | `confirm_research` 从 probing 重试时删旧探测任务，`refine_probe` 软删被替换任务，`approve_probe` 对已 collecting 状态幂等返回 |
+| Agent 上传幂等化 (v2026.04) | `upload_result` 用 dedup mapping（按 `post_id_on_platform` / `comment_id_on_platform`）替代清空-重插模式；agent 端按 `cloud_task_id` 聚合多次本地执行的 JSON 后整包上传，相同数据多次上传是 no-op |
+| 分析状态统一重置 (v2026.04) | `reset_task_analysis_state` 共享函数：清 Redis 自动分析锁 + 撤销进行中 Celery + 删 PostAnalysis/AnalysisJob + 清 task.analysis_result，被 `clear_task_data` / `delete_task_analyses` / `_advance_probe_task_to_collect` 复用，避免遗漏（之前 clear_task_data 不清 Redis 锁导致重传后分析触发被阻断的 bug） |
 
 **关键约束**：
 

@@ -745,6 +745,7 @@ async def reset_task_analysis_state(
     task: "Optional[SocialTask]" = None,  # noqa: F821 — runtime imported
     delete_post_analysis: bool = True,
     delete_analysis_jobs: bool = True,
+    clear_aggregated: bool = True,
 ) -> dict[str, int]:
     """完整重置一个任务的分析状态，确保后续分析能干净地重新触发。
 
@@ -753,13 +754,17 @@ async def reset_task_analysis_state(
     - 撤销进行中的 Celery 分析任务（不撤就可能用旧数据污染新数据）
     - 可选：删除 PostAnalysis 记录（per-post 分析结果）
     - 可选：删除 AnalysisJob 记录（分析作业历史）
-    - 如果传入 task 对象：清空 task.analysis_result / analysis_result_at（聚合结果）
+    - 如果传入 task 对象且 `clear_aggregated=True`：清空 task.analysis_result
+      / analysis_result_at（聚合结果）
 
     使用场景：
     - "清空数据" (clear_task_data)：全部清，相当于把任务还原到刚创建时
     - "清空结果" (delete_task_analyses)：清分析但保留 posts/comments
-    - phase 推进 (probe → collect)：只清锁和 Celery，PostAnalysis 保留
-      （让后续分析能基于已有 per-post 结果增量做，省 LLM 成本）
+    - phase 推进 (probe → collect)：只清锁和 Celery，PostAnalysis + 聚合结果都保留
+      （`clear_aggregated=False`；probe 的聚合对 0-new-data 的 collect 阶段作兜底，
+      collect 抓到新数据时 auto_analysis 会覆写，无新数据时 probe 聚合保持有效，
+      避免 "platform 总共就 20 条 → collect 抓 0 新 → analysis_result=None → 策略
+      永卡 collecting 无法建切片" 的边缘 bug）
 
     所有动作都是幂等的：重复调用安全。Redis / Celery 故障会记日志但不抛异常，
     不阻断主流程（因为它们都是"清理"而非"业务"动作）。
@@ -818,7 +823,7 @@ async def reset_task_analysis_state(
         )
 
     # 3) 可选：清空聚合分析报告（需要传入 task 对象）
-    if task is not None:
+    if task is not None and clear_aggregated:
         task.analysis_result = None
         task.analysis_result_at = None
 

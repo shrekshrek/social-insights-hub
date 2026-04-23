@@ -2788,8 +2788,12 @@ async def _advance_probe_task_to_collect(
     - status: probe_ready → pending（重新进入 agent 认领队列）
     - task_params: 覆写为全量采集参数
     - 重置执行态字段（accepted/started/completed/error），供 agent 重新认领
-    - 清除 Redis 自动分析锁 + 撤销进行中的 probe 分析作业，让 collect 完成后能重新触发分析
+    - 清除 Redis 自动分析锁 + 撤销进行中的 probe 分析作业
     - 保留 PostAnalysis：probe 阶段已分析的笔记结果可被 collect 阶段增量复用，省 LLM 成本
+    - 保留 task.analysis_result（probe 的聚合）：作为 0-new-data 边缘场景的兜底；
+      collect 抓到新数据时 auto_analysis 会覆写；抓不到新数据时（如 platform 总共
+      就 20 条），probe 的聚合仍然是对"全部可见数据"的合法聚合，让 check_collecting
+      scheduler 能正常筛到这个 task 进入建切片流程，避免策略永卡 collecting
 
     已采集的 posts/comments 保留在同一 task 下（它们是最终 50 条的一部分）。
     爬虫侧通过相同 cloud_task_id 的历史 checkpoint 自动续采，无需额外传参。
@@ -2808,14 +2812,16 @@ async def _advance_probe_task_to_collect(
     # posts_count / comments_count 保留：probe 阶段已入库的 20 条不能被遗忘
     flag_modified(task, "task_params")
 
-    # 复用统一的分析状态重置逻辑：清 Redis 锁 + 撤销 Celery + 清 task.analysis_result
+    # 复用统一的分析状态重置逻辑：清 Redis 锁 + 撤销 Celery
     # delete_post_analysis=False：probe 已经做过的 per-post 分析保留，collect 完成后增量复用
     # delete_analysis_jobs=False：保留作业历史，便于追溯
+    # clear_aggregated=False：保留 probe 聚合作为 0-new-data 边缘场景兜底（详见函数 docstring）
     await reset_task_analysis_state(
         db, task.id,
         task=task,
         delete_post_analysis=False,
         delete_analysis_jobs=False,
+        clear_aggregated=False,
     )
 
 

@@ -304,10 +304,23 @@ def _run_deep_comments(
         return job_id
 
 
-def _run_aggregation(task_id: int, user_id: int) -> int | None:
+def _run_aggregation(
+    task_id: int,
+    user_id: int,
+    skip_llm_normalization: bool = False,
+) -> int | None:
     """执行聚合报告生成
 
-    和手动聚合保持一致：创建实体归一化和观点归一化两个任务
+    Args:
+        task_id: SocialTask ID
+        user_id: 用户 ID
+        skip_llm_normalization: probe 轻量路径。True 时不创建 entity/opinion
+            归一化的 AnalysisJob（没 LLM 调用可记录），直接派发 celery 任务并
+            让 orchestrator 跳过 LLM 归一化。返回 None（无 job_id 可跟踪）
+
+    返回的 job id 仅供 `run_auto_analysis` 的 `_wait_for_analysis_job` 阻塞等待。
+    轻量路径下无需阻塞（聚合 <5s），直接返回 None 不会让主流程出错——
+    `run_auto_analysis` 里有 `if aggregation_job_id: wait` 的分支处理。
     """
     from sqlalchemy import func
     from src.social_media.tasks.models import SocialTask as SocialTask
@@ -333,6 +346,31 @@ def _run_aggregation(task_id: int, user_id: int) -> int | None:
 
         if analyzed_count == 0:
             logger.info("Task %s: No analyzed posts for aggregation", task_id)
+            return None
+
+        # 轻量路径：不创建 entity/opinion AnalysisJob，不派发额外 celery，不调 LLM
+        # 走独立的 build_probe_aggregation（probe_lite.py），只产出 probe review chain
+        # 需要的 4 个字段（posts_count/deep_analyzed/entity_match/top_topics/promotion_ratio）。
+        # 结果 shape 是完整 aggregation 的严格子集，字段路径一致。
+        # collect 阶段跑完整 aggregation 时会覆写这个轻量结果。
+        if skip_llm_normalization:
+            from datetime import datetime, timezone
+            from .aggregation.probe_lite import build_probe_aggregation
+
+            aggregation_result = build_probe_aggregation(db, task_id)
+            task.analysis_result = aggregation_result
+            task.analysis_result_at = datetime.now(timezone.utc)
+            db.commit()
+
+            logger.info(
+                "Task %s: Lightweight probe aggregation completed (%s entities, %s topics)",
+                task_id,
+                len(aggregation_result["insights"]["target_entities"])
+                + len(aggregation_result["insights"]["competitor_entities"]),
+                len(aggregation_result["insights"]["top_topics"]),
+            )
+            # 返回 None：probe 阶段没有 AnalysisJob 可供外层 _wait_for_analysis_job 等待；
+            # 聚合已同步完成，outer run_auto_analysis 看到 None 会标 completed_inline 直接返回
             return None
 
         # 创建实体归一化任务（和手动聚合一致）
@@ -392,10 +430,17 @@ def run_auto_analysis(
     spam_max: float = DEFAULT_SPAM_MAX,
     value_min: float = DEFAULT_VALUE_MIN,
     relevance_min: float = DEFAULT_RELEVANCE_MIN,
+    skip_llm_normalization: bool = False,
 ) -> Dict[str, Any]:
     """自动执行全流程分析
 
     按顺序执行：初筛 → 原文深度 → 评论深度 → 聚合报告
+
+    Args:
+        skip_llm_normalization: probe 轻量路径。True 时聚合步骤跳过 entity/opinion
+            LLM 归一化，聚合 wall time 从 60-90s 降到 <5s。由 upload_result 根据
+            task.phase 传入：probe=True，collect=False（collect 需要完整归一化供
+            切片消费 aggregated_opinions / aggregated_entities）
     """
     logger.info("Task %s: Starting auto analysis pipeline", task_id)
 
@@ -476,8 +521,13 @@ def run_auto_analysis(
             }
 
         # 4. 聚合报告生成
-        logger.info("Task %s: Step 4/4 - Running aggregation...", task_id)
-        aggregation_job_id = _run_aggregation(task_id, user_id)
+        logger.info(
+            "Task %s: Step 4/4 - Running aggregation (skip_llm=%s)...",
+            task_id, skip_llm_normalization,
+        )
+        aggregation_job_id = _run_aggregation(
+            task_id, user_id, skip_llm_normalization=skip_llm_normalization,
+        )
         results["aggregation"] = {"job_id": aggregation_job_id}
 
         if aggregation_job_id:
@@ -486,6 +536,9 @@ def run_auto_analysis(
                 logger.error("Task %s: Aggregation failed", task_id)
                 return results
             results["aggregation"]["status"] = "completed"
+        elif skip_llm_normalization:
+            # probe 轻量路径：aggregation 已在 _run_aggregation 里同步完成
+            results["aggregation"] = {"status": "completed_inline"}
         else:
             results["aggregation"] = {"status": "skipped", "reason": "unknown"}
 

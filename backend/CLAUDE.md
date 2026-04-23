@@ -134,8 +134,10 @@ backend/src/
 → 因此 social_media 没有、也不需要 `/tasks/{id}/execute` 端点；news_media 必须有。新增渠道时根据数据源特性二选一，不要混用。
 
 **news_media 场景区分**：
-- **独立 news monitor**：只支持一步式 collect，`/tasks/{id}/execute` 仅接受 `strategy_id IS NULL` 且 `phase != "probe"`；不提供 approve/refine 探测流程
+- **独立 news monitor**：只支持一步式 collect。`POST /monitors/{id}/tasks` 拒绝 `phase="probe"`；`/tasks/{id}/execute` 仅接受 `strategy_id IS NULL` 且 `phase != "probe"`；不提供 approve/refine 探测流程
 - **strategy 研究场景**：两段式 probe → collect，每阶段是**独立的 NewsTask 记录**（不做 phase 迁移），probe 只搜索卡片不抓全文不打标；probe/refine/approve 统一由 `strategies/service.py` 的批量端点编排，news_media router 不对外暴露
+
+**phase 字段约束（v2026.04）**：两张任务表（`social_tasks` / `news_tasks`）的 `phase` 列均为 `NOT NULL DEFAULT 'collect'`，值域 `probe | collect`。独立 monitor 创建入口（router + Pydantic schema 默认值 + 前端 create 表单）统一写入 `collect`，`probe` 仅由 `strategies` 模块在编排批量任务时显式传入。切片可选规则与此一致：`status='completed' AND phase='collect'` 才能参与切片（新闻 `NewsSlice` / 社媒 `SocialSlice` 共用此判定）。
 
 ### 事务策略（ADR）
 

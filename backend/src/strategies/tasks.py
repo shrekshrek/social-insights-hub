@@ -100,16 +100,23 @@ async def check_probing_strategies() -> int:
 
 
 async def check_collecting_strategies() -> int:
-    """找出全量采集完成但尚未建切片的策略，触发自动建切片 + 覆盖度验证。
+    """找出处于 collecting 态的策略，驱动两阶段推进：
 
-    1. 查询 status=collecting 的策略
-    2. 确认所有 collect 任务（社媒 + 新闻）均 completed 且已有分析结果
-    3. 按 monitor_id 判定社媒/新闻切片均未创建才调用 _create_auto_slices
+    阶段 A：全量采集任务完成 + 已分析 → 自动建切片（仍在 collecting）
+    阶段 B：切片已建 + 所有切片 Stage2 完成 + coverage 尚未跑 →
+             跑 coverage_check，通过则推进到 ready
+
+    两阶段幂等、彼此独立。用户端前端轮询 get_collection_status 会更快触发
+    阶段 B，此处仅作 2min 兜底（防前端停止轮询后永久卡住）。
     """
     from src.social_media.tasks.models import SocialTask
     from src.social_media.analysis.models import SocialSlice
     from src.strategies.models import Strategy
-    from src.strategies.service import _create_auto_slices, get_strategy_by_id
+    from src.strategies.service import (
+        _create_auto_slices,
+        _try_advance_to_ready,
+        get_strategy_by_id,
+    )
     from src.news_media.tasks.service import get_news_tasks_by_strategy
 
     triggered = 0
@@ -155,8 +162,7 @@ async def check_collecting_strategies() -> int:
             # 新闻允许全部 failed（新闻是补充数据源，不阻塞）
             completed_news = [t for t in news_tasks if t.status == "completed" and t.analysis_result is not None]
 
-            # 幂等保护：社媒切片 + 新闻切片都已建才跳过
-            # （与 confirm_research/approve_probe 的两渠道对称语义一致）
+            # 幂等保护：社媒切片 + 新闻切片是否已建（按 monitor_id 判定）
             has_social = False
             if strategy.social_monitor_id:
                 existing_social = await db.execute(
@@ -178,26 +184,44 @@ async def check_collecting_strategies() -> int:
             else:
                 has_news = not completed_news  # 无新闻 monitor 视为已"完成"
 
-            if has_social and has_news:
+            # 阶段 A：切片尚未建 → 建切片（保持 collecting，由后续轮次或 get_collection_status 推进 ready）
+            if not (has_social and has_news):
+                try:
+                    full_strategy = await get_strategy_by_id(db, strategy.id)
+                    await _create_auto_slices(
+                        db, full_strategy, completed_social, current_user_id=strategy.user_id,
+                        news_tasks=completed_news,
+                    )
+                    triggered += 1
+                    logger.info(
+                        "Strategy %d: slices auto-created by scheduler", strategy.id
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Strategy %d: auto-slice creation failed: %s",
+                        strategy.id,
+                        e,
+                        exc_info=True,
+                    )
                 continue
 
-            try:
-                full_strategy = await get_strategy_by_id(db, strategy.id)
-                await _create_auto_slices(
-                    db, full_strategy, completed_social, current_user_id=strategy.user_id,
-                    news_tasks=completed_news,
-                )
-                triggered += 1
-                logger.info(
-                    "Strategy %d: slices auto-created by scheduler", strategy.id
-                )
-            except Exception as e:
-                logger.error(
-                    "Strategy %d: auto-slice creation failed: %s",
-                    strategy.id,
-                    e,
-                    exc_info=True,
-                )
+            # 阶段 B：切片已建 + coverage 未跑 → 尝试推进到 ready
+            if strategy.coverage_check_result is None:
+                try:
+                    full_strategy = await get_strategy_by_id(db, strategy.id)
+                    advanced = await _try_advance_to_ready(db, full_strategy)
+                    if advanced:
+                        triggered += 1
+                        logger.info(
+                            "Strategy %d: advanced to ready by scheduler", strategy.id
+                        )
+                except Exception as e:
+                    logger.error(
+                        "Strategy %d: _try_advance_to_ready failed: %s",
+                        strategy.id,
+                        e,
+                        exc_info=True,
+                    )
 
     return triggered
 

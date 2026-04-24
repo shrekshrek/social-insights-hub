@@ -109,13 +109,15 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 ### ③ 数据就绪 (collecting → ready)
 
 1. 前端轮询 `collection-status`，爬虫采集全量数据（50 条 + 评论）
-2. 所有全量任务分析完成后自动按 slice_blueprint 创建切片
-   - 社媒：按维度分组任务 → `create_monitor_slice` → SocialSlice（Stage1/2/3 流水线）
-   - 新闻：按维度分组任务 → `_create_strategy_news_slice` → NewsSlice（独立 insight 分析）
+2. 所有全量任务分析完成后自动按 slice_blueprint 创建切片（`_create_auto_slices`）
+   - 社媒：按维度分组任务 → `create_monitor_slice`（同步 Stage1）→ 派发 Celery 跑 Stage2/Stage3
+   - 新闻：按维度分组任务 → `_create_strategy_news_slice`（同步 insight 分析）
    - 每个 blueprint 条目可产生 0-1 个 SocialSlice + 0-1 个 NewsSlice
-3. 切片就绪后自动运行 coverage_check_chain 验证覆盖度（社媒 + 新闻切片一起验证）
-4. `overall_ready=true` → 状态 → ready
-5. 用户可 `adjust-slices` 微调切片配置（触发重新验证）
+3. **"切片完成" = Stage2 完成**（聚合 + 实体/观点归一 + layers 构建）——此时 `SocialSlice.status="completed"`，与 NewsSlice 语义对齐。Stage3 的 3 报告是独立附加产出，不阻塞策略推进、不参与下游 chain
+4. 所有社媒切片 Stage2 + 所有新闻切片 insight 到终态（completed/failed/skipped）后，由 `_try_advance_to_ready` 跑 `coverage_check_chain`（只消费 `status=completed` 的切片）
+   - 触发来源：①`get_collection_status` 端点（前端 15s 轮询，近实时）；②APScheduler `strategy_collection` job（2min 兜底，前端停轮询时不被卡住）
+5. `overall_ready=true` → 状态 → ready
+6. 用户可 `adjust-slices` 微调切片配置（触发重新验证）
 
 ### ④ 产出生成 (ready → completed)
 
@@ -211,7 +213,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 | Job ID | 函数 | 间隔 | 职责 |
 |--------|------|------|------|
 | `strategy_probe` | `check_probing_strategies` | 2 分钟 | 扫描 `status=probing` 的策略，所有探测任务（社媒 + 新闻）均达到终态后自动触发 LLM probe review |
-| `strategy_collection` | `check_collecting_strategies` | 2 分钟 | 扫描 `status=collecting` 的策略，所有全量任务完成且有分析结果后自动创建切片 + 覆盖度验证 |
+| `strategy_collection` | `check_collecting_strategies` | 2 分钟 | 扫描 `status=collecting` 的策略，两阶段推进：① 任务全分析完成且切片未建 → 自动建切片；② 切片已建 + 所有切片 Stage2/新闻 insight 到终态 + coverage 未跑 → `_try_advance_to_ready` 推进到 ready |
 | `news_task_watchdog` | `reset_stuck_news_tasks` | 5 分钟 | 将策略新闻任务（probe + collect）中 `running`（Worker 崩溃）或 `pending`（Worker 宕机未消费）超过 20 分钟的记录标记为 `failed`，防止策略永久卡住 |
 
 ### 终态定义
@@ -227,7 +229,8 @@ Celery Worker 崩溃/宕机 → 新闻任务停留在 `running` 或 `pending` �
 ## Important Notes
 
 - Strategy 的社媒切片（SocialSlice）与新闻切片（NewsSlice）均通过 `monitor_id` 隐式关联（`SocialSlice.monitor_id == strategy.social_monitor_id` / `NewsSlice.monitor_id == strategy.news_monitor_id`），无显式关联表；`service._load_strategy_slice_summaries` / `_count_strategy_slices` 统一查询入口
-- `_create_auto_slices` 按 `slice_blueprint` 自动创建：社媒维度 → SocialSlice，新闻维度 → NewsSlice，互不侵入
+- `_create_auto_slices` 按 `slice_blueprint` 自动创建：社媒维度 → SocialSlice，新闻维度 → NewsSlice，互不侵入。**建完切片不直接跑 coverage_check，也不置 ready**——策略保持 `collecting`，由 `_try_advance_to_ready` 在切片 Stage2 全完成后异步推进
+- `SocialSlice.status="completed"` 语义 = Stage2 完成（下游可用）；Stage3 的 3 报告失败不回退该状态，只记在 `result_data.pipeline.stage3`。`load_strategy_inputs` / `load_strategy_news_inputs` 均按 `status=completed` 过滤，Stage2 未就绪或失败的切片不会喂给策略 chain
 - `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor（同渠道所有任务共享一个 Monitor）+ 条件创建 ResearchTask（brand_brief.channel_plan 含 `industry_research` 或 `creative_research` 渠道时）
 - `_task_dimension_map` / `_news_task_dimension_map` 存在 `research_design` 中，分别记录社媒 / 新闻 task_id → dimension_name 映射，供 probe 审查注入研究问题 + 自动建切片使用
 - `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）；两个端点同时返回 `industry_research` 和 `creative_research` 状态（ResearchTask 进度，不阻塞主流程）

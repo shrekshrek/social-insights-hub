@@ -87,17 +87,31 @@ def run_monitor_slice_pipeline_sync(
             logger.exception(
                 "[项目切片] 流水线异常中止: slice_id=%s", slice_id
             )
-            # 标记当前阶段为 failed，避免永远卡在 processing
-            if stage2.get("status") == "processing":
+            # 按阶段区分异常处理：
+            # - Stage2 阶段异常：切片数据不完整 → slice.status=failed
+            # - Stage3 阶段异常（Stage2 已完成）：切片对下游仍可用 →
+            #   slice.status 保持 Stage2 完成时置的 "completed"，
+            #   Stage3 错误只写入 pipeline.stage3.error
+            stage2_status_snapshot = stage2.get("status")
+            stage3_status_snapshot = stage3.get("status")
+            if stage2_status_snapshot == "processing":
                 stage2["status"] = "failed"
                 stage2["error"] = "pipeline_exception"
                 stage2["updated_at"] = now_iso()
-            elif stage3.get("status") == "processing":
+                slice_record.status = "failed"
+                slice_record.error_message = f"pipeline_exception: {exc}"[:1000]
+            elif stage3_status_snapshot == "processing":
                 stage3["status"] = "failed"
                 stage3["error"] = "pipeline_exception"
                 stage3["updated_at"] = now_iso()
-            slice_record.status = "failed"
-            slice_record.error_message = f"pipeline_exception: {exc}"[:1000]
+                existing_stats = (
+                    slice_record.stats if isinstance(slice_record.stats, dict) else {}
+                )
+                slice_record.stats = {**existing_stats, "stage3_status": "failed"}
+            else:
+                # 边缘兜底：两阶段都不在 processing（理论不应发生）→ 保守置 failed
+                slice_record.status = "failed"
+                slice_record.error_message = f"pipeline_exception: {exc}"[:1000]
             try:
                 commit_result()
             except Exception:
@@ -423,6 +437,22 @@ def _run_pipeline_body(
     set_step(stage2, "derived_analysis", "completed")
     stage2["status"] = "completed"
     stage2["generated_at"] = now_iso()
+
+    # Stage2 完成即视为切片"下游可用"（与 NewsSlice.status 语义对齐）。
+    # Stage3 的 3 报告是独立附加产出，不参与策略 chain，不阻塞切片整体可用性。
+    meta_now = result.get("meta") or {}
+    data_volume_now = (meta_now.get("data_volume") or {}) if isinstance(meta_now, dict) else {}
+    scope_now = (meta_now.get("scope") or {}) if isinstance(meta_now, dict) else {}
+    slice_record.status = "completed"
+    slice_record.error_message = None
+    slice_record.stats = {
+        "task_count": len(slice_record.included_task_ids or []),
+        "post_total": data_volume_now.get("total"),
+        "platforms": scope_now.get("platforms") or [],
+        "keywords": scope_now.get("keywords") or [],
+        "stage2_status": stage2.get("status"),
+        "stage3_status": stage3.get("status") or "pending",
+    }
     commit_result()
 
     # ========== Stage3：LLM 报告生成 ==========
@@ -490,25 +520,13 @@ def _run_pipeline_body(
         else (stage3.get("error") or "reports_failed"),
     )
 
-    # 汇总 status / stats / error_message 到 SocialSlice 列（与 NewsSlice 对称）
+    # Stage3 完成：只更新 pipeline.stage3 + stats["stage3_status"]。
+    # slice_record.status 已在 Stage2 完成时置为 "completed" —— Stage3 失败不回退，
+    # 失败原因写在 pipeline.stage3.error，切片整体对下游仍可用。
     stage3_status = stage3.get("status")
-    if stage3_status == "completed":
-        slice_record.status = "completed"
-        slice_record.error_message = None
-    else:
-        slice_record.status = "failed"
-        slice_record.error_message = (
-            stage3.get("error") or "reports_failed"
-        )[:1000]
-
-    data_volume = (meta.get("data_volume") or {}) if isinstance(meta, dict) else {}
-    scope = (meta.get("scope") or {}) if isinstance(meta, dict) else {}
+    existing_stats = slice_record.stats if isinstance(slice_record.stats, dict) else {}
     slice_record.stats = {
-        "task_count": len(slice_record.included_task_ids or []),
-        "post_total": data_volume.get("total"),
-        "platforms": scope.get("platforms") or [],
-        "keywords": scope.get("keywords") or [],
-        "stage2_status": stage2.get("status"),
+        **existing_stats,
         "stage3_status": stage3_status,
     }
     commit_result()

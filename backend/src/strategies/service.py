@@ -373,12 +373,18 @@ async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -
 
 
 async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dict]:
-    """加载策略社媒切片数据（SocialSlice.result_data）。按 social_monitor_id 查询。"""
+    """加载策略社媒切片数据（SocialSlice.result_data）。按 social_monitor_id 查询。
+
+    只返回 Stage2 完成后置为 `status=completed` 的切片（与 NewsSlice 过滤对称）。
+    Stage2 failed/skipped 的切片 result_data 可能不完整，下游 chain 消费会产生
+    质量问题，此处直接过滤。
+    """
     if not strategy.social_monitor_id:
         return []
 
     query = select(SocialSlice).where(
-        SocialSlice.monitor_id == strategy.social_monitor_id
+        SocialSlice.monitor_id == strategy.social_monitor_id,
+        SocialSlice.status == "completed",
     )
     result = await db.execute(query)
     slices = result.scalars().all()
@@ -417,12 +423,16 @@ async def load_strategy_news_inputs(
 async def load_strategy_inputs_with_names(
     db: AsyncSession, strategy: Strategy
 ) -> list[tuple[str | None, dict]]:
-    """加载策略输入数据（含切片名），用于覆盖度验证链。按 social_monitor_id 查询。"""
+    """加载策略输入数据（含切片名），用于覆盖度验证链。按 social_monitor_id 查询。
+
+    与 load_strategy_inputs 一致，只返回 Stage2 完成的切片（status=completed）。
+    """
     if not strategy.social_monitor_id:
         return []
 
     query = select(SocialSlice).where(
-        SocialSlice.monitor_id == strategy.social_monitor_id
+        SocialSlice.monitor_id == strategy.social_monitor_id,
+        SocialSlice.status == "completed",
     )
     result = await db.execute(query)
     slices = result.scalars().all()
@@ -580,24 +590,30 @@ def _validate_slices_have_data(
     strategy: Strategy,
     news_slices_data: list[dict] | None = None,
 ) -> None:
-    """校验切片是否有分析数据
+    """校验切片是否有可供下游消费的分析数据
 
     campaign_strategy 路径强制要求 social_media 作为主源——insight/brand_role/big_idea 的 prompt
     结构性依赖消费者声音（KOL/topic_aspects/pains/gains 等），纯新闻数据跑不出
     Tension / Brand Social Role / Big Idea。news_media 只作为补充视角存在。
 
     market_report 路径以 news_media 为主源，social_media 为可选补充。
+
+    注意：slices_data / news_slices_data 由 load_strategy_inputs / load_strategy_news_inputs
+    加载，两者均只返回 status=completed 的切片。因此此处"为空"的语义是
+    "切片聚合分析尚未就绪或已失败"，而非"切片根本不存在"——提示文案按此口径。
     """
+    social_msg = (
+        "社媒切片聚合分析尚未就绪（Stage2 未完成或失败），请在数据就绪后重试。"
+    )
+    news_msg = "新闻切片分析尚未就绪或已失败，请在数据就绪后重试。"
+
     output_type = strategy.output_type or "campaign_strategy"
 
     if output_type == "campaign_strategy":
         if not slices_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "campaign_strategy 产出路径依赖社媒切片作为消费者声音主源，"
-                    "但当前策略的社媒切片尚无分析数据。"
-                ),
+                detail=f"campaign_strategy 产出路径依赖社媒切片作为消费者声音主源：{social_msg}",
             )
         return
 
@@ -605,7 +621,7 @@ def _validate_slices_have_data(
         if not news_slices_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="market_report 产出路径依赖新闻切片作为主源，但新闻切片尚无分析数据。",
+                detail=f"market_report 产出路径依赖新闻切片作为主源：{news_msg}",
             )
         return
 
@@ -613,15 +629,12 @@ def _validate_slices_have_data(
         if not slices_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "full_strategy 产出路径依赖社媒切片作为消费者声音主源，"
-                    "但当前策略的社媒切片尚无分析数据。"
-                ),
+                detail=f"full_strategy 产出路径依赖社媒切片作为消费者声音主源：{social_msg}",
             )
         if not news_slices_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="full_strategy 产出路径依赖新闻切片作为竞争格局主源，但新闻切片尚无分析数据。",
+                detail=f"full_strategy 产出路径依赖新闻切片作为竞争格局主源：{news_msg}",
             )
         return
 
@@ -1427,6 +1440,7 @@ async def design_research(
         social_channel_brief=_extract_channel_brief(brand_brief, "social_media"),
         subject=brand_brief.get("subject", ""),
         constraints=brand_brief.get("constraints") or "",
+        analysis_goal=brand_brief.get("analysis_goal") or "",
         news_channel_brief=_extract_channel_brief(brand_brief, "news_media"),
         research_channel_brief=_extract_channel_brief(brand_brief, "industry_research"),
     )
@@ -1945,6 +1959,9 @@ _probe_review_in_progress: set[int] = set()
 
 # 防止多个并发请求同时触发同一策略的自动建切片
 _slice_creation_in_progress: set[int] = set()
+
+# 防止多个并发请求同时触发同一策略的 coverage_check + ready 推进
+_coverage_check_in_progress: set[int] = set()
 
 
 async def _build_probe_task_summaries(
@@ -3340,6 +3357,19 @@ async def check_collection_status(
     elif all_completed:
         logger.info("Strategy %s: 所有任务已完成，等待分析", strategy.id)
 
+    # 切片已建、但 coverage_check 尚未跑 → 在 Stage2/新闻 insight 全完时主动推进到 ready
+    # （利用前端 15s 轮询实现近实时推进，不依赖 APScheduler 2min tick）
+    if (has_social_slices or has_news_slices) and strategy.coverage_check_result is None:
+        try:
+            await _try_advance_to_ready(db, strategy)
+        except Exception as e:
+            logger.error(
+                "Strategy %s: _try_advance_to_ready 失败: %s",
+                strategy.id,
+                e,
+                exc_info=True,
+            )
+
     completed_count = (
         sum(1 for t in tasks if t.status == "completed")
         + sum(1 for t in news_tasks if t.status == "completed")
@@ -3617,49 +3647,12 @@ async def _create_auto_slices(
 
     # 切片通过 monitor_id 隐式关联到策略，无需显式关联表
     await db.flush()
-
-    # 覆盖度 LLM 验证（社媒 + 新闻切片）
-    try:
-        research_questions = research_design.get("research_questions") or []
-        slices_data = [
-            (s.name or f"切片{s.id}", s.result_data or {}) for s in slice_objs
-        ]
-        for ns in news_slice_objs:
-            slices_data.append(
-                (f"[新闻] {ns.name}", ns.result_data or {})
-            )
-        chain = create_coverage_check_chain()
-        inputs = format_coverage_check_inputs(
-            brief=strategy.brand_brief,
-            research_questions=research_questions,
-            slices_data=slices_data,
-        )
-        raw = await chain.ainvoke(inputs)
-        coverage_result = parse_coverage_check_response(
-            raw.content if hasattr(raw, "content") else str(raw)
-        )
-        strategy.coverage_check_result = coverage_result
-
-        if coverage_result.get("overall_ready"):
-            strategy.status = "ready"
-            logger.info("Strategy %s: 覆盖度验证通过，状态推进到 ready", strategy.id)
-        else:
-            logger.info(
-                "Strategy %s: 覆盖度验证未通过，保持 collecting，建议调整切片",
-                strategy.id,
-            )
-    except Exception as e:
-        logger.error(
-            "Strategy %s: 覆盖度 LLM 验证失败: %s", strategy.id, e, exc_info=True
-        )
-
     await db.commit()
 
-    if strategy.status == "ready":
-        fire_notification(feishu_tmpl.data_ready_card(
-            strategy.name, strategy.id,
-            slice_count=len(slice_objs) + len(news_slice_objs),
-        ), _strategy_open_ids(strategy))
+    # 策略保持 collecting 状态 —— 等所有社媒切片 Stage2 完成后，
+    # 由 get_collection_status / APScheduler 主动调 _try_advance_to_ready
+    # 跑 coverage_check 并推进到 ready。
+    # 新闻切片 insight 分析是另外独立的 Celery 流水线，也一同等待。
 
     # commit 之后触发 Stage2/Stage3 celery 任务
     if pipeline_slice_ids:
@@ -3674,6 +3667,155 @@ async def _create_auto_slices(
                 strategy.id,
                 sid,
             )
+
+
+# ==================== 覆盖度推进（Stage2 完成后 → ready） ====================
+
+# SocialSlice Stage2 的终态集合：任意一个都意味着"不再 processing"
+_SLICE_STAGE2_TERMINAL = {"completed", "failed", "skipped"}
+# 新闻切片单流水线 status 的终态集合
+_NEWS_SLICE_TERMINAL = {"completed", "failed"}
+
+
+def _social_slice_stage2_terminal(slice_obj: SocialSlice) -> bool:
+    """判断社媒切片 Stage2 是否已到终态（completed/failed/skipped）。
+
+    Stage2 完成即代表切片对策略下游可用——Stage3 的 3 报告不参与策略 chain。
+    """
+    rd = slice_obj.result_data or {}
+    if not isinstance(rd, dict):
+        return False
+    pipeline = rd.get("pipeline") or {}
+    stage2 = pipeline.get("stage2") or {}
+    return stage2.get("status") in _SLICE_STAGE2_TERMINAL
+
+
+async def _try_advance_to_ready(
+    db: AsyncSession,
+    strategy: Strategy,
+) -> bool:
+    """所有切片 Stage2 到终态后跑 coverage_check，通过则置 ready。
+
+    - 社媒切片：检查 `result_data.pipeline.stage2.status` ∈ {completed, failed, skipped}
+    - 新闻切片：检查 `NewsSlice.status` ∈ {completed, failed}
+    - 失败/跳过的切片：不阻塞 ready，coverage_check 会基于现有可用切片判定
+
+    返回：是否成功推进到 ready（或 coverage 已跑过但未通过时仍返回 False）
+    """
+    if strategy.status != "collecting":
+        return False
+    if strategy.coverage_check_result is not None:
+        # 已跑过 coverage（结果可能通过也可能未通过），不重复跑
+        return False
+    if strategy.id in _coverage_check_in_progress:
+        return False
+
+    # 收集关联切片
+    social_slices: list[SocialSlice] = []
+    if strategy.social_monitor_id:
+        res = await db.execute(
+            select(SocialSlice).where(
+                SocialSlice.monitor_id == strategy.social_monitor_id
+            )
+        )
+        social_slices = list(res.scalars().all())
+
+    news_slices_list: list = []
+    if strategy.news_monitor_id:
+        from src.news_media.analysis.models import NewsSlice as _NS
+
+        res = await db.execute(
+            select(_NS).where(_NS.monitor_id == strategy.news_monitor_id)
+        )
+        news_slices_list = list(res.scalars().all())
+
+    if not social_slices and not news_slices_list:
+        return False  # 切片尚未建出
+
+    # 等待所有切片 Stage2 / 新闻 insight 到终态
+    social_all_done = all(
+        _social_slice_stage2_terminal(s) for s in social_slices
+    )
+    news_all_done = all(
+        ns.status in _NEWS_SLICE_TERMINAL for ns in news_slices_list
+    )
+    if not (social_all_done and news_all_done):
+        return False
+
+    _coverage_check_in_progress.add(strategy.id)
+    try:
+        research_design = strategy.research_design or {}
+        research_questions = (
+            research_design.get("research_questions") or []
+            if isinstance(research_design, dict)
+            else []
+        )
+        # 只把可供下游消费的切片喂给 coverage chain
+        slices_data: list[tuple[str, dict]] = []
+        for s in social_slices:
+            if s.status == "completed" and s.result_data:
+                slices_data.append((s.name or f"切片{s.id}", s.result_data))
+        for ns in news_slices_list:
+            if ns.status == "completed" and ns.result_data:
+                slices_data.append((f"[新闻] {ns.name}", ns.result_data))
+
+        if not slices_data:
+            logger.warning(
+                "Strategy %s: 所有切片 Stage2 均失败/跳过，无可用数据，保持 collecting",
+                strategy.id,
+            )
+            return False
+
+        try:
+            chain = create_coverage_check_chain()
+            inputs = format_coverage_check_inputs(
+                brief=strategy.brand_brief,
+                research_questions=research_questions,
+                slices_data=slices_data,
+            )
+            raw = await chain.ainvoke(inputs)
+            coverage_result = parse_coverage_check_response(
+                raw.content if hasattr(raw, "content") else str(raw)
+            )
+            strategy.coverage_check_result = coverage_result
+            flag_modified(strategy, "coverage_check_result")
+
+            advanced = False
+            if coverage_result.get("overall_ready"):
+                strategy.status = "ready"
+                advanced = True
+                logger.info(
+                    "Strategy %s: 覆盖度验证通过，状态推进到 ready", strategy.id
+                )
+            else:
+                logger.info(
+                    "Strategy %s: 覆盖度验证未通过，保持 collecting，建议调整切片",
+                    strategy.id,
+                )
+
+            await db.commit()
+
+            if advanced:
+                fire_notification(
+                    feishu_tmpl.data_ready_card(
+                        strategy.name,
+                        strategy.id,
+                        slice_count=len(social_slices) + len(news_slices_list),
+                    ),
+                    _strategy_open_ids(strategy),
+                )
+
+            return advanced
+        except Exception as e:
+            logger.error(
+                "Strategy %s: 覆盖度 LLM 验证失败: %s",
+                strategy.id,
+                e,
+                exc_info=True,
+            )
+            return False
+    finally:
+        _coverage_check_in_progress.discard(strategy.id)
 
 
 async def get_data_overview(

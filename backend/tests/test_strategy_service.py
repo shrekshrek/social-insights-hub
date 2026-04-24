@@ -7,6 +7,8 @@ import pytest
 from src.strategies.service import (
     STATUS_ORDER,
     _create_auto_slices,
+    _social_slice_stage2_terminal,
+    _try_advance_to_ready,
     approve_probe,
     check_collection_status,
     generate_brand_role,
@@ -183,14 +185,14 @@ class TestStrategyDataFlowGuards:
 
 
 class TestCheckCollectionStatusSliceTrigger:
-    @pytest.mark.asyncio
-    @patch("src.strategies.service._strategy_read", return_value=None)
-    @patch("src.strategies.service._create_auto_slices", new_callable=AsyncMock)
-    async def test_trigger_auto_slices_only_when_strategy_has_no_slices(
-        self,
-        mock_create_auto_slices,
-        _mock_strategy_read,
-    ):
+    """验证 get_collection_status 的两阶段推进：
+
+    - 阶段 A：任务全分析完成 + 切片未建 → 调 _create_auto_slices
+    - 阶段 B：切片已建 + coverage 未跑 → 调 _try_advance_to_ready（新语义）
+    """
+
+    @staticmethod
+    def _make_task():
         task = MagicMock()
         task.id = 1
         task.keywords = "kw"
@@ -198,47 +200,246 @@ class TestCheckCollectionStatusSliceTrigger:
         task.posts_count = 10
         task.analysis_result = {"ok": True}
         task.platform = MagicMock(code="wb")
+        return task
 
-        db = AsyncMock()
-        result = MagicMock()
-        result.scalars.return_value.all.return_value = [task]
-        db.execute = AsyncMock(return_value=result)
-
+    @staticmethod
+    def _make_strategy():
         strategy = MagicMock()
         strategy.id = 1
-        strategy.task_ids = [1]
-        strategy.slices = []
+        strategy.user_id = 1
+        strategy.social_monitor_id = 1
+        strategy.news_monitor_id = 1
         strategy.coverage_check_result = None
+        return strategy
+
+    @pytest.mark.asyncio
+    @patch("src.strategies.service._get_research_agent_status", new_callable=AsyncMock)
+    @patch("src.news_media.tasks.service.get_news_tasks_by_strategy", new_callable=AsyncMock)
+    @patch("src.strategies.service._strategy_read", new_callable=AsyncMock)
+    @patch("src.strategies.service._create_auto_slices", new_callable=AsyncMock)
+    async def test_trigger_auto_slices_only_when_strategy_has_no_slices(
+        self,
+        mock_create_auto_slices,
+        mock_strategy_read,
+        mock_get_news,
+        mock_research_status,
+    ):
+        mock_get_news.return_value = []
+        from src.strategies.schemas import ResearchAgentStatus
+        mock_research_status.return_value = ResearchAgentStatus()
+        mock_strategy_read.return_value = None
+
+        tasks_result = MagicMock()
+        tasks_result.scalars.return_value.all.return_value = [self._make_task()]
+        # 切片未建：两次 scalar_one_or_none 返回 None
+        empty_slice = MagicMock()
+        empty_slice.scalar_one_or_none.return_value = None
+
+        db = AsyncMock()
+        db.execute = AsyncMock(side_effect=[tasks_result, empty_slice, empty_slice])
+
+        strategy = self._make_strategy()
 
         await check_collection_status(db, strategy, current_user_id=1)
         mock_create_auto_slices.assert_awaited_once()
 
     @pytest.mark.asyncio
-    @patch("src.strategies.service._strategy_read", return_value=None)
+    @patch("src.strategies.service._try_advance_to_ready", new_callable=AsyncMock)
+    @patch("src.strategies.service._get_research_agent_status", new_callable=AsyncMock)
+    @patch("src.news_media.tasks.service.get_news_tasks_by_strategy", new_callable=AsyncMock)
+    @patch("src.strategies.service._strategy_read", new_callable=AsyncMock)
     @patch("src.strategies.service._create_auto_slices", new_callable=AsyncMock)
     async def test_skip_auto_slices_when_strategy_already_has_slices(
         self,
         mock_create_auto_slices,
-        _mock_strategy_read,
+        mock_strategy_read,
+        mock_get_news,
+        mock_research_status,
+        mock_try_advance,
     ):
-        task = MagicMock()
-        task.id = 1
-        task.keywords = "kw"
-        task.status = "completed"
-        task.posts_count = 10
-        task.analysis_result = {"ok": True}
-        task.platform = MagicMock(code="wb")
+        mock_get_news.return_value = []
+        from src.strategies.schemas import ResearchAgentStatus
+        mock_research_status.return_value = ResearchAgentStatus()
+        mock_strategy_read.return_value = None
+        mock_try_advance.return_value = False
+
+        tasks_result = MagicMock()
+        tasks_result.scalars.return_value.all.return_value = [self._make_task()]
+        # 切片已建：两次 scalar_one_or_none 返回非 None
+        has_slice = MagicMock()
+        has_slice.scalar_one_or_none.return_value = 123
 
         db = AsyncMock()
-        result = MagicMock()
-        result.scalars.return_value.all.return_value = [task]
-        db.execute = AsyncMock(return_value=result)
+        db.execute = AsyncMock(side_effect=[tasks_result, has_slice, has_slice])
 
-        strategy = MagicMock()
-        strategy.id = 1
-        strategy.task_ids = [1]
-        strategy.slices = [MagicMock()]
-        strategy.coverage_check_result = None
+        strategy = self._make_strategy()
 
         await check_collection_status(db, strategy, current_user_id=1)
         mock_create_auto_slices.assert_not_awaited()
+        # 切片已建且 coverage 未跑 → 尝试推进 ready
+        mock_try_advance.assert_awaited_once()
+
+
+class TestSocialSliceStage2Terminal:
+    """_social_slice_stage2_terminal: 判断切片 Stage2 是否到终态"""
+
+    def _make_slice(self, stage2_status):
+        slc = MagicMock()
+        slc.result_data = {"pipeline": {"stage2": {"status": stage2_status}}}
+        return slc
+
+    def test_completed_is_terminal(self):
+        assert _social_slice_stage2_terminal(self._make_slice("completed")) is True
+
+    def test_failed_is_terminal(self):
+        assert _social_slice_stage2_terminal(self._make_slice("failed")) is True
+
+    def test_skipped_is_terminal(self):
+        assert _social_slice_stage2_terminal(self._make_slice("skipped")) is True
+
+    def test_processing_not_terminal(self):
+        assert _social_slice_stage2_terminal(self._make_slice("processing")) is False
+
+    def test_pending_not_terminal(self):
+        assert _social_slice_stage2_terminal(self._make_slice("pending")) is False
+
+    def test_missing_pipeline_not_terminal(self):
+        slc = MagicMock()
+        slc.result_data = {}
+        assert _social_slice_stage2_terminal(slc) is False
+
+    def test_none_result_data_not_terminal(self):
+        slc = MagicMock()
+        slc.result_data = None
+        assert _social_slice_stage2_terminal(slc) is False
+
+
+class TestTryAdvanceToReady:
+    """_try_advance_to_ready: Stage2 全完后跑 coverage_check 并置 ready"""
+
+    def _make_strategy(self, status="collecting", coverage=None):
+        strategy = MagicMock()
+        strategy.id = 1
+        strategy.status = status
+        strategy.coverage_check_result = coverage
+        strategy.social_monitor_id = 1
+        strategy.news_monitor_id = None  # 简化：不涉及新闻
+        strategy.brand_brief = {}
+        strategy.research_design = {"research_questions": []}
+        strategy.name = "test"
+        return strategy
+
+    def _make_social_slice(self, status="completed", stage2_status="completed", rd=None):
+        slc = MagicMock()
+        slc.id = 10
+        slc.name = "slice"
+        slc.status = status
+        slc.result_data = rd or {
+            "meta": {"subject": "x"},
+            "foundation": {"aligned_entities": [{"text": "a"}]},
+            "layers": {"landscape": {}},
+            "pipeline": {"stage2": {"status": stage2_status}},
+        }
+        return slc
+
+    @pytest.mark.asyncio
+    async def test_noop_when_not_collecting(self):
+        strategy = self._make_strategy(status="probing")
+        db = AsyncMock()
+        result = await _try_advance_to_ready(db, strategy)
+        assert result is False
+        db.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_noop_when_coverage_already_ran(self):
+        strategy = self._make_strategy(coverage={"overall_ready": False})
+        db = AsyncMock()
+        result = await _try_advance_to_ready(db, strategy)
+        assert result is False
+        db.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_noop_when_stage2_not_terminal(self):
+        strategy = self._make_strategy()
+        slice_obj = self._make_social_slice(stage2_status="processing")
+
+        slices_res = MagicMock()
+        slices_res.scalars.return_value.all.return_value = [slice_obj]
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=slices_res)
+
+        result = await _try_advance_to_ready(db, strategy)
+        assert result is False
+        # Stage2 未完成不应置 ready
+        assert strategy.status == "collecting"
+
+    @pytest.mark.asyncio
+    @patch("src.strategies.service.fire_notification")
+    @patch("src.strategies.service.parse_coverage_check_response")
+    @patch("src.strategies.service.format_coverage_check_inputs")
+    @patch("src.strategies.service.create_coverage_check_chain")
+    async def test_advances_to_ready_when_stage2_complete_and_coverage_passes(
+        self,
+        mock_chain_factory,
+        mock_format,
+        mock_parse,
+        mock_notify,
+    ):
+        strategy = self._make_strategy()
+        slice_obj = self._make_social_slice()
+
+        slices_res = MagicMock()
+        slices_res.scalars.return_value.all.return_value = [slice_obj]
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=slices_res)
+
+        mock_chain = AsyncMock()
+        raw_response = MagicMock()
+        raw_response.content = "{}"
+        mock_chain.ainvoke.return_value = raw_response
+        mock_chain_factory.return_value = mock_chain
+        mock_parse.return_value = {"overall_ready": True}
+
+        result = await _try_advance_to_ready(db, strategy)
+
+        assert result is True
+        assert strategy.status == "ready"
+        assert strategy.coverage_check_result == {"overall_ready": True}
+
+    @pytest.mark.asyncio
+    @patch("src.strategies.service.fire_notification")
+    @patch("src.strategies.service.parse_coverage_check_response")
+    @patch("src.strategies.service.format_coverage_check_inputs")
+    @patch("src.strategies.service.create_coverage_check_chain")
+    async def test_keeps_collecting_when_coverage_not_ready(
+        self,
+        mock_chain_factory,
+        mock_format,
+        mock_parse,
+        mock_notify,
+    ):
+        strategy = self._make_strategy()
+        slice_obj = self._make_social_slice()
+
+        slices_res = MagicMock()
+        slices_res.scalars.return_value.all.return_value = [slice_obj]
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=slices_res)
+
+        mock_chain = AsyncMock()
+        raw_response = MagicMock()
+        raw_response.content = "{}"
+        mock_chain.ainvoke.return_value = raw_response
+        mock_chain_factory.return_value = mock_chain
+        mock_parse.return_value = {"overall_ready": False, "reason": "..."}
+
+        result = await _try_advance_to_ready(db, strategy)
+
+        assert result is False
+        assert strategy.status == "collecting"
+        # coverage 已跑过结果写入，下次轮询会跳过
+        assert strategy.coverage_check_result == {"overall_ready": False, "reason": "..."}
+        mock_notify.assert_not_called()

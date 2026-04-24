@@ -174,7 +174,11 @@ class SocialSlice(Base):
         nullable=False,
         default="pending",
         server_default="pending",
-        comment="pending | analyzing | completed | failed",
+        comment=(
+            "pending | analyzing | completed | failed. "
+            "语义：Stage2 完成即置 completed（下游可用）；"
+            "Stage3（3 报告）的成败只记录在 result_data.pipeline.stage3，不回退 status"
+        ),
     )
 
     # 注意：result_data 会在 Celery 流水线中被逐步"原地更新"（stage2/stage3/reports 等）。

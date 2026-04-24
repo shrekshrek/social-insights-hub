@@ -1316,6 +1316,8 @@ def build_monitor_slice_result(
     # meta: 切片配置；foundation: 原始聚合数据（Stage2 归一后覆盖）；
     # layers: 三层指标（Stage2 计算）；reports: LLM 报告（Stage3 生成）；
     # pipeline: 各阶段执行状态追踪（stage1 同步、stage2/stage3 异步由 router 写入）。
+    # 注：SocialSlice.status 语义 = Stage2 完成（下游可用）。
+    # Stage3 的 3 报告是独立附加产出，失败只记在 pipeline.stage3，不回退 status。
     return {
         "meta": {
             "monitor_id": monitor_id,

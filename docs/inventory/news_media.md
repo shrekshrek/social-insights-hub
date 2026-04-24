@@ -25,13 +25,15 @@
 - **核心职责**:批量给新闻打 6 维结构化标注
 - **输入**:
   - `analysis_goal`:研究背景,用于 context 化标注
+  - `subject`:研究主体(非空时 `target` role 硬绑定到此;空则所有实体归 `context`)
+  - `competitors`:已知竞品列表(见 §1.3 三种 role 归类模式)
   - `article_count`:本批文章数(当前配置 **10 篇**)
   - `articles_content`:格式化的文章内容(title/source/snippet 或 full_text 截断 2000 字)
 - **输出**(JSON 数组,每文一条):
   - `relevance`: high / medium / low
   - `sentiment`: -2 ~ 2 整数
   - `article_type`: report / opinion / pr / analysis
-  - `mentioned_entities`: `[{name, role: target/competitor/context}]`
+  - `mentioned_entities`: `[{name, role: target/competitor/context}]`(role 归类规则见 §1.3)
   - `key_quotes`: `[{speaker, quote}]`
   - `summary`:一句话摘要(≤80 字)
 - **调用频次**:每文 1 次,以 **10 篇/批** 批处理(由 `settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE` 配置,默认 10)
@@ -51,6 +53,7 @@
 - **核心职责**:汇总已标注文章,输出 5 类全局洞察
 - **输入**:
   - `analysis_goal`, `subject`
+  - `competitors`:已知竞品列表(见 §1.3 三种 role 归类模式)
   - `article_count`
   - `tagged_articles`:已标注文章的格式化字符串
   - source_tier 分层统计(tier1/tier2/tier3/wechat_mp 各自数量)
@@ -72,6 +75,40 @@
   - **叙事聚类**:从 20+ 篇文章里归纳 ≤5 个代表性主题——需要段落级语义聚类
   - **竞品格局识别**:基于 mentioned_entities 的 role 字段自动识别竞品位置
   - 但整体**输出自由度较高**——narratives/entities 主要是自然语言摘要,结构化程度低于社媒切片的 SOV/象限等量化指标
+
+### 1.3 实体 role 归类机制(tagging + insight 共同遵守)
+
+新闻 pipeline 没有社媒侧的多层实体归一化链路(`monitor_entity_merge_chain` 两阶段 Merge + Review)。为保证 `NewsSlice.entities.role` 对下游 `landscape_chain` 可靠(该 chain 有硬规则"禁止改判 role,以输入为准"),由 **prompt 硬规则 + 代码兜底 `_enforce_entity_roles`** 共同保证。
+
+**三种运行模式**(触发条件由 subject / competitors 参数组合决定):
+
+| 模式 | 触发 | 行为 |
+|------|------|------|
+| 独立监测 | `subject == ""` | 所有实体 role=context,不做 target/competitor 区分 |
+| 显式列表 | `subject` 非空 + `competitors` 非空 | 严格按列表归类:name==subject→target;name∈competitors→competitor;列表外强制 context |
+| 自动发现 | `subject` 非空 + `competitors` 空 | LLM 自判同品类/场景级竞品归 competitor;代码仅强制 target 只能是 subject |
+
+**subject / competitors 的来源**:
+
+| 调用路径 | subject 来源 | competitors 来源 |
+|---------|-------------|-----------------|
+| Celery `run_news_collect_task` (tagging 阶段) | `brand_brief.subject`(策略场景传入)或 `""`(独立场景) | `slice_blueprint[].competitors` 的 union(策略场景)或 `[]`(独立场景) |
+| `strategies/_create_strategy_news_slice` (insight 阶段) | `slice_blueprint[].subject`(每切片独立一对) | `slice_blueprint[].competitors`(每切片独立一对) |
+| `news_media/analysis/service.run_slice_analysis` (独立 slice insight) | `""` | `[]` |
+
+**代码兜底 `_enforce_entity_roles`**([`backend/src/news_media/tasks/service.py`](../../backend/src/news_media/tasks/service.py)):
+
+1. **role 硬校验**:case-insensitive exact 优先,substring 兜底(处理"绿米联创Aqara" → "Aqara"这类品牌+附加词变体),patterns 按长度降序避免短名误匹配(如 "AppleCare" 不被归到 "Apple")
+2. **subject + competitors 的变体条目合并**:mention_count 累加 / sentiment 加权平均 / source_count 取 max / key_claims 去重截断 3 条
+3. **context 实体不合并**:未在 subject/competitors 列表内的实体保持 LLM 原样(不归一其变体),仅强制 role=context
+4. **entities 重排**:target → competitor(mention 降序)→ context(mention 降序)
+5. **同步重建 `competitive_landscape.entities_mentioned`**:保持和合并后 entities 一致
+
+**为什么需要代码兜底(而非纯 prompt 指令)**:
+
+- LLM 偶发不完美归一(同时返回 "Aqara" + "绿米联创Aqara" 两个实体条目),代码合并避免 entities 列表分裂
+- 显式模式下 LLM 偶发把 mention_count 最多的品牌误标 target(新闻里该品牌是报道焦点但非研究主体),代码强制覆写
+- 独立场景 LLM 可能误判某实体为 target/competitor,代码强制全 context
 
 ---
 

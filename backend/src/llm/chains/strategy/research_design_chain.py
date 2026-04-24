@@ -35,6 +35,23 @@ news_media 渠道推荐，其 data_plan 中不会出现 news_media 条目。
 
 本链的 `primary_sources` / `output_type` 字段是下游 service.confirm_research 校验的硬性依据，
 不能由 LLM 自由发挥，由 `_derive_primary_sources_and_output_type` 从 data_plan 强制推导覆盖。
+
+## slice_blueprint 字段下游契约
+
+每个 `slice_blueprint[]` 条目的 `subject` + `competitors` 不只是切片元数据，还会流到下游链路驱动
+实体归类硬绑定（与社媒 `monitor_entity_merge_chain` 对齐的设计）：
+
+- **社媒切片**：`_create_auto_slices` → `create_monitor_slice(subject=..., competitors=...)`
+  → `entity_aggregation` + `monitor_entity_merge_chain` 强制 role 归类
+- **新闻切片**：`_create_strategy_news_slice(subject=..., competitors=...)`
+  → `insight_chain` prompt + `_enforce_entity_roles` 代码兜底做 role 硬绑定 + 变体合并
+- **新闻 tagging 阶段**（collect 时）：`strategies.approve_probe` 派发 Celery 时传
+  `brand_brief.subject` + 所有 slice_blueprint[].competitors 的 union → `tagging_chain`
+  做 per-article role 归类
+
+品牌聚焦切片（`subject` 非空）必须提供 `competitors` 列表；大盘分析切片（`subject` 空字符串）
+下游新闻链路会退化为全 context（不做 target/competitor 区分）。详见
+`docs/inventory/news_media.md §1.3 实体 role 归类机制`。
 """
 
 from __future__ import annotations

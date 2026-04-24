@@ -143,6 +143,24 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 顺序执行两条路径：先完成 market_report 前两层（Agenda Map → Landscape），再执行 campaign_strategy 三层（Insight → Brand Role → Big Idea）。Insight 阶段以 `landscape_result` JSON 作为 `{news_media_section}` 注入，取代原始 news slices，让消费者洞察有完整的竞争格局背景。状态在 landscape_done 后保持不动，直到 Big Idea 完成跳至 completed。级联清空：重新生成 Agenda Map 或 Landscape 会同时清空 insight/brand_role/big_idea_result。
 
+#### NewsSlice 实体 role 归类机制（Agenda Map / Landscape 依赖）
+
+`landscape_chain` 硬规则「禁止改判 `NewsSlice.entities.role`，以输入为准」，其中「输入」来自下列**三种运行模式之一**（`_enforce_entity_roles` 代码层兜底 + `news tagging_chain` / `insight_chain` prompt 硬绑定共同保证）：
+
+| 模式 | 触发条件 | 行为 |
+|------|---------|------|
+| **独立监测** | `subject == ""` | 所有实体强制 role=context，不做 target/competitor 区分 |
+| **显式列表** | `subject` 非空 + `competitors` 非空 | 严格按列表归类：name==subject→target；name∈competitors→competitor；列表外强制 context |
+| **自动发现** | `subject` 非空 + `competitors` 空 | LLM 自判同品类/场景级竞品归 competitor；代码仅强制 target 只能是 subject |
+
+- **subject / competitors 的来源**：
+  - 策略场景：从 `slice_blueprint[].subject` + `slice_blueprint[].competitors` 取，由 `research_design_chain` 输出时指定。每个品牌聚焦切片独立一对（与社媒 `create_monitor_slice` 对称）；大盘分析切片 subject="" → 退化到独立监测模式
+  - Celery `run_news_collect_task` tagging 阶段：从 `brand_brief.subject` + 所有 `slice_blueprint[].competitors` 的 union 传入（per-article 粒度）
+  - 独立 NewsMonitor 创建 slice：`subject=""` + `competitors=[]`（无策略上下文）
+- **变体合并**：`_enforce_entity_roles` 在 subject + competitors 列表存在时对实体做 case-insensitive exact + substring 匹配（处理 "绿米联创Aqara" → "Aqara" 这类品牌+附加词变体），合并 mention_count / sentiment 加权平均 / source_count 取 max / key_claims 去重截断 3 条
+- **同步重建 competitive_landscape.entities_mentioned**：保持和合并后的 entities 一致
+- 详见 `backend/src/news_media/tasks/service.py:_enforce_entity_roles`
+
 #### data_provenance 记录
 
 每个 stage 生成后，结果 JSONB 的 `data_provenance` 字段记录实际消费来源：

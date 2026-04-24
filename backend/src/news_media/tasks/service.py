@@ -149,8 +149,12 @@ async def _run_insight_analysis(
     articles: list,
     analysis_goal: str,
     subject: str,
+    competitors: list[str] | None = None,
 ) -> tuple[dict, dict | None]:
     """整体分析（一次 LLM 调用），返回 (结构化洞察, token_usage)。
+
+    competitors: 研究主体的已知竞品列表（规范品牌名）。传空列表时 chain 退化为
+    全部标 context（独立监测场景）。策略场景由 slice_blueprint[].competitors 传入。
 
     token_usage 来自 LLM response_metadata，可能为 None。
     """
@@ -191,6 +195,7 @@ async def _run_insight_analysis(
     response = await chain.ainvoke({
         "analysis_goal": analysis_goal,
         "subject": subject,
+        "competitors": ", ".join(competitors or []) or "（未指定）",
         "article_count": len(relevant),
         "tagged_articles": tagged_content,
         "tier1_count": tier_counts["tier1"],
@@ -202,10 +207,191 @@ async def _run_insight_analysis(
     token_usage = (response.response_metadata or {}).get("token_usage")
 
     try:
-        return _parse_llm_json(response.content), token_usage
+        parsed = _parse_llm_json(response.content)
     except (json.JSONDecodeError, ValueError) as e:
         logger.error("Failed to parse insight response: %s", e)
         return {"error": str(e)}, token_usage
+
+    # 代码兜底：强制校正 role（LLM 偶发违反硬规则时）
+    _enforce_entity_roles(parsed, subject, competitors or [])
+    return parsed, token_usage
+
+
+def _enforce_entity_roles(
+    insights: dict,
+    subject: str,
+    competitors: list[str],
+) -> None:
+    """强制 role 规范 + 合并 subject/competitors 的变体实体条目（代码层兜底）。
+
+    LLM prompt 已指示"变体归一到规范名"+"role 硬绑定"，此函数作为防御性后处理
+    （新闻 pipeline 没有社媒侧的多层实体归一化链路，此兜底是必要补强）。
+
+    ## 三种运行模式
+
+    1. **独立监测场景**（`subject` 为空字符串）：全部实体 role=context，不做变体合并
+    2. **显式列表模式**（`subject` 非空 + `competitors` 非空）：严格按列表归类，
+       列表外品牌强制 context，subject/competitors 的变体合并到 canonical 条目
+    3. **自动发现模式**（`subject` 非空 + `competitors` 空）：允许 LLM 自判 competitor
+       （新闻编辑笔下品牌关系网络通常明示），代码仅强制 target==subject，
+       subject 的变体合并；LLM 自判的 competitor 保持原样（不在 canonical 列表合并）
+
+    ## 通用处理
+
+    - **name 匹配**：case-insensitive，exact 优先；substring 兜底（"绿米联创Aqara"
+      匹配 canonical "Aqara"），patterns 按长度降序避免 "AppleCare" 被归到 "Apple"
+    - **显式模式下的变体合并**：mention_count 累加、sentiment 加权平均、
+      source_count 取 max、key_claims 合并去重截断至 3 条
+    - **entities 重排**：target → competitor（mention 降序）→ context（mention 降序）
+    - **competitive_landscape.entities_mentioned 同步重建**：和合并后 entities 一致
+    """
+    if not isinstance(insights, dict):
+        return
+    entities = insights.get("entities")
+    if not isinstance(entities, list):
+        return
+
+    subj_norm = (subject or "").strip().lower()
+
+    # 独立场景（subject 空）：全部归 context，不做变体合并
+    if not subj_norm:
+        for e in entities:
+            if isinstance(e, dict):
+                e["role"] = "context"
+        return
+
+    comp_canonical: dict[str, str] = {
+        (c or "").strip().lower(): (c or "").strip()
+        for c in (competitors or [])
+        if (c or "").strip()
+    }
+    # 显式列表模式（用户明确指定 competitors）vs 自动发现模式（LLM 自判 competitor）
+    has_explicit_competitors = bool(comp_canonical)
+
+    # 构建匹配 patterns: [(lower_form, canonical_form, role), ...]
+    # Exact 匹配优先；substring 兜底按长度降序（更具体的优先，避免 "AppleCare"
+    # 被泛泛归到 "Apple"——虽然正常 brief 里不会有这种嵌套，但保持匹配确定性）
+    patterns: list[tuple[str, str, str]] = [
+        (subj_norm, (subject or "").strip(), "target"),
+    ]
+    for cl, cr in comp_canonical.items():
+        patterns.append((cl, cr, "competitor"))
+    patterns_by_len = sorted(patterns, key=lambda x: len(x[0]), reverse=True)
+
+    def _match(name_lower: str) -> tuple[str | None, str | None]:
+        """返回 (canonical_name, role)；未匹配返回 (None, None)。
+
+        两阶段匹配：
+        1. Exact（整个 name 完全等于 pattern）——优先，避免误匹配
+        2. Substring（pattern 是 name 的子串）——兜底，处理"品牌+附加词"变体
+           如 "绿米联创Aqara" / "Aqara Home" / "Aqara 窗帘伴侣 E1" → 归到 "Aqara"
+        """
+        for p_lower, canonical, role in patterns:
+            if name_lower == p_lower:
+                return canonical, role
+        for p_lower, canonical, role in patterns_by_len:
+            if p_lower and p_lower in name_lower:
+                return canonical, role
+        return None, None
+
+    # subject + competitors 的合并容器：canonical name → aggregated dict
+    merged: dict[str, dict] = {}
+    # 非列表内实体（context）直接保留，不合并变体
+    passthrough: list[dict] = []
+
+    for e in entities:
+        if not isinstance(e, dict):
+            continue
+        name_norm = (e.get("name") or "").strip().lower()
+
+        canonical, role = _match(name_norm)
+        if canonical is None:
+            # 未匹配 subject（也非 explicit competitors 列表中的任一）
+            e_copy = dict(e)
+            if has_explicit_competitors:
+                # 显式列表模式：列表之外的实体一律强制 context（尊重用户意图）
+                e_copy["role"] = "context"
+            else:
+                # 自动发现模式：保留 LLM 自判的 competitor/context；
+                # 但 target 只能是 subject，LLM 自判 target 强制改回 context
+                llm_role = (e_copy.get("role") or "").strip().lower()
+                if llm_role == "competitor":
+                    e_copy["role"] = "competitor"
+                else:
+                    # 任何非 competitor 的情况（context/target/空/非法）都归 context
+                    e_copy["role"] = "context"
+            passthrough.append(e_copy)
+            continue
+
+        if canonical not in merged:
+            merged[canonical] = {
+                "name": canonical,
+                "role": role,
+                "mention_count": 0,
+                "sentiment": 0.0,
+                "source_count": 0,
+                "key_claims": [],
+            }
+
+        agg = merged[canonical]
+        m = e.get("mention_count", 0) or 0
+        s_new = e.get("sentiment")
+        if isinstance(m, int) and m > 0:
+            n_before = agg["mention_count"]
+            n_after = n_before + m
+            if isinstance(s_new, (int, float)) and n_after > 0:
+                agg["sentiment"] = (
+                    agg["sentiment"] * n_before + s_new * m
+                ) / n_after
+            agg["mention_count"] = n_after
+
+        sc = e.get("source_count", 0) or 0
+        if isinstance(sc, int) and sc > agg["source_count"]:
+            agg["source_count"] = sc
+
+        claims = e.get("key_claims") or []
+        if isinstance(claims, list):
+            for c in claims:
+                if isinstance(c, str) and c and c not in agg["key_claims"]:
+                    agg["key_claims"].append(c)
+
+    # key_claims 截断至 3 条（对齐 prompt schema 限制）
+    for e in merged.values():
+        if len(e["key_claims"]) > 3:
+            e["key_claims"] = e["key_claims"][:3]
+
+    # 排序：target → competitor（mention 降序）→ context（mention 降序）
+    # 注意：显式列表模式下所有 competitor 都在 merged 里；
+    # 自动发现模式下 LLM 自判的 competitor 在 passthrough 里（role 已标 competitor）
+    target_list = [e for e in merged.values() if e["role"] == "target"]
+    merged_comp = [e for e in merged.values() if e["role"] == "competitor"]
+    passthrough_comp = [e for e in passthrough if e.get("role") == "competitor"]
+    passthrough_context = [e for e in passthrough if e.get("role") != "competitor"]
+
+    comp_list = sorted(
+        merged_comp + passthrough_comp,
+        key=lambda x: x.get("mention_count", 0) or 0,
+        reverse=True,
+    )
+    context_list = sorted(
+        passthrough_context,
+        key=lambda x: x.get("mention_count", 0) or 0,
+        reverse=True,
+    )
+
+    insights["entities"] = target_list + comp_list + context_list
+
+    # 重建 competitive_landscape.entities_mentioned，避免和 entities 不一致
+    cl = insights.get("competitive_landscape")
+    if isinstance(cl, dict):
+        cl["entities_mentioned"] = [
+            {
+                "name": e["name"],
+                "mentions": e.get("mention_count", 0),
+                "sentiment": e.get("sentiment", 0),
+            }
+            for e in comp_list
+        ]
 
 
 # ==================== Sync helpers for Celery gevent worker ====================
@@ -263,8 +449,15 @@ def _tag_articles_batch_sync(
     articles: list,
     analysis_goal: str,
     use_full_text: bool = False,
+    subject: str = "",
+    competitors: list[str] | None = None,
 ) -> tuple[list[dict], dict | None]:
-    """逐篇轻量标注（同步版，chain.invoke）"""
+    """逐篇轻量标注（同步版，chain.invoke）
+
+    subject / competitors：研究主体与已知竞品列表，供 role 硬绑定使用。
+    策略场景由 slice_blueprint[].subject/competitors 传入；独立监测场景传空，
+    chain 退化为全部 context。
+    """
     from src.llm.chains.news.tagging_chain import (
         create_tagging_chain,
         format_articles_for_tagging,
@@ -274,6 +467,9 @@ def _tag_articles_batch_sync(
     all_tags: list[dict] = []
     total_input_tokens = 0
     total_output_tokens = 0
+
+    competitors_str = ", ".join(competitors or []) or "（未指定）"
+    subject_str = subject or ""
 
     batch_size = settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE
     for i in range(0, len(articles), batch_size):
@@ -291,6 +487,8 @@ def _tag_articles_batch_sync(
         articles_content = format_articles_for_tagging(batch_dicts, use_full_text=use_full_text)
         response = chain.invoke({
             "analysis_goal": analysis_goal,
+            "subject": subject_str,
+            "competitors": competitors_str,
             "article_count": len(batch),
             "articles_content": articles_content,
         })
@@ -350,6 +548,7 @@ def _run_insight_analysis_sync(
     articles: list,
     analysis_goal: str,
     subject: str,
+    competitors: list[str] | None = None,
 ) -> tuple[dict, dict | None]:
     """整体分析（同步版，chain.invoke）"""
     from src.llm.chains.news.insight_chain import (
@@ -389,6 +588,7 @@ def _run_insight_analysis_sync(
     response = chain.invoke({
         "analysis_goal": analysis_goal,
         "subject": subject,
+        "competitors": ", ".join(competitors or []) or "（未指定）",
         "article_count": len(relevant),
         "tagged_articles": tagged_content,
         "tier1_count": tier_counts["tier1"],
@@ -400,10 +600,13 @@ def _run_insight_analysis_sync(
     token_usage = (response.response_metadata or {}).get("token_usage")
 
     try:
-        return _parse_llm_json(response.content), token_usage
+        parsed = _parse_llm_json(response.content)
     except (json.JSONDecodeError, ValueError) as e:
         logger.error("Failed to parse insight response: %s", e)
         return {"error": str(e)}, token_usage
+
+    _enforce_entity_roles(parsed, subject, competitors or [])
+    return parsed, token_usage
 
 
 def execute_news_probe_sync(

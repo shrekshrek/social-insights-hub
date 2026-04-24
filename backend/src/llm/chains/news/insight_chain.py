@@ -23,6 +23,9 @@ NEWS_INSIGHT_SYSTEM = """你是资深媒体分析师，擅长从新闻报道中�
 ## 研究主体
 {subject}
 
+## 研究主体的已知竞品
+{competitors}
+
 ## 任务
 根据以下已标注的新闻文章数据，进行整体分析并输出结构化洞察。
 
@@ -79,6 +82,17 @@ NEWS_INSIGHT_SYSTEM = """你是资深媒体分析师，擅长从新闻报道中�
 - representative_titles: 每个 narrative 最多 3 条
 - key_quotes: 最多 5 条，选择最具代表性的引述
 - competitive_landscape: 仅当存在 role=competitor 的实体时才输出此字段，否则设为 null
+
+## 实体归类硬规则
+
+- **name 必须规范化**：遇到研究主体或已知竞品的变体（如 "绿米联创Aqara" / "aqara" 都归 "Aqara"；"卧安机器人" 归 "SwitchBot"），统一使用 `{subject}` / `{competitors}` 列表中的规范名。同一品牌的不同变体**必须合并为一个 entity 条目**，mention_count 累加
+- **role=target**：name 严格等于 `{subject}`，即使 mention_count=0 也必须在 entities 列表中保留该条目（sentiment 设为 null），不得由其他品牌替代
+- **role=competitor**：按 `{competitors}` 列表状态分两种模式
+  - **显式列表模式**（列表非"（未指定）"）：role=competitor **严格限定**在该列表中；列表之外的同品类品牌一律归 context（尊重用户显式意图）
+  - **自动发现模式**（列表为"（未指定）"）：**由你自行识别** `{subject}` 的同品类或场景级竞争品牌，归 competitor（新闻报道本身明示品牌关系网络，按上下文判断）。自动发现的竞品也要按规范名归一（同一品牌的变体合并为一个 entity 条目）
+- **role=context**：其他所有实体（行业名、场景、第三方平台、未列出的关联实体）
+- **禁止**：将 mention_count 最多的品牌当作 target；显式列表模式下把列表外品牌标为 competitor
+- **退化规则**：若 `{subject}` 为空字符串（独立监测场景），所有实体统一标为 context，不做 target/competitor 区分
 
 只输出JSON，无额外文本。"""
 

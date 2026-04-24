@@ -2993,6 +2993,20 @@ async def approve_probe(
         from src.news_media.tasks import crud as news_crud
         from src.news_media.tasks.tasks import run_news_collect_task
 
+        # 从 brand_brief.subject + slice_blueprint union competitors 提取 role 归类元数据
+        # 供 tagging_chain 做 role 硬绑定（target=subject / competitor∈competitors / 其余=context）
+        brand_brief = strategy.brand_brief or {}
+        tagging_subject = (brand_brief.get("subject") or "").strip()
+        blueprint = research_design.get("slice_blueprint") or []
+        _comp_seen: set[str] = set()
+        tagging_competitors: list[str] = []
+        for bp in blueprint:
+            for c in (bp.get("competitors") or []):
+                c_norm = (c or "").strip()
+                if c_norm and c_norm.lower() not in _comp_seen:
+                    _comp_seen.add(c_norm.lower())
+                    tagging_competitors.append(c_norm)
+
         for tid in news_collect_task_ids:
             collect_task = await news_crud.get_task_by_id(db, tid, load_relations=False)
             if not collect_task:
@@ -3006,6 +3020,8 @@ async def approve_probe(
             celery_result = run_news_collect_task.delay(
                 task_id=collect_task.id,
                 tagging_job_id=tagging_job.id,
+                subject=tagging_subject,
+                competitors=tagging_competitors,
             )
             await jobs_crud.set_celery_task_id(db, tagging_job.id, celery_result.id)
             await db.commit()
@@ -3421,8 +3437,14 @@ async def _create_strategy_news_slice(
     news_task_ids: list[int],
     keywords: list[str],
     user_id: int,
+    subject: str = "",
+    competitors: list[str] | None = None,
 ) -> "NewsSlice | None":
     """为策略创建 NewsSlice 并运行 inline insight 分析。
+
+    subject / competitors: 供 insight_chain 做 role 硬绑定（与社媒 slice 层对称）。
+    传 slice_blueprint[].subject 和 slice_blueprint[].competitors；均可为空
+    （大盘分析切片 subject="" → 所有实体归 context）。
 
     不调用 news_media.analysis.service.create_slice（它有中间 commit），
     改为 inline 创建 + 分析，与策略事务管理一致（最终由调用方统一 commit）。
@@ -3468,13 +3490,15 @@ async def _create_strategy_news_slice(
         logger.info("NewsSlice「%s」无有效文章，跳过 insight", name)
         return ns
 
-    brand_brief = strategy.brand_brief or {}
     goal = f"{name}（关键词：{', '.join(keywords)}）" if keywords else name
-    subj = brand_brief.get("subject", name)
+    # subject 优先用 slice 层指定（对齐社媒 slice_blueprint.subject 语义）
+    # 大盘分析切片 subject="" → role 归类退化，所有实体归 context
+    subj = subject or ""
+    comp_list = competitors or []
 
     try:
         insights, _token_usage = await _run_insight_analysis(
-            filtered, analysis_goal=goal, subject=subj,
+            filtered, analysis_goal=goal, subject=subj, competitors=comp_list,
         )
         ns.result_data = (
             insights
@@ -3600,6 +3624,8 @@ async def _create_auto_slices(
                     news_task_ids=matched_news_task_ids,
                     keywords=matched_news_keywords,
                     user_id=current_user_id,
+                    subject=bp_subject or "",
+                    competitors=bp_competitors or [],
                 )
                 if ns:
                     news_slice_objs.append(ns)

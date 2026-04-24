@@ -55,10 +55,12 @@ async def create_slice(
         user_id=user_id,
     )
 
-    # 创建即分析
+    # 创建即分析。独立监测场景 subject 传空（无明确研究主体），insight_chain 退化为
+    # 全部实体归 context；若后续 UI 层扩展 NewsSliceCreate 允许用户指定 subject/competitors，
+    # 在此传入即可（对齐社媒 MonitorSliceCreate 的设计）
     return await run_slice_analysis(
         db, slice_obj, user_id=user_id,
-        analysis_goal=data.name, subject=data.name,
+        analysis_goal=data.name, subject="", competitors=[],
     )
 
 
@@ -68,8 +70,12 @@ async def run_slice_analysis(
     user_id: int,
     analysis_goal: str = "",
     subject: str = "",
+    competitors: list[str] | None = None,
 ) -> NewsSlice:
     """运行切片 insight 分析：合并文章 → 去重 → 筛选 → 统计 → insight chain
+
+    subject / competitors: 供 insight_chain 做 role 硬绑定。独立监测场景默认空
+    （LLM 退化为全部 context）；策略场景由 `_create_strategy_news_slice` 明确传入。
 
     创建 NEWS_INSIGHT AnalysisJob 追踪 token/耗时/状态。
     """
@@ -135,9 +141,15 @@ async def run_slice_analysis(
         from src.news_media.tasks.service import _run_insight_analysis
 
         goal = analysis_goal or slice_obj.name
-        subj = subject or slice_obj.name
+        # 独立切片场景 subject 传空时，insight_chain 退化为全部标 context；
+        # 不再默认 fallback 到 slice_obj.name（避免切片名被错误当作品牌）
+        subj = subject or ""
+        comp_list = competitors or []
         insights, token_usage = await _run_insight_analysis(
-            filtered, analysis_goal=goal, subject=subj,
+            filtered,
+            analysis_goal=goal,
+            subject=subj,
+            competitors=comp_list,
         )
 
         if isinstance(insights, dict) and "error" not in insights:

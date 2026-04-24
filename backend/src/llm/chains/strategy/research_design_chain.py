@@ -55,7 +55,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 ## 任务
 根据输入的渠道研究方向，输出结构化的研究计划：研究问题 → 数据采集方案 → 行业研究计划（可选） → 切片蓝图 → 主数据源判定 → 产出类型建议。不需要追问，用你的专业判断补全细节。
 
-输入可能包含"社媒渠道研究方向"、"新闻渠道研究方向"和/或"行业研究方向"——**只为输入中出现的渠道生成对应部分**。社媒/新闻方向生成 data_plan 维度；行业研究方向仅供参考，不体现在 JSON 输出中（由下游服务按需创建 ResearchTask）。渠道分配已由上游确认，无需重新评估适配度。
+输入可能包含"社媒渠道研究方向"、"新闻渠道研究方向"和/或"行业研究方向"——**只为输入中出现的渠道生成对应部分**。社媒/新闻方向生成 data_plan 维度；行业研究方向仅供参考，不体现在 JSON 输出中（由下游服务按需创建 ResearchTask）。渠道参与已由上游确认（无需你重评），但各 channel_brief 只是对该渠道切入点的**初步提示**——最终 RQ 和 data_plan 维度的锚定依据以"原始分析目标"为准（锚定规则见下文 §1）。
 
 ## 产出路径决策表（硬性规则，不可自由发挥）
 
@@ -142,12 +142,12 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 - 切片的 `source_dimensions` 可以同时引用社媒和新闻维度——系统会按渠道分别创建独立切片（社媒 SocialSlice + 新闻 NewsSlice），最终在 campaign_strategy / market_report 两条路径的三层产出中合并两方数据
 - 每个切片建议同时引用社媒和新闻维度，让两个渠道的分析结果能在报告中交叉验证
 - 纯新闻切片（无社媒维度）和纯社媒切片（无新闻维度）都是允许的
-- **competitive 维度建议加入品牌聚焦切片**：若 data_plan 中存在 competitive 维度，建议将其加入品牌聚焦切片的 source_dimensions（供竞品质性对比），以及大盘分析切片（供 SOV 声量对比）。若遗漏，后端会自动将 competitive 维度追加到品牌聚焦切片
+- **competitive 维度必须加入品牌聚焦切片**：若 data_plan 中存在 competitive 维度，必须将其加入品牌聚焦切片的 source_dimensions（供竞品质性对比），并加入大盘分析切片（供 SOV 声量对比）
 
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记：
 {{
-  "understanding_summary": "一句话概括你对分析需求的理解（如 adjust_scope 则注明范围收窄）",
+  "understanding_summary": "一句话概括你对分析需求的理解",
   "research_questions": [
     {{
       "id": "rq1",
@@ -201,7 +201,7 @@ output_type 可选值（按决策表推导）: campaign_strategy / market_report
 ## 要求
 - understanding_summary: 必填
 - research_questions: 2-4 个，覆盖所有渠道研究方向中的核心分析目标
-- data_plan: 只为输入中出现的社媒/新闻渠道生成维度。社媒维度（如有）2-4 个，每个 2-3 关键词（competitive 维度可按竞品数扩至 3-5 个）+ 1-2 平台，社媒总任务数目标 12-20；新闻维度（如有）1-2 个，每个 1-2 关键词，无 platforms
+- data_plan: 只为输入中出现的社媒/新闻渠道生成维度（维度数量、关键词数、平台数规则见 §3）
 - data_plan 中每个条目必须包含 `channel` 字段（"social_media" 或 "news_media"）
 - news_media 维度必须包含 `enable_wechat_mp` 字段（true 或 false），依据 Section 2 的判断标准填写，不得省略
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
@@ -233,13 +233,16 @@ def format_research_design_inputs(
     social_channel_brief: str = "",
     subject: str = "",
     constraints: str = "",
+    analysis_goal: str = "",
     news_channel_brief: str = "",
     research_channel_brief: str = "",
 ) -> dict[str, Any]:
     """格式化研究设计链输入
 
     三个 channel_brief 分别对应 brief_parser 的 channel_plan 中各渠道的定制化描述，
-    只有被推荐的渠道才会传入非空值。subject / constraints 作为补充上下文。
+    只有被推荐的渠道才会传入非空值。analysis_goal 是原始分析目标（完整 brief 诉求），
+    作为 RQ 锚定的最终依据——channel_brief 仅是渠道切入提示，可能存在压缩/遗漏。
+    subject / constraints 作为补充上下文。
     output_type 由后处理函数 _derive_primary_sources_and_output_type 从 data_plan
     channel 分布推导，不需要通过 prompt 传入。
     """
@@ -254,10 +257,12 @@ def format_research_design_inputs(
     if research_channel_brief:
         lines.append(f"\n## 行业研究方向\n{research_channel_brief}")
 
-    if subject or constraints:
+    if subject or analysis_goal or constraints:
         lines.append("\n## 研究背景（供参考）")
         if subject:
             lines.append(f"研究主体：{subject}")
+        if analysis_goal:
+            lines.append(f"原始分析目标：{analysis_goal}")
         if constraints:
             lines.append(f"补充说明：{constraints}")
 

@@ -332,12 +332,15 @@
         </template>
 
         <DataOverviewPanel
+          :tasks="collectionData.tasks"
+          :news-tasks="collectionData.newsTasks"
           :slices="collectionData.slices"
           :completed-count="collectionData.completedCount"
           :total-count="collectionData.totalCount"
           :all-analyzed="collectionData.allAnalyzed"
           :show-progress="!collectionData.allAnalyzed"
           :coverage-result="collectionData.coverageResult"
+          :task-dimension-map="taskDimensionMap"
         />
 
         <div

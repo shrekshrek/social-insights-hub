@@ -4,8 +4,8 @@
 """
 
 from datetime import datetime
-from typing import Literal
-from pydantic import Field
+from typing import Any, Literal
+from pydantic import Field, field_validator
 
 from src.schemas import CustomBaseModel
 from src.social_media.analysis.constants import SPAM_HIGH_THRESHOLD
@@ -22,6 +22,28 @@ from src.jobs.schemas import (  # noqa: F401
     TokenUsageStats,
     TokenUsageSummary,
 )
+
+
+def _normalize_string_list(v: Any) -> Any:
+    """把 LLM 偶发返回的 `{"name": "xxx", "type": "产品"}` 字典归一化为 `"xxx"` 字符串
+
+    用于 EntityInfo.competitors / CommentEntityInfo.competitors 等字段——
+    prompt 里要求 `list[str]`，但 DeepSeek 有概率返回结构化 dict（"{'name': 'X', 'type': '产品'}"）
+    导致 Pydantic 校验失败（type=string_type）。用 before-validator 做柔性归一：
+    - 字符串原样保留
+    - dict 且含 "name" 字段 → 取 name
+    - 其余（含无 name 字段的 dict / None / 非 list）丢弃或透传，交给主校验器报错
+    """
+    if not isinstance(v, list):
+        return v
+    normalized: list[str] = []
+    for item in v:
+        if isinstance(item, str):
+            normalized.append(item)
+        elif isinstance(item, dict) and isinstance(item.get("name"), str):
+            normalized.append(item["name"])
+        # else: 丢弃不可识别项，避免整条分析结果因单个异常项作废
+    return normalized
 
 
 # ==================== 提取结果 Schema ====================
@@ -42,6 +64,10 @@ class EntityInfo(CustomBaseModel):
     scenarios: list[str] = Field(default_factory=list, description="使用场景")
     market_factors: list[str] = Field(default_factory=list, description="价格/促销信息")
     competitors: list[str] = Field(default_factory=list, description="竞品对比")
+
+    _normalize_competitors = field_validator("competitors", mode="before")(
+        _normalize_string_list
+    )
 
 
 class GeneralOpinion(CustomBaseModel):
@@ -86,6 +112,10 @@ class CommentEntityInfo(CustomBaseModel):
     )
     support_score: int = Field(
         default=0, description="支持度分数（来源评论点赞数之和）"
+    )
+
+    _normalize_competitors = field_validator("competitors", mode="before")(
+        _normalize_string_list
     )
 
 

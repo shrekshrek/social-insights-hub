@@ -267,13 +267,24 @@ class RefineProbeResponse(CustomBaseModel):
 
 
 class CollectionTaskStatus(CustomBaseModel):
-    """单个采集任务状态"""
+    """单个采集任务状态（社媒）"""
 
     task_id: int
     keyword: str = ""
     platform: str = ""
     status: str
     posts_count: int = 0
+    has_analysis: bool = False
+
+
+class NewsCollectionTaskStatus(CustomBaseModel):
+    """单个新闻采集任务状态"""
+
+    task_id: int
+    keyword: str = ""
+    dimension: str = ""
+    status: str
+    articles_count: int = 0
     has_analysis: bool = False
 
 
@@ -284,6 +295,7 @@ class CollectionStatusResponse(CustomBaseModel):
     all_analyzed: bool = False
     slices_created: bool = False
     tasks: list[CollectionTaskStatus] = Field(default_factory=list)
+    news_tasks: list[NewsCollectionTaskStatus] = Field(default_factory=list)
     completed_count: int = 0
     total_count: int = 0
     coverage_check_result: dict | None = None

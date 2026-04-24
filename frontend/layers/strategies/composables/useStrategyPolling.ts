@@ -4,6 +4,8 @@ import type {
   ProbeReviewResult,
   SliceSummary,
   CoverageCheckResult,
+  CollectionTaskStatus,
+  NewsCollectionTaskStatus,
   Strategy,
 } from '../types'
 import { STATUS_ORDER } from './useStrategyConstants'
@@ -102,6 +104,8 @@ export const useStrategyPolling = (
   // ── 采集轮询 ────────────────────────────────────────────────────────
 
   const collectionData = reactive({
+    tasks: [] as CollectionTaskStatus[],
+    newsTasks: [] as NewsCollectionTaskStatus[],
     slices: [] as SliceSummary[],
     completedCount: 0,
     totalCount: 0,
@@ -126,6 +130,8 @@ export const useStrategyPolling = (
       const result = await strategiesApi.getCollectionStatus(strategyId.value)
       if (isUnmounted) return
 
+      collectionData.tasks = result.tasks
+      collectionData.newsTasks = result.news_tasks
       collectionData.completedCount = result.completed_count
       collectionData.totalCount = result.total_count
       collectionData.allAnalyzed = result.all_analyzed

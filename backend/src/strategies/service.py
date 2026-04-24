@@ -82,6 +82,7 @@ from .schemas import (
     ApproveProbeResponse,
     CollectionStatusResponse,
     CollectionTaskStatus,
+    NewsCollectionTaskStatus,
     ConfirmResearchResponse,
     DataOverviewResponse,
     DesignResearchResponse,
@@ -3293,11 +3294,15 @@ async def check_collection_status(
         all(task.status in _terminal for task in tasks)
         and all(t.status in _terminal for t in news_tasks)
     )
-    # 已分析判定：所有 completed 的任务都必须有分析结果，且至少有 1 个 completed 社媒任务
+    # 已分析判定：所有任务都终态 + 至少有 1 个 completed（非全失败） + 所有 completed 任务有 analysis_result
+    # 注意：必须要求 all_completed 为前置，否则单个任务完成就会触发 all_analyzed=True，让前端进度条提前消失
     completed_social = [t for t in tasks if t.status == "completed"]
+    completed_news = [t for t in news_tasks if t.status == "completed"]
     all_analyzed = (
-        bool(completed_social)
+        all_completed
+        and bool(completed_social or completed_news)
         and all(t.analysis_result is not None for t in completed_social)
+        and all(t.analysis_result is not None for t in completed_news)
     )
 
     task_statuses = [
@@ -3310,6 +3315,21 @@ async def check_collection_status(
             has_analysis=task.analysis_result is not None,
         )
         for task in tasks
+    ]
+
+    news_task_dim_map: dict[str, str] = (
+        (strategy.research_design or {}).get("_news_task_dimension_map") or {}
+    )
+    news_task_statuses = [
+        NewsCollectionTaskStatus(
+            task_id=nt.id,
+            keyword=nt.keywords or "",
+            dimension=news_task_dim_map.get(str(nt.id), ""),
+            status=nt.status,
+            articles_count=nt.articles_count or 0,
+            has_analysis=nt.analysis_result is not None,
+        )
+        for nt in news_tasks
     ]
 
     slices_created = False
@@ -3381,6 +3401,7 @@ async def check_collection_status(
 
     return CollectionStatusResponse(
         tasks=task_statuses,
+        news_tasks=news_task_statuses,
         all_completed=all_completed,
         all_analyzed=all_analyzed,
         slices_created=slices_created,

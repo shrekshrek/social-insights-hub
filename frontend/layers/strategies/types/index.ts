@@ -196,7 +196,19 @@ export interface ProbeStatusResponse {
 
 export interface CollectionTaskStatus {
   task_id: number
+  keyword: string
+  platform: string
   status: string
+  posts_count: number
+  has_analysis: boolean
+}
+
+export interface NewsCollectionTaskStatus {
+  task_id: number
+  keyword: string
+  dimension: string
+  status: string
+  articles_count: number
   has_analysis: boolean
 }
 
@@ -226,6 +238,7 @@ export interface CollectionStatusResponse {
   all_analyzed: boolean
   slices_created: boolean
   tasks: CollectionTaskStatus[]
+  news_tasks: NewsCollectionTaskStatus[]
   completed_count: number
   total_count: number
   coverage_check_result: CoverageCheckResult | null

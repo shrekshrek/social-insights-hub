@@ -52,6 +52,8 @@ def run_news_collect_task(
     task_id: int,
     tagging_job_id: int | None,
     analysis_goal: str = "",
+    subject: str = "",
+    competitors: list[str] | None = None,
 ) -> None:
     """执行新闻全量采集 Celery 任务（同步版）
 
@@ -67,6 +69,9 @@ def run_news_collect_task(
         task_id: NewsTask ID
         tagging_job_id: 逐篇标注的 AnalysisJob ID
         analysis_goal: 分析目标（可选，默认用任务关键词）
+        subject: 研究主体（策略场景传 brand_brief.subject；独立场景传空）
+        competitors: 已知竞品列表（策略场景传 slice_blueprint union；独立场景传空）
+            供 tagging_chain role 硬绑定使用
     """
     from src.database import SyncSessionLocal
     from src.jobs.factory import (
@@ -146,7 +151,11 @@ def run_news_collect_task(
             all_articles = list(db.execute(stmt).scalars().all())
 
             tags, tag_token_usage = _tag_articles_batch_sync(
-                all_articles, analysis_goal=goal, use_full_text=True,
+                all_articles,
+                analysis_goal=goal,
+                use_full_text=True,
+                subject=subject,
+                competitors=competitors,
             )
             _apply_tags_to_articles_sync(db, all_articles, tags)
 

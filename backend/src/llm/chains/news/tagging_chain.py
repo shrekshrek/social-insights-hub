@@ -20,6 +20,12 @@ NEWS_TAGGING_SYSTEM = """你是新闻分析助手，负责对新闻文章进行�
 ## 研究目标
 {analysis_goal}
 
+## 研究主体
+{subject}
+
+## 研究主体的已知竞品
+{competitors}
+
 ## 标注维度
 
 1. **relevance**：与研究目标的相关程度
@@ -41,8 +47,17 @@ NEWS_TAGGING_SYSTEM = """你是新闻分析助手，负责对新闻文章进行�
    - analysis：深度分析/行业研究
 
 4. **mentioned_entities**：文章中提及的实体
-   - name：实体名称
-   - role：target（研究目标）/ competitor（竞品）/ context（背景相关）
+   - name：实体名称。**遇到「研究主体」或「已知竞品」的变体**（如 "绿米联创Aqara" / "aqara" / "Aqara Home" 都应归到 "Aqara"；"卧安机器人" / "switch bot" 都归到 "SwitchBot"），**必须统一使用上述研究主体/竞品列表中的规范名**
+   - role：
+     - `target`：name **严格等于** 研究主体 `{subject}`（规范名归一后）
+     - `competitor`：按「研究主体的已知竞品」列表状态分两种模式
+       - **显式列表模式**（列表非"（未指定）"）：role=competitor **严格限定**在列表内；列表之外的同品类品牌一律归 context（尊重用户显式意图）
+       - **自动发现模式**（列表为"（未指定）"）：**由你自行识别** `{subject}` 的同品类或场景级竞争品牌，归 competitor（新闻报道本身会明示品牌关系网络，如 "A 与 B、C 等品牌竞争..."，按文章语境判断）
+     - `context`：其他所有实体（行业名、场景、第三方平台等）
+   - **硬规则**（两种模式共同遵守）：
+     - 禁止根据文章提及频率或主角倾向判断 target——target 只能是 `{subject}`
+     - 即使 `{subject}` 在文章中未出现，也不得把其他品牌标为 target
+     - 若 `{subject}` 为空字符串，所有实体统一标为 context（独立监测场景无显式对比对象）
 
 5. **key_quotes**：文章中的关键引述（直接引语）
    - speaker：发言人

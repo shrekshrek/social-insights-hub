@@ -48,6 +48,7 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
     - "了解用户如何选择某类服务（如：EY、麦肯锡）" → subject = 用户群体，括号是示例竞品
     - 判断依据：brief 的核心动词是"分析[某品牌]"还是"了解[某群体]的行为"
   - 若同时涉及集团和子品牌，取更具体的子品牌名
+  - 若 brief 明确提到产品线/型号/品类细化，subject 必须包含产品锚（如"索尼 WH-1000XM5"而非光"索尼"、"Nike Air Jordan"而非光"Nike"）——否则下游研究主题锚定会丢失精度
 
 - **analysis_goal**: 整体研究目标（200字以内，综合所有渠道的视角）
   - 从文档的研究意图出发，描述"通过数据分析需要了解/验证什么"
@@ -62,7 +63,7 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
 
 针对每种数据渠道，评估本 brief 的适合度。四种渠道各代表一种独立视角，以下是能力描述：
 
-- **social_media**（社交媒体 — 消费者声音）：覆盖小红书、抖音、微博、知乎、B站、快手、贴吧（不含脉脉、LinkedIn、Twitter 等平台）；适合消费者情感/口碑/行为观察、品牌认知研究、趋势话题分析
+- **social_media**（社交媒体 — 消费者声音）：覆盖小红书、抖音、微博、知乎、B站、快手、贴吧（不含脉脉、LinkedIn、Twitter 等平台）；适合消费者情感/口碑/行为观察、品牌认知研究、消费者侧的品牌对比评价（UGC 中对多品牌的主观比较与选择理由）、趋势话题分析
 - **news_media**（新闻媒体 — 媒体报道视角）：通过多渠道搜索引擎（百度+搜狗）检索公开新闻报道、行业资讯、媒体评论，可选启用微信公众号搜索（搜狗微信入口）获取行业深度分析和品牌自媒体内容；覆盖事件/动作/观点层面的媒体视角，适合品牌/事件报道追踪、竞品公开动作监测、行业热点与政策的媒体解读
 - **industry_research**（行业研究 — 专家/报告视角）：通过定向搜索四大咨询（麦肯锡/德勤/普华永道/安永/毕马威）、社科院、国研中心等权威机构的公开报告与分析文章，进行跨报告综合分析；覆盖量化行业数据（市场规模/份额/集中度/增速）、政策与结构性趋势分析、白空间与机会识别
 - **creative_research**（创意研究 — 竞品创意版图）：通过定向搜索数英（digitaling.com）、广告门（adquan.com）、SocialBeta 等创意媒体/案例库，收集品类竞品近年的品牌 Campaign、社媒创意案例、获奖作品；为涉及品牌传播方向 / 创意定位类研究提供创意参考输入，支持竞品创意角色版图绘制、创意白空间识别、差异化起点挖掘（与 social_media 的配套关系详见下文 platform_verdict 章节的产出框架描述）
@@ -70,15 +71,15 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
 每个渠道条目包含：
 - `type`: 渠道类型（social_media / news_media / industry_research / creative_research）
 - `available`: 是否当前可用（四个渠道均为 true）
-- `solvable`: 该渠道能解决 brief 中的哪些问题（1-3条，简短描述）
-- `unsolvable`: 该渠道对本 brief 有哪些明显局限（0-2条；若无明显局限则为空数组）
-- `channel_brief`: 针对该渠道的定制化研究描述（1-2句；聚焦该渠道能做的部分，是该渠道后续研究设计的输入）
+- `solvable`: 该渠道能从本 brief 独立切入的研究诉求（1-3条，简短描述）。**允许与其他渠道的 solvable 有重叠**——brief 里的同一条诉求可以被多个渠道从不同视角切入（例：「消费者对竞品 X 的评价与对比」在 social 表现为 UGC 主观比较、在 news 表现为媒体报道追踪，两者并存合理）
+- `unsolvable`: 该渠道本身结构性做不到的事（0-2条；若无明显局限则为空数组）。**只描述本渠道的硬边界**，不要写「其他渠道负责 X」——那是分工不是局限。反例：social 的 unsolvable 不应写「无法提供媒体报道视角」（那是 news 的职责），应写本渠道的真实限制（如「无法获取权威机构量化数据」「无法追踪财报等一手披露」）或留空
+- `channel_brief`: 本渠道可切入的 brief 诉求概述（1-2句）。允许与其他渠道描述的诉求重叠——具体承接由下游 research_design 按维度决定。务必覆盖原 brief 中属于本渠道能力范围的所有诉求（包括竞品对比、品牌认知等跨渠道诉求），不要因"另一渠道也能做"而省略
 
 **推荐规则**（按渠道分别判断，符合条件输出对应 channel_plan 条目，不符合则不输出）：
 
 - **social_media**：研究主体在覆盖平台上有足够密度的 UGC 讨论、能支撑系统化消费者洞察分析时推荐；讨论过于稀疏/碎片化（覆盖平台难以采集到足够样本）时不推荐
-- **news_media**：brief 涉及品牌/事件报道、竞品公开动作、行业动态/政策解读或市场竞争格局时推荐——绝大多数战略类 brief 都有媒体层诉求。（注：纯用户心理研究 / 品类结构性研究 / Campaign 历史参考等知识型 brief 由 platform_verdict 在上游判为 insufficient 后分流至研究分析入口，本规则不需处理此类 brief）
-- **industry_research**：战略规划、品类机会识别、结构性趋势判断、竞争格局定位类 brief 默认推荐——提供战略层的结构性背景支撑（产业报告 + 政策趋势 + 白空间 + 量化数据）。与 news_media 不互斥——前者是事件/动作/观点的媒体报道视角，后者是跨权威报告的结构性分析，战略类 brief 常两者并存。（注：舆情监测 / 事件追踪 / Campaign 复盘等诊断型 brief 由 platform_verdict 在上游判为 insufficient 后分流至 monitor + slice 入口，本规则不需处理此类 brief）
+- **news_media**：brief 涉及品牌/事件报道、竞品公开动作、行业动态/政策解读或市场竞争格局时推荐——绝大多数战略类 brief 都有媒体层诉求。
+- **industry_research**：战略规划、品类机会识别、结构性趋势判断、竞争格局定位类 brief 默认推荐——提供战略层的结构性背景支撑（产业报告 + 政策趋势 + 白空间 + 量化数据）。与 news_media 不互斥——前者是事件/动作/观点的媒体报道视角，后者是跨权威报告的结构性分析，战略类 brief 常两者并存。
 - **creative_research**：与 social_media 绑定——推了 social_media 就默认推（下游走 campaign_strategy / full_strategy 路径，Brand Role / Big Idea 阶段需要创意参考输入）；仅推 news_media（走 market_report 路径，无创意参考注入点）时不推
 - channel_plan 只输出 social_media、news_media、industry_research、creative_research 四种渠道类型
 
@@ -112,6 +113,8 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
 - **sufficient**：brief 的研究目标能完整对应某个框架，可直接推进
 
 `insufficient_reason` 合法取值索引：`no_channel` / `knowledge_industry` / `knowledge_creative` / `diagnostic_social` / `diagnostic_news` / `diagnostic_dual`。
+
+**与 channel_plan 的边界**：诊断型（上表 1）和知识型（上表 2）brief 由 insufficient 路径路由到 monitor+slice 或 research_agent 入口，不走 strategies pipeline；因此 channel_plan 的推荐规则只需判断**战略类 brief** 的渠道适合度，无需为诊断型/知识型 brief 做特殊处理。
 
 `platform_note`：1-2 句话说明判断依据。
 - 当 `platform_verdict == "insufficient"` 时，必须根据 `insufficient_reason` 给出对应替代功能建议：

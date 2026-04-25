@@ -252,7 +252,7 @@
     <div class="flex items-center gap-4 p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
       <div class="flex items-center gap-2">
         <span class="text-gray-600 dark:text-gray-400 shrink-0">每任务全量:</span>
-        <span class="text-sm text-gray-700 dark:text-gray-300">50 条</span>
+        <span class="text-sm text-gray-700 dark:text-gray-300">40 条</span>
       </div>
       <span class="text-gray-600 dark:text-gray-400">探测: 20 条（固定）</span>
       <span class="text-gray-400">|</span>

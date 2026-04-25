@@ -2813,7 +2813,7 @@ async def _advance_probe_task_to_collect(
       就 20 条），probe 的聚合仍然是对"全部可见数据"的合法聚合，让 check_collecting
       scheduler 能正常筛到这个 task 进入建切片流程，避免策略永卡 collecting
 
-    已采集的 posts/comments 保留在同一 task 下（它们是最终 50 条的一部分）。
+    已采集的 posts/comments 保留在同一 task 下（它们是最终 40 条的一部分）。
     爬虫侧通过相同 cloud_task_id 的历史 checkpoint 自动续采，无需额外传参。
     """
     from src.social_media.analysis.service import reset_task_analysis_state
@@ -2935,7 +2935,7 @@ async def approve_probe(
         # 覆写 collect 阶段默认参数（用户侧可通过配置页后续调整）
         collect_task_params = {
             **existing_params,
-            "max_notes_count": 50,
+            "max_notes_count": 40,
             "enable_comments": 1,
             "per_note_max_comments_count": 20,
         }

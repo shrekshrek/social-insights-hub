@@ -690,7 +690,7 @@ def _clean_entity_attributes_sync(
         invoke_func=invoke_with_stats_fn,
         parse_response_func=parse_normalization_response,
         llm_type=llm_type,
-        max_workers=10,
+        max_workers=20,
     )
 
     token_stats = stats  # 直接使用返回的统计

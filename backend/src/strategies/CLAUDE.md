@@ -108,7 +108,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 
 ### ③ 数据就绪 (collecting → ready)
 
-1. 前端轮询 `collection-status`，爬虫采集全量数据（50 条 + 评论）
+1. 前端轮询 `collection-status`，爬虫采集全量数据（40 条 + 评论）
 2. 所有全量任务分析完成后自动按 slice_blueprint 创建切片（`_create_auto_slices`）
    - 社媒：按维度分组任务 → `create_monitor_slice`（同步 Stage1）→ 派发 Celery 跑 Stage2/Stage3
    - 新闻：按维度分组任务 → `_create_strategy_news_slice`（同步 insight 分析）
@@ -215,7 +215,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 任务类型：
 - **探测任务**（phase="probe"）：max_pages 限制翻页，跳过评论，约 20 条
-- **全量任务**（phase="collect"）：采集完整数据（50 条 + 评论）
+- **全量任务**（phase="collect"）：采集完整数据（40 条 + 评论）
 - **普通任务**：一次性采集到 max_notes_count 指定数量
 
 **社媒单任务多阶段模型**（v2026.04 起）：

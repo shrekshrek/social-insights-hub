@@ -322,7 +322,7 @@ def aggregate_opinions(
         invoke_func=invoke_chain_with_stats_sync,
         parse_response_func=parse_normalization_response,
         llm_type=llm_type,
-        max_workers=10,
+        max_workers=20,
     )
 
     # 合并观点归一化的统计（保留之前类别归一化的统计）

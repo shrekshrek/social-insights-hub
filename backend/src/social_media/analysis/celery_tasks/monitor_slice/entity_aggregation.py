@@ -93,7 +93,7 @@ def normalize_entity_aliases(
     task_keywords: list[str] | None = None,
     subject: str | None = None,
     competitors: list[str] | None = None,
-    topn: int = 200,
+    topn: int = 300,
 ) -> dict[str, Any]:
     """Stage2-B1：实体别名归一（先程序预聚类，再 LLM 两阶段归一；失败降级）。"""
     task_keywords = task_keywords or []

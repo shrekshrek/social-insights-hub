@@ -10,7 +10,7 @@
 import logging
 
 from tavily import TavilyClient
-from tavily.errors import UsageLimitExceededError
+from tavily.errors import ForbiddenError, UsageLimitExceededError
 
 from src.config import get_settings
 
@@ -23,6 +23,13 @@ class TavilyQuotaExhaustedError(Exception):
     用户可见错误：由 tasks.py 捕获后写入 ResearchTask.error_message，
     前端任务详情页会直接显示。
     """
+
+
+# Tavily SDK 用两种异常表达"额度耗尽"，都需要触发切换到下一个 key：
+#   - UsageLimitExceededError: 免费配额触顶
+#   - ForbiddenError: paid/dev key 触达 dashboard 配置的自定义 usage limit
+#     （实测信息："This request exceeds this API key's set usage limit."）
+_QUOTA_EXHAUSTED_EXCEPTIONS = (UsageLimitExceededError, ForbiddenError)
 
 
 def _get_api_keys() -> list[str]:
@@ -86,12 +93,13 @@ def tavily_search(
                 }
                 for r in results
             ]
-        except UsageLimitExceededError:
+        except _QUOTA_EXHAUSTED_EXCEPTIONS as e:
             key_label = "主" if i == 0 else "备用"
             if i + 1 < len(api_keys):
                 logger.warning(
-                    "Tavily %s key 额度耗尽，切换到下一个 key: query=%s",
+                    "Tavily %s key 额度耗尽（%s），切换到下一个 key: query=%s",
                     key_label,
+                    type(e).__name__,
                     query,
                 )
                 continue

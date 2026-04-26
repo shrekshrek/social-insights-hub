@@ -284,7 +284,112 @@ const formatDate = (dateStr: string) => {
   })
 }
 
+const formatCompactNumber = (n: unknown): string => {
+  const v = typeof n === 'number' ? n : Number(n)
+  if (!Number.isFinite(v)) return '-'
+  const abs = Math.abs(v)
+  if (abs >= 10000) return `${(v / 10000).toFixed(abs >= 100000 ? 0 : 1)}万`
+  if (abs >= 1000) return `${(v / 1000).toFixed(abs >= 10000 ? 0 : 1)}k`
+  return `${Math.round(v)}`
+}
+
+const formatTaskIdsPreview = (ids?: number[]): string => {
+  const arr = Array.isArray(ids) ? ids : []
+  if (!arr.length) return '-'
+  const head = arr.slice(0, 6).join(', ')
+  return arr.length > 6 ? `${head} …` : head
+}
+
 // ========== 表格列 ==========
+
+const sliceColumns = computed<TableColumn<NewsSlice>[]>(() => {
+  const Badge = UBadge as Component
+  const Button = UButton as Component
+
+  return [
+    {
+      accessorKey: 'name',
+      header: '切片',
+      meta: { class: { th: 'w-[240px]', td: 'w-[240px] whitespace-normal' } },
+      cell: ({ row }) => {
+        const s = row.original
+        return h('div', { class: 'flex items-center gap-1.5 flex-wrap' }, [
+          h('span', { class: 'font-medium text-gray-900 dark:text-white leading-snug line-clamp-2' }, s.name || `切片 ${s.id}`),
+          h('span', { class: 'text-xs text-gray-400 font-normal shrink-0' }, `#${s.id}`),
+          h(Badge, { size: 'sm', variant: 'subtle', color: getSliceStatusColor(s.status) }, () => getSliceStatusText(s.status)),
+        ])
+      },
+    },
+    {
+      accessorKey: 'created_at',
+      header: '创建时间',
+      meta: { class: { th: 'w-[112px]', td: 'w-[112px] whitespace-nowrap' } },
+      cell: ({ row }) => h('span', { class: 'text-gray-600 dark:text-gray-400' }, formatDate(row.original.created_at)),
+    },
+    {
+      accessorKey: 'included_task_ids',
+      header: '任务',
+      meta: { class: { th: 'w-[110px]', td: 'w-[110px] whitespace-normal' } },
+      cell: ({ row }) => {
+        const ids = row.original.included_task_ids || []
+        return h('div', { class: 'text-xs text-gray-600 dark:text-gray-400' }, [
+          h('div', { class: 'font-medium text-gray-900 dark:text-white' }, `${ids.length} 个`),
+          h('div', { class: 'mt-0.5 font-mono whitespace-normal' }, formatTaskIdsPreview(ids)),
+        ])
+      },
+    },
+    {
+      accessorKey: 'metrics',
+      header: '关键指标',
+      meta: { class: { th: 'w-[150px]', td: 'w-[150px]' } },
+      cell: ({ row }) => {
+        const s = row.original
+        const stats = (s.stats || {}) as Record<string, unknown>
+        const articlesTotal = stats.articles_total
+        const sentimentOverall = stats.sentiment_overall
+        const sentimentText = typeof sentimentOverall === 'number' && Number.isFinite(sentimentOverall)
+          ? sentimentOverall.toFixed(2)
+          : '-'
+        const tierDist = (stats.source_tier_distribution || {}) as Record<string, number>
+        const tier1Count = tierDist.tier1 ?? 0
+        const tier2Count = tierDist.tier2 ?? 0
+        const topEntities = stats.top_entities as Array<unknown> | undefined
+        const entityCount = Array.isArray(topEntities) ? topEntities.length : null
+        return h('div', { class: 'text-xs text-gray-600 dark:text-gray-400' }, [
+          h('div', { class: 'text-gray-900 dark:text-white font-medium' },
+            `文章 ${formatCompactNumber(articlesTotal)} · 情绪 ${sentimentText}`,
+          ),
+          h('div', { class: 'mt-0.5' },
+            `T1 ${tier1Count} · T2 ${tier2Count} · 实体 ${entityCount ?? '-'}`,
+          ),
+        ])
+      },
+    },
+    {
+      accessorKey: 'actions',
+      header: '操作',
+      meta: { class: { th: 'w-[110px]', td: 'w-[110px] whitespace-nowrap' } },
+      cell: ({ row }) => {
+        const s = row.original
+        return h('div', { class: 'flex items-center gap-1' }, [
+          h(Button, {
+            size: 'xs',
+            variant: 'ghost',
+            icon: 'i-heroicons-eye',
+            to: `/news-media/slices/${s.id}`,
+          }, () => '查看'),
+          h(Button, {
+            size: 'xs',
+            variant: 'ghost',
+            color: 'error',
+            icon: 'i-heroicons-trash',
+            onClick: () => handleDeleteSlice(s),
+          }, () => '删除'),
+        ])
+      },
+    },
+  ]
+})
 
 const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
   const Button = UButton as Component
@@ -672,72 +777,45 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
       <UCard>
         <template #header>
           <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">分析切片</h2>
-            <UButton
-              size="sm"
-              variant="ghost"
-              icon="i-heroicons-arrow-path"
-              :loading="slicesLoading"
-              @click="refreshSlices()"
-            >
-              刷新
-            </UButton>
+            <h2 class="text-lg font-semibold">
+              切片列表 (<ClientOnly fallback="...">{{ slices.length }}</ClientOnly>)
+            </h2>
+            <ClientOnly>
+              <UButton
+                size="sm"
+                variant="ghost"
+                icon="i-heroicons-arrow-path"
+                :loading="slicesLoading"
+                @click="refreshSlices()"
+              >
+                刷新
+              </UButton>
+            </ClientOnly>
           </div>
         </template>
 
         <ClientOnly>
           <template #fallback>
-            <div class="text-center py-6">
-              <p class="text-gray-600 dark:text-gray-400">加载切片列表中...</p>
+            <div class="text-center py-8">
+              <p class="text-gray-600 dark:text-gray-400">加载切片中...</p>
             </div>
           </template>
 
-          <div v-if="slices.length > 0" class="space-y-3">
-            <div
-              v-for="slice in slices"
-              :key="slice.id"
-              class="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 mb-1">
-                  <span class="font-medium text-sm truncate">{{ slice.name }}</span>
-                  <UBadge
-                    :color="getSliceStatusColor(slice.status)"
-                    size="sm"
-                    variant="subtle"
-                  >
-                    {{ getSliceStatusText(slice.status) }}
-                  </UBadge>
-                </div>
-                <p class="text-xs text-gray-500">
-                  包含 {{ slice.included_task_ids.length }} 个任务 · {{ formatDate(slice.created_at) }}
-                </p>
-              </div>
-              <div class="flex items-center gap-1 shrink-0">
-                <UButton
-                  size="xs"
-                  variant="ghost"
-                  icon="i-heroicons-eye"
-                  :to="`/news-media/slices/${slice.id}`"
-                >
-                  查看
-                </UButton>
-                <UButton
-                  size="xs"
-                  variant="ghost"
-                  icon="i-heroicons-trash"
-                  color="error"
-                  @click="handleDeleteSlice(slice)"
-                >
-                  删除
-                </UButton>
-              </div>
-            </div>
+          <div v-if="slicesLoading" class="text-sm text-gray-400">
+            加载中...
+          </div>
+          <div v-else-if="!slices.length" class="text-sm text-gray-400">
+            暂无切片（可在上方勾选任务后生成）
           </div>
 
-          <div v-else class="text-center py-6 text-gray-400 text-sm">
-            暂无分析切片，请在任务列表中勾选已完成任务后点击「生成切片」
-          </div>
+          <UTable
+            v-else
+            :data="slices"
+            :columns="sliceColumns"
+            :loading="slicesLoading"
+            class="w-full"
+            :ui="{ base: 'w-full table-fixed' }"
+          />
         </ClientOnly>
       </UCard>
     </template>

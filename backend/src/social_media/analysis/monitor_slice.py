@@ -369,7 +369,7 @@ def build_monitor_slice_result(
     monitor_id: int,
     included_task_ids: list[int],
     task_data_list: list[dict[str, Any]],
-    max_items: int = 200,
+    max_items: int = 300,
     max_post_ids_sample: int = MAX_POST_IDS_SAMPLE,
     subject: str | None = None,
     competitors: list[str] | None = None,
@@ -391,7 +391,7 @@ def build_monitor_slice_result(
             - keyword: str
             - analysis_result: dict
         max_items: details.top_entities / details.top_topics 的候选池数量（按 score 排序）
-          - 推荐：200（用于后续“先归一再截断 Top60”的流程）
+          - 推荐：300（覆盖 21+ 任务策略切片的实体长尾，让 Stage2 LLM 有更多变体合并机会）
         max_post_ids_sample: 每个条目保留的 (task_id, post_id) 样本数量
         subject: 主体品牌/产品（用于 Focus 层触发与角色仲裁；为空则跳过 Focus）
         competitors: 竞品列表（用于角色仲裁与 Focus 层对比）

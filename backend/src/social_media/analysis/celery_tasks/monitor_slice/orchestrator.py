@@ -403,8 +403,8 @@ def _run_pipeline_body(
         if isinstance(result.get("foundation"), dict)
         else {}
     )
-    foundation["aligned_entities"] = entities_aligned[:200]
-    foundation["aligned_topics"] = topics_aligned[:200]
+    foundation["aligned_entities"] = entities_aligned[:300]
+    foundation["aligned_topics"] = topics_aligned[:300]
     result["foundation"] = foundation
 
     # Step3：分层指标（Landscape/Topic/Focus）——覆盖 Stage1 预计算的层数据

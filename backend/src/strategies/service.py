@@ -1679,15 +1679,15 @@ async def confirm_research(
         for dp in data_plan
         if dp.get("channel") == "news_media"
     )
-    if social_tasks > 20:
+    if social_tasks > 30:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"社媒采集任务数（{social_tasks}）过多，请精简关键词或平台（建议 8-12 个）",
+            detail=f"社媒采集任务数（{social_tasks}）过多，请精简关键词或平台（常规 brief 目标 12-20，明示 3 平台时可放宽至 18-30）",
         )
     if news_tasks > 10:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"新闻采集任务数（{news_tasks}）过多，请精简关键词（建议 2-4 个）",
+            detail=f"新闻采集任务数（{news_tasks}）过多，请精简关键词（建议 4-6 个）",
         )
 
     # 保存用户编辑后的研究计划 + 用户显式选择的 output_type（覆盖 LLM 建议值）

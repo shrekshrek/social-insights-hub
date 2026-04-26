@@ -261,6 +261,9 @@ def _run_pipeline_body(
         "input_count": ent_input_count,
         "program_clustered_count": ent_program_count,
         "after_count": None,
+        # 失败时填字符串（异常类型/解析失败/phase空），成功时为 None；
+        # 前端据此区分"LLM 成功无需合并" vs "LLM 失败兜底"
+        "llm_failure_reason": ent_norm_result.get("llm_failure_reason"),
     }
     entities_aligned = build_entities_aligned(
         top_entities=[e for e in top_entities if isinstance(e, dict)],
@@ -301,6 +304,7 @@ def _run_pipeline_body(
             "program_clustered_count": ent_program_count,
             "after_count": len(entities_aligned),
             "llm_used": bool(ent_norm_result.get("used")),
+            "llm_failure_reason": ent_norm_result.get("llm_failure_reason"),
         },
         error_message=None,
     )

@@ -474,13 +474,16 @@ export interface Stage2Status {
   alias_normalization?: {
     entities?: {
       used?: boolean
-      before_count?: number
+      input_count?: number
+      program_clustered_count?: number
       after_count?: number
       entity_mapping?: Record<string, string>
+      llm_failure_reason?: string | null
     }
     topics?: {
       used?: boolean
-      before_count?: number
+      input_count?: number
+      program_clustered_count?: number
       after_count?: number
       topic_mapping_by_category?: Record<string, Record<string, string>>
     }

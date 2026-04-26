@@ -75,7 +75,9 @@ async def run_slice_analysis(
     """运行切片 insight 分析：合并文章 → 去重 → 筛选 → 统计 → insight chain
 
     subject / competitors: 供 insight_chain 做 role 硬绑定。独立监测场景默认空
-    （LLM 退化为全部 context）；策略场景由 `_create_strategy_news_slice` 明确传入。
+    （LLM 退化为全部 context）；策略场景走 Celery 异步路径（见
+    `news_media.tasks.tasks.run_news_slice_insight_task`），由 `_create_auto_slices`
+    在派发时透传 blueprint 的 subject/competitors。
 
     创建 NEWS_INSIGHT AnalysisJob 追踪 token/耗时/状态。
     """

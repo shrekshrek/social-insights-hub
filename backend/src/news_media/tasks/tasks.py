@@ -213,3 +213,115 @@ def run_news_collect_task(
                     if tj and tj.status == "running":
                         complete_analysis_job_sync(db2, tj, error_message=str(e))
                 db2.commit()
+
+
+@celery_app.task(
+    name="news_media.run_news_slice_insight",
+    bind=True,
+    max_retries=0,
+)
+def run_news_slice_insight_task(
+    self,
+    slice_id: int,
+    user_id: int,
+    analysis_goal: str = "",
+    subject: str = "",
+    competitors: list[str] | None = None,
+) -> None:
+    """运行 NewsSlice insight 分析（同步版，策略场景专用）
+
+    策略场景下 _create_auto_slices 创建 NewsSlice 行（status=pending）后，
+    commit 主事务再异步派发本任务跑 insight。这样避免长事务（LLM ~90s）
+    持有 INSERT 不 commit，导致 APScheduler / 轮询读不到该行重复建切片。
+
+    独立监测场景仍走 news_media.analysis.service.run_slice_analysis（async）。
+    """
+    from src.database import SyncSessionLocal
+    from src.jobs.factory import (
+        complete_analysis_job_sync,
+        create_analysis_job_sync,
+    )
+    from src.jobs.models import AnalysisJob, AnalysisType
+    from src.news_media.analysis.models import NewsSlice
+    from src.news_media.analysis.service import _compute_stats
+    from src.news_media.tasks.models import NewsArticle
+    from src.news_media.tasks.service import _run_insight_analysis_sync
+
+    with SyncSessionLocal() as db:
+        slice_obj = db.get(NewsSlice, slice_id)
+        if not slice_obj:
+            logger.error("NewsSlice %d not found, aborting insight", slice_id)
+            return
+
+        slice_obj.status = "analyzing"
+        slice_obj.error_message = None
+        db.commit()
+
+        job = create_analysis_job_sync(
+            db=db,
+            news_monitor_id=slice_obj.monitor_id,
+            user_id=user_id,
+            analysis_type=AnalysisType.NEWS_INSIGHT.value,
+            source_count=0,
+            analysis_config={"slice_id": slice_id, "via": "strategy"},
+            status="running",
+        )
+
+        try:
+            stmt = (
+                select(NewsArticle)
+                .where(NewsArticle.task_id.in_(slice_obj.included_task_ids))
+                .order_by(NewsArticle.published_at.desc().nulls_last())
+            )
+            all_articles = list(db.execute(stmt).scalars().all())
+
+            seen_urls: set[str] = set()
+            deduped: list = []
+            for a in all_articles:
+                if a.url not in seen_urls:
+                    seen_urls.add(a.url)
+                    deduped.append(a)
+            filtered = [a for a in deduped if a.relevance != "low"]
+
+            slice_obj.stats = _compute_stats(filtered)
+            job.source_count = len(filtered)
+
+            if not filtered:
+                slice_obj.result_data = {"meta": {"articles_total": 0}}
+                slice_obj.status = "completed"
+                complete_analysis_job_sync(db, job, analyzed_count=0)
+                logger.info("NewsSlice %d: no valid articles, marked completed", slice_id)
+                return
+
+            goal = analysis_goal or slice_obj.name
+            insights, token_usage = _run_insight_analysis_sync(
+                filtered,
+                analysis_goal=goal,
+                subject=subject or "",
+                competitors=competitors or [],
+            )
+
+            if isinstance(insights, dict) and "error" not in insights:
+                slice_obj.result_data = insights
+            else:
+                slice_obj.result_data = {"meta": slice_obj.stats, "error": str(insights)}
+            slice_obj.status = "completed"
+            complete_analysis_job_sync(
+                db, job,
+                analyzed_count=len(filtered),
+                token_usage=token_usage,
+            )
+            logger.info("NewsSlice %d insight completed: %d articles", slice_id, len(filtered))
+
+        except Exception as e:
+            logger.error("NewsSlice %d insight failed: %s", slice_id, e, exc_info=True)
+            db.rollback()
+            with SyncSessionLocal() as db2:
+                s2 = db2.get(NewsSlice, slice_id)
+                if s2:
+                    s2.status = "failed"
+                    s2.error_message = str(e)[:1000]
+                j2 = db2.get(AnalysisJob, job.id)
+                if j2 and j2.status == "running":
+                    complete_analysis_job_sync(db2, j2, error_message=str(e)[:500])
+                db2.commit()

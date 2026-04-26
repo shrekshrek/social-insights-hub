@@ -114,6 +114,7 @@ async def check_collecting_strategies() -> int:
     from src.strategies.models import Strategy
     from src.strategies.service import (
         _create_auto_slices,
+        _slice_creation_in_progress,
         _try_advance_to_ready,
         get_strategy_by_id,
     )
@@ -185,7 +186,10 @@ async def check_collecting_strategies() -> int:
                 has_news = not completed_news  # 无新闻 monitor 视为已"完成"
 
             # 阶段 A：切片尚未建 → 建切片（保持 collecting，由后续轮次或 get_collection_status 推进 ready）
-            if not (has_social and has_news):
+            # 幂等保护：跳过 polling 正在创建中的策略，避免与 get_collection_status 重入
+            # （_create_auto_slices 内部按 monitor_id+name 跳过已存在切片，本检查为额外防御）
+            if not (has_social and has_news) and strategy.id not in _slice_creation_in_progress:
+                _slice_creation_in_progress.add(strategy.id)
                 try:
                     full_strategy = await get_strategy_by_id(db, strategy.id)
                     await _create_auto_slices(
@@ -203,6 +207,8 @@ async def check_collecting_strategies() -> int:
                         e,
                         exc_info=True,
                     )
+                finally:
+                    _slice_creation_in_progress.discard(strategy.id)
                 continue
 
             # 阶段 B：切片已建 + coverage 未跑 → 尝试推进到 ready

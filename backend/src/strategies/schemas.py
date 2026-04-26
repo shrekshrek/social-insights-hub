@@ -341,13 +341,22 @@ class AdjustSlicesRequest(CustomBaseModel):
 # ==================== Response Schemas ====================
 
 
+SliceChannel = Literal["social", "news"]
+
+
 class SliceSummary(CustomBaseModel):
-    """切片摘要"""
+    """跨渠道切片摘要
+
+    一条策略同时拥有 SocialSlice（social_monitor 下）+ NewsSlice（news_monitor 下），
+    通过 `channel` 区分；前端按 channel 分组显示并路由到不同详情页。
+    """
 
     slice_id: int
     slice_name: str | None = None
     monitor_id: int
     monitor_name: str
+    channel: SliceChannel
+    status: str  # social: pending/processing/completed/failed; news: pending/analyzing/completed/failed
 
 
 class StrategyListItem(CustomBaseModel):

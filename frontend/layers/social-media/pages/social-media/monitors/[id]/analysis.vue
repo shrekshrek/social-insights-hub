@@ -329,13 +329,16 @@ interface SliceResultData {
       alias_normalization?: {
         entities?: {
           used?: boolean
-          before_count?: number
+          input_count?: number
+          program_clustered_count?: number
           after_count?: number
           entity_mapping?: Record<string, string>
+          llm_failure_reason?: string | null
         }
         topics?: {
           used?: boolean
-          before_count?: number
+          input_count?: number
+          program_clustered_count?: number
           after_count?: number
           topic_mapping_by_category?: Record<string, Record<string, string>>
         }
@@ -1276,12 +1279,25 @@ const handleExport = async () => {
                 <div v-if="stage2.alias_normalization.entities">
                   <div class="text-gray-500 dark:text-gray-400 mb-1">实体</div>
                   <div class="flex items-center gap-2">
-                    <UBadge :color="stage2.alias_normalization.entities.used ? 'success' : 'neutral'" variant="subtle" size="sm">
-                      {{ stage2.alias_normalization.entities.used ? 'LLM 已用' : '未用 LLM' }}
+                    <UBadge
+                      :color="stage2.alias_normalization.entities.llm_failure_reason ? 'error' : (stage2.alias_normalization.entities.used ? 'success' : 'neutral')"
+                      variant="subtle"
+                      size="sm"
+                    >
+                      <template v-if="stage2.alias_normalization.entities.llm_failure_reason">LLM 失败 / 程序兜底</template>
+                      <template v-else-if="stage2.alias_normalization.entities.used">LLM 已用</template>
+                      <template v-else>未用 LLM</template>
                     </UBadge>
                     <span class="font-mono text-gray-600 dark:text-gray-400">
-                      {{ stage2.alias_normalization.entities.before_count ?? '?' }} → {{ stage2.alias_normalization.entities.after_count ?? '?' }}
+                      {{ stage2.alias_normalization.entities.input_count ?? '?' }} → {{ stage2.alias_normalization.entities.after_count ?? '?' }}
                     </span>
+                  </div>
+                  <div
+                    v-if="stage2.alias_normalization.entities.llm_failure_reason"
+                    class="mt-1 text-xs text-red-500 dark:text-red-400 truncate"
+                    :title="stage2.alias_normalization.entities.llm_failure_reason"
+                  >
+                    失败原因：{{ stage2.alias_normalization.entities.llm_failure_reason }}
                   </div>
                   <div
                     v-if="stage2.alias_normalization.entities.entity_mapping && Object.keys(stage2.alias_normalization.entities.entity_mapping).length"
@@ -1298,7 +1314,7 @@ const handleExport = async () => {
                       {{ stage2.alias_normalization.topics.used ? 'LLM 已用' : '未用 LLM' }}
                     </UBadge>
                     <span class="font-mono text-gray-600 dark:text-gray-400">
-                      {{ stage2.alias_normalization.topics.before_count ?? '?' }} → {{ stage2.alias_normalization.topics.after_count ?? '?' }}
+                      {{ stage2.alias_normalization.topics.input_count ?? '?' }} → {{ stage2.alias_normalization.topics.after_count ?? '?' }}
                     </span>
                   </div>
                   <div

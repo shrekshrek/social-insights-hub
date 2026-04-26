@@ -132,20 +132,46 @@ def create_monitor_entity_review_chain() -> Runnable:
 
 
 def parse_monitor_entity_merge_response(response_text: str) -> Dict[str, Any]:
-    """解析 JSON 响应"""
+    """解析 JSON 响应
+
+    失败时返回 `failure_reason` 字段（异常类型 + 简短描述 + 原始响应长度），
+    供上游记录到 stage2 stats / AnalysisJob，避免静默降级看起来像"系统优化"。
+    """
+    raw_len = len(response_text)
     if "```json" in response_text:
         response_text = response_text.split("```json")[1].split("```")[0]
     elif "```" in response_text:
         response_text = response_text.split("```")[1].split("```")[0]
 
+    stripped = response_text.strip()
     try:
-        result = json.loads(response_text.strip())
-    except Exception:
-        logger.error("JSON Parse Error: %s...", response_text[:200])
-        return {"entities": [], "entity_mapping": {}, "tags_mapping": {}}
+        result = json.loads(stripped)
+    except Exception as e:
+        # 完整记录：异常类型 + 异常消息 + 原始/剥离后长度 + 末尾片段（截断点最常出现在结尾）
+        reason = f"{type(e).__name__}: {e}"
+        tail = stripped[-200:] if len(stripped) > 200 else stripped
+        logger.error(
+            "JSON Parse Error: %s | raw_len=%d stripped_len=%d | tail=%r",
+            reason, raw_len, len(stripped), tail,
+        )
+        return {
+            "entities": [],
+            "entity_mapping": {},
+            "tags_mapping": {},
+            "failure_reason": f"json_parse_error: {reason} (response_length={len(stripped)})",
+        }
 
     if not isinstance(result, dict):
-        return {"entities": [], "entity_mapping": {}, "tags_mapping": {}}
+        logger.error(
+            "JSON Parse Error: response not a dict, got %s",
+            type(result).__name__,
+        )
+        return {
+            "entities": [],
+            "entity_mapping": {},
+            "tags_mapping": {},
+            "failure_reason": f"unexpected_type: got {type(result).__name__}",
+        }
 
     # 重建 mapping
     entity_mapping: dict[str, str] = {}
@@ -283,9 +309,12 @@ def merge_monitor_entities_with_review_sync(
 
     # 2. Second Pass (Review)
     if not first_result.get("entities"):
+        # 兜底：phase 1 解析失败或返回空。failure_reason 已由 parser 填好（如有）
         logger.warning(
             "[Project Merge] Phase 1 returned empty entities, skipping review."
         )
+        if "failure_reason" not in first_result:
+            first_result["failure_reason"] = "phase1_empty_entities"
         return first_result, combined_stats
 
     logger.info("[Project Merge] Phase 2: Audit & Review")
@@ -309,5 +338,17 @@ def merge_monitor_entities_with_review_sync(
         review_res.content if hasattr(review_res, "content") else str(review_res)
     )
     final_result = parse_monitor_entity_merge_response(final_json_str)
+
+    # Review 阶段失败时回退到 phase 1 结果，避免丢弃可用的合并结论；
+    # failure_reason 标注 phase 2 失败让运营可见
+    if not final_result.get("entities"):
+        logger.warning(
+            "[Project Merge] Phase 2 returned empty, falling back to Phase 1 result."
+        )
+        first_result["failure_reason"] = (
+            "phase2_review_failed_fallback_to_phase1: "
+            + final_result.get("failure_reason", "unknown")
+        )
+        return first_result, combined_stats
 
     return final_result, combined_stats

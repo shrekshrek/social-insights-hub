@@ -104,23 +104,62 @@
       </div>
     </div>
 
-    <!-- 切片列表 -->
-    <div v-if="slices.length">
-      <h4 class="text-xs font-medium text-gray-500 mb-2">
-        分析切片（{{ slices.length }} 个）
+    <!-- 切片列表（按渠道分组） -->
+    <div v-if="slices.length" class="space-y-3">
+      <h4 class="text-xs font-medium text-gray-500">
+        分析切片（{{ slices.length }} 个 · 社媒 {{ socialSlices.length }} · 新闻 {{ newsSlices.length }}）
       </h4>
-      <div class="grid grid-cols-3 gap-2">
-        <div
-          v-for="s in slices"
-          :key="s.slice_id"
-          class="flex items-center gap-2 text-sm p-2 border border-gray-100 dark:border-gray-800 rounded-lg"
-        >
-          <UIcon name="i-heroicons-document-chart-bar" class="text-gray-400 shrink-0" />
+
+      <!-- 社媒切片 -->
+      <div v-if="socialSlices.length" class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-heroicons-chat-bubble-left-right" class="text-blue-400 size-4" />
+          <span class="text-xs font-medium text-gray-500">社媒切片</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
           <NuxtLink
+            v-for="s in socialSlices"
+            :key="`social-${s.slice_id}`"
             :to="`/social-media/monitors/${s.monitor_id}/analysis?slice_id=${s.slice_id}`"
-            class="flex-1 min-w-0 hover:text-primary-600 transition-colors"
+            class="flex items-center gap-2 text-sm p-2 border border-gray-100 dark:border-gray-800 rounded-lg hover:border-primary-300 hover:text-primary-600 transition-colors"
           >
-            <div class="font-medium truncate">{{ s.slice_name || `切片 #${s.slice_id}` }}</div>
+            <UIcon name="i-heroicons-document-chart-bar" class="text-gray-400 shrink-0" />
+            <span class="font-medium truncate flex-1 min-w-0">{{ s.slice_name || `切片 #${s.slice_id}` }}</span>
+            <UBadge
+              :color="sliceStatusColor(s.status)"
+              variant="subtle"
+              size="sm"
+              class="shrink-0"
+            >
+              {{ sliceStatusLabel(s.status) }}
+            </UBadge>
+          </NuxtLink>
+        </div>
+      </div>
+
+      <!-- 新闻切片 -->
+      <div v-if="newsSlices.length" class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-heroicons-newspaper" class="text-amber-500 size-4" />
+          <span class="text-xs font-medium text-gray-500">新闻切片</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <NuxtLink
+            v-for="s in newsSlices"
+            :key="`news-${s.slice_id}`"
+            :to="`/news-media/slices/${s.slice_id}`"
+            class="flex items-center gap-2 text-sm p-2 border border-gray-100 dark:border-gray-800 rounded-lg hover:border-primary-300 hover:text-primary-600 transition-colors"
+          >
+            <UIcon name="i-heroicons-document-text" class="text-gray-400 shrink-0" />
+            <span class="font-medium truncate flex-1 min-w-0">{{ s.slice_name || `切片 #${s.slice_id}` }}</span>
+            <UBadge
+              :color="sliceStatusColor(s.status)"
+              variant="subtle"
+              size="sm"
+              class="shrink-0"
+            >
+              {{ sliceStatusLabel(s.status) }}
+            </UBadge>
           </NuxtLink>
         </div>
       </div>
@@ -271,4 +310,29 @@ const newsDimensionGroups = computed((): Record<string, NewsCollectionTaskStatus
   }
   return groups
 })
+
+/** 切片按 channel 分组 */
+const socialSlices = computed(() => props.slices.filter(s => s.channel === 'social'))
+const newsSlices = computed(() => props.slices.filter(s => s.channel === 'news'))
+
+/** 切片状态展示
+ *
+ * - 社媒：pending（Stage1 排队）/ processing（Stage2 跑中）/ completed / failed
+ * - 新闻：pending（待派发）/ analyzing（Celery insight 跑中）/ completed / failed
+ *
+ * 用户视角统一：未到 completed/failed 都视为"分析中"
+ */
+const sliceStatusLabel = (status: string): string => {
+  if (status === 'completed') return '已完成'
+  if (status === 'failed') return '失败'
+  if (!status || status === 'pending') return '待开始'
+  return '分析中'
+}
+
+const sliceStatusColor = (status: string) => {
+  if (status === 'completed') return 'success' as const
+  if (status === 'failed') return 'error' as const
+  if (!status || status === 'pending') return 'neutral' as const
+  return 'primary' as const
+}
 </script>

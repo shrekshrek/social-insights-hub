@@ -77,11 +77,14 @@ const open = defineModel<boolean>('open', { default: false })
 const adjustments = ref<AdjustSliceItem[]>([])
 const originalNames = ref<Record<number, string | null>>({})
 
-// 当 modal 打开时，从 slices 初始化 adjustments，记录原始名称
+// 仅社媒切片可微调；新闻切片调整需要重跑 insight chain，暂不支持
+const adjustableSlices = computed(() => props.slices.filter(s => s.channel === 'social'))
+
+// 当 modal 打开时，从 adjustableSlices 初始化 adjustments，记录原始名称
 watch(open, (isOpen) => {
   if (isOpen) {
     const names: Record<number, string | null> = {}
-    adjustments.value = props.slices.map(s => {
+    adjustments.value = adjustableSlices.value.map(s => {
       names[s.slice_id] = s.slice_name
       return {
         slice_id: s.slice_id,

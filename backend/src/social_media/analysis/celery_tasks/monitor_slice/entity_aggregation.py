@@ -102,6 +102,9 @@ def normalize_entity_aliases(
     entity_mapping: dict[str, str] = {}
     tags_mapping: dict[str, Any] = {}
     entity_mapping_program: dict[str, str] = {}
+    # LLM 失败原因（exception 类型 / 解析失败 / phase1 空 等），供上游写入 stage2 stats，
+    # 让前端区分"LLM 成功无需合并" vs "LLM 失败兜底"，避免静默降级被误读为系统优化
+    llm_failure_reason: str | None = None
     # parent 先验：来自任务级聚合（投票），用于 hint 注入与 LLM 缺失时回填
     raw_parent_by_name: dict[str, str] = {}
     raw_type_by_name: dict[str, str] = {}
@@ -229,6 +232,8 @@ def normalize_entity_aliases(
 
             entity_mapping = (llm_result or {}).get("entity_mapping") or {}
             tags_mapping = (llm_result or {}).get("tags_mapping") or {}
+            # 提取链层报告的失败原因（解析失败 / phase 空 / phase2 兜底）
+            llm_failure_reason = (llm_result or {}).get("failure_reason")
 
             # 去 Role 模式保护：subject 为空时强制 Context
             if not (subject or "").strip():
@@ -244,6 +249,8 @@ def normalize_entity_aliases(
         logger.error(
             "[Slice Stage2] Entity alias normalization failed: %s", e, exc_info=True
         )
+        # 顶层 exception 也记一下，让前端能看见
+        llm_failure_reason = f"exception: {type(e).__name__}: {e}"
 
     if not entity_mapping:
         # 降级：优先用程序预聚类的映射
@@ -345,6 +352,9 @@ def normalize_entity_aliases(
         # 统计信息：原始数量、程序归一后送入 LLM 的数量
         "input_count": input_count,
         "program_clustered_count": program_clustered_count,
+        # LLM 失败原因（None 表示成功或纯程序兜底无 LLM 调用）；
+        # 上游写入 stage2.alias_normalization.entities.llm_failure_reason 供前端展示
+        "llm_failure_reason": llm_failure_reason,
     }
 
 

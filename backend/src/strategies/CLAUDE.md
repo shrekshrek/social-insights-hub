@@ -113,8 +113,9 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 1. 前端轮询 `collection-status`，爬虫采集全量数据（40 条 + 评论）
 2. 所有全量任务分析完成后自动按 slice_blueprint 创建切片（`_create_auto_slices`）
    - 社媒：按维度分组任务 → `create_monitor_slice`（同步 Stage1）→ 派发 Celery 跑 Stage2/Stage3
-   - 新闻：按维度分组任务 → `_create_strategy_news_slice`（同步 insight 分析）
+   - 新闻：按维度分组任务 → `_create_strategy_news_slice` 仅创建 NewsSlice 行（status=pending）→ 主事务 commit 后派发 `news_media.run_news_slice_insight` Celery 任务异步跑 insight；这样避免 LLM 长事务持有 INSERT 不 commit、其他事务读不到该行导致重复建切片
    - 每个 blueprint 条目可产生 0-1 个 SocialSlice + 0-1 个 NewsSlice
+   - **幂等性**：`_create_auto_slices` 按 `(monitor_id, slice name)` 跳过已存在切片，支持 polling/scheduler 并发触发或上轮部分失败补建；scheduler 额外用 `_slice_creation_in_progress` 进程内 set 与 polling 互斥
 3. **"切片完成" = Stage2 完成**（聚合 + 实体/观点归一 + layers 构建）——此时 `SocialSlice.status="completed"`，与 NewsSlice 语义对齐。Stage3 的 3 报告是独立附加产出，不阻塞策略推进、不参与下游 chain
 4. 所有社媒切片 Stage2 + 所有新闻切片 insight 到终态（completed/failed/skipped）后，由 `_try_advance_to_ready` 跑 `coverage_check_chain`（只消费 `status=completed` 的切片）
    - 触发来源：①`get_collection_status` 端点（前端 15s 轮询，近实时）；②APScheduler `strategy_collection` job（2min 兜底，前端停轮询时不被卡住）
@@ -248,7 +249,8 @@ Celery Worker 崩溃/宕机 → 新闻任务停留在 `running` 或 `pending` �
 
 ## Important Notes
 
-- Strategy 的社媒切片（SocialSlice）与新闻切片（NewsSlice）均通过 `monitor_id` 隐式关联（`SocialSlice.monitor_id == strategy.social_monitor_id` / `NewsSlice.monitor_id == strategy.news_monitor_id`），无显式关联表；`service._load_strategy_slice_summaries` / `_count_strategy_slices` 统一查询入口
+- Strategy 的社媒切片（SocialSlice）与新闻切片（NewsSlice）均通过 `monitor_id` 隐式关联（`SocialSlice.monitor_id == strategy.social_monitor_id` / `NewsSlice.monitor_id == strategy.news_monitor_id`），无显式关联表；`service._load_strategy_slice_summaries` / `_count_strategy_slices` 统一查询入口，**两边都查并合并**（社媒在前、新闻在后），返回的 `SliceSummary` 携带 `channel: "social" | "news"` 字段供前端按渠道分组路由（`/social-media/monitors/{m}/analysis?slice_id=...` vs `/news-media/slices/{id}`）。`StrategyListItem.slice_count` 也是两渠道之和
+- `adjust_slices` 当前**仅支持调整社媒切片**——传入新闻切片 ID 会返回 409；新闻切片的 subject/competitors 影响 insight chain 的实体 role 归类，调整后需要重跑 insight，待后续支持
 - `_create_auto_slices` 按 `slice_blueprint` 自动创建：社媒维度 → SocialSlice，新闻维度 → NewsSlice，互不侵入。**建完切片不直接跑 coverage_check，也不置 ready**——策略保持 `collecting`，由 `_try_advance_to_ready` 在切片 Stage2 全完成后异步推进
 - `SocialSlice.status="completed"` 语义 = Stage2 完成（下游可用）；Stage3 的 3 报告失败不回退该状态，只记在 `result_data.pipeline.stage3`。`load_strategy_inputs` / `load_strategy_news_inputs` 均按 `status=completed` 过滤，Stage2 未就绪或失败的切片不会喂给策略 chain
 - `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor（同渠道所有任务共享一个 Monitor）+ 条件创建 ResearchTask（brand_brief.channel_plan 含 `industry_research` 或 `creative_research` 渠道时）

@@ -75,11 +75,15 @@ export interface BrandBrief {
 
 // ==================== 切片摘要 ====================
 
+export type SliceChannel = 'social' | 'news'
+
 export interface SliceSummary {
   slice_id: number
   slice_name: string | null
   monitor_id: number
   monitor_name: string
+  channel: SliceChannel
+  status: string
 }
 
 // ==================== 研究设计 ====================

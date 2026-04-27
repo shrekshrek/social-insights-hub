@@ -27,6 +27,16 @@
         <h2 class="text-base font-semibold">研究信息</h2>
       </template>
 
+      <!-- Brief 快速填入 -->
+      <BriefUploader
+        :loading="parsing"
+        class="mb-5"
+        @text-submit="handlePasteText"
+        @file-submit="handleParseFile"
+        @clear="clearSuitability"
+        @validation-error="showError"
+      />
+
       <!-- 研究类型选择 -->
       <div class="mb-5">
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">研究类型</label>
@@ -47,13 +57,56 @@
         </p>
       </div>
 
-      <!-- Brief 快速填入 -->
-      <BriefUploader
-        :loading="extracting || previewing"
-        class="mb-5"
-        @text-submit="handlePasteText"
-        @file-submit="extractFile"
-      />
+      <!-- 适配度诊断 banner -->
+      <div v-if="suitability && bannerKind" class="mb-5">
+        <div
+          v-if="bannerKind === 'switch'"
+          class="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-sm"
+        >
+          <UIcon name="i-heroicons-light-bulb" class="w-4 h-4 mt-0.5 text-amber-500 flex-shrink-0" />
+          <div class="flex-1">
+            <div class="font-medium text-amber-700 dark:text-amber-300">
+              建议切换到「{{ PROFILE_DISPLAY[suitability.recommended_profile] ?? suitability.recommended_profile }}」
+            </div>
+            <p v-if="suitability.note" class="text-gray-600 dark:text-gray-400 mt-0.5">{{ suitability.note }}</p>
+            <UButton size="xs" variant="subtle" class="mt-2" icon="i-heroicons-arrow-path" @click="applyRecommendedProfile">
+              切换并重新解析
+            </UButton>
+          </div>
+        </div>
+
+        <div
+          v-else-if="bannerKind === 'redirect'"
+          class="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-sm"
+        >
+          <UIcon name="i-heroicons-x-circle" class="w-4 h-4 mt-0.5 text-red-500 flex-shrink-0" />
+          <div class="flex-1">
+            <div class="font-medium text-red-700 dark:text-red-300">这条 Brief 不适合走专题研究</div>
+            <p v-if="suitability.note" class="text-gray-600 dark:text-gray-400 mt-0.5">{{ suitability.note }}</p>
+            <UButton
+              v-if="REDIRECT_TARGETS[suitability.redirect_hint]"
+              size="xs"
+              variant="subtle"
+              class="mt-2"
+              :to="REDIRECT_TARGETS[suitability.redirect_hint]!.path"
+              :label="REDIRECT_TARGETS[suitability.redirect_hint]!.label"
+              icon="i-heroicons-arrow-right"
+              trailing
+            />
+          </div>
+        </div>
+
+        <div
+          v-else-if="bannerKind === 'partial'"
+          class="flex items-start gap-2.5 p-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm"
+        >
+          <UIcon name="i-heroicons-information-circle" class="w-4 h-4 mt-0.5 text-gray-500 flex-shrink-0" />
+          <div class="flex-1">
+            <div class="font-medium text-gray-700 dark:text-gray-300">Brief 信息不足</div>
+            <p v-if="suitability.note" class="text-gray-600 dark:text-gray-400 mt-0.5">{{ suitability.note }}</p>
+          </div>
+        </div>
+      </div>
 
       <UForm
         id="research-form"
@@ -135,15 +188,20 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import type { ResearchProfileOption } from '../../types'
+import type {
+  ResearchProfileOption,
+  SuitabilityVerdict,
+  SuitabilityRedirectHint,
+  ParseBriefResponse,
+} from '../../types'
 
 definePageMeta({ layout: 'default', title: '新建研究' })
 
-const { getProfiles, extractBrief, previewPlan, createTask } = useResearchAgentApi()
+const { getProfiles, parseBrief, parseBriefText, createTask } = useResearchAgentApi()
+const { showError } = useApi()
 const toast = useToast()
 
-const extracting = ref(false)
-const previewing = ref(false)
+const parsing = ref(false)
 const submitting = ref(false)
 
 // 研究类型列表（后端驱动）
@@ -199,6 +257,58 @@ const rawQuery = ref('')
 // AI 额外生成的只读参考数据（解析后出现）
 const aiExtras = ref<{ keywords: string[]; search_angles: string[] } | null>(null)
 
+// 适配度诊断结果（解析后出现，呈现于 banner）
+interface SuitabilityState {
+  verdict: SuitabilityVerdict
+  recommended_profile: string
+  redirect_hint: SuitabilityRedirectHint
+  note: string
+}
+const suitability = ref<SuitabilityState | null>(null)
+
+const PROFILE_DISPLAY: Record<string, string> = {
+  industry: '行业研究',
+  creative: '创意研究',
+}
+
+const REDIRECT_TARGETS: Record<string, { path: string; label: string }> = {
+  strategy: { path: '/strategies/create', label: '前往策略页' },
+  monitor_social: { path: '/social-media/monitors/create', label: '前往社媒监测' },
+  monitor_news: { path: '/news-media/monitors/create', label: '前往新闻监测' },
+}
+
+const bannerKind = computed<'switch' | 'redirect' | 'partial' | null>(() => {
+  const s = suitability.value
+  if (!s) return null
+  if (s.verdict === 'suitable' && s.recommended_profile && s.recommended_profile !== formState.profile_name) {
+    return 'switch'
+  }
+  if (s.verdict === 'not_suitable' && s.redirect_hint) {
+    return 'redirect'
+  }
+  if (s.verdict === 'partial') {
+    return 'partial'
+  }
+  return null
+})
+
+function applyRecommendedProfile() {
+  const target = suitability.value?.recommended_profile
+  if (target && target !== formState.profile_name) {
+    formState.profile_name = target
+    // profile 变更会触发下面 watch，自动重新调用 callPreviewPlan
+  }
+}
+
+function clearSuitability() {
+  suitability.value = null
+  aiExtras.value = null
+  rawQuery.value = ''
+  formState.title = ''
+  formState.analysis_goal = ''
+  formState.questions = []
+}
+
 function removeQuestion(index: number) {
   formState.questions = formState.questions.filter((_, i) => i !== index)
 }
@@ -207,51 +317,52 @@ function addQuestion() {
   formState.questions = [...formState.questions, '']
 }
 
-async function callPreviewPlan(query: string) {
-  previewing.value = true
-  try {
-    const result = await previewPlan({
-      analysis_goal: query.trim(),
-      profile_name: formState.profile_name,
-    })
-    if (result.title) formState.title = result.title
-    if (result.analysis_goal) formState.analysis_goal = result.analysis_goal
-    if (result.research_questions.length) formState.questions = [...result.research_questions]
-    aiExtras.value = { keywords: result.keywords, search_angles: result.search_angles }
-  } catch {
-    // 错误已由 apiRequest 统一处理
-  } finally {
-    previewing.value = false
+function applyParseResult(result: ParseBriefResponse) {
+  if (result.title) formState.title = result.title
+  if (result.analysis_goal) formState.analysis_goal = result.analysis_goal
+  if (result.research_questions.length) formState.questions = [...result.research_questions]
+  aiExtras.value = { keywords: result.keywords, search_angles: result.search_angles }
+  suitability.value = {
+    verdict: result.verdict,
+    recommended_profile: result.recommended_profile,
+    redirect_hint: result.redirect_hint,
+    note: result.note,
   }
+  rawQuery.value = result.brief_text
 }
 
 async function handlePasteText(text: string) {
-  rawQuery.value = text
-  await callPreviewPlan(text)
-}
-
-const ALLOWED_EXT = new Set(['pdf', 'docx', 'txt', 'md'])
-async function extractFile(file: File) {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-  if (!ALLOWED_EXT.has(ext)) {
-    toast.add({ title: '仅支持 PDF / DOCX / TXT / MD 文件', color: 'error' })
-    return
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    toast.add({ title: '文件大小不能超过 10 MB', color: 'error' })
-    return
-  }
-  extracting.value = true
+  parsing.value = true
   try {
-    const result = await extractBrief(file)
-    rawQuery.value = result.text
-    await callPreviewPlan(result.text)
+    const result = await parseBriefText({ text, profile_name: formState.profile_name })
+    applyParseResult(result)
   } catch {
     // 错误已由 apiRequest 统一处理
   } finally {
-    extracting.value = false
+    parsing.value = false
   }
 }
+
+async function handleParseFile(file: File) {
+  parsing.value = true
+  try {
+    const result = await parseBrief(file, formState.profile_name)
+    applyParseResult(result)
+  } catch {
+    // 错误已由 apiRequest 统一处理
+  } finally {
+    parsing.value = false
+  }
+}
+
+
+// profile 切换时（含 banner 触发）若已有 brief 则用文本入口重新解析
+// 文件入口的抽取文本已在 brief_text 中回流到 rawQuery，无需重新上传
+watch(() => formState.profile_name, (next, prev) => {
+  if (next === prev) return
+  if (!rawQuery.value.trim()) return
+  handlePasteText(rawQuery.value)
+})
 
 async function handleSubmit() {
   const validQuestions = formState.questions.filter(q => q.trim())

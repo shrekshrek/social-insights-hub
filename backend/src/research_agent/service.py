@@ -3,9 +3,9 @@
 提供异步接口供 FastAPI router 调用。
 """
 
-import asyncio
 import logging
 
+from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,45 +15,69 @@ from src.research_agent.tasks import run_research_task
 logger = logging.getLogger(__name__)
 
 
-
-async def extract_brief_from_file(content: bytes, filename: str) -> str:
-    """从上传文档提取纯文本（复用 knowledge_base.service.parse_text）"""
+async def parse_brief_from_file(
+    content: bytes, filename: str, profile_name: str | None
+) -> dict:
+    """文件入口 → 抽文本 → brief_parser_chain 一次完成摄入+诊断+方案"""
     from src.knowledge_base.service import parse_text
+    from src.llm.chains.research_agent.brief_parser_chain import parse_brief
     from src.utils import run_cpu_bound_task
 
     try:
-        return await run_cpu_bound_task(parse_text, content, filename)
+        raw_text = await run_cpu_bound_task(parse_text, content, filename)
     except Exception as exc:
-        from fastapi import HTTPException, status
+        logger.error("Brief 文本提取失败 (%s): %s", filename, exc)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"无法从文档提取文本，请检查文件是否损坏: {exc}",
         ) from exc
 
+    if not raw_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="文档内容为空，无法解析",
+        )
 
-async def preview_research_plan(
-    analysis_goal: str,
-    brief: str | None = None,
-    research_questions: list[str] | None = None,
-    profile_name: str | None = None,
-) -> dict:
-    """调用 planner LLM 生成研究计划预览，不创建任务"""
-    from src.research_agent.nodes.planner import call_planner_llm
+    try:
+        parsed = await parse_brief(raw_text, profile_name)
+        return {**parsed, "brief_text": raw_text[:10000]}
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Brief 解析 LLM 调用失败: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI 解析失败，请稍后重试",
+        ) from exc
 
-    plan, _ = await asyncio.to_thread(
-        call_planner_llm,
-        analysis_goal,
-        brief or "",
-        research_questions or None,
-        profile_name,
-    )
-    return {
-        "title": plan.get("title", ""),
-        "analysis_goal": plan.get("analysis_goal", ""),
-        "research_questions": plan.get("research_questions", []),
-        "keywords": plan.get("keywords", []),
-        "search_angles": plan.get("search_angles", []),
-    }
+
+async def parse_brief_from_text(text: str, profile_name: str | None) -> dict:
+    """文本入口 → brief_parser_chain 一次完成摄入+诊断+方案"""
+    from src.llm.chains.research_agent.brief_parser_chain import parse_brief
+
+    if not text or not text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="文本内容为空，无法解析",
+        )
+
+    try:
+        parsed = await parse_brief(text, profile_name)
+        return {**parsed, "brief_text": text[:10000]}
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Brief 解析 LLM 调用失败: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI 解析失败，请稍后重试",
+        ) from exc
 
 
 async def create_research_task(

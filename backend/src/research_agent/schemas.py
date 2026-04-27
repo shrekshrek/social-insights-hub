@@ -7,12 +7,6 @@ from pydantic import Field
 from src.schemas import CustomBaseModel
 
 
-class BriefExtractResult(CustomBaseModel):
-    """文件提取的纯文本"""
-
-    text: str
-
-
 class ProfileOption(CustomBaseModel):
     """研究类型选项（供前端选择器展示）"""
 
@@ -20,26 +14,46 @@ class ProfileOption(CustomBaseModel):
     display_name: str = Field(..., description="展示名")
 
 
-class ResearchPlanPreviewRequest(CustomBaseModel):
-    """预览研究计划（不创建任务，仅调用 planner LLM）"""
+class ParseBriefTextRequest(CustomBaseModel):
+    """文本入口的 brief 解析请求"""
 
-    analysis_goal: str = Field(..., min_length=2, max_length=2000, description="核心研究意图（AI 提炼或用户手填）")
-    brief: str | None = Field(default=None, max_length=5000, description="原始 Brief 文本（可选，供 planner 参考）")
-    research_questions: list[str] | None = Field(default=None, description="初始研究问题（可选）")
+    text: str = Field(
+        ..., min_length=2, max_length=10000, description="待解析的 brief 文本"
+    )
     profile_name: str = Field(
         default="industry",
         description="研究类型：industry（行业研究）/ creative（创意研究）",
     )
 
 
-class ResearchPlanPreviewResult(CustomBaseModel):
-    """planner LLM 返回的研究计划预览"""
+class ParseBriefResponse(CustomBaseModel):
+    """brief 解析合流点的统一返回（摄入 + 诊断 + 方案）"""
 
     title: str
     analysis_goal: str
     research_questions: list[str]
     keywords: list[str]
     search_angles: list[str]
+    verdict: str = Field(
+        default="suitable",
+        description="brief 与专题研究入口的适配度：suitable / partial / not_suitable",
+    )
+    recommended_profile: str = Field(
+        default="",
+        description="suitable 时给出的建议研究类型（industry / creative）；其他情况为空",
+    )
+    redirect_hint: str = Field(
+        default="",
+        description="not_suitable 时给出的应跳转入口（strategy / monitor_social / monitor_news）；其他情况为空",
+    )
+    note: str = Field(
+        default="",
+        description="判断依据（1-2 句中文，呈现给用户）",
+    )
+    brief_text: str = Field(
+        default="",
+        description="本次解析所用的原始 brief 文本（文件入口为抽取后的纯文本），用于任务创建时回传 search_config.context 与 profile 切换重解析",
+    )
 
 
 class ResearchTaskCreate(CustomBaseModel):
@@ -48,7 +62,7 @@ class ResearchTaskCreate(CustomBaseModel):
     analysis_goal: str = Field(..., min_length=2, max_length=2000, description="核心研究意图，贯穿整个研究链")
     title: str = Field(..., min_length=1, max_length=200, description="研究标题")
     brief: str | None = Field(
-        default=None, max_length=5000, description="原始 Brief 文本（可选，作为 planner 背景参考）"
+        default=None, max_length=10000, description="原始 Brief 文本（可选，作为 planner 背景参考）"
     )
     research_questions: list[str] | None = Field(
         default=None, description="研究问题列表（可选，plan 节点会自动生成）"

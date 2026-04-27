@@ -20,12 +20,14 @@
         <h2 class="text-base font-semibold">Brief 信息</h2>
       </template>
 
-      <!-- AI 快速填入 -->
+      <!-- 快速填入 -->
       <BriefUploader
         :loading="parsing"
         class="mb-5"
         @text-submit="handleParseText"
         @file-submit="parseFile"
+        @clear="clearParsed"
+        @validation-error="showError"
       />
 
       <UForm
@@ -65,13 +67,13 @@
       </UForm>
     </UCard>
 
-    <!-- 渠道分析结果 -->
-    <UCard v-if="parsedChannelPlan?.length">
+    <!-- 渠道分析结果 / 平台适用性 -->
+    <UCard v-if="platformVerdict || parsedChannelPlan?.length">
       <template #header>
         <div class="flex items-center gap-2">
           <UIcon name="i-heroicons-signal" class="text-primary-500 w-4 h-4" />
-          <h2 class="text-base font-semibold">渠道分析结果</h2>
-          <span class="text-xs text-gray-400 font-normal">以下是 AI 对本次研究的渠道建议，供参考</span>
+          <h2 class="text-base font-semibold">{{ parsedChannelPlan?.length ? '渠道分析结果' : '平台适用性' }}</h2>
+          <span v-if="parsedChannelPlan?.length" class="text-xs text-gray-400 font-normal">以下是 AI 对本次研究的渠道建议，供参考</span>
         </div>
       </template>
 
@@ -154,7 +156,7 @@
         </div>
       </div>
 
-      <div v-if="platformVerdict !== 'insufficient'" class="space-y-3">
+      <div v-if="parsedChannelPlan?.length && platformVerdict !== 'insufficient'" class="space-y-3">
         <div
           v-for="item in parsedChannelPlan"
           :key="item.type"
@@ -229,6 +231,7 @@ const schema = z.object({
 type FormState = z.output<typeof schema>
 
 const strategiesApi = useStrategiesApi()
+const { showError } = useApi()
 
 const parsing = ref(false)
 const submitting = ref(false)
@@ -249,11 +252,19 @@ const applyResult = (result: Partial<ParseBriefResponse>) => {
   if (result.subject) formState.subject = result.subject
   if (result.analysis_goal) formState.analysis_goal = result.analysis_goal
   if (result.constraints) formState.constraints = result.constraints
-  if (result.channel_plan?.length) parsedChannelPlan.value = result.channel_plan
-  if (result.platform_verdict) platformVerdict.value = result.platform_verdict
+  parsedChannelPlan.value = result.channel_plan?.length ? result.channel_plan : null
+  platformVerdict.value = result.platform_verdict ?? null
   platformNote.value = result.platform_note ?? ''
   insufficientReason.value = result.insufficient_reason ?? ''
 }
+
+const clearParsed = () => {
+  parsedChannelPlan.value = null
+  platformVerdict.value = null
+  platformNote.value = ''
+  insufficientReason.value = ''
+}
+
 
 const handleParseText = async (text: string) => {
   parsing.value = true

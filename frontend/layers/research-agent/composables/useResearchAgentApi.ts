@@ -1,4 +1,4 @@
-import type { ResearchProfileOption, ResearchTask, ResearchTaskCreate, ResearchTaskResult, ResearchPlanPreviewRequest, ResearchPlanPreview, BriefExtractResult } from '../types'
+import type { ResearchProfileOption, ResearchTask, ResearchTaskCreate, ResearchTaskResult, ParseBriefTextRequest, ParseBriefResponse } from '../types'
 
 export function useResearchAgentApi() {
   const { apiRequest, useApiData } = useApi()
@@ -36,19 +36,22 @@ export function useResearchAgentApi() {
     })
   }
 
-  // 从文件提取 Brief 纯文本
-  async function extractBrief(file: File): Promise<BriefExtractResult> {
+  // 解析 Brief 文件（合流点：摄入 + 诊断 + 方案）
+  async function parseBrief(file: File, profileName: string): Promise<ParseBriefResponse> {
     const formData = new FormData()
     formData.append('file', file)
-    return apiRequest<BriefExtractResult>('/research/tasks/extract-brief', {
-      method: 'POST',
-      body: formData,
-    })
+    return apiRequest<ParseBriefResponse>(
+      `/research/parse-brief?profile_name=${encodeURIComponent(profileName)}`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    )
   }
 
-  // 预览研究计划（不创建任务）
-  async function previewPlan(data: ResearchPlanPreviewRequest): Promise<ResearchPlanPreview> {
-    return apiRequest<ResearchPlanPreview>('/research/tasks/preview', {
+  // 解析 Brief 文本（合流点：摄入 + 诊断 + 方案）
+  async function parseBriefText(data: ParseBriefTextRequest): Promise<ParseBriefResponse> {
+    return apiRequest<ParseBriefResponse>('/research/parse-brief-text', {
       method: 'POST',
       body: data,
     })
@@ -161,8 +164,8 @@ export function useResearchAgentApi() {
     getTasks,
     getTask,
     getTaskResult,
-    extractBrief,
-    previewPlan,
+    parseBrief,
+    parseBriefText,
     createTask,
     rerunTask,
     deleteTask,

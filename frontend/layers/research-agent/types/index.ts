@@ -39,23 +39,25 @@ export interface ResearchTaskStats {
   synthesis_length: number
 }
 
-export interface BriefExtractResult {
-  text: string
-}
+export type SuitabilityVerdict = 'suitable' | 'partial' | 'not_suitable'
+export type SuitabilityRedirectHint = 'strategy' | 'monitor_social' | 'monitor_news' | ''
 
-export interface ResearchPlanPreviewRequest {
-  analysis_goal: string
-  brief?: string
-  research_questions?: string[]
+export interface ParseBriefTextRequest {
+  text: string
   profile_name?: ResearchProfileName | string
 }
 
-export interface ResearchPlanPreview {
+export interface ParseBriefResponse {
   title: string
   analysis_goal: string
   research_questions: string[]
   keywords: string[]
   search_angles: string[]
+  verdict: SuitabilityVerdict
+  recommended_profile: string
+  redirect_hint: SuitabilityRedirectHint
+  note: string
+  brief_text: string
 }
 
 export interface ResearchTaskCreate {

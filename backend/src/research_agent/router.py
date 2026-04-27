@@ -34,16 +34,17 @@ async def list_research_profiles(
 
 
 @router.post(
-    "/tasks/extract-brief",
-    response_model=schemas.BriefExtractResult,
+    "/parse-brief",
+    response_model=schemas.ParseBriefResponse,
     status_code=status.HTTP_200_OK,
-    summary="从文件提取 Brief 文本",
+    summary="解析 Brief 文件（合流点：摄入 + 诊断 + 方案）",
 )
-async def extract_brief(
+async def parse_brief_file(
     file: UploadFile = File(...),
+    profile_name: str = "industry",
     _: User = Depends(require_research_agent_write),
 ):
-    """上传 PDF/DOCX/TXT/MD 文件，返回提取的纯文本，供前端填入研究主题输入框。"""
+    """上传 PDF/DOCX/TXT/MD 文件，一次返回标题/分析目标/研究问题/适配度诊断/搜索方案。"""
     _ALLOWED = {"pdf", "docx", "txt", "md"}
     ext = (file.filename or "").rsplit(".", 1)[-1].lower()
     if ext not in _ALLOWED:
@@ -57,30 +58,21 @@ async def extract_brief(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="文件大小不能超过 10 MB",
         )
-    text = await service.extract_brief_from_file(content, file.filename or "")
-    return {"text": text}
+    return await service.parse_brief_from_file(content, file.filename or "", profile_name)
 
 
 @router.post(
-    "/tasks/preview",
-    response_model=schemas.ResearchPlanPreviewResult,
+    "/parse-brief-text",
+    response_model=schemas.ParseBriefResponse,
     status_code=status.HTTP_200_OK,
-    summary="预览研究计划",
+    summary="解析 Brief 文本（合流点：摄入 + 诊断 + 方案）",
 )
-async def preview_task(
-    body: schemas.ResearchPlanPreviewRequest,
+async def parse_brief_text(
+    body: schemas.ParseBriefTextRequest,
     _: User = Depends(require_research_agent_write),
 ):
-    """调用 planner LLM 生成研究计划预览，不创建任务。
-    用于创建页的两步流程：用户确认 title + research_questions 后再正式提交。
-    """
-    plan = await service.preview_research_plan(
-        analysis_goal=body.analysis_goal,
-        brief=body.brief,
-        research_questions=body.research_questions,
-        profile_name=body.profile_name,
-    )
-    return plan
+    """粘贴的 brief 文本，一次返回标题/分析目标/研究问题/适配度诊断/搜索方案。"""
+    return await service.parse_brief_from_text(body.text, body.profile_name)
 
 
 @router.post(

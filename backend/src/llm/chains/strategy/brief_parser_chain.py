@@ -35,7 +35,7 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
 
 ### 基础字段
 
-- **strategy_name**: 策略名称建议（简洁，反映研究主体+核心分析场景）
+- **strategy_name**: 策略名称建议（简洁，反映研究主体 + 核心研究场景），措辞需能在 brief 原文中找到对应表达
 
 - **subject**: 研究主体（数据采集和分析的核心聚焦对象）
   - **核心问题**：如果要搜索数据，最主要的研究对象是谁？
@@ -50,9 +50,9 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
   - 若同时涉及集团和子品牌，取更具体的子品牌名
   - 若 brief 明确提到产品线/型号/品类细化，subject 必须包含产品锚（如"索尼 WH-1000XM5"而非光"索尼"、"Nike Air Jordan"而非光"Nike"）——否则下游研究主题锚定会丢失精度
 
-- **analysis_goal**: 整体研究目标（200字以内，综合所有渠道的视角）
-  - 从文档的研究意图出发，描述"通过数据分析需要了解/验证什么"
-  - 应包含：场景背景 + 需要洞察的核心问题 + 分析结果如何支持决策
+- **analysis_goal**: 整体研究目标（200字以内）
+  - 必须忠实反映 brief 原文表达的研究意图，**引入的关键概念必须能在原文中找到对应表达**
+  - 是否适合策略 pipeline 由下游 `platform_verdict` 字段独立判断，本字段不参与这层决策
 
 - **constraints**: 补充说明（200字以内）
   - 优先提取：具体产品/品类名称、主要竞品、目标受众、时间节点/范围、已有资料来源
@@ -110,9 +110,9 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
      - 仅推荐 social_media → `"diagnostic_social"`
      - 仅推荐 news_media → `"diagnostic_news"`
      - 同时推荐 social_media 和 news_media → `"diagnostic_dual"`
-  2. **知识性/探索性 brief**（次优先）：研究目标是"了解某个领域的现状/机制/流程"而非"为品牌找到消费者沟通策略"或"为品牌找到竞争定位"。即使新闻媒体或社媒上有相关数据可采，这类问题的答案形式也不适合用任何策略框架的产出结构来承载。按知识性质进一步细分 `insufficient_reason`：
+  2. **参考素材型 brief**（次优先）：brief 寻求的是已有知识或案例素材——可以是"了解某个领域的现状/机制/流程"，也可以是"借鉴某类做法的执行思路用于自己做方案"。本质都是把外部已存在的内容收回来供用户使用，而非由系统产出战略性结论或诊断快照。即使新闻媒体或社媒上有相关数据可采，这类问题的答案形式也不适合用任何策略框架的产出结构来承载。按素材性质进一步细分 `insufficient_reason`：
      - `"knowledge_industry"`：brief 想了解**品类结构 / 市场规模 / 政策趋势 / 技术原理 / 产业链 / 竞争格局结构性分析**等报告/学术型知识 → 对应研究分析功能的 industry profile
-     - `"knowledge_creative"`：brief 想了解**品类或竞品的 Campaign 套路 / 创意案例 / 获奖作品 / 品牌叙事风格 / 传播创意历史**等素材/灵感型知识 → 对应研究分析功能的 creative profile
+     - `"knowledge_creative"`：brief 关心**品类或竞品的 Campaign 套路 / 创意案例 / 获奖作品 / 品牌叙事风格 / 活动执行参考**——不论目的是研究历史脉络还是借鉴执行思路用于自己做方案 → 对应研究分析功能的 creative profile
      - 含糊不清或两者都沾边时默认用 `knowledge_industry`（更通用）
   3. **无可用渠道**（兜底，仅当 brief 既非诊断型也非知识型时触发）（`insufficient_reason: "no_channel"`）：channel_plan 未推荐 social_media 也未推荐 news_media（仅有 industry_research 无法生成完整策略报告）。此条兜底少数"战略性 brief 但渠道结构不支持"的边角 case（如 B2B 工业品类的消费者诉求但 social UGC 密度不足、无媒体事件可追踪）
 - **partial**：框架能部分承载，但 brief 涉及框架覆盖不到的维度（如企业内部数据、金融终端数据、线下调研等），需用户知晓局限后决定是否推进
@@ -123,7 +123,7 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
 **与 channel_plan 的边界**：诊断型（上表 1）和知识型（上表 2）brief 由 insufficient 路径路由到 monitor+slice 或 research_agent 入口，不走 strategies pipeline；因此 channel_plan 的推荐规则只需判断**战略类 brief** 的渠道适合度，无需为诊断型/知识型 brief 做特殊处理。
 
 `platform_note`：1-2 句话说明判断依据。
-- 当 `platform_verdict == "insufficient"` 时，必须根据 `insufficient_reason` 给出对应替代功能建议：
+- 当 `platform_verdict == "insufficient"` 时，必须**逐字照抄**下列对应 `insufficient_reason` 的固定句式（不得改写、不得替换产品名、不得增删字符）：
   - `no_channel` → 提示"该需求建议直接使用「研究分析」功能获取研究报告，无需走完整策略流程"
   - `knowledge_industry` → 提示"该需求建议直接使用「研究分析」功能的行业研究类型获取品类/市场/政策/技术的结构性研究报告，无需走完整策略流程"
   - `knowledge_creative` → 提示"该需求建议直接使用「研究分析」功能的创意研究类型获取品类 Campaign 案例与创意参考，无需走完整策略流程"

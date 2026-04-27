@@ -104,7 +104,7 @@
 
 **评估维度标注（跨链契约）**：当 brief 包含"用户用于评价/对比品牌的多个角度"（分析框架，非采集对象）时，brief_parser 在所属渠道的 `solvable` 与 `channel_brief` 末尾以 `(评估维度：A、B、C)` 形式显式标注。下游 `research_design_chain` 据此区分"分析框架 vs 采集主题"——A/B/C 不会被单独作为 keyword 主题，归宿是 RQ 表述 + 切片分析阶段（从 UGC 提取各维度内容）。
 
-**`platform_verdict` 分诊**：除渠道分发外，brief_parser 同时输出 `platform_verdict`（`sufficient` / `partial` / `insufficient`）判断 brief 的研究目标是否适合被 strategies pipeline 的产出框架承载。当判定 `insufficient` 时，新增 `insufficient_reason` 字段按**判断优先级**细分分诊方向（诊断型 → 知识型 → 无渠道兜底，共 6 种取值：`diagnostic_social` / `diagnostic_news` / `diagnostic_dual` / `knowledge_industry` / `knowledge_creative` / `no_channel`），前端按 reason 引导用户跳转至对应的替代功能入口（研究分析的 industry/creative profile / 社媒监测 + 切片分析 / 新闻监测 + 切片分析）——对应系统的**三层产出架构**。详见 [ADR-002](adr/002-output-tier-routing.md)。
+**`platform_verdict` 分诊**：除渠道分发外，brief_parser 同时输出 `platform_verdict`（`sufficient` / `partial` / `insufficient`）判断 brief 的研究目标是否适合被 strategies pipeline 的产出框架承载。当判定 `insufficient` 时，新增 `insufficient_reason` 字段按**判断优先级**细分分诊方向（诊断型 → 参考素材型 → 无渠道兜底，共 6 种取值：`diagnostic_social` / `diagnostic_news` / `diagnostic_dual` / `knowledge_industry` / `knowledge_creative` / `no_channel`），前端按 reason 引导用户跳转至对应的替代功能入口（研究分析的 industry/creative profile / 社媒监测 + 切片分析 / 新闻监测 + 切片分析）——对应系统的**三层产出架构**。详见 [ADR-002](adr/002-output-tier-routing.md)。
 
 **实现**：`brief_parser_chain.py`
 

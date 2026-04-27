@@ -143,14 +143,14 @@ def _analyze_single_post(
             if post_analysis:
                 post_analysis.post_deep_result = extraction_dict
                 post_analysis.analyzed_at = datetime.now(timezone.utc)
-                post_analysis.analysis_model = "deepseek-chat"
+                post_analysis.analysis_model = settings.DEEPSEEK_CHAT_MODEL
             else:
                 post_analysis = PostAnalysis(
                     task_id=task_id,
                     post_id=post_id,
                     post_deep_result=extraction_dict,
                     analyzed_at=datetime.now(timezone.utc),
-                    analysis_model="deepseek-chat",
+                    analysis_model=settings.DEEPSEEK_CHAT_MODEL,
                 )
                 db.add(post_analysis)
 
@@ -561,14 +561,14 @@ def _analyze_single_post_comments(
             if post_analysis:
                 post_analysis.comment_deep_result = extraction_dict
                 post_analysis.analyzed_at = datetime.now(timezone.utc)
-                post_analysis.analysis_model = "deepseek-chat"
+                post_analysis.analysis_model = settings.DEEPSEEK_CHAT_MODEL
             else:
                 post_analysis = PostAnalysis(
                     task_id=task_id,
                     post_id=post_id,
                     comment_deep_result=extraction_dict,
                     analyzed_at=datetime.now(timezone.utc),
-                    analysis_model="deepseek-chat",
+                    analysis_model=settings.DEEPSEEK_CHAT_MODEL,
                 )
                 db.add(post_analysis)
 

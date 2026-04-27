@@ -10,26 +10,13 @@
         <p class="text-sm text-white/60">
           中文社媒数据 · 多层 LLM 分析 · 结论可追溯
         </p>
-      </div>
-    </UCard>
-
-    <!-- 登录引导（仅未登录显示） -->
-    <UCard v-if="!loggedIn">
-      <div class="text-center space-y-6">
-        <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full">
-          <UIcon name="i-heroicons-user" class="w-8 h-8 text-blue-600 dark:text-blue-400" />
-        </div>
-        <div>
-          <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">开始使用</h2>
-          <p class="text-gray-600 dark:text-gray-400">登录账户以访问完整功能</p>
-        </div>
-        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <div v-if="!loggedIn" class="pt-2">
           <NuxtLink
             to="/login"
-            class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white text-slate-900 hover:bg-white/90 font-medium rounded-lg transition-colors text-sm"
           >
-            <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-5 h-5" />
-            立即登录
+            <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-4 h-4" />
+            登录开始使用
           </NuxtLink>
         </div>
       </div>

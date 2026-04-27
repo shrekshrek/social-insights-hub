@@ -248,7 +248,7 @@
       <UContainer>
         <div class="py-6 text-center">
           <p class="text-sm text-gray-600 dark:text-gray-400">
-            © 2024 {{ appName }}. 保留所有权利。
+            © 2026 {{ appName }}. 保留所有权利。
           </p>
         </div>
       </UContainer>

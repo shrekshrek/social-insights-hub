@@ -2,7 +2,7 @@
   <div class="space-y-8">
     <!-- Hero -->
     <UCard class="bg-gradient-to-br from-slate-900 via-blue-900 to-cyan-800 border-0">
-      <div class="text-center text-white py-6 space-y-4">
+      <div class="text-center text-white py-2 space-y-4">
         <h1 v-if="appName" class="text-4xl font-bold tracking-wide">{{ appName }}</h1>
         <p class="text-xl text-white/85 font-light max-w-3xl mx-auto leading-relaxed">
           替广告策略团队把 brief 跑成可交付的策略初稿

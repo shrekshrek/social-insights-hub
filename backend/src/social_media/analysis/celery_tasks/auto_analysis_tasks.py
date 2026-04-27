@@ -344,15 +344,17 @@ def _run_aggregation(
             or 0
         )
 
-        if analyzed_count == 0:
-            logger.info("Task %s: No analyzed posts for aggregation", task_id)
-            return None
-
         # 轻量路径：不创建 entity/opinion AnalysisJob，不派发额外 celery，不调 LLM
         # 走独立的 build_probe_aggregation（probe_lite.py），只产出 probe review chain
         # 需要的 4 个字段（posts_count/deep_analyzed/entity_match/top_topics/promotion_ratio）。
         # 结果 shape 是完整 aggregation 的严格子集，字段路径一致。
         # collect 阶段跑完整 aggregation 时会覆写这个轻量结果。
+        #
+        # 即使 analyzed_count == 0 仍走 probe_lite：probe_lite 对空 analyses 健壮（产出
+        # screened=0/deep_analyzed=0 的骨架），让 task.analysis_result 非 NULL 进入终态。
+        # 否则当 screening 全部失败（如 LLM 偶发返回非 JSON）时 task 永久卡 probe_ready，
+        # 整个策略卡 probing 死锁。空骨架交给 probe review chain 自行判（deep_analyzed<8
+        # → 样本不足 pass 待全量验证）
         if skip_llm_normalization:
             from datetime import datetime, timezone
             from .aggregation.probe_lite import build_probe_aggregation
@@ -362,15 +364,26 @@ def _run_aggregation(
             task.analysis_result_at = datetime.now(timezone.utc)
             db.commit()
 
-            logger.info(
-                "Task %s: Lightweight probe aggregation completed (%s entities, %s topics)",
-                task_id,
-                len(aggregation_result["insights"]["target_entities"])
-                + len(aggregation_result["insights"]["competitor_entities"]),
-                len(aggregation_result["insights"]["top_topics"]),
-            )
+            if analyzed_count == 0:
+                logger.warning(
+                    "Task %s: Probe aggregation written with 0 valid analyses "
+                    "(screening produced no PostAnalysis rows; likely LLM call failure)",
+                    task_id,
+                )
+            else:
+                logger.info(
+                    "Task %s: Lightweight probe aggregation completed (%s entities, %s topics)",
+                    task_id,
+                    len(aggregation_result["insights"]["target_entities"])
+                    + len(aggregation_result["insights"]["competitor_entities"]),
+                    len(aggregation_result["insights"]["top_topics"]),
+                )
             # 返回 None：probe 阶段没有 AnalysisJob 可供外层 _wait_for_analysis_job 等待；
             # 聚合已同步完成，outer run_auto_analysis 看到 None 会标 completed_inline 直接返回
+            return None
+
+        if analyzed_count == 0:
+            logger.info("Task %s: No analyzed posts for aggregation", task_id)
             return None
 
         # 创建实体归一化任务（和手动聚合一致）

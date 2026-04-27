@@ -2004,7 +2004,7 @@ _slice_creation_in_progress: set[int] = set()
 _coverage_check_in_progress: set[int] = set()
 
 
-async def _build_probe_task_summaries(
+async def _build_social_probe_summaries(
     db: AsyncSession,
     task_ids: list[int],
 ) -> tuple[list[SocialProbeTaskStatus], list[dict]]:
@@ -2096,6 +2096,46 @@ async def _build_probe_task_summaries(
     return statuses, analyzed_summaries
 
 
+async def _build_news_probe_summaries(
+    db: AsyncSession,
+    news_probe_tasks: list,
+) -> list[dict]:
+    """为已完成的新闻 probe 任务构造 LLM 审查所需的卡片摘要
+
+    Returns:
+        list[dict]，每条含 task_id / keyword / articles_total / source_tier_distribution
+        / articles / channel。失败任务（status != completed 或无 analysis_result）跳过——
+        审查链入参为空文章卡片无意义；失败任务由 _run_probe_review_bg_task 内部规则层补建议。
+    """
+    from src.news_media.tasks import crud as news_crud
+
+    summaries: list[dict] = []
+    for npt in news_probe_tasks:
+        if not (npt.status == "completed" and npt.analysis_result):
+            continue
+        meta = (npt.analysis_result or {}).get("meta", {}) or {}
+        articles, _ = await news_crud.get_articles_by_task(
+            db, task_id=npt.id, skip=0, limit=40
+        )
+        summaries.append({
+            "task_id": npt.id,
+            "keyword": npt.keywords or "",
+            "articles_total": meta.get("articles_total", 0),
+            "source_tier_distribution": meta.get("source_tier_distribution") or {},
+            "articles": [
+                {
+                    "title": a.title,
+                    "source_name": a.source_name,
+                    "source_tier": a.source_tier,
+                    "snippet": a.snippet,
+                }
+                for a in articles
+            ],
+            "channel": "news_media",
+        })
+    return summaries
+
+
 def _build_channel_summary(assessments: list[dict]) -> dict[str, dict]:
     """按渠道聚合 probe verdict，生成渠道级摘要。
 
@@ -2177,7 +2217,7 @@ def _override_suggestions_for_all_fail_channels(
     return result
 
 
-def _auto_verdict_probe_task(summary: dict) -> tuple[str, str] | None:
+def _auto_verdict_social_probe_task(summary: dict) -> tuple[str, str] | None:
     """客观规则层：根据量化指标直接判定，返回 (verdict, note) 或 None（交 LLM 判断）
 
     Hard FAIL：内容极少 / 广告占比极高
@@ -2245,7 +2285,7 @@ async def _run_probe_review_bg_task(
     """后台任务：运行探测审查，结果写入 DB（不阻塞 HTTP 响应）
 
     全量评估所有任务（不区分新旧轮次）：
-    1. 客观规则层（_auto_verdict_probe_task）处理明确案例
+    1. 客观规则层（_auto_verdict_social_probe_task）处理明确案例
     2. LLM 层处理模糊案例（话题相关性判断）
     temperature=0 保证相同数据重评结果不变。
     """
@@ -2261,7 +2301,7 @@ async def _run_probe_review_bg_task(
             ambiguous_summaries: list[dict] = []
 
             for summary in analyzed_summaries:
-                result = _auto_verdict_probe_task(summary)
+                result = _auto_verdict_social_probe_task(summary)
                 if result is not None:
                     verdict, note = result
                     auto_assessments.append({
@@ -2408,7 +2448,9 @@ async def _run_probe_review_bg_task(
                     })
 
             # 失败的新闻探测任务未进 LLM 审查（无文章数据可评估），补规则建议
-            reviewed_news_ids = {nps["task_id"] for nps in news_probe_summaries}
+            # `news_probe_summaries or []`：scheduler 路径在历史 bug 修复前可能传 None；
+            # 现 scheduler 也构造摘要，理论不再为 None，但保留防御避免新调用方再踩坑
+            reviewed_news_ids = {nps["task_id"] for nps in (news_probe_summaries or [])}
             for npt in news_probe_tasks:
                 if npt.status == "failed" and npt.id not in reviewed_news_ids:
                     note = npt.error_message or "新闻探测任务失败，未能采集到搜索结果"
@@ -2746,7 +2788,7 @@ async def check_probe_status(
         )
 
     task_ids = [t.id for t in probe_tasks]
-    task_statuses, analyzed_summaries = await _build_probe_task_summaries(db, task_ids)
+    task_statuses, analyzed_summaries = await _build_social_probe_summaries(db, task_ids)
 
     # 新闻任务状态（进入终态即视为已处理，failed 不阻塞审查触发）
     _NEWS_PROBE_TERMINAL = {"completed", "failed"}
@@ -2773,32 +2815,7 @@ async def check_probe_status(
 
     # 新闻 probe 送 LLM 审查：加载每个任务的文章卡片（title/source/tier/snippet）
     # 由 strategy_news_probe_review_chain 基于搜索结果判断关键词相关性与信号质量
-    from src.news_media.tasks import crud as news_crud
-
-    news_probe_summaries: list[dict] = []
-    for npt in news_probe_tasks:
-        if not (npt.status == "completed" and npt.analysis_result):
-            continue
-        meta = (npt.analysis_result or {}).get("meta", {}) or {}
-        articles, _ = await news_crud.get_articles_by_task(
-            db, task_id=npt.id, skip=0, limit=40
-        )
-        news_probe_summaries.append({
-            "task_id": npt.id,
-            "keyword": npt.keywords or "",
-            "articles_total": meta.get("articles_total", 0),
-            "source_tier_distribution": meta.get("source_tier_distribution") or {},
-            "articles": [
-                {
-                    "title": a.title,
-                    "source_name": a.source_name,
-                    "source_tier": a.source_tier,
-                    "snippet": a.snippet,
-                }
-                for a in articles
-            ],
-            "channel": "news_media",
-        })
+    news_probe_summaries = await _build_news_probe_summaries(db, news_probe_tasks)
 
     # 兼容纯新闻策略（无社媒任务时 task_statuses 为空）
     social_all_analyzed = not task_statuses or all(t.has_analysis for t in task_statuses)

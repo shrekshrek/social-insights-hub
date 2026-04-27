@@ -1,11 +1,14 @@
 <template>
   <div class="space-y-8">
-    <!-- 欢迎横幅 -->
+    <!-- Hero -->
     <UCard class="bg-gradient-to-br from-slate-900 via-blue-900 to-cyan-800 border-0">
-      <div class="text-center text-white py-4">
-        <h1 v-if="appName" class="text-4xl font-bold tracking-wide mb-4">{{ appName }}</h1>
-        <p class="text-xl text-white/70 font-light">
-          AI 驱动的品牌策略与创意研究平台
+      <div class="text-center text-white py-6 space-y-4">
+        <h1 v-if="appName" class="text-4xl font-bold tracking-wide">{{ appName }}</h1>
+        <p class="text-xl text-white/85 font-light max-w-3xl mx-auto leading-relaxed">
+          替广告策略团队把 brief 跑成可交付的策略初稿
+        </p>
+        <p class="text-sm text-white/60">
+          中文社媒数据 · 多层 LLM 分析 · 结论可追溯
         </p>
       </div>
     </UCard>
@@ -32,172 +35,148 @@
       </div>
     </UCard>
 
-    <!-- 核心功能 -->
-    <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
-              <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">策略研究</h3>
-          </div>
-        </template>
-        <p class="text-gray-600 dark:text-gray-400">汇聚多渠道数据，LLM 辅助生成品牌策略与市场报告</p>
-      </UCard>
-
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-              <UIcon name="i-heroicons-signal" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">社媒监测</h3>
-          </div>
-        </template>
-        <p class="text-gray-600 dark:text-gray-400">聚合小红书、抖音、微博等 7 大平台，追踪品牌声量与舆情动态</p>
-      </UCard>
-
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
-              <UIcon name="i-heroicons-newspaper" class="w-5 h-5 text-orange-600 dark:text-orange-400" />
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">新闻监测</h3>
-          </div>
-        </template>
-        <p class="text-gray-600 dark:text-gray-400">整合多渠道新闻（包括公众号），自动切片分析，生成新闻舆情报告</p>
-      </UCard>
-
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-violet-100 dark:bg-violet-900 rounded-lg flex items-center justify-center">
-              <UIcon name="i-heroicons-magnifying-glass" class="w-5 h-5 text-violet-600 dark:text-violet-400" />
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">行业研究</h3>
-          </div>
-        </template>
-        <p class="text-gray-600 dark:text-gray-400">Agentic 搜索权威报告与数据，深度阅读后生成结构化行业洞察</p>
-      </UCard>
-
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-pink-100 dark:bg-pink-900 rounded-lg flex items-center justify-center">
-              <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-pink-600 dark:text-pink-400" />
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">创意研究</h3>
-          </div>
-        </template>
-        <p class="text-gray-600 dark:text-gray-400">检索 campaign 案例与创意评论，提炼视觉/文案钩子与传播机制</p>
-      </UCard>
-    </div>
-
-    <!-- 平台能力亮点 -->
+    <!-- 典型场景 -->
     <UCard>
       <template #header>
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 bg-emerald-100 dark:bg-emerald-900 rounded-lg flex items-center justify-center">
-            <UIcon name="i-heroicons-star" class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+            <UIcon name="i-heroicons-briefcase" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">平台能力亮点</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400">面向广告策略研究场景的工程化 AI 系统</p>
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">典型场景</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">按你日常的活儿，看 {{ appName }} 怎么接</p>
           </div>
         </div>
       </template>
-      <div class="grid sm:grid-cols-2 gap-4">
+      <div class="grid md:grid-cols-2 gap-4">
         <div class="flex gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-          <div class="flex-shrink-0 w-10 h-10 bg-emerald-100 dark:bg-emerald-900 rounded-lg flex items-center justify-center">
-            <UIcon name="i-heroicons-rectangle-stack" class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <div class="flex-shrink-0 w-10 h-10 bg-violet-100 dark:bg-violet-900 rounded-lg flex items-center justify-center">
+            <UIcon name="i-heroicons-document-text" class="w-5 h-5 text-violet-600 dark:text-violet-400" />
           </div>
           <div>
-            <h3 class="font-semibold text-gray-900 dark:text-white mb-1">三源交叉验证</h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">消费者声音（社媒）+ 媒体事实（新闻）+ 行业报告（Research Agent）多源交叉，降低单一视角偏差</p>
+            <h3 class="font-semibold text-gray-900 dark:text-white mb-1">客户给了一个新 brief</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">从 brief 解析、多渠道采集到 strategic brief 初稿全流程跑通，evidence 可追溯</p>
           </div>
         </div>
         <div class="flex gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-          <div class="flex-shrink-0 w-10 h-10 bg-indigo-100 dark:bg-indigo-900 rounded-lg flex items-center justify-center">
-            <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <div class="flex-shrink-0 w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+            <UIcon name="i-heroicons-signal" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
-            <h3 class="font-semibold text-gray-900 dark:text-white mb-1">从 Brief 到 Big Idea</h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">AI 贯穿策略研究全流程，多层分析链路沉淀可追溯的结构化产出，不是零散工具拼接</p>
+            <h3 class="font-semibold text-gray-900 dark:text-white mb-1">客户问"我们品牌在小红书上声量怎么样"</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">7 大社媒平台监测 + 切片分析，产出实体/观点/竞品/KOL 结构化结论</p>
           </div>
         </div>
         <div class="flex gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-          <div class="flex-shrink-0 w-10 h-10 bg-amber-100 dark:bg-amber-900 rounded-lg flex items-center justify-center">
-            <UIcon name="i-heroicons-shield-check" class="w-5 h-5 text-amber-600 dark:text-amber-400" />
+          <div class="flex-shrink-0 w-10 h-10 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
+            <UIcon name="i-heroicons-newspaper" class="w-5 h-5 text-orange-600 dark:text-orange-400" />
           </div>
           <div>
-            <h3 class="font-semibold text-gray-900 dark:text-white mb-1">采集前可校准</h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">Probe/Collect 两段式采集，搜索方向先审核再全量执行，避免黑盒一把过</p>
+            <h3 class="font-semibold text-gray-900 dark:text-white mb-1">想搞清品类格局和竞品最近在做什么</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">跨社媒+新闻策略研究，自动产出 landscape / agenda map / brand role / big idea</p>
           </div>
         </div>
         <div class="flex gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-          <div class="flex-shrink-0 w-10 h-10 bg-teal-100 dark:bg-teal-900 rounded-lg flex items-center justify-center">
-            <UIcon name="i-heroicons-banknotes" class="w-5 h-5 text-teal-600 dark:text-teal-400" />
+          <div class="flex-shrink-0 w-10 h-10 bg-pink-100 dark:bg-pink-900 rounded-lg flex items-center justify-center">
+            <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-pink-600 dark:text-pink-400" />
           </div>
           <div>
-            <h3 class="font-semibold text-gray-900 dark:text-white mb-1">成本透明可控</h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">每次 LLM 调用 token 账单入库，Prompt Cache 命中率 93%+，项目成本可预测</p>
+            <h3 class="font-semibold text-gray-900 dark:text-white mb-1">临时要一份行业报告或创意参考</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">Research Agent 自主搜索权威报告/案例，深度阅读后产出结构化洞察</p>
           </div>
         </div>
       </div>
     </UCard>
 
-    <!-- 在 AI 工具生态中的位置 -->
+    <!-- 为什么选 SIH -->
     <UCard>
       <template #header>
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">
-            <UIcon name="i-heroicons-squares-plus" class="w-5 h-5 text-slate-600 dark:text-slate-400" />
+          <div class="w-10 h-10 bg-emerald-100 dark:bg-emerald-900 rounded-lg flex items-center justify-center">
+            <UIcon name="i-heroicons-scale" class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">在 AI 工具生态中的位置</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400">不同工具面向不同场景 · {{ appName }} 聚焦广告策略研究的生产系统</p>
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">为什么选 {{ appName }}</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">和你现在可能在用的工具对比，看清差异点</p>
           </div>
         </div>
       </template>
-      <div class="grid md:grid-cols-3 gap-4">
-        <div class="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-          <div class="flex items-center gap-2 mb-2">
-            <div class="w-10 h-10 bg-sky-100 dark:bg-sky-900 rounded-lg flex items-center justify-center">
-              <UIcon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5 text-sky-600 dark:text-sky-400" />
-            </div>
-            <h3 class="font-semibold text-gray-900 dark:text-white">通用 AI 对话</h3>
-          </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">ChatGPT / Claude 等：擅长单次创意发散与推理</p>
-          <p class="text-sm text-gray-700 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-gray-700">
-            <span class="font-medium text-gray-900 dark:text-white">{{ appName }}</span> 把这类推理能力嵌入多层分析链路，服务多项目并行的策略生产
-          </p>
-        </div>
-        <div class="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-          <div class="flex items-center gap-2 mb-2">
-            <div class="w-10 h-10 bg-violet-100 dark:bg-violet-900 rounded-lg flex items-center justify-center">
-              <UIcon name="i-heroicons-document-magnifying-glass" class="w-5 h-5 text-violet-600 dark:text-violet-400" />
-            </div>
-            <h3 class="font-semibold text-gray-900 dark:text-white">AI Deep Research</h3>
-          </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">OpenAI / Perplexity 等：擅长一次性自主研究</p>
-          <p class="text-sm text-gray-700 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-gray-700">
-            <span class="font-medium text-gray-900 dark:text-white">{{ appName }}</span> 把类似能力沉淀为可重现、可中途校准、结论可追溯的工程化研究流程
-          </p>
-        </div>
-        <div class="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-          <div class="flex items-center gap-2 mb-2">
-            <div class="w-10 h-10 bg-rose-100 dark:bg-rose-900 rounded-lg flex items-center justify-center">
-              <UIcon name="i-heroicons-chart-bar-square" class="w-5 h-5 text-rose-600 dark:text-rose-400" />
-            </div>
-            <h3 class="font-semibold text-gray-900 dark:text-white">专业数据平台</h3>
-          </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Brandwatch / 蝉妈妈等：擅长多平台数据聚合</p>
-          <p class="text-sm text-gray-700 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-gray-700">
-            <span class="font-medium text-gray-900 dark:text-white">{{ appName }}</span> 把数据、多层 LLM 分析与人机协作整合为端到端的策略研究引擎
-          </p>
-        </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[760px]">
+          <thead>
+            <tr class="border-b-2 border-gray-200 dark:border-gray-700">
+              <th class="text-left p-3 font-semibold text-gray-700 dark:text-gray-300 w-[20%]">你可能在用</th>
+              <th class="text-left p-3 font-semibold text-gray-700 dark:text-gray-300 w-[35%]">它的真实强项</th>
+              <th class="text-left p-3 font-semibold text-emerald-700 dark:text-emerald-400 w-[45%]">{{ appName }} 在它做不到的地方</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            <tr>
+              <td class="p-3 align-top">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-chat-bubble-left-right" class="w-4 h-4 text-sky-600 dark:text-sky-400 flex-shrink-0" />
+                  <span class="font-medium text-gray-900 dark:text-white">通用 AI 对话</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1 ml-6">ChatGPT / Claude</p>
+              </td>
+              <td class="p-3 text-gray-600 dark:text-gray-400 align-top">顶尖推理深度，单点创意发散和策略思辨能力极强，是最好的"思考伙伴"</td>
+              <td class="p-3 text-gray-800 dark:text-gray-200 align-top">
+                <span class="font-semibold text-emerald-700 dark:text-emerald-400">几百条 UGC 一次跑完结构化分析</span>
+                <span class="text-gray-600 dark:text-gray-400">——LLM 只做提取、代码做聚合，统计数字真实可信；跨任务实体自动归一沉淀</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="p-3 align-top">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-document-magnifying-glass" class="w-4 h-4 text-violet-600 dark:text-violet-400 flex-shrink-0" />
+                  <span class="font-medium text-gray-900 dark:text-white">AI Deep Research</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1 ml-6">秘塔 / Kimi / Perplexity</p>
+              </td>
+              <td class="p-3 text-gray-600 dark:text-gray-400 align-top">公开网信息综述能力强，行业报告/学术资料整合迅速，研究类查询体验最佳</td>
+              <td class="p-3 text-gray-800 dark:text-gray-200 align-top">
+                <span class="font-semibold text-emerald-700 dark:text-emerald-400">多源数据按策略场景定制</span>
+                <span class="text-gray-600 dark:text-gray-400">——社媒/新闻/行业报告三条链路分别优化，采集前先校准方向再跑全量，产出策略素材而非综述</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="p-3 align-top">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-chart-bar-square" class="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
+                  <span class="font-medium text-gray-900 dark:text-white">专业数据平台</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1 ml-6">Brandwatch / 蝉妈妈</p>
+              </td>
+              <td class="p-3 text-gray-600 dark:text-gray-400 align-top">数据广度与历史回溯无可替代，仪表盘成熟，AI 分析能力深度集成，行业沉淀十年以上</td>
+              <td class="p-3 text-gray-800 dark:text-gray-200 align-top">
+                <span class="font-semibold text-emerald-700 dark:text-emerald-400">按品类深度定制的策略生产链路</span>
+                <span class="text-gray-600 dark:text-gray-400">——从 brief 解析到 big idea 整套按垂类场景调优，结论可追溯到原始素材，贴合策略 deck 形态</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="p-3 align-top">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-cursor-arrow-rays" class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                  <span class="font-medium text-gray-900 dark:text-white">通用 Agent</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1 ml-6">Manus / Operator</p>
+              </td>
+              <td class="p-3 text-gray-600 dark:text-gray-400 align-top">任意任务通用执行，零部署即用，新需求即时响应，演进速度快</td>
+              <td class="p-3 text-gray-800 dark:text-gray-200 align-top">
+                <span class="font-semibold text-emerald-700 dark:text-emerald-400">项目化资产沉淀 + 生产级稳定</span>
+                <span class="text-gray-600 dark:text-gray-400">——一个项目重复跑会越来越准（不是每次重做），后台并发采集，分析链路稳定可复现</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-5 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
+        <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+          它们各有所长——但<span class="font-semibold text-gray-900 dark:text-white">没有一个</span>同时把<span class="font-semibold text-emerald-700 dark:text-emerald-400">中文闭源 UGC 数据</span>、<span class="font-semibold text-emerald-700 dark:text-emerald-400">多层稳定的 LLM 分析链</span>、<span class="font-semibold text-emerald-700 dark:text-emerald-400">可交付的策略产出</span>串成一条生产线。
+        </p>
+        <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+          这是 {{ appName }} 唯一在做的事——窄而深的位置，专为广告策略团队的日常生产而设计。
+        </p>
       </div>
     </UCard>
   </div>
@@ -212,7 +191,7 @@ const appName = computed(() => (config.public.appName as string) || '')
 useHead({
   title: appName.value || undefined,
   meta: [
-    { name: 'description', content: 'AI 驱动的品牌策略与创意研究平台：多渠道数据聚合、行业报告搜索、创意案例检索，辅助品牌策略决策与创意策划。' }
+    { name: 'description', content: '替广告策略团队把 brief 跑成可交付的策略初稿——中文社媒数据、多层 LLM 分析、结论可追溯。' }
   ]
 })
 </script>

@@ -31,27 +31,29 @@
 |---|---|---|---|---|
 | **strategies pipeline** | 战略产出（Brand Role / Big Idea / Strategic Brief / 品牌定位） | `/strategies/*`（brief_parser → research_design → 4 阶段流水线） | 4 渠道全上（social + news + industry + creative） | 端到端策略报告（campaign_strategy / market_report / full_strategy） |
 | **monitor + slice** | **诊断产出**（情感快照 / 舆情监测 / 竞品对标 / Campaign 复盘 / KOL 声量监测） | `/social-media/monitors/*` + `/news-media/monitors/*`（独立入口，不经 brief_parser） | 单渠道（social 或 news） | 结构化诊断切片（foundation / layers / reports） |
-| **research_agent** | 知识性研究（领域综述 / 机制 / 流程 / 行业报告） | `/research-agent/*` | 开放 Web（Tavily 定向搜索 + Crawl4AI/httpx 全文抓取） | 研究综述 + findings_by_question |
+| **research_agent** | 参考素材型研究（领域综述 / 机制 / 流程 / 行业报告 / 借鉴 Campaign 案例与执行思路） | `/research-agent/*` | 开放 Web（Tavily 定向搜索 + Crawl4AI/httpx 全文抓取） | 研究综述 + findings_by_question |
 
 三层职责严格区分：
 - 只有**策略产出**（需要 Brand Role / Big Idea / Strategic Brief）走 strategies pipeline
 - 只要是**诊断产出**（不要求战略建议），归 monitor + slice
-- 只有**知识性研究**（了解现状/机制/流程），归 research_agent
+- **参考素材型研究**（了解某领域 / 借鉴某类执行思路），归 research_agent
 
 ### insufficient 分诊机制
 
-`platform_verdict = insufficient` 的成因从 2 种扩展为 **3 种**，并新增 `insufficient_reason` 输出字段精确标记分诊方向。知识性/探索性与诊断型都按下游承接功能的子类型进一步细分，使前端能精准路由至对应入口。下表按**判断优先级从高到低**排列，LLM 命中第一个即判定，不再检查后续成因：
+`platform_verdict = insufficient` 的成因从 2 种扩展为 **3 种**，并新增 `insufficient_reason` 输出字段精确标记分诊方向。参考素材型与诊断型都按下游承接功能的子类型进一步细分，使前端能精准路由至对应入口。下表按**判断优先级从高到低**排列，LLM 命中第一个即判定，不再检查后续成因：
 
 | 优先级 | 成因 | `insufficient_reason` | 触发条件 | 前端跳转 |
 |--------|------|----------------------|---------|---------|
 | ① 最优先 | **诊断型 brief（新增）** | `diagnostic_social` / `diagnostic_news` / `diagnostic_dual` | brief 只需诊断快照，不要求战略产出。按 channel_plan 推荐的渠道分三个子类 | 对应跳转社媒监测 / 新闻监测 / 两者并列 |
-| ② 次优先 | 知识性/探索性 brief · 行业知识型 | `knowledge_industry` | brief 想了解品类结构 / 市场规模 / 政策趋势 / 技术原理 / 产业链 / 竞争格局结构性分析 | 前往专题研究 · 行业研究（`?profile=industry`） |
-| ② 次优先 | 知识性/探索性 brief · 创意知识型 | `knowledge_creative` | brief 想了解品类 / 竞品的 Campaign 套路 / 创意案例 / 获奖作品 / 品牌叙事风格 / 传播创意历史 | 前往专题研究 · 创意研究（`?profile=creative`） |
-| ③ 兜底 | 无可用渠道 | `no_channel` | channel_plan 未推荐 social_media 也未推荐 news_media（仅有 industry_research）。仅当 brief 既非诊断型也非知识型时触发——覆盖"战略性 brief 但渠道结构不支持"的罕见边角 case（如 B2B 工业品类的消费者诉求，但 social UGC 密度不足、无媒体事件可追踪） | 前往专题研究（默认 profile） |
+| ② 次优先 | 参考素材型 brief · 行业素材 | `knowledge_industry` | brief 关心品类结构 / 市场规模 / 政策趋势 / 技术原理 / 产业链 / 竞争格局结构性分析等结构性背景 | 前往专题研究 · 行业研究（`?profile=industry`） |
+| ② 次优先 | 参考素材型 brief · 创意素材 | `knowledge_creative` | brief 关心品类 / 竞品的 Campaign 套路 / 创意案例 / 获奖作品 / 品牌叙事风格 / 活动执行参考——不论目的是研究历史脉络还是借鉴执行思路用于自己做方案 | 前往专题研究 · 创意研究（`?profile=creative`） |
+| ③ 兜底 | 无可用渠道 | `no_channel` | channel_plan 未推荐 social_media 也未推荐 news_media（仅有 industry_research）。仅当 brief 既非诊断型也非参考素材型时触发——覆盖"战略性 brief 但渠道结构不支持"的罕见边角 case（如 B2B 工业品类的消费者诉求，但 social UGC 密度不足、无媒体事件可追踪） | 前往专题研究（默认 profile） |
 
-**为何要定优先级**：诊断型信号最锐利（时间窗 + 动词 + 产出诉求三条硬信号），必须最先判才不会被知识性或"无渠道"误吸收；知识性次之，其枚举值明确 research_agent 的 profile，比 no_channel 更精准；`no_channel` 纯作结构性兜底，避免战略型 brief 在渠道不支持时无处可去。
+**为何要定优先级**：诊断型信号最锐利（时间窗 + 动词 + 产出诉求三条硬信号），必须最先判才不会被参考素材型或"无渠道"误吸收；参考素材型次之，其枚举值明确 research_agent 的 profile，比 no_channel 更精准；`no_channel` 纯作结构性兜底，避免战略型 brief 在渠道不支持时无处可去。
 
-**为何细分**：research_agent（专题研究）实际有 `industry` 和 `creative` 两个 profile，各自面向不同的数据源和产出形态（industry → 权威报告/政策/量化数据；creative → 数英/广告门/SocialBeta 创意案例库）。若 `knowledge_research` 不细分、一律默认落 `industry` profile，创意知识型 brief 会被错误导向行业报告搜索。与诊断型按 monitor 渠道细分的逻辑对称。
+**为何"参考素材型"统一了解 + 借鉴**：执行向 brief（"找类似案例做参考"）和研究向 brief（"了解某领域历史/现状"）在素材形态上完全重合——都是从已有内容（数英/广告门/SocialBeta 案例库 / 行业报告）中检索/汇编，由系统产出研究综述。用户的最终用途不同（执行借鉴 vs 知识理解），但搜索域、抓取流水线和产出结构相同，因此统一归 `knowledge_creative`，而非按"目的"另立子类。
+
+**为何细分**：research_agent（专题研究）实际有 `industry` 和 `creative` 两个 profile，各自面向不同的数据源和产出形态（industry → 权威报告/政策/量化数据；creative → 数英/广告门/SocialBeta 创意案例库）。若不细分、一律默认落 `industry` profile，创意素材型 brief 会被错误导向行业报告搜索。与诊断型按 monitor 渠道细分的逻辑对称。
 
 **诊断型 brief 的判断信号**（命中任一且无战略产出诉求即成立）：
 - 时间窗为日/周/月级短期观察（而非半年/年度战略规划）

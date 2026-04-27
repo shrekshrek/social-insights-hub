@@ -50,8 +50,8 @@ SYSTEM_TEMPLATE = """你是专题研究入口的 Brief 解析器。用户在专�
 
 判定流程（按优先级，命中即停）：
 
-1. **想要消费者洞察驱动的策略产物** → `verdict=not_suitable` + `redirect_hint=strategy`
-   信号：brief 明确诉求是品牌策略、品牌定位、Insight、Brand Role、Big Idea、战略简报、Landscape 竞争格局策略、传播方向策略等"应该怎么做"产物。
+1. **想要策略框架的战略层产物**（campaign_strategy / market_report / full_strategy 任一）→ `verdict=not_suitable` + `redirect_hint=strategy`
+   信号：brief 明确诉求是品牌策略、品牌定位、Insight、Brand Role、Big Idea、Agenda Map、Landscape 竞争格局、Strategic Brief 战略简报、传播方向策略等"应该怎么做"产物。
 2. **想要短期监测/复盘** → `verdict=not_suitable` + `redirect_hint=monitor_social` 或 `monitor_news`
    信号：核心动词是监测/追踪/复盘/快照/简报，时间窗为日/周/月级，产出诉求是"看到了什么"。主要看消费者声音 → `monitor_social`；主要看媒体报道 → `monitor_news`。
 3. **Brief 信息不足** → `verdict=partial`

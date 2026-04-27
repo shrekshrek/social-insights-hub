@@ -157,7 +157,7 @@ def _analyze_batch_posts(
                         post_analysis.sentiment = item.get("sentiment")
                         post_analysis.cii = cii_value
                         post_analysis.analyzed_at = datetime.now(timezone.utc)
-                        post_analysis.analysis_model = "deepseek-chat"
+                        post_analysis.analysis_model = settings.DEEPSEEK_CHAT_MODEL
                     else:
                         post_analysis = PostAnalysis(
                             task_id=task_id,
@@ -168,7 +168,7 @@ def _analyze_batch_posts(
                             sentiment=item.get("sentiment"),
                             cii=cii_value,
                             analyzed_at=datetime.now(timezone.utc),
-                            analysis_model="deepseek-chat",
+                            analysis_model=settings.DEEPSEEK_CHAT_MODEL,
                         )
                         db.add(post_analysis)
 

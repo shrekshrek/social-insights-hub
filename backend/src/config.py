@@ -63,24 +63,25 @@ class Settings(BaseSettings):
 
     # DeepSeek Pricing Configuration (CNY per million tokens)
     # 官方定价参考: https://api-docs.deepseek.com/zh-cn/quick_start/pricing
-    # 缓存命中价为未命中价的 1/10，Context Caching 默认启用、无需额外配置
+    # 默认值仅作 fallback；权威值在 .env / .env.production 中维护
+    # 当前对齐：Chat = deepseek-v4-flash；Reasoner = deepseek-v4-pro 标准价
     DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION: float = Field(
-        default=2.0, description="Chat model input price (cache miss): CNY/million tokens"
+        default=1.0, description="Chat model input price (cache miss): CNY/million tokens"
     )
     DEEPSEEK_CHAT_INPUT_CACHE_HIT_PRICE_PER_MILLION: float = Field(
-        default=0.2, description="Chat model input price (cache hit): CNY/million tokens"
+        default=0.02, description="Chat model input price (cache hit): CNY/million tokens"
     )
     DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION: float = Field(
-        default=3.0, description="Chat model output price: CNY/million tokens"
+        default=2.0, description="Chat model output price: CNY/million tokens"
     )
     DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION: float = Field(
-        default=2.0, description="Reasoner model input price (cache miss): CNY/million tokens"
+        default=12.0, description="Reasoner model input price (cache miss): CNY/million tokens"
     )
     DEEPSEEK_REASONER_INPUT_CACHE_HIT_PRICE_PER_MILLION: float = Field(
-        default=0.2, description="Reasoner model input price (cache hit): CNY/million tokens"
+        default=0.1, description="Reasoner model input price (cache hit): CNY/million tokens"
     )
     DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION: float = Field(
-        default=3.0, description="Reasoner model output price: CNY/million tokens"
+        default=24.0, description="Reasoner model output price: CNY/million tokens"
     )
 
     # ========== Celery Task Configuration ==========

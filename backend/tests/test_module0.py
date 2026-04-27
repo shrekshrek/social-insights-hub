@@ -82,13 +82,21 @@ class TestConfiguration:
         )
 
     def test_deepseek_config(self):
-        """测试DeepSeek配置"""
-        assert settings.DEEPSEEK_BASE_URL is not None
-        assert settings.DEEPSEEK_CHAT_MODEL == "deepseek-chat"
-        assert settings.DEEPSEEK_REASONER_MODEL == "deepseek-reasoner"
-        assert settings.DEEPSEEK_CHAT_MAX_TOKENS == 8192
-        assert settings.DEEPSEEK_REASONER_MAX_TOKENS == 65536
-        assert settings.DEEPSEEK_TEMPERATURE == 0.0
+        """测试 DeepSeek 配置字段存在且合法
+
+        注: 具体值（模型名 / max tokens / temperature / base url）由环境变量决定,
+        会随官方模型升级或部署偏好调整。此测试仅校验字段存在 + 类型合法 + 关键值非空。
+        """
+        assert settings.DEEPSEEK_BASE_URL
+        assert settings.DEEPSEEK_BASE_URL.startswith("http")
+        assert isinstance(settings.DEEPSEEK_CHAT_MODEL, str) and settings.DEEPSEEK_CHAT_MODEL
+        assert isinstance(settings.DEEPSEEK_REASONER_MODEL, str) and settings.DEEPSEEK_REASONER_MODEL
+        assert isinstance(settings.DEEPSEEK_CHAT_MAX_TOKENS, int)
+        assert settings.DEEPSEEK_CHAT_MAX_TOKENS > 0
+        assert isinstance(settings.DEEPSEEK_REASONER_MAX_TOKENS, int)
+        assert settings.DEEPSEEK_REASONER_MAX_TOKENS > 0
+        assert isinstance(settings.DEEPSEEK_TEMPERATURE, float)
+        assert 0.0 <= settings.DEEPSEEK_TEMPERATURE <= 2.0
         print(
             f"✓ DeepSeek模型配置正确 (chat: {settings.DEEPSEEK_CHAT_MODEL}, reasoner: {settings.DEEPSEEK_REASONER_MODEL})"
         )

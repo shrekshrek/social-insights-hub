@@ -240,8 +240,8 @@ def get_model_info(model_type: str = "chat") -> Dict[str, Any]:
         {
             "model_name": "deepseek-chat",
             "max_tokens": 8192,
-            "input_price_per_million": 2.0,
-            "output_price_per_million": 8.0,
+            "input_price_per_million": 1.0,
+            "output_price_per_million": 2.0,
             "temperature": 0.0,
             "适用场景": "数据筛选、信息提取、文本分类"
         }
@@ -252,10 +252,10 @@ def get_model_info(model_type: str = "chat") -> Dict[str, Any]:
             "model_name": getattr(settings, "DEEPSEEK_CHAT_MODEL", "deepseek-chat"),
             "max_tokens": getattr(settings, "DEEPSEEK_CHAT_MAX_TOKENS", 8192),
             "input_price_per_million": getattr(
-                settings, "DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION", 2.0
+                settings, "DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION", 1.0
             ),
             "output_price_per_million": getattr(
-                settings, "DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION", 3.0
+                settings, "DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION", 2.0
             ),
             "temperature": getattr(settings, "DEEPSEEK_TEMPERATURE", 0.0),
             "use_cases": ["数据筛选", "信息提取", "文本分类", "快速处理"],
@@ -267,10 +267,10 @@ def get_model_info(model_type: str = "chat") -> Dict[str, Any]:
             ),
             "max_tokens": getattr(settings, "DEEPSEEK_REASONER_MAX_TOKENS", 65536),
             "input_price_per_million": getattr(
-                settings, "DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION", 2.0
+                settings, "DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION", 12.0
             ),
             "output_price_per_million": getattr(
-                settings, "DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION", 3.0
+                settings, "DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION", 24.0
             ),
             "temperature": getattr(settings, "DEEPSEEK_TEMPERATURE", 0.0),
             "use_cases": ["主题聚类", "竞品分析", "趋势分析", "复杂推理", "深度分析"],

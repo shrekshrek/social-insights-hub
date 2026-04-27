@@ -31,14 +31,15 @@ async def check_probing_strategies() -> int:
     """
     from src.strategies.models import Strategy
     from src.strategies.service import (
-        _build_probe_task_summaries,
+        _build_news_probe_summaries,
+        _build_social_probe_summaries,
         _probe_review_in_progress,
         _run_probe_review_bg_task,
     )
     from src.social_media.tasks.models import SocialTask
     from src.news_media.tasks.service import get_news_tasks_by_strategy
 
-    to_review: list[tuple[int, list[dict]]] = []
+    to_review: list[tuple[int, list[dict], list[dict]]] = []
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -71,7 +72,7 @@ async def check_probing_strategies() -> int:
                 continue
 
             task_ids = [t.id for t in probe_tasks]
-            task_statuses, analyzed_summaries = await _build_probe_task_summaries(
+            task_statuses, analyzed_summaries = await _build_social_probe_summaries(
                 db, task_ids
             )
 
@@ -87,13 +88,21 @@ async def check_probing_strategies() -> int:
             )
 
             if social_all_analyzed and news_all_analyzed:
-                to_review.append((strategy.id, analyzed_summaries))
+                # 构造新闻摘要（与 get_strategy_probe_status 端点路径一致），
+                # 否则 _run_probe_review_bg_task 拿到 news_probe_summaries=None 会跳过新闻审查
+                # 并在补失败建议环节抛 TypeError（曾导致 strategy 永久卡 probing）
+                news_probe_summaries = await _build_news_probe_summaries(
+                    db, news_probe_tasks
+                )
+                to_review.append((strategy.id, analyzed_summaries, news_probe_summaries))
 
     # 在 session 关闭后调用，_run_probe_review_bg_task 内部自开 session
-    for strategy_id, analyzed_summaries in to_review:
+    for strategy_id, analyzed_summaries, news_probe_summaries in to_review:
         if strategy_id not in _probe_review_in_progress:
             _probe_review_in_progress.add(strategy_id)
-            await _run_probe_review_bg_task(strategy_id, analyzed_summaries)
+            await _run_probe_review_bg_task(
+                strategy_id, analyzed_summaries, news_probe_summaries
+            )
             logger.info("Strategy %d: probe review triggered by scheduler", strategy_id)
 
     return len(to_review)

@@ -87,7 +87,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
    - 新闻：`run_news_probe_task` 双渠道搜索（baidu + sogou），每渠道上限 20 条，URL 去重后落库元数据，不抓全文、不打标
 2. 所有任务准备就绪后后台自动运行 probe 审查
    - 社媒：规则分流 + `strategy_social_probe_review_chain`（LLM 判定模糊案例）
-     - 规则层（`_auto_verdict_probe_task`）：`posts<5` / `promotion_ratio>85%` 直接 fail 并建议移除（`suggested_keyword=null`）；`deep_analyzed<8` 样本不足直接 pass 待全量验证；其余送 LLM
+     - 规则层（`_auto_verdict_social_probe_task`）：`posts<5` / `promotion_ratio>85%` 直接 fail 并建议移除（`suggested_keyword=null`）；`deep_analyzed<8` 样本不足直接 pass 待全量验证；其余送 LLM
      - LLM 层：单任务并行评估，输入含 `top_topics[:20]`（每个话题带 `mentions + post_source_count`，帮 LLM 识别单帖垄断）
    - 新闻：`strategy_news_probe_review_chain` 对每个任务并行 LLM 评估（基于卡片 title/source/tier/snippet + 维度→研究问题映射）
    - 社媒创建 `STRATEGY_SOCIAL_PROBE_REVIEW` AnalysisJob、新闻创建 `STRATEGY_NEWS_PROBE_REVIEW` AnalysisJob，独立记录 token/cost；LLM 失败时保守判 pass + 人工核查提示

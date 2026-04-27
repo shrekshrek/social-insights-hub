@@ -5,7 +5,7 @@
 
 与完整 `aggregate_task_analysis` 的关系：
 - 产出 shape 是完整结果的严格子集（字段路径一致：meta.data_volume / metrics.marketing_analysis
-  / insights.{target_entities, competitor_entities, top_topics}），`_build_probe_task_summaries`
+  / insights.{target_entities, competitor_entities, top_topics}），`_build_social_probe_summaries`
   读取时无需任何特殊分支
 - 不包含 `aggregated_opinions` / `aggregated_entities` 等切片消费字段——这些只有在
   collect 阶段跑完完整 aggregation 才会有，phase 推进后由完整路径覆写 task.analysis_result
@@ -46,7 +46,7 @@ def build_probe_aggregation(
 
     Returns:
         dict：与完整 aggregation 字段路径兼容的子集，可直接写入 `task.analysis_result`。
-        `_build_probe_task_summaries` 消费的所有字段都在其中。
+        `_build_social_probe_summaries` 消费的所有字段都在其中。
     """
     # 0. 任务关键词（用于 target/competitor 分类）
     task = db.execute(select(SocialTask).where(SocialTask.id == task_id)).scalar_one_or_none()

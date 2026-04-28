@@ -144,16 +144,14 @@ export default defineNuxtConfig({
     // 业务layer组件都在各自layer内部使用
   ],
   modules: [
-    // Nuxt UI v4 配置：禁用字体功能以避免网络连接问题
-    // colorMode 由我们显式安装 @nuxtjs/color-mode 来配置
-    ['@nuxt/ui', { fonts: false, colorMode: false }],
-    // Color Mode 配置（Nuxt UI v4 推荐使用 @nuxtjs/color-mode）
-    ['@nuxtjs/color-mode', {
-      ssr: false,
-      preference: 'light',
-      fallback: 'light',
-      classSuffix: '',
-      storageKey: 'nuxt-color-mode'
+    // Nuxt UI v4 配置：禁用字体功能，使用内置 colorMode（不再单独引入 @nuxtjs/color-mode）
+    ['@nuxt/ui', {
+      fonts: false,
+      colorMode: {
+        preference: 'light',
+        fallback: 'light',
+        classSuffix: '',
+      }
     }],
     '@nuxt/eslint',
     // '@nuxt/image',

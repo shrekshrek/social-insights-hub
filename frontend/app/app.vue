@@ -1,5 +1,10 @@
 <template>
-  <UApp>
+  <!-- toaster=null 禁止 UApp 在 SSR/hydration 阶段渲染内联 Toaster
+       避免 reka-ui 的 ToastPortal(Transition+Teleport) 触发 classList 报错 -->
+  <UApp :toaster="null">
+    <ClientOnly>
+      <UToaster />
+    </ClientOnly>
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>

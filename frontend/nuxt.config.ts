@@ -122,7 +122,9 @@ export default defineNuxtConfig({
   nitro: {
     devProxy: {
       '/api/v1': 'http://localhost:8000/api/v1'
-    }
+    },
+    // 启用静态资源预压缩（gzip + brotli），减少首屏加载体积 60%+
+    compressPublicAssets: true
   },
   extends: [
     './layers/ui-kit',

@@ -149,6 +149,7 @@ export default defineNuxtConfig({
     ['@nuxt/ui', { fonts: false, colorMode: false }],
     // Color Mode 配置（Nuxt UI v4 推荐使用 @nuxtjs/color-mode）
     ['@nuxtjs/color-mode', {
+      ssr: false,
       preference: 'light',
       fallback: 'light',
       classSuffix: '',

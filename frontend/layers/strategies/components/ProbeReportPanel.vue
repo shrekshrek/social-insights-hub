@@ -20,6 +20,32 @@
       <p class="text-sm text-gray-400">新的探测任务已创建，等待采集...</p>
     </div>
 
+    <!-- 社媒任务失败提示：阻塞探测验证，需 retry 或人工删除 -->
+    <div
+      v-if="failedSocialCount > 0 && !probeReview"
+      class="p-3 rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20"
+    >
+      <div class="flex items-start gap-2">
+        <UIcon name="i-heroicons-exclamation-triangle" class="text-red-500 size-5 shrink-0 mt-0.5" />
+        <div class="flex-1 text-sm space-y-1">
+          <p class="font-medium text-red-700 dark:text-red-400">
+            {{ failedSocialCount }} 个社媒探测任务采集失败，探测验证暂停
+          </p>
+          <p class="text-xs text-red-600 dark:text-red-300">
+            等待爬虫自动续采，或前往监测项目页手动删除失败任务以继续。删除时请筛选 phase=探测，避免误删全量任务。
+          </p>
+          <NuxtLink
+            v-if="socialMonitorId"
+            :to="`/social-media/monitors/${socialMonitorId}`"
+            class="inline-flex items-center gap-1 text-xs text-red-700 dark:text-red-400 hover:underline mt-1"
+          >
+            <UIcon name="i-heroicons-arrow-top-right-on-square" class="size-3.5" />
+            前往监测项目页
+          </NuxtLink>
+        </div>
+      </div>
+    </div>
+
     <!-- 社媒任务状态：按维度分组 -->
     <div v-if="socialTasks.length">
       <!-- 有维度映射：分组展示 -->
@@ -28,7 +54,10 @@
           <div class="flex items-center gap-2">
             <span class="text-xs font-medium text-gray-500">{{ dimName }}</span>
             <span class="text-xs text-gray-400">
-              {{ group.filter(t => t.has_analysis).length }}/{{ group.length }} 已分析
+              {{ group.filter(t => t.has_analysis && t.status !== 'failed').length }}/{{ group.length }} 已分析
+            </span>
+            <span v-if="group.filter(t => t.status === 'failed').length" class="text-xs text-red-500">
+              {{ group.filter(t => t.status === 'failed').length }} 失败
             </span>
           </div>
           <div class="grid grid-cols-3 gap-1.5">
@@ -36,15 +65,19 @@
               v-for="t in group"
               :key="t.task_id"
               class="flex items-center gap-1.5 text-xs p-1.5 rounded"
-              :class="t.has_analysis ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
+              :class="socialTaskBg(t)"
+              :title="socialTaskTooltip(t)"
             >
               <UIcon
-                :name="t.has_analysis ? 'i-heroicons-check-circle' : 'i-heroicons-clock'"
-                :class="t.has_analysis ? 'text-green-500' : 'text-gray-400'"
+                :name="socialTaskIcon(t)"
+                :class="socialTaskIconColor(t)"
                 class="shrink-0"
               />
               <span class="font-medium truncate">{{ t.keyword }}</span>
               <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
+              <span v-if="t.status === 'failed'" class="text-red-500 shrink-0 ml-auto text-[10px]">
+                {{ formatRelativeTime(t.last_updated_at) }}
+              </span>
             </div>
           </div>
         </div>
@@ -56,15 +89,19 @@
           v-for="t in socialTasks"
           :key="t.task_id"
           class="flex items-center gap-1.5 text-xs p-1.5 rounded"
-          :class="t.has_analysis ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800'"
+          :class="socialTaskBg(t)"
+          :title="socialTaskTooltip(t)"
         >
           <UIcon
-            :name="t.has_analysis ? 'i-heroicons-check-circle' : 'i-heroicons-clock'"
-            :class="t.has_analysis ? 'text-green-500' : 'text-gray-400'"
+            :name="socialTaskIcon(t)"
+            :class="socialTaskIconColor(t)"
             class="shrink-0"
           />
           <span class="font-medium truncate">{{ t.keyword }}</span>
           <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(t.platform) }}</UBadge>
+          <span v-if="t.status === 'failed'" class="text-red-500 shrink-0 ml-auto text-[10px]">
+            {{ formatRelativeTime(t.last_updated_at) }}
+          </span>
         </div>
       </div>
     </div>
@@ -256,7 +293,14 @@ const props = defineProps<{
   taskDimensionMap?: Record<string, string>
   /** data_plan 维度名称有序列表，决定分组顺序 */
   dimensionNames?: string[]
+  /** 当前策略关联的 SocialMonitor ID，用于失败任务横幅深链跳转到监测项目页 */
+  socialMonitorId?: number | null
 }>()
+
+/** 失败的社媒任务计数：方案 B 下这些任务阻塞 all_analyzed，需要 retry 或人工删除 */
+const failedSocialCount = computed(
+  () => props.socialTasks.filter(t => t.status === 'failed').length,
+)
 
 const progressPercent = computed(() => {
   if (props.totalCount === 0) return 0
@@ -305,6 +349,50 @@ const newsTaskDimensionGroups = computed((): Record<string, NewsProbeTaskStatus[
   }
   return groups
 })
+
+/** 简易相对时间格式化（中文，用于失败任务的"失败于 X 分钟前"）*/
+const formatRelativeTime = (iso: string | null): string => {
+  if (!iso) return ''
+  const ts = new Date(iso).getTime()
+  if (Number.isNaN(ts)) return ''
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000))
+  if (diffSec < 60) return '刚刚'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin} 分钟前`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour} 小时前`
+  return `${Math.floor(diffHour / 24)} 天前`
+}
+
+/** 失败任务卡片的 hover 提示，给出明确的 next-step 指引 */
+const socialTaskTooltip = (t: SocialProbeTaskStatus): string | undefined => {
+  if (t.status !== 'failed') return undefined
+  const when = formatRelativeTime(t.last_updated_at)
+  return `失败${when ? '于 ' + when : ''} — 等待自动续采，或前往监测项目页删除该任务以继续`
+}
+
+/** 社媒任务卡片视觉状态：失败 → 红，已分析（成功或终态无数据）→ 绿，其他 → 灰
+ *
+ * 方案 B 下后端不再把 failed 计入 has_analysis，但这里仍用 status 作优先判定，
+ * 即便未来 has_analysis 语义再调整也保持视觉一致。
+ */
+const socialTaskBg = (t: SocialProbeTaskStatus): string => {
+  if (t.status === 'failed') return 'bg-red-50 dark:bg-red-900/20'
+  if (t.has_analysis) return 'bg-green-50 dark:bg-green-900/20'
+  return 'bg-gray-50 dark:bg-gray-800'
+}
+
+const socialTaskIcon = (t: SocialProbeTaskStatus): string => {
+  if (t.status === 'failed') return 'i-heroicons-x-circle'
+  if (t.has_analysis) return 'i-heroicons-check-circle'
+  return 'i-heroicons-clock'
+}
+
+const socialTaskIconColor = (t: SocialProbeTaskStatus): string => {
+  if (t.status === 'failed') return 'text-red-500'
+  if (t.has_analysis) return 'text-green-500'
+  return 'text-gray-400'
+}
 
 /** 按维度分组的审查结果（用于 probeReview 展示） */
 const assessmentDimensionGroups = computed((): Record<string, { assessments: ProbeAssessment[], failCount: number }> | null => {

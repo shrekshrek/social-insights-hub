@@ -290,6 +290,7 @@
           :probe-review="probeData.probeReview"
           :task-dimension-map="taskDimensionMap"
           :dimension-names="dimensionNames"
+          :social-monitor-id="strategy.social_monitor_id"
         />
 
         <div v-if="probeData.probeReview && strategy.status === 'probing'" class="flex items-center gap-3 mt-4">

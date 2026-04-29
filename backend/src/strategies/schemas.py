@@ -189,14 +189,6 @@ class ProbeStatusResponse(CustomBaseModel):
     analyzed_count: int = 0
     total_count: int = 0
     probe_review_result: dict | None = Field(None, description="审查结果（全部分析完成后自动填充）")
-    industry_research: ResearchAgentStatus = Field(
-        default_factory=ResearchAgentStatus,
-        description="行业研究任务状态（profile_name=industry，与探测并行，不阻塞）",
-    )
-    creative_research: ResearchAgentStatus = Field(
-        default_factory=ResearchAgentStatus,
-        description="创意研究任务状态（profile_name=creative，与探测并行，不阻塞）",
-    )
     strategy: "StrategyRead | None" = None
 
 
@@ -317,11 +309,11 @@ class CollectionStatusResponse(CustomBaseModel):
     coverage_check_result: dict | None = None
     industry_research: ResearchAgentStatus = Field(
         default_factory=ResearchAgentStatus,
-        description="行业研究任务状态（profile_name=industry，不阻塞采集流程）",
+        description="行业研究任务状态（profile_name=industry，approve_probe 时启动，与全量采集并行）",
     )
     creative_research: ResearchAgentStatus = Field(
         default_factory=ResearchAgentStatus,
-        description="创意研究任务状态（profile_name=creative，不阻塞采集流程）",
+        description="创意研究任务状态（profile_name=creative，approve_probe 时启动，与全量采集并行）",
     )
     strategy: "StrategyRead | None" = None
 

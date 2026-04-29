@@ -77,8 +77,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 3. `confirm-research`: 根据 data_plan 的渠道分别创建 SocialMonitor / NewsMonitor + 对应 phase="probe" 任务，状态 → probing
    - 社媒：每个 keyword×platform 一个 SocialTask，max_pages 限制翻页
    - 新闻：每个 keyword 一个 NewsTask，celery `run_news_probe_task` 异步派发（纯搜索）
-   - 行业研究：brand_brief.channel_plan 含 `industry_research` 渠道时条件创建 ResearchTask（Celery 立即启动 LangGraph，无探测阶段，与社媒/新闻并行）；query=channel_brief，context=analysis_goal，研究问题由 Planner 自行生成
-   - 创意研究：brand_brief.channel_plan 含 `creative_research` 渠道且 output_type 为 campaign_strategy / full_strategy 时，自动创建 profile_name="creative" 的 ResearchTask
+   - 行业/创意研究**不在此处启动**：等到 `approve_probe` 探测通过、进入 collecting 时再起，避免方向被 probe review 否决时浪费 Tavily 调用，并保证研究主题基于稳定后的 brief（详见 ③ 数据就绪）
 
 ### ② 探测验证 (probing → collecting)
 
@@ -110,6 +109,11 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 
 ### ③ 数据就绪 (collecting → ready)
 
+0. 进入 collecting 时（`approve_probe` 内 `strategy.status = "collecting"` 之后）由后端自动启动 Research Agent 任务，与全量采集并行：
+   - 行业研究：`brand_brief.channel_plan` 含 `industry_research` 渠道时创建 profile_name="industry" 的 ResearchTask；query=channel_brief，context=analysis_goal，研究问题由 Planner 自行生成
+   - 创意研究：output_type ∈ {campaign_strategy, full_strategy} 且 `brand_brief.channel_plan` 含 `creative_research` 渠道时创建 profile_name="creative" 的 ResearchTask（搜集竞品 Campaign 案例）
+   - 失败仅日志告警，不阻塞 collecting 推进；产出阶段 `_retrieve_research_findings` / `_retrieve_creative_research_findings` 找不到已完成 ResearchTask 时优雅降级为空，注入 `{research_findings}=""` / `{creative_references}=""`
+   - 幂等：`approve_probe` 入口对 status >= collecting 早返回，避免重复创建
 1. 前端轮询 `collection-status`，爬虫采集全量数据（40 条 + 评论）
 2. 所有全量任务分析完成后自动按 slice_blueprint 创建切片（`_create_auto_slices`）
    - 社媒：按维度分组任务 → `create_monitor_slice`（同步 Stage1）→ 派发 Celery 跑 Stage2/Stage3
@@ -253,9 +257,9 @@ Celery Worker 崩溃/宕机 → 新闻任务停留在 `running` 或 `pending` �
 - `adjust_slices` 当前**仅支持调整社媒切片**——传入新闻切片 ID 会返回 409；新闻切片的 subject/competitors 影响 insight chain 的实体 role 归类，调整后需要重跑 insight，待后续支持
 - `_create_auto_slices` 按 `slice_blueprint` 自动创建：社媒维度 → SocialSlice，新闻维度 → NewsSlice，互不侵入。**建完切片不直接跑 coverage_check，也不置 ready**——策略保持 `collecting`，由 `_try_advance_to_ready` 在切片 Stage2 全完成后异步推进
 - `SocialSlice.status="completed"` 语义 = Stage2 完成（下游可用）；Stage3 的 3 报告失败不回退该状态，只记在 `result_data.pipeline.stage3`。`load_strategy_inputs` / `load_strategy_news_inputs` 均按 `status=completed` 过滤，Stage2 未就绪或失败的切片不会喂给策略 chain
-- `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor（同渠道所有任务共享一个 Monitor）+ 条件创建 ResearchTask（brand_brief.channel_plan 含 `industry_research` 或 `creative_research` 渠道时）
+- `confirm_research` 按渠道分别创建 SocialMonitor / NewsMonitor（同渠道所有任务共享一个 Monitor）+ 探测任务；ResearchTask 不在此处创建，移到 `approve_probe` 探测通过、进入 collecting 时启动（详见 ③ 数据就绪 第 0 步）
 - `_task_dimension_map` / `_news_task_dimension_map` 存在 `research_design` 中，分别记录社媒 / 新闻 task_id → dimension_name 映射，供 probe 审查注入研究问题 + 自动建切片使用
-- `probe-status` 和 `collection-status` 是轮询端点，全部完成后自动触发下游逻辑（LLM 审查/建切片/覆盖度验证）；两个端点同时返回 `industry_research` 和 `creative_research` 状态（ResearchTask 进度，不阻塞主流程）
+- `probe-status` 是轮询端点，全部分析完成后触发 LLM 审查；不返回研究状态（探测阶段研究还未启动）。`collection-status` 同样是轮询端点，全部完成后触发建切片/覆盖度验证，并返回 `industry_research` / `creative_research` 状态（ResearchTask 进度，不阻塞主流程）
 - Research Agent 通过 `research_tasks.strategy_id` FK 关联策略，不在 Strategy 表上加冗余字段。`_retrieve_research_findings` 读取最新已完成的 profile_name="industry" ResearchTask；`_retrieve_creative_research_findings` 读取 profile_name="creative" ResearchTask
 - 新闻 insight 粒度：独立监测和策略研究都通过 NewsSlice 切片触发 insight（按 blueprint 条目分组新闻任务创建切片），采集阶段仅做 tagging 不做 insight
 - 新闻搜索渠道：baidu / sogou（默认两渠道，均通过 Crawl4AI）+ wechat_mp（可选，通过搜狗微信专用入口）；source_tier 分层：tier1(权威) / tier2(行业) / tier3(其他) / wechat_mp(公众号)

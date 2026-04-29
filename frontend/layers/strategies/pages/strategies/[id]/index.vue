@@ -342,6 +342,8 @@
           :show-progress="!collectionData.allAnalyzed"
           :coverage-result="collectionData.coverageResult"
           :task-dimension-map="taskDimensionMap"
+          :industry-research="collectionData.industryResearch"
+          :creative-research="collectionData.creativeResearch"
         />
 
         <div

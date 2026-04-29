@@ -1462,6 +1462,74 @@ def _extract_channel_brief(brand_brief: dict | None, channel_type: str) -> str:
     return ""
 
 
+async def _dispatch_strategy_research_tasks(
+    db: AsyncSession,
+    strategy: Strategy,
+    user_id: int,
+) -> None:
+    """探测通过、进入 collecting 时启动 Research Agent 任务（行业 + 创意）。
+
+    与全量采集并行；探测通过后才启动是为了避免方向被 probe review 否决时浪费 Tavily 调用，
+    并保证研究主题基于 probe review 后稳定的 brief。
+
+    创建条件：
+    - 行业研究：`brand_brief.channel_plan` 含 `industry_research` 渠道
+    - 创意研究：`output_type ∈ {campaign_strategy, full_strategy}` 且 `channel_plan` 含 `creative_research`
+
+    失败仅日志告警，不阻塞 collecting 推进（产出阶段 _retrieve_research_findings
+    找不到已完成 ResearchTask 时优雅降级为空注入）。幂等性由调用方 approve_probe
+    入口的 status>=collecting 早返回守卫保证。
+    """
+    from src.research_agent.service import create_research_task
+
+    brief = strategy.brand_brief or {}
+    industry_channel_brief = _extract_channel_brief(brief, "industry_research")
+    if industry_channel_brief:
+        try:
+            analysis_goal = brief.get("analysis_goal", "")
+            search_config = {"context": analysis_goal} if analysis_goal else {}
+            await create_research_task(
+                db,
+                user_id=user_id,
+                analysis_goal=industry_channel_brief,
+                title=brief.get("subject", "") or "行业研究",
+                search_config=search_config,
+                strategy_id=strategy.id,
+                profile_name="industry",
+            )
+            logger.info("策略 %d: 进入 collecting，创建行业研究任务", strategy.id)
+        except Exception as e:
+            logger.warning(
+                "策略 %d: 创建行业研究任务失败（不阻塞主流程）: %s", strategy.id, e
+            )
+
+    if strategy.output_type in ("campaign_strategy", "full_strategy"):
+        creative_channel_brief = _extract_channel_brief(brief, "creative_research")
+        if creative_channel_brief:
+            try:
+                analysis_goal = brief.get("analysis_goal", "")
+                search_config = {"context": analysis_goal} if analysis_goal else {}
+                subject = brief.get("subject", "") or "品牌"
+                await create_research_task(
+                    db,
+                    user_id=user_id,
+                    analysis_goal=creative_channel_brief,
+                    title=f"{subject} 竞品创意研究",
+                    search_config=search_config,
+                    strategy_id=strategy.id,
+                    profile_name="creative",
+                )
+                logger.info(
+                    "策略 %d: 进入 collecting，创建创意研究任务", strategy.id
+                )
+            except Exception as e:
+                logger.warning(
+                    "策略 %d: 创建创意研究任务失败（不阻塞主流程）: %s",
+                    strategy.id,
+                    e,
+                )
+
+
 # ==================== 研究计划 advisory ====================
 #
 # 非阻塞软提示，在 design_research 返回时计算，附带在 DesignResearchResponse.advisories。
@@ -2022,58 +2090,6 @@ async def confirm_research(
 
     strategy.social_monitor_id = monitor.id
     strategy.status = "probing"
-
-    # 条件创建 Research Agent 任务（仅 research_design 包含 industry_research 时）
-    brief = strategy.brand_brief or {}
-    ra_channel_brief = _extract_channel_brief(brief, "industry_research")
-    if ra_channel_brief:
-        try:
-            from src.research_agent.service import create_research_task
-
-            research_title = brief.get("subject", "") or "行业研究"
-            # query = channel_brief（industry_research 渠道专属定制描述，Planner 的主锚点）
-            # context = analysis_goal（整体策略背景，replan 各轮持续参考）
-            analysis_goal = brief.get("analysis_goal", "")
-            search_config = {"context": analysis_goal} if analysis_goal else {}
-            # research_questions 不传：Planner 从 channel_brief 自行生成搜索优化的问题
-            await create_research_task(
-                db,
-                user_id=current_user_id,
-                analysis_goal=ra_channel_brief,
-                title=research_title,
-                search_config=search_config,
-                strategy_id=strategy.id,
-                profile_name="industry",
-            )
-            logger.info("策略 %d: 创建行业研究 Research Agent 任务", strategy.id)
-        except Exception as e:
-            logger.warning("策略 %d: 创建行业研究任务失败（不阻塞主流程）: %s", strategy.id, e)
-            partial_errors.append(f"创建研究任务失败: {e}")
-
-    # 条件创建创意研究任务（campaign_strategy/full_strategy + brief 含 creative_research 渠道时）
-    # 创意研究搜集竞品 Campaign 案例，注入 Brand Role 和 Big Idea 层提供差异化起点
-    if output_type in ("campaign_strategy", "full_strategy"):
-        creative_channel_brief = _extract_channel_brief(brief, "creative_research")
-        if creative_channel_brief:
-            try:
-                from src.research_agent.service import create_research_task  # noqa: F811
-
-                subject = brief.get("subject", "") or "品牌"
-                analysis_goal = brief.get("analysis_goal", "")
-                search_config = {"context": analysis_goal} if analysis_goal else {}
-                await create_research_task(
-                    db,
-                    user_id=current_user_id,
-                    analysis_goal=creative_channel_brief,
-                    title=f"{subject} 竞品创意研究",
-                    search_config=search_config,
-                    strategy_id=strategy.id,
-                    profile_name="creative",
-                )
-                logger.info("策略 %d: 创建创意研究 Research Agent 任务", strategy.id)
-            except Exception as e:
-                logger.warning("策略 %d: 创建创意研究任务失败（不阻塞主流程）: %s", strategy.id, e)
-                partial_errors.append(f"创建创意研究任务失败: {e}")
 
     await db.commit()
     updated = await get_strategy_by_id(db, strategy.id)
@@ -2926,9 +2942,6 @@ async def check_probe_status(
             _run_probe_review_bg_task(strategy.id, analyzed_summaries, news_probe_summaries)
         )
 
-    industry_status = await _get_research_agent_status(db, strategy.id, "industry")
-    creative_status = await _get_research_agent_status(db, strategy.id, "creative")
-
     return ProbeStatusResponse(
         social_tasks=task_statuses,
         news_tasks=news_task_statuses,
@@ -2936,8 +2949,6 @@ async def check_probe_status(
         analyzed_count=analyzed_count,
         total_count=total_count,
         probe_review_result=strategy.probe_review_result,
-        industry_research=industry_status,
-        creative_research=creative_status,
         strategy=await _strategy_read(db, strategy),
     )
 
@@ -3133,6 +3144,8 @@ async def approve_probe(
     research_design["_news_task_dimension_map"] = news_collect_dim_map
     strategy.research_design = research_design
     flag_modified(strategy, "research_design")
+
+    await _dispatch_strategy_research_tasks(db, strategy, current_user_id)
 
     await db.commit()
 

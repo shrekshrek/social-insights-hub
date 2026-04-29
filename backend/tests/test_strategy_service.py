@@ -9,6 +9,7 @@ from src.strategies.service import (
     _check_missing_competitive_social_dimension,
     _compute_research_design_advisories,
     _create_auto_slices,
+    _dispatch_strategy_research_tasks,
     _social_slice_stage2_terminal,
     _try_advance_to_ready,
     approve_probe,
@@ -314,6 +315,183 @@ class TestSocialSliceStage2Terminal:
         slc = MagicMock()
         slc.result_data = None
         assert _social_slice_stage2_terminal(slc) is False
+
+
+class TestDispatchStrategyResearchTasks:
+    """_dispatch_strategy_research_tasks: 探测通过、进入 collecting 时启动专题研究
+
+    研究任务的启动时机从 confirm_research（探测开始）迁移到 approve_probe（探测通过、
+    进入全量采集），避免方向被否决时浪费 Tavily 调用。本组测试聚焦在新 helper 自身：
+    创建条件、output_type 互斥、失败容忍。幂等性由 approve_probe 入口的
+    status>=collecting 早返回守卫保证，不在此处重复测试。
+    """
+
+    @staticmethod
+    def _make_strategy(
+        *,
+        output_type: str = "campaign_strategy",
+        channel_plan: list | None = None,
+        subject: str = "测试品牌",
+        analysis_goal: str = "目标分析",
+    ):
+        strategy = MagicMock()
+        strategy.id = 42
+        strategy.output_type = output_type
+        strategy.brand_brief = {
+            "subject": subject,
+            "analysis_goal": analysis_goal,
+            "channel_plan": channel_plan or [],
+        }
+        return strategy
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_creates_industry_when_channel_brief_present(self, mock_create):
+        strategy = self._make_strategy(
+            channel_plan=[
+                {"type": "industry_research", "channel_brief": "聚焦行业趋势"},
+            ],
+        )
+        db = AsyncMock()
+
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        mock_create.assert_awaited_once()
+        kwargs = mock_create.await_args.kwargs
+        assert kwargs["profile_name"] == "industry"
+        assert kwargs["analysis_goal"] == "聚焦行业趋势"
+        assert kwargs["title"] == "测试品牌"
+        assert kwargs["search_config"] == {"context": "目标分析"}
+        assert kwargs["strategy_id"] == 42
+        assert kwargs["user_id"] == 7
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_skips_industry_when_channel_brief_absent(self, mock_create):
+        strategy = self._make_strategy(channel_plan=[])
+        db = AsyncMock()
+
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        mock_create.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_creates_creative_for_campaign_strategy(self, mock_create):
+        strategy = self._make_strategy(
+            output_type="campaign_strategy",
+            channel_plan=[
+                {"type": "creative_research", "channel_brief": "竞品 Campaign 案例"},
+            ],
+        )
+        db = AsyncMock()
+
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        mock_create.assert_awaited_once()
+        kwargs = mock_create.await_args.kwargs
+        assert kwargs["profile_name"] == "creative"
+        assert kwargs["title"] == "测试品牌 竞品创意研究"
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_creates_creative_for_full_strategy(self, mock_create):
+        strategy = self._make_strategy(
+            output_type="full_strategy",
+            channel_plan=[
+                {"type": "creative_research", "channel_brief": "竞品 Campaign 案例"},
+            ],
+        )
+        db = AsyncMock()
+
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        mock_create.assert_awaited_once()
+        kwargs = mock_create.await_args.kwargs
+        assert kwargs["profile_name"] == "creative"
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_skips_creative_for_market_report(self, mock_create):
+        """market_report 路径产出不消费 creative_references，即便 channel_brief 存在也不该启动"""
+        strategy = self._make_strategy(
+            output_type="market_report",
+            channel_plan=[
+                {"type": "creative_research", "channel_brief": "竞品 Campaign 案例"},
+            ],
+        )
+        db = AsyncMock()
+
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        mock_create.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_skips_creative_when_channel_brief_absent(self, mock_create):
+        strategy = self._make_strategy(
+            output_type="campaign_strategy",
+            channel_plan=[],
+        )
+        db = AsyncMock()
+
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        mock_create.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_creates_both_when_both_channels_present(self, mock_create):
+        strategy = self._make_strategy(
+            output_type="full_strategy",
+            channel_plan=[
+                {"type": "industry_research", "channel_brief": "行业趋势"},
+                {"type": "creative_research", "channel_brief": "创意素材"},
+            ],
+        )
+        db = AsyncMock()
+
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        assert mock_create.await_count == 2
+        profiles = {call.kwargs["profile_name"] for call in mock_create.await_args_list}
+        assert profiles == {"industry", "creative"}
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_failure_does_not_raise(self, mock_create):
+        """create_research_task 失败时仅日志告警，不阻塞主流程（产出阶段优雅降级为空）"""
+        mock_create.side_effect = RuntimeError("Tavily API 超时")
+        strategy = self._make_strategy(
+            channel_plan=[
+                {"type": "industry_research", "channel_brief": "行业趋势"},
+            ],
+        )
+        db = AsyncMock()
+
+        # 不抛异常即通过
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        mock_create.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @patch("src.research_agent.service.create_research_task", new_callable=AsyncMock)
+    async def test_industry_failure_does_not_block_creative(self, mock_create):
+        """行业研究创建失败时，创意研究仍应尝试启动（两者互不依赖）"""
+        # 第一次（industry）失败，第二次（creative）成功
+        mock_create.side_effect = [RuntimeError("行业研究失败"), None]
+        strategy = self._make_strategy(
+            output_type="campaign_strategy",
+            channel_plan=[
+                {"type": "industry_research", "channel_brief": "行业趋势"},
+                {"type": "creative_research", "channel_brief": "创意素材"},
+            ],
+        )
+        db = AsyncMock()
+
+        await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
+
+        assert mock_create.await_count == 2
 
 
 class TestTryAdvanceToReady:

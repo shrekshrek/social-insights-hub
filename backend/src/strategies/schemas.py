@@ -157,7 +157,17 @@ class SocialProbeTaskStatus(CustomBaseModel):
     keyword: str = ""
     platform: str = ""
     status: str = Field(..., description="任务状态")
-    has_analysis: bool = Field(False, description="是否已有分析结果")
+    has_analysis: bool = Field(
+        False,
+        description=(
+            "是否已成功完成可供审查（分析就绪 或 终态 0 数据兜底）；"
+            "failed 任务恒为 False，强制等待 retry 或人工删除"
+        ),
+    )
+    last_updated_at: datetime | None = Field(
+        None,
+        description="任务最近更新时间（用于 UI 展示失败时长，如'失败于 5 分钟前'）",
+    )
 
 
 class ResearchAgentStatus(CustomBaseModel):

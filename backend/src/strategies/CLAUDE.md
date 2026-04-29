@@ -84,6 +84,14 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 1. 前端轮询 `probe-status`
    - 社媒：爬虫采集约 20 条，跳过评论，LLM 打标（screening + deep_posts 分析链）；**聚合走 probe_lite 轻量路径**（[`aggregation/probe_lite.py`](../social_media/analysis/celery_tasks/aggregation/probe_lite.py)，纯 SQL/Python，不调 entity/opinion LLM 归一化，~5s），只产出 probe review chain 需要的 4 个字段（posts_count / deep_analyzed / entity_match / top_topics / promotion_ratio）；phase 推进到 collect 后完整 aggregation 覆写 `task.analysis_result`
    - 新闻：`run_news_probe_task` 双渠道搜索（baidu + sogou），每渠道上限 20 条，URL 去重后落库元数据，不抓全文、不打标
+
+   **社媒 vs 新闻 failed 语义不对称**（v2026.04 起）：
+   - 社媒 `_PROBE_OK_TERMINAL_STATUSES = {probe_ready, approved, completed}`——**failed 不是终态**，`has_analysis` 恒为 False，`all_analyzed` 永远停留在 false，probe review 不触发。失败任务的两个常用出口：
+     1. **等自愈**（默认路径）：agent 启用 `enable_checkpoint=1` 的 auto_retry 拿到数据 → 上传走 [`agent/service.py:_validate_upload_status`](../agent/service.py) 的 failed 白名单 → status 推进到 probe_ready/completed → 进入终态 → 由前端 10s 轮询或 APScheduler `strategy_probe`（2 min）触发审查
+     2. **手动删除**：用户去 `/social-media/monitors/{id}` 任务列表，按 `phase=probe` 筛选后删除该任务（永久放弃此关键词×平台组合）
+   - 新闻 `_NEWS_PROBE_TERMINAL = {completed, failed}`——**failed 视为终态**，由 `strategy_news_probe_review_chain` 保守判 pass + 标注"人工核查"。理由：新闻走 Celery push 模型，**无 retry 机制**，等待无意义；用户出口与社媒不同，靠审查链路标注降级处理
+   - 设计意图：让"等待"对应有 retry 通道的渠道，对没有的渠道走"标注降级"，不强迫用户为单点失败一直等下去
+   - **`approve_probe` 端点不算常用出口**：当前 UI 的"忽略问题，继续采集"按钮 gate 在 `probe_review_result` 上，方案 B 下 review 不会触发 → 按钮在 failed 阻塞场景下不显示。端点本身仍可被直接调用（API 层兜底），但**不是用户可达的 UI 出口**——不要在用户文档/帮助里把它列为推荐流程
 2. 所有任务准备就绪后后台自动运行 probe 审查
    - 社媒：规则分流 + `strategy_social_probe_review_chain`（LLM 判定模糊案例）
      - 规则层（`_auto_verdict_social_probe_task`）：`posts<5` / `promotion_ratio>85%` 直接 fail 并建议移除（`suggested_keyword=null`）；`deep_analyzed<8` 样本不足直接 pass 待全量验证；其余送 LLM
@@ -243,13 +251,15 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 ### 终态定义
 
-- **社媒探测任务**：`has_analysis=True`（LLM 已完成打标）
+- **社媒探测任务**：`has_analysis=True` —— 即 `analysis_result is not None and status != "failed"`，或者"成功终态 + 0 帖兜底"（`status in {probe_ready, approved, completed}` AND `posts_count == 0`）。**failed 恒判 False**，强制等待 retry 或人工删除（详见 ② 探测验证 章节的"社媒 vs 新闻 failed 语义不对称"）
 - **新闻探测任务**：`status in {"completed", "failed"}`（completed=采集成功；failed=失败或被 watchdog 回收）
-  - failed 不阻塞流程——probe review chain 会对失败任务保守判 pass 并标注"人工核查"
+  - failed 不阻塞流程——probe review chain 会对失败任务保守判 pass 并标注"人工核查"（与社媒不对称，因新闻无 retry 机制）
 
 ### 卡死恢复流程
 
-Celery Worker 崩溃/宕机 → 新闻任务停留在 `running` 或 `pending` → watchdog 在任务创建 20 分钟后标记 `failed` → `check_probing_strategies` 在下一个 2 分钟周期检测到所有任务终态 → 自动触发 LLM 审查 → 策略恢复正常流程。全程无需人工干预。
+**新闻任务卡死**：Celery Worker 崩溃/宕机 → 新闻任务停留在 `running` 或 `pending` → watchdog 在任务创建 20 分钟后标记 `failed` → `check_probing_strategies` 在下一个 2 分钟周期检测到所有任务终态 → 自动触发 LLM 审查 → 策略恢复正常流程。全程无需人工干预。
+
+**社媒任务失败**：账号风控/采集异常 → task.status=failed → `has_analysis=False` 阻塞 `all_analyzed` → 等 agent `enable_checkpoint=1` 的 auto_retry 拿到数据 → 上传被 failed 白名单接受 → status 推进到 probe_ready → 进入终态 → 前端轮询或 `check_probing_strategies` 触发审查。永久失败（如账号永封）需人工去 monitor 页删除，否则策略一直卡在 probing。
 
 ## Important Notes
 

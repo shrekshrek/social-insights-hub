@@ -2135,29 +2135,40 @@ async def _build_social_probe_summaries(
     result = await db.execute(query)
     tasks = result.scalars().all()
 
-    # 爬虫已完成（含 0 结果）的终态
-    _PROBE_TERMINAL_STATUSES = {"probe_ready", "approved", "completed", "failed"}
+    # 社媒探测"成功完结"终态（爬虫结束 + 数据可信）。failed 不在此集合：
+    # - agent 启用 enable_checkpoint=1 时支持 auto_retry，failed 不是永久状态
+    # - 等 retry 拿到数据后 status 会推进到 probe_ready / completed，再触发审查
+    # - 永久失败（如账号风控）走人工出口：用户去监测项目页删除该任务
+    # 与新闻探测的非对称设计：新闻 Celery push 模型无 retry 机制，failed 在新闻侧
+    # 仍按"保守 pass + 人工核查标注"处理（见 _NEWS_PROBE_TERMINAL）
+    _PROBE_OK_TERMINAL_STATUSES = {"probe_ready", "approved", "completed"}
 
     statuses = []
     analyzed_summaries = []
 
     for task in tasks:
-        has_analysis = task.analysis_result is not None
-        # 只有进入终态（爬虫已结束）且 0 条时才视为已处理，避免把仍在运行的任务提前计入
-        no_data = (task.posts_count or 0) == 0 and task.status in _PROBE_TERMINAL_STATUSES
+        is_failed = task.status == "failed"
+        # 失败任务永远不算"已分析"——即便 analysis_result 在崩溃前部分写入也不算，
+        # 强制等待 retry 或人工删除。这是方案 B "失败必须解决" 的核心保证。
+        has_analysis_real = task.analysis_result is not None and not is_failed
+        # 0 条数据 + 成功终态：爬虫已完成但无结果，无需 LLM 判断，视为已处理
+        no_data = (
+            (task.posts_count or 0) == 0
+            and task.status in _PROBE_OK_TERMINAL_STATUSES
+        )
 
-        # 0 条数据：爬虫已完成但无结果，无需 LLM 判断，直接视为已处理（客观规则层会自动 fail）
         statuses.append(
             SocialProbeTaskStatus(
                 task_id=task.id,
                 keyword=task.keywords or "",
                 platform=task.platform.code if task.platform else "",
                 status=task.status,
-                has_analysis=has_analysis or no_data,
+                has_analysis=has_analysis_real or no_data,
+                last_updated_at=task.updated_at,
             )
         )
 
-        if has_analysis:
+        if has_analysis_real:
             ar = task.analysis_result or {}
             insights = ar.get("insights") or {}
             metrics = ar.get("metrics") or {}

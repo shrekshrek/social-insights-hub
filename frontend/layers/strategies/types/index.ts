@@ -139,7 +139,10 @@ export interface SocialProbeTaskStatus {
   keyword: string
   platform: string
   status: string
+  /** 是否已成功完成可供审查；failed 任务恒为 false（强制等待 retry 或人工删除）*/
   has_analysis: boolean
+  /** 任务最近更新时间 ISO string，用于展示"失败于 X 分钟前" */
+  last_updated_at: string | null
 }
 
 export interface ProbeAssessment {

@@ -6,6 +6,7 @@ import pytest
 
 from src.strategies.service import (
     STATUS_ORDER,
+    _build_social_probe_summaries,
     _check_missing_competitive_social_dimension,
     _compute_research_design_advisories,
     _create_auto_slices,
@@ -492,6 +493,130 @@ class TestDispatchStrategyResearchTasks:
         await _dispatch_strategy_research_tasks(db, strategy, user_id=7)
 
         assert mock_create.await_count == 2
+
+
+class TestBuildSocialProbeSummariesFailedSemantics:
+    """_build_social_probe_summaries: 方案 B "失败必须解决" 的核心保证
+
+    failed 任务永远不算 has_analysis（无论 analysis_result / posts_count 状态），
+    用来阻塞 all_analyzed → 阻塞 probe review 触发，强制等待 retry 或人工删除。
+    """
+
+    @staticmethod
+    def _make_task(
+        *,
+        task_id: int = 1,
+        status: str = "completed",
+        posts_count: int = 20,
+        analysis_result: dict | None = None,
+        platform_code: str = "wb",
+    ):
+        from datetime import datetime, timezone
+
+        task = MagicMock()
+        task.id = task_id
+        task.keywords = "测试关键词"
+        task.status = status
+        task.posts_count = posts_count
+        task.analysis_result = analysis_result
+        task.platform = MagicMock(code=platform_code)
+        task.updated_at = datetime(2026, 4, 30, 12, 0, 0, tzinfo=timezone.utc)
+        return task
+
+    @staticmethod
+    def _mock_db_with_tasks(tasks):
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = tasks
+        db.execute.return_value = result
+        return db
+
+    @pytest.mark.asyncio
+    async def test_failed_with_no_data_is_not_analyzed(self):
+        """failed + 0 帖：旧 _PROBE_TERMINAL_STATUSES 含 failed 时会判 has_analysis=true，
+        方案 B 下必须为 false 才能阻塞 all_analyzed"""
+        db = self._mock_db_with_tasks([
+            self._make_task(status="failed", posts_count=0),
+        ])
+
+        statuses, summaries = await _build_social_probe_summaries(db, [1])
+
+        assert len(statuses) == 1
+        assert statuses[0].has_analysis is False
+        assert statuses[0].status == "failed"
+        assert summaries == []
+
+    @pytest.mark.asyncio
+    async def test_failed_with_partial_analysis_is_not_analyzed(self):
+        """failed + 已有 analysis_result（崩溃前部分写入）：仍不算 has_analysis，
+        防止时序漏洞——失败任务即便有部分数据也不该被审查 """
+        db = self._mock_db_with_tasks([
+            self._make_task(
+                status="failed",
+                posts_count=10,
+                analysis_result={"insights": {"top_topics": []}, "metrics": {}, "meta": {}},
+            ),
+        ])
+
+        statuses, summaries = await _build_social_probe_summaries(db, [1])
+
+        assert statuses[0].has_analysis is False
+        assert summaries == [], "failed 任务的 partial analysis 不该进入审查 summaries"
+
+    @pytest.mark.asyncio
+    async def test_completed_with_data_is_analyzed(self):
+        """成功路径回归：completed + analysis_result 正常算 has_analysis"""
+        db = self._mock_db_with_tasks([
+            self._make_task(
+                status="completed",
+                posts_count=20,
+                analysis_result={
+                    "insights": {"top_topics": [], "target_entities": [], "competitor_entities": []},
+                    "metrics": {"marketing_analysis": {}},
+                    "meta": {"data_volume": {}},
+                },
+            ),
+        ])
+
+        statuses, summaries = await _build_social_probe_summaries(db, [1])
+
+        assert statuses[0].has_analysis is True
+        assert len(summaries) == 1
+
+    @pytest.mark.asyncio
+    async def test_completed_with_no_data_is_analyzed_via_no_data_fallback(self):
+        """completed + 0 帖：兜底视为已处理（规则层会自动 fail 给"建议移除"）"""
+        db = self._mock_db_with_tasks([
+            self._make_task(status="completed", posts_count=0),
+        ])
+
+        statuses, _ = await _build_social_probe_summaries(db, [1])
+
+        assert statuses[0].has_analysis is True
+
+    @pytest.mark.asyncio
+    async def test_running_is_not_analyzed(self):
+        """running 不算终态，has_analysis=false（既有行为，做回归保险）"""
+        db = self._mock_db_with_tasks([
+            self._make_task(status="running", posts_count=0),
+        ])
+
+        statuses, _ = await _build_social_probe_summaries(db, [1])
+
+        assert statuses[0].has_analysis is False
+
+    @pytest.mark.asyncio
+    async def test_last_updated_at_exposed(self):
+        """SocialProbeTaskStatus.last_updated_at 字段透传给前端用于'失败于 X 分钟前'"""
+        from datetime import datetime, timezone
+
+        db = self._mock_db_with_tasks([
+            self._make_task(status="failed", posts_count=0),
+        ])
+
+        statuses, _ = await _build_social_probe_summaries(db, [1])
+
+        assert statuses[0].last_updated_at == datetime(2026, 4, 30, 12, 0, 0, tzinfo=timezone.utc)
 
 
 class TestTryAdvanceToReady:

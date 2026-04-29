@@ -79,6 +79,18 @@ class DesignResearchRequest(CustomBaseModel):
     user_input: str = Field("", description="用户补充说明（可为空，AI 将基于 Brief 直接设计）")
 
 
+class ResearchDesignAdvisory(CustomBaseModel):
+    """研究计划软提示（非阻塞）
+
+    基于规则检测 brief 隐含诉求与 data_plan 之间的覆盖盲区，提示用户在确认前考虑补充。
+    不影响 confirm-research 流程，前端展示为可关闭的提示卡片。
+    """
+
+    code: str = Field(description="advisory 代码，如 missing_competitive_social_dimension")
+    severity: Literal["warning"] = Field("warning", description="严重级别")
+    message: str = Field(description="给用户的提示文案")
+
+
 class DesignResearchResponse(CustomBaseModel):
     """AI 研究设计响应
 
@@ -97,6 +109,10 @@ class DesignResearchResponse(CustomBaseModel):
     )
     output_type: OutputType = Field("campaign_strategy")
     output_type_rationale: str = Field("")
+    advisories: list[ResearchDesignAdvisory] = Field(
+        default_factory=list,
+        description="非阻塞软提示，基于 brief 与 data_plan 的差异检测",
+    )
 
 
 class ConfirmResearchRequest(CustomBaseModel):

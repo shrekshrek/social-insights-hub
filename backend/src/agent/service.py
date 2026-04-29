@@ -21,6 +21,55 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 
+# upload_result 接受上传的状态白名单（"can-receive-data" 集合）
+# - accepted / running：agent 正在执行，正常上传路径
+# - completed：multi-phase 续采或聚合多次本地执行的再传
+# - failed：agent enable_checkpoint=1 的 auto_retry 恢复路径；line 537 的 internal-exception
+#   永久锁恢复路径；dedup 模型保证无副作用
+# - pending：agent 长时间没活动后被 reset_timed_out_tasks 打回的兜底
+# probe_ready / approved 不在白名单：probe 完成后等待审查阶段，agent 不应再上传
+_UPLOAD_ACCEPTABLE_STATUSES: frozenset[str] = frozenset(
+    {"accepted", "running", "completed", "failed", "pending"}
+)
+
+
+def _validate_upload_status(task_id: int, task_status: str) -> None:
+    """校验 upload_result 接收上传时的任务状态。
+
+    白名单外的状态抛 409；pending / failed 只记日志便于追踪恢复路径，不阻塞。
+    """
+    if task_status == "pending":
+        # 即时失败 + agent timeout-reset 的"超时反向修复"路径
+        logger.warning(
+            "Task %s: upload received while status=pending "
+            "(likely timeout-reset recovery path); accepting to avoid data loss",
+            task_id,
+        )
+        return
+    if task_status == "failed":
+        # agent auto_retry 拿到数据后重传；is_reupload 仍按 status=="completed" 判定，
+        # 不含 failed——否则 phase=="probe" 的 failed-recovery 会跳过 probe_ready
+        # 直接到 completed，绕开 probe review 链路。
+        logger.info(
+            "Task %s: upload received while status=failed "
+            "(likely agent auto_retry recovery); accepting via dedup model",
+            task_id,
+        )
+        return
+    if task_status not in _UPLOAD_ACCEPTABLE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "ok": False,
+                "error_code": "INVALID_TASK_STATUS",
+                "message": (
+                    f"Task status is {task_status}, "
+                    "expected accepted, running, completed, failed or pending"
+                ),
+            },
+        )
+
+
 async def get_pending_tasks(
     db: AsyncSession,
     limit: int = 5,
@@ -249,29 +298,7 @@ async def upload_result(
             detail="Task not found",
         )
 
-    # 验证状态
-    # pending 兜底：agent 长时间没活动时 `reset_timed_out_tasks` 会把 task 打回 pending，
-    # 此时若 worker 恰好在首次 progress_report 之前完成上传（例如即时失败场景），
-    # 云端仍应接收数据——拒绝会导致爬虫端重试循环因 409 立即中止、数据丢失。
-    # 记 warning 以便追踪这种"超时反向修复"路径的频率。
-    if task.status == "pending":
-        logger.warning(
-            "Task %s: upload received while status=pending "
-            "(likely timeout-reset recovery path); accepting to avoid data loss",
-            task_id,
-        )
-    elif task.status not in ("accepted", "running", "completed"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "ok": False,
-                "error_code": "INVALID_TASK_STATUS",
-                "message": (
-                    f"Task status is {task.status}, "
-                    "expected accepted, running, completed or pending"
-                ),
-            },
-        )
+    _validate_upload_status(task_id, task.status)
 
     # 单任务多阶段 + 聚合上传模型下：
     # - 每次 upload 都是 cloud_task_id 的"完整数据快照"（agent 已聚合多个本地 task 的 JSON）

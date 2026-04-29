@@ -1462,6 +1462,96 @@ def _extract_channel_brief(brand_brief: dict | None, channel_type: str) -> str:
     return ""
 
 
+# ==================== 研究计划 advisory ====================
+#
+# 非阻塞软提示，在 design_research 返回时计算，附带在 DesignResearchResponse.advisories。
+# 设计原则：
+# - 只检测 brief 显性化诉求与 data_plan 的覆盖盲区，不替用户决策
+# - 规则判断（不调 LLM），单一信号词，召回明确、漏报可接受
+# - 信号词为简体中文专有名词，不做正则、不做语义匹配（避免误报）
+
+# 用于检测竞品对比诉求的单一信号词。"竞品" 在 brand brief 中几乎无歧义；
+# "对比/差异化/横向" 等词太宽泛（"消费者对比场景"/"产品差异化升级"/"用户横向调研"
+# 都不必然意味着 brand-vs-brand 的竞品分析），不纳入触发集。
+_COMPETITIVE_SIGNAL_TOKEN = "竞品"
+
+
+def _check_missing_competitive_social_dimension(
+    research_design: dict,
+    brand_brief: dict,
+) -> dict | None:
+    """检测 brief 提及竞品但 data_plan 缺 competitive 社媒维度的覆盖盲区。
+
+    所有触发条件全部满足时返回 advisory dict，否则 None：
+    1. data_plan 含 social_media 维度（纯新闻 brief 不适用）
+    2. data_plan 不含 competitive 类型维度（通过 RQ.dimension 反查）
+    3. brand_brief 的 constraints / analysis_goal / channel_plan[social_media].solvable
+       任一字段含信号词「竞品」
+    """
+    data_plan = research_design.get("data_plan") or []
+    research_questions = research_design.get("research_questions") or []
+
+    has_social = any(
+        (dp.get("channel") or "social_media") == "social_media"
+        for dp in data_plan
+    )
+    if not has_social:
+        return None
+
+    rq_dim_map = {rq.get("id"): rq.get("dimension") for rq in research_questions}
+    has_competitive = any(
+        rq_dim_map.get(qid) == "competitive"
+        for dp in data_plan
+        for qid in (dp.get("question_ids") or [])
+    )
+    if has_competitive:
+        return None
+
+    constraints = brand_brief.get("constraints") or ""
+    analysis_goal = brand_brief.get("analysis_goal") or ""
+
+    social_solvable: list[str] = []
+    for ch in brand_brief.get("channel_plan") or []:
+        if ch.get("type") == "social_media":
+            social_solvable = ch.get("solvable") or []
+            break
+
+    text_pool = " ".join([constraints, analysis_goal, *social_solvable])
+    if _COMPETITIVE_SIGNAL_TOKEN not in text_pool:
+        return None
+
+    return {
+        "code": "missing_competitive_social_dimension",
+        "severity": "warning",
+        "message": (
+            "Brief 中提及「竞品」相关诉求，但研究计划未包含 competitive 类型的社媒维度。"
+            "若需采集消费者对竞品的主观评价（社媒 UGC），建议补充一个 competitive 维度，"
+            "关键词建议与主品 consumer_voice 共享同一主题锚（如「<竞品名> <主题锚>」）。"
+            "若仅关注主品资产建设，或竞品诉求已由新闻媒体维度覆盖，可忽略此提示。"
+        ),
+    }
+
+
+def _compute_research_design_advisories(
+    research_design: dict,
+    brand_brief: dict,
+) -> list[dict]:
+    """计算研究计划 advisory（非阻塞软提示）。
+
+    第一版仅一条规则：missing_competitive_social_dimension。
+    后续可扩展更多 advisory 检测，每条独立函数，互不影响。
+    """
+    advisories: list[dict] = []
+
+    missing_competitive = _check_missing_competitive_social_dimension(
+        research_design, brand_brief,
+    )
+    if missing_competitive:
+        advisories.append(missing_competitive)
+
+    return advisories
+
+
 async def design_research(
     db: AsyncSession,
     strategy: Strategy,
@@ -1497,6 +1587,9 @@ async def design_research(
             detail=f"AI 研究设计解析失败: {e}",
         ) from e
 
+    advisories = _compute_research_design_advisories(parsed, brand_brief)
+    parsed["advisories"] = advisories
+
     response = DesignResearchResponse(
         understanding_summary=parsed["understanding_summary"],
         research_questions=parsed["research_questions"],
@@ -1505,6 +1598,7 @@ async def design_research(
         primary_sources=parsed.get("primary_sources", []),
         output_type=parsed["output_type"],
         output_type_rationale=parsed.get("output_type_rationale", ""),
+        advisories=advisories,
     )
     logger.info(
         "Strategy %d 研究设计完成 (%.1fs, %d 个研究问题, %d 个数据维度)",

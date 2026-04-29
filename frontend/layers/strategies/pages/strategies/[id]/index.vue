@@ -227,6 +227,7 @@
             :research-questions="researchDesign?.research_questions || []"
             :data-plan="editableDataPlan"
             :slice-blueprint="editableBlueprint"
+            :advisories="researchDesign?.advisories || []"
             :output-type="selectedOutputType"
             :output-type-rationale="researchDesign?.output_type_rationale"
             :editing="editingPlan"

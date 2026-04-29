@@ -8,6 +8,18 @@
       <span class="font-medium">AI 理解：</span>{{ understandingSummary }}
     </div>
 
+    <!-- 软提示：研究计划与 brief 诉求的潜在差异（非阻塞） -->
+    <UAlert
+      v-for="advisory in visibleAdvisories"
+      :key="advisory.code"
+      color="warning"
+      variant="soft"
+      icon="i-heroicons-exclamation-triangle"
+      title="建议关注"
+      :description="advisory.message"
+      :close="{ onClick: () => dismissAdvisory(advisory.code) }"
+    />
+
     <!-- 研究问题 -->
     <div v-if="researchQuestions.length">
       <h4 class="text-xs font-medium text-gray-500 mb-2">
@@ -264,7 +276,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DataPlanItem, OutputType, SliceBlueprintItem, ResearchQuestion } from '../types'
+import type { DataPlanItem, OutputType, ResearchDesignAdvisory, SliceBlueprintItem, ResearchQuestion } from '../types'
 import {
   OUTPUT_TYPE_LABELS,
   PLATFORM_OPTIONS,
@@ -291,11 +303,22 @@ const props = defineProps<{
   researchQuestions: ResearchQuestion[]
   dataPlan: DataPlanItem[]
   sliceBlueprint: SliceBlueprintItem[]
+  advisories?: ResearchDesignAdvisory[]
   outputType?: OutputType
   outputTypeRationale?: string
   editing: boolean
   notesPerTask: number
 }>()
+
+const dismissedAdvisoryCodes = ref<Set<string>>(new Set())
+
+const visibleAdvisories = computed(() =>
+  (props.advisories || []).filter(a => !dismissedAdvisoryCodes.value.has(a.code))
+)
+
+const dismissAdvisory = (code: string): void => {
+  dismissedAdvisoryCodes.value = new Set([...dismissedAdvisoryCodes.value, code])
+}
 
 const emit = defineEmits<{
   'update:dataPlan': [value: DataPlanItem[]]

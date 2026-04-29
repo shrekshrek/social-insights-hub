@@ -6,6 +6,8 @@ import pytest
 
 from src.strategies.service import (
     STATUS_ORDER,
+    _check_missing_competitive_social_dimension,
+    _compute_research_design_advisories,
     _create_auto_slices,
     _social_slice_stage2_terminal,
     _try_advance_to_ready,
@@ -443,3 +445,142 @@ class TestTryAdvanceToReady:
         # coverage 已跑过结果写入，下次轮询会跳过
         assert strategy.coverage_check_result == {"overall_ready": False, "reason": "..."}
         mock_notify.assert_not_called()
+
+
+class TestResearchDesignAdvisories:
+    """research design advisory 软提示规则单元测试"""
+
+    @staticmethod
+    def _design(
+        *,
+        has_social: bool = True,
+        has_competitive: bool = False,
+        has_news: bool = False,
+    ) -> dict:
+        """构造最小可用的 research_design dict"""
+        rqs: list[dict] = []
+        data_plan: list[dict] = []
+
+        if has_social:
+            rqs.append({"id": "rq1", "dimension": "consumer_voice"})
+            data_plan.append({
+                "channel": "social_media",
+                "dimension_name": "主品 UGC",
+                "question_ids": ["rq1"],
+            })
+        if has_competitive:
+            rqs.append({"id": "rq_comp", "dimension": "competitive"})
+            data_plan.append({
+                "channel": "social_media",
+                "dimension_name": "竞品 UGC",
+                "question_ids": ["rq_comp"],
+            })
+        if has_news:
+            rqs.append({"id": "rq_news", "dimension": "media_narrative"})
+            data_plan.append({
+                "channel": "news_media",
+                "dimension_name": "竞品新闻",
+                "question_ids": ["rq_news"],
+            })
+
+        return {"research_questions": rqs, "data_plan": data_plan}
+
+    @staticmethod
+    def _brief_with_competitor_signal(*, location: str = "constraints") -> dict:
+        """构造含「竞品」信号的 brand_brief"""
+        base = {
+            "subject": "美赞臣 Enfinitas",
+            "analysis_goal": "提升配方优越性的品牌形象",
+            "constraints": "",
+            "channel_plan": [
+                {"type": "social_media", "solvable": ["消费者对 MFGM 的认知"]}
+            ],
+        }
+        signal = "竞品：高端婴幼儿配方奶粉品牌"
+        if location == "constraints":
+            base["constraints"] = signal
+        elif location == "analysis_goal":
+            base["analysis_goal"] = base["analysis_goal"] + "；并对比竞品配方"
+        elif location == "social_solvable":
+            base["channel_plan"] = [
+                {
+                    "type": "social_media",
+                    "solvable": ["消费者对 Enfinitas 及竞品高端奶粉的价值评价与对比"],
+                }
+            ]
+        return base
+
+    def test_triggers_when_brief_mentions_competitor_and_no_competitive_dim(self):
+        design = self._design(has_social=True, has_competitive=False, has_news=True)
+        brief = self._brief_with_competitor_signal(location="constraints")
+
+        result = _check_missing_competitive_social_dimension(design, brief)
+
+        assert result is not None
+        assert result["code"] == "missing_competitive_social_dimension"
+        assert result["severity"] == "warning"
+        assert "竞品" in result["message"]
+
+    def test_triggers_on_signal_in_social_solvable(self):
+        """信号词出现在 channel_plan[social_media].solvable 也应触发"""
+        design = self._design(has_social=True, has_competitive=False)
+        brief = self._brief_with_competitor_signal(location="social_solvable")
+
+        result = _check_missing_competitive_social_dimension(design, brief)
+
+        assert result is not None
+
+    def test_no_advisory_when_competitive_dim_already_present(self):
+        design = self._design(has_social=True, has_competitive=True)
+        brief = self._brief_with_competitor_signal(location="constraints")
+
+        result = _check_missing_competitive_social_dimension(design, brief)
+
+        assert result is None
+
+    def test_no_advisory_when_brief_lacks_competitor_signal(self):
+        design = self._design(has_social=True, has_competitive=False)
+        brief = {
+            "subject": "某品牌",
+            "analysis_goal": "了解消费者对某品牌的认知",
+            "constraints": "时间：Y26",
+            "channel_plan": [
+                {"type": "social_media", "solvable": ["消费者认知"]}
+            ],
+        }
+
+        result = _check_missing_competitive_social_dimension(design, brief)
+
+        assert result is None
+
+    def test_no_advisory_when_no_social_media_dimension(self):
+        """纯新闻 brief 不适用此规则"""
+        design = self._design(has_social=False, has_competitive=False, has_news=True)
+        brief = self._brief_with_competitor_signal(location="constraints")
+
+        result = _check_missing_competitive_social_dimension(design, brief)
+
+        assert result is None
+
+    def test_compute_advisories_aggregates_results(self):
+        """顶层入口在命中时返回非空 list，未命中时返回空 list"""
+        triggering = self._compute_for(has_competitive=False, signal=True)
+        non_triggering = self._compute_for(has_competitive=True, signal=True)
+
+        assert len(triggering) == 1
+        assert triggering[0]["code"] == "missing_competitive_social_dimension"
+        assert non_triggering == []
+
+    def _compute_for(self, *, has_competitive: bool, signal: bool) -> list[dict]:
+        design = self._design(has_social=True, has_competitive=has_competitive)
+        brief = (
+            self._brief_with_competitor_signal(location="constraints")
+            if signal
+            else {
+                "subject": "某品牌",
+                "analysis_goal": "认知研究",
+                "constraints": "",
+                "channel_plan": [],
+            }
+        )
+        return _compute_research_design_advisories(design, brief)

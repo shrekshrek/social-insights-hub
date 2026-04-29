@@ -115,6 +115,12 @@ export interface SliceBlueprintItem {
   serves_questions?: string[]
 }
 
+export interface ResearchDesignAdvisory {
+  code: string
+  severity: 'warning'
+  message: string
+}
+
 export interface ResearchDesign {
   understanding_summary: string
   research_questions: ResearchQuestion[]
@@ -123,6 +129,7 @@ export interface ResearchDesign {
   primary_sources: PrimarySource[]
   output_type: OutputType
   output_type_rationale: string
+  advisories?: ResearchDesignAdvisory[]
 }
 
 // ==================== 探测验证 ====================

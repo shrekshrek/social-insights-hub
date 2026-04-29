@@ -79,6 +79,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      crawl4ai:
+        condition: service_started
     restart: unless-stopped
 
   redis:
@@ -86,6 +88,13 @@ services:
     container_name: prod-redis
     volumes:
       - redis_data_prod:/data
+    restart: unless-stopped
+
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: crawl4ai
+    environment:
+      - CRAWL4AI_API_TOKEN=${CRAWL4AI_TOKEN:-}
     restart: unless-stopped
 
 

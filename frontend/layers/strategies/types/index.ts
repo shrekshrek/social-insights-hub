@@ -198,8 +198,6 @@ export interface ProbeStatusResponse {
   analyzed_count: number
   total_count: number
   probe_review_result: ProbeReviewResult | null
-  industry_research: ResearchAgentStatus
-  creative_research: ResearchAgentStatus
   strategy: Strategy | null
 }
 

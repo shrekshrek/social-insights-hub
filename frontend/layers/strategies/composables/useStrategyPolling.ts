@@ -6,9 +6,16 @@ import type {
   CoverageCheckResult,
   CollectionTaskStatus,
   NewsCollectionTaskStatus,
+  ResearchAgentStatus,
   Strategy,
 } from '../types'
 import { STATUS_ORDER } from './useStrategyConstants'
+
+const emptyResearchStatus = (): ResearchAgentStatus => ({
+  has_task: false,
+  status: '',
+  task_id: null,
+})
 
 /**
  * 策略详情页轮询逻辑：探测状态 + 采集状态
@@ -111,6 +118,8 @@ export const useStrategyPolling = (
     totalCount: 0,
     allAnalyzed: false,
     coverageResult: null as CoverageCheckResult | null,
+    industryResearch: emptyResearchStatus(),
+    creativeResearch: emptyResearchStatus(),
   })
 
   let collectionTimer: ReturnType<typeof setInterval> | null = null
@@ -135,6 +144,8 @@ export const useStrategyPolling = (
       collectionData.completedCount = result.completed_count
       collectionData.totalCount = result.total_count
       collectionData.allAnalyzed = result.all_analyzed
+      collectionData.industryResearch = result.industry_research
+      collectionData.creativeResearch = result.creative_research
 
       if (result.coverage_check_result) {
         collectionData.coverageResult = result.coverage_check_result
@@ -175,6 +186,10 @@ export const useStrategyPolling = (
       startProbePolling()
     } else if (status === 'collecting') {
       startCollectionPolling()
+    } else if (status && (STATUS_ORDER[status as keyof typeof STATUS_ORDER] ?? 0) >= STATUS_ORDER.ready) {
+      // 已就绪及之后阶段：一次性拉 collection-status 拿研究状态（pollCollectionStatus
+      // 内部会因 status >= ready 立即停止，等价于 one-shot fetch）
+      pollCollectionStatus()
     }
   }
 

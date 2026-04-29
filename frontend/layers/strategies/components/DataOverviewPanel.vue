@@ -104,6 +104,37 @@
       </div>
     </div>
 
+    <!-- 专题研究（行业 / 创意）：在 collecting 阶段与全量采集并行启动 -->
+    <div v-if="researchCards.length" class="space-y-1.5">
+      <div class="flex items-center gap-2">
+        <UIcon name="i-heroicons-academic-cap" class="text-purple-500 size-4" />
+        <span class="text-xs font-medium text-gray-500">专题研究</span>
+      </div>
+      <div class="grid grid-cols-3 gap-1.5">
+        <component
+          :is="card.taskId ? NuxtLink : 'div'"
+          v-for="card in researchCards"
+          :key="card.key"
+          :to="card.taskId ? `/research-agent/${card.taskId}` : undefined"
+          class="flex items-center gap-1.5 text-xs p-1.5 rounded"
+          :class="[
+            statusBg(card.status),
+            card.taskId ? 'hover:ring-1 hover:ring-primary-300 transition' : '',
+          ]"
+        >
+          <UIcon
+            :name="statusIcon(card.status)"
+            :class="[statusIconColor(card.status), card.status === 'running' ? 'animate-spin' : '']"
+            class="shrink-0"
+          />
+          <span class="font-medium truncate">{{ card.label }}</span>
+          <UBadge variant="subtle" size="sm" :color="researchBadgeColor(card.status)" class="shrink-0 ml-auto">
+            {{ researchStatusLabel(card.status, card.hasTask) }}
+          </UBadge>
+        </component>
+      </div>
+    </div>
+
     <!-- 切片列表（按渠道分组） -->
     <div v-if="slices.length" class="space-y-3">
       <h4 class="text-xs font-medium text-gray-500">
@@ -239,7 +270,14 @@
 </template>
 
 <script setup lang="ts">
-import type { SliceSummary, CoverageCheckResult, CollectionTaskStatus, NewsCollectionTaskStatus } from '../types'
+import { NuxtLink } from '#components'
+import type {
+  SliceSummary,
+  CoverageCheckResult,
+  CollectionTaskStatus,
+  NewsCollectionTaskStatus,
+  ResearchAgentStatus,
+} from '../types'
 import { platformLabel } from '../composables/useStrategyConstants'
 
 const props = defineProps<{
@@ -253,6 +291,10 @@ const props = defineProps<{
   coverageResult: CoverageCheckResult | null
   /** task_id(string) → dimension_name 映射，用于按维度分组展示社媒任务 */
   taskDimensionMap?: Record<string, string>
+  /** 行业研究任务状态（approve_probe 时启动，与全量采集并行） */
+  industryResearch?: ResearchAgentStatus
+  /** 创意研究任务状态（campaign_strategy / full_strategy 路径） */
+  creativeResearch?: ResearchAgentStatus
 }>()
 
 const progressPercent = computed(() => {
@@ -334,5 +376,50 @@ const sliceStatusColor = (status: string) => {
   if (status === 'failed') return 'error' as const
   if (!status || status === 'pending') return 'neutral' as const
   return 'primary' as const
+}
+
+/** 专题研究卡片：仅展示 has_task=true 的（避免空槽位） */
+const researchCards = computed(() => {
+  const cards: Array<{
+    key: string
+    label: string
+    status: string
+    hasTask: boolean
+    taskId: number | null
+  }> = []
+  if (props.industryResearch?.has_task) {
+    cards.push({
+      key: 'industry',
+      label: '行业研究',
+      status: props.industryResearch.status || 'pending',
+      hasTask: true,
+      taskId: props.industryResearch.task_id,
+    })
+  }
+  if (props.creativeResearch?.has_task) {
+    cards.push({
+      key: 'creative',
+      label: '创意研究',
+      status: props.creativeResearch.status || 'pending',
+      hasTask: true,
+      taskId: props.creativeResearch.task_id,
+    })
+  }
+  return cards
+})
+
+const researchStatusLabel = (status: string, hasTask: boolean): string => {
+  if (!hasTask) return '未启动'
+  if (status === 'completed') return '已完成'
+  if (status === 'failed') return '失败'
+  if (status === 'running') return '研究中'
+  return '排队中'
+}
+
+const researchBadgeColor = (status: string) => {
+  if (status === 'completed') return 'success' as const
+  if (status === 'failed') return 'error' as const
+  if (status === 'running') return 'primary' as const
+  return 'neutral' as const
 }
 </script>

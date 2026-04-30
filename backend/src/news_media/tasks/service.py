@@ -5,14 +5,16 @@
   提供底层 execute_news_probe / celery 任务，approve/refine 入口不对外暴露
   （策略通过 strategies/service.py 的批量端点处理）
 
-collect 阶段的执行流水线位于 src/news_media/tasks/tasks.py，
-本模块内的辅助函数（_tag_articles_batch / _run_insight_analysis）供 celery
-_async_run_collect 直接引用。
+collect 阶段的执行流水线位于 src/news_media/tasks/tasks.py，本模块内的辅助函数
+（_tag_articles_batch_sync / _apply_tags_to_articles_sync / _compute_task_stats）
+供 celery 直接调用。Slice 综合分析（Pass 1 + Pass 2）由 src/news_media/analysis/
+service.py 承担，task 层不再调 insight。
 """
 
 import json
 import logging
 import re
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -145,260 +147,10 @@ def _parse_llm_json(content: str) -> list | dict:
     return json.loads(content)
 
 
-async def _run_insight_analysis(
-    articles: list,
-    analysis_goal: str,
-    subject: str,
-    competitors: list[str] | None = None,
-) -> tuple[dict, dict | None]:
-    """整体分析（一次 LLM 调用），返回 (结构化洞察, token_usage)。
-
-    competitors: 研究主体的已知竞品列表（规范品牌名）。传空列表时 chain 退化为
-    全部标 context（独立监测场景）。策略场景由 slice_blueprint[].competitors 传入。
-
-    token_usage 来自 LLM response_metadata，可能为 None。
-    """
-    from src.llm.chains.news.insight_chain import (
-        create_insight_chain as create_news_insight_chain,
-        format_tagged_articles_for_insight,
-    )
-
-    relevant = [
-        a for a in articles
-        if a.relevance in ("high", "medium") or a.relevance is None
-    ]
-
-    article_dicts = [
-        {
-            "title": a.title,
-            "source_name": a.source_name,
-            "source_tier": a.source_tier,
-            "published_at": str(a.published_at) if a.published_at else "未知",
-            "relevance": a.relevance,
-            "sentiment": a.sentiment,
-            "article_type": a.article_type,
-            "mentioned_entities": a.mentioned_entities,
-            "key_quotes": a.key_quotes,
-            "summary": a.summary,
-        }
-        for a in relevant
-    ]
-
-    tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
-    for a in relevant:
-        tier = a.source_tier or "tier3"
-        tier_counts[tier] = tier_counts.get(tier, 0) + 1
-
-    tagged_content = format_tagged_articles_for_insight(article_dicts)
-
-    chain = create_news_insight_chain()
-    response = await chain.ainvoke({
-        "analysis_goal": analysis_goal,
-        "subject": subject,
-        "competitors": ", ".join(competitors or []) or "（未指定）",
-        "article_count": len(relevant),
-        "tagged_articles": tagged_content,
-        "tier1_count": tier_counts["tier1"],
-        "tier2_count": tier_counts["tier2"],
-        "tier3_count": tier_counts["tier3"],
-        "wechat_mp_count": tier_counts["wechat_mp"],
-    })
-
-    token_usage = (response.response_metadata or {}).get("token_usage")
-
-    try:
-        parsed = _parse_llm_json(response.content)
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.error("Failed to parse insight response: %s", e)
-        return {"error": str(e)}, token_usage
-
-    # 代码兜底：强制校正 role（LLM 偶发违反硬规则时）
-    _enforce_entity_roles(parsed, subject, competitors or [])
-    return parsed, token_usage
-
-
-def _enforce_entity_roles(
-    insights: dict,
-    subject: str,
-    competitors: list[str],
-) -> None:
-    """强制 role 规范 + 合并 subject/competitors 的变体实体条目（代码层兜底）。
-
-    LLM prompt 已指示"变体归一到规范名"+"role 硬绑定"，此函数作为防御性后处理
-    （新闻 pipeline 没有社媒侧的多层实体归一化链路，此兜底是必要补强）。
-
-    ## 三种运行模式
-
-    1. **独立监测场景**（`subject` 为空字符串）：全部实体 role=context，不做变体合并
-    2. **显式列表模式**（`subject` 非空 + `competitors` 非空）：严格按列表归类，
-       列表外品牌强制 context，subject/competitors 的变体合并到 canonical 条目
-    3. **自动发现模式**（`subject` 非空 + `competitors` 空）：允许 LLM 自判 competitor
-       （新闻编辑笔下品牌关系网络通常明示），代码仅强制 target==subject，
-       subject 的变体合并；LLM 自判的 competitor 保持原样（不在 canonical 列表合并）
-
-    ## 通用处理
-
-    - **name 匹配**：case-insensitive，exact 优先；substring 兜底（"绿米联创Aqara"
-      匹配 canonical "Aqara"），patterns 按长度降序避免 "AppleCare" 被归到 "Apple"
-    - **显式模式下的变体合并**：mention_count 累加、sentiment 加权平均、
-      source_count 取 max、key_claims 合并去重截断至 3 条
-    - **entities 重排**：target → competitor（mention 降序）→ context（mention 降序）
-    - **competitive_landscape.entities_mentioned 同步重建**：和合并后 entities 一致
-    """
-    if not isinstance(insights, dict):
-        return
-    entities = insights.get("entities")
-    if not isinstance(entities, list):
-        return
-
-    subj_norm = (subject or "").strip().lower()
-
-    # 独立场景（subject 空）：全部归 context，不做变体合并
-    if not subj_norm:
-        for e in entities:
-            if isinstance(e, dict):
-                e["role"] = "context"
-        return
-
-    comp_canonical: dict[str, str] = {
-        (c or "").strip().lower(): (c or "").strip()
-        for c in (competitors or [])
-        if (c or "").strip()
-    }
-    # 显式列表模式（用户明确指定 competitors）vs 自动发现模式（LLM 自判 competitor）
-    has_explicit_competitors = bool(comp_canonical)
-
-    # 构建匹配 patterns: [(lower_form, canonical_form, role), ...]
-    # Exact 匹配优先；substring 兜底按长度降序（更具体的优先，避免 "AppleCare"
-    # 被泛泛归到 "Apple"——虽然正常 brief 里不会有这种嵌套，但保持匹配确定性）
-    patterns: list[tuple[str, str, str]] = [
-        (subj_norm, (subject or "").strip(), "target"),
-    ]
-    for cl, cr in comp_canonical.items():
-        patterns.append((cl, cr, "competitor"))
-    patterns_by_len = sorted(patterns, key=lambda x: len(x[0]), reverse=True)
-
-    def _match(name_lower: str) -> tuple[str | None, str | None]:
-        """返回 (canonical_name, role)；未匹配返回 (None, None)。
-
-        两阶段匹配：
-        1. Exact（整个 name 完全等于 pattern）——优先，避免误匹配
-        2. Substring（pattern 是 name 的子串）——兜底，处理"品牌+附加词"变体
-           如 "绿米联创Aqara" / "Aqara Home" / "Aqara 窗帘伴侣 E1" → 归到 "Aqara"
-        """
-        for p_lower, canonical, role in patterns:
-            if name_lower == p_lower:
-                return canonical, role
-        for p_lower, canonical, role in patterns_by_len:
-            if p_lower and p_lower in name_lower:
-                return canonical, role
-        return None, None
-
-    # subject + competitors 的合并容器：canonical name → aggregated dict
-    merged: dict[str, dict] = {}
-    # 非列表内实体（context）直接保留，不合并变体
-    passthrough: list[dict] = []
-
-    for e in entities:
-        if not isinstance(e, dict):
-            continue
-        name_norm = (e.get("name") or "").strip().lower()
-
-        canonical, role = _match(name_norm)
-        if canonical is None:
-            # 未匹配 subject（也非 explicit competitors 列表中的任一）
-            e_copy = dict(e)
-            if has_explicit_competitors:
-                # 显式列表模式：列表之外的实体一律强制 context（尊重用户意图）
-                e_copy["role"] = "context"
-            else:
-                # 自动发现模式：保留 LLM 自判的 competitor/context；
-                # 但 target 只能是 subject，LLM 自判 target 强制改回 context
-                llm_role = (e_copy.get("role") or "").strip().lower()
-                if llm_role == "competitor":
-                    e_copy["role"] = "competitor"
-                else:
-                    # 任何非 competitor 的情况（context/target/空/非法）都归 context
-                    e_copy["role"] = "context"
-            passthrough.append(e_copy)
-            continue
-
-        if canonical not in merged:
-            merged[canonical] = {
-                "name": canonical,
-                "role": role,
-                "mention_count": 0,
-                "sentiment": 0.0,
-                "source_count": 0,
-                "key_claims": [],
-            }
-
-        agg = merged[canonical]
-        m = e.get("mention_count", 0) or 0
-        s_new = e.get("sentiment")
-        if isinstance(m, int) and m > 0:
-            n_before = agg["mention_count"]
-            n_after = n_before + m
-            if isinstance(s_new, (int, float)) and n_after > 0:
-                agg["sentiment"] = (
-                    agg["sentiment"] * n_before + s_new * m
-                ) / n_after
-            agg["mention_count"] = n_after
-
-        sc = e.get("source_count", 0) or 0
-        if isinstance(sc, int) and sc > agg["source_count"]:
-            agg["source_count"] = sc
-
-        claims = e.get("key_claims") or []
-        if isinstance(claims, list):
-            for c in claims:
-                if isinstance(c, str) and c and c not in agg["key_claims"]:
-                    agg["key_claims"].append(c)
-
-    # key_claims 截断至 3 条（对齐 prompt schema 限制）
-    for e in merged.values():
-        if len(e["key_claims"]) > 3:
-            e["key_claims"] = e["key_claims"][:3]
-
-    # 排序：target → competitor（mention 降序）→ context（mention 降序）
-    # 注意：显式列表模式下所有 competitor 都在 merged 里；
-    # 自动发现模式下 LLM 自判的 competitor 在 passthrough 里（role 已标 competitor）
-    target_list = [e for e in merged.values() if e["role"] == "target"]
-    merged_comp = [e for e in merged.values() if e["role"] == "competitor"]
-    passthrough_comp = [e for e in passthrough if e.get("role") == "competitor"]
-    passthrough_context = [e for e in passthrough if e.get("role") != "competitor"]
-
-    comp_list = sorted(
-        merged_comp + passthrough_comp,
-        key=lambda x: x.get("mention_count", 0) or 0,
-        reverse=True,
-    )
-    context_list = sorted(
-        passthrough_context,
-        key=lambda x: x.get("mention_count", 0) or 0,
-        reverse=True,
-    )
-
-    insights["entities"] = target_list + comp_list + context_list
-
-    # 重建 competitive_landscape.entities_mentioned，避免和 entities 不一致
-    cl = insights.get("competitive_landscape")
-    if isinstance(cl, dict):
-        cl["entities_mentioned"] = [
-            {
-                "name": e["name"],
-                "mentions": e.get("mention_count", 0),
-                "sentiment": e.get("sentiment", 0),
-            }
-            for e in comp_list
-        ]
-
-
 # ==================== Sync helpers for Celery gevent worker ====================
 # Celery 任务（gevent pool）直接调用这些同步函数，走 SyncSessionLocal + psycopg。
 # 避免在 gevent worker 里引入 asyncio event loop（asyncpg 连接绑定 loop 会造成
 # 跨 loop 并发 dispose 竞态，导致 greenlet 永久卡死）。
-# FastAPI 路由的 async 调用路径使用上面的 _run_insight_analysis（async 版本）。
 
 
 def _search_and_store_articles_sync(
@@ -544,69 +296,146 @@ def _apply_tags_to_articles_sync(
     db.flush()
 
 
-def _run_insight_analysis_sync(
-    articles: list,
-    analysis_goal: str,
-    subject: str,
-    competitors: list[str] | None = None,
-) -> tuple[dict, dict | None]:
-    """整体分析（同步版，chain.invoke）"""
-    from src.llm.chains.news.insight_chain import (
-        create_insight_chain as create_news_insight_chain,
-        format_tagged_articles_for_insight,
+_TIER_KEYS = ("tier1", "tier2", "tier3", "wechat_mp")
+_CHANNEL_KEYS = ("baidu", "sogou", "wechat_mp")
+_ARTICLE_TYPE_KEYS = ("report", "opinion", "pr", "analysis")
+_RELEVANCE_KEYS = ("high", "medium", "low")
+# tier1 优先；同 tier 内保持原顺序（list 拼接 + 稳定排序保证）
+_TIER_PRIORITY = {"tier1": 0, "tier2": 1, "tier3": 2, "wechat_mp": 3}
+
+
+def _compute_task_stats(articles: list) -> dict:
+    """从已标注 NewsArticle 列表派生 task 描述统计。
+
+    供 collect celery 任务调用，写入 task.analysis_result.meta；不调 LLM。
+    所有指标基于 tagging 阶段产出聚合，是事实层。
+    """
+    tier_counts = {k: 0 for k in _TIER_KEYS}
+    source_dist = {k: 0 for k in _CHANNEL_KEYS}
+    article_type_counts = {k: 0 for k in _ARTICLE_TYPE_KEYS}
+    relevance_counts = {k: 0 for k in _RELEVANCE_KEYS}
+    sentiment_dist = {"positive": 0, "neutral": 0, "negative": 0}
+
+    sentiment_scores: list[float] = []
+    sentiment_by_tier_buckets: dict[str, list[float]] = defaultdict(list)
+    entity_mentions: dict[str, int] = {}
+    by_date: dict[str, dict] = defaultdict(
+        lambda: {
+            "count": 0,
+            "by_tier": {k: 0 for k in _TIER_KEYS},
+            "sentiments": [],
+        }
+    )
+    quotes_with_priority: list[tuple[int, dict]] = []
+
+    for a in articles:
+        tier = a.source_tier or "tier3"
+        if tier in tier_counts:
+            tier_counts[tier] += 1
+
+        src = getattr(a, "search_source", None) or "baidu"
+        if src in source_dist:
+            source_dist[src] += 1
+
+        if a.relevance in relevance_counts:
+            relevance_counts[a.relevance] += 1
+
+        if a.article_type in article_type_counts:
+            article_type_counts[a.article_type] += 1
+
+        if a.sentiment is not None:
+            sentiment_scores.append(a.sentiment)
+            sentiment_by_tier_buckets[tier].append(a.sentiment)
+            if a.sentiment > 0:
+                sentiment_dist["positive"] += 1
+            elif a.sentiment < 0:
+                sentiment_dist["negative"] += 1
+            else:
+                sentiment_dist["neutral"] += 1
+
+        if a.published_at:
+            date_str = a.published_at.strftime("%Y-%m-%d")
+            bucket = by_date[date_str]
+            bucket["count"] += 1
+            if tier in bucket["by_tier"]:
+                bucket["by_tier"][tier] += 1
+            if a.sentiment is not None:
+                bucket["sentiments"].append(a.sentiment)
+
+        # 实体原始计数（不归一，归一是 slice 的事）
+        for ent in (a.mentioned_entities or []):
+            name = (ent or {}).get("name", "")
+            if name:
+                entity_mentions[name] = entity_mentions.get(name, 0) + 1
+
+        for q in (a.key_quotes or []):
+            speaker = (q or {}).get("speaker", "")
+            quote_text = (q or {}).get("quote", "")
+            if speaker and quote_text:
+                quotes_with_priority.append((
+                    _TIER_PRIORITY.get(tier, 99),
+                    {
+                        "speaker": speaker,
+                        "quote": quote_text,
+                        "source_name": a.source_name,
+                        "source_tier": tier,
+                        "article_id": a.id,
+                    },
+                ))
+
+    sentiment_overall = (
+        round(sum(sentiment_scores) / len(sentiment_scores), 3)
+        if sentiment_scores else None
     )
 
-    relevant = [
-        a for a in articles
-        if a.relevance in ("high", "medium") or a.relevance is None
-    ]
+    sentiment_by_tier = {
+        t: (
+            round(sum(scores) / len(scores), 3)
+            if (scores := sentiment_by_tier_buckets.get(t)) else None
+        )
+        for t in _TIER_KEYS
+    }
 
-    article_dicts = [
-        {
-            "title": a.title,
-            "source_name": a.source_name,
-            "source_tier": a.source_tier,
-            "published_at": str(a.published_at) if a.published_at else "未知",
-            "relevance": a.relevance,
-            "sentiment": a.sentiment,
-            "article_type": a.article_type,
-            "mentioned_entities": a.mentioned_entities,
-            "key_quotes": a.key_quotes,
-            "summary": a.summary,
-        }
-        for a in relevant
-    ]
+    coverage_by_day = sorted(
+        (
+            {
+                "date": d,
+                "count": v["count"],
+                "count_by_tier": v["by_tier"],
+                "sentiment_avg": (
+                    round(sum(v["sentiments"]) / len(v["sentiments"]), 3)
+                    if v["sentiments"] else None
+                ),
+            }
+            for d, v in by_date.items()
+        ),
+        key=lambda x: x["date"],
+    )
 
-    tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
-    for a in relevant:
-        tier = a.source_tier or "tier3"
-        tier_counts[tier] = tier_counts.get(tier, 0) + 1
+    top_entities_raw = sorted(
+        ({"name": k, "mention_count": v} for k, v in entity_mentions.items()),
+        key=lambda x: x["mention_count"],
+        reverse=True,
+    )[:10]
 
-    tagged_content = format_tagged_articles_for_insight(article_dicts)
+    quotes_with_priority.sort(key=lambda x: x[0])
+    top_quotes = [q for _, q in quotes_with_priority[:5]]
 
-    chain = create_news_insight_chain()
-    response = chain.invoke({
-        "analysis_goal": analysis_goal,
-        "subject": subject,
-        "competitors": ", ".join(competitors or []) or "（未指定）",
-        "article_count": len(relevant),
-        "tagged_articles": tagged_content,
-        "tier1_count": tier_counts["tier1"],
-        "tier2_count": tier_counts["tier2"],
-        "tier3_count": tier_counts["tier3"],
-        "wechat_mp_count": tier_counts["wechat_mp"],
-    })
-
-    token_usage = (response.response_metadata or {}).get("token_usage")
-
-    try:
-        parsed = _parse_llm_json(response.content)
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.error("Failed to parse insight response: %s", e)
-        return {"error": str(e)}, token_usage
-
-    _enforce_entity_roles(parsed, subject, competitors or [])
-    return parsed, token_usage
+    return {
+        "articles_total": len(articles),
+        "articles_high": relevance_counts["high"],
+        "articles_medium": relevance_counts["medium"],
+        "articles_low": relevance_counts["low"],
+        "source_tier_distribution": tier_counts,
+        "search_source_distribution": source_dist,
+        "article_type_distribution": article_type_counts,
+        "sentiment_distribution": sentiment_dist,
+        "sentiment_overall": sentiment_overall,
+        "sentiment_by_tier": sentiment_by_tier,
+        "coverage_by_day": coverage_by_day,
+        "top_entities_raw": top_entities_raw,
+        "top_quotes": top_quotes,
+    }
 
 
 def execute_news_probe_sync(

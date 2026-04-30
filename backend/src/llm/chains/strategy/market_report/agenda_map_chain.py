@@ -116,13 +116,20 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 - attention_gaps: 1-3 条，禁止输出"一切都已充分覆盖"这类空内容
 - credibility=high 要求 tier1+tier2 共同支撑；仅 tier3/wechat_mp 支撑的 narrative 必须 low
 
-## 字段解读
+## 字段解读（NewsSlice 新 schema，仅消费结构化层）
 
-- NewsSlice.result_data.coverage: 报道强度 + 趋势 + 综合指数（media_coverage_index 0-100）
-- NewsSlice.result_data.narratives: 已聚合的叙事，直接引用 theme / article_count 作为 heat_rank 依据
-- NewsSlice.result_data.key_quotes: 按代表性精选的 quotes，优先作为 representative_voices 来源
-- NewsSlice.stats.source_tier_distribution: 各 tier 的文章数量分布
-- NewsSlice.stats.sentiment_overall: 该切片的整体情感倾向（-2~2）
+- `descriptive.articles_filtered`: 切片实际参与分析的文章数（去重 + 过滤 low 后）
+- `descriptive.source_tier_distribution`: 各 tier 的文章数量分布（媒介层级）
+- `descriptive.sentiment_overall` / `sentiment_by_tier`: 整体情感（-2~2）+ 按 tier 分层情感（核心议程定调信号）
+- `descriptive.cross_task_overlap`: 跨任务重叠分布（高重叠 = 多角度共同关注，强热度信号）
+- `descriptive.coverage_timeseries` / `sentiment_timeseries`: 报道量与情感的时序，可用于判断议题阶段（上升/平稳/回落）
+- `event_clusters`: 跨文章事件聚类（含 first_reported_at / peak_date / tier_weighted_score / in_task_ids），是议程的"事实级"载体——narrative_map 应基于这些 cluster 抽象出主题
+- `entities`: 归一后实体（含 role / mention_count / source_count / sentiment_avg / sentiment_by_tier），可识别议程主角
+- `quotes`: 已 speaker 分级的引述（official > executive > analyst > kol > other），含 article_id 锚点；`representative_voices` 优先选 official + executive
+- `media_landscape.source_pyramid`: 4 层金字塔（tier × article_count × sentiment_avg × top_source_names），是 credibility 与议程位置判断依据
+- `competitive`: 主体/竞品投影（players + quote_share），含跨 tier sentiment 与官方引述占比
+
+**禁止使用**：result_data.page_synthesis（含 LLM 散文 briefing / event_titles，仅供 slice 页面阅读，不作策略输入）。
 
 ## 禁止行为
 - 禁止虚构未出现在数据中的引述或来源
@@ -176,41 +183,80 @@ def _build_research_context_section(research_design: dict | None) -> str:
 
 
 def _format_news_slices_for_agenda(news_slices: list[dict]) -> str:
-    """将 NewsSlice 数据格式化为 Agenda Map 层输入，精选 agenda 分析相关字段。"""
+    """将 NewsSlice 数据格式化为 Agenda Map 层输入（ADR-003 新 schema）。
+
+    只消费结构化层（descriptive / entities / quotes / event_clusters /
+    media_landscape / competitive），不消费 page_synthesis。
+    """
     if not news_slices:
         return "（无新闻切片数据）"
 
     parts: list[dict[str, Any]] = []
     for ns in news_slices:
         rd = ns.get("result_data")
-        if not rd or isinstance(rd, str) or rd.get("error"):
+        if not rd or isinstance(rd, str):
             continue
-        stats = ns.get("stats") or {}
+        descriptive = rd.get("descriptive") or {}
+        media_landscape = rd.get("media_landscape") or {}
+        competitive = rd.get("competitive") or {}
+
         parts.append({
             "slice_name": ns.get("name", ""),
-            "article_count": stats.get("articles_total", 0),
-            "source_tier_distribution": stats.get("source_tier_distribution"),
-            "sentiment_overall": stats.get("sentiment_overall"),
-            "coverage": rd.get("coverage"),
-            "sentiment": rd.get("sentiment"),
-            "narratives": (rd.get("narratives") or [])[:5],
+            "article_count": descriptive.get("articles_filtered", 0),
+            "source_tier_distribution": descriptive.get("source_tier_distribution"),
+            "sentiment_overall": descriptive.get("sentiment_overall"),
+            "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+            "cross_task_overlap": (descriptive.get("cross_task_overlap") or {}).get("distribution"),
+            "coverage_timeseries": (descriptive.get("coverage_timeseries") or [])[-30:],  # 最多最近 30 个时间点
+            "media_landscape": {
+                "source_pyramid": media_landscape.get("source_pyramid"),
+                "top_sources": media_landscape.get("top_sources"),
+            },
+            "event_clusters": [
+                {
+                    "cluster_id": c.get("cluster_id"),
+                    "article_count": c.get("article_count"),
+                    "first_reported_at": c.get("first_reported_at"),
+                    "peak_date": c.get("peak_date"),
+                    "tier_weighted_score": c.get("tier_weighted_score"),
+                    "first_reporter": c.get("first_reporter"),
+                    "in_task_ids": c.get("in_task_ids"),
+                }
+                for c in (rd.get("event_clusters") or [])[:8]
+            ],
             "entities": [
                 {
                     "name": e.get("name"),
                     "role": e.get("role"),
                     "mention_count": e.get("mention_count"),
-                    "sentiment": e.get("sentiment"),
                     "source_count": e.get("source_count"),
-                    "key_claims": (e.get("key_claims") or [])[:2],
+                    "cross_task_count": e.get("cross_task_count"),
+                    "sentiment_avg": e.get("sentiment_avg"),
+                    "sentiment_by_tier": e.get("sentiment_by_tier"),
                 }
                 for e in (rd.get("entities") or [])[:10]
                 if isinstance(e, dict)
             ],
-            "key_quotes": (rd.get("key_quotes") or [])[:5],
+            "key_quotes": [
+                {
+                    "speaker": q.get("speaker"),
+                    "speaker_role": q.get("speaker_role"),
+                    "quote": q.get("quote"),
+                    "source_name": q.get("source_name"),
+                    "source_tier": q.get("source_tier"),
+                    "context": q.get("context"),
+                }
+                for q in (rd.get("quotes") or [])[:8]
+                if q.get("speaker_role") in ("official", "executive", "analyst")
+            ],
+            "competitive": {
+                "players": competitive.get("players"),
+                "quote_share": competitive.get("quote_share"),
+            },
         })
 
     if not parts:
-        return "（新闻切片数据均无有效 insight 结果）"
+        return "（新闻切片数据均无有效结构化结果）"
     return json.dumps(parts, ensure_ascii=False, indent=2)
 
 

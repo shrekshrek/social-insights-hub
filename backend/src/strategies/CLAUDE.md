@@ -160,7 +160,9 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 #### NewsSlice 实体 role 归类机制（Agenda Map / Landscape 依赖）
 
-`landscape_chain` 硬规则「禁止改判 `NewsSlice.entities.role`，以输入为准」，其中「输入」来自下列**三种运行模式之一**（`_enforce_entity_roles` 代码层兜底 + `news tagging_chain` / `insight_chain` prompt 硬绑定共同保证）：
+> ADR-003 后，slice 综合分析由 `pass1_chain`（清洗归一抽取）+ `pass2_chain`（解读综述）替代旧 `insight_chain`。任务层只跑 `tagging_chain` 不再产 insight。下游策略层只消费结构化层（`descriptive` / `entities` / `quotes` / `event_clusters` / `media_landscape` / `competitive`），不消费 `page_synthesis`（LLM 散文）。
+
+`landscape_chain` 硬规则「禁止改判 `NewsSlice.entities.role`，以输入为准」，其中「输入」来自下列**三种运行模式之一**（`_enforce_entity_roles` 代码层兜底 + `tagging_chain` / `pass1_chain` prompt 硬绑定共同保证）：
 
 | 模式 | 触发条件 | 行为 |
 |------|---------|------|
@@ -172,9 +174,9 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
   - 策略场景：从 `slice_blueprint[].subject` + `slice_blueprint[].competitors` 取，由 `research_design_chain` 输出时指定。每个品牌聚焦切片独立一对（与社媒 `create_monitor_slice` 对称）；大盘分析切片 subject="" → 退化到独立监测模式
   - Celery `run_news_collect_task` tagging 阶段：从 `brand_brief.subject` + 所有 `slice_blueprint[].competitors` 的 union 传入（per-article 粒度）
   - 独立 NewsMonitor 创建 slice：`subject=""` + `competitors=[]`（无策略上下文）
-- **变体合并**：`_enforce_entity_roles` 在 subject + competitors 列表存在时对实体做 case-insensitive exact + substring 匹配（处理 "绿米联创Aqara" → "Aqara" 这类品牌+附加词变体），合并 mention_count / sentiment 加权平均 / source_count 取 max / key_claims 去重截断 3 条
-- **同步重建 competitive_landscape.entities_mentioned**：保持和合并后的 entities 一致
-- 详见 `backend/src/news_media/tasks/service.py:_enforce_entity_roles`
+- **变体合并**：`_enforce_entity_roles` 在 subject + competitors 列表存在时对实体做 case-insensitive exact + substring 匹配（处理 "绿米联创Aqara" → "Aqara" 这类品牌+附加词变体），合并 mention_count / source_count 取 max / sentiment_avg 加权平均；`sentiment_by_tier` / `sentiment_weighted_by_tier` / `top_quote_ids` 由派生层（`_compute_derived` 之后的 `_attach_*` 步骤）基于合并后的 article_ids 重算
+- 不再有 `competitive_landscape.entities_mentioned`（旧 schema 字段，已删）。竞争层投影通过 `competitive.players`（基于 `entities[role∈target+competitor]` 派生），含 `tier_weighted_sov` / `sentiment_by_tier` / `top_quote_ids`
+- 详见 `backend/src/news_media/analysis/service.py:_enforce_entity_roles`（已从 tasks/service.py 迁移到 analysis/service.py）
 
 #### data_provenance 记录
 

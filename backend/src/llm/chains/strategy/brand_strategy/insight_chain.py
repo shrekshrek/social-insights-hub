@@ -241,29 +241,57 @@ def _build_research_context_section(
 
 
 def _format_news_media_section(news_slices: list[dict]) -> str:
-    """从 NewsSlice 数据格式化新闻媒体视角补充段落。
+    """从 NewsSlice 数据格式化新闻媒体视角补充段落（ADR-003 新 schema）。
 
-    news_slices 结构：每项为一个 NewsSlice 的数据：
-    name / result_data（insight 分析结果）/ stats（文章统计）。
+    只消费**结构化数据**（descriptive / entities / quotes / media_landscape /
+    competitive / event_clusters），不消费 page_synthesis（LLM 散文）。
     """
     all_insights: list[dict] = []
     for ns in news_slices:
         rd = ns.get("result_data")
-        if not rd or isinstance(rd, str) or rd.get("error"):
+        if not rd or isinstance(rd, str):
             continue
-        stats = ns.get("stats") or {}
+        descriptive = rd.get("descriptive") or {}
+        media_landscape = rd.get("media_landscape") or {}
+        competitive = rd.get("competitive") or {}
+
         all_insights.append({
             "slice_name": ns.get("name", ""),
-            "article_count": stats.get("articles_total", 0),
-            "source_tier_distribution": stats.get("source_tier_distribution"),
-            "sentiment_overall": stats.get("sentiment_overall"),
-            "top_entities": (stats.get("top_entities") or [])[:8],
-            "coverage": rd.get("coverage"),
-            "sentiment": rd.get("sentiment"),
-            "narratives": (rd.get("narratives") or [])[:5],
-            "entities": (rd.get("entities") or [])[:8],
-            "competitive_landscape": rd.get("competitive_landscape"),
-            "key_quotes": (rd.get("key_quotes") or [])[:5],
+            "article_count": descriptive.get("articles_filtered", 0),
+            "source_tier_distribution": descriptive.get("source_tier_distribution"),
+            "sentiment_overall": descriptive.get("sentiment_overall"),
+            "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+            "source_pyramid": media_landscape.get("source_pyramid"),
+            # 实体清单（已归一 + role 标注）
+            "entities": [
+                {
+                    "name": e.get("name"),
+                    "role": e.get("role"),
+                    "mention_count": e.get("mention_count"),
+                    "source_count": e.get("source_count"),
+                    "cross_task_count": e.get("cross_task_count"),
+                    "sentiment_avg": e.get("sentiment_avg"),
+                    "sentiment_by_tier": e.get("sentiment_by_tier"),
+                }
+                for e in (rd.get("entities") or [])[:10]
+            ],
+            # 引述（已 speaker 分级，原文 + 来源 + 文章 ID 锚点）
+            "key_quotes": [
+                {
+                    "speaker": q.get("speaker"),
+                    "speaker_role": q.get("speaker_role"),
+                    "quote": q.get("quote"),
+                    "source_name": q.get("source_name"),
+                    "source_tier": q.get("source_tier"),
+                }
+                for q in (rd.get("quotes") or [])[:6]
+                if q.get("speaker_role") in ("official", "executive", "analyst")
+            ],
+            # 竞争投影（target / competitor 子集）
+            "competitive": {
+                "players": competitive.get("players"),
+                "quote_share": competitive.get("quote_share"),
+            },
         })
 
     if not all_insights:
@@ -272,7 +300,8 @@ def _format_news_media_section(news_slices: list[dict]) -> str:
     return (
         "## 新闻媒体视角（补充数据）\n\n"
         "以下数据来自新闻媒体渠道（搜索引擎聚合 + 微信公众号），反映媒体/行业对相关话题的报道视角，"
-        "与社媒切片中的消费者声音互为补充。\n\n"
+        "与社媒切片中的消费者声音互为补充。**结构化数据**：含归一后实体（带 role / "
+        "by_tier sentiment）+ 分级引述（official/executive/analyst）+ 媒介金字塔 + 竞争投影。\n\n"
         + json.dumps(all_insights, ensure_ascii=False, indent=2)
     )
 

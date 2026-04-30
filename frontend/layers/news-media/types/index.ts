@@ -27,7 +27,7 @@ export interface NewsTask {
   status: string
   search_params: Record<string, unknown> | null
   articles_count: number
-  analysis_result: NewsAnalysisResult | null
+  analysis_result: NewsTaskAnalysisResult | null
   started_at: string | null
   completed_at: string | null
   error_message: string | null
@@ -81,68 +81,206 @@ export interface NewsTaskChannelStats {
   deduped_total: number
 }
 
-// ==================== Analysis Result Types ====================
+// ==================== Task Analysis Result ====================
+// task.analysis_result 仅含 meta 子字段，由 _compute_task_stats 派生（无 LLM）。
+// 所有归一/聚类/解读层产出在 slice 层，不在 task 层。
 
-export interface NewsAnalysisMeta {
-  keywords: string
-  articles_total: number
-  articles_relevant?: number
-  articles_crawled?: number
-  articles_analyzed?: number
-  source_tier_distribution?: { tier1: number; tier2: number; tier3: number; wechat_mp: number }
-}
-
-export interface NewsAnalysisCoverage {
-  media_coverage_index?: number
-  intensity?: string
-  trend?: string
-  summary?: string
-}
-
-export interface NewsAnalysisSentiment {
-  overall?: number
-  distribution?: { positive: number; neutral: number; negative: number }
-  by_source_tier?: { tier1: number; tier2: number; tier3: number; wechat_mp: number }
-}
-
-export interface NewsNarrative {
-  theme: string
-  article_count: number
-  sentiment: number
-  summary: string
-  representative_titles?: string[]
-}
-
-export interface NewsEntity {
-  name: string
-  role: string
-  mention_count: number
-  source_count: number
-  sentiment: number
-  key_claims?: string[]
-}
-
-export interface NewsCompetitiveLandscape {
-  positioning_summary?: string
-  entities_mentioned?: Array<{ name: string; mentions: number; sentiment: number }>
-}
-
-export interface NewsKeyQuote {
+export interface NewsTaskTopQuote {
   speaker: string
   quote: string
-  source_name?: string
-  context?: string
+  source_name: string
+  source_tier: string
+  article_id: number
 }
 
-export interface NewsAnalysisResult {
-  meta?: NewsAnalysisMeta
-  articles_summary?: Array<Record<string, unknown>>
-  coverage?: NewsAnalysisCoverage
-  sentiment?: NewsAnalysisSentiment
-  narratives?: NewsNarrative[]
-  entities?: NewsEntity[]
-  competitive_landscape?: NewsCompetitiveLandscape
-  key_quotes?: NewsKeyQuote[]
+export interface NewsTaskCoverageDay {
+  date: string
+  count: number
+  count_by_tier: { tier1: number; tier2: number; tier3: number; wechat_mp: number }
+  sentiment_avg: number | null
+}
+
+export interface NewsTaskMeta {
+  keywords: string
+  articles_crawled?: number
+  channel_raw_counts?: Record<string, number>
+
+  articles_total: number
+  articles_high: number
+  articles_medium: number
+  articles_low: number
+
+  source_tier_distribution: { tier1: number; tier2: number; tier3: number; wechat_mp: number }
+  search_source_distribution: { baidu: number; sogou: number; wechat_mp: number }
+  article_type_distribution: { report: number; opinion: number; pr: number; analysis: number }
+  sentiment_distribution: { positive: number; neutral: number; negative: number }
+
+  sentiment_overall: number | null
+  sentiment_by_tier: {
+    tier1: number | null
+    tier2: number | null
+    tier3: number | null
+    wechat_mp: number | null
+  }
+
+  coverage_by_day: NewsTaskCoverageDay[]
+  top_entities_raw: Array<{ name: string; mention_count: number }>
+  top_quotes: NewsTaskTopQuote[]
+
+  // probe 阶段独有：搜索到的来源样本
+  source_samples?: string[]
+}
+
+export interface NewsTaskAnalysisResult {
+  meta: NewsTaskMeta
+}
+
+// ==================== Slice Result Types（ADR-003 新 schema） ====================
+
+export type TierKey = 'tier1' | 'tier2' | 'tier3' | 'wechat_mp'
+export type SpeakerRole = 'official' | 'executive' | 'analyst' | 'kol' | 'other'
+export type EntityRole = 'target' | 'competitor' | 'context'
+
+export type TierBreakdown = Record<TierKey, number>
+export type TierBreakdownNullable = Record<TierKey, number | null>
+
+export interface NewsSliceCrossTaskOverlap {
+  distribution: { single_task: number; two_tasks: number; three_plus: number }
+  high_overlap_articles: Array<{
+    url: string
+    task_ids: number[]
+    title: string
+    article_id: number
+    task_count: number
+  }>
+}
+
+export interface NewsSliceCoverageDay {
+  date: string
+  count: number
+  count_by_tier: TierBreakdown
+}
+
+export interface NewsSliceSentimentDay {
+  date: string
+  sentiment_avg: number | null
+  sentiment_weighted_by_tier: number | null
+}
+
+export interface NewsSliceDescriptive {
+  articles_total: number
+  articles_unique: number
+  articles_filtered: number
+
+  source_tier_distribution: TierBreakdown
+  search_source_distribution: { baidu: number; sogou: number; wechat_mp: number }
+  article_type_distribution: { report: number; opinion: number; pr: number; analysis: number }
+  sentiment_distribution: { positive: number; neutral: number; negative: number }
+  sentiment_overall: number | null
+  sentiment_by_tier: TierBreakdownNullable
+
+  cross_task_overlap: NewsSliceCrossTaskOverlap
+  coverage_timeseries: NewsSliceCoverageDay[]
+  sentiment_timeseries: NewsSliceSentimentDay[]
+}
+
+export interface NewsSliceEntity {
+  name: string
+  role: EntityRole
+  mention_count: number
+  source_count: number
+  cross_task_count: number
+  article_ids: number[]
+  representative_article_ids: number[]
+  sentiment_avg: number | null
+  sentiment_weighted_by_tier: number | null
+  sentiment_by_tier: TierBreakdownNullable
+  top_quote_ids: number[]
+}
+
+export interface NewsSliceQuote {
+  speaker: string
+  speaker_role: SpeakerRole
+  quote: string
+  context: string
+  article_id: number
+  source_name: string
+  source_tier: string
+  published_at: string | null
+}
+
+export interface NewsSliceEventCluster {
+  cluster_id: number
+  article_ids: number[]
+  article_count: number
+  first_reported_at: string | null
+  first_reporter: { source_name: string; source_tier: string } | null
+  peak_date: string | null
+  tier_weighted_score: number
+  in_task_ids: number[]
+  representative_article_ids: number[]
+}
+
+export interface NewsSliceMediaLandscape {
+  source_pyramid: Array<{
+    tier: TierKey
+    article_count: number
+    sentiment_avg: number | null
+    top_source_names: string[]
+    representative_articles: Array<{
+      title: string
+      article_id: number
+      url: string
+      source_name: string
+    }>
+  }>
+  top_sources: Array<{ name: string; count: number; share: number }>
+}
+
+export interface NewsSliceCompetitivePlayer {
+  name: string
+  role: EntityRole
+  tier_weighted_sov: number
+  mention_count: number
+  source_count: number
+  cross_task_count: number
+  sentiment_avg: number | null
+  sentiment_by_tier: TierBreakdownNullable
+  article_ids: number[]
+  top_quote_ids: number[]
+}
+
+export interface NewsSliceCompetitive {
+  players: NewsSliceCompetitivePlayer[]
+  quote_share: Array<{ name: string; quote_count: number; official_quote_count: number }>
+}
+
+export interface NewsSlicePageSynthesis {
+  briefing?: {
+    headline?: string
+    key_findings?: string[]
+    risks?: string[]
+  }
+  event_titles?: Record<string, { title: string; dominant_frame: string }>
+}
+
+export interface NewsSliceResultData {
+  descriptive: NewsSliceDescriptive
+  entities?: NewsSliceEntity[]
+  quotes?: NewsSliceQuote[]
+  event_clusters?: NewsSliceEventCluster[]
+  media_landscape?: NewsSliceMediaLandscape
+  competitive?: NewsSliceCompetitive
+  page_synthesis?: NewsSlicePageSynthesis
+}
+
+export interface NewsSliceStatsSummary {
+  articles_total: number
+  articles_filtered: number
+  source_tier_distribution?: TierBreakdown
+  sentiment_distribution?: { positive: number; neutral: number; negative: number }
+  sentiment_overall?: number | null
+  top_entities?: Array<{ name: string; mention_count: number }>
 }
 
 // ==================== Slice Types ====================
@@ -153,8 +291,8 @@ export interface NewsSlice {
   monitor_id: number
   included_task_ids: number[]
   status: string
-  result_data: Record<string, unknown> | null
-  stats: Record<string, unknown> | null
+  result_data: NewsSliceResultData | null
+  stats: NewsSliceStatsSummary | null
   error_message: string | null
   user_id: number
   created_at: string

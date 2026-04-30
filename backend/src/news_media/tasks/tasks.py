@@ -83,6 +83,7 @@ def run_news_collect_task(
     from src.news_media.tasks.models import NewsArticle, NewsTask
     from src.news_media.tasks.service import (
         _apply_tags_to_articles_sync,
+        _compute_task_stats,
         _resolve_channels,
         _search_and_store_articles_sync,
         _tag_articles_batch_sync,
@@ -108,7 +109,7 @@ def run_news_collect_task(
             raw_counts: dict[str, int] = {}
             articles = _search_and_store_articles_sync(
                 db, task,
-                max_results=30,
+                max_results=40,
                 channels=_resolve_channels(task),
                 raw_counts_out=raw_counts,
             )
@@ -120,8 +121,9 @@ def run_news_collect_task(
                 task.analysis_result = {
                     "meta": {
                         "keywords": task.keywords,
-                        "articles_total": 0,
+                        "articles_crawled": 0,
                         "channel_raw_counts": raw_counts,
+                        **_compute_task_stats([]),
                     },
                 }
                 if tagging_job:
@@ -169,26 +171,15 @@ def run_news_collect_task(
             else:
                 db.flush()
 
-            tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0, "wechat_mp": 0}
-            for a in all_articles:
-                tier = a.source_tier or "tier3"
-                tier_counts[tier] = tier_counts.get(tier, 0) + 1
-
-            relevant_count = sum(
-                1 for a in all_articles if a.relevance in ("high", "medium")
-            )
-
             task.status = "completed"
             task.completed_at = datetime.now(timezone.utc)
             task.articles_count = len(all_articles)
             task.analysis_result = {
                 "meta": {
                     "keywords": task.keywords,
-                    "articles_total": len(all_articles),
                     "articles_crawled": articles_crawled,
-                    "articles_analyzed": relevant_count,
-                    "source_tier_distribution": tier_counts,
                     "channel_raw_counts": raw_counts,
+                    **_compute_task_stats(all_articles),
                 },
             }
             db.commit()
@@ -228,13 +219,17 @@ def run_news_slice_insight_task(
     subject: str = "",
     competitors: list[str] | None = None,
 ) -> None:
-    """运行 NewsSlice insight 分析（同步版，策略场景专用）
+    """运行 NewsSlice 综合分析（同步版，策略场景专用，ADR-003 4 步流程）。
 
-    策略场景下 _create_auto_slices 创建 NewsSlice 行（status=pending）后，
-    commit 主事务再异步派发本任务跑 insight。这样避免长事务（LLM ~90s）
-    持有 INSERT 不 commit，导致 APScheduler / 轮询读不到该行重复建切片。
+    策略场景下 _create_auto_slices 创建 NewsSlice 行（status=pending）后，commit 主事务再
+    异步派发本任务跑分析。这样避免长事务（LLM 调用合计 ~120s）持有 INSERT 不 commit，
+    导致 APScheduler / 轮询读不到该行重复建切片。
 
-    独立监测场景仍走 news_media.analysis.service.run_slice_analysis（async）。
+    独立监测场景走 news_media.analysis.service.run_slice_analysis（async）。两条路径
+    共享 service.py 的纯函数（_dedupe_and_filter / _compute_descriptive /
+    _compute_derived / _enforce_entity_roles / _build_stats_summary / _articles_for_llm /
+    _parse_pass1_output / _parse_pass2_output / _merge_token_usage），仅 chain 调用
+    用 sync `.invoke()` 取代 async `.ainvoke()`。
     """
     from src.database import SyncSessionLocal
     from src.jobs.factory import (
@@ -242,10 +237,28 @@ def run_news_slice_insight_task(
         create_analysis_job_sync,
     )
     from src.jobs.models import AnalysisJob, AnalysisType
+    from src.llm.chains.news.pass1_chain import (
+        create_pass1_chain,
+        format_articles_for_pass1,
+    )
+    from src.llm.chains.news.pass2_chain import (
+        create_pass2_chain,
+        format_entities_for_pass2,
+        format_events_for_pass2,
+        format_quotes_for_pass2,
+    )
     from src.news_media.analysis.models import NewsSlice
-    from src.news_media.analysis.service import _compute_stats
+    from src.news_media.analysis.service import (
+        _articles_for_llm,
+        _build_stats_summary,
+        _compute_derived,
+        _compute_descriptive,
+        _dedupe_and_filter,
+        _merge_token_usage,
+        _parse_pass1_output,
+        _parse_pass2_output,
+    )
     from src.news_media.tasks.models import NewsArticle
-    from src.news_media.tasks.service import _run_insight_analysis_sync
 
     with SyncSessionLocal() as db:
         slice_obj = db.get(NewsSlice, slice_id)
@@ -275,46 +288,85 @@ def run_news_slice_insight_task(
             )
             all_articles = list(db.execute(stmt).scalars().all())
 
-            seen_urls: set[str] = set()
-            deduped: list = []
-            for a in all_articles:
-                if a.url not in seen_urls:
-                    seen_urls.add(a.url)
-                    deduped.append(a)
-            filtered = [a for a in deduped if a.relevance != "low"]
-
-            slice_obj.stats = _compute_stats(filtered)
+            filtered, url_to_task_ids = _dedupe_and_filter(all_articles)
             job.source_count = len(filtered)
 
+            descriptive = _compute_descriptive(filtered, url_to_task_ids)
+
             if not filtered:
-                slice_obj.result_data = {"meta": {"articles_total": 0}}
+                slice_obj.stats = _build_stats_summary(descriptive, entities=[])
+                slice_obj.result_data = {"descriptive": descriptive}
                 slice_obj.status = "completed"
                 complete_analysis_job_sync(db, job, analyzed_count=0)
                 logger.info("NewsSlice %d: no valid articles, marked completed", slice_id)
                 return
 
             goal = analysis_goal or slice_obj.name
-            insights, token_usage = _run_insight_analysis_sync(
-                filtered,
-                analysis_goal=goal,
-                subject=subject or "",
-                competitors=competitors or [],
+
+            # Step 2：Pass 1 LLM（sync）
+            pass1_chain = create_pass1_chain()
+            pass1_input_articles = _articles_for_llm(filtered)
+            pass1_response = pass1_chain.invoke({
+                "analysis_goal": goal,
+                "subject": subject or "",
+                "competitors": ", ".join(competitors or []) or "（未指定）",
+                "article_count": len(filtered),
+                "articles_content": format_articles_for_pass1(pass1_input_articles),
+            })
+            pass1_token_usage = (pass1_response.response_metadata or {}).get("token_usage")
+            pass1_parsed = _parse_pass1_output(pass1_response.content)
+
+            # Step 3：派生层
+            derived = _compute_derived(
+                pass1_parsed, filtered, url_to_task_ids,
+                subject=subject or "", competitors=competitors or [],
             )
 
-            if isinstance(insights, dict) and "error" not in insights:
-                slice_obj.result_data = insights
-            else:
-                slice_obj.result_data = {"meta": slice_obj.stats, "error": str(insights)}
+            # Step 4：Pass 2 LLM（sync，失败容错）
+            page_synthesis: dict = {}
+            pass2_token_usage: dict | None = None
+            try:
+                pass2_chain = create_pass2_chain()
+                article_titles_by_id = {a.id: a.title for a in filtered}
+                pass2_response = pass2_chain.invoke({
+                    "analysis_goal": goal,
+                    "subject": subject or "（独立监测，无指定主体）",
+                    "articles_filtered": descriptive.get("articles_filtered"),
+                    "source_tier_dist": descriptive.get("source_tier_distribution"),
+                    "search_source_dist": descriptive.get("search_source_distribution"),
+                    "article_type_dist": descriptive.get("article_type_distribution"),
+                    "sentiment_dist": descriptive.get("sentiment_distribution"),
+                    "sentiment_overall": descriptive.get("sentiment_overall"),
+                    "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+                    "entities_block": format_entities_for_pass2(derived.get("entities") or []),
+                    "quotes_block": format_quotes_for_pass2(derived.get("quotes") or []),
+                    "events_block": format_events_for_pass2(
+                        derived.get("event_clusters") or [], article_titles_by_id,
+                    ),
+                })
+                pass2_token_usage = (pass2_response.response_metadata or {}).get("token_usage")
+                page_synthesis = _parse_pass2_output(pass2_response.content)
+            except Exception as e:
+                logger.warning("NewsSlice %d Pass 2 failed (页面降级): %s", slice_id, e)
+
+            slice_obj.result_data = {
+                "descriptive": descriptive,
+                **derived,
+                "page_synthesis": page_synthesis,
+            }
+            slice_obj.stats = _build_stats_summary(descriptive, derived["entities"])
             slice_obj.status = "completed"
+
+            token_usage = _merge_token_usage(pass1_token_usage, pass2_token_usage)
             complete_analysis_job_sync(
                 db, job,
                 analyzed_count=len(filtered),
                 token_usage=token_usage,
             )
-            logger.info("NewsSlice %d insight completed: %d articles", slice_id, len(filtered))
+            logger.info("NewsSlice %d analysis completed: %d articles", slice_id, len(filtered))
 
         except Exception as e:
-            logger.error("NewsSlice %d insight failed: %s", slice_id, e, exc_info=True)
+            logger.error("NewsSlice %d analysis failed: %s", slice_id, e, exc_info=True)
             db.rollback()
             with SyncSessionLocal() as db2:
                 s2 = db2.get(NewsSlice, slice_id)

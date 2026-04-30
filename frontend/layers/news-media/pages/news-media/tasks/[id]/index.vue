@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { h, ref, computed, type Component } from 'vue'
+import { h, ref, computed, nextTick, watch, type Component } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
+import type { EChartsOption } from 'echarts'
 import { UButton, UBadge } from '#components'
 import { PERMISSIONS } from '~/config/permissions'
 
@@ -136,14 +137,114 @@ const handleDelete = async () => {
   }
 }
 
-// ========== 分析报告 ==========
+// ========== 任务统计（task.analysis_result.meta 由 _compute_task_stats 派生） ==========
 
-const analysisResult = computed(() => task.value?.analysis_result || null)
-const hasMeta = computed(() => !!analysisResult.value?.meta)
-const hasInsights = computed(() => {
-  const r = analysisResult.value
-  return r && (r.coverage || r.sentiment || r.narratives || r.entities)
+const meta = computed(() => task.value?.analysis_result?.meta ?? null)
+
+// 标注派生信号是否可用：collect 完成且至少有一篇被打过 relevance
+const hasTagging = computed(() => {
+  const m = meta.value
+  if (!m) return false
+  return m.articles_high + m.articles_medium + m.articles_low > 0
 })
+
+type TierKey = 'tier1' | 'tier2' | 'tier3' | 'wechat_mp'
+const TIER_KEYS: TierKey[] = ['tier1', 'tier2', 'tier3', 'wechat_mp']
+
+interface TierRow {
+  key: TierKey
+  count: number
+  widthPct: number
+  sentiment: number | null
+}
+
+const tierRows = computed<TierRow[]>(() => {
+  const m = meta.value
+  if (!m) return []
+  const counts = TIER_KEYS.map(t => m.source_tier_distribution[t] || 0)
+  const max = Math.max(...counts, 1)
+  return TIER_KEYS.map((t, i) => ({
+    key: t,
+    count: counts[i] ?? 0,
+    widthPct: max > 0 ? Math.max(((counts[i] ?? 0) / max) * 100, counts[i] ? 4 : 0) : 0,
+    sentiment: m.sentiment_by_tier[t],
+  }))
+})
+
+const hasCoverageDays = computed(() => (meta.value?.coverage_by_day?.length ?? 0) > 1)
+
+// Coverage by Day 柱状图
+const { chartRef: coverageChartRef, initChart: initCoverageChart, setOption: setCoverageOption }
+  = useCharts()
+
+const renderCoverageChart = () => {
+  const m = meta.value
+  if (!m || !m.coverage_by_day || m.coverage_by_day.length === 0) return
+  if (!coverageChartRef.value) return
+  if (!initCoverageChart()) return
+
+  // 兼容历史数据：旧 task 的 coverage_by_day 缺 count_by_tier 字段，
+  // fallback 把整日 count 归到 tier3（重跑 task 后会正确分层）
+  const safeTierBreakdown = (d: NewsTaskCoverageDay): { tier1: number; tier2: number; tier3: number; wechat_mp: number } => {
+    if (d.count_by_tier) return d.count_by_tier
+    return { tier1: 0, tier2: 0, tier3: d.count ?? 0, wechat_mp: 0 }
+  }
+
+  const option: EChartsOption = {
+    animation: false,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params: unknown) => {
+        const arr = params as Array<{ name: string; value: number; dataIndex: number }>
+        if (!arr || arr.length === 0) return ''
+        const day = m.coverage_by_day[arr[0]!.dataIndex]
+        if (!day) return ''
+        const sent = day.sentiment_avg !== null
+          ? `<br/>情感均值：${day.sentiment_avg.toFixed(2)}`
+          : ''
+        return `${day.date}<br/>报道数：${day.count}${sent}`
+      },
+    },
+    legend: { top: 0, textStyle: { fontSize: 11 } },
+    grid: { left: 8, right: 12, top: 30, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: m.coverage_by_day.map(d => d.date),
+      axisLabel: {
+        fontSize: 11,
+        rotate: m.coverage_by_day.length > 8 ? 35 : 0,
+        margin: 10,
+        hideOverlap: true,
+      },
+    },
+    yAxis: { type: 'value', minInterval: 1 },
+    series: [
+      { name: 'tier1 权威', type: 'bar', stack: 'all', data: m.coverage_by_day.map(d => safeTierBreakdown(d).tier1), itemStyle: { color: '#ef4444' }, barMaxWidth: 24 },
+      { name: 'tier2 行业', type: 'bar', stack: 'all', data: m.coverage_by_day.map(d => safeTierBreakdown(d).tier2), itemStyle: { color: '#f59e0b' } },
+      { name: 'tier3 其他', type: 'bar', stack: 'all', data: m.coverage_by_day.map(d => safeTierBreakdown(d).tier3), itemStyle: { color: '#9ca3af' } },
+      { name: '公众号', type: 'bar', stack: 'all', data: m.coverage_by_day.map(d => safeTierBreakdown(d).wechat_mp), itemStyle: { color: '#10b981' } },
+    ],
+  }
+  setCoverageOption(option)
+}
+
+watch(
+  [meta, coverageChartRef],
+  () => {
+    if (meta.value && coverageChartRef.value && hasCoverageDays.value) {
+      nextTick(renderCoverageChart)
+    }
+  },
+  { immediate: true },
+)
+
+const sentimentTextClass = (score: number | null): string => {
+  if (score === null) return 'text-gray-400'
+  if (score > 0) return 'text-green-600 dark:text-green-400'
+  if (score < 0) return 'text-red-600 dark:text-red-400'
+  return 'text-gray-600 dark:text-gray-300'
+}
 
 // ========== 辅助函数 ==========
 
@@ -208,8 +309,8 @@ const getTierLabel = (tier: string) => {
   return map[tier] || tier
 }
 
-const getTierColor = (tier: string) => {
-  const map: Record<string, string> = { tier1: 'error', tier2: 'warning', tier3: 'neutral', wechat_mp: 'success' }
+const getTierColor = (tier: string): BadgeColor => {
+  const map: Record<string, BadgeColor> = { tier1: 'error', tier2: 'warning', tier3: 'neutral', wechat_mp: 'success' }
   return map[tier] || 'neutral'
 }
 
@@ -656,200 +757,142 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
         </template>
       </UCard>
 
-      <!-- 分析报告（Probe 摘要 / Collect 完整洞察） -->
-      <UCard v-if="hasMeta || hasInsights">
+      <!-- 任务统计（task.analysis_result.meta 由 _compute_task_stats 派生，纯 SQL） -->
+      <UCard v-if="meta">
         <template #header>
-          <h2 class="text-lg font-semibold">分析报告</h2>
+          <h2 class="text-lg font-semibold">任务统计</h2>
         </template>
 
-        <!-- Meta 概要 -->
-        <div v-if="hasMeta" class="mb-6">
+        <ClientOnly>
+          <!-- 概要数字 -->
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
               <span class="text-gray-500">文章总数</span>
-              <p class="text-xl font-bold mt-1">{{ analysisResult?.meta?.articles_total ?? '-' }}</p>
+              <p class="text-xl font-bold mt-1">{{ meta.articles_total }}</p>
             </div>
-            <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-              <span class="text-gray-500">相关文章</span>
-              <p class="text-xl font-bold mt-1">{{ analysisResult?.meta?.articles_analyzed ?? analysisResult?.meta?.articles_relevant ?? '-' }}</p>
+            <div v-if="hasTagging" class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <span class="text-gray-500">高/中/低相关</span>
+              <p class="text-base font-medium mt-1">
+                <span class="text-green-600 dark:text-green-400">{{ meta.articles_high }}</span>
+                /
+                <span class="text-amber-600 dark:text-amber-400">{{ meta.articles_medium }}</span>
+                /
+                <span class="text-gray-500">{{ meta.articles_low }}</span>
+              </p>
             </div>
-            <div v-if="analysisResult?.meta?.articles_crawled !== undefined" class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+            <div v-if="meta.articles_crawled !== undefined" class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
               <span class="text-gray-500">成功抓取</span>
-              <p class="text-xl font-bold mt-1">{{ analysisResult?.meta?.articles_crawled }}</p>
+              <p class="text-xl font-bold mt-1">{{ meta.articles_crawled }}</p>
             </div>
-            <div v-if="analysisResult?.meta?.source_tier_distribution" class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-              <span class="text-gray-500">来源分布</span>
-              <p class="text-sm font-medium mt-1">
-                权威 {{ analysisResult.meta.source_tier_distribution.tier1 ?? 0 }} /
-                行业 {{ analysisResult.meta.source_tier_distribution.tier2 ?? 0 }} /
-                其他 {{ analysisResult.meta.source_tier_distribution.tier3 ?? 0 }} /
-                公众号 {{ analysisResult.meta.source_tier_distribution.wechat_mp ?? 0 }}
+            <div v-if="hasTagging && meta.sentiment_overall !== null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <span class="text-gray-500">综合情感</span>
+              <p class="text-xl font-bold mt-1" :class="sentimentTextClass(meta.sentiment_overall)">
+                {{ formatSentimentScore(meta.sentiment_overall) }}
               </p>
             </div>
           </div>
-        </div>
 
-        <!-- 报道覆盖度 -->
-        <ClientOnly>
-          <div v-if="analysisResult?.coverage" class="mb-6">
-            <h3 class="text-base font-semibold mb-3">报道覆盖度</h3>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-              <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-                <span class="text-gray-500">MCI 指数</span>
-                <p class="text-xl font-bold mt-1 text-blue-700 dark:text-blue-400">
-                  {{ analysisResult.coverage.media_coverage_index ?? '-' }}
-                </p>
-              </div>
-              <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-                <span class="text-gray-500">报道强度</span>
-                <p class="text-lg font-semibold mt-1">{{ analysisResult.coverage.intensity || '-' }}</p>
-              </div>
-              <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-                <span class="text-gray-500">趋势</span>
-                <p class="text-lg font-semibold mt-1">{{ analysisResult.coverage.trend || '-' }}</p>
-              </div>
-            </div>
-            <p v-if="analysisResult.coverage.summary" class="mt-3 text-sm text-gray-600 dark:text-gray-400">
-              {{ analysisResult.coverage.summary }}
-            </p>
-          </div>
-
-          <!-- 情感分布 -->
-          <div v-if="analysisResult?.sentiment" class="mb-6">
-            <h3 class="text-base font-semibold mb-3">情感分布</h3>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-              <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <span class="text-gray-500">综合情感</span>
-                <p class="text-xl font-bold mt-1">{{ formatSentimentScore(analysisResult.sentiment.overall) }}</p>
-              </div>
-              <div v-if="analysisResult.sentiment.distribution" class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <span class="text-gray-500">正/中/负</span>
-                <p class="font-medium mt-1">
-                  <span class="text-green-600">{{ analysisResult.sentiment.distribution.positive ?? 0 }}</span> /
-                  <span class="text-gray-600">{{ analysisResult.sentiment.distribution.neutral ?? 0 }}</span> /
-                  <span class="text-red-600">{{ analysisResult.sentiment.distribution.negative ?? 0 }}</span>
-                </p>
-              </div>
-              <div v-if="analysisResult.sentiment.by_source_tier" class="p-3 bg-gray-50 dark:bg-gray-800 rounded col-span-2">
-                <span class="text-gray-500">按来源等级</span>
-                <p class="font-medium mt-1 text-sm">
-                  权威: {{ formatSentimentScore(analysisResult.sentiment.by_source_tier.tier1) }} |
-                  行业: {{ formatSentimentScore(analysisResult.sentiment.by_source_tier.tier2) }} |
-                  其他: {{ formatSentimentScore(analysisResult.sentiment.by_source_tier.tier3) }}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- 叙事聚类 -->
-          <div v-if="analysisResult?.narratives?.length" class="mb-6">
-            <h3 class="text-base font-semibold mb-3">叙事主题</h3>
-            <div class="space-y-3">
-              <div
-                v-for="(narrative, idx) in analysisResult.narratives"
-                :key="idx"
-                class="p-3 border border-gray-200 dark:border-gray-700 rounded"
-              >
-                <div class="flex items-center justify-between mb-1">
-                  <span class="font-medium">{{ narrative.theme }}</span>
-                  <div class="flex items-center gap-2 text-sm text-gray-500">
-                    <span>{{ narrative.article_count }} 篇</span>
-                    <UBadge :color="getSentimentColor(narrative.sentiment)" size="sm">
-                      {{ formatSentimentScore(narrative.sentiment) }}
-                    </UBadge>
+          <!-- 媒介金字塔（来源分层 × 情感） -->
+          <div v-if="hasTagging" class="mt-6">
+            <h3 class="text-base font-semibold mb-3">媒介金字塔</h3>
+            <div class="space-y-2">
+              <div v-for="row in tierRows" :key="row.key" class="flex items-center gap-3">
+                <div class="w-20 shrink-0">
+                  <UBadge :color="getTierColor(row.key)" variant="subtle" size="sm">
+                    {{ getTierLabel(row.key) }}
+                  </UBadge>
+                </div>
+                <div class="flex-1 bg-gray-100 dark:bg-gray-800 rounded h-8 relative overflow-hidden">
+                  <div
+                    class="h-full bg-blue-200 dark:bg-blue-900/40 transition-all"
+                    :style="{ width: row.widthPct + '%' }"
+                  />
+                  <div class="absolute inset-0 flex items-center px-3 text-sm">
+                    <span class="font-medium">{{ row.count }}</span>
+                    <span class="text-gray-500 ml-1">篇</span>
+                    <span v-if="row.sentiment !== null" class="ml-auto text-xs">
+                      情感
+                      <span class="font-medium" :class="sentimentTextClass(row.sentiment)">
+                        {{ formatSentimentScore(row.sentiment) }}
+                      </span>
+                    </span>
                   </div>
                 </div>
-                <p class="text-sm text-gray-600 dark:text-gray-400">{{ narrative.summary }}</p>
-                <div v-if="narrative.representative_titles?.length" class="mt-2 text-xs text-gray-500">
-                  代表文章: {{ narrative.representative_titles.join('、') }}
-                </div>
               </div>
             </div>
           </div>
 
-          <!-- 实体全景 -->
-          <div v-if="analysisResult?.entities?.length" class="mb-6">
-            <h3 class="text-base font-semibold mb-3">实体分析</h3>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="border-b dark:border-gray-700">
-                    <th class="text-left py-2 px-3">实体</th>
-                    <th class="text-left py-2 px-3">角色</th>
-                    <th class="text-right py-2 px-3">提及数</th>
-                    <th class="text-right py-2 px-3">来源数</th>
-                    <th class="text-right py-2 px-3">情感</th>
-                    <th class="text-left py-2 px-3">关键论述</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(entity, idx) in analysisResult.entities"
-                    :key="idx"
-                    class="border-b dark:border-gray-700"
-                  >
-                    <td class="py-2 px-3 font-medium">{{ entity.name }}</td>
-                    <td class="py-2 px-3">
-                      <UBadge
-                        :color="entity.role === 'target' ? 'primary' : entity.role === 'competitor' ? 'warning' : 'neutral'"
-                        size="sm"
-                      >
-                        {{ entity.role }}
-                      </UBadge>
-                    </td>
-                    <td class="py-2 px-3 text-right">{{ entity.mention_count }}</td>
-                    <td class="py-2 px-3 text-right">{{ entity.source_count }}</td>
-                    <td class="py-2 px-3 text-right">
-                      <UBadge :color="getSentimentColor(entity.sentiment)" size="sm">
-                        {{ formatSentimentScore(entity.sentiment) }}
-                      </UBadge>
-                    </td>
-                    <td class="py-2 px-3 text-gray-600 dark:text-gray-400 max-w-[300px]">
-                      {{ entity.key_claims?.join('；') || '-' }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+          <!-- 情感与类型分布 -->
+          <div v-if="hasTagging" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <span class="text-gray-500">情感分布（正/中/负）</span>
+              <p class="font-medium mt-1">
+                <span class="text-green-600 dark:text-green-400">{{ meta.sentiment_distribution.positive }}</span>
+                /
+                <span class="text-gray-600 dark:text-gray-300">{{ meta.sentiment_distribution.neutral }}</span>
+                /
+                <span class="text-red-600 dark:text-red-400">{{ meta.sentiment_distribution.negative }}</span>
+              </p>
+            </div>
+            <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <span class="text-gray-500">类型分布（报道/评论/PR/分析）</span>
+              <p class="font-medium mt-1">
+                {{ meta.article_type_distribution.report }} /
+                {{ meta.article_type_distribution.opinion }} /
+                {{ meta.article_type_distribution.pr }} /
+                {{ meta.article_type_distribution.analysis }}
+              </p>
             </div>
           </div>
 
-          <!-- 竞品格局 -->
-          <div v-if="analysisResult?.competitive_landscape" class="mb-6">
-            <h3 class="text-base font-semibold mb-3">竞品格局</h3>
-            <p v-if="analysisResult.competitive_landscape.positioning_summary" class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-              {{ analysisResult.competitive_landscape.positioning_summary }}
-            </p>
-            <div v-if="analysisResult.competitive_landscape.entities_mentioned?.length" class="flex flex-wrap gap-2">
-              <div
-                v-for="(ce, idx) in analysisResult.competitive_landscape.entities_mentioned"
-                :key="idx"
-                class="px-3 py-1.5 bg-gray-50 dark:bg-gray-800 rounded text-sm"
-              >
-                <span class="font-medium">{{ ce.name }}</span>
-                <span class="text-gray-500 ml-1">{{ ce.mentions }}次</span>
-                <UBadge :color="getSentimentColor(ce.sentiment)" size="sm" class="ml-1">
-                  {{ formatSentimentScore(ce.sentiment) }}
-                </UBadge>
-              </div>
-            </div>
+          <!-- 报道时间分布 柱状图 -->
+          <div v-if="hasCoverageDays" class="mt-6">
+            <h3 class="text-base font-semibold mb-3">报道时间分布</h3>
+            <div ref="coverageChartRef" class="w-full h-56" />
           </div>
 
-          <!-- 关键引述 -->
-          <div v-if="analysisResult?.key_quotes?.length" class="mb-6">
-            <h3 class="text-base font-semibold mb-3">关键引述</h3>
+          <!-- 关键引述墙（task 内 top） -->
+          <div v-if="hasTagging && meta.top_quotes.length > 0" class="mt-6">
+            <h3 class="text-base font-semibold mb-3">
+              关键引述
+              <span class="text-xs font-normal text-gray-500 ml-2">
+                按来源权威度排（top {{ meta.top_quotes.length }}）
+              </span>
+            </h3>
             <div class="space-y-3">
               <div
-                v-for="(quote, idx) in analysisResult.key_quotes"
+                v-for="(q, idx) in meta.top_quotes"
                 :key="idx"
                 class="p-3 border-l-4 border-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-r"
               >
-                <p class="text-sm italic">&ldquo;{{ quote.quote }}&rdquo;</p>
-                <p class="text-xs text-gray-500 mt-1">
-                  &mdash; {{ quote.speaker }}
-                  <span v-if="quote.source_name" class="ml-1">| {{ quote.source_name }}</span>
-                  <span v-if="quote.context" class="ml-1">| {{ quote.context }}</span>
+                <p class="text-sm italic">&ldquo;{{ q.quote }}&rdquo;</p>
+                <p class="text-xs text-gray-500 mt-1 flex items-center flex-wrap gap-1">
+                  <span>&mdash; {{ q.speaker }}</span>
+                  <span class="ml-1">| {{ q.source_name }}</span>
+                  <UBadge :color="getTierColor(q.source_tier)" size="sm" variant="subtle" class="ml-1">
+                    {{ getTierLabel(q.source_tier) }}
+                  </UBadge>
                 </p>
               </div>
+            </div>
+          </div>
+
+          <!-- 高频实体（原始计数，未归一） -->
+          <div v-if="hasTagging && meta.top_entities_raw.length > 0" class="mt-6">
+            <h3 class="text-base font-semibold mb-2">
+              高频实体
+              <span class="text-xs font-normal text-gray-500 ml-2">
+                top {{ meta.top_entities_raw.length }}，原始计数（未跨变体归一，归一在 slice 层）
+              </span>
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              <UBadge
+                v-for="ent in meta.top_entities_raw"
+                :key="ent.name"
+                variant="subtle"
+              >
+                {{ ent.name }} · {{ ent.mention_count }}次
+              </UBadge>
             </div>
           </div>
         </ClientOnly>

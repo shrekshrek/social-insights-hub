@@ -151,7 +151,7 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
 
 
 _PAGE_SIZE = 10  # 百度新闻每页实际返回约 10 条
-_MAX_PAGES = 5  # 最多翻 5 页（50 条）兜底——防止百度在结果耗尽后返回重复内容导致的无限翻页
+_MAX_PAGES = 6  # 最多翻 6 页（60 条）兜底——防止百度在结果耗尽后返回重复内容导致的无限翻页
 
 
 def _fetch_one_page(session: requests.Session, url: str, headers: dict) -> str:

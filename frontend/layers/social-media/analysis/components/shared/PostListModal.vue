@@ -42,21 +42,36 @@ const groups = computed(() => (Array.isArray(props.groups) ? props.groups : []))
 const hasGroups = computed(() => groups.value.length > 0)
 const selectedTaskId = ref<number | undefined>(undefined)
 
+// selectedTaskId 始终保持有效值（默认第一个 group），不等 modal open。
+// 这样 USelect 初次渲染就能显示 "任务 #X" label，避免"下拉空但内容是第一个 task"
+// 的 UI/数据错位（用户会误以为"空 = 全部样本合并"，实际并非如此）。
 watch(
-  () => [props.open, groups.value.length],
-  ([isOpen]) => {
+  () => [groups.value.length, groups.value[0]?.taskId, props.taskId],
+  () => {
+    if (hasGroups.value) {
+      // 当前选中的 task 不在新的 groups 列表里，重置到第一个
+      const exists = selectedTaskId.value
+        && groups.value.some(g => g.taskId === selectedTaskId.value)
+      if (!exists) {
+        selectedTaskId.value = groups.value[0]?.taskId
+      }
+    } else if (!selectedTaskId.value) {
+      selectedTaskId.value = props.taskId
+    }
+  },
+  { immediate: true },
+)
+
+// modal open 时重置 spam tab + tabTotals 缓存（与 selectedTaskId 解耦）
+watch(
+  () => props.open,
+  (isOpen) => {
     if (!isOpen) return
     spamGroup.value = undefined
-    // 重置 tabTotals
     for (const k of Object.keys(tabTotals)) {
       tabTotals[k] = undefined
     }
-    if (hasGroups.value) {
-      selectedTaskId.value = groups.value[0]?.taskId
-    } else {
-      selectedTaskId.value = props.taskId
-    }
-  }
+  },
 )
 
 const selectedGroup = computed(() => {

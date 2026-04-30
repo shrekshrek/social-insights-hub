@@ -292,6 +292,7 @@ class CollectionTaskStatus(CustomBaseModel):
     platform: str = ""
     status: str
     posts_count: int = 0
+    comments_count: int = 0
     has_analysis: bool = False
 
 

@@ -212,6 +212,7 @@ export interface CollectionTaskStatus {
   platform: string
   status: string
   posts_count: number
+  comments_count: number
   has_analysis: boolean
 }
 

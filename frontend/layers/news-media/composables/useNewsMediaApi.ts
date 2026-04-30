@@ -236,11 +236,27 @@ export const useNewsSlices = () => {
     return true
   }
 
+  /**
+   * 按 article_ids 批量取切片内文章详情。后端限定 article 必须属于
+   * slice.included_task_ids 中的 task，跨切片或非本切片的 ids 会被自动过滤。
+   * 单次最多 200 个 ids（超过会 400）。
+   */
+  const getSliceArticlesByIds = async (
+    sliceId: number,
+    ids: number[],
+  ): Promise<NewsArticle[]> => {
+    if (ids.length === 0) return []
+    return apiRequest<NewsArticle[]>(`/news-media/slices/${sliceId}/articles`, {
+      query: { ids: ids.join(',') },
+    })
+  }
+
   return {
     getSlices,
     getSlice,
     createSlice,
     analyzeSlice,
     deleteSlice,
+    getSliceArticlesByIds,
   }
 }

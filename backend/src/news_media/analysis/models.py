@@ -22,8 +22,9 @@ if TYPE_CHECKING:
 class NewsSlice(Base):
     """新闻分析切片
 
-    用户勾选若干 NewsTask → 合并文章 → URL 去重 → 低相关过滤
-    → news_insight_chain → 存结果。
+    用户勾选若干 NewsTask → 合并文章 → URL 去重 → 低相关过滤 → 描述层 SQL
+    → Pass 1 LLM（归一/抽取/聚类） → 派生层 SQL → Pass 2 LLM（briefing/event_titles）。
+    详见 docs/adr/003-news-analysis-redesign.md。
     """
 
     __tablename__ = "news_slices"

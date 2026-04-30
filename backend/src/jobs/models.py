@@ -61,7 +61,7 @@ class AnalysisType(str, Enum):
 
     # 新闻媒体分析（关联 news_monitor_id / news_task_id）
     NEWS_TAGGING = "news_tagging"  # 逐篇标注（news_tagging_chain）
-    NEWS_INSIGHT = "news_insight"  # 切片级 insight 分析（news_insight_chain）
+    NEWS_INSIGHT = "news_insight"  # 切片级综合分析（pass1_chain + pass2_chain）
 
     # Research Agent（独立研究 / 策略渠道）
     RESEARCH = "research"  # LangGraph 研究图

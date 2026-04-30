@@ -116,12 +116,14 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - positioning_map.positions: 3-6 个玩家，必须与 players 数组重合
 - discourse_battles: 条目必须能在 agenda_map 的 agenda_battles 里找到对应（禁止凭空杜撰）
 - 若某字段无数据支持，使用空数组而非伪造内容
-- momentum 判断需基于 coverage.trend 或 narratives 数量变化，禁止"感觉上升"
+- momentum 判断需基于 `descriptive.coverage_timeseries` / `descriptive.sentiment_timeseries` 真实时序，
+  以及 `event_clusters` 的 `tier_weighted_score` 与 `peak_date` 分布；禁止"感觉上升"
 
 ## 禁止行为
 - 禁止改判 NewsSlice.entities.role（target/competitor/context 以输入为准）
 - 禁止脱离 agenda_map 议程图单独产生新的 battle
 - 禁止在 evidence_quote 中编造未出现的原文
+- 禁止使用 `result_data.page_synthesis`（briefing / event_titles 是 LLM 散文，仅供 slice 页面阅读，不作策略输入）
 
 ## 行业研究数据（research_findings）使用指南
 - 行业研究数据来自自动化搜索引擎 + 行业报告 + 公开数据���综合分析，代表**专家/行业视角**
@@ -172,40 +174,76 @@ def _build_research_context_section(research_design: dict | None) -> str:
 
 
 def _format_news_slices_for_landscape(news_slices: list[dict]) -> str:
-    """将 NewsSlice 数据格式化为 Landscape 层输入，重点提取 entities + competitive_landscape。"""
+    """将 NewsSlice 数据格式化为 Landscape 层输入（ADR-003 新 schema）。
+
+    重点字段：entities（含 role / by_tier sentiment）+ competitive（players + quote_share）+
+    media_landscape + 时序（用于 momentum 判断）。
+    """
     if not news_slices:
         return "（无新闻切片数据）"
 
     parts: list[dict[str, Any]] = []
     for ns in news_slices:
         rd = ns.get("result_data")
-        if not rd or isinstance(rd, str) or rd.get("error"):
+        if not rd or isinstance(rd, str):
             continue
-        stats = ns.get("stats") or {}
+        descriptive = rd.get("descriptive") or {}
+        media_landscape = rd.get("media_landscape") or {}
+        competitive = rd.get("competitive") or {}
+
         parts.append({
             "slice_name": ns.get("name", ""),
-            "article_count": stats.get("articles_total", 0),
-            "source_tier_distribution": stats.get("source_tier_distribution"),
-            "coverage_trend": (rd.get("coverage") or {}).get("trend"),
+            "article_count": descriptive.get("articles_filtered", 0),
+            "source_tier_distribution": descriptive.get("source_tier_distribution"),
+            "sentiment_overall": descriptive.get("sentiment_overall"),
+            "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+            # 时序信号（最近 30 个时间点），供 momentum 判断
+            "coverage_timeseries": (descriptive.get("coverage_timeseries") or [])[-30:],
+            "sentiment_timeseries": (descriptive.get("sentiment_timeseries") or [])[-30:],
+            "media_landscape": {
+                "source_pyramid": media_landscape.get("source_pyramid"),
+                "top_sources": media_landscape.get("top_sources"),
+            },
             "entities": [
                 {
                     "name": e.get("name"),
                     "role": e.get("role"),
                     "mention_count": e.get("mention_count"),
-                    "sentiment": e.get("sentiment"),
                     "source_count": e.get("source_count"),
-                    "key_claims": (e.get("key_claims") or [])[:3],
+                    "cross_task_count": e.get("cross_task_count"),
+                    "sentiment_avg": e.get("sentiment_avg"),
+                    "sentiment_weighted_by_tier": e.get("sentiment_weighted_by_tier"),
+                    "sentiment_by_tier": e.get("sentiment_by_tier"),
                 }
                 for e in (rd.get("entities") or [])[:15]
                 if isinstance(e, dict)
             ],
-            "competitive_landscape": rd.get("competitive_landscape"),
-            "narratives_headlines": [
-                {"theme": n.get("theme"), "article_count": n.get("article_count")}
-                for n in (rd.get("narratives") or [])[:5]
-                if isinstance(n, dict)
+            "competitive": {
+                "players": competitive.get("players"),
+                "quote_share": competitive.get("quote_share"),
+            },
+            "event_clusters_summary": [
+                {
+                    "cluster_id": c.get("cluster_id"),
+                    "article_count": c.get("article_count"),
+                    "first_reported_at": c.get("first_reported_at"),
+                    "peak_date": c.get("peak_date"),
+                    "tier_weighted_score": c.get("tier_weighted_score"),
+                }
+                for c in (rd.get("event_clusters") or [])[:8]
+                if isinstance(c, dict)
             ],
-            "key_quotes": (rd.get("key_quotes") or [])[:4],
+            "key_quotes": [
+                {
+                    "speaker": q.get("speaker"),
+                    "speaker_role": q.get("speaker_role"),
+                    "quote": q.get("quote"),
+                    "source_name": q.get("source_name"),
+                    "source_tier": q.get("source_tier"),
+                }
+                for q in (rd.get("quotes") or [])[:6]
+                if q.get("speaker_role") in ("official", "executive", "analyst")
+            ],
         })
 
     if not parts:

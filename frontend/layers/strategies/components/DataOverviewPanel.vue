@@ -1,7 +1,8 @@
 <template>
   <div class="space-y-4">
-    <!-- 整体进度条 -->
-    <div v-if="showProgress || totalCount > 0" class="flex items-center gap-3">
+    <!-- 整体进度条：仅在采集进行中显示。allAnalyzed=true 时进度条变成静态 100%
+         无增量信息，纯视觉冗余，隐藏；任务卡片照常保留作为数据来源审计记录 -->
+    <div v-if="!allAnalyzed && totalCount > 0" class="flex items-center gap-3">
       <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
         <div
           class="h-2 rounded-full transition-all duration-300"
@@ -29,10 +30,11 @@
             </span>
           </div>
           <div class="grid grid-cols-3 gap-1.5">
-            <div
+            <NuxtLink
               v-for="t in group"
               :key="t.task_id"
-              class="flex items-center gap-1.5 text-xs p-1.5 rounded"
+              :to="`/social-media/tasks/${t.task_id}`"
+              class="flex items-center gap-1.5 text-xs p-1.5 rounded hover:ring-1 hover:ring-primary-300 transition"
               :class="statusBg(t.status)"
             >
               <UIcon
@@ -44,18 +46,19 @@
               <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">
                 {{ platformLabel(t.platform) }}
               </UBadge>
-              <span class="text-gray-400 shrink-0 ml-auto">{{ t.posts_count }} 帖</span>
-            </div>
+              <span class="text-gray-400 shrink-0 ml-auto">{{ formatTaskCounts(t) }}</span>
+            </NuxtLink>
           </div>
         </div>
       </div>
 
       <!-- 无维度映射：平铺展示（兜底） -->
       <div v-else class="grid grid-cols-3 gap-1.5">
-        <div
+        <NuxtLink
           v-for="t in tasks"
           :key="t.task_id"
-          class="flex items-center gap-1.5 text-xs p-1.5 rounded"
+          :to="`/social-media/tasks/${t.task_id}`"
+          class="flex items-center gap-1.5 text-xs p-1.5 rounded hover:ring-1 hover:ring-primary-300 transition"
           :class="statusBg(t.status)"
         >
           <UIcon
@@ -67,8 +70,8 @@
           <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">
             {{ platformLabel(t.platform) }}
           </UBadge>
-          <span class="text-gray-400 shrink-0 ml-auto">{{ t.posts_count }} 帖</span>
-        </div>
+          <span class="text-gray-400 shrink-0 ml-auto">{{ formatTaskCounts(t) }}</span>
+        </NuxtLink>
       </div>
     </div>
 
@@ -86,10 +89,11 @@
           </span>
         </div>
         <div class="grid grid-cols-3 gap-1.5">
-          <div
+          <NuxtLink
             v-for="t in group"
             :key="t.task_id"
-            class="flex items-center gap-1.5 text-xs p-1.5 rounded"
+            :to="`/news-media/tasks/${t.task_id}`"
+            class="flex items-center gap-1.5 text-xs p-1.5 rounded hover:ring-1 hover:ring-primary-300 transition"
             :class="statusBg(t.status)"
           >
             <UIcon
@@ -99,7 +103,7 @@
             />
             <span class="font-medium truncate">{{ t.keyword }}</span>
             <span class="text-gray-400 shrink-0 ml-auto">{{ t.articles_count }} 篇</span>
-          </div>
+          </NuxtLink>
         </div>
       </div>
     </div>
@@ -304,6 +308,13 @@ const progressPercent = computed(() => {
 
 /** 任务终态（completed / failed） */
 const isTerminal = (status: string) => status === 'completed' || status === 'failed'
+
+/** 任务卡片右侧统计：有评论时显示"X 帖 · Y 评"，无评论时只显示"X 帖" */
+const formatTaskCounts = (t: CollectionTaskStatus): string => {
+  const posts = `${t.posts_count} 帖`
+  if (t.comments_count > 0) return `${posts} · ${t.comments_count} 评`
+  return posts
+}
 
 const statusBg = (status: string): string => {
   if (status === 'completed') return 'bg-green-50 dark:bg-green-900/20'

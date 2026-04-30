@@ -3502,6 +3502,7 @@ async def check_collection_status(
             platform=task.platform.code if task.platform else "",
             status=task.status,
             posts_count=task.posts_count,
+            comments_count=task.comments_count or 0,
             has_analysis=task.analysis_result is not None,
         )
         for task in tasks

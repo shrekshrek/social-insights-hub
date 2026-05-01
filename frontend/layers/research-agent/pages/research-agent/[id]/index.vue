@@ -64,9 +64,26 @@
       <!-- 任务信息卡片 -->
       <UCard>
         <template #header>
-          <h2 class="text-lg font-semibold">任务信息</h2>
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">任务信息</h2>
+            <ClientOnly>
+              <UButton
+                v-if="canManageParticipants"
+                size="sm"
+                variant="outline"
+                icon="i-heroicons-pencil-square"
+                @click="openEditModal"
+              >
+                编辑
+              </UButton>
+            </ClientOnly>
+          </div>
         </template>
         <dl class="space-y-2 text-sm">
+          <div class="flex gap-3">
+            <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">标题</dt>
+            <dd class="text-gray-900 dark:text-white font-medium">{{ task.title || '-' }}</dd>
+          </div>
           <div class="flex gap-3">
             <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究主题</dt>
             <dd class="text-gray-900 dark:text-white font-medium whitespace-pre-line">{{ task.analysis_goal }}</dd>
@@ -82,6 +99,14 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
             <div class="flex gap-3">
+              <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">类型</dt>
+              <dd>
+                <UBadge :color="profileColor(task.profile_name)" variant="soft" size="sm">
+                  {{ profileLabel(task.profile_name) }}
+                </UBadge>
+              </dd>
+            </div>
+            <div class="flex gap-3">
               <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">状态</dt>
               <dd>
                 <UBadge :color="statusColor(task.status)" variant="subtle" size="sm">
@@ -89,6 +114,23 @@
                 </UBadge>
               </dd>
             </div>
+            <div class="flex gap-3">
+              <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">关联策略</dt>
+              <dd class="text-gray-900 dark:text-white">
+                <UButton
+                  v-if="task.strategy_id"
+                  variant="link"
+                  size="sm"
+                  class="p-0"
+                  :to="`/strategies/${task.strategy_id}`"
+                >
+                  策略 #{{ task.strategy_id }}
+                </UButton>
+                <span v-else class="text-gray-400">独立任务</span>
+              </dd>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
             <div v-if="task.stats" class="flex gap-3">
               <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">来源数</dt>
               <dd class="text-gray-900 dark:text-white">{{ task.stats.documents_analyzed }} 篇</dd>
@@ -96,6 +138,35 @@
             <div class="flex gap-3">
               <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">创建时间</dt>
               <dd class="text-gray-900 dark:text-white">{{ formatDate(task.created_at) }}</dd>
+            </div>
+          </div>
+
+          <!-- 创建者 / 参与者（只读 chip 列表） -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+            <div class="flex gap-3">
+              <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400 pt-0.5">创建者</dt>
+              <dd class="text-gray-900 dark:text-white">
+                {{ task.owner_username || task.user_id }}
+              </dd>
+            </div>
+            <div class="flex gap-3 sm:col-span-2">
+              <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400 pt-0.5">参与者</dt>
+              <dd class="flex-1">
+                <ClientOnly fallback="...">
+                  <div v-if="task.participant_ids?.length" class="flex flex-wrap gap-1.5">
+                    <UBadge
+                      v-for="(pid, i) in task.participant_ids"
+                      :key="pid"
+                      color="neutral"
+                      variant="subtle"
+                      size="sm"
+                    >
+                      {{ task.participant_usernames?.[i] || pid }}
+                    </UBadge>
+                  </div>
+                  <span v-else class="text-gray-400">暂无参与者</span>
+                </ClientOnly>
+              </dd>
             </div>
           </div>
         </dl>
@@ -361,11 +432,50 @@
     <div v-else class="text-center py-12">
       <p class="text-gray-500">研究任务不存在</p>
     </div>
+
+    <!-- 编辑研究任务弹窗 -->
+    <ClientOnly>
+      <UModal
+        v-model:open="showEditModal"
+        title="编辑研究任务"
+        :ui="{ footer: 'justify-end' }"
+      >
+        <template #body>
+          <div class="space-y-4">
+            <UFormField label="标题" help="仅标题可修改；研究主题/问题/类型创建后无法修改">
+              <UInput v-model="editState.title" placeholder="请输入标题" class="w-full" />
+            </UFormField>
+            <UFormField label="参与者" help="参与者变更会立即生效，无需点保存">
+              <ParticipantsManager
+                v-if="task"
+                :participants="(task.participant_ids || []).map((id: number, i: number) => ({ id, username: task!.participant_usernames?.[i] || String(id) }))"
+                :owner-id="task.user_id"
+                :can-manage="true"
+                :on-add="handleAddParticipants"
+                :on-remove="handleRemoveParticipant"
+              />
+            </UFormField>
+          </div>
+        </template>
+        <template #footer>
+          <UButton
+            variant="outline"
+            :disabled="editSubmitting"
+            @click="showEditModal = false"
+          >
+            取消
+          </UButton>
+          <UButton :loading="editSubmitting" @click="handleSaveEdit">
+            保存
+          </UButton>
+        </template>
+      </UModal>
+    </ClientOnly>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from 'vue'
+import { computed, reactive, ref, onUnmounted } from 'vue'
 import { PERMISSIONS } from '~/config/permissions'
 
 
@@ -380,14 +490,19 @@ const { currentUserId, hasPermission } = usePermissions()
 const {
   getTask,
   getTaskResult,
+  updateTask,
   rerunTask,
   deleteTask,
+  addParticipants,
+  removeParticipant,
   statusLabel,
   statusColor,
   confidenceLabel,
   confidenceColor,
   tierLabel,
   tierColor,
+  profileLabel,
+  profileColor,
 } = useResearchAgentApi()
 
 const { data: task, pending: loadingTask, refresh: refreshTask } = getTask(taskId)
@@ -555,6 +670,52 @@ async function handleDelete() {
   } catch {
     // 错误已由 apiRequest 统一处理
   }
+}
+
+// 编辑：仅 owner 或 admin 可管
+const showEditModal = ref(false)
+const editSubmitting = ref(false)
+const editState = reactive({ title: '' })
+
+const canManageParticipants = computed(() => {
+  if (!task.value) return false
+  return task.value.user_id === currentUserId.value || hasPermission(PERMISSIONS.RESEARCH_AGENT_WRITE)
+})
+
+function openEditModal() {
+  editState.title = task.value?.title || ''
+  showEditModal.value = true
+}
+
+async function handleSaveEdit() {
+  if (!task.value) return
+  const newTitle = editState.title.trim()
+  // 如果未变更则不发请求
+  if (newTitle === (task.value.title || '')) {
+    showEditModal.value = false
+    return
+  }
+  editSubmitting.value = true
+  try {
+    await updateTask(taskId, { title: newTitle || undefined })
+    toast.add({ title: '已保存', color: 'success' })
+    await refreshTask()
+    showEditModal.value = false
+  } catch {
+    // 错误已由 apiRequest 统一处理
+  } finally {
+    editSubmitting.value = false
+  }
+}
+
+async function handleAddParticipants(userIds: number[]) {
+  await addParticipants(taskId, userIds)
+  await refreshTask()
+}
+
+async function handleRemoveParticipant(userId: number) {
+  await removeParticipant(taskId, userId)
+  await refreshTask()
 }
 </script>
 

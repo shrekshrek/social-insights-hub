@@ -1,10 +1,14 @@
 """Research Agent Pydantic 模型"""
 
 from datetime import datetime
+from typing import TYPE_CHECKING, List
 
 from pydantic import Field
 
 from src.schemas import CustomBaseModel
+
+if TYPE_CHECKING:
+    from src.research_agent.models import ResearchTask
 
 
 class ProfileOption(CustomBaseModel):
@@ -97,6 +101,53 @@ class ResearchTaskRead(CustomBaseModel):
     progress: list | None = None
     created_at: datetime
     updated_at: datetime
+    participant_ids: List[int] = Field(
+        default_factory=list, description="参与者ID列表"
+    )
+    participant_usernames: List[str] = Field(
+        default_factory=list, description="参与者用户名列表"
+    )
+    owner_username: str = Field(default="", description="创建者用户名")
+
+    @classmethod
+    def from_orm_full(cls, task: "ResearchTask") -> "ResearchTaskRead":
+        """从 ORM ResearchTask 构造，附带 participants / owner 展示信息。"""
+        return cls(
+            id=task.id,
+            title=task.title,
+            analysis_goal=task.analysis_goal,
+            research_questions=task.research_questions,
+            search_config=task.search_config,
+            profile_name=task.profile_name,
+            strategy_id=task.strategy_id,
+            user_id=task.user_id,
+            job_id=task.job_id,
+            status=task.status,
+            error_message=task.error_message,
+            stats=task.stats,
+            progress=task.progress,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+            participant_ids=[p.id for p in task.participants],
+            participant_usernames=[p.username for p in task.participants],
+            owner_username=task.user.username if task.user else "",
+        )
+
+
+class ResearchTaskUpdate(CustomBaseModel):
+    """更新研究任务（仅允许编辑 title；其他字段改动会让既有研究结果失效，不予支持）"""
+
+    title: str | None = Field(
+        None, min_length=1, max_length=200, description="研究标题"
+    )
+
+
+class ResearchTaskParticipantAssignment(CustomBaseModel):
+    """研究任务-参与者关联请求"""
+
+    user_ids: List[int] = Field(
+        ..., min_length=1, description="要添加的参与者用户ID列表"
+    )
 
 
 class DataPointSchema(CustomBaseModel):

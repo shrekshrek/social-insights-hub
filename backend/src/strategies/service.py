@@ -355,7 +355,7 @@ async def add_participants_to_strategy(
             strategy.participants.append(user)
 
     await db.flush()
-    await _sync_participants_to_monitors(db, strategy)
+    await _sync_participants_to_associated_resources(db, strategy)
     await db.commit()
     return await get_strategy_by_id(db, strategy.id)
 
@@ -376,22 +376,26 @@ async def remove_participant_from_strategy(
         )
     strategy.participants = [p for p in strategy.participants if p.id != user_id]
     await db.flush()
-    await _sync_participants_to_monitors(db, strategy)
+    await _sync_participants_to_associated_resources(db, strategy)
     await db.commit()
     return await get_strategy_by_id(db, strategy.id)
 
 
-async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -> None:
-    """将策略 participants 同步（覆盖）到关联的 SocialMonitor 和 NewsMonitor。
+async def _sync_participants_to_associated_resources(db: AsyncSession, strategy: Strategy) -> None:
+    """将策略 participants 同步（覆盖）到关联的 SocialMonitor / NewsMonitor / ResearchTask。
 
-    只同步由策略创建/关联的 monitor（通过 social_monitor_id / news_monitor_id 判断）。
-    独立创建的 monitor 不受此影响。
+    只同步由策略创建/关联的资源（通过 social_monitor_id / news_monitor_id / strategy_id 判断）。
+    独立创建的资源不受此影响。
+    覆盖式语义：策略 participants 是关联资源 participants 的单一来源——任何额外加在
+    资源上的协作者都会在策略 participants 变更时被覆盖。
     """
+    from src.auth.models import User
+    from src.research_agent.models import ResearchTask
+
     participant_ids = [p.id for p in strategy.participants]
 
     if strategy.social_monitor_id:
         from src.social_media.monitors.crud import get_social_monitor_by_id
-        from src.auth.models import User
 
         monitor = await get_social_monitor_by_id(db, strategy.social_monitor_id, load_relations=True)
         if monitor:
@@ -402,7 +406,6 @@ async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -
 
     if strategy.news_monitor_id:
         from src.news_media.monitors.crud import get_monitor_by_id as get_news_monitor_by_id
-        from src.auth.models import User
 
         news_monitor = await get_news_monitor_by_id(db, strategy.news_monitor_id, load_relations=True)
         if news_monitor:
@@ -410,6 +413,22 @@ async def _sync_participants_to_monitors(db: AsyncSession, strategy: Strategy) -
             new_participants2 = [u for u in users2.scalars().all() if u.id != news_monitor.user_id]
             news_monitor.participants = new_participants2
             await db.flush()
+
+    # 同步到该策略关联的所有 ResearchTask（行业研究 / 创意研究）
+    research_tasks_stmt = (
+        select(ResearchTask)
+        .where(ResearchTask.strategy_id == strategy.id)
+        .options(selectinload(ResearchTask.participants))
+    )
+    research_tasks = (await db.execute(research_tasks_stmt)).scalars().all()
+    if research_tasks:
+        users_for_research = (
+            await db.execute(select(User).where(User.id.in_(participant_ids)))
+        ).scalars().all() if participant_ids else []
+        for rtask in research_tasks:
+            new_rparticipants = [u for u in users_for_research if u.id != rtask.user_id]
+            rtask.participants = new_rparticipants
+        await db.flush()
 
 
 async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dict]:
@@ -3157,6 +3176,9 @@ async def approve_probe(
     flag_modified(strategy, "research_design")
 
     await _dispatch_strategy_research_tasks(db, strategy, current_user_id)
+
+    # 新建的 ResearchTask 立即同步 participants，让协作者无需等下次手动 add/remove 就能看见
+    await _sync_participants_to_associated_resources(db, strategy)
 
     await db.commit()
 

@@ -1,4 +1,4 @@
-import type { ResearchProfileOption, ResearchTask, ResearchTaskCreate, ResearchTaskResult, ParseBriefTextRequest, ParseBriefResponse } from '../types'
+import type { ResearchProfileOption, ResearchTask, ResearchTaskCreate, ResearchTaskResult, ResearchTaskUpdate, ParseBriefTextRequest, ParseBriefResponse } from '../types'
 
 export function useResearchAgentApi() {
   const { apiRequest, useApiData } = useApi()
@@ -65,6 +65,14 @@ export function useResearchAgentApi() {
     })
   }
 
+  // 编辑研究任务（仅 title）
+  async function updateTask(id: number, data: ResearchTaskUpdate): Promise<ResearchTask> {
+    return apiRequest<ResearchTask>(`/research/tasks/${id}`, {
+      method: 'PATCH',
+      body: data,
+    })
+  }
+
   // 重新运行
   async function rerunTask(id: number): Promise<ResearchTask> {
     return apiRequest<ResearchTask>(`/research/tasks/${id}/rerun`, {
@@ -75,6 +83,21 @@ export function useResearchAgentApi() {
   // 删除任务
   async function deleteTask(id: number): Promise<void> {
     return apiRequest(`/research/tasks/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
+  // 添加参与者
+  async function addParticipants(taskId: number, userIds: number[]): Promise<ResearchTask> {
+    return apiRequest<ResearchTask>(`/research/tasks/${taskId}/participants`, {
+      method: 'POST',
+      body: { user_ids: userIds },
+    })
+  }
+
+  // 移除参与者
+  async function removeParticipant(taskId: number, userId: number): Promise<ResearchTask> {
+    return apiRequest<ResearchTask>(`/research/tasks/${taskId}/participants/${userId}`, {
       method: 'DELETE',
     })
   }
@@ -167,8 +190,11 @@ export function useResearchAgentApi() {
     parseBrief,
     parseBriefText,
     createTask,
+    updateTask,
     rerunTask,
     deleteTask,
+    addParticipants,
+    removeParticipant,
     statusLabel,
     statusColor,
     confidenceLabel,

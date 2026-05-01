@@ -10,6 +10,7 @@ from src.rbac.dependencies import (
     require_research_agent_write,
     require_research_agent_delete,
 )
+from src.rbac.utils import is_admin_or_super_admin
 from src.research_agent import schemas, service
 from src.research_agent.profiles import list_profiles
 from src.schemas import PaginatedResponse
@@ -99,7 +100,9 @@ async def create_task(
         search_config=search_config,
         profile_name=body.profile_name,
     )
-    return task
+    # 重新加载以填充 participants / user 关系（新建时为空但展示字段需要存在）
+    refreshed = await service.get_research_task(db, task.id)
+    return schemas.ResearchTaskRead.from_orm_full(refreshed or task)
 
 
 @router.get(
@@ -117,10 +120,17 @@ async def list_tasks(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_research_agent_read),
 ):
-    """列出当前用户的研究任务"""
+    """列出研究任务
+
+    - 管理员/超级管理员：返回所有任务
+    - 普通用户：返回自己创建或参与的任务（owner OR participant）
+    """
+    accessible_to_user_id = (
+        None if is_admin_or_super_admin(current_user) else current_user.id
+    )
     items, total = await service.list_research_tasks(
         db=db,
-        user_id=current_user.id,
+        accessible_to_user_id=accessible_to_user_id,
         status=status_filter,
         profile_name=profile_name,
         search=search,
@@ -128,7 +138,10 @@ async def list_tasks(
         page_size=page_size,
     )
     return PaginatedResponse.create(
-        items=items, total=total, page=page, page_size=page_size
+        items=[schemas.ResearchTaskRead.from_orm_full(t) for t in items],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -141,16 +154,17 @@ async def list_tasks(
 async def get_task(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    _: User = Depends(require_research_agent_read),
+    current_user: User = Depends(require_research_agent_read),
 ):
-    """获取研究任务详情"""
+    """获取研究任务详情（owner / participant / admin 可见）"""
     task = await service.get_research_task(db, task_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="研究任务不存在",
         )
-    return task
+    await service.assert_research_task_access(db, task_id, current_user.id)
+    return schemas.ResearchTaskRead.from_orm_full(task)
 
 
 @router.get(
@@ -162,9 +176,10 @@ async def get_task(
 async def get_task_result(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    _: User = Depends(require_research_agent_read),
+    current_user: User = Depends(require_research_agent_read),
 ):
     """获取研究结果（synthesis + findings + sources）"""
+    await service.assert_research_task_access(db, task_id, current_user.id)
     result = await service.get_research_result(db, task_id)
     if not result:
         raise HTTPException(
@@ -183,7 +198,7 @@ async def get_task_result(
 async def rerun_task(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    _: User = Depends(require_research_agent_write),
+    current_user: User = Depends(require_research_agent_write),
 ):
     """原地重置研究任务并重新执行，覆盖原有结果"""
     task = await service.get_research_task(db, task_id)
@@ -192,12 +207,42 @@ async def rerun_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="研究任务不存在",
         )
+    await service.assert_research_task_access(db, task_id, current_user.id)
     if task.status in ("pending", "running"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="任务正在执行中，无法重新研究",
         )
-    return await service.rerun_research_task(db, task)
+    refreshed = await service.rerun_research_task(db, task)
+    return schemas.ResearchTaskRead.from_orm_full(refreshed)
+
+
+@router.patch(
+    "/tasks/{task_id}",
+    response_model=schemas.ResearchTaskRead,
+    status_code=status.HTTP_200_OK,
+    summary="编辑研究任务（仅 title）",
+)
+async def update_task(
+    task_id: int,
+    body: schemas.ResearchTaskUpdate,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_research_agent_write),
+):
+    """编辑研究任务可变字段（当前仅 title）。仅 owner / admin。"""
+    task = await service.get_research_task(db, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="研究任务不存在",
+        )
+    if not is_admin_or_super_admin(current_user) and task.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有研究任务的创建者或管理员可以编辑",
+        )
+    updated = await service.update_research_task(db, task, title=body.title)
+    return schemas.ResearchTaskRead.from_orm_full(updated)
 
 
 @router.delete(
@@ -208,12 +253,82 @@ async def rerun_task(
 async def delete_task(
     task_id: int,
     db: AsyncSession = Depends(get_async_db),
-    _: User = Depends(require_research_agent_delete),
+    current_user: User = Depends(require_research_agent_delete),
 ):
-    """删除研究任务"""
+    """删除研究任务（仅 owner / admin 可删；participant 不可删）"""
+    task = await service.get_research_task(db, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="研究任务不存在",
+        )
+    if not is_admin_or_super_admin(current_user) and task.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有研究任务的创建者或管理员可以删除",
+        )
     deleted = await service.delete_research_task(db, task_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="研究任务不存在",
         )
+
+
+# ==================== Participant Management ====================
+
+
+@router.post(
+    "/tasks/{task_id}/participants",
+    response_model=schemas.ResearchTaskRead,
+    status_code=status.HTTP_200_OK,
+    summary="添加研究任务参与者",
+)
+async def add_participants(
+    task_id: int,
+    body: schemas.ResearchTaskParticipantAssignment,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_research_agent_write),
+):
+    """添加研究任务参与者（仅 owner / admin）"""
+    task = await service.get_research_task(db, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="研究任务不存在",
+        )
+    if not is_admin_or_super_admin(current_user) and task.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有研究任务的创建者或管理员可以管理参与者",
+        )
+    updated = await service.add_participants_to_task(db, task, body.user_ids)
+    return schemas.ResearchTaskRead.from_orm_full(updated)
+
+
+@router.delete(
+    "/tasks/{task_id}/participants/{user_id}",
+    response_model=schemas.ResearchTaskRead,
+    status_code=status.HTTP_200_OK,
+    summary="移除研究任务参与者",
+)
+async def remove_participant(
+    task_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_research_agent_write),
+):
+    """移除研究任务参与者（仅 owner / admin；不能移除创建者）"""
+    task = await service.get_research_task(db, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="研究任务不存在",
+        )
+    if not is_admin_or_super_admin(current_user) and task.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有研究任务的创建者或管理员可以管理参与者",
+        )
+    updated = await service.remove_participant_from_task(db, task, user_id)
+    return schemas.ResearchTaskRead.from_orm_full(updated)

@@ -3,7 +3,17 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text, DateTime, JSON, Index
+from sqlalchemy import (
+    ForeignKey,
+    String,
+    Text,
+    DateTime,
+    JSON,
+    Index,
+    Table,
+    Column,
+    Integer,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -13,6 +23,25 @@ if TYPE_CHECKING:
     from src.auth.models import User
     from src.strategies.models import Strategy
     from src.jobs.models import AnalysisJob
+
+
+# 研究任务-参与者关联表（多对多）
+research_task_participants = Table(
+    "research_task_participants",
+    Base.metadata,
+    Column(
+        "research_task_id",
+        Integer,
+        ForeignKey("research_tasks.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 class ResearchTask(Base):
@@ -110,6 +139,11 @@ class ResearchTask(Base):
     user: Mapped["User"] = relationship(
         "src.auth.models.User",
         foreign_keys=[user_id],
+        lazy="selectin",
+    )
+    participants: Mapped[list["User"]] = relationship(
+        "src.auth.models.User",
+        secondary=research_task_participants,
         lazy="selectin",
     )
     job: Mapped["AnalysisJob | None"] = relationship(

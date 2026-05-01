@@ -503,12 +503,12 @@ const columns = computed<TableColumn<NewsArticle>[]>(() => {
         <ClientOnly>
           <div class="flex items-center gap-3">
             <UButton
-              v-if="task.status === 'pending'"
+              v-if="['pending', 'failed'].includes(task.status) && (hasPermission(PERMISSIONS.NEWS_TASK_WRITE) || task.user_id === currentUserId)"
               icon="i-heroicons-play"
               :loading="executing"
               @click="handleExecute"
             >
-              执行任务
+              {{ task.status === 'failed' ? '重新执行' : '执行任务' }}
             </UButton>
             <UButton
               variant="ghost"

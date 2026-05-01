@@ -559,7 +559,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
       <ClientOnly>
         <div v-if="task" class="flex gap-3">
           <UButton
-            v-if="task.status === 'pending' && task.data_source === 'local_upload'"
+            v-if="task.status === 'pending' && task.data_source === 'local_upload' && (hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE) || task.user_id === currentUserId)"
             icon="i-heroicons-arrow-up-tray"
             :to="`/social-media/tasks/${taskId}/upload`"
           >

@@ -40,6 +40,7 @@
               刷新
             </UButton>
             <UButton
+              v-if="canWriteTask"
               variant="outline"
               icon="i-heroicons-arrow-path"
               :loading="rerunning"
@@ -68,7 +69,7 @@
             <h2 class="text-lg font-semibold">任务信息</h2>
             <ClientOnly>
               <UButton
-                v-if="canManageParticipants"
+                v-if="canWriteTask"
                 size="sm"
                 variant="outline"
                 icon="i-heroicons-pencil-square"
@@ -677,7 +678,8 @@ const showEditModal = ref(false)
 const editSubmitting = ref(false)
 const editState = reactive({ title: '' })
 
-const canManageParticipants = computed(() => {
+// 写操作权限（重新研究 / 编辑 / 管理参与者）：owner 或具备 RESEARCH_AGENT_WRITE
+const canWriteTask = computed(() => {
   if (!task.value) return false
   return task.value.user_id === currentUserId.value || hasPermission(PERMISSIONS.RESEARCH_AGENT_WRITE)
 })

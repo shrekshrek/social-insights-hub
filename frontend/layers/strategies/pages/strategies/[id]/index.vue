@@ -197,9 +197,10 @@
 
         <!-- 未生成研究计划 -->
         <div v-if="!hasResearchDesign">
-          <UButton :loading="designLoading" icon="i-heroicons-sparkles" @click="handleDesignResearch">
+          <UButton v-if="canEdit" :loading="designLoading" icon="i-heroicons-sparkles" @click="handleDesignResearch">
             生成研究计划
           </UButton>
+          <p v-else class="text-sm text-gray-400">您没有生成研究计划的权限</p>
         </div>
 
         <!-- 已有研究计划 -->
@@ -238,7 +239,7 @@
             @update:output-type="selectedOutputType = $event"
           />
 
-          <div class="mt-4 flex flex-col gap-2">
+          <div v-if="canEdit" class="mt-4 flex flex-col gap-2">
             <div class="flex items-center gap-3">
               <UButton
                 :loading="confirmResearchLoading"
@@ -293,7 +294,7 @@
           :social-monitor-id="strategy.social_monitor_id"
         />
 
-        <div v-if="probeData.probeReview && strategy.status === 'probing'" class="flex items-center gap-3 mt-4">
+        <div v-if="canEdit && probeData.probeReview && strategy.status === 'probing'" class="flex items-center gap-3 mt-4">
           <UButton :loading="approveProbeLoading" icon="i-heroicons-check-circle" @click="handleApproveProbe">
             {{ probeData.probeReview?.overall_verdict === 'all_pass' ? '确认继续' : '忽略问题，继续采集' }}
           </UButton>
@@ -324,7 +325,7 @@
               <h2 class="text-lg font-semibold">数据就绪</h2>
             </div>
             <UButton
-              v-if="collectionData.slices.length"
+              v-if="canEdit && collectionData.slices.length"
               variant="outline" size="sm" icon="i-heroicons-adjustments-horizontal"
               @click="sliceAdjustOpen = true"
             >
@@ -380,7 +381,7 @@
         <template v-if="isBrandStrategyPath">
           <BrandStrategyStageCard
             stage="insight" title="Insight 洞察"
-            :has-result="!!strategy.insight_result" :can-generate="true" :can-edit="canEdit"
+            :has-result="!!strategy.insight_result" :can-generate="canEdit" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'insight'" :saving="savingBrandStrategyStage === 'insight'"
             :result="strategy.insight_result"
             @generate="handleGenerateBrandStrategyStage('insight')"
@@ -391,7 +392,7 @@
 
           <BrandStrategyStageCard
             stage="brand_role" title="Brand Role 品牌角色"
-            :has-result="!!strategy.brand_role_result" :can-generate="canGenerateBrandRole" :can-edit="canEdit"
+            :has-result="!!strategy.brand_role_result" :can-generate="canEdit && canGenerateBrandRole" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'brand_role'" :saving="savingBrandStrategyStage === 'brand_role'"
             :result="strategy.brand_role_result"
             @generate="handleGenerateBrandStrategyStage('brand_role')"
@@ -402,7 +403,7 @@
 
           <BrandStrategyStageCard
             stage="big_idea" title="Big Idea 创意"
-            :has-result="!!strategy.big_idea_result" :can-generate="canGenerateBigIdea" :can-edit="canEdit"
+            :has-result="!!strategy.big_idea_result" :can-generate="canEdit && canGenerateBigIdea" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'big_idea'" :saving="savingBrandStrategyStage === 'big_idea'"
             :result="strategy.big_idea_result"
             @generate="handleGenerateBrandStrategyStage('big_idea')"
@@ -416,7 +417,7 @@
         <template v-else-if="isMarketReportPath">
           <MarketReportStageCard
             stage="agenda_map" title="Agenda Map 媒体议程图"
-            :has-result="!!strategy.agenda_map_result" :can-generate="true"
+            :has-result="!!strategy.agenda_map_result" :can-generate="canEdit"
             :generating="generatingMarketReportStage === 'agenda_map'" :result="strategy.agenda_map_result"
             @generate="handleGenerateMarketReportStage('agenda_map')"
           >
@@ -425,7 +426,7 @@
 
           <MarketReportStageCard
             stage="landscape" title="Landscape 竞争格局"
-            :has-result="!!strategy.landscape_result" :can-generate="canGenerateLandscape"
+            :has-result="!!strategy.landscape_result" :can-generate="canEdit && canGenerateLandscape"
             :generating="generatingMarketReportStage === 'landscape'" :result="strategy.landscape_result"
             @generate="handleGenerateMarketReportStage('landscape')"
           >
@@ -434,7 +435,7 @@
 
           <MarketReportStageCard
             stage="strategic_brief" title="Strategic Brief 战略简报"
-            :has-result="!!strategy.strategic_brief_result" :can-generate="canGenerateStrategicBrief"
+            :has-result="!!strategy.strategic_brief_result" :can-generate="canEdit && canGenerateStrategicBrief"
             :generating="generatingMarketReportStage === 'strategic_brief'" :result="strategy.strategic_brief_result"
             @generate="handleGenerateMarketReportStage('strategic_brief')"
           >
@@ -453,7 +454,7 @@
 
           <MarketReportStageCard
             stage="agenda_map" title="Agenda Map 媒体议程图"
-            :has-result="!!strategy.agenda_map_result" :can-generate="true"
+            :has-result="!!strategy.agenda_map_result" :can-generate="canEdit"
             :generating="generatingMarketReportStage === 'agenda_map'" :result="strategy.agenda_map_result"
             @generate="handleGenerateMarketReportStage('agenda_map')"
           >
@@ -462,7 +463,7 @@
 
           <MarketReportStageCard
             stage="landscape" title="Landscape 竞争格局"
-            :has-result="!!strategy.landscape_result" :can-generate="canGenerateLandscape"
+            :has-result="!!strategy.landscape_result" :can-generate="canEdit && canGenerateLandscape"
             :generating="generatingMarketReportStage === 'landscape'" :result="strategy.landscape_result"
             @generate="handleGenerateMarketReportStage('landscape')"
           >
@@ -478,7 +479,7 @@
 
           <BrandStrategyStageCard
             stage="insight" title="Insight 洞察"
-            :has-result="!!strategy.insight_result" :can-generate="canGenerateInsightForFull" :can-edit="canEdit"
+            :has-result="!!strategy.insight_result" :can-generate="canEdit && canGenerateInsightForFull" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'insight'" :saving="savingBrandStrategyStage === 'insight'"
             :result="strategy.insight_result"
             @generate="handleGenerateBrandStrategyStage('insight')"
@@ -489,7 +490,7 @@
 
           <BrandStrategyStageCard
             stage="brand_role" title="Brand Role 品牌角色"
-            :has-result="!!strategy.brand_role_result" :can-generate="canGenerateBrandRole" :can-edit="canEdit"
+            :has-result="!!strategy.brand_role_result" :can-generate="canEdit && canGenerateBrandRole" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'brand_role'" :saving="savingBrandStrategyStage === 'brand_role'"
             :result="strategy.brand_role_result"
             @generate="handleGenerateBrandStrategyStage('brand_role')"
@@ -500,7 +501,7 @@
 
           <BrandStrategyStageCard
             stage="big_idea" title="Big Idea 创意"
-            :has-result="!!strategy.big_idea_result" :can-generate="canGenerateBigIdea" :can-edit="canEdit"
+            :has-result="!!strategy.big_idea_result" :can-generate="canEdit && canGenerateBigIdea" :can-edit="canEdit"
             :generating="generatingBrandStrategyStage === 'big_idea'" :saving="savingBrandStrategyStage === 'big_idea'"
             :result="strategy.big_idea_result"
             @generate="handleGenerateBrandStrategyStage('big_idea')"

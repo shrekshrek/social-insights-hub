@@ -500,7 +500,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
         const t = row.original
         const isOwner = t.user_id === currentUserId.value
         const canExecute = (hasPermission(PERMISSIONS.NEWS_TASK_WRITE) || isOwner)
-          && t.status === 'pending'
+          && ['pending', 'failed'].includes(t.status)
         const canDelete = hasPermission(PERMISSIONS.NEWS_TASK_DELETE) || isOwner
         return h('div', { class: 'flex items-center gap-1' }, [
           h(

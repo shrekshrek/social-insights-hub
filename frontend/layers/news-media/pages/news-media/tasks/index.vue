@@ -219,6 +219,7 @@ const columns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
 
       <div class="flex items-center gap-3">
         <UButton
+          v-if="hasPermission(PERMISSIONS.NEWS_TASK_WRITE)"
           icon="i-heroicons-plus"
           to="/news-media/tasks/create"
         >

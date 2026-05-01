@@ -160,6 +160,7 @@ const columns = computed<TableColumn<SocialMonitor>[]>(() => {
 
       <div class="flex items-center gap-3">
         <UButton
+          v-if="hasPermission(PERMISSIONS.SOCIAL_MONITOR_WRITE)"
           icon="i-heroicons-plus"
           to="/social-media/monitors/create"
         >

@@ -13,7 +13,11 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <UButton icon="i-heroicons-plus" to="/users/create">
+        <UButton
+          v-if="hasPermission(PERMISSIONS.USER_WRITE)"
+          icon="i-heroicons-plus"
+          to="/users/create"
+        >
           新增用户
         </UButton>
         <UButton
@@ -96,6 +100,9 @@ import type { User } from "../../types";
 import type { TableColumn } from "@nuxt/ui";
 import { UAvatar, UBadge, UButton } from "#components";
 import { getRoleDisplayName } from "../../../rbac/utils/permissions";  // 明确的跨模块依赖
+import { PERMISSIONS } from "~/config/permissions";
+
+const { hasPermission, canEditUser, canDeleteUser } = usePermissions();
 
 // 页面元数据
 definePageMeta({
@@ -283,27 +290,33 @@ const columns: TableColumn<User>[] = [
           icon: "i-heroicons-eye",
           to: `/users/${row.original.id}`,
         }, () => "查看"),
-        h(UButton as Component, {
-          size: "xs",
-          variant: "ghost",
-          color: "primary",
-          icon: "i-heroicons-user-group",
-          to: `/users/${row.original.id}/roles`,
-        }, () => "角色"),
-        h(UButton as Component, {
-          size: "xs",
-          variant: "ghost",
-          icon: "i-heroicons-pencil-square",
-          to: `/users/${row.original.id}/edit`,
-        }, () => "编辑"),
-        h(UButton as Component, {
-          size: "xs",
-          variant: "ghost",
-          color: "error",
-          icon: "i-heroicons-trash",
-          onClick: () => confirmDeleteUser(row.original),
-        }, () => "删除"),
-      ]);
+        hasPermission(PERMISSIONS.USER_WRITE)
+          ? h(UButton as Component, {
+              size: "xs",
+              variant: "ghost",
+              color: "primary",
+              icon: "i-heroicons-user-group",
+              to: `/users/${row.original.id}/roles`,
+            }, () => "角色")
+          : null,
+        canEditUser(row.original)
+          ? h(UButton as Component, {
+              size: "xs",
+              variant: "ghost",
+              icon: "i-heroicons-pencil-square",
+              to: `/users/${row.original.id}/edit`,
+            }, () => "编辑")
+          : null,
+        canDeleteUser(row.original)
+          ? h(UButton as Component, {
+              size: "xs",
+              variant: "ghost",
+              color: "error",
+              icon: "i-heroicons-trash",
+              onClick: () => confirmDeleteUser(row.original),
+            }, () => "删除")
+          : null,
+      ].filter(Boolean));
     },
   },
 ];

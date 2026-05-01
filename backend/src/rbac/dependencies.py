@@ -107,10 +107,10 @@ require_research_agent_read = create_permission_dependency("research_agent:read"
 require_research_agent_write = create_permission_dependency("research_agent:write")
 require_research_agent_delete = create_permission_dependency("research_agent:delete")
 
-# 分析权限依赖
-require_analysis_read = create_permission_dependency("analysis:read")
-require_analysis_write = create_permission_dependency("analysis:write")
-require_analysis_delete = create_permission_dependency("analysis:delete")
+# AI 任务（/jobs 跨渠道 AnalysisJob 历史页）权限依赖
+require_jobs_read = create_permission_dependency("jobs:read")
+require_jobs_write = create_permission_dependency("jobs:write")
+require_jobs_delete = create_permission_dependency("jobs:delete")
 
 # 审计日志权限依赖
 require_audit_read = create_permission_dependency("audit:read")

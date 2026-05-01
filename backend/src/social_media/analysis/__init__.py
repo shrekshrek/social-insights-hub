@@ -17,7 +17,6 @@ from .schemas import (
     PostAnalysisCreate,
     PostAnalysisResponse,
     AnalysisJobResponse,
-    AnalysisStatsResponse,
 )
 from .base_task import AnalysisTaskBase
 
@@ -29,7 +28,6 @@ __all__ = [
     "PostAnalysisCreate",
     "PostAnalysisResponse",
     "AnalysisJobResponse",
-    "AnalysisStatsResponse",
     # Task Base
     "AnalysisTaskBase",
 ]

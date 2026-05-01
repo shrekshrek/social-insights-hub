@@ -11,7 +11,11 @@
           上传研报、行业资料，AI 策略生成时自动引用
         </p>
       </div>
-      <UButton icon="i-heroicons-arrow-up-tray" to="/knowledge-base/upload">
+      <UButton
+        v-if="hasPermission(PERMISSIONS.KB_WRITE as Permission)"
+        icon="i-heroicons-arrow-up-tray"
+        to="/knowledge-base/upload"
+      >
         上传文档
       </UButton>
     </div>

@@ -101,19 +101,6 @@ export interface PostAnalysisCreate {
   comment_deep_result?: CommentDeepResult;
 }
 
-// ==================== Analysis Statistics ====================
-
-export interface AnalysisStats {
-  total_jobs: number;
-  completed_jobs: number;
-  failed_jobs: number;
-  pending_jobs: number;
-  processing_jobs: number;
-  total_cost_cny: number;
-  total_tokens: number;
-  avg_processing_time: number;
-}
-
 // ==================== API Requests ====================
 
 export interface RunScreeningRequest {

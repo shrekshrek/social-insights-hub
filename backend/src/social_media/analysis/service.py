@@ -23,7 +23,6 @@ from .schemas import (
     RunScreeningRequest,
     RunDeepAnalysisRequest,
     RunAnalysisResponse,
-    AnalysisStatsResponse,
 )
 
 from .monitor_slice import build_monitor_slice_result
@@ -893,49 +892,6 @@ async def delete_task_analyses(
         "message": f"已删除 {deleted_count} 条分析结果",
         "details": summary,
     }
-
-
-# ==================== Statistics Service ====================
-
-
-async def get_global_stats(
-    db: AsyncSession, current_user_id: int
-) -> AnalysisStatsResponse:
-    """获取全局分析统计"""
-    # 查询所有分析任务
-    stmt = select(AnalysisJob)
-    result = await db.execute(stmt)
-    all_jobs = result.scalars().all()
-
-    total_jobs = len(all_jobs)
-    completed_jobs = sum(1 for j in all_jobs if j.status == "completed")
-    failed_jobs = sum(1 for j in all_jobs if j.status == "failed")
-    pending_jobs = sum(1 for j in all_jobs if j.status == "pending")
-    processing_jobs = sum(1 for j in all_jobs if j.status == "running")
-
-    total_cost = 0.0
-    total_tokens = 0
-    total_time = 0
-
-    for j in all_jobs:
-        if j.token_usage:
-            total_cost += j.token_usage.get("summary", {}).get("total_cost_cny", 0.0)
-            total_tokens += j.token_usage.get("summary", {}).get("total_tokens", 0)
-        if j.processing_time:
-            total_time += j.processing_time
-
-    avg_processing_time = total_time / total_jobs if total_jobs > 0 else 0
-
-    return AnalysisStatsResponse(
-        total_jobs=total_jobs,
-        completed_jobs=completed_jobs,
-        failed_jobs=failed_jobs,
-        pending_jobs=pending_jobs,
-        processing_jobs=processing_jobs,
-        total_cost_cny=total_cost,
-        total_tokens=total_tokens,
-        avg_processing_time=avg_processing_time,
-    )
 
 
 # ==================== Task Analysis Result ====================

@@ -69,7 +69,7 @@ const resourceOptions = [
   { label: '新闻采集', value: 'news_task' },
   { label: '新闻切片', value: 'news_slice' },
   { label: '策略研究', value: 'strategy' },
-  { label: 'AI 分析', value: 'analysis_job' },
+  { label: 'AI 任务', value: 'analysis_job' },
   { label: '知识库文档', value: 'kb_document' },
   { label: '专题研究', value: 'research_task' },
 ]
@@ -116,7 +116,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   news_task: '新闻采集',
   news_slice: '新闻切片',
   strategy: '策略',
-  analysis_job: 'AI 分析',
+  analysis_job: 'AI 任务',
   kb_document: '知识库',
   research_task: '专题研究',
 }

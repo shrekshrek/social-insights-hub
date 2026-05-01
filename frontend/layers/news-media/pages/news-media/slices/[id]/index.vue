@@ -311,7 +311,7 @@ const dateOnly = (iso: string | null): string => {
         <ClientOnly>
           <div class="flex items-center gap-3">
             <UButton
-              v-if="(slice.status === 'completed' || slice.status === 'failed') && hasPermission(PERMISSIONS.ANALYSIS_WRITE)"
+              v-if="(slice.status === 'completed' || slice.status === 'failed') && hasPermission(PERMISSIONS.NEWS_MONITOR_WRITE)"
               icon="i-heroicons-sparkles"
               :loading="analyzing"
               @click="handleAnalyze"

@@ -420,7 +420,7 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
       cell: ({ row }) => {
         const job = row.original
         const isRunning = ['pending', 'running'].includes(job.status)
-        const canAct = job.user_id === currentUserId.value || hasPermission(PERMISSIONS.ANALYSIS_DELETE)
+        const canAct = job.user_id === currentUserId.value || hasPermission(PERMISSIONS.JOBS_DELETE)
 
         return h('div', { class: 'flex items-center gap-2' }, [
           canAct

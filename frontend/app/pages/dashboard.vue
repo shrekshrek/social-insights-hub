@@ -156,7 +156,7 @@
           </NuxtLink>
 
           <NuxtLink
-            v-if="hasPermission(PERMISSIONS.ANALYSIS_ACCESS)"
+            v-if="hasPermission(PERMISSIONS.JOBS_ACCESS)"
             to="/jobs"
             class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >

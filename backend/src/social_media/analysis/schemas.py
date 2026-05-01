@@ -301,22 +301,6 @@ class RunAnalysisResponse(CustomBaseModel):
     message: str
 
 
-# ==================== 分析统计 Schema ====================
-
-
-class AnalysisStatsResponse(CustomBaseModel):
-    """分析统计响应"""
-
-    total_jobs: int
-    completed_jobs: int
-    failed_jobs: int
-    pending_jobs: int
-    processing_jobs: int
-    total_cost_cny: float
-    total_tokens: int
-    avg_processing_time: float
-
-
 # ==================== 任务级聚合结果 Schema ====================
 
 

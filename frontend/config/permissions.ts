@@ -68,11 +68,11 @@ export const PERMISSIONS = {
   KB_WRITE: {target: 'knowledge_base', action: 'write'},
   KB_DELETE: {target: 'knowledge_base', action: 'delete'},
 
-  // AI 分析
-  ANALYSIS_ACCESS: {target: 'analysis', action: 'access'},
-  ANALYSIS_READ: {target: 'analysis', action: 'read'},
-  ANALYSIS_WRITE: {target: 'analysis', action: 'write'},
-  ANALYSIS_DELETE: {target: 'analysis', action: 'delete'},
+  // AI 任务统计（仅管 /jobs 跨渠道任务历史页面）
+  JOBS_ACCESS: {target: 'jobs', action: 'access'},
+  JOBS_READ: {target: 'jobs', action: 'read'},
+  JOBS_WRITE: {target: 'jobs', action: 'write'},
+  JOBS_DELETE: {target: 'jobs', action: 'delete'},
 
   // 研究分析
   RESEARCH_AGENT_ACCESS: {target: 'research_agent', action: 'access'},

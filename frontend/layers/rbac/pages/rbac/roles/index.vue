@@ -14,6 +14,7 @@
 
       <div class="flex items-center gap-3">
         <UButton
+          v-if="hasPermission(PERMISSIONS.ROLE_WRITE)"
           icon="i-heroicons-plus"
           to="/rbac/roles/create"
         >
@@ -99,6 +100,9 @@ import type { Role, PermissionWithMeta as Permission } from "../../../types";
 import type { TableColumn } from "@nuxt/ui";
 import { UBadge, UButton } from "#components";
 import { isCoreRole } from "../../../utils/permissions";
+import { PERMISSIONS } from "~/config/permissions";
+
+const { hasPermission } = usePermissions();
 
 // 页面元数据
 definePageMeta({
@@ -280,6 +284,9 @@ const columns: TableColumn<Role>[] = [
     cell: ({ row }) => {
       const isCore = isCoreRole(row.original.name);
 
+      const canWrite = hasPermission(PERMISSIONS.ROLE_WRITE);
+      const canDelete = hasPermission(PERMISSIONS.ROLE_DELETE);
+
       return h("div", { class: "flex items-center gap-2" }, [
         h(UButton as Component, {
           size: "xs",
@@ -287,7 +294,7 @@ const columns: TableColumn<Role>[] = [
           icon: "i-heroicons-eye",
           to: `/rbac/roles/${row.original.id}`,
         }, () => "查看"),
-        row.original.permission_strategy === 'explicit' &&
+        row.original.permission_strategy === 'explicit' && canWrite &&
           h(UButton as Component, {
             size: "xs",
             variant: "ghost",
@@ -295,14 +302,14 @@ const columns: TableColumn<Role>[] = [
             icon: "i-heroicons-key",
             to: `/rbac/roles/${row.original.id}/permissions`,
           }, () => "权限"),
-        !isCore &&
+        !isCore && canWrite &&
           h(UButton as Component, {
             size: "xs",
             variant: "ghost",
             icon: "i-heroicons-pencil-square",
             to: `/rbac/roles/${row.original.id}/edit`,
           }, () => "编辑"),
-        !isCore &&
+        !isCore && canDelete &&
           h(UButton as Component, {
             size: "xs",
             variant: "ghost",

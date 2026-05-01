@@ -97,11 +97,11 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
   "/research-agent/[id]": { permission: PERMISSIONS.RESEARCH_AGENT_READ },
   // AI 统计模块（跨渠道 AnalysisJob）
   "/jobs": {
-    permission: PERMISSIONS.ANALYSIS_ACCESS,
+    permission: PERMISSIONS.JOBS_ACCESS,
     label: "AI 统计",
     showInNav: true,
     order: 70,
-    target: "analysis",
+    target: "jobs",
   },
   // 知识库模块
   "/knowledge-base": {

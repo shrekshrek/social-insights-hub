@@ -18,8 +18,8 @@ from src.auth.models import User
 from src.database import get_async_db
 from src.jobs import crud
 from src.rbac.dependencies import (
-    require_analysis_read,
-    require_analysis_delete,
+    require_jobs_read,
+    require_jobs_delete,
 )
 from src.jobs.schemas import (
     AnalysisJobListResponse,
@@ -47,7 +47,7 @@ async def list_analysis_jobs(
     start_date: str | None = Query(None, description="开始日期 (YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="结束日期 (YYYY-MM-DD)"),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_read),
+    current_user: User = Depends(require_jobs_read),
 ):
     """全局分析任务列表，支持按渠道/任务/类型/状态/日期筛选。"""
     items, total = await crud.get_analysis_jobs(
@@ -80,7 +80,7 @@ async def list_analysis_jobs(
 async def get_analysis_job(
     job_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_read),
+    current_user: User = Depends(require_jobs_read),
 ):
     result = await crud.get_analysis_job(db, job_id, current_user.id)
     if not result:
@@ -99,7 +99,7 @@ async def get_analysis_job(
 async def get_analysis_progress(
     job_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_read),
+    current_user: User = Depends(require_jobs_read),
 ):
     return await crud.get_analysis_progress(db, job_id, current_user.id)
 
@@ -112,7 +112,7 @@ async def get_analysis_progress(
 async def cancel_analysis_job(
     job_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_read),
+    current_user: User = Depends(require_jobs_read),
 ):
     success = await crud.cancel_analysis_job(db, job_id, current_user.id)
     return {"success": success, "message": "Analysis job cancelled"}
@@ -126,7 +126,7 @@ async def cancel_analysis_job(
 async def delete_analysis_job(
     job_id: int,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_analysis_delete),
+    current_user: User = Depends(require_jobs_delete),
 ):
     success = await crud.delete_analysis_job(db, job_id, current_user.id)
     return {"success": success, "message": "Analysis job deleted"}

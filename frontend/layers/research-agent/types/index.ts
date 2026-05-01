@@ -30,6 +30,9 @@ export interface ResearchTask {
   progress: ProgressEntry[] | null
   created_at: string
   updated_at: string
+  participant_ids: number[]
+  participant_usernames: string[]
+  owner_username: string
 }
 
 export interface ResearchTaskStats {
@@ -67,6 +70,10 @@ export interface ResearchTaskCreate {
   research_questions?: string[]
   search_config?: Record<string, unknown>
   profile_name?: ResearchProfileName | string
+}
+
+export interface ResearchTaskUpdate {
+  title?: string
 }
 
 export interface DataPoint {

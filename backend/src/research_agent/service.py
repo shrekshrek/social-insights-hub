@@ -8,8 +8,10 @@ import logging
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from src.research_agent.models import ResearchTask
+from src.auth.models import User
+from src.research_agent.models import ResearchTask, research_task_participants
 from src.research_agent.tasks import run_research_task
 
 logger = logging.getLogger(__name__)
@@ -118,8 +120,122 @@ async def create_research_task(
 
 
 async def get_research_task(db: AsyncSession, task_id: int) -> ResearchTask | None:
-    """获取研究任务"""
-    return await db.get(ResearchTask, task_id)
+    """获取研究任务（含 user/participants 关系）"""
+    stmt = (
+        select(ResearchTask)
+        .where(ResearchTask.id == task_id)
+        .options(
+            selectinload(ResearchTask.user),
+            selectinload(ResearchTask.participants),
+        )
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def check_research_task_access(
+    db: AsyncSession, task_id: int, user_id: int
+) -> bool:
+    """检查用户是否有研究任务访问权限。
+
+    访问权限规则（与 social_monitor / news_monitor 对齐）：
+    1. 管理员 / 超级管理员：放行所有任务
+    2. 任务创建者（owner）：放行
+    3. 任务参与者（participant）：放行
+    """
+    from src.rbac.models import UserRole
+    from src.rbac.utils import is_admin_or_super_admin
+
+    user_stmt = (
+        select(User)
+        .where(User.id == user_id)
+        .options(selectinload(User.user_roles).selectinload(UserRole.role))
+    )
+    user = (await db.execute(user_stmt)).scalar_one_or_none()
+    if user is None:
+        return False
+
+    if is_admin_or_super_admin(user):
+        return True
+
+    task_stmt = (
+        select(ResearchTask)
+        .where(ResearchTask.id == task_id)
+        .options(selectinload(ResearchTask.participants))
+    )
+    task = (await db.execute(task_stmt)).scalar_one_or_none()
+    if task is None:
+        return False
+    if task.user_id == user_id:
+        return True
+    return user_id in {p.id for p in task.participants}
+
+
+async def assert_research_task_access(
+    db: AsyncSession,
+    task_id: int,
+    user_id: int,
+    detail: str = "You don't have access to this research task",
+) -> None:
+    """校验访问权限，无权时抛 403。"""
+    if not await check_research_task_access(db, task_id, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
+
+
+async def add_participants_to_task(
+    db: AsyncSession, task: ResearchTask, user_ids: list[int]
+) -> ResearchTask:
+    """向研究任务追加参与者（去重，剔除 owner）"""
+    filtered_ids = [uid for uid in user_ids if uid != task.user_id]
+    if not filtered_ids:
+        return task
+
+    users_result = await db.execute(select(User).where(User.id.in_(filtered_ids)))
+    new_participants = users_result.scalars().all()
+    existing_ids = {u.id for u in task.participants}
+    for user in new_participants:
+        if user.id not in existing_ids:
+            task.participants.append(user)
+
+    await db.commit()
+    await db.refresh(task, ["participants"])
+    return task
+
+
+async def update_research_task(
+    db: AsyncSession, task: ResearchTask, title: str | None
+) -> ResearchTask:
+    """更新研究任务可编辑字段（当前仅 title）"""
+    if title is not None:
+        task.title = title
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+async def remove_participant_from_task(
+    db: AsyncSession, task: ResearchTask, user_id: int
+) -> ResearchTask:
+    """从研究任务移除参与者（不能移除 owner）"""
+    if user_id == task.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能移除研究任务的创建者",
+        )
+
+    if user_id not in {p.id for p in task.participants}:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"用户 {user_id} 不是该研究任务的参与者",
+        )
+
+    task.participants = [p for p in task.participants if p.id != user_id]
+    await db.commit()
+    await db.refresh(task, ["participants"])
+    return task
 
 
 async def rerun_research_task(db: AsyncSession, task: ResearchTask) -> ResearchTask:
@@ -141,7 +257,7 @@ async def rerun_research_task(db: AsyncSession, task: ResearchTask) -> ResearchT
 
 async def list_research_tasks(
     db: AsyncSession,
-    user_id: int | None = None,
+    accessible_to_user_id: int | None = None,
     strategy_id: int | None = None,
     status: str | None = None,
     search: str | None = None,
@@ -149,11 +265,24 @@ async def list_research_tasks(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[ResearchTask], int]:
-    """列出研究任务，返回 (items, total)"""
+    """列出研究任务，返回 (items, total)
+
+    accessible_to_user_id: 仅返回该用户作为 owner 或 participant 的任务（None 表示返回全部，admin 用）
+    """
     base = select(ResearchTask)
 
-    if user_id is not None:
-        base = base.where(ResearchTask.user_id == user_id)
+    if accessible_to_user_id is not None:
+        participated_subq = (
+            select(research_task_participants.c.research_task_id)
+            .where(research_task_participants.c.user_id == accessible_to_user_id)
+            .scalar_subquery()
+        )
+        base = base.where(
+            or_(
+                ResearchTask.user_id == accessible_to_user_id,
+                ResearchTask.id.in_(participated_subq),
+            )
+        )
     if strategy_id is not None:
         base = base.where(ResearchTask.strategy_id == strategy_id)
     if status:
@@ -172,7 +301,15 @@ async def list_research_tasks(
 
     # items
     offset = (page - 1) * page_size
-    stmt = base.order_by(desc(ResearchTask.created_at)).offset(offset).limit(page_size)
+    stmt = (
+        base.options(
+            selectinload(ResearchTask.user),
+            selectinload(ResearchTask.participants),
+        )
+        .order_by(desc(ResearchTask.created_at))
+        .offset(offset)
+        .limit(page_size)
+    )
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
 

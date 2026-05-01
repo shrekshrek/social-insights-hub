@@ -203,15 +203,25 @@ const columns: TableColumn<ResearchTask>[] = [
     meta: { class: { th: 'w-[300px]', td: 'w-[300px] whitespace-normal' } },
     cell: ({ row }) => {
       const displayTitle = row.original.title || row.original.analysis_goal
-      return h(
-        UButton as Component,
-        {
-          variant: 'link',
-          to: `/research-agent/${row.original.id}`,
-          class: 'p-0 font-medium text-left whitespace-normal leading-snug line-clamp-2',
-        },
-        () => displayTitle,
-      )
+      const isOwn = row.original.user_id === currentUserId.value
+      return h('div', { class: 'flex items-start gap-2' }, [
+        h(
+          UButton as Component,
+          {
+            variant: 'link',
+            to: `/research-agent/${row.original.id}`,
+            class: 'p-0 font-medium text-left whitespace-normal leading-snug line-clamp-2',
+          },
+          () => displayTitle,
+        ),
+        !isOwn
+          ? h(
+              UBadge as Component,
+              { color: 'neutral', variant: 'subtle', size: 'sm', class: 'shrink-0 mt-0.5' },
+              () => '已加入',
+            )
+          : null,
+      ])
     },
   },
   {

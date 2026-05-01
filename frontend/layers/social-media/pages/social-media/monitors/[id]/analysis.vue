@@ -13,10 +13,12 @@ import PostListModal from '../../../../analysis/components/shared/PostListModal.
 import SpamRatioBar from '../../../../analysis/components/shared/SpamRatioBar.vue'
 // MarkdownRenderer 由 ui-kit layer 自动注册
 import type { SpamDistribution } from '../../../../analysis/types'
+import { PERMISSIONS } from '~/config/permissions'
 
 definePageMeta({ layout: 'default' })
 
 const toast = useToast()
+const { hasPermission, currentUserId } = usePermissions()
 
 // ==================== Types (new slice contract only) ====================
 interface OriginalTerm { text: string; count: number }
@@ -386,6 +388,38 @@ const { data: slice, pending: sliceLoading, refresh: refreshSlice } = useApiData
 const handleRefresh = async () => {
   if (!sliceId.value) return
   await refreshSlice()
+}
+
+// 删除权限：owner 或具备 SOCIAL_MONITOR_DELETE 权限（与 monitor 详情页 canDeleteSlice 对齐）
+const canDeleteSlice = computed(() =>
+  !!slice.value && (hasPermission(PERMISSIONS.SOCIAL_MONITOR_DELETE) || slice.value.user_id === currentUserId.value),
+)
+
+// ==================== 切片删除 ====================
+const { deleteMonitorSlice } = useAnalysis()
+const deleting = ref(false)
+
+const handleDelete = async () => {
+  if (!slice.value || !sliceId.value) return
+  const { $confirm } = useNuxtApp()
+  const confirmed = await $confirm({
+    title: '删除切片',
+    message: `确定要删除切片「${slice.value.name || sliceId.value}」吗？此操作不可恢复。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'error',
+  })
+  if (!confirmed) return
+
+  deleting.value = true
+  try {
+    await deleteMonitorSlice(monitorId.value, sliceId.value)
+    await navigateTo(`/social-media/monitors/${monitorId.value}`)
+  } catch {
+    // error already handled by apiRequest
+  } finally {
+    deleting.value = false
+  }
 }
 
 // ==================== 切片重命名 ====================
@@ -1167,9 +1201,21 @@ const handleExport = async () => {
         </div>
       </div>
       <ClientOnly>
-        <UButton icon="i-heroicons-arrow-path" variant="ghost" :loading="sliceLoading" @click="handleRefresh">
-          刷新
-        </UButton>
+        <div class="flex items-center gap-3">
+          <UButton icon="i-heroicons-arrow-path" variant="ghost" :loading="sliceLoading" @click="handleRefresh">
+            刷新
+          </UButton>
+          <UButton
+            v-if="slice && canDeleteSlice"
+            color="error"
+            variant="outline"
+            icon="i-heroicons-trash"
+            :loading="deleting"
+            @click="handleDelete"
+          >
+            删除
+          </UButton>
+        </div>
       </ClientOnly>
     </div>
 

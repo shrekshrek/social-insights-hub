@@ -15,9 +15,17 @@ definePageMeta({ layout: 'default' })
 const route = useRoute()
 const sliceId = Number(route.params.id)
 
-const { hasPermission } = usePermissions()
+const { hasPermission, currentUserId } = usePermissions()
 const { getSlice, analyzeSlice, deleteSlice: deleteSliceApi } = useNewsSlices()
 const { data: slice, pending: loading, refresh } = getSlice(sliceId)
+
+// 写/删除权限：owner 或具备相应 RBAC 权限即可（与 monitor 详情页 canWriteSlice / canDeleteSlice 对齐）
+const canWriteSlice = computed(() =>
+  !!slice.value && (hasPermission(PERMISSIONS.NEWS_MONITOR_WRITE) || slice.value.user_id === currentUserId.value),
+)
+const canDeleteSlice = computed(() =>
+  !!slice.value && (hasPermission(PERMISSIONS.NEWS_MONITOR_DELETE) || slice.value.user_id === currentUserId.value),
+)
 
 const analyzing = ref(false)
 
@@ -295,7 +303,7 @@ const dateOnly = (iso: string | null): string => {
     </div>
 
     <template v-else-if="slice">
-      <!-- 头部 -->
+      <!-- 头部（对齐社媒切片详情头部结构） -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <UButton
@@ -303,15 +311,35 @@ const dateOnly = (iso: string | null): string => {
             icon="i-heroicons-arrow-left"
             :to="`/news-media/monitors/${slice.monitor_id}`"
           />
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-            切片详情
-          </h1>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+                {{ slice.name || `切片 ${sliceId}` }}
+              </h1>
+              <ClientOnly>
+                <UBadge :color="statusColor(slice.status)" size="sm" variant="subtle">
+                  {{ statusText(slice.status) }}
+                </UBadge>
+              </ClientOnly>
+            </div>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              项目级新闻切片 · 创建于 {{ formatDate(slice.created_at) }}
+            </p>
+          </div>
         </div>
 
         <ClientOnly>
           <div class="flex items-center gap-3">
             <UButton
-              v-if="(slice.status === 'completed' || slice.status === 'failed') && hasPermission(PERMISSIONS.NEWS_MONITOR_WRITE)"
+              icon="i-heroicons-arrow-path"
+              variant="ghost"
+              :loading="loading"
+              @click="refresh"
+            >
+              刷新
+            </UButton>
+            <UButton
+              v-if="(slice.status === 'completed' || slice.status === 'failed') && canWriteSlice"
               icon="i-heroicons-sparkles"
               :loading="analyzing"
               @click="handleAnalyze"
@@ -319,6 +347,7 @@ const dateOnly = (iso: string | null): string => {
               重新分析
             </UButton>
             <UButton
+              v-if="canDeleteSlice"
               color="error"
               variant="outline"
               icon="i-heroicons-trash"
@@ -330,39 +359,15 @@ const dateOnly = (iso: string | null): string => {
         </ClientOnly>
       </div>
 
-      <!-- 基本信息 -->
-      <UCard>
-        <template #header>
-          <h2 class="text-lg font-medium text-gray-900 dark:text-white">基本信息</h2>
-        </template>
-
-        <dl class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-          <div>
-            <dt class="text-gray-500">切片名称</dt>
-            <dd class="font-medium mt-1">{{ slice.name }}</dd>
-          </div>
-          <div>
-            <dt class="text-gray-500">状态</dt>
-            <dd class="mt-1">
-              <UBadge :color="statusColor(slice.status)" size="sm" variant="subtle">
-                {{ statusText(slice.status) }}
-              </UBadge>
-            </dd>
-          </div>
-          <div>
-            <dt class="text-gray-500">包含任务</dt>
-            <dd class="font-medium mt-1">{{ slice.included_task_ids.length }} 个</dd>
-          </div>
-          <div>
-            <dt class="text-gray-500">创建时间</dt>
-            <dd class="mt-1">{{ formatDate(slice.created_at) }}</dd>
-          </div>
-        </dl>
-
-        <div v-if="slice.error_message" class="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded text-sm text-red-600 dark:text-red-400">
-          {{ slice.error_message }}
-        </div>
-      </UCard>
+      <!-- 错误信息（独立 UAlert，错误时永远显示） -->
+      <UAlert
+        v-if="slice.error_message"
+        color="error"
+        variant="soft"
+        title="切片分析失败"
+        :description="slice.error_message"
+        icon="i-heroicons-exclamation-triangle"
+      />
 
       <UCard v-if="slice.status === 'analyzing'">
         <div class="text-center py-6 text-gray-400 text-sm">正在运行综合分析...</div>
@@ -392,7 +397,14 @@ const dateOnly = (iso: string | null): string => {
           <!-- 概要数字 + 跨任务重叠 -->
           <UCard>
             <template #header>
-              <h2 class="text-lg font-medium text-gray-900 dark:text-white">数据概要</h2>
+              <div class="flex items-center justify-between gap-4">
+                <h2 class="text-lg font-medium text-gray-900 dark:text-white">数据概要</h2>
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                  <span class="font-mono">slice_id={{ slice.id }}</span>
+                  <span class="mx-2">·</span>
+                  <span>任务数 {{ slice.included_task_ids.length }}</span>
+                </div>
+              </div>
             </template>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
               <div class="flex items-baseline gap-2">
@@ -425,11 +437,12 @@ const dateOnly = (iso: string | null): string => {
               </div>
             </div>
 
-            <!-- 跨任务重叠 -->
-            <div v-if="overlapTotal > 0" class="mt-4 p-3 border border-gray-200 dark:border-gray-700 rounded">
-              <p class="text-sm text-gray-500 mb-2">
-                跨任务重叠（同一 URL 被几个 task 命中，重叠越高=多角度共同关注）
-              </p>
+            <!-- 跨任务重叠（用分割线，跟社媒概览同款） -->
+            <div v-if="overlapTotal > 0" class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <div class="flex items-center justify-between gap-3 mb-2">
+                <div class="text-xs text-gray-500 dark:text-gray-400">跨任务重叠</div>
+                <div class="text-[10px] text-gray-400 dark:text-gray-500">同一 URL 被几个 task 命中，重叠越高=多角度共同关注</div>
+              </div>
               <div class="flex items-center gap-6 text-sm">
                 <span>仅 1 个 task：<strong>{{ descriptive.cross_task_overlap.distribution.single_task }}</strong></span>
                 <span class="text-amber-600">2 个 task：<strong>{{ descriptive.cross_task_overlap.distribution.two_tasks }}</strong></span>

@@ -21,7 +21,6 @@ const emit = defineEmits<{
 const toast = useToast()
 const { hasPermission } = usePermissions()
 
-const { getAnalysisJobs } = useJobsApi()
 const {
   getTaskPostAnalyses,
   getDeepAnalysisPreview,
@@ -31,18 +30,16 @@ const {
   deleteTaskAnalyses,
   runTaskAggregation,
   getTaskAggregation,
+  getTaskAnalysisJobs,
 } = useAnalysis()
 
-/** 任务历史（用于运行中状态提示，按 task_id 筛选） */
-const analysisJobsParams = computed(() => ({
-  social_task_id: props.taskId,
-  page_size: 50,
-}))
+/** 任务级 AnalysisJob 状态（channel-local，权限随任务读权限走，避免依赖 admin-only 的 /jobs） */
+const analysisJobsParams = computed(() => ({ page_size: 50 }))
 
 const {
   data: analysisHistory,
   refresh: refreshHistory,
-} = getAnalysisJobs(analysisJobsParams)
+} = getTaskAnalysisJobs(props.taskId, analysisJobsParams)
 
 /** 统一的原文分析列表 */
 const page = ref(1)

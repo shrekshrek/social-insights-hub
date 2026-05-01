@@ -56,9 +56,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!requiredPermissions) {
     return // 无权限要求，已登录即可访问
   }
-  
-  const permissions = usePermissions()
-  
+
   // 管理员对于页面访问权限直接放行
   if (userRoles.includes('admin')) {
     const isSinglePermission = !Array.isArray(requiredPermissions)
@@ -66,17 +64,26 @@ export default defineNuxtRouteMiddleware(async (to) => {
       return
     }
   }
-  
+
+  // SSR 阶段无法异步加载用户权限（usePermissions 的 server stub 恒返回 false），
+  // 这里直接放行，客户端 hydration 后路由守卫会用真实权限再判一次。
+  // 后端 API 仍按 RBAC 鉴权，SSR 渲染的页面外壳不会泄露受限业务数据。
+  if (import.meta.server) {
+    return
+  }
+
+  const permissions = usePermissions()
+
   // 确保权限已加载
   if (!permissions.permissionsLoaded.value) {
     await permissions.loadUserPermissions()
   }
-  
+
   // 检查权限
   const hasAccess = Array.isArray(requiredPermissions)
     ? requiredPermissions.every((p: Permission) => permissions.hasPermission(p))
     : permissions.hasPermission(requiredPermissions)
-    
+
   if (!hasAccess) {
     return navigateTo('/403')
   }

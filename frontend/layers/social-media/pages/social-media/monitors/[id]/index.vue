@@ -24,6 +24,17 @@ const { currentUserId, hasPermission } = usePermissions()
 // 获取项目详情（使用顶层 await）
 const { data: monitor, pending: _monitorLoading, refresh: refreshMonitor } = await getMonitor(monitorId.value)
 
+// 写操作权限：owner 或具备相应 RBAC 权限即可
+const canWriteTask = computed(() =>
+  hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE) || monitor.value?.user_id === currentUserId.value,
+)
+const canWriteSlice = computed(() =>
+  hasPermission(PERMISSIONS.SOCIAL_MONITOR_WRITE) || monitor.value?.user_id === currentUserId.value,
+)
+const canDeleteSlice = computed(() =>
+  hasPermission(PERMISSIONS.SOCIAL_MONITOR_DELETE) || monitor.value?.user_id === currentUserId.value,
+)
+
 // phase 筛选：全部 / 探测 / 全量
 const phaseFilter = ref<'all' | 'probe' | 'collect'>('all')
 const phaseItems = [
@@ -653,15 +664,17 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
             icon: 'i-heroicons-eye',
             to: `/social-media/monitors/${monitorId.value}/analysis?slice_id=${s.id}`,
           }, () => '查看'),
-          h(Button, {
-            size: 'xs',
-            variant: 'ghost',
-            color: 'error',
-            icon: 'i-heroicons-trash',
-            loading: deletingSliceId.value === s.id,
-            onClick: () => handleDeleteSlice(s.id),
-          }, () => '删除'),
-        ])
+          canDeleteSlice.value
+            ? h(Button, {
+                size: 'xs',
+                variant: 'ghost',
+                color: 'error',
+                icon: 'i-heroicons-trash',
+                loading: deletingSliceId.value === s.id,
+                onClick: () => handleDeleteSlice(s.id),
+              }, () => '删除')
+            : null,
+        ].filter(Boolean))
       },
     },
   ]
@@ -781,31 +794,40 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
       accessorKey: 'actions',
       meta: { class: { th: 'w-[120px]', td: 'w-[120px] whitespace-nowrap' } },
       header: '操作',
-      cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
-        h(Button, {
-          size: 'xs',
-          variant: 'ghost',
-          icon: 'i-heroicons-eye',
-          to: `/social-media/tasks/${row.original.id}?from=monitor&monitor_id=${monitorId.value}`,
-        }, () => '查看'),
-        row.original.status === 'pending' && row.original.data_source === 'local_upload'
-          ? h(Button, {
-              size: 'xs',
-              variant: 'ghost',
-              icon: 'i-heroicons-arrow-up-tray',
-              color: 'info',
-              to: `/social-media/tasks/${row.original.id}/upload`,
-            }, () => '上传')
-          : null,
-        h(Button, {
-          size: 'xs',
-          variant: 'ghost',
-          color: 'error',
-          icon: 'i-heroicons-trash',
-          loading: deletingTaskId.value === row.original.id,
-          onClick: () => handleDeleteTask(row.original),
-        }, () => '删除'),
-      ].filter(Boolean)),
+      cell: ({ row }) => {
+        const t = row.original
+        const isOwner = t.user_id === currentUserId.value
+        const canUpload = (hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE) || isOwner)
+          && t.status === 'pending' && t.data_source === 'local_upload'
+        const canDelete = hasPermission(PERMISSIONS.SOCIAL_TASK_DELETE) || isOwner
+        return h('div', { class: 'flex items-center gap-2' }, [
+          h(Button, {
+            size: 'xs',
+            variant: 'ghost',
+            icon: 'i-heroicons-eye',
+            to: `/social-media/tasks/${t.id}?from=monitor&monitor_id=${monitorId.value}`,
+          }, () => '查看'),
+          canUpload
+            ? h(Button, {
+                size: 'xs',
+                variant: 'ghost',
+                icon: 'i-heroicons-arrow-up-tray',
+                color: 'info',
+                to: `/social-media/tasks/${t.id}/upload`,
+              }, () => '上传')
+            : null,
+          canDelete
+            ? h(Button, {
+                size: 'xs',
+                variant: 'ghost',
+                color: 'error',
+                icon: 'i-heroicons-trash',
+                loading: deletingTaskId.value === t.id,
+                onClick: () => handleDeleteTask(t),
+              }, () => '删除')
+            : null,
+        ].filter(Boolean))
+      },
     },
   ]
 })
@@ -983,6 +1005,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
                 对比任务
               </UButton>
               <UButton
+                v-if="canWriteSlice"
                 size="sm"
                 icon="i-heroicons-sparkles"
                 :disabled="!selectedTaskIds.length"
@@ -992,6 +1015,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
                 生成切片
               </UButton>
               <UButton
+                v-if="canWriteTask"
                 size="sm"
                 icon="i-heroicons-plus"
                 :to="`/social-media/tasks/create?monitor_id=${monitorId}`"
@@ -999,6 +1023,7 @@ const columns = computed<TableColumn<SocialTaskWithRelations>[]>(() => {
                 创建任务
               </UButton>
               <UButton
+                v-if="canWriteTask"
                 size="sm"
                 variant="outline"
                 icon="i-heroicons-squares-plus"

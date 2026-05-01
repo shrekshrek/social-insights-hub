@@ -574,7 +574,7 @@ const AnalysisPanel = defineAsyncComponent(() =>
             刷新
           </UButton>
           <UButton
-            v-if="task.posts_count > 0 || task.comments_count > 0"
+            v-if="(task.posts_count > 0 || task.comments_count > 0) && (hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE) || task.user_id === currentUserId)"
             variant="outline"
             icon="i-heroicons-x-circle"
             color="warning"

@@ -212,6 +212,12 @@ const formatDate = (dateString: string) => {
 // 表格列配置 - Nuxt UI v4 格式
 const columns: TableColumn<User>[] = [
   {
+    accessorKey: "id",
+    header: "ID",
+    meta: { class: { th: "w-14", td: "w-14" } },
+    cell: ({ row }) => h("span", { class: "text-xs text-gray-500 font-mono" }, row.original.id),
+  },
+  {
     accessorKey: "username",
     header: "用户信息",
     meta: { class: { th: "w-[220px]", td: "w-[220px] whitespace-normal" } },

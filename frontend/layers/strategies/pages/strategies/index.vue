@@ -160,6 +160,12 @@ const handleRefresh = async () => {
 
 const columns: TableColumn<StrategyListItem>[] = [
   {
+    accessorKey: 'id',
+    header: 'ID',
+    meta: { class: { th: 'w-14', td: 'w-14' } },
+    cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.id),
+  },
+  {
     accessorKey: 'name',
     header: '策略名称',
     meta: { class: { th: 'w-[260px]', td: 'w-[260px] whitespace-normal' } },

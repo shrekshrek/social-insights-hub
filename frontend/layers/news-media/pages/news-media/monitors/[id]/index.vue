@@ -18,6 +18,17 @@ const { currentUserId, hasPermission } = usePermissions()
 
 const { data: monitor, pending: monitorLoading, refresh: refreshMonitor } = getMonitor(monitorId)
 
+// 写操作权限：owner 或具备相应 RBAC 权限即可
+const canWriteTask = computed(() =>
+  hasPermission(PERMISSIONS.NEWS_TASK_WRITE) || monitor.value?.user_id === currentUserId.value,
+)
+const canWriteSlice = computed(() =>
+  hasPermission(PERMISSIONS.NEWS_MONITOR_WRITE) || monitor.value?.user_id === currentUserId.value,
+)
+const canDeleteSlice = computed(() =>
+  hasPermission(PERMISSIONS.NEWS_MONITOR_DELETE) || monitor.value?.user_id === currentUserId.value,
+)
+
 const currentPage = ref(1)
 const pageSize = ref(10)
 const statusFilter = ref('all')
@@ -378,14 +389,16 @@ const sliceColumns = computed<TableColumn<NewsSlice>[]>(() => {
             icon: 'i-heroicons-eye',
             to: `/news-media/slices/${s.id}`,
           }, () => '查看'),
-          h(Button, {
-            size: 'xs',
-            variant: 'ghost',
-            color: 'error',
-            icon: 'i-heroicons-trash',
-            onClick: () => handleDeleteSlice(s),
-          }, () => '删除'),
-        ])
+          canDeleteSlice.value
+            ? h(Button, {
+                size: 'xs',
+                variant: 'ghost',
+                color: 'error',
+                icon: 'i-heroicons-trash',
+                onClick: () => handleDeleteSlice(s),
+              }, () => '删除')
+            : null,
+        ].filter(Boolean))
       },
     },
   ]
@@ -483,42 +496,50 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
       accessorKey: 'actions',
       header: '操作',
       meta: { class: { th: 'w-[120px]', td: 'w-[120px]' } },
-      cell: ({ row }) =>
-        h('div', { class: 'flex items-center gap-1' }, [
+      cell: ({ row }) => {
+        const t = row.original
+        const isOwner = t.user_id === currentUserId.value
+        const canExecute = (hasPermission(PERMISSIONS.NEWS_TASK_WRITE) || isOwner)
+          && t.status === 'pending'
+        const canDelete = hasPermission(PERMISSIONS.NEWS_TASK_DELETE) || isOwner
+        return h('div', { class: 'flex items-center gap-1' }, [
           h(
             Button,
             {
               size: 'xs',
               variant: 'ghost',
               icon: 'i-heroicons-eye',
-              to: `/news-media/tasks/${row.original.id}?from=monitor&monitor_id=${monitorId}`,
+              to: `/news-media/tasks/${t.id}?from=monitor&monitor_id=${monitorId}`,
             },
             () => '查看',
           ),
-          row.original.status === 'pending'
+          canExecute
             ? h(
                 Button,
                 {
                   size: 'xs',
                   variant: 'ghost',
                   icon: 'i-heroicons-play',
-                  onClick: () => handleExecuteTask(row.original),
+                  onClick: () => handleExecuteTask(t),
                 },
                 () => '执行',
               )
             : null,
-          h(
-            Button,
-            {
-              size: 'xs',
-              variant: 'ghost',
-              icon: 'i-heroicons-trash',
-              color: 'error',
-              onClick: () => handleDeleteTask(row.original),
-            },
-            () => '删除',
-          ),
-        ]),
+          canDelete
+            ? h(
+                Button,
+                {
+                  size: 'xs',
+                  variant: 'ghost',
+                  icon: 'i-heroicons-trash',
+                  color: 'error',
+                  onClick: () => handleDeleteTask(t),
+                },
+                () => '删除',
+              )
+            : null,
+        ].filter(Boolean))
+      },
     },
   ]
 })
@@ -692,6 +713,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
                 class="w-28"
               />
               <UButton
+                v-if="canWriteSlice"
                 size="sm"
                 icon="i-heroicons-sparkles"
                 :disabled="!selectedTaskIds.length"
@@ -701,6 +723,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
                 生成切片
               </UButton>
               <UButton
+                v-if="canWriteTask"
                 size="sm"
                 icon="i-heroicons-plus"
                 :to="`/news-media/tasks/create?monitor_id=${monitorId}`"

@@ -4,6 +4,7 @@ import type {
   DeepAnalysisPreview,
   TaskAnalysisResultResponse,
   RunAggregationResponse,
+  AnalysisJobListResponse,
 } from "../types";
 
 /**
@@ -195,6 +196,29 @@ export const useAnalysis = () => {
   };
 
   /**
+   * 获取任务级 AnalysisJob 状态列表（channel-local，供 AnalysisPanel 显示进度）
+   *
+   * 跨渠道运维查询走 `layers/jobs/composables/useJobsApi.ts` 的 getAnalysisJobs
+   * （admin-only）。本端点权限是 social_task:read + 任务访问校验，跟查看任务本体一致。
+   */
+  const getTaskAnalysisJobs = (
+    taskId: MaybeRef<number>,
+    params?: MaybeRef<{ page_size?: number; analysis_type?: string; status?: string }>,
+  ) => {
+    return useApiData<AnalysisJobListResponse>(
+      computed(() => `/social-media/analysis/tasks/${unref(taskId)}/jobs`),
+      {
+        query: params,
+        key: computed(() => {
+          const p = unref(params)
+          return `task-analysis-jobs-${unref(taskId)}-${p?.page_size ?? 50}-${p?.analysis_type ?? ''}-${p?.status ?? ''}`
+        }),
+        getCachedData: () => undefined,
+      },
+    );
+  };
+
+  /**
    * 获取任务级聚合分析结果
    * 使用 silent404 静默处理 404 错误，因为聚合结果可能尚未生成
    */
@@ -285,6 +309,7 @@ export const useAnalysis = () => {
     deleteTaskAnalyses,
     runTaskAggregation,
     getTaskAggregation,
+    getTaskAnalysisJobs,
 
     // 监测级合并切片
     createMonitorSlice,

@@ -198,6 +198,12 @@ function formatDate(dateStr: string): string {
 
 const columns: TableColumn<ResearchTask>[] = [
   {
+    accessorKey: 'id',
+    header: 'ID',
+    meta: { class: { th: 'w-14', td: 'w-14' } },
+    cell: ({ row }) => h('span', { class: 'text-xs text-gray-500 font-mono' }, row.original.id),
+  },
+  {
     id: 'title',
     header: '研究主题',
     meta: { class: { th: 'w-[300px]', td: 'w-[300px] whitespace-normal' } },

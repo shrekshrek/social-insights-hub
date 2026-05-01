@@ -110,7 +110,7 @@ backend/src/
 
 严格单向依赖：`strategies → {social_media, news_media, knowledge_base} → {jobs, llm}`。
 
-- `src/jobs/` — 跨渠道 AnalysisJob 的唯一归属地（models/schemas/crud/factory/router）。任何渠道创建/查询/取消 AnalysisJob 都通过这里
+- `src/jobs/` — 跨渠道 AnalysisJob 的**数据模型与跨渠道运维入口**（models/schemas/crud/factory/router）。`/jobs` 端点用于跨渠道运维（成本汇总 / 取消 / 删除），权限收窄到 `jobs:*`（admin-only）。**channel-local 的任务级 AnalysisJob 状态查询**（如详情页进度提示）由各渠道在自己的 router 下暴露，权限随该资源的 read 权限走（参考 `social_media/analysis/router.py:list_task_analysis_jobs` / 新闻和策略也用各自的 status 端点）。任何渠道**创建** AnalysisJob 仍通过 `src/jobs/` 的 factory
 - `src/llm/` — LLM 实例管理与分析链（原 `src/langchain/`，因与 pypi 包同名而重命名）
 - 各渠道的 **analysis celery 任务** 与 **分析编排** 归本渠道：
   - `src/social_media/analysis/celery_tasks/` — 社媒 screening/deep/aggregation/slice

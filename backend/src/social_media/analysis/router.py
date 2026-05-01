@@ -1,7 +1,7 @@
 """社媒分析模块 API 路由
 
-跨渠道的 AnalysisJob 查询端点（/jobs 系列）已迁至 src/jobs/router.py。
-本路由只暴露社媒渠道特有的分析操作。
+跨渠道运维 AnalysisJob（成本汇总 / 取消 / 删除）端点位于 src/jobs/router.py。
+本路由暴露社媒渠道特有的分析操作 + 任务级 AnalysisJob 状态查询（channel-local）。
 
 API 结构：
 - /tasks/{task_id}/screening     运行原文初筛
@@ -10,6 +10,7 @@ API 结构：
 - /tasks/{task_id}/aggregation   POST运行聚合分析 / GET获取聚合结果
 - /tasks/{task_id}/posts         原文分析结果列表
 - /tasks/{task_id}/preview       深度分析预览
+- /tasks/{task_id}/jobs          任务级 AnalysisJob 状态（用于详情页进度提示）
 - /monitors/{monitor_id}/slices  项目级切片 CRUD
 """
 
@@ -33,6 +34,8 @@ from src.rbac.dependencies import (
     require_social_task_write,
     require_social_task_delete,
 )
+
+from src.jobs.schemas import AnalysisJobListResponse, AnalysisJobResponse
 
 from . import service
 from .models import SocialSlice
@@ -283,6 +286,60 @@ async def preview_deep_analysis(
         relevance_min=relevance_min,
     )
     return DeepAnalysisPreviewResponse.model_validate(preview)
+
+
+@router.get(
+    "/tasks/{task_id}/jobs",
+    response_model=AnalysisJobListResponse,
+    summary="获取任务级 AnalysisJob 状态列表",
+)
+async def list_task_analysis_jobs(
+    task_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    analysis_type: str | None = Query(None, description="按分析类型筛选"),
+    status_filter: str | None = Query(None, alias="status", description="按状态筛选"),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_social_task_read),
+):
+    """任务级 AnalysisJob 状态查询（channel-local）
+
+    供任务详情页 AnalysisPanel 显示分析进度（screening / deep / aggregation
+    各阶段是否在跑）。权限校验：social_task:read + 任务访问校验（owner /
+    participant / admin），与查看任务本体一致。
+
+    跨渠道运维查询请走 GET /jobs（admin-only，详见 src/jobs/router.py）。
+    """
+    from src.jobs import crud as jobs_crud
+    from src.social_media.monitors import crud as monitor_crud
+    from src.social_media.tasks.models import SocialTask
+
+    task = await db.get(SocialTask, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    await monitor_crud.assert_monitor_access(
+        db, task.monitor_id, current_user.id,
+        detail="You don't have access to this task",
+    )
+
+    items, total = await jobs_crud.get_analysis_jobs(
+        db=db,
+        current_user_id=current_user.id,
+        page=page,
+        page_size=page_size,
+        social_task_id=task_id,
+        analysis_type=analysis_type,
+        status=status_filter,
+    )
+    return AnalysisJobListResponse(
+        items=[AnalysisJobResponse.model_validate(item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.delete(

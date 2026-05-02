@@ -435,6 +435,9 @@ def build_entities_aligned(
                 "original_terms_counts": {},  # 原话合并
                 "post_ids_sample": [],
                 "_post_ids_sample_set": set(),
+                # 全量去重 post_id 集合（不设上限），用于 source_count 计算
+                # 与 post_ids_sample（200 条 cap，前端下钻样本）分离
+                "_unique_post_ids": set(),
                 "source_tasks": {},
                 # Spam 4D 分布累加器
                 "_spam_high_post": 0,
@@ -551,10 +554,8 @@ def build_entities_aligned(
                     b["promo_sent_weight"] += high_total
                 except Exception:
                     pass
-        # 原文样本合并（去重 + 限制数量）
+        # 原文样本合并（去重 + 限制数量），同时累计全量去重 post_id 集合用于 source_count
         for ref in e.get("post_ids_sample") or []:
-            if len(b["post_ids_sample"]) >= max_post_ids_sample:
-                break
             if not isinstance(ref, dict):
                 continue
             try:
@@ -565,6 +566,11 @@ def build_entities_aligned(
             if tid <= 0 or pid <= 0:
                 continue
             key = f"{tid}:{pid}"
+            # source_count 用：全量去重，不受样本上限影响
+            b["_unique_post_ids"].add(key)
+            # post_ids_sample 前端下钻样本：保留 200 条上限
+            if len(b["post_ids_sample"]) >= max_post_ids_sample:
+                continue
             if key in b["_post_ids_sample_set"]:
                 continue
             b["_post_ids_sample_set"].add(key)
@@ -633,6 +639,9 @@ def build_entities_aligned(
                 "organic_heat": round(float(b.get("organic_heat") or 0.0), 3),
                 "promo_heat": round(float(b.get("promo_heat") or 0.0), 3),
                 "mentions": mentions,
+                # source_count: 提及该实体的去重源帖数（与 mentions 区分：mentions 含同帖多次提及）
+                # 下游 LLM 链消费此字段判断信号强度
+                "source_count": len(b.get("_unique_post_ids") or set()),
                 "score": round(score, 3),
                 # 情感字段（用于行业象限散点图）
                 "sentiment": sentiment,

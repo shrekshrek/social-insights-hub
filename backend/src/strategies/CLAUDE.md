@@ -131,6 +131,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 3. **"切片完成" = Stage2 完成**（聚合 + 实体/观点归一 + layers 构建）——此时 `SocialSlice.status="completed"`，与 NewsSlice 语义对齐。Stage3 的 3 报告是独立附加产出，不阻塞策略推进、不参与下游 chain
 4. 所有社媒切片 Stage2 + 所有新闻切片 insight 到终态（completed/failed/skipped）后，由 `_try_advance_to_ready` 跑 `coverage_check_chain`（只消费 `status=completed` 的切片）
    - 触发来源：①`get_collection_status` 端点（前端 15s 轮询，近实时）；②APScheduler `strategy_collection` job（2min 兜底，前端停轮询时不被卡住）
+   - **判定逻辑**：per-RQ 三态判定 `covered / partial / uncovered`，基于切片量化指标（`mentions` + `source_count` + `sentiment`）。`source_count ≥3` 即视为可靠信号（统计上"互相佐证"最低线，避免单帖偏见 / 双帖巧合）；`source=1-2` 判 partial；完全无相关命中判 uncovered。`overall_ready=true` 当且仅当所有 `priority=high` 的 RQ ∈ {covered, partial}。warnings 字段承载跨 RQ 共性诊断（如"slice X 数据稀疏，影响 rq2/rq3"）
 5. `overall_ready=true` → 状态 → ready
 6. 用户可 `adjust-slices` 微调切片配置（触发重新验证）
 

@@ -266,7 +266,7 @@
           class="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-2"
         >
           <UIcon name="i-heroicons-check-circle" class="text-green-500 size-4" />
-          <span class="text-sm text-green-600 dark:text-green-400">研究计划已确认，采集进行中</span>
+          <span class="text-sm text-green-600 dark:text-green-400">研究计划已确认，已进入探测验证</span>
         </div>
       </UCard>
 
@@ -312,7 +312,7 @@
           class="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-2"
         >
           <UIcon name="i-heroicons-check-circle" class="text-green-500 size-4" />
-          <span class="text-sm text-green-600 dark:text-green-400">探测已通过，全量采集进行中</span>
+          <span class="text-sm text-green-600 dark:text-green-400">探测已通过，已进入数据采集</span>
         </div>
       </UCard>
 

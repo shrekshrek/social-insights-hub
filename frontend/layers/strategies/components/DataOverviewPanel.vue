@@ -222,21 +222,69 @@
       <!-- 研究问题覆盖 -->
       <div v-if="coverageResult.question_coverage?.length">
         <h4 class="text-xs font-medium text-gray-500 mb-1.5">研究问题覆盖度</h4>
-        <div class="space-y-1">
+        <div class="space-y-1.5">
           <div
             v-for="qc in coverageResult.question_coverage"
             :key="qc.question_id"
-            class="flex items-start gap-2 text-sm"
           >
-            <UIcon
-              :name="qc.covered ? 'i-heroicons-check' : 'i-heroicons-x-mark'"
-              :class="qc.covered ? 'text-green-500' : 'text-red-400'"
-              class="mt-0.5 shrink-0"
-            />
-            <div>
-              <span>{{ qc.question }}</span>
-              <span v-if="qc.note" class="text-xs text-gray-400 ml-1">{{ qc.note }}</span>
+            <div class="flex items-start gap-2 text-sm">
+              <UIcon
+                :name="qc.covered ? 'i-heroicons-check' : 'i-heroicons-x-mark'"
+                :class="qc.covered ? 'text-green-500' : 'text-red-400'"
+                class="mt-0.5 shrink-0"
+              />
+              <div class="flex-1">
+                <span>{{ qc.question }}</span>
+                <span v-if="qc.note" class="text-xs text-gray-400 ml-1">{{ qc.note }}</span>
+              </div>
             </div>
+
+            <!-- 未覆盖时显示 probe 阶段诊断（根因分析） -->
+            <details
+              v-if="!qc.covered && getDiagnosticForRQ(qc.question_id)"
+              class="ml-6 mt-1.5"
+            >
+              <summary class="text-xs text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none">
+                查看 probe 阶段诊断
+              </summary>
+              <div class="mt-2 pl-3 border-l-2 border-amber-200 dark:border-amber-800/40 space-y-1.5">
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                  关联维度：{{ getDiagnosticForRQ(qc.question_id)?.dimensionNames.join('、') }}
+                </div>
+                <div
+                  v-for="a in getDiagnosticForRQ(qc.question_id)?.assessments ?? []"
+                  :key="a.task_id"
+                  class="text-xs flex items-start gap-2"
+                >
+                  <UIcon
+                    :name="a.verdict === 'pass' ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-circle'"
+                    :class="a.verdict === 'pass' ? 'text-green-500' : 'text-red-400'"
+                    class="mt-0.5 shrink-0"
+                  />
+                  <div class="flex-1 min-w-0">
+                    <div class="text-gray-700 dark:text-gray-300">
+                      <span class="font-mono">{{ a.platform }}</span> /
+                      <span>{{ a.keyword }}</span>
+                      <span v-if="a.subject_match !== undefined" class="ml-1.5 text-gray-400">
+                        subject_match=<span :class="a.subject_match ? 'text-green-600' : 'text-red-500'">{{ a.subject_match }}</span>
+                      </span>
+                      <span v-if="a.competitor_match !== undefined" class="ml-1.5 text-gray-400">
+                        competitor_match=<span :class="a.competitor_match ? 'text-green-600' : 'text-red-500'">{{ a.competitor_match }}</span>
+                      </span>
+                      <span v-if="a.relevant_source_posts !== undefined" class="ml-1.5 text-gray-400">
+                        相关源帖={{ a.relevant_source_posts }}
+                      </span>
+                    </div>
+                    <div v-if="a.note" class="text-gray-500 mt-0.5 leading-snug">
+                      {{ a.note }}
+                    </div>
+                    <div v-if="a.verdict === 'fail' && a.suggestion_reason" class="text-amber-600 dark:text-amber-400 mt-0.5 leading-snug">
+                      建议：{{ a.suggestion_reason }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </div>
@@ -281,6 +329,8 @@ import type {
   CollectionTaskStatus,
   NewsCollectionTaskStatus,
   ResearchAgentStatus,
+  ProbeAssessment,
+  DataPlanItem,
 } from '../types'
 import { platformLabel } from '../composables/useStrategyConstants'
 
@@ -299,7 +349,42 @@ const props = defineProps<{
   industryResearch?: ResearchAgentStatus
   /** 创意研究任务状态（campaign_strategy / full_strategy 路径） */
   creativeResearch?: ResearchAgentStatus
+  /** 数据计划（用于反查 RQ → 维度 → 任务） */
+  dataPlan?: DataPlanItem[]
+  /** Probe 阶段的 per-task assessments（用于覆盖失败 RQ 的根因诊断） */
+  probeAssessments?: ProbeAssessment[]
 }>()
+
+/** 反查给定 RQ 的 probe 阶段 per-task 诊断信息
+ *
+ * 链路：questionId → data_plan(question_ids 含此 RQ) → dimension_name → task_id → assessment
+ */
+function getDiagnosticForRQ(questionId: string): {
+  dimensionNames: string[]
+  assessments: ProbeAssessment[]
+} | null {
+  if (!props.dataPlan?.length || !props.probeAssessments?.length) return null
+  const dimNames = new Set(
+    props.dataPlan
+      .filter(dp => (dp.question_ids ?? []).includes(questionId))
+      .map(dp => dp.dimension_name)
+      .filter(Boolean),
+  )
+  if (!dimNames.size) return null
+
+  const dimMap = props.taskDimensionMap ?? {}
+  const relatedTaskIds = new Set(
+    Object.entries(dimMap)
+      .filter(([, dim]) => dimNames.has(dim))
+      .map(([taskId]) => Number(taskId)),
+  )
+  if (!relatedTaskIds.size) return null
+
+  const assessments = props.probeAssessments.filter(a => relatedTaskIds.has(a.task_id))
+  if (!assessments.length) return null
+
+  return { dimensionNames: Array.from(dimNames), assessments }
+}
 
 const progressPercent = computed(() => {
   if (props.totalCount === 0) return 0

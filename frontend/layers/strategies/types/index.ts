@@ -104,6 +104,8 @@ export interface DataPlanItem {
   /** 新闻维度专属：是否额外搜索微信公众号（通过搜狗微信入口） */
   enable_wechat_mp?: boolean
   rationale?: string
+  /** 该维度数据采集服务的 research_question id 列表 */
+  question_ids?: string[]
 }
 
 export interface SliceBlueprintItem {
@@ -154,6 +156,12 @@ export interface ProbeAssessment {
   suggested_keyword?: string | null
   suggestion_reason?: string | null
   entity_match?: boolean
+  /** 识别到的 target 实体是否命中 expected_subjects（slice_blueprint 派生） */
+  subject_match?: boolean
+  /** 识别到的 competitor 实体是否命中 expected_competitors */
+  competitor_match?: boolean
+  /** 与 RQ 相关话题去重后的源帖数（防单帖伪相关） */
+  relevant_source_posts?: number
 }
 
 export interface RefinementSuggestion {

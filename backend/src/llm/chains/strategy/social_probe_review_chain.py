@@ -27,22 +27,63 @@ SINGLE_TASK_SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估�
 
 ## 字段说明
 
-- **主要话题**：从深度分析帖子中聚合出的核心话题，括号内为「提及次数，来自N篇」——N 表示产出该话题的源帖数量
-- **entity_match**：目标品牌或竞品实体是否在采集内容中出现（true=有出现，false=未出现）
+- **预期主体 / 预期竞品**（来自切片蓝图 slice_blueprint）：当前任务所属维度被哪些聚焦切片消费，那些切片显式声明的 subject / competitors 实体。判定时用作"应该召回什么"的参照
+- **识别到的 target 实体**：deep analysis 提取出的、与任务关键词匹配的品牌/产品实体（`probe_lite._matches_keywords`）
+- **识别到的 competitor 实体**：deep analysis 提取出的、未匹配关键词但 type=品牌/产品的其他实体
+- **entity_match**：target ∪ competitor 任一非空（粗信号，仅作辅助；细判用上面两个 sample）
+- **主要话题（top_topics）**：从 `general_opinions` 聚合的泛化观点 category，括号内为「提及次数，来自N篇」。**注意**：聚焦实体的讨论会被归入实体的 features/issues 等结构化字段，**不会出现在 top_topics 里**。所以 top_topics 空但 target 实体丰富是正常情况，不算召回失败
+- **采集 → screening → deep**：screening 是 spam/价值/相关性 LLM 筛选；这条链路反映关键词召回的"信噪比"
 - **广告占比**：被判定为推广/软文的帖子比例
 
 ## 判定规则
 
-**核心问题**：话题内容能否支撑该任务所属维度对应的研究问题？
+**核心问题**：这个任务召回的内容是否能为下游切片汇总贡献可靠信号？信号有两条独立路径：
 
-每个任务已标注维度，请只对照该维度下的研究问题进行判断。
+- **实体路径**：识别到的 target/competitor 实体，是否匹配 slice_blueprint 的 expected_subjects/competitors。匹配代表"切片要研究的主体出现了"，下游会消费 entities 内的 features/issues 等结构化字段
+- **话题路径**：top_topics 中是否有被多源帖支撑、与 RQ 直接相关的泛化观点
 
-- **pass**：话题与该维度研究问题的核心关注点有明显关联
-- **fail**：话题与该维度研究问题明显无关（收集到的内容完全答不上研究问题）
+**只要任一路径有效，就算对汇总有贡献**。两条路径都失败才是真召回失败。
 
-**警惕话题池被单帖垄断**：如果 top 话题多数都是「来自1篇」，说明话题池被个别内容丰富的长帖主导，并不能代表该平台用户讨论的主流，真正相关的帖子可能被挤出前列。此情况下应结合 `deep_analyzed` 样本量和 `entity_match` 综合判断——只要存在至少一条与研究问题直接相关的话题（无论排名），就应判 pass，让全量采集暴露真正的分布。
+**重要语境**：probe 是单 (keyword × platform) 任务的简易聚合，不是 slice 的全量跨任务分析。判定的是「该任务对汇总有无贡献」，**不是「该任务自己能否回答 RQ」**——单任务低占比不代表无贡献。
 
-**保守偏置**：存疑时判 pass——全量采集后分析结果会暴露真正的问题，误判 fail 会浪费关键词调整机会。尤其在 `deep_analyzed < 10` 时，样本量不足以可靠判 fail，优先判 pass。
+### 第一步：评估两条路径
+
+**实体路径信号**：
+- `subject_match`：识别到的 target 实体里是否有 expected_subjects 中的任一项（精确匹配或子串匹配）
+- `competitor_match`：识别到的 competitor 实体里是否有 expected_competitors 中的任一项
+- 若任务无 expected_subjects/competitors（如大盘分析切片），则降级为「entity_match 是否为 True」
+
+**话题路径信号**：
+- 识别相关话题：从 top_topics 中筛出与本维度 RQ 核心关注点直接相关的话题
+- 估算 `relevant_source_posts ≈ 相关话题去重后的源帖数`（用 post_source_count 估算并去重，防单帖垄断）
+
+### 第二步：判定 pass / fail
+
+**Hard fail（双路径均失败 = 真召回失败）**：
+- `deep_analyzed = 0`（screening 过滤了所有内容）
+- 或 `target_entities_sample = []` AND `competitor_entities_sample = []` AND `top_topics = []`（深度分析了但啥结构化信息都没提取出来——内容全是无价值灌水）
+- 或两条路径都"方向错"：实体没命中 expected_*，话题也都跟 RQ 无关
+- → fail + 给具体换词建议
+
+**Pass（实体路径有效）**：
+- `subject_match = True`：召回了 expected_subjects 实体，下游切片能消费 entities 内 features/issues 等讨论
+- 或 `competitor_match = True`（仅当任务维度是 competitive）：召回了 expected_competitors 实体
+- 或无 expected_* 且 `entity_match = True`：大盘分析场景，识别到品牌讨论即可
+
+**Pass（话题路径有效）**：
+- `relevant_source_posts ≥ 2`：多源帖支撑相关话题，可靠
+
+**Pass + 样本不足兜底（标注但放行）**：
+- `0 < deep_analyzed < 5` 且任一路径有微弱信号：样本不足以下定论，pass + 标注「样本不足，待全量验证」
+
+**Edge fail（单帖伪相关）**：
+- `deep_analyzed ≥ 10` 且实体路径完全失败（无 subject/competitor match）且话题路径只有 `relevant_source_posts ≤ 1`：充足样本下两条路径都很弱，是伪相关，fail + 换词
+
+**关键判定提醒**：
+- top_topics 空但 target_entities_sample 命中 expected_subjects → **正常 pass**（实体聚焦讨论，泛观点本就不该有）
+- target/competitor sample 非空但完全不在 expected_* 里 → 召回错位，可能换词
+- screening 通过率（screened/posts）极低（如 < 30%）+ entities 也空 → 关键词召回质量差
+- 样本充足（deep_analyzed ≥ 10）且两条路径都很弱时，必须 fail 以暴露低质关键词，不要因为"存疑"就放过
 
 ## 关键词建议（仅 fail 时填写）
 
@@ -73,13 +114,20 @@ SINGLE_TASK_SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估�
   "keyword": "关键词",
   "platform": "平台",
   "verdict": "pass",
-  "note": "一句话判定依据（说明话题与研究问题的关联或差距）",
+  "subject_match": true,
+  "competitor_match": false,
+  "relevant_source_posts": 4,
+  "note": "一句话判定依据（含两条路径的命中情况与量化数）",
   "suggested_keyword": null,
   "suggestion_reason": null
 }}
 
 **规则：**
 - verdict 只能是 pass 或 fail
+- subject_match：识别到的 target 实体是否命中 expected_subjects 中任一项（bool；无 expected_subjects 时填 false）
+- competitor_match：识别到的 competitor 实体是否命中 expected_competitors 中任一项（bool；无 expected_competitors 时填 false）
+- relevant_source_posts：与 RQ 相关话题去重后的源帖数（整数），保守估算即可；无相关话题填 0
+- note 必须明确写出两条路径命中情况 + 量化数（如「subject_match=True（召回美赞臣 8 次），话题路径相关源帖 4，deep_analyzed=12」），让审查者可追溯
 - verdict=fail 时：suggested_keyword 给出替换关键词，suggestion_reason 说明「当前收到了什么 vs 需要什么 → 为何推荐这个词」；pass 时均为 null
 """
 
@@ -183,11 +231,35 @@ def format_single_task_probe_review_inputs(
         for rq in all_rqs:
             task_lines.append(f"  - [{rq.get('id')}] {rq.get('question')}")
 
+    # slice_blueprint 派生的预期主体/竞品（per-task），供 LLM 精准匹配实体
+    expected_subjects = task.get("expected_subjects") or []
+    expected_competitors = task.get("expected_competitors") or []
+    if expected_subjects or expected_competitors:
+        task_lines.append("本任务关联切片预期实体：")
+        if expected_subjects:
+            task_lines.append(f"  - 预期主体（subject）: {', '.join(expected_subjects)}")
+        if expected_competitors:
+            task_lines.append(f"  - 预期竞品（competitors）: {', '.join(expected_competitors)}")
+
+    # 实际识别到的实体名样本（让 LLM 看清是否匹配 expected_*）
+    target_sample = task.get("target_entities_sample") or []
+    competitor_sample = task.get("competitor_entities_sample") or []
     entity_match = task.get("entity_match", False)
-    task_lines.append(f"entity_match: {entity_match}（{'品牌/竞品实体在内容中有出现' if entity_match else '品牌/竞品实体未在内容中出现'}）")
     task_lines.append(
-        f"采集: {task.get('posts_count', 0)} 条"
-        f"（深度分析 {task.get('deep_analyzed', 0)} 条）"
+        f"识别到的 target 实体（{len(target_sample)} 个）: "
+        f"{', '.join(target_sample) if target_sample else '（无）'}"
+    )
+    task_lines.append(
+        f"识别到的 competitor 实体（{len(competitor_sample)} 个）: "
+        f"{', '.join(competitor_sample) if competitor_sample else '（无）'}"
+    )
+    task_lines.append(f"entity_match: {entity_match}（target/competitor 任一非空即 True）")
+
+    posts = task.get("posts_count", 0)
+    screened = task.get("screened", 0)
+    deep = task.get("deep_analyzed", 0)
+    task_lines.append(
+        f"采集: {posts} 条 → screening 通过 {screened} 条 → 深度分析 {deep} 条"
     )
 
     top_topics = task.get("top_topics") or []

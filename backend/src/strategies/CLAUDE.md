@@ -111,7 +111,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 - **评估维度 ≠ 采集主题**：brief_parser 以 `(评估维度：X、Y、Z)` 标注的词是**分析框架**，归属于 RQ 表述 + 切片分析阶段（从 UGC 提取），**禁止作 keyword 主题或附加词**；keyword 一律使用统一主题锚（品类/事件/场景/趋势）
 - **同维度结构语义双重一致**：同维度所有品牌关键词共享主题锚，召回数据落在同一研究主题范围，保证横向对比公平
 - **情绪中立**：同维度关键词需覆盖正/中/负三类情绪表达
-- **保守偏置**：存疑时判 pass，让全量阶段验证；尤其在 `deep_analyzed < 10` 或话题池被单帖垄断时
+- **判定核心：实体路径 + 话题路径双信号**——probe 是任务级简易聚合（top_topics 来自 general_opinions、target/competitor entities 来自 entities），下游全量阶段才会跨任务汇总到 slice。判定标准是「该任务对汇总有无贡献」而非「该任务自己能否回答 RQ」。两条独立路径任一有效即 pass：①实体路径 `subject_match` / `competitor_match`（识别实体命中 slice_blueprint 的 expected_subjects/competitors）；②话题路径 `relevant_source_posts ≥ 2`（相关泛话题去重后源帖数）。**双路径均失败才 fail**——top_topics 空但 entities 命中 expected_subjects 是正常 pass（聚焦实体讨论，泛观点本就不该有）。`deep_analyzed < 5` 兜底 pass + 标注。详见 `social_probe_review_chain` SINGLE_TASK_SYSTEM_TEMPLATE「判定规则」
 
 修改规则应同步三个 chain 的 prompt：[`research_design_chain.py`](../llm/chains/strategy/research_design_chain.py)（源头） → [`social_probe_review_chain.py`](../llm/chains/strategy/social_probe_review_chain.py) / [`news_probe_review_chain.py`](../llm/chains/strategy/news_probe_review_chain.py)（修复建议）。
 

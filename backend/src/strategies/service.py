@@ -2136,8 +2136,14 @@ _coverage_check_in_progress: set[int] = set()
 async def _build_social_probe_summaries(
     db: AsyncSession,
     task_ids: list[int],
+    research_design: dict | None = None,
 ) -> tuple[list[SocialProbeTaskStatus], list[dict]]:
     """查询探测任务状态和分析摘要
+
+    Args:
+        research_design: 可选，传入后会从 slice_blueprint 派生 expected_subjects /
+            expected_competitors 注入 summary，让 probe review LLM 知道当前任务
+            预期召回哪些主体/竞品实体（修正 entity_match bool 的语义模糊问题）。
 
     Returns:
         (task_statuses, analyzed_summaries)
@@ -2147,6 +2153,22 @@ async def _build_social_probe_summaries(
 
     if not task_ids:
         return [], []
+
+    # 构造 dimension_name → (subjects, competitors) 映射
+    # 来自 slice_blueprint：每个聚焦切片显式声明了 subject + competitors，
+    # 通过 source_dimensions 关联到 data_plan 的 dimension_name
+    task_dim_map: dict[str, str] = (research_design or {}).get("_task_dimension_map") or {}
+    slice_blueprint: list[dict] = (research_design or {}).get("slice_blueprint") or []
+    dim_to_subjects: dict[str, set[str]] = {}
+    dim_to_competitors: dict[str, set[str]] = {}
+    for sb in slice_blueprint:
+        subj = (sb.get("subject") or "").strip()
+        comps = [c.strip() for c in (sb.get("competitors") or []) if c and c.strip()]
+        for src_dim in (sb.get("source_dimensions") or []):
+            if subj:
+                dim_to_subjects.setdefault(src_dim, set()).add(subj)
+            for c in comps:
+                dim_to_competitors.setdefault(src_dim, set()).add(c)
 
     query = select(SocialTask).where(
         SocialTask.id.in_(task_ids), SocialTask.is_deleted.is_(False)
@@ -2209,13 +2231,30 @@ async def _build_social_probe_summaries(
                 for t in top_topics_raw[:20]
             ]
 
+            # 实际识别到的实体名样本（前 20 个），让 LLM 看清是否匹配 expected_subjects/competitors
+            # 取 20 而非 10：probe_lite 不做实体归一，主品名常见 3-5 种变体占位；
+            # 强竞品对比场景下竞品品牌也常 10+ 个。20 能覆盖典型长尾，prompt 长度可控。
+            target_entities_sample = [e.get("name", "") for e in target_entities[:20] if e.get("name")]
+            competitor_entities_sample = [e.get("name", "") for e in competitor_entities[:20] if e.get("name")]
+
+            # 来自 slice_blueprint 的预期主体/竞品（per-task，按 dimension_name 关联）
+            # 防御性上限 50：实际场景不会触达，避免 slice_blueprint 异常时 prompt 爆炸
+            dim_name = task_dim_map.get(str(task.id), "")
+            expected_subjects = sorted(dim_to_subjects.get(dim_name, set()))[:50]
+            expected_competitors = sorted(dim_to_competitors.get(dim_name, set()))[:50]
+
             summary = {
                 "task_id": task.id,
                 "keyword": task.keywords or "",
                 "platform": task.platform.code if task.platform else "",
                 "posts_count": task.posts_count,
+                "screened": data_volume.get("screened", 0),
                 "deep_analyzed": data_volume.get("deep_analyzed", 0),
                 "entity_match": entity_match,
+                "target_entities_sample": target_entities_sample,
+                "competitor_entities_sample": competitor_entities_sample,
+                "expected_subjects": expected_subjects,
+                "expected_competitors": expected_competitors,
                 "top_topics": top_topics,
                 "promotion_ratio": marketing.get("promotion_ratio"),
             }
@@ -2227,8 +2266,13 @@ async def _build_social_probe_summaries(
                 "keyword": task.keywords or "",
                 "platform": task.platform.code if task.platform else "",
                 "posts_count": 0,
+                "screened": 0,
                 "deep_analyzed": 0,
                 "entity_match": False,
+                "target_entities_sample": [],
+                "competitor_entities_sample": [],
+                "expected_subjects": [],
+                "expected_competitors": [],
                 "top_topics": [],
                 "promotion_ratio": None,
             })
@@ -2360,13 +2404,13 @@ def _override_suggestions_for_all_fail_channels(
 def _auto_verdict_social_probe_task(summary: dict) -> tuple[str, str] | None:
     """客观规则层：根据量化指标直接判定，返回 (verdict, note) 或 None（交 LLM 判断）
 
-    Hard FAIL：内容极少 / 广告占比极高
-    数据门槛：深度分析样本不足，默认 pass 待全量后验证
-    None：交 LLM 判断话题与研究问题的相关性
+    Hard FAIL：原始采集量极少 / 广告占比极高（LLM 也无法从中获取有效话题）
+    其余（含深度分析样本不足）：交 LLM 判断——LLM 看 top_topics + entity_match
+    后给出更细粒度的 pass+样本不足兜底 / fail+具体换词建议，统一走 SINGLE_TASK_SYSTEM_TEMPLATE
+    的「判定规则」：deep_analyzed < 10 触发样本不足兜底 pass；>=10 严格按 30% 阈值。
     """
     posts = summary.get("posts_count") or 0
     promo = summary.get("promotion_ratio")
-    deep_analyzed = summary.get("deep_analyzed") or 0
 
     # Hard FAIL
     if posts < 5:
@@ -2374,11 +2418,7 @@ def _auto_verdict_social_probe_task(summary: dict) -> tuple[str, str] | None:
     if promo is not None and promo > 0.85:
         return "fail", f"广告内容占比 {promo:.0%}，自然讨论极少"
 
-    # 数据门槛：深度分析样本不足，无法判断话题相关性，默认通过待全量后验证
-    if deep_analyzed < 5:
-        return "pass", f"深度分析样本较少（{deep_analyzed} 条），待全量采集后验证话题相关性"
-
-    return None  # 交 LLM 判断话题相关性
+    return None  # 交 LLM 判断话题相关性（含 deep_analyzed < 5 的低样本场景）
 
 
 async def _run_news_probe_review_one(
@@ -2928,7 +2968,9 @@ async def check_probe_status(
         )
 
     task_ids = [t.id for t in probe_tasks]
-    task_statuses, analyzed_summaries = await _build_social_probe_summaries(db, task_ids)
+    task_statuses, analyzed_summaries = await _build_social_probe_summaries(
+        db, task_ids, research_design=strategy.research_design,
+    )
 
     # 新闻任务状态（进入终态即视为已处理，failed 不阻塞审查触发）
     _NEWS_PROBE_TERMINAL = {"completed", "failed"}

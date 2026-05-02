@@ -344,6 +344,8 @@
           :show-progress="!collectionData.allAnalyzed"
           :coverage-result="collectionData.coverageResult"
           :task-dimension-map="taskDimensionMap"
+          :data-plan="strategy.research_design?.data_plan ?? []"
+          :probe-assessments="strategy.probe_review_result?.assessments ?? []"
           :industry-research="collectionData.industryResearch"
           :creative-research="collectionData.creativeResearch"
         />

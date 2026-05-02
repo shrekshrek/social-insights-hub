@@ -115,19 +115,25 @@ def format_coverage_check_inputs(
         is_news = name.startswith("[新闻]")
 
         if is_news:
-            # 新闻切片 result_data 结构: {coverage, sentiment, narratives, ...}
-            coverage = data.get("coverage") or {}
-            sentiment = data.get("sentiment") or {}
-            narratives = data.get("narratives") or []
-            dist = sentiment.get("distribution") or {}
+            # 新闻切片 result_data 结构（ADR-003 后）：
+            #   descriptive: sentiment_distribution / sentiment_overall / articles_unique / articles_filtered
+            #   entities: [{name, role, mention_count, source_count, sentiment_avg, ...}]
+            #   event_clusters / media_landscape / competitive: 派生层
+            #   page_synthesis: Pass 2 LLM 散文（briefing + event_titles），策略层禁用
+            descriptive = data.get("descriptive") or {}
+            entities = data.get("entities") or []
+            dist = descriptive.get("sentiment_distribution") or {}
             total_articles = sum(dist.get(k, 0) for k in ("positive", "neutral", "negative"))
             slice_lines.append(f"原文数: {total_articles}")
-            if coverage.get("summary"):
-                slice_lines.append(f"覆盖概要: {coverage['summary']}")
-            if narratives:
-                narrative_themes = [n.get("theme", "") for n in narratives[:5]]
-                slice_lines.append(f"主要叙事: {', '.join(narrative_themes)}")
-            overall_sent = sentiment.get("overall")
+            if entities:
+                # 取前 10，按已有 (target → competitor → context) 排序展示
+                ent_strs = [
+                    f"{e.get('name', '')}({e.get('role', '')})"
+                    for e in entities[:10] if e.get("name")
+                ]
+                if ent_strs:
+                    slice_lines.append(f"主要实体: {', '.join(ent_strs)}")
+            overall_sent = descriptive.get("sentiment_overall")
             if overall_sent is not None:
                 label = "正面" if overall_sent > 0.6 else "负面" if overall_sent < 0.4 else "中性"
                 slice_lines.append(f"整体情感: {label}（{overall_sent:.2f}）")

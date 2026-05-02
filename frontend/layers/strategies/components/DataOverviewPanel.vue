@@ -219,7 +219,7 @@
         </div>
       </div>
 
-      <!-- 研究问题覆盖 -->
+      <!-- 研究问题覆盖度（三态：covered / partial / uncovered） -->
       <div v-if="coverageResult.question_coverage?.length">
         <h4 class="text-xs font-medium text-gray-500 mb-1.5">研究问题覆盖度</h4>
         <div class="space-y-1.5">
@@ -229,19 +229,24 @@
           >
             <div class="flex items-start gap-2 text-sm">
               <UIcon
-                :name="qc.covered ? 'i-heroicons-check' : 'i-heroicons-x-mark'"
-                :class="qc.covered ? 'text-green-500' : 'text-red-400'"
+                :name="coverageStatusIcon(qc.status)"
+                :class="coverageStatusClass(qc.status)"
                 class="mt-0.5 shrink-0"
               />
               <div class="flex-1">
                 <span>{{ qc.question }}</span>
-                <span v-if="qc.note" class="text-xs text-gray-400 ml-1">{{ qc.note }}</span>
+                <span class="text-xs ml-1" :class="coverageStatusClass(qc.status)">
+                  [{{ coverageStatusLabel(qc.status) }}]
+                </span>
+                <span v-if="qc.evidence_summary" class="text-xs text-gray-400 ml-1">
+                  {{ qc.evidence_summary }}
+                </span>
               </div>
             </div>
 
-            <!-- 未覆盖时显示 probe 阶段诊断（根因分析） -->
+            <!-- partial / uncovered 时显示 probe 阶段诊断（根因分析） -->
             <details
-              v-if="!qc.covered && getDiagnosticForRQ(qc.question_id)"
+              v-if="qc.status !== 'covered' && getDiagnosticForRQ(qc.question_id)"
               class="ml-6 mt-1.5"
             >
               <summary class="text-xs text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none">
@@ -289,6 +294,21 @@
         </div>
       </div>
 
+      <!-- 跨 RQ 共性警示 -->
+      <div v-if="coverageResult.warnings?.length">
+        <h4 class="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1.5">警示</h4>
+        <div class="space-y-1">
+          <div
+            v-for="(w, i) in coverageResult.warnings"
+            :key="i"
+            class="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300"
+          >
+            <UIcon name="i-heroicons-exclamation-triangle" class="mt-0.5 shrink-0 text-amber-500" />
+            <span>{{ w }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- 数据亮点 -->
       <div v-if="coverageResult.data_highlights?.length">
         <h4 class="text-xs font-medium text-gray-500 mb-1.5">数据亮点</h4>
@@ -331,8 +351,27 @@ import type {
   ResearchAgentStatus,
   ProbeAssessment,
   DataPlanItem,
+  QuestionCoverageStatus,
 } from '../types'
 import { platformLabel } from '../composables/useStrategyConstants'
+
+function coverageStatusIcon(s: QuestionCoverageStatus): string {
+  if (s === 'covered') return 'i-heroicons-check-circle'
+  if (s === 'partial') return 'i-heroicons-minus-circle'
+  return 'i-heroicons-x-circle'
+}
+
+function coverageStatusClass(s: QuestionCoverageStatus): string {
+  if (s === 'covered') return 'text-green-500 dark:text-green-400'
+  if (s === 'partial') return 'text-amber-500 dark:text-amber-400'
+  return 'text-red-400 dark:text-red-300'
+}
+
+function coverageStatusLabel(s: QuestionCoverageStatus): string {
+  if (s === 'covered') return '已覆盖'
+  if (s === 'partial') return '部分覆盖'
+  return '未覆盖'
+}
 
 const props = defineProps<{
   tasks: CollectionTaskStatus[]

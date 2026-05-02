@@ -233,12 +233,16 @@ export interface NewsCollectionTaskStatus {
   has_analysis: boolean
 }
 
+export type QuestionCoverageStatus = 'covered' | 'partial' | 'uncovered'
+
 export interface QuestionCoverage {
   question_id: string
   question: string
-  covered: boolean
-  covered_by: string
-  note: string
+  /** 三态判定：covered（充分）/ partial（部分）/ uncovered（无支撑） */
+  status: QuestionCoverageStatus
+  covered_by: string[]
+  /** 量化证据摘要（含 mentions / sources 数字） */
+  evidence_summary: string
 }
 
 export interface SliceAdjustmentSuggestion {
@@ -250,6 +254,8 @@ export interface SliceAdjustmentSuggestion {
 export interface CoverageCheckResult {
   question_coverage: QuestionCoverage[]
   overall_ready: boolean
+  /** 跨 RQ 共性诊断（如"slice X 数据稀疏，影响 rq2/rq3"） */
+  warnings: string[]
   data_highlights: string[]
   slice_adjustments: SliceAdjustmentSuggestion[]
 }

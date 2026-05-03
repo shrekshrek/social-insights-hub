@@ -591,29 +591,54 @@ export interface CompetitivePlayer {
   name: string
   role: 'target' | 'competitor' | 'context' | string
   media_sov_pct: number
-  media_sentiment: 'positive' | 'neutral' | 'negative' | string
+  /** 后端 prompt 输出 number (-2 ~ 2)，但兼容 'positive'/'neutral'/'negative' 字符串 */
+  media_sentiment: number | 'positive' | 'neutral' | 'negative' | string | null
   source_count: number
   narrative_position: string
+  /** 媒体围绕该玩家的代表性论述（2-3 条要点列表） */
+  key_claims?: string[]
   evidence_quote?: string | EvidenceQuote
 }
 
+/** 定位轴语义：label = 轴名，low/high = 两端语义 */
+export interface PositioningAxis {
+  label: string
+  low: string
+  high: string
+}
+
+/** 定位图（与 backend landscape_chain prompt 对齐） */
 export interface PositioningMap {
-  x_axis: string
-  y_axis: string
+  x_axis: PositioningAxis
+  y_axis: PositioningAxis
+  /** 为何选择这两条轴 */
   rationale: string
-  placements: Array<{
-    name: string
-    x: string
-    y: string
+  /** 玩家定位坐标，x/y ∈ [-1, 1] */
+  positions: Array<{
+    player: string
+    x: number
+    y: number
+    /** 定位到该象限的证据 */
+    rationale: string
   }>
 }
 
+/** 话语权博弈阵营条目 */
+export interface DiscourseBattleCamp {
+  player: string
+  stance: string
+}
+
+/** 话语权博弈（与 backend landscape_chain prompt 对齐） */
 export interface DiscourseBattle {
-  topic: string
-  agenda_map_battle_ref?: string
-  players_involved: string[]
-  winner?: string
-  note?: string
+  /** 关联 agenda_map 的 contested_topic */
+  battle: string
+  leaders: DiscourseBattleCamp[]
+  challengers: DiscourseBattleCamp[]
+  /** momentum 方向："向 leaders" / "向 challengers" / "stable" */
+  shift_direction: string
+  /** 支持该判断的关键证据 */
+  evidence: string
 }
 
 /** 市场动态条目。后端可能返回纯文本或结构化对象。 */

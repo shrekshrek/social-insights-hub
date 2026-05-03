@@ -38,60 +38,150 @@
           <p v-if="player.narrative_position" class="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
             {{ player.narrative_position }}
           </p>
+          <!-- 关键论述（key_claims） -->
+          <ul v-if="player.key_claims?.length" class="mt-1.5 space-y-0.5">
+            <li
+              v-for="(claim, ci) in player.key_claims"
+              :key="ci"
+              class="text-[11px] text-gray-600 dark:text-gray-300 pl-2 relative before:content-['·'] before:absolute before:left-0 before:text-gray-400"
+            >
+              {{ claim }}
+            </li>
+          </ul>
           <!-- 引用 -->
-          <div v-if="player.evidence_quote" class="mt-1 text-[11px] italic text-gray-400 border-l-2 border-gray-200 dark:border-gray-700 pl-2">
-            <template v-if="typeof player.evidence_quote === 'object'">
-              "{{ truncateText(player.evidence_quote.quote, 60) }}"
-            </template>
-            <template v-else>"{{ truncateText(player.evidence_quote, 60) }}"</template>
+          <div v-if="quoteText(player.evidence_quote)" class="mt-1 text-[11px] italic text-gray-400 border-l-2 border-gray-200 dark:border-gray-700 pl-2">
+            "{{ truncateText(quoteText(player.evidence_quote), 120) }}"
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 定位图 -->
-    <div v-if="result.positioning_map?.placements?.length">
+    <!-- 定位图（2D 象限可视化） -->
+    <div v-if="result.positioning_map?.positions?.length">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">定位图</h4>
-      <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <div class="text-xs text-gray-500 mb-2 flex items-center gap-3">
-          <span>X 轴：{{ result.positioning_map.x_axis }}</span>
-          <span>Y 轴：{{ result.positioning_map.y_axis }}</span>
+      <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+        <!-- 轴说明 + 选轴理由 -->
+        <div class="text-xs text-gray-600 dark:text-gray-300 mb-3 space-y-1">
+          <p>
+            <span class="font-medium">X 轴：</span>{{ result.positioning_map.x_axis?.label }}
+            <span class="text-gray-400">（{{ result.positioning_map.x_axis?.low }} ↔ {{ result.positioning_map.x_axis?.high }}）</span>
+          </p>
+          <p>
+            <span class="font-medium">Y 轴：</span>{{ result.positioning_map.y_axis?.label }}
+            <span class="text-gray-400">（{{ result.positioning_map.y_axis?.low }} ↔ {{ result.positioning_map.y_axis?.high }}）</span>
+          </p>
+          <p v-if="result.positioning_map.rationale" class="text-gray-500 dark:text-gray-400 italic">
+            {{ result.positioning_map.rationale }}
+          </p>
         </div>
-        <p v-if="result.positioning_map.rationale" class="text-xs text-gray-500 mb-2">
-          {{ result.positioning_map.rationale }}
-        </p>
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+
+        <!-- 2D 象限网格 -->
+        <div class="relative w-full max-w-md mx-auto aspect-square bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded">
+          <!-- 中线 -->
+          <div class="absolute inset-x-0 top-1/2 border-t border-dashed border-gray-300 dark:border-gray-600" />
+          <div class="absolute inset-y-0 left-1/2 border-l border-dashed border-gray-300 dark:border-gray-600" />
+
+          <!-- 轴端点标签 -->
+          <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap">
+            ↑ {{ result.positioning_map.y_axis?.high }}
+          </span>
+          <span class="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap">
+            ↓ {{ result.positioning_map.y_axis?.low }}
+          </span>
+          <span class="absolute top-1/2 -left-2 -translate-x-full -translate-y-1/2 text-[10px] text-gray-500 whitespace-nowrap">
+            {{ result.positioning_map.x_axis?.low }} ←
+          </span>
+          <span class="absolute top-1/2 -right-2 translate-x-full -translate-y-1/2 text-[10px] text-gray-500 whitespace-nowrap">
+            → {{ result.positioning_map.x_axis?.high }}
+          </span>
+
+          <!-- 玩家点位 -->
           <div
-            v-for="(placement, idx) in result.positioning_map.placements"
+            v-for="(pos, idx) in result.positioning_map.positions"
             :key="idx"
-            class="p-2 bg-white dark:bg-gray-900 rounded text-xs"
+            class="absolute -translate-x-1/2 translate-y-1/2"
+            :style="{
+              left: `${(clampCoord(pos.x) + 1) * 50}%`,
+              bottom: `${(clampCoord(pos.y) + 1) * 50}%`,
+            }"
           >
-            <span class="font-medium">{{ placement.name }}</span>
-            <div class="text-gray-400 mt-0.5">X: {{ placement.x }} · Y: {{ placement.y }}</div>
+            <div class="flex items-center gap-1">
+              <div
+                class="w-2.5 h-2.5 rounded-full shrink-0"
+                :class="pos.player === targetPlayerName ? 'bg-primary-500' : 'bg-gray-500 dark:bg-gray-400'"
+              />
+              <span class="text-[10px] font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap">
+                {{ pos.player }}
+              </span>
+            </div>
           </div>
         </div>
+
+        <!-- 定位理由列表（点位下方展开） -->
+        <ul class="mt-6 space-y-1.5">
+          <li
+            v-for="(pos, idx) in result.positioning_map.positions"
+            :key="idx"
+            class="text-xs text-gray-600 dark:text-gray-300"
+          >
+            <span class="font-medium">{{ pos.player }}</span>
+            <span class="text-gray-400 ml-1">(x: {{ formatCoord(pos.x) }} · y: {{ formatCoord(pos.y) }})</span>
+            <span v-if="pos.rationale" class="block mt-0.5 pl-3 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+              {{ pos.rationale }}
+            </span>
+          </li>
+        </ul>
       </div>
     </div>
 
     <!-- 话语权博弈 -->
     <div v-if="result.discourse_battles?.length">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">话语权博弈</h4>
-      <div class="space-y-2">
+      <div class="space-y-3">
         <div
           v-for="(battle, idx) in result.discourse_battles"
           :key="idx"
           class="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg"
         >
-          <div class="flex items-center justify-between gap-2">
-            <p class="font-medium text-sm text-gray-900 dark:text-white">{{ battle.topic }}</p>
-            <UBadge v-if="battle.winner" color="warning" variant="subtle" size="sm">
-              胜方：{{ battle.winner }}
-            </UBadge>
+          <p class="font-medium text-sm text-gray-900 dark:text-white">{{ battle.battle }}</p>
+
+          <!-- 双阵营 -->
+          <div class="mt-2 grid md:grid-cols-2 gap-2">
+            <div v-if="battle.leaders?.length" class="bg-white dark:bg-gray-800 rounded p-2">
+              <p class="text-[10px] font-medium text-gray-500 mb-1">主导方</p>
+              <ul class="space-y-0.5">
+                <li
+                  v-for="(camp, ci) in battle.leaders"
+                  :key="ci"
+                  class="text-[11px] text-gray-700 dark:text-gray-300"
+                >
+                  <span class="font-medium">{{ camp.player }}</span>
+                  <span v-if="camp.stance" class="text-gray-500">：{{ camp.stance }}</span>
+                </li>
+              </ul>
+            </div>
+            <div v-if="battle.challengers?.length" class="bg-white dark:bg-gray-800 rounded p-2">
+              <p class="text-[10px] font-medium text-gray-500 mb-1">挑战方</p>
+              <ul class="space-y-0.5">
+                <li
+                  v-for="(camp, ci) in battle.challengers"
+                  :key="ci"
+                  class="text-[11px] text-gray-700 dark:text-gray-300"
+                >
+                  <span class="font-medium">{{ camp.player }}</span>
+                  <span v-if="camp.stance" class="text-gray-500">：{{ camp.stance }}</span>
+                </li>
+              </ul>
+            </div>
           </div>
-          <p v-if="battle.players_involved?.length" class="mt-1 text-xs text-gray-600 dark:text-gray-300">
-            参与者：{{ battle.players_involved.join('、') }}
+
+          <!-- 走向 + 证据 -->
+          <p v-if="battle.shift_direction" class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+            <span class="font-medium">走向：</span>{{ battle.shift_direction }}
           </p>
-          <p v-if="battle.note" class="mt-1 text-xs text-gray-500">{{ battle.note }}</p>
+          <p v-if="battle.evidence" class="mt-1 text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+            <span class="font-medium">证据：</span>{{ battle.evidence }}
+          </p>
         </div>
       </div>
     </div>
@@ -115,8 +205,18 @@
             >
               <template v-if="typeof item === 'object'">
                 <span class="font-medium">{{ item.player || item.shift || '' }}</span>
-                <span v-if="item.signal || item.implication" class="text-gray-500 block mt-0.5 pl-2">
-                  {{ truncateText(item.signal || item.implication || '', 100) }}
+                <span v-if="item.signal || item.implication" class="text-gray-500 block mt-0.5 pl-2 leading-relaxed">
+                  {{ isItemExpanded(section.key, iIdx) || (item.signal || item.implication || '').length <= 100
+                    ? (item.signal || item.implication)
+                    : truncateText(item.signal || item.implication || '', 100)
+                  }}
+                  <button
+                    v-if="(item.signal || item.implication || '').length > 100"
+                    class="text-primary-500 hover:text-primary-600 ml-1 cursor-pointer"
+                    @click="toggleItemExpanded(section.key, iIdx)"
+                  >
+                    {{ isItemExpanded(section.key, iIdx) ? '收起' : '展开' }}
+                  </button>
                 </span>
               </template>
               <template v-else>· {{ item }}</template>
@@ -130,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-import type { LandscapeResult, MarketDynamicEntry } from '../types'
+import type { LandscapeResult, MarketDynamicEntry, EvidenceQuote } from '../types'
 import { UBadge } from '#components'
 
 const props = defineProps<{
@@ -141,6 +241,26 @@ const truncateText = (text: string, max: number) => {
   if (!text || text.length <= max) return text
   return text.slice(0, max) + '…'
 }
+
+/** evidence_quote 兼容字符串 / 对象两种返回 */
+const quoteText = (q: string | EvidenceQuote | undefined | null): string => {
+  if (!q) return ''
+  if (typeof q === 'string') return q
+  return q.quote ?? ''
+}
+
+/** 把 [-1,1] 范围的坐标限制在 [-1,1]，避免 LLM 偶尔输出越界值导致点位飞出网格 */
+const clampCoord = (n: number) => Math.max(-1, Math.min(1, n ?? 0))
+
+const formatCoord = (n: number) => {
+  if (n == null || Number.isNaN(n)) return '--'
+  return n.toFixed(2)
+}
+
+/** target 玩家在定位图中高亮（与 player.role 对齐） */
+const targetPlayerName = computed(() => {
+  return props.result?.players?.find(p => p.role === 'target')?.name ?? ''
+})
 
 const hasMarketDynamics = computed(() => {
   const d = props.result?.market_dynamics
@@ -175,6 +295,18 @@ const marketDynamicSections = computed(() => {
   return sections
 })
 
+// 市场动态条目展开状态：key=`${sectionKey}:${itemIdx}`
+const expandedItems = ref(new Set<string>())
+const isItemExpanded = (sectionKey: string, idx: number) =>
+  expandedItems.value.has(`${sectionKey}:${idx}`)
+const toggleItemExpanded = (sectionKey: string, idx: number) => {
+  const key = `${sectionKey}:${idx}`
+  const next = new Set(expandedItems.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedItems.value = next
+}
+
 const roleColor = (r: string) => {
   if (r === 'target') return 'primary' as const
   if (r === 'competitor') return 'error' as const
@@ -193,10 +325,11 @@ const roleBgClass = (r: string) => {
   return 'bg-gray-50 dark:bg-gray-800'
 }
 
-const sentimentColor = (s: number | string) => {
+const sentimentColor = (s: number | string | null | undefined) => {
+  if (s == null) return 'neutral' as const
   if (typeof s === 'number') {
     if (s > 0.6) return 'success' as const
-    if (s < 0.4) return 'error' as const
+    if (s < -0.2) return 'error' as const
     return 'neutral' as const
   }
   if (s === 'positive') return 'success' as const
@@ -204,10 +337,11 @@ const sentimentColor = (s: number | string) => {
   return 'neutral' as const
 }
 
-const sentimentLabel = (s: number | string) => {
+const sentimentLabel = (s: number | string | null | undefined) => {
+  if (s == null) return '中性'
   if (typeof s === 'number') {
     if (s > 0.6) return '正面'
-    if (s < 0.4) return '负面'
+    if (s < -0.2) return '负面'
     return '中性'
   }
   if (s === 'positive') return '正面'

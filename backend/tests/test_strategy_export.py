@@ -19,8 +19,7 @@ def _make_strategy(
         spec=[
             "name",
             "insight_result",
-            "brand_role_result",
-            "big_idea_result",
+            "brand_strategy_branches",
             "agenda_map_result",
             "landscape_result",
             "strategic_brief_result",
@@ -31,12 +30,22 @@ def _make_strategy(
     )
     strategy.name = name
     strategy.insight_result = insight
-    strategy.brand_role_result = brand_role
-    strategy.big_idea_result = big_idea
+    # 多分支：把单 brand_role/big_idea 包成单元素 selected branch
+    if brand_role is not None or big_idea is not None:
+        strategy.brand_strategy_branches = [{
+            "tension_id": 0,
+            "tension_summary": "test tension",
+            "brand_role": brand_role,
+            "big_idea": big_idea,
+            "selected": True,
+            "status": "big_idea_done" if big_idea else "brand_role_done",
+        }]
+    else:
+        strategy.brand_strategy_branches = None
     strategy.agenda_map_result = None
     strategy.landscape_result = None
     strategy.strategic_brief_result = None
-    strategy.output_type = "brand_strategy"
+    strategy.output_type = "campaign_strategy"
     strategy.brand_brief = None
     strategy.research_design = None
     return strategy

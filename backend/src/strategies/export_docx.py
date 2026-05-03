@@ -20,7 +20,7 @@ from .models import Strategy
 
 
 def generate_strategy_docx(strategy: Strategy) -> BytesIO:
-    """从策略记录生成 Word 文档"""
+    """从策略记录生成 Word 文档（多分支：仅导出 selected branch）"""
     doc = Document()
     _setup_styles(doc)
 
@@ -30,16 +30,60 @@ def generate_strategy_docx(strategy: Strategy) -> BytesIO:
     # 洞察层
     _add_insight_section(doc, strategy.insight_result)
 
+    # 多分支：取 selected=true 的分支；无则按完成度回退（big_idea > brand_role > 第一个）
+    selected = _pick_export_branch(strategy.brand_strategy_branches)
+    branch_brand_role = (selected or {}).get("brand_role")
+    branch_big_idea = (selected or {}).get("big_idea")
+    branch_label = _format_branch_label(selected)
+
     # 品牌角色层
-    _add_brand_role_section(doc, strategy.brand_role_result)
+    _add_brand_role_section(doc, branch_brand_role, branch_label=branch_label)
 
     # 创意层
-    _add_big_idea_section(doc, strategy.big_idea_result)
+    _add_big_idea_section(doc, branch_big_idea, branch_label=branch_label)
 
     buf = BytesIO()
     doc.save(buf)
     buf.seek(0)
     return buf
+
+
+def _pick_export_branch(branches: list[dict] | None) -> dict | None:
+    """选取要导出的分支：selected=true 优先；否则按完成度回退"""
+    if not branches:
+        return None
+    selected = next(
+        (b for b in branches if isinstance(b, dict) and b.get("selected")),
+        None,
+    )
+    if selected:
+        return selected
+    with_big_idea = next(
+        (b for b in branches if isinstance(b, dict) and b.get("big_idea")),
+        None,
+    )
+    if with_big_idea:
+        return with_big_idea
+    with_brand_role = next(
+        (b for b in branches if isinstance(b, dict) and b.get("brand_role")),
+        None,
+    )
+    if with_brand_role:
+        return with_brand_role
+    return branches[0] if isinstance(branches[0], dict) else None
+
+
+def _format_branch_label(branch: dict | None) -> str:
+    """生成分支标题尾缀，如 "（基于 Tension 1：xxxx）"。"""
+    if not branch:
+        return ""
+    tension_id = branch.get("tension_id")
+    summary = (branch.get("tension_summary") or "").strip()
+    if tension_id is None and not summary:
+        return ""
+    if summary:
+        return f"（基于 Tension {int(tension_id) + 1 if isinstance(tension_id, int) else '?'}：{summary}）"
+    return f"（基于 Tension {int(tension_id) + 1}）"
 
 
 def _add_cover(doc: Document, strategy: Strategy) -> None:
@@ -99,9 +143,14 @@ def _add_insight_section(doc: Document, insight: dict | None) -> None:
             _add_evidence_list(doc, o.get("evidence", []))
 
 
-def _add_brand_role_section(doc: Document, brand_role: dict | None) -> None:
+def _add_brand_role_section(
+    doc: Document,
+    brand_role: dict | None,
+    *,
+    branch_label: str = "",
+) -> None:
     """第 2 层 Brand Role (品牌角色): Brand Social Role + Social Strategy"""
-    doc.add_heading("第 2 层 Brand Role: 品牌角色", level=1)
+    doc.add_heading(f"第 2 层 Brand Role: 品牌角色{branch_label}", level=1)
 
     if not brand_role:
         doc.add_paragraph("（未完成）")
@@ -136,9 +185,14 @@ def _add_brand_role_section(doc: Document, brand_role: dict | None) -> None:
         _add_evidence_list(doc, social_strategy.get("evidence", []))
 
 
-def _add_big_idea_section(doc: Document, big_idea: dict | None) -> None:
+def _add_big_idea_section(
+    doc: Document,
+    big_idea: dict | None,
+    *,
+    branch_label: str = "",
+) -> None:
     """第 3 层 Big Idea (创意): Big Idea + Content Strategy"""
-    doc.add_heading("第 3 层 Big Idea: 创意", level=1)
+    doc.add_heading(f"第 3 层 Big Idea: 创意{branch_label}", level=1)
 
     if not big_idea:
         doc.add_paragraph("（未完成）")

@@ -21,8 +21,11 @@
 | GET | `/strategies/{id}/collection-status` | 全量采集进度 + 自动建切片 |
 | GET | `/strategies/{id}/data-overview` | 数据全景（切片 + 覆盖度） |
 | POST | `/strategies/{id}/adjust-slices` | 微调切片配置 |
-| POST | `/strategies/{id}/generate/{insight,brand-role,big-idea}` | campaign_strategy / full_strategy 路径：生成对应阶段 |
-| PUT | `/strategies/{id}/{insight,brand-role,big-idea}` | campaign_strategy / full_strategy 路径：编辑阶段结果 |
+| POST | `/strategies/{id}/generate/{insight,brand-role,big-idea}` | campaign_strategy / full_strategy 路径：生成对应阶段（brand-role / big-idea body 可选 `tension_ids` 子集；省略=全跑模式重置所有分支，指定=仅跑选定分支保留其他） |
+| PUT | `/strategies/{id}/insight` | campaign_strategy / full_strategy 路径：编辑 insight（按新 tensions 重建 pending 分支骨架） |
+| PUT | `/strategies/{id}/{brand-role,big-idea}` | 按分支编辑（body 必填 `tension_id`） |
+| POST | `/strategies/{id}/branches/select` | 选定 brand_strategy 分支（设 selected=true，影响导出） |
+| POST | `/strategies/{id}/branches/regenerate-{brand-role,big-idea}` | 单分支重生成（仅刷新指定 tension 的层） |
 | POST | `/strategies/{id}/generate/{agenda-map,landscape,strategic-brief}` | market_report / full_strategy 路径：生成对应阶段 |
 | PUT | `/strategies/{id}/{agenda-map,landscape,strategic-brief}` | market_report / full_strategy 路径：编辑阶段结果 |
 | GET | `/strategies/{id}/export` | 导出 Word 文档 |
@@ -38,7 +41,7 @@
 
 - `strategies`: 顶级实体，核心 JSONB 字段：
   - 阶段结果：`brand_brief` / `research_design` / `probe_review_result` / `coverage_check_result`
-  - campaign_strategy 路径：`insight_result` / `brand_role_result` / `big_idea_result`
+  - campaign_strategy 路径：`insight_result`（含多 tensions） + `brand_strategy_branches`（多分支：每 tension 一个独立 brand_role + big_idea 路径，结构 `[{tension_id, tension_summary, brand_role, big_idea, selected, status, error_message?}]`）
   - market_report 路径：`agenda_map_result` / `landscape_result` / `strategic_brief_result`
   - 路由字段：`status` / `output_type`（`campaign_strategy` | `market_report` | `full_strategy`，用户在 confirm-research 时显式选择）
   - 监测关联：`social_monitor_id` / `news_monitor_id`（两条路径分别对应）
@@ -145,9 +148,26 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 - **行业研究（research）**：Research Agent 自动搜索分析，注入 `{research_findings}` 占位符（无结果时优雅降级为 ""）
 - **创意研究（creative_research）**：campaign_strategy / full_strategy 专属，搜索数英/广告门/SocialBeta，注入 `{creative_references}` 占位符
 
-#### campaign_strategy 路径（Insight → Brand Role → Big Idea）
+#### campaign_strategy 路径（Insight → Brand Role → Big Idea，多分支并行）
 
 Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数据源 = social_media（`load_strategy_inputs`），同时通过 `_format_news_media_section` 将新闻切片作为补充段落注入 `{news_media_section}`（可选上下文）。行业研究注入 `{research_findings}`，创意研究注入 `{creative_references}`（Brand Role ~400 tokens 排除法差异化；Big Idea ~800 tokens 完整版图 + 白空间）。
+
+**多分支架构（v2026.05）**：Insight 阶段产出多个 social_tensions 后，Brand Role 与 Big Idea 不再产出单一结论，而是**为每个 tension 生成一条独立的 brand_role + big_idea 分支**：
+
+- 数据载体：`strategy.brand_strategy_branches: list[{tension_id, tension_summary, brand_role, big_idea, selected, status, error_message?}]`
+- **分支骨架预创建**：Insight 生成或编辑后立刻调 `_ensure_branches_skeleton` 把分支按 tensions 数初始化为 `status="pending"` + brand_role/big_idea = null。前端因此始终能列出分支供用户多选（无需读 `insight_result.social_tensions` 做 fallback）
+- 调度：`generate_brand_role` / `generate_big_idea` 用 `asyncio.gather` 并行调用每个分支的 worker（`_run_brand_role_for_one_branch` / `_run_big_idea_for_one_branch`），不共享 DB session；单分支失败不影响其他分支（`status="failed"` + `error_message` 写回该分支，整体仍 commit）
+- **生成模式（全跑 vs 子集）**：两个 generate 端点 body 接受可选 `tension_ids: list[int] | None`：
+  - `tension_ids=None` / 省略：**全跑模式**——`generate_brand_role` 重置所有分支 brand_role/big_idea/selected/status 后并行跑全部；`generate_big_idea` 对所有 brand_role 已完成的分支跑
+  - `tension_ids=[...]`：**子集模式**——仅清空指定分支并跑它们，未指定的分支完全不动（含 selected）。`generate_big_idea` 子集会过滤掉未生成 brand_role 的指定项；空交集时 400
+  - 子集模式语义上等价于多次 `regenerate_X_branch` 但合并为一条 AnalysisJob、一次 LLM 批次（成本/审计聚合）
+- Chain 输入：`brand_role_chain` / `big_idea_chain` 接受 `selected_tension_id`，prompt 注入 `{insight_focused_section}`（仅当前 tension + 关联 opportunities）和 `{branch_brand_role_section}`（big_idea 阶段：当前分支的 brand_role），系统提示明确"当前分支独立，不要与其他分支综合"
+- AnalysisJob：每次 `generate_brand_role` / `generate_big_idea` 创建**单条**跨分支 Job，`analysis_config.{branch_count, subset_mode, target_tension_ids}` 记录调用形态；token_usage / processing_time 通过 `_merge_token_usage_dicts` 聚合多分支总成本；`error_message` 写"K/N 分支生成失败"汇总
+- 分支编辑：PUT `/{id}/brand-role` 与 `/{id}/big-idea` body 必填 `tension_id`；编辑 brand_role 同步清空该分支 big_idea
+- 单分支重生成：POST `/{id}/branches/regenerate-{brand-role,big-idea}`（仅刷新指定 tension，不影响其他分支）；与子集模式 `generate` 等价但只跑 1 条
+- 选定分支：POST `/{id}/branches/select`（设 `selected=true`，仅一条），影响 Word 导出（仅导出 selected 分支；selected 缺失时按 big_idea > brand_role > 第一条回退）
+- Insight 重生成或编辑会让 tensions 变化 → `brand_strategy_branches` 整体重建为 pending 骨架（按新 tensions）；旧的所有 brand_role / big_idea / selected 状态作废
+- full_strategy 路径：Agenda Map / Landscape 重生成或编辑同步清空 `insight_result + brand_strategy_branches`（用户须重新生成 insight 后骨架自动重建）
 
 #### market_report 路径（Agenda Map → Landscape → Strategic Brief）
 
@@ -157,7 +177,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 #### full_strategy 路径（Agenda Map → Landscape → Insight → Brand Role → Big Idea）
 
-顺序执行两条路径：先完成 market_report 前两层（Agenda Map → Landscape），再执行 campaign_strategy 三层（Insight → Brand Role → Big Idea）。Insight 阶段以 `landscape_result` JSON 作为 `{news_media_section}` 注入，取代原始 news slices，让消费者洞察有完整的竞争格局背景。状态在 landscape_done 后保持不动，直到 Big Idea 完成跳至 completed。级联清空：重新生成 Agenda Map 或 Landscape 会同时清空 insight/brand_role/big_idea_result。
+顺序执行两条路径：先完成 market_report 前两层（Agenda Map → Landscape），再执行 campaign_strategy 三层（Insight → Brand Role → Big Idea）。Insight 阶段以 `landscape_result` JSON 作为 `{news_media_section}` 注入，取代原始 news slices，让消费者洞察有完整的竞争格局背景。状态在 landscape_done 后保持不动，直到任意分支 Big Idea 完成跳至 completed。级联清空：重新生成 Agenda Map 或 Landscape 会同时清空 insight_result + brand_strategy_branches。
 
 #### NewsSlice 实体 role 归类机制（Agenda Map / Landscape 依赖）
 
@@ -277,6 +297,5 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 - 新闻 insight 粒度：独立监测和策略研究都通过 NewsSlice 切片触发 insight（按 blueprint 条目分组新闻任务创建切片），采集阶段仅做 tagging 不做 insight
 - 新闻搜索渠道：baidu / sogou（默认两渠道，均通过 Crawl4AI）+ wechat_mp（可选，通过搜狗微信专用入口）；source_tier 分层：tier1(权威) / tier2(行业) / tier3(其他) / wechat_mp(公众号)
 - `output_type` 由用户在 confirm-research 时**显式选择**，前端 `ResearchPlanEditor` 根据 data_plan 的渠道组成阻塞不合法的组合（campaign_strategy 需含 social_media 维度；market_report 需含 news_media 维度；full_strategy 需同时含两者）。后端 `_validate_market_report_output_type` 在生成时二次校验
-- `generate_brand_strategy_stage` 和 `generate_market_report_stage` 都遵循**下游级联清空**语义：重新生成 Insight / Agenda Map 会清空下游结果 + 回退状态到 `ready`；重新生成 Brand Role / Landscape 会清空 Big Idea / Strategic Brief；full_strategy 重生成 Agenda Map / Landscape 还会同时清空 insight/brand_role/big_idea_result
-- `edit_brand_strategy_stage` 和 `edit_market_report_stage` 同样会级联清空下游结果，避免上下游不一致
+- `generate_*` 与 `edit_*` 都遵循**下游级联清空**语义：重新生成或编辑 Insight 会清空整张 `brand_strategy_branches`（tensions 可能变化）；重新生成 Agenda Map 会清空 landscape_result/strategic_brief_result，full_strategy 还同步清空 insight_result + brand_strategy_branches；重新生成 Landscape 会清空 strategic_brief_result，full_strategy 还同步清空 insight_result + brand_strategy_branches；分支级编辑 brand_role 仅清空**该分支** big_idea，不影响其他分支
 - Word 导出依赖 `python-docx`

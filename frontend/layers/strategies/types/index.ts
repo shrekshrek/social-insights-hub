@@ -282,6 +282,19 @@ export interface DataOverviewResponse {
 
 // ==================== 策略 ====================
 
+/** brand_strategy 多分支条目：每个 insight tension 一条，独立 brand_role + big_idea 路径 */
+export interface BrandStrategyBranch {
+  tension_id: number
+  tension_summary: string
+  brand_role: Record<string, unknown> | null
+  big_idea: Record<string, unknown> | null
+  selected: boolean
+  /** pending | brand_role_done | big_idea_done | failed */
+  status: string
+  /** 失败时填充失败原因 */
+  error_message?: string
+}
+
 export interface Strategy {
   id: number
   name: string
@@ -300,10 +313,10 @@ export interface Strategy {
 
   // ④ 产出生成
   output_type: OutputType | null
-  // campaign_strategy 路径：第 1 层 → 第 2 层 → 第 3 层
+  // campaign_strategy 路径：
+  //   第 1 层 insight（单一） → 第 2/3 层多分支（每个 tension 独立 brand_role + big_idea 路径）
   insight_result: Record<string, unknown> | null
-  brand_role_result: Record<string, unknown> | null
-  big_idea_result: Record<string, unknown> | null
+  brand_strategy_branches: BrandStrategyBranch[] | null
   // market_report 路径：第 1 层 → 第 2 层 → 第 3 层
   agenda_map_result: Record<string, unknown> | null
   landscape_result: Record<string, unknown> | null

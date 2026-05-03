@@ -8,20 +8,21 @@ brand_strategy 三阶段递进分析的**第 2 层**：insight → brand_role �
 
 - brief_section  : 品牌 Brief，与 insight 层一致
 - research_context_section: 研究问题 + 需求理解摘要
-- insight_result : 上游 insight 层输出的完整 JSON（social_tensions + brand_opportunities），
-                   由调用方从 strategy.insight_result 序列化后传入
+- insight_focused_section : **单一指定 tension** 及其相关 opportunities（多分支模式下，
+                   每个 tension 走独立分支，本 chain 仅基于当前分支的 tension 推导）
 
 ## 关键设计决策
 
-1. **直接传入 insight JSON，而非摘要**
-   - LLM 可直接引用 opportunity index（如 insight:opportunity:0）作为 evidence
-   - 保留完整 conventional_wisdom / data_reality，brand_role 的角色定义需要"反直觉推理链"的原始依据
+1. **多分支模式（v2026-05+）**
+   - Insight 产出多 tensions，每个 tension 由本 chain **独立**推导一次 brand_role
+   - 调用方传入 `selected_tension_id`，本函数提取对应 tension + 相关 opportunities，
+     **不**把其他 tensions 喂给 LLM——确保分支 brand_role 与该 tension 强绑定
+   - 不同分支的 brand_role 应有明显差异化（同品牌不同 social role 由 tension 角度决定）
 
 2. **"反陈词约束"（Anti-Cliché）是核心约束**
    - 品类默认角色（"陪伴者"、"生活方式品牌"）毫无差异化价值
    - 要求 LLM 自检："这个品类里其他品牌会不会说同样的话？"——若会，则不合格
    - elaboration 必须显式声明"我们不是 X，我们是 Y"，强制输出对比而非自描述
-   - 推荐角色须以 insight 层中"最具反直觉性的 Tension"（非最显眼的那条）为切入点
 
 3. **KOL 声音风格作为角色验证锚点**
    - 切片数据中的 KOL 生态信息会经由 slice_data 传递到 brand_role 层
@@ -46,14 +47,18 @@ logger = logging.getLogger(__name__)
 SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察推导品牌社交策略。
 
 ## 任务
-基于已确认的洞察层结果（Social Tension + Brand Opportunity），推导：
+基于**指定的单一 Tension** 及其相关 Brand Opportunities，推导：
 1. **Brand Social Role（品牌社交角色）**：品牌在社交场域应该扮演什么角色。
 2. **Social Strategy（社交策略）**：整体社交传播的策略方向。
 
+**多分支约束**：你看到的是**当前分支的 tension**——insight 阶段产出了多个 tensions，
+每个 tension 都会单独走完整 brand_role + big_idea 路径。**不要去综合或对标其他 tensions**——
+你的角色是"基于此 tension 推出独特视角的 brand role"，让用户看到不同 tension 切入下的方案差异。
+
 ## 分析框架
-- Brand Social Role 应基于 Opportunity 自然延伸，结合 KOL 声音风格和 Brief 中的品牌定位
+- Brand Social Role 应基于该 tension 对应的 Opportunity 自然延伸，结合 KOL 声音风格和 Brief 中的品牌定位
 - Social Strategy 应考虑平台特征、KOL 声音风格、传播节奏
-- 每条结论引用上游洞察层的 opportunity index
+- 每条结论引用 insight 中的 opportunity index
 
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记：
@@ -128,9 +133,9 @@ USER_TEMPLATE = """{brief_section}
 
 {creative_references}
 
-## 洞察层 (Insight) 结果
+## 当前分支聚焦的 Tension
 
-{insight_result}
+{insight_focused_section}
 
 ## 补充数据
 
@@ -151,6 +156,7 @@ def create_brand_role_chain() -> Runnable:
 
 def format_data_for_brand_role(
     insight_result: dict,
+    selected_tension_id: int,
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
@@ -158,7 +164,12 @@ def format_data_for_brand_role(
     research_findings: str = "",
     creative_references: str = "",
 ) -> dict[str, Any]:
-    """将 insight 结果 + 补充数据格式化为 brand_role 层输入"""
+    """将单一 tension（多分支模式下）+ 补充数据格式化为 brand_role 层输入
+
+    Args:
+        insight_result: 完整 insight 输出（含多 tensions / opportunities）
+        selected_tension_id: 当前分支聚焦的 tension index（0-based）
+    """
     from src.llm.chains.strategy.brand_strategy.insight_chain import (
         _build_research_context_section,
         _format_news_media_section,
@@ -169,6 +180,9 @@ def format_data_for_brand_role(
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
 
     research_context_section = _build_research_context_section(research_design)
+
+    # 提取当前分支聚焦的 tension + 相关 opportunities
+    insight_focused_section = _build_focused_tension_section(insight_result, selected_tension_id)
 
     # 提取 KOL 声音、平台特征
     supplementary_parts = []
@@ -234,7 +248,7 @@ def format_data_for_brand_role(
     return {
         "brief_section": brief_section,
         "research_context_section": research_context_section,
-        "insight_result": json.dumps(insight_result, ensure_ascii=False, indent=2),
+        "insight_focused_section": insight_focused_section,
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
         ),
@@ -242,6 +256,42 @@ def format_data_for_brand_role(
         "creative_references": creative_references,
         "news_media_section": news_media_section,
     }
+
+
+def _build_focused_tension_section(insight_result: dict, tension_id: int) -> str:
+    """从完整 insight 中提取指定 tension + 其关联的 opportunities，构建 focused 段落。
+
+    单 tension 自包含上下文（含 conventional_wisdom / data_reality / evidence），让 LLM
+    能基于"反直觉推理链"做角色推导，但完全聚焦此 tension 不被其他干扰。
+    """
+    tensions = insight_result.get("social_tensions") or []
+    opportunities = insight_result.get("brand_opportunities") or []
+
+    if not (0 <= tension_id < len(tensions)):
+        # 容错：tension_id 越界时降级为输出整个 insight
+        return json.dumps(insight_result, ensure_ascii=False, indent=2)
+
+    selected_tension = tensions[tension_id]
+    # 收集与该 tension 关联的 opportunities（按 related_tensions 字段过滤）
+    related_opps = [
+        opp for opp in opportunities
+        if isinstance(opp, dict)
+        and tension_id in (opp.get("related_tensions") or [])
+    ]
+    # 若无显式关联，至少给前 2 个 opportunities 作为参考（避免空白）
+    if not related_opps and opportunities:
+        related_opps = opportunities[:2]
+
+    focused = {
+        "selected_tension_id": tension_id,
+        "selected_tension": selected_tension,
+        "related_opportunities": related_opps,
+        "_note": (
+            "本分支基于此特定 tension 推导。其他 tensions 由其他分支独立处理，"
+            "**不要**综合或对标其他 tensions——保持本分支的独特视角。"
+        ),
+    }
+    return json.dumps(focused, ensure_ascii=False, indent=2)
 
 
 def parse_brand_role_response(response_text: str) -> dict[str, Any]:

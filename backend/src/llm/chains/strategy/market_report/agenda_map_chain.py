@@ -8,6 +8,8 @@ market_report 三层分析的**第 1 层**：agenda_map → landscape → strate
 
 - brief_section       : Brand Brief（主体 + 分析目标）
 - research_context_section : 研究问题 + 需求理解
+- coverage_signals    : 跨切片数据质量诊断（warnings + data_highlights），来自
+                        strategy.coverage_check_result，用于校准结论置信度
 - news_slice_data     : 所有 NewsSlice 的 insight 数据聚合（coverage/narratives/entities/key_quotes）
 - research_findings   : Research Agent 行业研究发现（自动注入）
 
@@ -36,6 +38,7 @@ from typing import Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
+from src.llm.chains.strategy.research_findings import format_coverage_signals
 from src.llm.llm import get_llm
 
 logger = logging.getLogger(__name__)
@@ -148,6 +151,8 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
+
+{coverage_signals}
 
 {research_findings}
 
@@ -265,6 +270,7 @@ def format_inputs_for_agenda_map(
     brief: dict | None = None,
     research_design: dict | None = None,
     research_findings: str = "",
+    coverage_check_result: dict | None = None,
 ) -> dict[str, Any]:
     """构建 Agenda Map chain 的输入参数字典。"""
     brief_section = ""
@@ -274,6 +280,7 @@ def format_inputs_for_agenda_map(
     return {
         "brief_section": brief_section,
         "research_context_section": _build_research_context_section(research_design),
+        "coverage_signals": format_coverage_signals(coverage_check_result),
         "research_findings": research_findings,
         "news_slice_data": _format_news_slices_for_agenda(news_slices),
     }

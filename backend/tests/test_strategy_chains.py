@@ -122,11 +122,18 @@ class TestParseBrandRole:
 class TestFormatBrandRole:
     def test_basic_format(self):
         result = format_data_for_brand_role(
-            insight_result={"social_tensions": []},
+            insight_result={
+                "social_tensions": [
+                    {"id": 0, "statement": "T0"},
+                    {"id": 1, "statement": "T1"},
+                ],
+            },
+            selected_tension_id=0,
             slices=[{"layers": {"focus": {"kol_voices": [{"text": "hi"}]}}}],
             brief=None,
         )
-        assert "social_tensions" in result["insight_result"]
+        # 多分支模式下注入 focused tension section 而非完整 insight_result
+        assert "insight_focused_section" in result
 
 
 # ==================== Big Idea (brand_strategy 第 3 层) ====================
@@ -159,9 +166,15 @@ class TestParseBigIdea:
 class TestFormatBigIdea:
     def test_basic_format(self):
         result = format_data_for_big_idea(
-            insight_result={"social_tensions": []},
-            brand_role_result={"brand_social_role": {}},
+            insight_result={
+                "social_tensions": [
+                    {"id": 0, "statement": "T0"},
+                ],
+            },
+            selected_tension_id=0,
+            branch_brand_role={"brand_social_role": {}},
             slices=[{"layers": {}, "foundation": {}}],
         )
-        assert "insight_result" in result
-        assert "brand_role_result" in result
+        # 多分支模式：注入 focused tension + 当前分支 brand_role
+        assert "insight_focused_section" in result
+        assert "branch_brand_role_section" in result

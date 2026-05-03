@@ -525,7 +525,8 @@ export interface NarrativeRepresentativeVoice {
 export interface NarrativeMapItem {
   theme: string
   framing: string
-  sentiment: 'positive' | 'neutral' | 'negative' | string
+  /** [-2, 2] 加权情感；缺失时为 null */
+  sentiment: number | null
   heat_rank: number
   supporting_sources: NarrativeSupportingSources
   representative_voices: NarrativeRepresentativeVoice[]
@@ -591,8 +592,8 @@ export interface CompetitivePlayer {
   name: string
   role: 'target' | 'competitor' | 'context' | string
   media_sov_pct: number
-  /** 后端 prompt 输出 number (-2 ~ 2)，但兼容 'positive'/'neutral'/'negative' 字符串 */
-  media_sentiment: number | 'positive' | 'neutral' | 'negative' | string | null
+  /** [-2, 2] 加权情感；0-source 玩家为 null */
+  media_sentiment: number | null
   source_count: number
   narrative_position: string
   /** 媒体围绕该玩家的代表性论述（2-3 条要点列表） */

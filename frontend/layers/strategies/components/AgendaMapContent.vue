@@ -206,6 +206,7 @@
 
 <script setup lang="ts">
 import type { AgendaMapResult, VoicePatternEntry } from '../types'
+import { sentimentColor, sentimentLabel } from '../composables/useStrategyConstants'
 import { UBadge } from '#components'
 
 const props = defineProps<{
@@ -281,28 +282,6 @@ const voicePatternSections = computed(() => {
   }
   return sections
 })
-
-const sentimentColor = (s: number | string) => {
-  if (typeof s === 'number') {
-    if (s > 0.6) return 'success' as const
-    if (s < 0.4) return 'error' as const
-    return 'neutral' as const
-  }
-  if (s === 'positive') return 'success' as const
-  if (s === 'negative') return 'error' as const
-  return 'neutral' as const
-}
-
-const sentimentLabel = (s: number | string) => {
-  if (typeof s === 'number') {
-    if (s > 0.6) return '正面'
-    if (s < 0.4) return '负面'
-    return '中性'
-  }
-  if (s === 'positive') return '正面'
-  if (s === 'negative') return '负面'
-  return '中性'
-}
 
 const credibilityColor = (c: string) => {
   if (c === 'high') return 'success' as const

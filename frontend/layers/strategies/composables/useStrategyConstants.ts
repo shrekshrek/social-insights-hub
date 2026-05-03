@@ -73,3 +73,37 @@ export const formatDate = (dateString: string): string => {
     minute: '2-digit',
   })
 }
+
+// ==================== Sentiment（情感数值映射）====================
+//
+// 后端策略产出层的 sentiment 字段（Agenda Map narrative.sentiment、
+// Landscape player.media_sentiment 等）统一为 [-2, 2] 加权数值；
+// 0-source 实体可能为 null。**不混用 'positive'/'negative' 字符串。**
+//
+// 阈值：±0.5
+//   -  >  0.5 → 正面（success 色）
+//   -  < -0.5 → 负面（error 色）
+//   - else    → 中性（neutral 色）
+//
+// 0.5 选择依据：[-2, 2] 全程 4 单位，±0.5 = 1/4 半程，对应"明显倾向"，
+// 避免把 0.1 等微弱倾向误标为正/负面（旧版用 0-1 范围阈值导致 0.0
+// 被误判为负面）。
+
+export type SentimentValue = number | null | undefined
+
+export const SENTIMENT_POSITIVE_THRESHOLD = 0.5
+export const SENTIMENT_NEGATIVE_THRESHOLD = -0.5
+
+export const sentimentColor = (s: SentimentValue): 'success' | 'error' | 'neutral' => {
+  if (typeof s !== 'number') return 'neutral'
+  if (s > SENTIMENT_POSITIVE_THRESHOLD) return 'success'
+  if (s < SENTIMENT_NEGATIVE_THRESHOLD) return 'error'
+  return 'neutral'
+}
+
+export const sentimentLabel = (s: SentimentValue): '正面' | '负面' | '中性' => {
+  if (typeof s !== 'number') return '中性'
+  if (s > SENTIMENT_POSITIVE_THRESHOLD) return '正面'
+  if (s < SENTIMENT_NEGATIVE_THRESHOLD) return '负面'
+  return '中性'
+}

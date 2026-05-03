@@ -42,22 +42,30 @@
           <p v-if="narrative.framing" class="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
             {{ narrative.framing }}
           </p>
-          <!-- 代表声音（折叠，只显示第一条，点击展开） -->
+          <!-- 代表声音：折叠状态显示第 1 条 + 截断 150 字符；展开后所有 voice 全文 -->
           <div v-if="narrative.representative_voices?.length" class="mt-1.5">
             <div
               v-for="(voice, vi) in expandedNarratives.has(idx) ? narrative.representative_voices : narrative.representative_voices.slice(0, 1)"
               :key="vi"
               class="text-xs text-gray-500 dark:text-gray-400 border-l-2 border-gray-200 dark:border-gray-700 pl-2 mt-1"
             >
-              <span class="italic">"{{ truncateText(voice.quote, 80) }}"</span>
+              <span class="italic">
+                "{{ expandedNarratives.has(idx) ? voice.quote : truncateText(voice.quote, 150) }}"
+              </span>
               <span class="text-gray-400 ml-1">— {{ voice.speaker || voice.source_name || '媒体' }}</span>
             </div>
             <button
-              v-if="narrative.representative_voices.length > 1"
+              v-if="narrative.representative_voices.length > 1 || (narrative.representative_voices[0]?.quote?.length ?? 0) > 150"
               class="mt-1 text-xs text-primary-500 hover:text-primary-600 cursor-pointer"
               @click="toggleNarrative(idx)"
             >
-              {{ expandedNarratives.has(idx) ? '收起' : `展开全部 ${narrative.representative_voices.length} 条引用` }}
+              {{
+                expandedNarratives.has(idx)
+                  ? '收起'
+                  : narrative.representative_voices.length > 1
+                    ? `展开全部 ${narrative.representative_voices.length} 条引用`
+                    : '展开全文'
+              }}
             </button>
           </div>
         </div>
@@ -67,25 +75,56 @@
     <!-- 议程博弈 -->
     <div v-if="result.agenda_battles?.length">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">议程博弈</h4>
-      <div class="space-y-2">
+      <div class="space-y-3">
         <div
           v-for="(battle, idx) in result.agenda_battles"
           :key="idx"
           class="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg"
         >
-          <p class="font-medium text-gray-900 dark:text-white text-sm">{{ battle.topic }}</p>
-          <div v-if="battle.sides?.length" class="mt-1.5 flex flex-wrap gap-2">
+          <p class="font-medium text-gray-900 dark:text-white text-sm">{{ battle.contested_topic }}</p>
+
+          <!-- 各方立场（camps） -->
+          <div v-if="battle.camps?.length" class="mt-2 space-y-2">
             <div
-              v-for="(side, si) in battle.sides"
-              :key="si"
-              class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 px-2 py-1 rounded"
+              v-for="(camp, ci) in battle.camps"
+              :key="ci"
+              class="bg-white dark:bg-gray-800 rounded p-2"
             >
-              <span class="font-medium">{{ side.stance }}</span>
-              <span class="text-gray-400 ml-1">{{ side.supporters_brief }}</span>
+              <div class="flex items-start justify-between gap-2 flex-wrap">
+                <span class="text-xs font-medium text-gray-800 dark:text-gray-200 flex-1">
+                  {{ camp.stance }}
+                </span>
+                <div v-if="camp.supporting_tiers?.length" class="flex gap-1 shrink-0">
+                  <span
+                    v-for="t in camp.supporting_tiers"
+                    :key="t"
+                    class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                  >
+                    {{ tierLabel(t) }}
+                  </span>
+                </div>
+              </div>
+              <ul
+                v-if="camp.sample_quotes?.length"
+                class="mt-1 space-y-0.5"
+              >
+                <li
+                  v-for="(q, qi) in camp.sample_quotes"
+                  :key="qi"
+                  class="text-[11px] text-gray-500 dark:text-gray-400 italic border-l-2 border-amber-200 dark:border-amber-800 pl-2"
+                >
+                  "{{ q }}"
+                </li>
+              </ul>
             </div>
           </div>
-          <p v-if="battle.dominant_side" class="mt-1 text-xs text-amber-600 dark:text-amber-400">
-            主导方：{{ battle.dominant_side }}
+
+          <!-- 战略含义 -->
+          <p
+            v-if="battle.implication"
+            class="mt-2 text-xs text-amber-700 dark:text-amber-300 leading-relaxed"
+          >
+            <span class="font-medium">含义：</span>{{ battle.implication }}
           </p>
         </div>
       </div>

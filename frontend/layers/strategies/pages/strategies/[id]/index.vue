@@ -392,27 +392,26 @@
             <InsightContent :result="insightData" />
           </BrandStrategyStageCard>
 
-          <BrandStrategyStageCard
-            stage="brand_role" title="Brand Role 品牌角色"
-            :has-result="!!strategy.brand_role_result" :can-generate="canEdit && canGenerateBrandRole" :can-edit="canEdit"
-            :generating="generatingBrandStrategyStage === 'brand_role'" :saving="savingBrandStrategyStage === 'brand_role'"
-            :result="strategy.brand_role_result"
-            @generate="handleGenerateBrandStrategyStage('brand_role')"
-            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('brand_role', r)"
-          >
-            <BrandRoleContent :result="brandRoleData" />
-          </BrandStrategyStageCard>
-
-          <BrandStrategyStageCard
-            stage="big_idea" title="Big Idea 创意"
-            :has-result="!!strategy.big_idea_result" :can-generate="canEdit && canGenerateBigIdea" :can-edit="canEdit"
-            :generating="generatingBrandStrategyStage === 'big_idea'" :saving="savingBrandStrategyStage === 'big_idea'"
-            :result="strategy.big_idea_result"
-            @generate="handleGenerateBrandStrategyStage('big_idea')"
-            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('big_idea', r)"
-          >
-            <BigIdeaContent :result="bigIdeaData" />
-          </BrandStrategyStageCard>
+          <BrandStrategyBranchesPanel
+            :branches="brandStrategyBranches"
+            :can-edit="canEdit"
+            :can-generate-brand-role="canEdit && canGenerateBrandRole"
+            :can-generate-big-idea="canEdit && canGenerateBigIdea"
+            :insight-ready="!!strategy.insight_result"
+            :generating-brand-role-all="generatingBrandStrategyStage === 'brand_role'"
+            :generating-big-idea-all="generatingBrandStrategyStage === 'big_idea'"
+            :regenerating-brand-role-id="regeneratingBrandRoleBranchId"
+            :regenerating-big-idea-id="regeneratingBigIdeaBranchId"
+            :saving-brand-role-id="savingBrandRoleBranchId"
+            :saving-big-idea-id="savingBigIdeaBranchId"
+            @generate-brand-role="(ids: number[] | undefined) => handleGenerateBrandStrategyStage('brand_role', ids)"
+            @generate-big-idea="(ids: number[] | undefined) => handleGenerateBrandStrategyStage('big_idea', ids)"
+            @select-branch="handleSelectBranch"
+            @regenerate-brand-role="handleRegenerateBrandRoleBranch"
+            @regenerate-big-idea="handleRegenerateBigIdeaBranch"
+            @save-brand-role="handleSaveBrandRoleBranch"
+            @save-big-idea="handleSaveBigIdeaBranch"
+          />
         </template>
 
         <!-- market_report 路径：Agenda Map → Landscape → Strategic Brief -->
@@ -490,27 +489,26 @@
             <InsightContent :result="insightData" />
           </BrandStrategyStageCard>
 
-          <BrandStrategyStageCard
-            stage="brand_role" title="Brand Role 品牌角色"
-            :has-result="!!strategy.brand_role_result" :can-generate="canEdit && canGenerateBrandRole" :can-edit="canEdit"
-            :generating="generatingBrandStrategyStage === 'brand_role'" :saving="savingBrandStrategyStage === 'brand_role'"
-            :result="strategy.brand_role_result"
-            @generate="handleGenerateBrandStrategyStage('brand_role')"
-            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('brand_role', r)"
-          >
-            <BrandRoleContent :result="brandRoleData" />
-          </BrandStrategyStageCard>
-
-          <BrandStrategyStageCard
-            stage="big_idea" title="Big Idea 创意"
-            :has-result="!!strategy.big_idea_result" :can-generate="canEdit && canGenerateBigIdea" :can-edit="canEdit"
-            :generating="generatingBrandStrategyStage === 'big_idea'" :saving="savingBrandStrategyStage === 'big_idea'"
-            :result="strategy.big_idea_result"
-            @generate="handleGenerateBrandStrategyStage('big_idea')"
-            @save="(r: Record<string, unknown>) => handleSaveBrandStrategyStage('big_idea', r)"
-          >
-            <BigIdeaContent :result="bigIdeaData" />
-          </BrandStrategyStageCard>
+          <BrandStrategyBranchesPanel
+            :branches="brandStrategyBranches"
+            :can-edit="canEdit"
+            :can-generate-brand-role="canEdit && canGenerateBrandRole"
+            :can-generate-big-idea="canEdit && canGenerateBigIdea"
+            :insight-ready="!!strategy.insight_result"
+            :generating-brand-role-all="generatingBrandStrategyStage === 'brand_role'"
+            :generating-big-idea-all="generatingBrandStrategyStage === 'big_idea'"
+            :regenerating-brand-role-id="regeneratingBrandRoleBranchId"
+            :regenerating-big-idea-id="regeneratingBigIdeaBranchId"
+            :saving-brand-role-id="savingBrandRoleBranchId"
+            :saving-big-idea-id="savingBigIdeaBranchId"
+            @generate-brand-role="(ids: number[] | undefined) => handleGenerateBrandStrategyStage('brand_role', ids)"
+            @generate-big-idea="(ids: number[] | undefined) => handleGenerateBrandStrategyStage('big_idea', ids)"
+            @select-branch="handleSelectBranch"
+            @regenerate-brand-role="handleRegenerateBrandRoleBranch"
+            @regenerate-big-idea="handleRegenerateBigIdeaBranch"
+            @save-brand-role="handleSaveBrandRoleBranch"
+            @save-big-idea="handleSaveBigIdeaBranch"
+          />
         </template>
       </div>
     </ClientOnly>
@@ -548,8 +546,6 @@
 import type {
   StrategyStatus,
   InsightResult,
-  BrandRoleResult,
-  BigIdeaResult,
   AgendaMapResult,
   LandscapeResult,
   StrategicBriefResult,
@@ -636,8 +632,10 @@ const canGenerateBrandRole = computed(() => {
   return currentStatusOrder.value >= STATUS_ORDER.insight_done
 })
 const canGenerateBigIdea = computed(() => {
-  if (isFullStrategyPath.value) return !!strategy.value?.brand_role_result
-  return currentStatusOrder.value >= STATUS_ORDER.brand_role_done
+  // 多分支模式：任一分支已生成 brand_role 即可推导 big_idea
+  const hasAnyBrandRole = brandStrategyBranches.value.some(b => b.brand_role)
+  if (isFullStrategyPath.value) return hasAnyBrandRole
+  return currentStatusOrder.value >= STATUS_ORDER.brand_role_done && hasAnyBrandRole
 })
 
 // market_report 路径门控：Agenda Map → Landscape → Strategic Brief
@@ -656,8 +654,7 @@ const dimensionNames = computed(() =>
 )
 
 const insightData = computed(() => (strategy.value?.insight_result || null) as InsightResult | null)
-const brandRoleData = computed(() => (strategy.value?.brand_role_result || null) as BrandRoleResult | null)
-const bigIdeaData = computed(() => (strategy.value?.big_idea_result || null) as BigIdeaResult | null)
+const brandStrategyBranches = computed(() => strategy.value?.brand_strategy_branches || [])
 
 const agendaMapData = computed(() => (strategy.value?.agenda_map_result || null) as AgendaMapResult | null)
 const landscapeData = computed(() => (strategy.value?.landscape_result || null) as LandscapeResult | null)
@@ -922,10 +919,14 @@ const handleAdjustSlices = async (adjustments: AdjustSliceItem[]) => {
 const generatingBrandStrategyStage = ref<BrandStrategyStage | null>(null)
 const savingBrandStrategyStage = ref<BrandStrategyStage | null>(null)
 
-const handleGenerateBrandStrategyStage = async (stage: BrandStrategyStage) => {
+const handleGenerateBrandStrategyStage = async (
+  stage: BrandStrategyStage,
+  tensionIds?: number[],
+) => {
   generatingBrandStrategyStage.value = stage
   try {
-    await strategiesApi.generateBrandStrategyStage(strategyId.value, stage)
+    // insight 是单一结果不接受 tensionIds；brand_role/big_idea 可选子集
+    await strategiesApi.generateBrandStrategyStage(strategyId.value, stage, tensionIds)
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
@@ -940,12 +941,83 @@ const handleSaveBrandStrategyStage = async (
 ) => {
   savingBrandStrategyStage.value = stage
   try {
+    // insight 单一结果，不传 tension_id；brand_role / big_idea 已在分支级 handler 处理
     await strategiesApi.editBrandStrategyStage(strategyId.value, stage, result)
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
   } catch {
     // 错误已由 useApi 处理
   } finally {
     savingBrandStrategyStage.value = null
+  }
+}
+
+// ── 多分支：单分支 select / regenerate / save ──────────────────────────────────
+
+const regeneratingBrandRoleBranchId = ref<number | null>(null)
+const regeneratingBigIdeaBranchId = ref<number | null>(null)
+const savingBrandRoleBranchId = ref<number | null>(null)
+const savingBigIdeaBranchId = ref<number | null>(null)
+
+const handleSelectBranch = async (tensionId: number) => {
+  try {
+    await strategiesApi.selectBrandStrategyBranch(strategyId.value, tensionId)
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+  } catch {
+    // 错误已由 useApi 处理
+  }
+}
+
+const handleRegenerateBrandRoleBranch = async (tensionId: number) => {
+  regeneratingBrandRoleBranchId.value = tensionId
+  try {
+    await strategiesApi.regenerateBrandRoleBranch(strategyId.value, tensionId)
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+  } catch {
+    // 错误已由 useApi 处理
+  } finally {
+    regeneratingBrandRoleBranchId.value = null
+  }
+}
+
+const handleRegenerateBigIdeaBranch = async (tensionId: number) => {
+  regeneratingBigIdeaBranchId.value = tensionId
+  try {
+    await strategiesApi.regenerateBigIdeaBranch(strategyId.value, tensionId)
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+  } catch {
+    // 错误已由 useApi 处理
+  } finally {
+    regeneratingBigIdeaBranchId.value = null
+  }
+}
+
+const handleSaveBrandRoleBranch = async (
+  tensionId: number,
+  result: Record<string, unknown>,
+) => {
+  savingBrandRoleBranchId.value = tensionId
+  try {
+    await strategiesApi.editBrandStrategyStage(strategyId.value, 'brand_role', result, tensionId)
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+  } catch {
+    // 错误已由 useApi 处理
+  } finally {
+    savingBrandRoleBranchId.value = null
+  }
+}
+
+const handleSaveBigIdeaBranch = async (
+  tensionId: number,
+  result: Record<string, unknown>,
+) => {
+  savingBigIdeaBranchId.value = tensionId
+  try {
+    await strategiesApi.editBrandStrategyStage(strategyId.value, 'big_idea', result, tensionId)
+    strategy.value = await strategiesApi.fetchStrategy(strategyId.value)
+  } catch {
+    // 错误已由 useApi 处理
+  } finally {
+    savingBigIdeaBranchId.value = null
   }
 }
 

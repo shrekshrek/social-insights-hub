@@ -31,6 +31,43 @@ def _load_result(result_data: dict | None) -> dict:
     return result_data
 
 
+def format_coverage_signals(coverage_check_result: dict | None) -> str:
+    """注入跨切片的数据质量诊断信号到产出层 chain。
+
+    只输出 warnings + data_highlights —— 这两类是 LLM 看任一单 slice 看不出来的
+    **跨 slice / 跨 RQ 共性诊断**。per-RQ status (covered/partial/uncovered) 不注入：
+    LLM 看证据数量 (mentions / source_count) 自然能推断置信度，重复打标价值低。
+    """
+    if not coverage_check_result or not isinstance(coverage_check_result, dict):
+        return ""
+
+    warnings = [
+        w for w in (coverage_check_result.get("warnings") or [])
+        if isinstance(w, str) and w.strip()
+    ]
+    highlights = [
+        h for h in (coverage_check_result.get("data_highlights") or [])
+        if isinstance(h, str) and h.strip()
+    ]
+
+    if not warnings and not highlights:
+        return ""
+
+    parts = ["## 数据质量与亮点（来自 coverage_check）"]
+    if warnings:
+        parts.append(
+            "\n**跨切片数据稀疏/质量警告**（影响下列 RQ 的结论置信度——"
+            "引用相关证据时请用 hedging 措辞，避免做强断言）："
+        )
+        parts.extend(f"- ⚠ {w}" for w in warnings)
+    if highlights:
+        parts.append(
+            "\n**跨切片数据亮点**（高密度信号，可作为重点结论的支撑）："
+        )
+        parts.extend(f"- ★ {h}" for h in highlights)
+    return "\n".join(parts)
+
+
 def format_research_for_insight(result_data: dict | None) -> str:
     """Insight 层（brand_strategy 第 1 层）：完整研究发现
 

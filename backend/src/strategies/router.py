@@ -23,6 +23,8 @@ from .models import Strategy
 from .schemas import (
     AdjustSlicesRequest,
     ApproveProbeResponse,
+    BranchActionRequest,
+    BrandStrategyBatchGenerateRequest,
     CollectionStatusResponse,
     ConfirmResearchRequest,
     ConfirmResearchResponse,
@@ -367,12 +369,17 @@ async def generate_insight(
     summary="生成 brand_strategy 第 2 层: Brand Role (品牌角色)",
 )
 async def generate_brand_role(
+    data: BrandStrategyBatchGenerateRequest | None = None,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_strategy_write),
 ):
-    """AI 生成 Brand Role: Brand Social Role + Social Strategy"""
-    updated = await service.generate_brand_role(db, strategy)
+    """AI 生成 Brand Role: Brand Social Role + Social Strategy。
+
+    body 可选 `tension_ids` 指定要生成的 tension 子集（省略=全跑模式，重置所有分支）。
+    """
+    tension_ids = data.tension_ids if data else None
+    updated = await service.generate_brand_role(db, strategy, tension_ids=tension_ids)
     return await service._strategy_read(db, updated)
 
 
@@ -383,12 +390,18 @@ async def generate_brand_role(
     summary="生成 brand_strategy 第 3 层: Big Idea (创意)",
 )
 async def generate_big_idea(
+    data: BrandStrategyBatchGenerateRequest | None = None,
     strategy: Strategy = Depends(validate_strategy_access),
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_strategy_write),
 ):
-    """AI 生成 Big Idea: Big Idea + Content Strategy"""
-    updated = await service.generate_big_idea(db, strategy)
+    """AI 生成 Big Idea: Big Idea + Content Strategy。
+
+    body 可选 `tension_ids` 指定要生成的 tension 子集（仅对已有 brand_role 的分支生效；
+    省略=全跑模式，对所有 brand_role 已完成的分支并行跑）。
+    """
+    tension_ids = data.tension_ids if data else None
+    updated = await service.generate_big_idea(db, strategy, tension_ids=tension_ids)
     return await service._strategy_read(db, updated)
 
 
@@ -479,9 +492,9 @@ async def edit_brand_role(
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_strategy_write),
 ):
-    """编辑 Brand Role 结果（自动清除 big_idea）"""
+    """编辑指定分支的 Brand Role 结果（必填 tension_id；同分支 big_idea 会被清空）"""
     updated = await service.edit_brand_strategy_result(
-        db, strategy, stage="brand_role", result=data.result
+        db, strategy, stage="brand_role", result=data.result, tension_id=data.tension_id
     )
     return await service._strategy_read(db, updated)
 
@@ -498,9 +511,69 @@ async def edit_big_idea(
     db: AsyncSession = Depends(get_async_db),
     _: User = Depends(require_strategy_write),
 ):
-    """编辑 Big Idea 结果"""
+    """编辑指定分支的 Big Idea 结果（必填 tension_id；触发分支间相似度重检）"""
     updated = await service.edit_brand_strategy_result(
-        db, strategy, stage="big_idea", result=data.result
+        db, strategy, stage="big_idea", result=data.result, tension_id=data.tension_id
+    )
+    return await service._strategy_read(db, updated)
+
+
+# ---- 多分支专属端点 ----
+
+
+@router.post(
+    "/{strategy_id}/branches/select",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="选定分支（设 selected=true）",
+)
+async def select_brand_strategy_branch(
+    data: BranchActionRequest,
+    strategy: Strategy = Depends(validate_strategy_access),
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
+):
+    """将指定分支标记为 selected=true，其他分支 selected=false。
+    selected 影响导出（仅导出 selected 分支）和 UI 默认展示。"""
+    updated = await service.select_branch(db, strategy, tension_id=data.tension_id)
+    return await service._strategy_read(db, updated)
+
+
+@router.post(
+    "/{strategy_id}/branches/regenerate-brand-role",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="单分支重生成 Brand Role",
+)
+async def regenerate_brand_role_branch_endpoint(
+    data: BranchActionRequest,
+    strategy: Strategy = Depends(validate_strategy_access),
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
+):
+    """仅对指定分支重新生成 Brand Role（同分支 big_idea 同步作废）。
+    其他分支不受影响。"""
+    updated = await service.regenerate_brand_role_branch(
+        db, strategy, tension_id=data.tension_id
+    )
+    return await service._strategy_read(db, updated)
+
+
+@router.post(
+    "/{strategy_id}/branches/regenerate-big-idea",
+    response_model=StrategyRead,
+    status_code=status.HTTP_200_OK,
+    summary="单分支重生成 Big Idea",
+)
+async def regenerate_big_idea_branch_endpoint(
+    data: BranchActionRequest,
+    strategy: Strategy = Depends(validate_strategy_access),
+    db: AsyncSession = Depends(get_async_db),
+    _: User = Depends(require_strategy_write),
+):
+    """仅对指定分支重新生成 Big Idea。"""
+    updated = await service.regenerate_big_idea_branch(
+        db, strategy, tension_id=data.tension_id
     )
     return await service._strategy_read(db, updated)
 

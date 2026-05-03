@@ -95,7 +95,7 @@ class Strategy(Base):
 
     # ④ 产出生成
     # output_type 决定走哪条产出路径（两条路径都是 3 层递进）：
-    #   - campaign_strategy: 填充 insight_result → brand_role_result → big_idea_result
+    #   - campaign_strategy: 填充 insight_result → brand_strategy_branches（多分支）
     #   - market_report:  填充 agenda_map_result → landscape_result → strategic_brief_result
     output_type: Mapped[str | None] = mapped_column(
         String(30), nullable=True,
@@ -103,15 +103,20 @@ class Strategy(Base):
     )
     insight_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True,
-        comment="campaign_strategy 第 1 层 Insight: Tension + Opportunity",
+        comment="campaign_strategy 第 1 层 Insight: 含多 tensions + opportunities",
     )
-    brand_role_result: Mapped[dict | None] = mapped_column(
+    # campaign_strategy 第 2/3 层：每个 tension 一个独立分支
+    # 结构: [{tension_id, tension_summary, brand_role, big_idea, selected, status,
+    #        error_message?}]
+    # - tension_id: insight_result.social_tensions 的 index（0-based）
+    # - tension_summary: tension 一句话摘要（便于 UI 快速参考）
+    # - brand_role / big_idea: 该分支独立产出（与其他分支隔离）
+    # - selected: 用户最终选定的分支（仅一个为 true）
+    # - status: pending | brand_role_done | big_idea_done | failed
+    # - error_message: 该分支生成失败时的错误信息（可选）
+    brand_strategy_branches: Mapped[list | None] = mapped_column(
         JSON, nullable=True,
-        comment="campaign_strategy 第 2 层 Brand Role: Role + Strategy",
-    )
-    big_idea_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True,
-        comment="campaign_strategy 第 3 层 Big Idea: Big Idea + Content Strategy",
+        comment="campaign_strategy 第 2/3 层多分支：每个 insight tension 独立 brand_role + big_idea 路径",
     )
     agenda_map_result: Mapped[dict | None] = mapped_column(
         JSON, nullable=True,

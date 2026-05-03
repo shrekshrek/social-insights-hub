@@ -209,29 +209,90 @@ export const useStrategiesApi = () => {
   // ==================== ④ 产出生成 ====================
 
   // 生成 campaign_strategy 路径的某一层
-  const generateBrandStrategyStage = async (id: number, stage: BrandStrategyStage) => {
+  // brand_role / big_idea 支持子集模式：传 tensionIds=[0,2] 仅生成这两个分支
+  // 不传或传 undefined：全跑模式（insight 是单一结果，不接受 tensionIds）
+  const generateBrandStrategyStage = async (
+    id: number,
+    stage: BrandStrategyStage,
+    tensionIds?: number[],
+  ) => {
+    const body = tensionIds && tensionIds.length > 0
+      ? { tension_ids: tensionIds }
+      : undefined
     const result = await apiRequest<Strategy>(
       `/strategies/${id}/generate/${toKebab(stage)}`,
-      { method: 'POST' }
+      { method: 'POST', body }
     )
-    showSuccess(`${BRAND_STRATEGY_STAGE_LABELS[stage]} 生成完成`)
+    const subsetLabel = tensionIds?.length ? `（${tensionIds.length} 个分支）` : ''
+    showSuccess(`${BRAND_STRATEGY_STAGE_LABELS[stage]} 生成完成${subsetLabel}`)
     return result
   }
 
   // 编辑 campaign_strategy 路径的某一层结果
+  // brand_role / big_idea 是多分支：tensionId 必填，定位要编辑的分支；
+  // insight 单一结果，tensionId 不传。
   const editBrandStrategyStage = async (
     id: number,
     stage: BrandStrategyStage,
     result: Record<string, unknown>,
+    tensionId?: number,
   ) => {
+    const body: Record<string, unknown> = { result }
+    if (stage !== 'insight') {
+      if (tensionId === undefined) {
+        throw new Error(`编辑 ${stage} 必须指定 tension_id`)
+      }
+      body.tension_id = tensionId
+    }
     const updated = await apiRequest<Strategy>(
       `/strategies/${id}/${toKebab(stage)}`,
       {
         method: 'PUT',
-        body: { result },
+        body,
       }
     )
     showSuccess('已保存修改')
+    return updated
+  }
+
+  // ==================== 多分支专属操作 ====================
+
+  // 选定分支（仅一条 selected=true，影响导出和 UI 默认展示）
+  const selectBrandStrategyBranch = async (id: number, tensionId: number) => {
+    const updated = await apiRequest<Strategy>(
+      `/strategies/${id}/branches/select`,
+      {
+        method: 'POST',
+        body: { tension_id: tensionId },
+      }
+    )
+    showSuccess('已设为主推分支')
+    return updated
+  }
+
+  // 单分支重生成 brand_role（同步作废该分支 big_idea）
+  const regenerateBrandRoleBranch = async (id: number, tensionId: number) => {
+    const updated = await apiRequest<Strategy>(
+      `/strategies/${id}/branches/regenerate-brand-role`,
+      {
+        method: 'POST',
+        body: { tension_id: tensionId },
+      }
+    )
+    showSuccess(`分支 #${tensionId + 1} Brand Role 重生成完成`)
+    return updated
+  }
+
+  // 单分支重生成 big_idea
+  const regenerateBigIdeaBranch = async (id: number, tensionId: number) => {
+    const updated = await apiRequest<Strategy>(
+      `/strategies/${id}/branches/regenerate-big-idea`,
+      {
+        method: 'POST',
+        body: { tension_id: tensionId },
+      }
+    )
+    showSuccess(`分支 #${tensionId + 1} Big Idea 重生成完成`)
     return updated
   }
 
@@ -324,6 +385,9 @@ export const useStrategiesApi = () => {
     adjustSlices,
     generateBrandStrategyStage,
     editBrandStrategyStage,
+    selectBrandStrategyBranch,
+    regenerateBrandRoleBranch,
+    regenerateBigIdeaBranch,
     generateMarketReportStage,
     editMarketReportStage,
     exportStrategy,

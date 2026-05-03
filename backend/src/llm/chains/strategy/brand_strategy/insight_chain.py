@@ -20,6 +20,8 @@ brand_strategy 三阶段递进分析的**第 1 层**：insight → brand_role �
 
 - brief_section     : 品牌 Brief（目标/竞品/关注维度），来自 strategy.brand_brief
 - research_context_section: 研究问题 + 需求理解摘要，来自 strategy.research_design
+- coverage_signals  : 跨切片数据质量诊断（warnings + data_highlights），来自
+                      strategy.coverage_check_result，用于校准结论置信度
 - slice_data        : 所有关联切片的聚合分析数据，由 format_slice_data_for_insight() 构建
 - news_media_section: 新闻切片补充段落（campaign / full_strategy 都注入原始数据）
 - landscape_context_section: 仅 full_strategy 注入 Landscape 已结构化的
@@ -58,6 +60,7 @@ from typing import Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
+from src.llm.chains.strategy.research_findings import format_coverage_signals
 from src.llm.llm import get_llm
 
 logger = logging.getLogger(__name__)
@@ -116,7 +119,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
         {{"type": "topic_sentiment", "description": "具体数据发现", "source": "slice数据"}},
         {{"type": "opinion_cluster", "description": "具体数据发现", "source": "slice数据"}}
       ],
-      "confidence": "high/medium/low"
+      "confidence": "high/medium/low",
+      "research_questions_addressed": ["rq1", "rq3"]
     }}
   ],
   "brand_opportunities": [
@@ -126,7 +130,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
       "evidence": [
         {{"type": "sov_gap", "description": "具体数据发现", "source": "slice数据"}}
       ],
-      "related_tensions": [0]
+      "related_tensions": [0],
+      "research_questions_addressed": ["rq2"]
     }}
   ]
 }}
@@ -136,6 +141,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - brand_opportunities: 1-2 条，每条引用相关 tension 的索引
 - evidence 至少 2 条，类型可选: topic_sentiment, opinion_cluster, sov_gap, quadrant_position, kol_voice, unmet_need, audience_insight, organic_vs_mixed_sentiment, topic_category_pattern
 - confidence: high(数据充分)/medium(有支撑但需验证)/low(推测性)
+- **research_questions_addressed（必填）**：每条 tension / opportunity 必须用 RQ id 列表标明它回应了 research_context_section 中的哪些 RQ；若结论是数据中浮现的额外洞察、不直接对应任何 RQ，填空数组 `[]`，但**不要漏写字段**
+- 若 `coverage_signals` 段落对某 RQ 标注了「数据稀疏/警告」，回应该 RQ 的 tension/opportunity 必须使用 hedging 措辞（如"初步迹象"、"有限数据显示"），不得做强断言
 - 如切片数据中包含 audiences（受众画像），需标注哪类人群最受此 Tension 影响，以及哪类人群是品牌机会的主要触达对象
 
 ## 字段解读
@@ -179,6 +186,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
+
+{coverage_signals}
 
 {research_findings}
 
@@ -339,6 +348,7 @@ def format_slice_data_for_insight(
     research_design: dict | None = None,
     news_slices: list[dict] | None = None,
     research_findings: str = "",
+    coverage_check_result: dict | None = None,
 ) -> dict[str, Any]:
     """将切片 result_data 格式化为 Insight (洞察层) 输入
 
@@ -582,9 +592,12 @@ def format_slice_data_for_insight(
 
     news_media_section = _format_news_media_section(news_slices or [])
 
+    coverage_signals = format_coverage_signals(coverage_check_result)
+
     return {
         "brief_section": brief_section,
         "research_context_section": research_context_section,
+        "coverage_signals": coverage_signals,
         "slice_data": slice_data,
         "research_findings": research_findings,
         "news_media_section": news_media_section,

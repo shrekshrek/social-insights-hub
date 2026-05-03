@@ -773,6 +773,7 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
         research_design=strategy.research_design,
         news_slices=news_slices_data,  # 原始新闻切片始终注入（一阶事实信号）
         research_findings=research_findings_text,
+        coverage_check_result=strategy.coverage_check_result,
     )
     # full_strategy 路径：在原始新闻数据基础上，**额外**注入 Landscape 已结构化的
     # 竞争格局作为对标参考。Landscape 是二阶 LLM 解读（players / positioning_map /
@@ -830,8 +831,10 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
         job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
         strategy.insight_result = result
-        strategy.brand_role_result = None
-        strategy.big_idea_result = None
+        # 重新生成 insight 后，tensions 可能变化，下游所有分支作废
+        strategy.brand_strategy_branches = None
+        # 立即按新 tensions 初始化 pending 骨架（让前端能展示 tension 列表 + 多选 UI）
+        strategy.brand_strategy_branches = _ensure_branches_skeleton(strategy)
         # full_strategy：Insight 是 Landscape 之后的子阶段，status 保持 landscape_done
         # 避免从 landscape_done(6) 回退到 insight_done(5) 引发后续状态校验混乱
         if strategy.output_type != "full_strategy":
@@ -852,8 +855,140 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
         raise
 
 
-async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
-    """生成 campaign_strategy 第 2 层 (策略): Brand Social Role + Social Strategy"""
+def _build_tension_summary(tension: dict) -> str:
+    """从 tension 构造一句话摘要（≤80 字符），用于 UI 快速参考。"""
+    statement = (tension.get("statement") or "").strip()
+    if len(statement) <= 80:
+        return statement
+    return statement[:77] + "..."
+
+
+def _ensure_branches_skeleton(strategy: Strategy) -> list[dict]:
+    """从 insight_result 初始化或刷新 branches 骨架。
+
+    - tensions 数量增加（refine 后）：补齐缺失 branches
+    - tensions 数量减少：保留所有现有 branches（不删旧产出，用户可手动删）
+    - 已存在的 branch 不动（保留 brand_role / big_idea 已生成结果）
+    """
+    insight = strategy.insight_result or {}
+    tensions = insight.get("social_tensions") or []
+    branches = list(strategy.brand_strategy_branches or [])
+    existing_ids = {b.get("tension_id") for b in branches if isinstance(b, dict)}
+
+    for idx, tension in enumerate(tensions):
+        if idx in existing_ids:
+            continue
+        branches.append({
+            "tension_id": idx,
+            "tension_summary": _build_tension_summary(tension),
+            "brand_role": None,
+            "big_idea": None,
+            "selected": False,
+            "status": "pending",
+        })
+    # 按 tension_id 排序保持稳定顺序
+    branches.sort(key=lambda b: b.get("tension_id", 0))
+    return branches
+
+
+async def _run_brand_role_for_one_branch(
+    branch_idx: int,
+    selected_tension_id: int,
+    insight_result: dict,
+    slices_data: list[dict],
+    news_slices_data: list[dict],
+    brief: dict | None,
+    research_design: dict | None,
+    research_findings_text: str,
+    creative_references_text: str,
+) -> tuple[int, dict | None, dict | None, float, Exception | None]:
+    """单分支 brand_role 调用 worker（不碰 DB session）。
+
+    Returns:
+        (branch_idx, result, token_usage, duration, error)
+    """
+    chain = create_brand_role_chain()
+    inputs = format_data_for_brand_role(
+        insight_result,
+        selected_tension_id=selected_tension_id,
+        slices=slices_data,
+        brief=brief,
+        research_design=research_design,
+        news_slices=news_slices_data,
+        research_findings=research_findings_text,
+        creative_references=creative_references_text,
+    )
+    start = time.time()
+    try:
+        response = await chain.ainvoke(inputs)
+        duration = time.time() - start
+        result = parse_brand_role_response(response.content)
+        result["data_provenance"] = _build_data_provenance(
+            slices_data, news_slices_data,
+            primary_channel="social_media",
+            research_findings=research_findings_text,
+        )
+        return (branch_idx, result, extract_token_usage(response, duration_seconds=duration), duration, None)
+    except Exception as exc:
+        return (branch_idx, None, None, time.time() - start, exc)
+
+
+async def _run_big_idea_for_one_branch(
+    branch_idx: int,
+    selected_tension_id: int,
+    branch_brand_role: dict,
+    insight_result: dict,
+    slices_data: list[dict],
+    news_slices_data: list[dict],
+    brief: dict | None,
+    research_design: dict | None,
+    research_findings_text: str,
+    creative_references_text: str,
+) -> tuple[int, dict | None, dict | None, float, Exception | None]:
+    """单分支 big_idea 调用 worker（不碰 DB session）。"""
+    chain = create_big_idea_chain()
+    inputs = format_data_for_big_idea(
+        insight_result,
+        selected_tension_id=selected_tension_id,
+        branch_brand_role=branch_brand_role,
+        slices=slices_data,
+        brief=brief,
+        research_design=research_design,
+        news_slices=news_slices_data,
+        research_findings=research_findings_text,
+        creative_references=creative_references_text,
+    )
+    start = time.time()
+    try:
+        response = await chain.ainvoke(inputs)
+        duration = time.time() - start
+        result = parse_big_idea_response(response.content)
+        result["data_provenance"] = _build_data_provenance(
+            slices_data, news_slices_data,
+            primary_channel="social_media",
+            research_findings=research_findings_text,
+        )
+        return (branch_idx, result, extract_token_usage(response, duration_seconds=duration), duration, None)
+    except Exception as exc:
+        return (branch_idx, None, None, time.time() - start, exc)
+
+
+async def generate_brand_role(
+    db: AsyncSession,
+    strategy: Strategy,
+    *,
+    tension_ids: list[int] | None = None,
+) -> Strategy:
+    """生成 campaign_strategy 第 2 层 (策略): 多分支 Brand Role 并行生成
+
+    两种模式：
+    - tension_ids=None：**全跑模式**——重置所有分支 brand_role/big_idea/selected/status，
+      然后并行跑全部分支（"重新全跑"语义）
+    - tension_ids=[...]：**子集模式**——仅清空指定分支的 brand_role + big_idea + status，
+      并仅对它们并行跑；未指定的分支保留当前状态（含已生成的 brand_role / big_idea / selected）
+
+    单分支失败不影响其他分支（独立 try/except，failed branch 写 error_message 仍 commit）。
+    """
     # full_strategy：status 在 landscape_done(6) 之后不经过 insight_done(5)，
     # 用 insight_result 存在性代替 status 校验
     if strategy.output_type == "full_strategy":
@@ -866,6 +1001,13 @@ async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="请先完成并确认洞察层",
+        )
+
+    tensions = (strategy.insight_result or {}).get("social_tensions") or []
+    if not tensions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Insight 阶段未产出任何 tensions，无法推导 brand_role",
         )
 
     slices_data = await load_strategy_inputs(db, strategy)
@@ -882,17 +1024,41 @@ async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
     creative_result = await _retrieve_creative_research_findings(db, strategy, "BrandRole")
     creative_references_text = format_creative_for_brand_role(creative_result)
 
-    chain = create_brand_role_chain()
-    inputs = format_data_for_brand_role(
-        strategy.insight_result,
-        slices_data,
-        strategy.brand_brief,
-        research_design=strategy.research_design,
-        news_slices=news_slices_data,
-        research_findings=research_findings_text,
-        creative_references=creative_references_text,
-    )
+    # 初始化/补齐分支骨架（覆盖所有 insight tensions）
+    branches = _ensure_branches_skeleton(strategy)
 
+    if tension_ids is None:
+        # 全跑模式：重置所有分支
+        for b in branches:
+            b["brand_role"] = None
+            b["big_idea"] = None
+            b["selected"] = False
+            b["status"] = "pending"
+        branches_to_run = branches
+    else:
+        # 子集模式：严格校验所有 tension_ids 都存在；仅清空指定分支，保留其他（不动 selected）
+        existing_ids = {b.get("tension_id") for b in branches}
+        target_ids = set(tension_ids)
+        unknown_ids = sorted(target_ids - existing_ids)
+        if unknown_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"tension_ids 包含不存在的分支: {unknown_ids}（已有分支 tension_id={sorted(existing_ids)}）",
+            )
+        branches_to_run = [
+            b for b in branches if b.get("tension_id") in target_ids
+        ]
+        if not branches_to_run:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="tension_ids 不能为空",
+            )
+        for b in branches_to_run:
+            b["brand_role"] = None
+            b["big_idea"] = None
+            b["status"] = "pending"
+
+    # 创建跨分支 AnalysisJob（一次记录所有运行分支的总成本）
     job = await create_analysis_job_async(
         db,
         social_monitor_id=strategy.social_monitor_id,
@@ -901,57 +1067,123 @@ async def generate_brand_role(db: AsyncSession, strategy: Strategy) -> Strategy:
         analysis_type=AnalysisType.STRATEGY_BRAND_ROLE.value,
         source_count=len(slices_data) + len(news_slices_data),
         status="running",
-        analysis_config={"strategy_id": strategy.id},
+        analysis_config={
+            "strategy_id": strategy.id,
+            "branch_count": len(branches_to_run),
+            "subset_mode": tension_ids is not None,
+            "target_tension_ids": tension_ids,
+        },
     )
 
+    overall_start = time.time()
     try:
-        start = time.time()
-        response = await chain.ainvoke(inputs)
-        duration = time.time() - start
+        # 所有要跑的分支并行调用 LLM（不共享 DB session，纯外部 API 调用）
+        results = await asyncio.gather(*[
+            _run_brand_role_for_one_branch(
+                branch_idx=b["tension_id"],
+                selected_tension_id=b["tension_id"],
+                insight_result=strategy.insight_result,
+                slices_data=slices_data,
+                news_slices_data=news_slices_data,
+                brief=strategy.brand_brief,
+                research_design=strategy.research_design,
+                research_findings_text=research_findings_text,
+                creative_references_text=creative_references_text,
+            )
+            for b in branches_to_run
+        ])
 
-        result = parse_brand_role_response(response.content)
-        result["data_provenance"] = _build_data_provenance(
-            slices_data, news_slices_data,
-            primary_channel="social_media",
-            research_findings=research_findings_text,
-        )
-        logger.info("Strategy %d Brand Role 生成完成 (%.1fs)", strategy.id, duration)
+        # 写回 branches + 聚合 token usage
+        success_count = 0
+        failed_count = 0
+        total_token_usage: dict[str, Any] = {}
+        for branch_idx, result, token_usage, duration, error in results:
+            target = next((b for b in branches if b.get("tension_id") == branch_idx), None)
+            if target is None:
+                continue
+            if error is not None:
+                target["status"] = "failed"
+                target["brand_role"] = None
+                target["error_message"] = str(error)[:500]
+                failed_count += 1
+                logger.error(
+                    "Strategy %d branch %d brand_role 失败: %s",
+                    strategy.id, branch_idx, error,
+                )
+            else:
+                target["status"] = "brand_role_done"
+                target["brand_role"] = result
+                target.pop("error_message", None)
+                success_count += 1
+                if token_usage:
+                    total_token_usage = _merge_token_usage_dicts(total_token_usage, token_usage)
+                logger.info(
+                    "Strategy %d branch %d brand_role 完成 (%.1fs)",
+                    strategy.id, branch_idx, duration,
+                )
 
-        now = datetime.now(timezone.utc)
-        job.status = "completed"
-        job.completed_at = now
-        job.analyzed_count = 1
-        job.processing_time = int(duration)
-        job.token_usage = extract_token_usage(response, duration_seconds=duration)
+        if success_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"所有 {len(branches_to_run)} 个分支的 brand_role 生成都失败",
+            )
 
-        strategy.brand_role_result = result
-        strategy.big_idea_result = None
-        # full_strategy：status 保持 landscape_done，不推进到 brand_role_done(6=landscape_done)
-        # 防止 STATUS_ORDER 比较混乱（两者 order 相同，但避免歧义语义）
+        strategy.brand_strategy_branches = branches
+        flag_modified(strategy, "brand_strategy_branches")
+        # 任一分支成功即推进 status；full_strategy 路径保持 landscape_done
         if strategy.output_type != "full_strategy":
             strategy.status = "brand_role_done"
+
+        # 更新 AnalysisJob
+        overall_duration = time.time() - overall_start
+        job.status = "completed" if failed_count == 0 else "completed"  # 部分失败也算完成
+        job.completed_at = datetime.now(timezone.utc)
+        job.analyzed_count = success_count
+        job.processing_time = int(overall_duration)
+        job.token_usage = total_token_usage or None
+        job.error_message = (
+            f"{failed_count}/{len(branches_to_run)} 分支生成失败" if failed_count else None
+        )
 
         await db.commit()
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
-        logger.error("Strategy %d Brand Role 生成失败: %s", strategy.id, exc, exc_info=True)
+        logger.error("Strategy %d Brand Role 多分支生成失败: %s", strategy.id, exc, exc_info=True)
         try:
             job.status = "failed"
             job.error_message = str(exc)[:500]
             job.completed_at = datetime.now(timezone.utc)
-            job.processing_time = int(time.time() - start)
+            job.processing_time = int(time.time() - overall_start)
             await db.commit()
         except Exception:
             await db.rollback()
         raise
 
 
-async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
-    """生成 campaign_strategy 第 3 层 (创意): Big Idea + Content Strategy"""
+async def generate_big_idea(
+    db: AsyncSession,
+    strategy: Strategy,
+    *,
+    tension_ids: list[int] | None = None,
+) -> Strategy:
+    """生成 campaign_strategy 第 3 层 (创意): 多分支 Big Idea 并行生成
+
+    两种模式：
+    - tension_ids=None：**全跑模式**——对所有 `brand_role` 已生成的分支并行跑 big_idea
+    - tension_ids=[...]：**子集模式**——仅对指定的「且 brand_role 已生成」的分支跑
+
+    无论哪种模式，都跳过 brand_role 未生成 / failed / pending 的分支（big_idea 依赖 brand_role）。
+    单分支失败不影响其他分支。
+    """
     # full_strategy：status 在 landscape_done(6) 之后不经过 brand_role_done(6)，
-    # 用 brand_role_result 存在性代替 status 校验
+    # 用 brand_strategy_branches 是否含 brand_role 代替 status 校验
+    branches = list(strategy.brand_strategy_branches or [])
+    all_with_brand_role = [
+        b for b in branches if isinstance(b, dict) and b.get("brand_role")
+    ]
+
     if strategy.output_type == "full_strategy":
-        if not strategy.brand_role_result:
+        if not all_with_brand_role:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="full_strategy 路径：请先完成 Brand Role（策略层）分析，再生成 Big Idea",
@@ -961,6 +1193,42 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
             status_code=status.HTTP_409_CONFLICT,
             detail="请先完成并确认策略层",
         )
+
+    if not all_with_brand_role:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="所有分支的 brand_role 都未生成，无法推导 big_idea",
+        )
+
+    # 子集模式：严格校验所有 tension_ids 都对应「存在 + 已生成 brand_role」的分支
+    if tension_ids is None:
+        branches_to_run = all_with_brand_role
+    else:
+        existing_ids = {b.get("tension_id") for b in branches}
+        ready_ids = {b.get("tension_id") for b in all_with_brand_role}
+        target_ids = set(tension_ids)
+        unknown_ids = sorted(target_ids - existing_ids)
+        if unknown_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"tension_ids 包含不存在的分支: {unknown_ids}",
+            )
+        not_ready_ids = sorted(target_ids - ready_ids)
+        if not_ready_ids:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"以下分支尚未生成 brand_role，无法推导 big_idea: {not_ready_ids}"
+                ),
+            )
+        if not target_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="tension_ids 不能为空",
+            )
+        branches_to_run = [
+            b for b in all_with_brand_role if b.get("tension_id") in target_ids
+        ]
 
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
@@ -976,17 +1244,305 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
     creative_result = await _retrieve_creative_research_findings(db, strategy, "BigIdea")
     creative_references_text = format_creative_for_big_idea(creative_result)
 
-    chain = create_big_idea_chain()
-    inputs = format_data_for_big_idea(
-        strategy.insight_result,
-        strategy.brand_role_result,
-        slices_data,
-        strategy.brand_brief,
-        research_design=strategy.research_design,
-        news_slices=news_slices_data,
-        research_findings=research_findings_text,
-        creative_references=creative_references_text,
+    job = await create_analysis_job_async(
+        db,
+        social_monitor_id=strategy.social_monitor_id,
+        news_monitor_id=strategy.news_monitor_id,
+        user_id=strategy.user_id,
+        analysis_type=AnalysisType.STRATEGY_BIG_IDEA.value,
+        source_count=len(slices_data) + len(news_slices_data),
+        status="running",
+        analysis_config={
+            "strategy_id": strategy.id,
+            "branch_count": len(branches_to_run),
+            "subset_mode": tension_ids is not None,
+            "target_tension_ids": tension_ids,
+        },
     )
+
+    overall_start = time.time()
+    try:
+        # 对要跑的分支并行生成 big_idea
+        results = await asyncio.gather(*[
+            _run_big_idea_for_one_branch(
+                branch_idx=b["tension_id"],
+                selected_tension_id=b["tension_id"],
+                branch_brand_role=b["brand_role"],
+                insight_result=strategy.insight_result,
+                slices_data=slices_data,
+                news_slices_data=news_slices_data,
+                brief=strategy.brand_brief,
+                research_design=strategy.research_design,
+                research_findings_text=research_findings_text,
+                creative_references_text=creative_references_text,
+            )
+            for b in branches_to_run
+        ])
+
+        success_count = 0
+        failed_count = 0
+        total_token_usage: dict[str, Any] = {}
+        for branch_idx, result, token_usage, duration, error in results:
+            target = next((b for b in branches if b.get("tension_id") == branch_idx), None)
+            if target is None:
+                continue
+            if error is not None:
+                target["status"] = "failed"
+                target["big_idea"] = None
+                target["error_message"] = str(error)[:500]
+                failed_count += 1
+                logger.error(
+                    "Strategy %d branch %d big_idea 失败: %s",
+                    strategy.id, branch_idx, error,
+                )
+            else:
+                target["status"] = "big_idea_done"
+                target["big_idea"] = result
+                target.pop("error_message", None)
+                success_count += 1
+                if token_usage:
+                    total_token_usage = _merge_token_usage_dicts(total_token_usage, token_usage)
+                logger.info(
+                    "Strategy %d branch %d big_idea 完成 (%.1fs)",
+                    strategy.id, branch_idx, duration,
+                )
+
+        if success_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"所有 {len(branches_to_run)} 个分支的 big_idea 生成都失败",
+            )
+
+        strategy.brand_strategy_branches = branches
+        flag_modified(strategy, "brand_strategy_branches")
+        strategy.status = "completed"
+
+        overall_duration = time.time() - overall_start
+        job.status = "completed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.analyzed_count = success_count
+        job.processing_time = int(overall_duration)
+        job.token_usage = total_token_usage or None
+        job.error_message = (
+            f"{failed_count}/{len(branches_to_run)} 分支生成失败" if failed_count else None
+        )
+
+        await db.commit()
+        fire_notification(
+            feishu_tmpl.big_idea_done_card(strategy.name, strategy.id),
+            _strategy_open_ids(strategy),
+        )
+        return await get_strategy_by_id(db, strategy.id)
+    except Exception as exc:
+        logger.error("Strategy %d Big Idea 多分支生成失败: %s", strategy.id, exc, exc_info=True)
+        try:
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - overall_start)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        raise
+
+
+async def select_branch(
+    db: AsyncSession,
+    strategy: Strategy,
+    *,
+    tension_id: int,
+) -> Strategy:
+    """将指定分支标记为 selected=true，其他分支 selected=false。
+
+    selected 标志影响导出（仅导出 selected 分支）和 UI 默认展示。
+    分支必须存在；selected 不要求该分支已完成 big_idea（允许用户选定一条进行中的方向）。
+    """
+    branches = list(strategy.brand_strategy_branches or [])
+    target = next(
+        (b for b in branches if isinstance(b, dict) and b.get("tension_id") == tension_id),
+        None,
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"分支 tension_id={tension_id} 不存在",
+        )
+    for b in branches:
+        if isinstance(b, dict):
+            b["selected"] = b.get("tension_id") == tension_id
+
+    strategy.brand_strategy_branches = branches
+    flag_modified(strategy, "brand_strategy_branches")
+    await db.commit()
+    return await get_strategy_by_id(db, strategy.id)
+
+
+async def regenerate_brand_role_branch(
+    db: AsyncSession,
+    strategy: Strategy,
+    *,
+    tension_id: int,
+) -> Strategy:
+    """单分支重生成 brand_role：仅刷新指定 tension 的 brand_role + 清空其 big_idea。"""
+    if strategy.output_type and strategy.output_type not in ("campaign_strategy", "full_strategy"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"当前策略产出路径为 {strategy.output_type}，无法生成 brand_role",
+        )
+    if not strategy.insight_result:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="请先完成 Insight（洞察层）分析，再生成 Brand Role",
+        )
+
+    branches = list(strategy.brand_strategy_branches or [])
+    target = next(
+        (b for b in branches if isinstance(b, dict) and b.get("tension_id") == tension_id),
+        None,
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"分支 tension_id={tension_id} 不存在",
+        )
+
+    slices_data = await load_strategy_inputs(db, strategy)
+    news_slices_data = await load_strategy_news_inputs(db, strategy)
+    _validate_slices_have_data(slices_data, strategy, news_slices_data)
+
+    research_result = await _retrieve_research_findings(db, strategy, "BrandRole")
+    from src.llm.chains.strategy.research_findings import (
+        format_creative_for_brand_role,
+        format_research_for_brand_role,
+    )
+    research_findings_text = format_research_for_brand_role(research_result)
+
+    creative_result = await _retrieve_creative_research_findings(db, strategy, "BrandRole")
+    creative_references_text = format_creative_for_brand_role(creative_result)
+
+    job = await create_analysis_job_async(
+        db,
+        social_monitor_id=strategy.social_monitor_id,
+        news_monitor_id=strategy.news_monitor_id,
+        user_id=strategy.user_id,
+        analysis_type=AnalysisType.STRATEGY_BRAND_ROLE.value,
+        source_count=len(slices_data) + len(news_slices_data),
+        status="running",
+        analysis_config={
+            "strategy_id": strategy.id,
+            "branch_count": 1,
+            "tension_id": tension_id,
+        },
+    )
+
+    overall_start = time.time()
+    try:
+        branch_idx, result, token_usage, duration, error = await _run_brand_role_for_one_branch(
+            branch_idx=tension_id,
+            selected_tension_id=tension_id,
+            insight_result=strategy.insight_result,
+            slices_data=slices_data,
+            news_slices_data=news_slices_data,
+            brief=strategy.brand_brief,
+            research_design=strategy.research_design,
+            research_findings_text=research_findings_text,
+            creative_references_text=creative_references_text,
+        )
+
+        if error is not None:
+            target["status"] = "failed"
+            target["brand_role"] = None
+            target["error_message"] = str(error)[:500]
+            job.status = "failed"
+            job.error_message = str(error)[:500]
+        else:
+            target["brand_role"] = result
+            target["big_idea"] = None  # 上游变更，下游作废
+            target["status"] = "brand_role_done"
+            target.pop("error_message", None)
+            job.status = "completed"
+            job.analyzed_count = 1
+            job.token_usage = token_usage or None
+
+        job.completed_at = datetime.now(timezone.utc)
+        job.processing_time = int(time.time() - overall_start)
+
+        strategy.brand_strategy_branches = branches
+        flag_modified(strategy, "brand_strategy_branches")
+        if error is None and strategy.output_type != "full_strategy":
+            strategy.status = "brand_role_done"
+
+        await db.commit()
+        if error is not None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"分支 tension_id={tension_id} brand_role 生成失败: {error}",
+            )
+        logger.info(
+            "Strategy %d branch %d brand_role 单分支重生成完成 (%.1fs)",
+            strategy.id, tension_id, duration,
+        )
+        return await get_strategy_by_id(db, strategy.id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Strategy %d branch %d brand_role 单分支重生成失败: %s",
+            strategy.id, tension_id, exc, exc_info=True,
+        )
+        try:
+            job.status = "failed"
+            job.error_message = str(exc)[:500]
+            job.completed_at = datetime.now(timezone.utc)
+            job.processing_time = int(time.time() - overall_start)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        raise
+
+
+async def regenerate_big_idea_branch(
+    db: AsyncSession,
+    strategy: Strategy,
+    *,
+    tension_id: int,
+) -> Strategy:
+    """单分支重生成 big_idea：仅刷新指定 tension 的 big_idea。"""
+    if strategy.output_type and strategy.output_type not in ("campaign_strategy", "full_strategy"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"当前策略产出路径为 {strategy.output_type}，无法生成 big_idea",
+        )
+
+    branches = list(strategy.brand_strategy_branches or [])
+    target = next(
+        (b for b in branches if isinstance(b, dict) and b.get("tension_id") == tension_id),
+        None,
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"分支 tension_id={tension_id} 不存在",
+        )
+    if not target.get("brand_role"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"分支 tension_id={tension_id} 尚未生成 brand_role，无法推导 big_idea",
+        )
+
+    slices_data = await load_strategy_inputs(db, strategy)
+    news_slices_data = await load_strategy_news_inputs(db, strategy)
+    _validate_slices_have_data(slices_data, strategy, news_slices_data)
+
+    research_result = await _retrieve_research_findings(db, strategy, "BigIdea")
+    from src.llm.chains.strategy.research_findings import (
+        format_creative_for_big_idea,
+        format_research_for_big_idea,
+    )
+    research_findings_text = format_research_for_big_idea(research_result)
+
+    creative_result = await _retrieve_creative_research_findings(db, strategy, "BigIdea")
+    creative_references_text = format_creative_for_big_idea(creative_result)
 
     job = await create_analysis_job_async(
         db,
@@ -996,46 +1552,90 @@ async def generate_big_idea(db: AsyncSession, strategy: Strategy) -> Strategy:
         analysis_type=AnalysisType.STRATEGY_BIG_IDEA.value,
         source_count=len(slices_data) + len(news_slices_data),
         status="running",
-        analysis_config={"strategy_id": strategy.id},
+        analysis_config={
+            "strategy_id": strategy.id,
+            "branch_count": 1,
+            "tension_id": tension_id,
+        },
     )
 
+    overall_start = time.time()
     try:
-        start = time.time()
-        response = await chain.ainvoke(inputs)
-        duration = time.time() - start
-
-        result = parse_big_idea_response(response.content)
-        result["data_provenance"] = _build_data_provenance(
-            slices_data, news_slices_data,
-            primary_channel="social_media",
-            research_findings=research_findings_text,
+        branch_idx, result, token_usage, duration, error = await _run_big_idea_for_one_branch(
+            branch_idx=tension_id,
+            selected_tension_id=tension_id,
+            branch_brand_role=target["brand_role"],
+            insight_result=strategy.insight_result,
+            slices_data=slices_data,
+            news_slices_data=news_slices_data,
+            brief=strategy.brand_brief,
+            research_design=strategy.research_design,
+            research_findings_text=research_findings_text,
+            creative_references_text=creative_references_text,
         )
-        logger.info("Strategy %d Big Idea 生成完成 (%.1fs)", strategy.id, duration)
 
-        now = datetime.now(timezone.utc)
-        job.status = "completed"
-        job.completed_at = now
-        job.analyzed_count = 1
-        job.processing_time = int(duration)
-        job.token_usage = extract_token_usage(response, duration_seconds=duration)
+        if error is not None:
+            target["status"] = "failed"
+            target["big_idea"] = None
+            target["error_message"] = str(error)[:500]
+            job.status = "failed"
+            job.error_message = str(error)[:500]
+        else:
+            target["big_idea"] = result
+            target["status"] = "big_idea_done"
+            target.pop("error_message", None)
+            job.status = "completed"
+            job.analyzed_count = 1
+            job.token_usage = token_usage or None
 
-        strategy.big_idea_result = result
-        strategy.status = "completed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.processing_time = int(time.time() - overall_start)
+
+        strategy.brand_strategy_branches = branches
+        flag_modified(strategy, "brand_strategy_branches")
+        if error is None and strategy.output_type != "full_strategy":
+            strategy.status = "completed"
 
         await db.commit()
-        fire_notification(feishu_tmpl.big_idea_done_card(strategy.name, strategy.id), _strategy_open_ids(strategy))
+        if error is not None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"分支 tension_id={tension_id} big_idea 生成失败: {error}",
+            )
+        logger.info(
+            "Strategy %d branch %d big_idea 单分支重生成完成 (%.1fs)",
+            strategy.id, tension_id, duration,
+        )
         return await get_strategy_by_id(db, strategy.id)
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.error("Strategy %d Big Idea 生成失败: %s", strategy.id, exc, exc_info=True)
+        logger.error(
+            "Strategy %d branch %d big_idea 单分支重生成失败: %s",
+            strategy.id, tension_id, exc, exc_info=True,
+        )
         try:
             job.status = "failed"
             job.error_message = str(exc)[:500]
             job.completed_at = datetime.now(timezone.utc)
-            job.processing_time = int(time.time() - start)
+            job.processing_time = int(time.time() - overall_start)
             await db.commit()
         except Exception:
             await db.rollback()
         raise
+
+
+def _merge_token_usage_dicts(a: dict, b: dict | None) -> dict:
+    """累加两个 token_usage dict（用于聚合多 branch 的 LLM 调用成本）"""
+    if not b:
+        return a
+    merged = dict(a)
+    for key, val in b.items():
+        if isinstance(val, (int, float)):
+            merged[key] = merged.get(key, 0) + val
+        elif key not in merged:
+            merged[key] = val
+    return merged
 
 
 # ==================== market_report 路径 agenda_map / landscape / strategic_brief ====================
@@ -1063,11 +1663,14 @@ async def edit_brand_strategy_result(
     *,
     stage: str,
     result: dict[str, Any],
+    tension_id: int | None = None,
 ) -> Strategy:
     """编辑 campaign_strategy 路径的 insight / brand_role / big_idea 结果。
 
-    编辑上游层会级联清除下游层（避免陈旧结果与新修改冲突），
-    并根据 stage 把 strategy.status 回退到对应节点。
+    - insight: 单一结果。编辑会让所有分支作废（tensions 可能变化），
+      下次生成 brand_role 时会按新 tensions 重建分支骨架。
+    - brand_role / big_idea: 多分支，必须传 tension_id 指定要编辑的分支；
+      编辑 brand_role 会清空该分支的 big_idea。
     """
     if strategy.output_type and strategy.output_type not in ("campaign_strategy", "full_strategy"):
         raise HTTPException(
@@ -1093,32 +1696,58 @@ async def edit_brand_strategy_result(
                 detail="insight 层尚未生成，无法编辑",
             )
         strategy.insight_result = result
-        strategy.brand_role_result = None
-        strategy.big_idea_result = None
+        # 编辑 insight 后 tensions 可能变化，下游所有分支作废 + 按新 tensions 重建 pending 骨架
+        strategy.brand_strategy_branches = None
+        strategy.brand_strategy_branches = _ensure_branches_skeleton(strategy)
         # full_strategy：insight 是 landscape 之后的子阶段，保持 landscape_done
         if not is_full:
             strategy.status = "insight_done"
-    elif stage == "brand_role":
-        if not strategy.brand_role_result:
+        flag_modified(strategy, "insight_result")
+    else:
+        # brand_role / big_idea：按分支编辑
+        if tension_id is None:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="brand_role 层尚未生成，无法编辑",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"编辑 {stage} 必须指定 tension_id",
             )
-        strategy.brand_role_result = result
-        strategy.big_idea_result = None
-        # full_strategy：brand_role 是 landscape 之后的子阶段，保持 landscape_done
-        if not is_full:
-            strategy.status = "brand_role_done"
-    else:  # stage == "big_idea"
-        if not strategy.big_idea_result:
+        branches = list(strategy.brand_strategy_branches or [])
+        target = next(
+            (b for b in branches if isinstance(b, dict) and b.get("tension_id") == tension_id),
+            None,
+        )
+        if target is None:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="big_idea 层尚未生成，无法编辑",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"分支 tension_id={tension_id} 不存在",
             )
-        strategy.big_idea_result = result
-        strategy.status = "completed"
 
-    flag_modified(strategy, f"{stage}_result")
+        if stage == "brand_role":
+            if not target.get("brand_role"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"分支 tension_id={tension_id} 的 brand_role 尚未生成，无法编辑",
+                )
+            target["brand_role"] = result
+            # 清空该分支下游 big_idea
+            target["big_idea"] = None
+            target["status"] = "brand_role_done"
+            if not is_full:
+                # 任何分支有 brand_role 即视为推进到 brand_role_done
+                strategy.status = "brand_role_done"
+        else:  # stage == "big_idea"
+            if not target.get("big_idea"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"分支 tension_id={tension_id} 的 big_idea 尚未生成，无法编辑",
+                )
+            target["big_idea"] = result
+            target["status"] = "big_idea_done"
+            if not is_full:
+                strategy.status = "completed"
+
+        strategy.brand_strategy_branches = branches
+        flag_modified(strategy, "brand_strategy_branches")
+
     await db.commit()
     return await get_strategy_by_id(db, strategy.id)
 
@@ -1163,8 +1792,7 @@ async def edit_market_report_result(
         # full_strategy：清空依赖 landscape 的 insight/brand_role/big_idea
         if is_full:
             strategy.insight_result = None
-            strategy.brand_role_result = None
-            strategy.big_idea_result = None
+            strategy.brand_strategy_branches = None
         strategy.status = "agenda_map_done"
     elif stage == "landscape":
         if not strategy.landscape_result:
@@ -1177,8 +1805,7 @@ async def edit_market_report_result(
         # full_strategy：清空依赖 landscape 的 insight/brand_role/big_idea
         if is_full:
             strategy.insight_result = None
-            strategy.brand_role_result = None
-            strategy.big_idea_result = None
+            strategy.brand_strategy_branches = None
         strategy.status = "landscape_done"
     else:  # stage == "strategic_brief"
         if not strategy.strategic_brief_result:
@@ -1218,6 +1845,7 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         brief=strategy.brand_brief,
         research_design=strategy.research_design,
         research_findings=research_findings_text,
+        coverage_check_result=strategy.coverage_check_result,
     )
 
     job = await create_analysis_job_async(
@@ -1258,8 +1886,7 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         # full_strategy：insight/brand_role/big_idea 依赖 landscape，需同步清空
         if strategy.output_type == "full_strategy":
             strategy.insight_result = None
-            strategy.brand_role_result = None
-            strategy.big_idea_result = None
+            strategy.brand_strategy_branches = None
         strategy.status = "agenda_map_done"
 
         await db.commit()
@@ -1340,8 +1967,7 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         # full_strategy：insight/brand_role/big_idea 依赖 landscape，重新生成时需清空
         if strategy.output_type == "full_strategy":
             strategy.insight_result = None
-            strategy.brand_role_result = None
-            strategy.big_idea_result = None
+            strategy.brand_strategy_branches = None
         strategy.status = "landscape_done"
 
         await db.commit()

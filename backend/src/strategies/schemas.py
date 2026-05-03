@@ -14,10 +14,11 @@ if TYPE_CHECKING:
 
 
 # 产出路径：
-#   campaign_strategy 填充 insight_result / brand_role_result / big_idea_result（三层递进）
+#   campaign_strategy 填充 insight_result（含多 tensions） + brand_strategy_branches
+#                     （每 tension 一个独立 brand_role + big_idea 分支）
 #   market_report  填充 agenda_map_result / landscape_result / strategic_brief_result（三层递进）
 #   full_strategy  先走 market_report 路径（agenda_map → landscape），
-#                  再走 campaign_strategy 路径（insight* → brand_role → big_idea）
+#                  再走 campaign_strategy 多分支路径（insight* → 多分支 brand_role + big_idea）
 OutputType = Literal["campaign_strategy", "market_report", "full_strategy"]
 
 # 主数据源：决定产出路径（campaign_strategy vs market_report）
@@ -68,6 +69,31 @@ class StageResultEdit(CustomBaseModel):
     """编辑阶段结果请求"""
 
     result: dict = Field(..., description="阶段结果 JSON")
+    tension_id: int | None = Field(
+        None,
+        ge=0,
+        description="多分支编辑必填：要编辑的分支 tension_id（仅 brand_role/big_idea 编辑使用）",
+    )
+
+
+class BranchActionRequest(CustomBaseModel):
+    """分支操作请求（select / 单分支 regenerate）"""
+
+    tension_id: int = Field(..., ge=0, description="目标分支 tension_id")
+
+
+class BrandStrategyBatchGenerateRequest(CustomBaseModel):
+    """brand_role / big_idea 批量生成请求
+
+    - tension_ids=None / 省略：全跑模式——重置所有分支并并行生成（"重新全跑"语义）
+    - tension_ids=[...]：子集模式——仅对指定 tensions 跑，未指定的分支保留现有状态
+      （"增量探索"语义，等同于多次 regenerate_X_branch 但合并为一次 LLM 批次 / 一条 Job）
+    """
+
+    tension_ids: list[int] | None = Field(
+        None,
+        description="指定要生成的 tension 子集（省略=全跑模式）",
+    )
 
 
 # ==================== 研究设计 Schemas ====================
@@ -424,10 +450,11 @@ class StrategyRead(CustomBaseModel):
 
     # ④ 产出生成
     output_type: OutputType | None = None
-    # campaign_strategy 路径（insight → brand_role → big_idea）
+    # campaign_strategy 路径（insight → 多分支 brand_role + big_idea）
     insight_result: dict | None = None
-    brand_role_result: dict | None = None
-    big_idea_result: dict | None = None
+    # 多分支：每个 tension 一个独立 brand_role + big_idea 路径
+    # 元素结构: {tension_id, tension_summary, brand_role, big_idea, selected, status, error_message?}
+    brand_strategy_branches: list[dict] | None = None
     # market_report 路径（agenda_map → landscape → strategic_brief）
     agenda_map_result: dict | None = None
     landscape_result: dict | None = None
@@ -469,8 +496,7 @@ class StrategyRead(CustomBaseModel):
             coverage_check_result=strategy.coverage_check_result,
             output_type=strategy.output_type,  # type: ignore[arg-type]
             insight_result=strategy.insight_result,
-            brand_role_result=strategy.brand_role_result,
-            big_idea_result=strategy.big_idea_result,
+            brand_strategy_branches=strategy.brand_strategy_branches,
             agenda_map_result=strategy.agenda_map_result,
             landscape_result=strategy.landscape_result,
             strategic_brief_result=strategy.strategic_brief_result,

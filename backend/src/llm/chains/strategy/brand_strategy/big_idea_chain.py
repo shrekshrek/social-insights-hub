@@ -7,14 +7,19 @@ brand_strategy 三阶段递进分析的**第 3 层（终层）**：insight → b
 
 - brief_section  : 品牌 Brief，与前两层一致
 - research_context_section: 研究问题 + 需求理解摘要
-- insight_result    : insight 层完整 JSON（social_tensions + brand_opportunities）
-- brand_role_result : brand_role 层完整 JSON（brand_social_role + social_strategy）
+- insight_focused_section : 当前分支聚焦的单一 tension + 相关 opportunities（多分支模式）
+- branch_brand_role_section : 当前分支的 brand_role 结果（与该 tension 同源）
 - slice_data        : 切片数据（与 insight 层相同来源，但仅提取 big_idea 层所需字段）
                       包含高互动内容特征、KOL 生态、受众画像、topic_aspects
 
 ## 关键设计决策
 
-1. **insight + brand_role 同时传入，而非仅传入 brand_role**
+1. **多分支模式（v2026-05+）**
+   - 每个 tension 走独立 brand_role + big_idea 路径
+   - 本 chain 只看当前分支的 tension + brand_role，不看其他分支
+   - 不同分支的 big_idea 应有明显差异化（同品牌不同创意概念由 tension+role 共同决定）
+
+2. **insight + brand_role 同时传入，而非仅传入 brand_role**
    - Big Idea 需直接"回应核心 Social Tension"，evidence 引用 insight:tension:X
    - 仅传入 brand_role 会导致 LLM 产出的 Big Idea 与原始矛盾脱节，只是策略的复述
 
@@ -56,12 +61,17 @@ logger = logging.getLogger(__name__)
 SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察推导创意概念和内容方向。
 
 ## 任务
-基于已确认的洞察层（insight）和策略层（brand_role）结果，推导：
+基于**当前分支**的洞察层 tension（insight_focused_section）+ 该分支的策略层 brand_role
+（branch_brand_role_section）结果，推导：
 1. **Big Idea（创意概念）**：用一个创意概念统领整个传播。
 2. **Content Strategy（内容策略）**：具体的内容支柱和方向。
 
+**多分支约束**：当前分支的 big_idea 应与**该 tension + 该 brand_role 紧密绑定**——
+每个 tension 切入下的 big_idea 应有差异化创意视角，不要产出"放之四海皆准"的概念。
+其他分支由其他 tensions 走独立路径，**不要去综合或对标其他分支**。
+
 ## 分析框架
-- Big Idea 应回应核心 Social Tension，体现 Brand Social Role
+- Big Idea 应回应当前分支的核心 Social Tension，体现该分支的 Brand Social Role
 - Content Strategy 应基于高互动内容分析和 KOL 生态
 - 每个内容支柱需要具体可执行
 
@@ -137,13 +147,13 @@ USER_TEMPLATE = """{brief_section}
 
 {creative_references}
 
-## 洞察层 (Insight) 结果
+## 当前分支聚焦的 Tension（Insight 单分支结果）
 
-{insight_result}
+{insight_focused_section}
 
-## 策略层 (Brand Role) 结果
+## 当前分支的策略层 (Brand Role) 结果
 
-{brand_role_result}
+{branch_brand_role_section}
 
 ## 补充数据（高互动内容 + KOL 生态）
 
@@ -163,32 +173,70 @@ def create_big_idea_chain() -> Runnable:
     return prompt | llm
 
 
-def _slim_insight(insight_result: dict) -> dict:
-    """insight 结论精简：剔除 evidence（big_idea 层只需结论，不需要推理链）"""
-    tensions = [
-        {
-            "statement": t.get("statement"),
-            "conventional_wisdom": t.get("conventional_wisdom"),
-            "data_reality": t.get("data_reality"),
-            "confidence": t.get("confidence"),
-        }
-        for t in (insight_result.get("social_tensions") or [])
+def _slim_insight_focused(insight_result: dict, tension_id: int) -> dict:
+    """提取指定 tension + 相关 opportunities，剔除 evidence（big_idea 层只需结论）
+
+    多分支模式：仅传当前分支聚焦的 tension，不要把其他 tensions 喂给 LLM。
+    """
+    tensions = insight_result.get("social_tensions") or []
+    opportunities = insight_result.get("brand_opportunities") or []
+
+    if not (0 <= tension_id < len(tensions)):
+        # 容错：tension_id 越界时降级为传所有 tensions（避免 KeyError）
+        slim_tensions = [
+            {
+                "statement": t.get("statement"),
+                "conventional_wisdom": t.get("conventional_wisdom"),
+                "data_reality": t.get("data_reality"),
+                "confidence": t.get("confidence"),
+            }
+            for t in tensions
+        ]
+        slim_opps = [
+            {
+                "statement": o.get("statement"),
+                "why_non_obvious": o.get("why_non_obvious"),
+                "related_tensions": o.get("related_tensions"),
+            }
+            for o in opportunities
+        ]
+        return {"social_tensions": slim_tensions, "brand_opportunities": slim_opps}
+
+    selected_tension = tensions[tension_id]
+    related_opps = [
+        opp for opp in opportunities
+        if isinstance(opp, dict)
+        and tension_id in (opp.get("related_tensions") or [])
     ]
-    opportunities = [
-        {
-            "statement": o.get("statement"),
-            "why_non_obvious": o.get("why_non_obvious"),
-            "related_tensions": o.get("related_tensions"),
-        }
-        for o in (insight_result.get("brand_opportunities") or [])
-    ]
-    return {"social_tensions": tensions, "brand_opportunities": opportunities}
+    if not related_opps and opportunities:
+        related_opps = opportunities[:2]
+
+    return {
+        "selected_tension_id": tension_id,
+        "selected_tension": {
+            "statement": selected_tension.get("statement"),
+            "conventional_wisdom": selected_tension.get("conventional_wisdom"),
+            "data_reality": selected_tension.get("data_reality"),
+            "confidence": selected_tension.get("confidence"),
+        },
+        "related_opportunities": [
+            {
+                "statement": o.get("statement"),
+                "why_non_obvious": o.get("why_non_obvious"),
+            }
+            for o in related_opps
+        ],
+        "_note": (
+            "本分支基于此特定 tension 推导。其他分支独立处理其他 tensions，"
+            "**不要**综合或对标——保持本分支创意视角的独特性。"
+        ),
+    }
 
 
-def _slim_brand_role(brand_role_result: dict) -> dict:
+def _slim_brand_role(branch_brand_role: dict) -> dict:
     """brand_role 结论精简：剔除 evidence"""
-    role = brand_role_result.get("brand_social_role") or {}
-    strategy = brand_role_result.get("social_strategy") or {}
+    role = branch_brand_role.get("brand_social_role") or {}
+    strategy = branch_brand_role.get("social_strategy") or {}
     return {
         "brand_social_role": {
             "statement": role.get("statement"),
@@ -204,7 +252,8 @@ def _slim_brand_role(brand_role_result: dict) -> dict:
 
 def format_data_for_big_idea(
     insight_result: dict,
-    brand_role_result: dict,
+    selected_tension_id: int,
+    branch_brand_role: dict,
     slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
@@ -212,10 +261,12 @@ def format_data_for_big_idea(
     research_findings: str = "",
     creative_references: str = "",
 ) -> dict[str, Any]:
-    """将 insight + brand_role 结果 + 补充数据格式化为 big_idea 层输入
+    """将单一 tension 分支的 insight + brand_role + 补充数据格式化为 big_idea 输入
 
-    insight / brand_role 只传结论字段，剔除 evidence 数组——big_idea 层只需知道
-    「得出了什么结论」，不需要重新审阅推理链，可节省约 30-50% 输入 token。
+    Args:
+        insight_result: 完整 insight 输出（含多 tensions），内部提取 selected_tension
+        selected_tension_id: 当前分支聚焦的 tension index
+        branch_brand_role: 当前分支的 brand_role 结果（与该 tension 同源）
     """
     from src.llm.chains.strategy.brand_strategy.insight_chain import (
         _build_research_context_section,
@@ -305,8 +356,13 @@ def format_data_for_big_idea(
     return {
         "brief_section": brief_section,
         "research_context_section": research_context_section,
-        "insight_result": json.dumps(_slim_insight(insight_result), ensure_ascii=False, indent=2),
-        "brand_role_result": json.dumps(_slim_brand_role(brand_role_result), ensure_ascii=False, indent=2),
+        "insight_focused_section": json.dumps(
+            _slim_insight_focused(insight_result, selected_tension_id),
+            ensure_ascii=False, indent=2,
+        ),
+        "branch_brand_role_section": json.dumps(
+            _slim_brand_role(branch_brand_role), ensure_ascii=False, indent=2,
+        ),
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
         ),

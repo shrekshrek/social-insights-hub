@@ -231,6 +231,7 @@
 
 <script setup lang="ts">
 import type { LandscapeResult, MarketDynamicEntry, EvidenceQuote } from '../types'
+import { sentimentColor, sentimentLabel } from '../composables/useStrategyConstants'
 import { UBadge } from '#components'
 
 const props = defineProps<{
@@ -323,30 +324,6 @@ const roleBgClass = (r: string) => {
   if (r === 'target') return 'bg-primary-50 dark:bg-primary-900/20'
   if (r === 'competitor') return 'bg-red-50 dark:bg-red-900/20'
   return 'bg-gray-50 dark:bg-gray-800'
-}
-
-const sentimentColor = (s: number | string | null | undefined) => {
-  if (s == null) return 'neutral' as const
-  if (typeof s === 'number') {
-    if (s > 0.6) return 'success' as const
-    if (s < -0.2) return 'error' as const
-    return 'neutral' as const
-  }
-  if (s === 'positive') return 'success' as const
-  if (s === 'negative') return 'error' as const
-  return 'neutral' as const
-}
-
-const sentimentLabel = (s: number | string | null | undefined) => {
-  if (s == null) return '中性'
-  if (typeof s === 'number') {
-    if (s > 0.6) return '正面'
-    if (s < -0.2) return '负面'
-    return '中性'
-  }
-  if (s === 'positive') return '正面'
-  if (s === 'negative') return '负面'
-  return '中性'
 }
 
 const formatPct = (pct: number) => {

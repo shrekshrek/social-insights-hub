@@ -74,18 +74,23 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - Brand Opportunity 应结合竞品格局（SOV、四象限）找到空白区
 - 每条结论必须附带数据论据（evidence），标明来源
 
-## 实体级关键字段（top 5 实体附加，用于 tension 识别）
+## 实体级关键字段（用于多层 tension 识别）
 
-数据中部分实体含以下扩展字段，明确指向**特定层面的 tension**：
+数据中实体含以下扩展字段，每个字段明确指向**特定层面的 tension**：
 
-- **`top_issues`**（已有）：用户对该实体的痛点/不满 → **产品层 tension**（功能缺陷、体验落差）
-- **`top_scenarios`**：该实体被讨论的常见使用场景 → **场景层 tension**（特定场景下的痛点、场景缺失、场景不便）
-- **`top_market_factors`**：消费者讨论时的宏观背景（价格/政策/经济环境/促销/渠道） → **宏观层 tension**（消费降级、价格敏感、政策影响等大背景下的需求转变）
+- **`top_issues`**（top 10 实体均有）：用户对该实体的痛点/不满 → **产品层 tension**（功能缺陷、体验落差）
+- **`top_scenarios`**（top 10 实体均有）：该实体被讨论的常见使用场景 → **场景层 tension**（特定场景下的痛点、场景缺失、场景不便）
+- **`top_market_factors`**（top 10 实体均有）：消费者讨论时的宏观背景（价格/政策/经济环境/促销/渠道） → **宏观层 tension**（消费降级、价格敏感、政策影响等大背景下的需求转变）
+- **`original_terms`**（top 5 实体）：用户原始表述，供 evidence 引用真实语言，长尾实体原话稀疏不附加
 
 不同层面的 tension 价值不同：
 - 产品层 tension 易被竞品复制（短期机会）
 - 场景层 tension 更具差异化（中期占位）
 - 宏观层 tension 与品牌大方向绑定（长期定位价值）
+
+**关键识别方法**：
+- **跨实体场景重叠** = 高价值场景层 tension（多个品牌都在同一场景被讨论且都有问题，说明是行业级场景痛点而非单品牌问题）
+- **跨实体宏观重叠** = 高价值宏观层 tension（多个品牌讨论中共同出现某宏观因素，说明是行业级背景驱动的需求转变）
 
 **优先挖掘场景层和宏观层 tension** —— 仅基于 issues 的产品层 tension 容易停留在表层。
 
@@ -361,10 +366,10 @@ def format_slice_data_for_insight(
 
         # 实体 top 10（精简字段 + issues 用于 Opportunity 推导竞品弱点）
         # organic_sentiment：剔除推广内容后的真实用户情感，与 sentiment 差距大时说明推广掩盖了真实口碑
-        # 仅 top 5 实体附加扩展字段（避免 token 过载）：
-        #   - original_terms：用户原始表述，保留真实语言模式，供 evidence 引用原话
-        #   - top_scenarios：实体常被讨论的使用场景，识别"场景 tension"（如通勤场景缺失、家用场景不便）
-        #   - top_market_factors：消费者讨论该实体时的宏观背景（价格/政策/经济环境等），识别"宏观 tension"
+        # 字段附加范围分级（基于"信号广度 vs 数据稀疏度"权衡）：
+        #   - original_terms（top 5）：用户原话，长尾实体原话稀疏不具代表性，仅 top 5 有意义
+        #   - top_scenarios（top 10）：场景层 tension 需"跨实体场景重叠"识别，需广覆盖
+        #   - top_market_factors（top 10）：宏观层 tension 需"跨实体宏观重叠"识别，需广覆盖
         entities = foundation.get("aligned_entities", [])[:10]
         entity_summaries = []
         for idx_e, e in enumerate(entities):
@@ -379,7 +384,23 @@ def format_slice_data_for_insight(
                     if isinstance(f, dict) and f.get("text")
                 ],
             }
-            # 仅为 top 5 实体附加扩展字段
+
+            # 场景层 + 宏观层 tension 字段（top 10 全覆盖）
+            scenarios = [
+                s.get("text") for s in (e.get("top_scenarios") or [])[:3]
+                if isinstance(s, dict) and s.get("text")
+            ]
+            if scenarios:
+                entry["top_scenarios"] = scenarios
+
+            market_factors = [
+                m.get("text") for m in (e.get("top_market_factors") or [])[:3]
+                if isinstance(m, dict) and m.get("text")
+            ]
+            if market_factors:
+                entry["top_market_factors"] = market_factors
+
+            # 用户原话仅 top 5（长尾稀疏不具代表性）
             if idx_e < 5:
                 raw_terms = e.get("original_terms") or []
                 terms = [
@@ -390,19 +411,6 @@ def format_slice_data_for_insight(
                 if terms:
                     entry["original_terms"] = terms
 
-                scenarios = [
-                    s.get("text") for s in (e.get("top_scenarios") or [])[:3]
-                    if isinstance(s, dict) and s.get("text")
-                ]
-                if scenarios:
-                    entry["top_scenarios"] = scenarios
-
-                market_factors = [
-                    m.get("text") for m in (e.get("top_market_factors") or [])[:3]
-                    if isinstance(m, dict) and m.get("text")
-                ]
-                if market_factors:
-                    entry["top_market_factors"] = market_factors
             entity_summaries.append(entry)
 
         # 话题 top 15（精简字段）

@@ -8,18 +8,22 @@ brand_strategy 三阶段递进分析的**第 1 层**：insight → brand_role �
 ## 两种运行模式
 
 - **campaign_strategy 模式**：社媒切片为主源，新闻数据作为补充证据
-- **full_strategy 模式**：社媒切片 + Landscape 竞争格局分析为**双主源**，
-  service 层在 news_media_section 中注入整合分析框架，覆盖本文件中
-  "新闻数据使用指南"的默认权重（补充→共同推导）。消费者-媒体分歧是
-  full_strategy 模式下最高价值的 Tension 来源。
+- **full_strategy 模式**：在 campaign_strategy 基础上，**额外**注入
+  Landscape 竞争格局分析作为对标参考。原始新闻切片仍然完整保留——
+  Landscape 是**已结构化的二阶解读**（players / positioning_map / battles），
+  原始新闻是**一阶事实信号**（entities / quotes / event_clusters 时序），
+  两者地位不同，互为补充而非替代。消费者-媒体分歧仍是 full_strategy
+  模式下最高价值的 Tension 来源，但应基于原始新闻信号识别，Landscape
+  仅作为"竞品已占据/未占据的位置"对标参考。
 
 ## 输入上下文（USER_TEMPLATE 的占位符）
 
 - brief_section     : 品牌 Brief（目标/竞品/关注维度），来自 strategy.brand_brief
 - research_context_section: 研究问题 + 需求理解摘要，来自 strategy.research_design
 - slice_data        : 所有关联切片的聚合分析数据，由 format_slice_data_for_insight() 构建
-- news_media_section: campaign_strategy 下为新闻切片补充段落；
-                      full_strategy 下为 Landscape 结构化输出 + 整合分析框架（由 service 层覆盖）
+- news_media_section: 新闻切片补充段落（campaign / full_strategy 都注入原始数据）
+- landscape_context_section: 仅 full_strategy 注入 Landscape 已结构化的
+                      竞争格局对标参考，campaign_strategy 下为空字符串
 
 ## 关键设计决策
 
@@ -70,6 +74,21 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - Brand Opportunity 应结合竞品格局（SOV、四象限）找到空白区
 - 每条结论必须附带数据论据（evidence），标明来源
 
+## 实体级关键字段（top 5 实体附加，用于 tension 识别）
+
+数据中部分实体含以下扩展字段，明确指向**特定层面的 tension**：
+
+- **`top_issues`**（已有）：用户对该实体的痛点/不满 → **产品层 tension**（功能缺陷、体验落差）
+- **`top_scenarios`**：该实体被讨论的常见使用场景 → **场景层 tension**（特定场景下的痛点、场景缺失、场景不便）
+- **`top_market_factors`**：消费者讨论时的宏观背景（价格/政策/经济环境/促销/渠道） → **宏观层 tension**（消费降级、价格敏感、政策影响等大背景下的需求转变）
+
+不同层面的 tension 价值不同：
+- 产品层 tension 易被竞品复制（短期机会）
+- 场景层 tension 更具差异化（中期占位）
+- 宏观层 tension 与品牌大方向绑定（长期定位价值）
+
+**优先挖掘场景层和宏观层 tension** —— 仅基于 issues 的产品层 tension 容易停留在表层。
+
 ## 洞察质量标准（重要）
 
 **核心要求：输出不能是"认真浏览一遍内容就能得出"的结论。**
@@ -78,6 +97,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 1. **反常信号**：热度高但情感负向（争议核心）、热度低但情感极正向（潜在机会）、跨切片同一实体情感截然相反（场景依赖）
 2. **跨切片交叉洞察**：只有对比 ≥2 个切片才能发现的模式，至少 1 条 Tension 必须满足此要求，并在 evidence 中说明单看任一切片无法得出该结论
 3. **常识颠覆**：每条结论须明确说明它如何修正行业通常认知，不接受"用户关注健康"此类任何人都能猜到的结论
+4. **多层 tension 覆盖**：1-3 条 tension 中应该至少有 1 条属于"场景层"或"宏观层"，不要全部停留在"产品层"
 
 ## 输出格式
 只输出 JSON，不要额外文字或 markdown 代码块标记：
@@ -161,7 +181,9 @@ USER_TEMPLATE = """{brief_section}
 
 {slice_data}
 
-{news_media_section}"""
+{news_media_section}
+
+{landscape_context_section}"""
 
 
 def create_insight_chain() -> Runnable:
@@ -339,7 +361,10 @@ def format_slice_data_for_insight(
 
         # 实体 top 10（精简字段 + issues 用于 Opportunity 推导竞品弱点）
         # organic_sentiment：剔除推广内容后的真实用户情感，与 sentiment 差距大时说明推广掩盖了真实口碑
-        # original_terms（top 5 实体）：用户原始表述，保留真实语言模式，供 evidence 引用原话
+        # 仅 top 5 实体附加扩展字段（避免 token 过载）：
+        #   - original_terms：用户原始表述，保留真实语言模式，供 evidence 引用原话
+        #   - top_scenarios：实体常被讨论的使用场景，识别"场景 tension"（如通勤场景缺失、家用场景不便）
+        #   - top_market_factors：消费者讨论该实体时的宏观背景（价格/政策/经济环境等），识别"宏观 tension"
         entities = foundation.get("aligned_entities", [])[:10]
         entity_summaries = []
         for idx_e, e in enumerate(entities):
@@ -354,7 +379,7 @@ def format_slice_data_for_insight(
                     if isinstance(f, dict) and f.get("text")
                 ],
             }
-            # 仅为 top 5 实体附加原始用语，避免 token 过载
+            # 仅为 top 5 实体附加扩展字段
             if idx_e < 5:
                 raw_terms = e.get("original_terms") or []
                 terms = [
@@ -364,6 +389,20 @@ def format_slice_data_for_insight(
                 ]
                 if terms:
                     entry["original_terms"] = terms
+
+                scenarios = [
+                    s.get("text") for s in (e.get("top_scenarios") or [])[:3]
+                    if isinstance(s, dict) and s.get("text")
+                ]
+                if scenarios:
+                    entry["top_scenarios"] = scenarios
+
+                market_factors = [
+                    m.get("text") for m in (e.get("top_market_factors") or [])[:3]
+                    if isinstance(m, dict) and m.get("text")
+                ]
+                if market_factors:
+                    entry["top_market_factors"] = market_factors
             entity_summaries.append(entry)
 
         # 话题 top 15（精简字段）
@@ -541,6 +580,7 @@ def format_slice_data_for_insight(
         "slice_data": slice_data,
         "research_findings": research_findings,
         "news_media_section": news_media_section,
+        "landscape_context_section": "",  # full_strategy 时由 service 层覆盖
     }
 
 

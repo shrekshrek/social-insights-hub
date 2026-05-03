@@ -532,14 +532,18 @@ export interface NarrativeMapItem {
   credibility: 'high' | 'medium' | 'low' | string
 }
 
+/** 议程博弈：tier 间分歧 / 正反争论的议题（与 backend agenda_map_chain prompt 对齐） */
 export interface AgendaBattle {
-  topic: string
-  sides: Array<{
+  contested_topic: string
+  camps: Array<{
     stance: string
-    supporters_brief: string
+    /** 支持该立场的 source_tier 列表（如 ["tier1", "tier2"]） */
+    supporting_tiers: string[]
+    /** 该立场的代表性引述（短句） */
+    sample_quotes: string[]
   }>
-  dominant_side?: string
-  note?: string
+  /** 该分歧对品牌/行业的含义 */
+  implication: string
 }
 
 /** 媒体声量模式条目。后端可能返回纯文本或结构化对象。 */

@@ -766,43 +766,37 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
     from src.llm.chains.strategy.research_findings import format_research_for_insight
     research_findings_text = format_research_for_insight(research_result)
 
-    # full_strategy 路径：用 Landscape 结构化输出替代原始新闻切片，
-    # 并提升其在 Insight 分析中的权重——从"补充证据"升级为"共同推导源"。
-    # 这是 full_strategy 与 campaign_strategy 的核心差异：双视角整合洞察。
-    if strategy.output_type == "full_strategy" and strategy.landscape_result:
-        landscape_as_news_section = (
-            "## 竞争格局视角（Landscape 分析产出，full_strategy 双视角整合模式）\n\n"
-            "**重要：本次为 full_strategy 全渠道综合分析。以下竞争格局数据与社媒消费者数据"
-            "是共同推导 Tension 和 Opportunity 的双主源，不是补充证据。**\n\n"
-            "### 整合分析框架（覆盖本 chain 默认的「新闻数据使用指南」）\n\n"
-            "1. **消费者-媒体分歧 = 最高价值 Tension**：当消费者声音（社媒切片）与媒体竞争格局"
-            "（下方 Landscape）出现矛盾时（如消费者不满但媒体正面报道该品牌，或消费者热议"
-            "但媒体完全忽视），这种分歧本身就是核心 Social Tension，应优先挖掘。\n"
-            "2. **竞争格局验证 Brand Opportunity**：Landscape 的 players / positioning_map / "
-            "discourse_battles 直接用于验证 Brand Opportunity——如果一个消费者机会在竞争格局中"
-            "也显示为竞品空白区（positioning_map 上无人占据），则为高置信度机会。\n"
-            "3. **evidence 可直接引用 Landscape 字段**：evidence.source 可标注"
-            "「竞争格局分析:players[X]」「竞争格局分析:positioning_map」等结构化引用，"
-            "与社媒切片证据同等权重。\n\n"
-            "### Landscape 数据\n\n"
-            + json.dumps(strategy.landscape_result, ensure_ascii=False, indent=2)
-        )
-        effective_news_slices = []  # 原始新闻切片不再注入
-    else:
-        landscape_as_news_section = None
-        effective_news_slices = news_slices_data
-
     chain = create_insight_chain()
     inputs = format_slice_data_for_insight(
         slices_data,
         strategy.brand_brief,
         research_design=strategy.research_design,
-        news_slices=effective_news_slices,
+        news_slices=news_slices_data,  # 原始新闻切片始终注入（一阶事实信号）
         research_findings=research_findings_text,
     )
-    # full_strategy：覆盖 format_slice_data_for_insight 生成的 news_media_section
-    if landscape_as_news_section is not None:
-        inputs["news_media_section"] = landscape_as_news_section
+    # full_strategy 路径：在原始新闻数据基础上，**额外**注入 Landscape 已结构化的
+    # 竞争格局作为对标参考。Landscape 是二阶 LLM 解读（players / positioning_map /
+    # discourse_battles），原始新闻是一阶事实信号（entities / quotes / event_clusters
+    # 时序），两者互为补充而非替代——避免一阶信号被二阶过滤削弱。
+    if strategy.output_type == "full_strategy" and strategy.landscape_result:
+        inputs["landscape_context_section"] = (
+            "## 竞争格局对标参考（Landscape 分析产出，full_strategy 模式）\n\n"
+            "**说明**：以下是 Landscape chain 已生成的竞争格局结构化解读。请将其与上方"
+            "原始新闻切片（news_media_section）和社媒切片（slice_data）共同使用——\n"
+            "原始新闻是**一阶事实信号**（识别消费者-媒体分歧的依据），\n"
+            "Landscape 是**已结构化的二阶解读**（提供「竞品已占据 / 未占据的位置」对标）。\n\n"
+            "### 使用指引\n\n"
+            "1. **消费者-媒体分歧识别**：基于原始新闻 + 社媒切片识别（不要直接用 Landscape，"
+            "因为它已经过 LLM 二次过滤）\n"
+            "2. **Brand Opportunity 验证**：识别出消费者机会后，对标 Landscape 的 "
+            "positioning_map 和 attention_gaps——如果该位置在 Landscape 上是空白区，"
+            "则为高置信度机会\n"
+            "3. **evidence.source 引用规则**：原始信号引用 `news_media:...` / "
+            "`social_slice:...`；对标 Landscape 时引用 `landscape:players[X]` 或 "
+            "`landscape:positioning_map`，明确标注信号的二阶性质\n\n"
+            "### Landscape 数据\n\n"
+            + json.dumps(strategy.landscape_result, ensure_ascii=False, indent=2)
+        )
 
     job = await create_analysis_job_async(
         db,

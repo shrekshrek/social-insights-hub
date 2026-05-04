@@ -1986,30 +1986,57 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
 
 
 async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Strategy:
-    """生成 Market Report 第 3 层（终层）：战略简报 (Strategic Brief)"""
+    """生成 Strategic Brief 战略简报 (双模式终层)。
+
+    - **market_report 路径** (media_only 模式)：基于 Agenda Map + Landscape 输出
+      聚焦媒体战略 / PR 焦点的战略简报。前置条件：Landscape 已完成。
+
+    - **full_strategy 路径** (comprehensive 模式)：除媒体侧外，还注入 Insight +
+      已完成的 brand_strategy_branches + creative_references，输出综合战略简报。
+      前置条件：至少有一个分支的 big_idea 已生成（确保下游消费者侧分析就绪）。
+
+    **可选触发**：full_strategy 路径下，Strategic Brief 不自动跑——用户在所有上游层
+    完成后主动触发。market_report 路径下，Strategic Brief 是终层（必跑才算 completed）。
+    """
     _validate_market_report_output_type(strategy)
-    # strategic_brief 是 market_report 的终层；full_strategy 的终层是 big_idea，不生成 strategic_brief
-    if strategy.output_type == "full_strategy":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="full_strategy 路径不生成 Strategic Brief；请继续生成 Insight → Brand Role → Big Idea",
-        )
 
-    if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["landscape_done"]:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="请先完成并确认 Landscape",
-        )
+    is_full = strategy.output_type == "full_strategy"
 
-    # strategic_brief 不加载切片数据（纯 agenda_map + landscape 合成），
-    # 但仍记录 provenance 便于前端展示
+    # 前置条件分模式校验
+    if is_full:
+        # comprehensive 模式：需要 Big Idea 至少一个分支完成（保证 brand_strategy_branches 有内容可综合）
+        branches = strategy.brand_strategy_branches or []
+        has_big_idea = any(
+            isinstance(b, dict) and b.get("big_idea")
+            for b in branches
+        )
+        if not has_big_idea:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="full_strategy 路径生成 Strategic Brief 需先完成至少一个分支的 Big Idea",
+            )
+    else:
+        # media_only 模式：需要 Landscape 完成
+        if STATUS_ORDER.get(strategy.status, 0) < STATUS_ORDER["landscape_done"]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="请先完成并确认 Landscape",
+            )
+
+    # 加载切片数据（不直接喂给 chain，仅用于 data_provenance + 校验）
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
 
-    # strategic_brief 只注入高置信度研究要点作为证据锚点，不引入大量新数据
     research_result = await _retrieve_research_findings(db, strategy, "StrategicBrief")
     from src.llm.chains.strategy.research_findings import format_research_for_strategic_brief
     research_findings_text = format_research_for_strategic_brief(research_result)
+
+    # comprehensive 模式：额外拉取 creative_references（与 Big Idea 阶段同源）
+    creative_references_text = ""
+    if is_full:
+        creative_result = await _retrieve_creative_research_findings(db, strategy, "StrategicBrief")
+        from src.llm.chains.strategy.research_findings import format_creative_for_big_idea
+        creative_references_text = format_creative_for_big_idea(creative_result)
 
     chain = create_strategic_brief_chain()
     inputs = format_inputs_for_strategic_brief(
@@ -2018,6 +2045,11 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         brief=strategy.brand_brief,
         research_design=strategy.research_design,
         research_findings=research_findings_text,
+        coverage_check_result=strategy.coverage_check_result,
+        # comprehensive 模式：注入消费者侧 + 多分支 + 创意；media_only 模式留空
+        insight_result=strategy.insight_result if is_full else None,
+        brand_strategy_branches=strategy.brand_strategy_branches if is_full else None,
+        creative_references=creative_references_text,
     )
 
     job = await create_analysis_job_async(
@@ -2026,9 +2058,12 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         news_monitor_id=strategy.news_monitor_id,
         user_id=strategy.user_id,
         analysis_type=AnalysisType.STRATEGY_STRATEGIC_BRIEF.value,
-        source_count=len(news_slices_data),
+        source_count=len(news_slices_data) + (len(slices_data) if is_full else 0),
         status="running",
-        analysis_config={"strategy_id": strategy.id},
+        analysis_config={
+            "strategy_id": strategy.id,
+            "mode": "comprehensive" if is_full else "media_only",
+        },
     )
 
     try:
@@ -2037,17 +2072,21 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         duration = time.time() - start
 
         result = parse_strategic_brief_response(response.content)
+        # comprehensive 模式 primary 标 mixed（消费者+媒体），media_only 标 news_media
         result["data_provenance"] = _build_data_provenance(
             slices_data, news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
         )
-        # 埋点：观察 evidence_refs 实际产出规模，为后续决定是否需要路径校验提供数据
+        # 标记生成模式（前端展示「媒体视角」vs「综合视角」标签依据）
+        result["generation_mode"] = "comprehensive" if is_full else "media_only"
+
         priorities = result.get("strategic_priorities") or []
         total_refs = sum(len(sp.get("evidence_refs") or []) for sp in priorities)
         logger.info(
-            "Strategy %d Strategic Brief 生成完成 (%.1fs): %d priorities, %d evidence_refs",
-            strategy.id, duration, len(priorities), total_refs,
+            "Strategy %d Strategic Brief (%s 模式) 生成完成 (%.1fs): %d priorities, %d evidence_refs",
+            strategy.id, "comprehensive" if is_full else "media_only", duration,
+            len(priorities), total_refs,
         )
 
         now = datetime.now(timezone.utc)
@@ -2058,7 +2097,10 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         job.token_usage = extract_token_usage(response, duration_seconds=duration)
 
         strategy.strategic_brief_result = result
-        strategy.status = "completed"
+        # full_strategy 路径 status 已经在 big_idea 完成时置为 "completed"，无需再改
+        # market_report 路径 SB 是终层，必须置 status
+        if not is_full:
+            strategy.status = "completed"
 
         await db.commit()
         fire_notification(feishu_tmpl.strategic_brief_done_card(strategy.name, strategy.id), _strategy_open_ids(strategy))

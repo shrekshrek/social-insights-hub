@@ -173,7 +173,10 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 - **Agenda Map（媒体议程图，第 1 层）**：主数据源 = news_media（`load_strategy_news_inputs`）。基于 NewsSlice 的 tagging/insight 产出 narrative_map / agenda_battles / media_voice_patterns / attention_gaps。credibility=high 必须有 tier1+tier2 支撑。禁止引入消费者声音（那是 campaign_strategy 路径）。
 - **Landscape（竞争格局，第 2 层）**：输入 = Agenda Map 结果 + 原始 news slices。产出 players（role: target/competitor/context，media_sov_pct, media_sentiment）/ positioning_map（LLM 自选 x/y 轴）/ discourse_battles（必须 ref `agenda_map_battle_ref`）/ market_dynamics。
-- **Strategic Brief（战略简报，第 3 层）**：输入 = Agenda Map + Landscape（**禁止引入新数据**）。产出 executive_summary / strategic_priorities（每条必须 answer ≥1 research_question + evidence_refs 指向 agenda_map/landscape 字段）/ market_opportunities / risks_and_threats / recommended_positioning（proof_points 通过 `agenda_map_narrative_ref` 回链上游叙事）。**full_strategy 不支持生成 Strategic Brief**（返回 409）。
+- **Strategic Brief（战略简报，第 3 层 / 双模式终层）**：输出 executive_summary / strategic_priorities（每条必须 answer ≥1 research_question + evidence_refs 指向上游字段）/ market_opportunities / risks_and_threats / recommended_positioning。
+  - **media_only 模式（market_report 路径）**：输入 = Agenda Map + Landscape（**禁止引入新市场事实**）。evidence_refs 仅允许指向 `agenda_map.*` / `landscape.*`。聚焦媒体战略 / PR 焦点，服务 PR 团队。**market_report 路径下 SB 是终层**——必须跑才能 status="completed"。
+  - **comprehensive 模式（full_strategy 路径）**：输入 = Agenda Map + Landscape **+ Insight + brand_strategy_branches + creative_references**。evidence_refs 额外允许指向 `insight.social_tensions[X]` / `brand_strategy_branches[X].brand_role/big_idea`。recommended_positioning 必须整合 selected 分支的 brand_social_role.statement + big_idea。前置：至少一个分支已生成 big_idea。**full_strategy 路径下 SB 是可选终层**——不自动跑，用户在 Big Idea 完成后主动触发；status 已在 big_idea 完成时置 completed，SB 生成不再改 status。
+  - 模式切换：`generation_mode` 字段记录在 result 里供前端展示「媒体视角」vs「综合视角」标签。prompt 通过 `{insight_section}` / `{brand_strategy_branches_section}` 段落是否非空自动判定模式。
 
 #### full_strategy 路径（Agenda Map → Landscape → Insight → Brand Role → Big Idea）
 
@@ -237,7 +240,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 | big_idea_chain | 创意总监（第 3 层） | ④ | campaign_strategy / full_strategy |
 | agenda_map_chain | 媒体议程图（第 1 层） | ④ | market_report / full_strategy |
 | landscape_chain | 竞争格局（第 2 层） | ④ | market_report / full_strategy |
-| strategic_brief_chain | 战略简报（第 3 层，只消费前两层） | ④ | market_report（full_strategy 不支持） |
+| strategic_brief_chain | 战略简报（双模式终层：media_only / comprehensive） | ④ | market_report（终层必跑）/ full_strategy（可选） |
 
 所有 stage chain 都注入 `research_design` 中的 research_questions 作为分析上下文。`research_findings.py` 提供 per-stage formatter 函数，按 token 预算从 ResearchTask.result_data 提取并格式化行业研究数据注入 `{research_findings}`，以及 `format_creative_for_brand_role` / `format_creative_for_big_idea` 注入创意研究数据 `{creative_references}`。campaign_strategy chain 通过 `_format_news_media_section` 把新闻切片作为补充段落注入；market_report Agenda Map chain 直接消费 `load_strategy_news_inputs` 加载的 NewsSlice 作为主数据源。
 

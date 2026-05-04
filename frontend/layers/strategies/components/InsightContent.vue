@@ -33,6 +33,17 @@
               {{ tension.data_reality }}
             </p>
           </div>
+          <!-- 回应的研究问题（RQ traceability） -->
+          <div v-if="tension.research_questions_addressed?.length" class="mt-2 flex items-center gap-1 flex-wrap">
+            <span class="text-[10px] text-gray-400">回应：</span>
+            <span
+              v-for="rqId in tension.research_questions_addressed"
+              :key="rqId"
+              class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+            >
+              {{ rqId.toUpperCase() }}
+            </span>
+          </div>
           <StrategyEvidenceList :evidence="tension.evidence" />
         </div>
       </div>
@@ -58,6 +69,17 @@
           <p v-if="opp.why_non_obvious" class="mt-1.5 text-xs text-gray-600 dark:text-gray-400 p-2 bg-white/60 dark:bg-gray-800 rounded">
             <span class="font-medium text-gray-700 dark:text-gray-300">为何非显而易见：</span>{{ opp.why_non_obvious }}
           </p>
+          <!-- 回应的研究问题 -->
+          <div v-if="opp.research_questions_addressed?.length" class="mt-2 flex items-center gap-1 flex-wrap">
+            <span class="text-[10px] text-gray-400">回应：</span>
+            <span
+              v-for="rqId in opp.research_questions_addressed"
+              :key="rqId"
+              class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+            >
+              {{ rqId.toUpperCase() }}
+            </span>
+          </div>
           <StrategyEvidenceList :evidence="opp.evidence" />
         </div>
       </div>

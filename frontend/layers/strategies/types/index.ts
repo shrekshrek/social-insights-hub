@@ -440,8 +440,12 @@ export interface SocialTension {
   statement: string
   conventional_wisdom?: string
   data_reality?: string
-  confidence?: string
+  /** 后端 prompt 严格枚举 high/medium/low；老数据可能为空 */
+  confidence?: 'high' | 'medium' | 'low'
   evidence?: StageEvidence[]
+  /** 该 tension 回应的 research_questions id 列表（如 ["rq1", "rq3"]）。
+   *  prompt v2026.05+ 必填；老 insight 结果无此字段 */
+  research_questions_addressed?: string[]
 }
 
 export interface BrandOpportunity {
@@ -449,6 +453,8 @@ export interface BrandOpportunity {
   why_non_obvious?: string
   related_tensions?: number[]
   evidence?: StageEvidence[]
+  /** 该 opportunity 回应的 research_questions id 列表（同 SocialTension） */
+  research_questions_addressed?: string[]
 }
 
 /** campaign_strategy 第 1 层 Insight: Social Tension + Brand Opportunity */
@@ -515,11 +521,13 @@ export interface NarrativeSupportingSources {
   wechat_mp?: number
 }
 
+/** 与 backend agenda_map_chain prompt 对齐：source / source_tier 是 BE 实际字段名 */
 export interface NarrativeRepresentativeVoice {
-  source_name: string
-  tier: string
   quote: string
   speaker?: string
+  source: string
+  /** tier1 | tier2 | tier3 | wechat_mp */
+  source_tier: string
 }
 
 export interface NarrativeMapItem {
@@ -530,7 +538,9 @@ export interface NarrativeMapItem {
   heat_rank: number
   supporting_sources: NarrativeSupportingSources
   representative_voices: NarrativeRepresentativeVoice[]
-  credibility: 'high' | 'medium' | 'low' | string
+  credibility: 'high' | 'medium' | 'low'
+  /** 跨切片证据：佐证该 narrative 的 slice 名称列表 */
+  cross_slice_evidence?: string[]
 }
 
 /** 议程博弈：tier 间分歧 / 正反争论的议题（与 backend agenda_map_chain prompt 对齐） */
@@ -547,28 +557,37 @@ export interface AgendaBattle {
   implication: string
 }
 
-/** 媒体声量模式条目。后端可能返回纯文本或结构化对象。 */
-export interface VoicePatternItem {
+/** 媒体声量模式：三种子类型 schema 各异（与 backend agenda_map_chain prompt 对齐） */
+export interface AuthoritativeConsensusItem {
   topic: string
-  stance?: string
+  stance: string
+  evidence: string
 }
 
-export type VoicePatternEntry = string | VoicePatternItem
+export interface IndustryDebateItem {
+  topic: string
+  positions: string[]
+}
+
+export interface EmergingNarrativeItem {
+  topic: string
+  why_unverified: string
+  /** tier1 | tier2 | tier3 | wechat_mp */
+  originating_tier: string
+}
 
 export interface MediaVoicePatterns {
-  authoritative_consensus: VoicePatternEntry[]
-  industry_debate: VoicePatternEntry[]
-  emerging_narratives: VoicePatternEntry[]
+  authoritative_consensus: AuthoritativeConsensusItem[]
+  industry_debate: IndustryDebateItem[]
+  emerging_narratives: EmergingNarrativeItem[]
 }
 
-/** 注意力缺口条目。后端可能返回纯文本或结构化对象。 */
+/** 注意力缺口（与 backend agenda_map_chain prompt 对齐） */
 export interface AttentionGapItem {
   topic: string
-  risk_or_opportunity?: 'risk' | 'opportunity' | string
-  why_matters?: string
+  risk_or_opportunity: 'risk' | 'opportunity'
+  why_matters: string
 }
-
-export type AttentionGapEntry = string | AttentionGapItem
 
 /** market_report 第 1 层 Agenda Map: 媒体议程图 */
 export interface AgendaMapResult {
@@ -576,7 +595,7 @@ export interface AgendaMapResult {
   narrative_map: NarrativeMapItem[]
   agenda_battles: AgendaBattle[]
   media_voice_patterns: MediaVoicePatterns
-  attention_gaps: AttentionGapEntry[]
+  attention_gaps: AttentionGapItem[]
   data_provenance?: DataProvenance
 }
 
@@ -590,7 +609,7 @@ export interface EvidenceQuote {
 
 export interface CompetitivePlayer {
   name: string
-  role: 'target' | 'competitor' | 'context' | string
+  role: 'target' | 'competitor' | 'context'
   media_sov_pct: number
   /** [-2, 2] 加权情感；0-source 玩家为 null */
   media_sentiment: number | null
@@ -642,20 +661,22 @@ export interface DiscourseBattle {
   evidence: string
 }
 
-/** 市场动态条目。后端可能返回纯文本或结构化对象。 */
-export interface MarketDynamicItem {
-  player?: string
-  shift?: string
-  signal?: string
-  implication?: string
+/** momentum 条目：gainers / losers 共用结构 */
+export interface MomentumItem {
+  player: string
+  signal: string
 }
 
-export type MarketDynamicEntry = string | MarketDynamicItem
+/** 结构性变化条目 */
+export interface StructuralShiftItem {
+  shift: string
+  implication: string
+}
 
 export interface MarketDynamics {
-  momentum_gainers: MarketDynamicEntry[]
-  momentum_losers: MarketDynamicEntry[]
-  structural_shifts: MarketDynamicEntry[]
+  momentum_gainers: MomentumItem[]
+  momentum_losers: MomentumItem[]
+  structural_shifts: StructuralShiftItem[]
 }
 
 /** market_report 第 2 层 Landscape: 竞争格局 + 话语权 */
@@ -688,7 +709,7 @@ export interface MarketOpportunity {
 
 export interface RiskAndThreat {
   risk: string
-  likelihood: 'high' | 'medium' | 'low' | string
+  likelihood: 'high' | 'medium' | 'low'
   source: string
   mitigation: string
 }

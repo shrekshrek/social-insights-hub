@@ -1,16 +1,27 @@
 """Strategy Market Report — Strategic Brief Chain (战略简报)
 
-market_report 三层分析的**第 3 层（终层）**：agenda_map → landscape → strategic_brief。
-综合 agenda_map（媒体议程图）+ landscape（竞争格局）的产出，**以 brand_brief 为过滤器**，
-输出一份面向决策层的战略简报：执行摘要 + 战略优先级 + 市场机会 + 风险与威胁 + 推荐定位。
+**双模式终层 chain**：
+
+- **media_only 模式**（market_report 路径）：综合 agenda_map + landscape 输出
+  纯媒体战略简报，服务 PR/comms 团队。
+- **comprehensive 模式**（full_strategy 路径）：除媒体侧外，**同时综合**
+  Insight（消费者矛盾）+ Brand Strategy Branches（多分支 brand_role + big_idea）+
+  creative_references，输出 CMO 级综合战略简报。
+
+模式自动判定：根据 USER_TEMPLATE 中 `{insight_section}` /
+`{brand_strategy_branches_section}` 是否为空切换。
 
 ## 输入上下文（USER_TEMPLATE 占位符）
 
-- brief_section            : Brand Brief（必须作为品牌视角过滤器，驱动取舍判断）
-- research_context_section : 研究问题 + 需求理解
-- agenda_map_section       : 上游 agenda_map 层产出（必需）
-- landscape_section        : 上游 landscape 层产出（必需）
-- research_findings        : Research Agent 行业研究发现（自动注入，仅高置信度）
+- brief_section                    : Brand Brief（必须作为品牌视角过滤器，驱动取舍判断）
+- research_context_section         : 研究问题 + 需求理解
+- coverage_signals                 : 跨切片数据质量诊断（warnings + data_highlights）
+- agenda_map_section               : 上游 agenda_map 层产出（必需）
+- landscape_section                : 上游 landscape 层产出（必需）
+- insight_section                  : 消费者洞察层产出；comprehensive 模式注入，media_only 为空
+- brand_strategy_branches_section  : 多分支 brand_role + big_idea 输出；comprehensive 模式注入
+- research_findings                : Research Agent 行业研究发现
+- creative_references              : 创意研究（数英 / SocialBeta），comprehensive 模式可选
 
 ## 输出结构
 
@@ -29,17 +40,21 @@ recommended_positioning : 推荐定位（含 why_this_brand_can_own_it 可行性
    market_opportunities 中的 brand_fit 字段强制要求 LLM 评估每个机会与该品牌的匹配程度。
 
 2. **禁止引入新的市场事实**，但必须基于 brand_brief 约束做取舍判断。
-   "新市场事实" = Agenda Map / Landscape 里没有出现过的市场数据或论断（禁止）。
-   "品牌约束判断" = 基于 brand_brief.analysis_goal / constraints 对已有机会做优先级排序（必须）。
-   两者性质不同，不要混为一谈。
+   "新市场事实" = 上游各层里没有出现过的市场数据或论断（禁止）。
+   "品牌约束判断" = 基于 brand_brief 对已有信息做优先级排序（必须）。
 
 3. **recommended_positioning 必须论证"为什么是这个品牌"**。
    why_this_brand_can_own_it 字段要求说明：该品牌凭什么能占据这个定位，
    竞品（已出现在 landscape.players）为何无法跟进或难以复制。
-   禁止输出对所有玩家都成立的定位建议。
 
 4. **强制对齐 research_questions**。每条 strategic_priority 必须标注它回答了哪个
    research question（至少 1 个），否则说明研究计划与战略产出失配。
+
+5. **comprehensive 模式下 evidence_refs 跨层引用**。
+   - media_only：仅允许 ref `agenda_map.*` / `landscape.*` 字段
+   - comprehensive：**额外允许** ref `insight.social_tensions[X]` /
+     `insight.brand_opportunities[X]` / `brand_strategy_branches[X].brand_role` /
+     `brand_strategy_branches[X].big_idea`，必须把消费者洞察纳入 priority 推导
 """
 
 from __future__ import annotations
@@ -51,41 +66,56 @@ from typing import Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
+from src.llm.chains.strategy.research_findings import format_coverage_signals
 from src.llm.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_TEMPLATE = """你是资深战略顾问，擅长把媒体分析 + 竞争格局转化为品牌专属的可执行战略简报。
+SYSTEM_TEMPLATE = """你是资深战略顾问，擅长把市场分析转化为品牌专属的可执行战略简报。
 
 ## 任务
-基于上游 agenda_map（媒体议程图）+ landscape（竞争格局），以 brand_brief 为过滤器，
-输出这个品牌专属的战略简报。
+基于上游产出（媒体议程图 + 竞争格局，**comprehensive 模式下还含消费者洞察 + 品牌策略多分支**），
+以 brand_brief 为过滤器，输出这个品牌专属的战略简报。
 
-**核心价值主张**：Agenda Map 和 Landscape 描述市场全貌，但所有品牌看到的是同一份数据。
+**核心价值主张**：上游各层描述市场/消费者全貌，但所有品牌看到的是同一份数据。
 Strategic Brief 的独特价值在于：用 brand_brief（分析目标、所处赛道、constraints）
-过滤市场机会，做出该品牌而非通用的取舍判断——哪些机会这个品牌能拿，哪些拿不到，为什么。
+过滤、做出该品牌而非通用的取舍判断——哪些机会这个品牌能拿，哪些拿不到，为什么。
+
+## 模式判定
+
+USER_TEMPLATE 中如果 `## 消费者洞察 (Insight)` 段落非空 = **comprehensive 模式**：
+- 必须把消费者矛盾（social_tensions）纳入 priority 推导逻辑
+- 必须考察 brand_strategy_branches 中**已 selected 的分支**（或多个 brand_role/big_idea），
+  把品牌的 social role 与战略推荐 statement 整合到 recommended_positioning
+- evidence_refs 跨层引用消费者侧字段
+
+否则 = **media_only 模式**：
+- 只基于 agenda_map + landscape 推导，输出聚焦媒体战略 / PR 焦点
+- evidence_refs 只引用 agenda_map / landscape
 
 ## 分析步骤
 
 **第一步：定位品牌当前处境**
 从 landscape.players 找到 target 品牌的 media_sov_pct / media_sentiment / narrative_position，
 结合 brand_brief.analysis_goal，判断品牌目前是"防守""追击"还是"领跑"状态。
-这个判断将贯穿后续所有优先级决策。
+**comprehensive 模式**：还要考察 insight.social_tensions——消费者侧是否有未解的矛盾正在
+影响品牌处境（如媒体广泛报道但消费者不 buy）。
 
 **第二步：品牌视角过滤机会**
-Agenda Map 的 attention_gaps 列出了市场中所有值得报道却缺位的议题。
-但不是每个 gap 都适合这个品牌去占领。逐条评估：
-- 该品牌的分析目标（brand_brief.analysis_goal）与这个 gap 的方向是否一致？
-- 该品牌在 landscape.positioning_map 上的当前位置，能否可信地切入这个 gap？
-- landscape.players 中的竞品是否已在抢占这个 gap？品牌的差异化空间在哪里？
-筛选后留下 brand_fit=high 的机会优先推进，brand_fit=low 的机会标注原因后降优先级。
+Agenda Map 的 attention_gaps + insight.brand_opportunities（如有）共同构成机会池。
+逐条评估：
+- 该品牌的分析目标（brand_brief.analysis_goal）与这个机会的方向是否一致？
+- 该品牌在 landscape.positioning_map 上的当前位置，能否可信地切入？
+- landscape.players 中的竞品是否已在抢占？品牌的差异化空间在哪里？
+- **comprehensive 模式**：brand_strategy_branches 中已 selected 的分支 brand_role 是否与该机会方向一致？
+筛选后留下 brand_fit=high 的优先推进，brand_fit=low 的标注原因后降优先级。
 
 **第三步：推导品牌专属定位**
-从 landscape.positioning_map 出发，找到 target 品牌当前位置，
-推断它应该向哪个方向移动——但必须论证"为什么是这个品牌能做到"：
-该品牌在 landscape.players 中的 key_claims / narrative_position 是否支撑这个方向？
-竞品为何难以跟进（已占据其他位置、缺乏相关叙事、media_sentiment 制约等）？
+从 landscape.positioning_map 出发，找到 target 品牌当前位置。
+**comprehensive 模式**：整合 brand_strategy_branches 中 selected 分支的 brand_social_role.statement +
+big_idea.statement，让推荐定位与品牌策略层、创意层一致——而非只基于媒体定位。
+论证"为什么是这个品牌能做到"：竞品为何难以跟进（叙事基础、media_sentiment 制约等）？
 
 ## 输出格式（严格 JSON，无 markdown）
 
@@ -98,7 +128,9 @@ Agenda Map 的 attention_gaps 列出了市场中所有值得报道却缺位的�
       "answers_questions": ["q1_id", "q2_id"],
       "evidence_refs": [
         "agenda_map.narrative_map[0].theme",
-        "landscape.players[2].narrative_position"
+        "landscape.players[2].narrative_position",
+        "insight.social_tensions[1] (仅 comprehensive 模式)",
+        "brand_strategy_branches[0].brand_role.brand_social_role.statement (仅 comprehensive 模式)"
       ],
       "actions": ["具体动作1", "具体动作2", "具体动作3"],
       "success_metric": "衡量该优先级是否奏效的指标"
@@ -154,7 +186,11 @@ USER_TEMPLATE = """{brief_section}
 
 {research_context_section}
 
+{coverage_signals}
+
 {research_findings}
+
+{creative_references}
 
 ## 媒体议程图 (Agenda Map)
 
@@ -162,7 +198,11 @@ USER_TEMPLATE = """{brief_section}
 
 ## 竞争格局 (Landscape)
 
-{landscape_section}"""
+{landscape_section}
+
+{insight_section}
+
+{brand_strategy_branches_section}"""
 
 
 def create_strategic_brief_chain() -> Runnable:
@@ -190,14 +230,113 @@ def _build_research_context_section(research_design: dict | None) -> str:
     return "\n".join(lines)
 
 
+def _format_insight_section(insight_result: dict | None) -> str:
+    """comprehensive 模式下注入消费者洞察层产出（去掉 evidence 减少 token）"""
+    if not insight_result:
+        return ""
+    tensions = insight_result.get("social_tensions") or []
+    opportunities = insight_result.get("brand_opportunities") or []
+    slim = {
+        "social_tensions": [
+            {
+                "id": idx,
+                "statement": t.get("statement"),
+                "conventional_wisdom": t.get("conventional_wisdom"),
+                "data_reality": t.get("data_reality"),
+                "confidence": t.get("confidence"),
+                "research_questions_addressed": t.get("research_questions_addressed"),
+            }
+            for idx, t in enumerate(tensions)
+            if isinstance(t, dict)
+        ],
+        "brand_opportunities": [
+            {
+                "id": idx,
+                "statement": o.get("statement"),
+                "why_non_obvious": o.get("why_non_obvious"),
+                "related_tensions": o.get("related_tensions"),
+                "research_questions_addressed": o.get("research_questions_addressed"),
+            }
+            for idx, o in enumerate(opportunities)
+            if isinstance(o, dict)
+        ],
+    }
+    return (
+        "## 消费者洞察 (Insight)\n\n"
+        + json.dumps(slim, ensure_ascii=False, indent=2)
+    )
+
+
+def _format_brand_strategy_branches_section(
+    branches: list[dict] | None,
+) -> str:
+    """comprehensive 模式下注入多分支 brand_role + big_idea 输出。
+
+    精简：仅保留 statement 级核心字段（剔除 evidence / data_provenance），
+    优先标注 selected 分支让 LLM 重点参考。
+    """
+    if not branches:
+        return ""
+    slim_branches = []
+    for b in branches:
+        if not isinstance(b, dict):
+            continue
+        brand_role = b.get("brand_role") or {}
+        big_idea = b.get("big_idea") or {}
+        slim = {
+            "tension_id": b.get("tension_id"),
+            "tension_summary": b.get("tension_summary"),
+            "selected": b.get("selected", False),
+            "status": b.get("status"),
+        }
+        if brand_role:
+            br_role = brand_role.get("brand_social_role") or {}
+            br_strategy = brand_role.get("social_strategy") or {}
+            slim["brand_role"] = {
+                "brand_social_role_statement": br_role.get("statement"),
+                "social_strategy_statement": br_strategy.get("statement"),
+                "core_message": br_strategy.get("core_message"),
+            }
+        if big_idea:
+            bi = big_idea.get("big_idea") or {}
+            content = big_idea.get("content_strategy") or {}
+            slim["big_idea"] = {
+                "big_idea_statement": bi.get("statement"),
+                "tension_echo": bi.get("tension_echo"),
+                "content_pillars": [
+                    p.get("name") for p in (content.get("pillars") or [])
+                    if isinstance(p, dict) and p.get("name")
+                ],
+            }
+        slim_branches.append(slim)
+
+    return (
+        "## 品牌策略多分支 (Brand Strategy Branches)\n\n"
+        "**注意**：标记 `selected: true` 的分支是用户选定的主推方向，"
+        "推导 recommended_positioning 时应优先整合该分支的 brand_role + big_idea。\n\n"
+        + json.dumps(slim_branches, ensure_ascii=False, indent=2)
+    )
+
+
 def format_inputs_for_strategic_brief(
     agenda_map_result: dict | None,
     landscape_result: dict | None,
     brief: dict | None = None,
     research_design: dict | None = None,
     research_findings: str = "",
+    coverage_check_result: dict | None = None,
+    insight_result: dict | None = None,
+    brand_strategy_branches: list[dict] | None = None,
+    creative_references: str = "",
 ) -> dict[str, Any]:
-    """构建 Strategic Brief chain 的输入参数字典。"""
+    """构建 Strategic Brief chain 的输入参数字典。
+
+    media_only 模式（market_report 路径）：insight_result / brand_strategy_branches /
+    creative_references 留空，输出聚焦媒体战略简报。
+
+    comprehensive 模式（full_strategy 路径）：注入消费者侧 + 多分支 + 创意研究，
+    输出综合战略简报；prompt 自动检测 insight_section 段落非空切换分析逻辑。
+    """
     brief_section = ""
     if brief:
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
@@ -214,9 +353,13 @@ def format_inputs_for_strategic_brief(
     return {
         "brief_section": brief_section,
         "research_context_section": _build_research_context_section(research_design),
+        "coverage_signals": format_coverage_signals(coverage_check_result),
         "research_findings": research_findings,
+        "creative_references": creative_references,
         "agenda_map_section": agenda_map_section,
         "landscape_section": landscape_section,
+        "insight_section": _format_insight_section(insight_result),
+        "brand_strategy_branches_section": _format_brand_strategy_branches_section(brand_strategy_branches),
     }
 
 

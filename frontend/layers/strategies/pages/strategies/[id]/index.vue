@@ -435,7 +435,7 @@
           </MarketReportStageCard>
 
           <MarketReportStageCard
-            stage="strategic_brief" title="Strategic Brief 战略简报"
+            stage="strategic_brief" title="Strategic Brief 战略简报 · 媒体视角"
             :has-result="!!strategy.strategic_brief_result" :can-generate="canEdit && canGenerateStrategicBrief"
             :generating="generatingMarketReportStage === 'strategic_brief'" :result="strategy.strategic_brief_result"
             @generate="handleGenerateMarketReportStage('strategic_brief')"
@@ -509,6 +509,24 @@
             @save-brand-role="handleSaveBrandRoleBranch"
             @save-big-idea="handleSaveBigIdeaBranch"
           />
+
+          <!-- 第三阶段（可选）：综合战略简报 -->
+          <div class="flex items-center gap-2 pt-1">
+            <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+            <span class="text-xs text-gray-400 px-2 shrink-0">综合战略简报（可选）</span>
+            <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+          </div>
+
+          <MarketReportStageCard
+            stage="strategic_brief" title="Strategic Brief 战略简报 · 综合视角"
+            :has-result="!!strategy.strategic_brief_result"
+            :can-generate="canEdit && canGenerateStrategicBriefForFull"
+            :generating="generatingMarketReportStage === 'strategic_brief'"
+            :result="strategy.strategic_brief_result"
+            @generate="handleGenerateMarketReportStage('strategic_brief')"
+          >
+            <StrategicBriefContent :result="strategicBriefData" />
+          </MarketReportStageCard>
         </template>
       </div>
     </ClientOnly>
@@ -641,6 +659,10 @@ const canGenerateBigIdea = computed(() => {
 // market_report 路径门控：Agenda Map → Landscape → Strategic Brief
 const canGenerateLandscape = computed(() => currentStatusOrder.value >= STATUS_ORDER.agenda_map_done)
 const canGenerateStrategicBrief = computed(() => currentStatusOrder.value >= STATUS_ORDER.landscape_done)
+// full_strategy 路径下的 Strategic Brief 是可选终层，需至少一个分支完成 big_idea
+const canGenerateStrategicBriefForFull = computed(() =>
+  brandStrategyBranches.value.some(b => b.big_idea),
+)
 
 // full_strategy 专属门控：landscape 完成后才能生成 Insight
 const canGenerateInsightForFull = computed(() => !!strategy.value?.landscape_result)

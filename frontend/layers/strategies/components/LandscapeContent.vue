@@ -56,81 +56,98 @@
       </div>
     </div>
 
-    <!-- 定位图（2D 象限可视化） -->
+    <!-- 定位图（2D 象限可视化）：左右布局——左 grid / 右 轴说明 + 玩家定位理由 -->
     <div v-if="result.positioning_map?.positions?.length">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">定位图</h4>
       <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <!-- 轴说明 + 选轴理由 -->
-        <div class="text-xs text-gray-600 dark:text-gray-300 mb-3 space-y-1">
-          <p>
-            <span class="font-medium">X 轴：</span>{{ result.positioning_map.x_axis?.label }}
-            <span class="text-gray-400">（{{ result.positioning_map.x_axis?.low }} ↔ {{ result.positioning_map.x_axis?.high }}）</span>
-          </p>
-          <p>
-            <span class="font-medium">Y 轴：</span>{{ result.positioning_map.y_axis?.label }}
-            <span class="text-gray-400">（{{ result.positioning_map.y_axis?.low }} ↔ {{ result.positioning_map.y_axis?.high }}）</span>
-          </p>
-          <p v-if="result.positioning_map.rationale" class="text-gray-500 dark:text-gray-400 italic">
-            {{ result.positioning_map.rationale }}
-          </p>
-        </div>
+        <div class="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-6 items-start">
+          <!-- 左：2D 象限网格（保留 aspect-square + 内 padding 留出端点标签空间） -->
+          <div class="px-6 py-5">
+            <div class="relative w-full aspect-square bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded">
+              <!-- 中线 -->
+              <div class="absolute inset-x-0 top-1/2 border-t border-dashed border-gray-300 dark:border-gray-600" />
+              <div class="absolute inset-y-0 left-1/2 border-l border-dashed border-gray-300 dark:border-gray-600" />
 
-        <!-- 2D 象限网格 -->
-        <div class="relative w-full max-w-md mx-auto aspect-square bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded">
-          <!-- 中线 -->
-          <div class="absolute inset-x-0 top-1/2 border-t border-dashed border-gray-300 dark:border-gray-600" />
-          <div class="absolute inset-y-0 left-1/2 border-l border-dashed border-gray-300 dark:border-gray-600" />
-
-          <!-- 轴端点标签 -->
-          <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap">
-            ↑ {{ result.positioning_map.y_axis?.high }}
-          </span>
-          <span class="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap">
-            ↓ {{ result.positioning_map.y_axis?.low }}
-          </span>
-          <span class="absolute top-1/2 -left-2 -translate-x-full -translate-y-1/2 text-[10px] text-gray-500 whitespace-nowrap">
-            {{ result.positioning_map.x_axis?.low }} ←
-          </span>
-          <span class="absolute top-1/2 -right-2 translate-x-full -translate-y-1/2 text-[10px] text-gray-500 whitespace-nowrap">
-            → {{ result.positioning_map.x_axis?.high }}
-          </span>
-
-          <!-- 玩家点位 -->
-          <div
-            v-for="(pos, idx) in result.positioning_map.positions"
-            :key="idx"
-            class="absolute -translate-x-1/2 translate-y-1/2"
-            :style="{
-              left: `${(clampCoord(pos.x) + 1) * 50}%`,
-              bottom: `${(clampCoord(pos.y) + 1) * 50}%`,
-            }"
-          >
-            <div class="flex items-center gap-1">
-              <div
-                class="w-2.5 h-2.5 rounded-full shrink-0"
-                :class="pos.player === targetPlayerName ? 'bg-primary-500' : 'bg-gray-500 dark:bg-gray-400'"
-              />
-              <span class="text-[10px] font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap">
-                {{ pos.player }}
+              <!-- 轴端点标签 -->
+              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap">
+                ↑ {{ result.positioning_map.y_axis?.high }}
               </span>
+              <span class="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap">
+                ↓ {{ result.positioning_map.y_axis?.low }}
+              </span>
+              <span
+                class="absolute top-1/2 -left-2 -translate-x-full -translate-y-1/2 text-[10px] text-gray-500 whitespace-nowrap"
+                style="writing-mode: vertical-rl;"
+              >
+                ↓ {{ result.positioning_map.x_axis?.low }}
+              </span>
+              <span
+                class="absolute top-1/2 -right-2 translate-x-full -translate-y-1/2 text-[10px] text-gray-500 whitespace-nowrap"
+                style="writing-mode: vertical-rl;"
+              >
+                ↑ {{ result.positioning_map.x_axis?.high }}
+              </span>
+
+              <!-- 玩家点位 -->
+              <div
+                v-for="(pos, idx) in result.positioning_map.positions"
+                :key="idx"
+                class="absolute -translate-x-1/2 translate-y-1/2"
+                :style="{
+                  left: `${(clampCoord(pos.x) + 1) * 50}%`,
+                  bottom: `${(clampCoord(pos.y) + 1) * 50}%`,
+                }"
+              >
+                <div class="flex items-center gap-1">
+                  <div
+                    class="w-2.5 h-2.5 rounded-full shrink-0"
+                    :class="pos.player === targetPlayerName ? 'bg-primary-500' : 'bg-gray-500 dark:bg-gray-400'"
+                  />
+                  <span class="text-[10px] font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap">
+                    {{ pos.player }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 定位理由列表（点位下方展开） -->
-        <ul class="mt-6 space-y-1.5">
-          <li
-            v-for="(pos, idx) in result.positioning_map.positions"
-            :key="idx"
-            class="text-xs text-gray-600 dark:text-gray-300"
-          >
-            <span class="font-medium">{{ pos.player }}</span>
-            <span class="text-gray-400 ml-1">(x: {{ formatCoord(pos.x) }} · y: {{ formatCoord(pos.y) }})</span>
-            <span v-if="pos.rationale" class="block mt-0.5 pl-3 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-              {{ pos.rationale }}
-            </span>
-          </li>
-        </ul>
+          <!-- 右：轴说明 + 选轴理由 + 玩家定位列表 -->
+          <div class="space-y-3">
+            <div class="text-xs text-gray-600 dark:text-gray-300 space-y-0.5">
+              <p>
+                <span class="font-medium">X 轴 · {{ result.positioning_map.x_axis?.label }}</span>
+                <span class="text-gray-400 ml-1">（{{ result.positioning_map.x_axis?.low }} ↔ {{ result.positioning_map.x_axis?.high }}）</span>
+              </p>
+              <p>
+                <span class="font-medium">Y 轴 · {{ result.positioning_map.y_axis?.label }}</span>
+                <span class="text-gray-400 ml-1">（{{ result.positioning_map.y_axis?.low }} ↔ {{ result.positioning_map.y_axis?.high }}）</span>
+              </p>
+              <p v-if="result.positioning_map.rationale" class="text-gray-500 dark:text-gray-400 italic pt-1 leading-relaxed">
+                {{ result.positioning_map.rationale }}
+              </p>
+            </div>
+
+            <ul class="space-y-1.5 pt-2 border-t border-gray-200 dark:border-gray-700">
+              <li
+                v-for="(pos, idx) in result.positioning_map.positions"
+                :key="idx"
+                class="text-xs text-gray-600 dark:text-gray-300"
+              >
+                <div class="flex items-center gap-1.5">
+                  <div
+                    class="w-2 h-2 rounded-full shrink-0"
+                    :class="pos.player === targetPlayerName ? 'bg-primary-500' : 'bg-gray-500 dark:bg-gray-400'"
+                  />
+                  <span class="font-medium">{{ pos.player }}</span>
+                  <span class="text-gray-400">(x: {{ formatCoord(pos.x) }} · y: {{ formatCoord(pos.y) }})</span>
+                </div>
+                <p v-if="pos.rationale" class="mt-0.5 pl-3.5 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                  {{ pos.rationale }}
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -186,40 +203,90 @@
       </div>
     </div>
 
-    <!-- 市场动态 -->
+    <!-- 市场动态：三种子类型 schema 不同（MomentumItem vs StructuralShiftItem），分别渲染 -->
     <div v-if="hasMarketDynamics">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">市场动态</h4>
       <div class="grid md:grid-cols-3 gap-3">
+        <!-- 势能上扬 -->
         <div
-          v-for="section in marketDynamicSections"
-          :key="section.key"
-          class="p-3 rounded-lg"
-          :class="section.bgClass"
+          v-if="result.market_dynamics?.momentum_gainers?.length"
+          class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20"
         >
-          <p class="text-xs font-medium mb-1.5" :class="section.titleClass">{{ section.label }}</p>
+          <p class="text-xs font-medium mb-1.5 text-green-700 dark:text-green-300">势能上扬</p>
           <ul class="space-y-1.5">
             <li
-              v-for="(item, iIdx) in section.items"
+              v-for="(item, iIdx) in result.market_dynamics.momentum_gainers"
               :key="iIdx"
               class="text-xs text-gray-700 dark:text-gray-300"
             >
-              <template v-if="typeof item === 'object'">
-                <span class="font-medium">{{ item.player || item.shift || '' }}</span>
-                <span v-if="item.signal || item.implication" class="text-gray-500 block mt-0.5 pl-2 leading-relaxed">
-                  {{ isItemExpanded(section.key, iIdx) || (item.signal || item.implication || '').length <= 100
-                    ? (item.signal || item.implication)
-                    : truncateText(item.signal || item.implication || '', 100)
-                  }}
-                  <button
-                    v-if="(item.signal || item.implication || '').length > 100"
-                    class="text-primary-500 hover:text-primary-600 ml-1 cursor-pointer"
-                    @click="toggleItemExpanded(section.key, iIdx)"
-                  >
-                    {{ isItemExpanded(section.key, iIdx) ? '收起' : '展开' }}
-                  </button>
-                </span>
-              </template>
-              <template v-else>· {{ item }}</template>
+              <span class="font-medium">{{ item.player }}</span>
+              <span v-if="item.signal" class="text-gray-500 block mt-0.5 pl-2 leading-relaxed">
+                {{ isItemExpanded('gainers', iIdx) || item.signal.length <= 100
+                  ? item.signal : truncateText(item.signal, 100) }}
+                <button
+                  v-if="item.signal.length > 100"
+                  class="text-primary-500 hover:text-primary-600 ml-1 cursor-pointer"
+                  @click="toggleItemExpanded('gainers', iIdx)"
+                >
+                  {{ isItemExpanded('gainers', iIdx) ? '收起' : '展开' }}
+                </button>
+              </span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 势能下滑 -->
+        <div
+          v-if="result.market_dynamics?.momentum_losers?.length"
+          class="p-3 rounded-lg bg-red-50 dark:bg-red-900/20"
+        >
+          <p class="text-xs font-medium mb-1.5 text-red-700 dark:text-red-300">势能下滑</p>
+          <ul class="space-y-1.5">
+            <li
+              v-for="(item, iIdx) in result.market_dynamics.momentum_losers"
+              :key="iIdx"
+              class="text-xs text-gray-700 dark:text-gray-300"
+            >
+              <span class="font-medium">{{ item.player }}</span>
+              <span v-if="item.signal" class="text-gray-500 block mt-0.5 pl-2 leading-relaxed">
+                {{ isItemExpanded('losers', iIdx) || item.signal.length <= 100
+                  ? item.signal : truncateText(item.signal, 100) }}
+                <button
+                  v-if="item.signal.length > 100"
+                  class="text-primary-500 hover:text-primary-600 ml-1 cursor-pointer"
+                  @click="toggleItemExpanded('losers', iIdx)"
+                >
+                  {{ isItemExpanded('losers', iIdx) ? '收起' : '展开' }}
+                </button>
+              </span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 结构性转变 -->
+        <div
+          v-if="result.market_dynamics?.structural_shifts?.length"
+          class="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20"
+        >
+          <p class="text-xs font-medium mb-1.5 text-purple-700 dark:text-purple-300">结构性转变</p>
+          <ul class="space-y-1.5">
+            <li
+              v-for="(item, iIdx) in result.market_dynamics.structural_shifts"
+              :key="iIdx"
+              class="text-xs text-gray-700 dark:text-gray-300"
+            >
+              <span class="font-medium">{{ item.shift }}</span>
+              <span v-if="item.implication" class="text-gray-500 block mt-0.5 pl-2 leading-relaxed">
+                {{ isItemExpanded('shifts', iIdx) || item.implication.length <= 100
+                  ? item.implication : truncateText(item.implication, 100) }}
+                <button
+                  v-if="item.implication.length > 100"
+                  class="text-primary-500 hover:text-primary-600 ml-1 cursor-pointer"
+                  @click="toggleItemExpanded('shifts', iIdx)"
+                >
+                  {{ isItemExpanded('shifts', iIdx) ? '收起' : '展开' }}
+                </button>
+              </span>
             </li>
           </ul>
         </div>
@@ -230,7 +297,7 @@
 </template>
 
 <script setup lang="ts">
-import type { LandscapeResult, MarketDynamicEntry, EvidenceQuote } from '../types'
+import type { LandscapeResult, EvidenceQuote } from '../types'
 import { sentimentColor, sentimentLabel } from '../composables/useStrategyConstants'
 import { UBadge } from '#components'
 
@@ -271,32 +338,7 @@ const hasMarketDynamics = computed(() => {
     || (d.structural_shifts?.length ?? 0) > 0
 })
 
-const marketDynamicSections = computed(() => {
-  const d = props.result?.market_dynamics
-  if (!d) return []
-  const sections: Array<{ key: string; label: string; items: MarketDynamicEntry[]; bgClass: string; titleClass: string }> = []
-  if (d.momentum_gainers?.length) {
-    sections.push({
-      key: 'gainers', label: '势能上扬', items: d.momentum_gainers,
-      bgClass: 'bg-green-50 dark:bg-green-900/20', titleClass: 'text-green-700 dark:text-green-300',
-    })
-  }
-  if (d.momentum_losers?.length) {
-    sections.push({
-      key: 'losers', label: '势能下滑', items: d.momentum_losers,
-      bgClass: 'bg-red-50 dark:bg-red-900/20', titleClass: 'text-red-700 dark:text-red-300',
-    })
-  }
-  if (d.structural_shifts?.length) {
-    sections.push({
-      key: 'shifts', label: '结构性转变', items: d.structural_shifts,
-      bgClass: 'bg-purple-50 dark:bg-purple-900/20', titleClass: 'text-purple-700 dark:text-purple-300',
-    })
-  }
-  return sections
-})
-
-// 市场动态条目展开状态：key=`${sectionKey}:${itemIdx}`
+// 市场动态条目展开状态：key=`${sectionKey}:${itemIdx}`，sectionKey ∈ gainers / losers / shifts
 const expandedItems = ref(new Set<string>())
 const isItemExpanded = (sectionKey: string, idx: number) =>
   expandedItems.value.has(`${sectionKey}:${idx}`)

@@ -52,7 +52,7 @@
               <span class="italic">
                 "{{ expandedNarratives.has(idx) ? voice.quote : truncateText(voice.quote, 150) }}"
               </span>
-              <span class="text-gray-400 ml-1">— {{ voice.speaker || voice.source_name || '媒体' }}</span>
+              <span class="text-gray-400 ml-1">— {{ voice.speaker || voice.source || '媒体' }}</span>
             </div>
             <button
               v-if="narrative.representative_voices.length > 1 || (narrative.representative_voices[0]?.quote?.length ?? 0) > 150"
@@ -132,28 +132,81 @@
 
     <!-- 媒体声量模式 + 注意力缺口：并排两栏 -->
     <div class="grid md:grid-cols-2 gap-4">
-      <!-- 媒体声量模式 -->
+      <!-- 媒体声量模式：三种子类型 schema 不同，分别渲染 -->
       <div v-if="hasVoicePatterns">
         <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">媒体声量模式</h4>
         <div class="space-y-2">
+          <!-- 权威共识 -->
           <div
-            v-for="(section, sIdx) in voicePatternSections"
-            :key="sIdx"
-            class="p-2.5 rounded-lg"
-            :class="section.bgClass"
+            v-if="result.media_voice_patterns?.authoritative_consensus?.length"
+            class="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20"
           >
-            <p class="text-xs font-medium mb-1" :class="section.titleClass">{{ section.label }}</p>
-            <ul class="space-y-1">
+            <p class="text-xs font-medium mb-1 text-blue-700 dark:text-blue-300">权威共识</p>
+            <ul class="space-y-1.5">
               <li
-                v-for="(item, iIdx) in section.items"
+                v-for="(item, iIdx) in result.media_voice_patterns.authoritative_consensus"
                 :key="iIdx"
                 class="text-xs text-gray-700 dark:text-gray-300"
               >
-                <template v-if="typeof item === 'object'">
+                <span class="font-medium">{{ item.topic }}</span>
+                <span v-if="item.stance" class="block mt-0.5 pl-2 text-gray-500">{{ item.stance }}</span>
+                <span v-if="item.evidence" class="block mt-0.5 pl-2 text-[11px] text-gray-400 italic">
+                  证据：{{ item.evidence }}
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- 行业争论 -->
+          <div
+            v-if="result.media_voice_patterns?.industry_debate?.length"
+            class="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20"
+          >
+            <p class="text-xs font-medium mb-1 text-amber-700 dark:text-amber-400">行业争论</p>
+            <ul class="space-y-1.5">
+              <li
+                v-for="(item, iIdx) in result.media_voice_patterns.industry_debate"
+                :key="iIdx"
+                class="text-xs text-gray-700 dark:text-gray-300"
+              >
+                <span class="font-medium">{{ item.topic }}</span>
+                <ul v-if="item.positions?.length" class="mt-0.5 space-y-0.5 pl-2">
+                  <li
+                    v-for="(p, pi) in item.positions"
+                    :key="pi"
+                    class="text-[11px] text-gray-500 dark:text-gray-400 before:content-['·_'] before:text-gray-400"
+                  >
+                    {{ p }}
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <!-- 新兴叙事 -->
+          <div
+            v-if="result.media_voice_patterns?.emerging_narratives?.length"
+            class="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-900/20"
+          >
+            <p class="text-xs font-medium mb-1 text-purple-700 dark:text-purple-300">新兴叙事</p>
+            <ul class="space-y-1.5">
+              <li
+                v-for="(item, iIdx) in result.media_voice_patterns.emerging_narratives"
+                :key="iIdx"
+                class="text-xs text-gray-700 dark:text-gray-300"
+              >
+                <div class="flex items-center justify-between gap-2 flex-wrap">
                   <span class="font-medium">{{ item.topic }}</span>
-                  <span v-if="item.stance" class="text-gray-500 block mt-0.5 pl-2">{{ truncateText(item.stance, 60) }}</span>
-                </template>
-                <template v-else>{{ item }}</template>
+                  <span
+                    v-if="item.originating_tier"
+                    class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-800/50 text-purple-700 dark:text-purple-300 shrink-0"
+                  >
+                    源自 {{ tierLabel(item.originating_tier) }}
+                  </span>
+                </div>
+                <span v-if="item.why_unverified" class="block mt-0.5 pl-2 text-[11px] text-gray-500 italic">
+                  待验证：{{ item.why_unverified }}
+                </span>
               </li>
             </ul>
           </div>
@@ -169,33 +222,28 @@
             :key="idx"
             class="p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg"
           >
-            <template v-if="typeof gap === 'object'">
-              <div class="flex items-start justify-between gap-2">
-                <p class="text-xs font-medium text-gray-800 dark:text-gray-200">{{ gap.topic }}</p>
-                <UBadge
-                  v-if="gap.risk_or_opportunity"
-                  :color="gap.risk_or_opportunity === 'risk' ? 'error' : 'success'"
-                  variant="subtle"
-                  size="sm"
-                  class="shrink-0"
-                >
-                  {{ gap.risk_or_opportunity === 'risk' ? '风险' : '机会' }}
-                </UBadge>
-              </div>
-              <p v-if="gap.why_matters" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-                {{ expandedGaps.has(idx) || gap.why_matters.length <= 120 ? gap.why_matters : truncateText(gap.why_matters, 120) }}
-                <button
-                  v-if="gap.why_matters.length > 120"
-                  class="text-primary-500 hover:text-primary-600 ml-1 cursor-pointer"
-                  @click="toggleGap(idx)"
-                >
-                  {{ expandedGaps.has(idx) ? '收起' : '展开' }}
-                </button>
-              </p>
-            </template>
-            <template v-else>
-              <p class="text-xs text-gray-700 dark:text-gray-300">{{ gap }}</p>
-            </template>
+            <div class="flex items-start justify-between gap-2">
+              <p class="text-xs font-medium text-gray-800 dark:text-gray-200">{{ gap.topic }}</p>
+              <UBadge
+                v-if="gap.risk_or_opportunity"
+                :color="gap.risk_or_opportunity === 'risk' ? 'error' : 'success'"
+                variant="subtle"
+                size="sm"
+                class="shrink-0"
+              >
+                {{ gap.risk_or_opportunity === 'risk' ? '风险' : '机会' }}
+              </UBadge>
+            </div>
+            <p v-if="gap.why_matters" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+              {{ expandedGaps.has(idx) || gap.why_matters.length <= 120 ? gap.why_matters : truncateText(gap.why_matters, 120) }}
+              <button
+                v-if="gap.why_matters.length > 120"
+                class="text-primary-500 hover:text-primary-600 ml-1 cursor-pointer"
+                @click="toggleGap(idx)"
+              >
+                {{ expandedGaps.has(idx) ? '收起' : '展开' }}
+              </button>
+            </p>
           </div>
         </div>
       </div>
@@ -205,7 +253,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AgendaMapResult, VoicePatternEntry } from '../types'
+import type { AgendaMapResult } from '../types'
 import { sentimentColor, sentimentLabel } from '../composables/useStrategyConstants'
 import { UBadge } from '#components'
 
@@ -250,37 +298,6 @@ const hasVoicePatterns = computed(() => {
   return (p.authoritative_consensus?.length ?? 0) > 0
     || (p.industry_debate?.length ?? 0) > 0
     || (p.emerging_narratives?.length ?? 0) > 0
-})
-
-const voicePatternSections = computed(() => {
-  const p = props.result?.media_voice_patterns
-  if (!p) return []
-  const sections: Array<{ label: string; items: VoicePatternEntry[]; bgClass: string; titleClass: string }> = []
-  if (p.authoritative_consensus?.length) {
-    sections.push({
-      label: '权威共识',
-      items: p.authoritative_consensus,
-      bgClass: 'bg-blue-50 dark:bg-blue-900/20',
-      titleClass: 'text-blue-700 dark:text-blue-300',
-    })
-  }
-  if (p.industry_debate?.length) {
-    sections.push({
-      label: '行业争论',
-      items: p.industry_debate,
-      bgClass: 'bg-amber-50 dark:bg-amber-900/20',
-      titleClass: 'text-amber-700 dark:text-amber-400',
-    })
-  }
-  if (p.emerging_narratives?.length) {
-    sections.push({
-      label: '新兴叙事',
-      items: p.emerging_narratives,
-      bgClass: 'bg-purple-50 dark:bg-purple-900/20',
-      titleClass: 'text-purple-700 dark:text-purple-300',
-    })
-  }
-  return sections
 })
 
 const credibilityColor = (c: string) => {

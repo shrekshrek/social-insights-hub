@@ -114,10 +114,10 @@ Formatter 入口:[`insight_chain.py::format_slice_data_for_insight()`](../../bac
 |---------|-----|-----|------|
 | `meta.subject` | insight | 区分品牌聚焦 vs 大盘切片 | 🔴 必需 |
 | `meta.competitors` | insight | 竞品列表背景 | 🟡 可选 |
-| `foundation.aligned_entities[0:10]` | insight | 实体热度 + 情感 | 🔴 必需 |
+| `foundation.aligned_entities[0:50]` | insight | 实体热度 + 情感 | 🔴 必需 |
 | `foundation.aligned_entities[].original_terms[0:5]` | insight | 用户原话(Top 5 实体) | 🟡 强烈推荐(evidence 引用) |
 | `foundation.aligned_entities[].organic_sentiment` | insight | 非推广情感(真实痛点) | 🔴 必需 |
-| `foundation.aligned_topics[0:15]` | insight | 话题热度 + 情感 | 🔴 必需 |
+| `foundation.aligned_topics[0:30]` | insight | 话题热度 + 情感 | 🔴 必需 |
 | `layers.landscape.sov_ranking[0:10]` | insight | 品牌声量 + 情感(四象限) | 🔴 必需 |
 | `layers.landscape.sov_ranking[].role` | insight | 竞争角色标签 | 🟡 可选 |
 | `layers.intent.topic_radar.pains[0:10]` | insight | **痛点话题(Tension 核心)** | 🔴 必需 |

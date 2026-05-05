@@ -135,6 +135,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 4. 所有社媒切片 Stage2 + 所有新闻切片 insight 到终态（completed/failed/skipped）后，由 `_try_advance_to_ready` 跑 `coverage_check_chain`（只消费 `status=completed` 的切片）
    - 触发来源：①`get_collection_status` 端点（前端 15s 轮询，近实时）；②APScheduler `strategy_collection` job（2min 兜底，前端停轮询时不被卡住）
    - **判定逻辑**：per-RQ 三态判定 `covered / partial / uncovered`，基于切片量化指标（`mentions` + `source_count` + `sentiment`）。`source_count ≥3` 即视为可靠信号（统计上"互相佐证"最低线，避免单帖偏见 / 双帖巧合）；`source=1-2` 判 partial；完全无相关命中判 uncovered。`overall_ready=true` 当且仅当所有 `priority=high` 的 RQ ∈ {covered, partial}。warnings 字段承载跨 RQ 共性诊断（如"slice X 数据稀疏，影响 rq2/rq3"）
+   - **实现要点（v2026.05 修，避免假阴性）**：① 输入按 `source_count` 降序排，**保留所有 ≥3 source 的实体/话题**（`_select_evidence`，与判定阈值对齐，非盲目 top N）；② prompt 强制 LLM 输出 `term_aliases_explored`（中英文/缩写/全称/同义词别名展开）+ `matched_items`（命中清单），防止 RQ 字面词不出现就误判 uncovered；③ 明确告知 LLM `(Context)` 角色实体（成分/技术/概念）也是有效证据；④ 边界规则：判数据已采集 ≠ 判 RQ 已被回答（后者是 Insight 阶段的事）。详见 [`coverage_check_chain.py`](../llm/chains/strategy/coverage_check_chain.py)
 5. `overall_ready=true` → 状态 → ready
 6. 用户可 `adjust-slices` 微调切片配置（触发重新验证）
 

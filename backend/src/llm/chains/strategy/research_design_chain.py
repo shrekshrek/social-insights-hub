@@ -228,6 +228,7 @@ output_type 可选值（按决策表推导）: campaign_strategy / market_report
 - news_media 维度必须包含 `enable_wechat_mp` 字段（true 或 false），依据 Section 2 的判断标准填写，不得省略
 - slice_blueprint: 2-3 个切片，覆盖所有研究问题
 - 每个切片的 source_dimensions 必须引用 data_plan 中存在的 dimension_name
+- **data_plan 中每个 dimension_name 必须至少出现在一个切片的 source_dimensions 中（不允许孤儿维度——已采集却无切片消费的维度等于丢数据）**；若同一研究主题在 social_media 与 news_media 各有一条 dim，两条都必须被引用（切片可同时引用跨渠道 dim）
 - 每个切片的 serves_questions 必须引用 research_questions 中存在的 id
 - 每个 data_plan 条目的 question_ids 必须引用 research_questions 中存在的 id（该维度的数据采集服务哪些研究问题）
 - primary_sources: 按上文"产出路径决策表"从 data_plan 的 channel 分布推导，非空数组
@@ -427,57 +428,97 @@ def _fix_platform_symmetry(
     return result
 
 
-def _fix_competitive_in_slices(
+# 孤儿维度按 dim_type 归位的目标切片类型
+# focused = 有 subject 的切片（品牌聚焦）；general = 无 subject 的切片（大盘分析）
+_ORPHAN_DIM_TARGETS: dict[str, tuple[str, ...]] = {
+    "competitive": ("focused", "general"),  # 与 prompt §4 对齐：品牌聚焦供质性对比 + 大盘供 SOV
+    "consumer_voice": ("focused",),
+    "brand_voice": ("focused",),
+    "media_narrative": ("general",),
+    "industry": ("general",),
+}
+
+
+def _fix_orphan_dimensions(
     data_plan: list[dict[str, Any]],
     slice_blueprint: list[dict[str, Any]],
     dim_type_map: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """确保 competitive 维度至少出现在一个切片的 source_dimensions 里。
+    """确保 data_plan 中每个 dimension_name 至少被一个切片的 source_dimensions 引用。
 
-    若所有切片都未引用任何 competitive 维度，自动将其追加到品牌聚焦切片（有 subject 的切片）。
-    无品牌聚焦切片时追加到第一个切片。
+    LLM 偶尔会在 social_media / news_media 同概念给出不同后缀的 dim_name（如
+    "竞品配方沟通策略" / "竞品配方沟通新闻"），blueprint 只列其中一条 → 另一条变孤儿
+    维度，对应任务被静默丢弃（详见 strategy 41 事故）。本函数按 dim_type 自动归位：
+
+    - competitive → 品牌聚焦 + 大盘（与 prompt §4 一致）
+    - consumer_voice / brand_voice → 品牌聚焦
+    - media_narrative / industry → 大盘
+    - 未知 type 或对应切片缺失 → 兜底加入第一个切片 + warning
+
+    渠道无关：social_media 与 news_media 的孤儿维度等同处理。
     """
-    competitive_dim_names = {
+    if not slice_blueprint or not data_plan:
+        return slice_blueprint
+
+    referenced: set[str] = set()
+    for sb in slice_blueprint:
+        referenced.update(sb.get("source_dimensions") or [])
+
+    orphans = [
         dp.get("dimension_name", "")
         for dp in data_plan
-        if dim_type_map.get(dp.get("dimension_name", "")) == "competitive"
-    }
-    if not competitive_dim_names:
+        if dp.get("dimension_name") and dp.get("dimension_name") not in referenced
+    ]
+    if not orphans:
         return slice_blueprint
 
-    # 检查是否已有切片引用了 competitive 维度
-    already_referenced = any(
-        bool(competitive_dim_names & set(sb.get("source_dimensions") or []))
-        for sb in slice_blueprint
-    )
-    if already_referenced:
-        return slice_blueprint
-
-    if not slice_blueprint:
-        return slice_blueprint
-
-    # 找品牌聚焦切片，没有则取第一个
-    target_idx = next(
+    focused_idx = next(
         (i for i, sb in enumerate(slice_blueprint) if sb.get("subject")),
-        0,
+        None,
+    )
+    general_idx = next(
+        (i for i, sb in enumerate(slice_blueprint) if not sb.get("subject")),
+        None,
     )
 
-    logger.info(
-        "competitive 维度 %s 未被任何切片引用，自动追加到切片「%s」",
-        competitive_dim_names,
-        slice_blueprint[target_idx].get("name", ""),
-    )
+    # idx → 要追加的 dim_names（保持出现顺序，去重在最后）
+    to_append: dict[int, list[str]] = {}
+    for dim_name in orphans:
+        dim_type = dim_type_map.get(dim_name, "")
+        targets = _ORPHAN_DIM_TARGETS.get(dim_type, ())
+        target_indices: list[int] = []
+        for t in targets:
+            if t == "focused" and focused_idx is not None:
+                target_indices.append(focused_idx)
+            elif t == "general" and general_idx is not None:
+                target_indices.append(general_idx)
 
-    fixed = slice_blueprint[target_idx].copy()
-    existing = list(fixed.get("source_dimensions") or [])
-    fixed["source_dimensions"] = existing + [
-        name for name in competitive_dim_names if name not in existing
-    ]
+        if not target_indices:
+            target_indices = [0]
+            logger.warning(
+                "孤儿维度「%s」(dim_type=%s) 无对应切片类型，兜底加入第一个切片「%s」",
+                dim_name, dim_type or "unknown",
+                slice_blueprint[0].get("name", ""),
+            )
 
-    return [
-        fixed if i == target_idx else sb
-        for i, sb in enumerate(slice_blueprint)
-    ]
+        for ti in target_indices:
+            to_append.setdefault(ti, []).append(dim_name)
+
+    result = []
+    for i, sb in enumerate(slice_blueprint):
+        adds = to_append.get(i)
+        if not adds:
+            result.append(sb)
+            continue
+        existing = list(sb.get("source_dimensions") or [])
+        merged = existing + [n for n in adds if n not in existing]
+        logger.info(
+            "孤儿维度 %s 自动追加到切片「%s」",
+            adds, sb.get("name", ""),
+        )
+        result.append({**sb, "source_dimensions": merged})
+
+    return result
 
 
 def parse_research_design_response(response_text: str) -> dict[str, Any]:
@@ -521,7 +562,7 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
     # 后端结构校正（不依赖 LLM 严格遵守 prompt）
     dim_type_map = _build_dim_type_map(result["data_plan"], result["research_questions"])
     result["data_plan"] = _fix_platform_symmetry(result["data_plan"], dim_type_map)
-    result["slice_blueprint"] = _fix_competitive_in_slices(
+    result["slice_blueprint"] = _fix_orphan_dimensions(
         result["data_plan"], result["slice_blueprint"], dim_type_map
     )
 

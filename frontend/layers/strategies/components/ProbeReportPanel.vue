@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
-    <!-- 进度条（仅在有任务数据或仍在探测时显示） -->
-    <div v-if="totalCount > 0 || !allAnalyzed" class="flex items-center gap-3">
+    <!-- 进度条：审查报告出来后让位（与数据就绪面板一致）；failed 任务恒令 allAnalyzed=false，仍会保留 -->
+    <div v-if="(totalCount > 0 || !allAnalyzed) && !(allAnalyzed && probeReview)" class="flex items-center gap-3">
       <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
         <div
           class="h-2 rounded-full transition-all duration-300"

@@ -14,6 +14,9 @@ from src.llm.chains.strategy.brand_strategy.big_idea_chain import (
     format_data_for_big_idea,
     parse_big_idea_response,
 )
+from src.llm.chains.strategy.research_design_chain import (
+    _fix_orphan_dimensions,
+)
 
 
 # ==================== Insight (brand_strategy 第 1 层) ====================
@@ -178,3 +181,103 @@ class TestFormatBigIdea:
         # 多分支模式：注入 focused tension + 当前分支 brand_role
         assert "insight_focused_section" in result
         assert "branch_brand_role_section" in result
+
+
+# ==================== _fix_orphan_dimensions（research_design 后置修复） ====================
+
+
+class TestFixOrphanDimensions:
+    """覆盖 strategy 41 事故场景及对称社媒/新闻孤儿维度兜底。"""
+
+    def test_strategy_41_news_competitive_orphan_repaired(self):
+        """LLM 把 social/news 同概念命名分裂（"竞品配方沟通策略" / "竞品配方沟通新闻"），
+        blueprint 只引用了 social 那条 → news 那条变孤儿，修复后必须进入品牌聚焦+大盘切片。"""
+        data_plan = [
+            {"dimension_name": "消费者对Enfinitas及MFGM认知", "channel": "social_media",
+             "question_ids": ["rq1"]},
+            {"dimension_name": "竞品配方沟通策略", "channel": "social_media",
+             "question_ids": ["rq3"]},
+            {"dimension_name": "行业趋势与科研新闻", "channel": "news_media",
+             "question_ids": ["rq4"]},
+            {"dimension_name": "竞品配方沟通新闻", "channel": "news_media",
+             "question_ids": ["rq3"]},
+        ]
+        slice_blueprint = [
+            {"name": "Enfinitas品牌认知与竞争对比", "subject": "Enfinitas",
+             "source_dimensions": ["消费者对Enfinitas及MFGM认知", "竞品配方沟通策略"]},
+            {"name": "高端奶粉行业趋势与MFGM价值", "subject": "",
+             "source_dimensions": ["竞品配方沟通策略", "行业趋势与科研新闻"]},
+        ]
+        dim_type_map = {
+            "消费者对Enfinitas及MFGM认知": "consumer_voice",
+            "竞品配方沟通策略": "competitive",
+            "行业趋势与科研新闻": "industry",
+            "竞品配方沟通新闻": "competitive",
+        }
+        fixed = _fix_orphan_dimensions(data_plan, slice_blueprint, dim_type_map)
+        focused_dims = set(fixed[0]["source_dimensions"])
+        general_dims = set(fixed[1]["source_dimensions"])
+        # competitive 类孤儿：品牌聚焦 + 大盘 都要进
+        assert "竞品配方沟通新闻" in focused_dims
+        assert "竞品配方沟通新闻" in general_dims
+        # 非孤儿维度不变
+        assert "消费者对Enfinitas及MFGM认知" in focused_dims
+        assert "行业趋势与科研新闻" in general_dims
+
+    def test_no_orphan_returns_unchanged(self):
+        """所有 dim 都被引用时不修改 blueprint。"""
+        data_plan = [{"dimension_name": "A"}, {"dimension_name": "B"}]
+        slice_blueprint = [
+            {"name": "s1", "subject": "X", "source_dimensions": ["A", "B"]},
+        ]
+        result = _fix_orphan_dimensions(data_plan, slice_blueprint, {"A": "competitive", "B": "industry"})
+        assert result == slice_blueprint
+
+    def test_consumer_voice_orphan_to_focused(self):
+        data_plan = [{"dimension_name": "消费者声音"}]
+        slice_blueprint = [
+            {"name": "聚焦", "subject": "X", "source_dimensions": []},
+            {"name": "大盘", "subject": "", "source_dimensions": []},
+        ]
+        fixed = _fix_orphan_dimensions(data_plan, slice_blueprint, {"消费者声音": "consumer_voice"})
+        assert "消费者声音" in fixed[0]["source_dimensions"]
+        assert "消费者声音" not in fixed[1]["source_dimensions"]
+
+    def test_industry_orphan_to_general(self):
+        data_plan = [{"dimension_name": "行业新闻"}]
+        slice_blueprint = [
+            {"name": "聚焦", "subject": "X", "source_dimensions": []},
+            {"name": "大盘", "subject": "", "source_dimensions": []},
+        ]
+        fixed = _fix_orphan_dimensions(data_plan, slice_blueprint, {"行业新闻": "industry"})
+        assert "行业新闻" not in fixed[0]["source_dimensions"]
+        assert "行业新闻" in fixed[1]["source_dimensions"]
+
+    def test_unknown_type_falls_back_to_first_slice(self):
+        data_plan = [{"dimension_name": "X"}]
+        slice_blueprint = [
+            {"name": "s1", "subject": "Y", "source_dimensions": []},
+        ]
+        fixed = _fix_orphan_dimensions(data_plan, slice_blueprint, {})
+        assert "X" in fixed[0]["source_dimensions"]
+
+    def test_competitive_no_general_slice_only_focused(self):
+        """只有品牌聚焦切片时 competitive 孤儿仅进 focused，不报错。"""
+        data_plan = [{"dimension_name": "竞品X"}]
+        slice_blueprint = [
+            {"name": "聚焦", "subject": "Y", "source_dimensions": []},
+        ]
+        fixed = _fix_orphan_dimensions(data_plan, slice_blueprint, {"竞品X": "competitive"})
+        assert fixed[0]["source_dimensions"] == ["竞品X"]
+
+    def test_dedup_when_already_partially_referenced(self):
+        """同名维度已在某切片但缺另一切片时，仅追加缺失的那个切片，不重复。"""
+        data_plan = [{"dimension_name": "竞品A"}]
+        slice_blueprint = [
+            {"name": "聚焦", "subject": "Y", "source_dimensions": ["竞品A"]},
+            {"name": "大盘", "subject": "", "source_dimensions": []},
+        ]
+        # 注意：当前 dim 已被任一切片引用就不再视为孤儿（与设计一致）
+        fixed = _fix_orphan_dimensions(data_plan, slice_blueprint, {"竞品A": "competitive"})
+        # 已被引用 → 不视为孤儿，blueprint 不变
+        assert fixed == slice_blueprint

@@ -94,7 +94,7 @@ NEWS_PASS1_SYSTEM = """你是新闻数据清洗员，从已标注的新闻文章
 - 从 article_indices 中挑 3-5 个最具代表性的（优先 tier1 + 内容直接讨论该实体）
 - 总文章 < 3 篇时，全部都是代表性的
 
-**数量上限**：最多 15 个 entities，按 article_indices 长度降序。
+**数量上限**：最多 30 个 entities，按 article_indices 长度降序。
 
 ## quotes 规则
 
@@ -116,7 +116,7 @@ NEWS_PASS1_SYSTEM = """你是新闻数据清洗员，从已标注的新闻文章
 - `context` 一句话说清"这是在什么场合说的"（如"4 月 15 日发布会致辞"/"接受财新采访时表示"），≤30 字
 - `article_index` 必须是该 quote 所在文章在输入列表中的下标
 
-**数量上限**：最多 8 条。若 official + executive + analyst 加起来不足 8 条，可以补 kol，但不要为凑数加 other。
+**数量上限**：最多 12 条。若 official + executive + analyst 加起来不足 12 条，可以补 kol，但不要为凑数加 other。
 
 ## event_clusters 规则
 

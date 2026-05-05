@@ -309,7 +309,9 @@ def _format_news_media_section(news_slices: list[dict]) -> str:
                     "sentiment_avg": e.get("sentiment_avg"),
                     "sentiment_by_tier": e.get("sentiment_by_tier"),
                 }
-                for e in (rd.get("entities") or [])[:10]
+                # 新闻切片 entities 上限 30（pass1_chain），取 [:15] 覆盖 target+competitor+
+                # 高 mention context；规模上限 30 时 [:15] 已含全部 source>=2 实体
+                for e in (rd.get("entities") or [])[:15]
             ],
             # 引述（已 speaker 分级，原文 + 来源 + 文章 ID 锚点）
             "key_quotes": [
@@ -374,13 +376,15 @@ def format_slice_data_for_insight(
         foundation = s.get("foundation") or {}
         layers = s.get("layers") or {}
 
-        # 实体 top 10（精简字段 + issues 用于 Opportunity 推导竞品弱点）
+        # 实体 top 50（精简字段 + issues 用于 Opportunity 推导竞品弱点）
         # organic_sentiment：剔除推广内容后的真实用户情感，与 sentiment 差距大时说明推广掩盖了真实口碑
         # 字段附加范围分级（基于"信号广度 vs 数据稀疏度"权衡）：
         #   - original_terms（top 5）：用户原话，长尾实体原话稀疏不具代表性，仅 top 5 有意义
         #   - top_scenarios（top 10）：场景层 tension 需"跨实体场景重叠"识别，需广覆盖
         #   - top_market_factors（top 10）：宏观层 tension 需"跨实体宏观重叠"识别，需广覆盖
-        entities = foundation.get("aligned_entities", [])[:10]
+        # 窗口 50 依据：aligned_entities 按 score 降序，top 10 几乎全是品牌实体（Target/Competitor），
+        # Context 角色（成分/技术/概念实体）从 top 11 起，扩到 50 覆盖 source>=3 的全部 Context
+        entities = foundation.get("aligned_entities", [])[:50]
         entity_summaries = []
         for idx_e, e in enumerate(entities):
             entry: dict[str, Any] = {
@@ -423,9 +427,11 @@ def format_slice_data_for_insight(
 
             entity_summaries.append(entry)
 
-        # 话题 top 15（精简字段）
+        # 话题 top 30（精简字段）
         # organic_sentiment：有机内容下的话题情感，比混合均值更反映真实用户态度
-        topics = foundation.get("aligned_topics", [])[:15]
+        # 窗口 30 依据：aligned_topics 按 score 降序，top 30 仍 100% source>=3，
+        # 且能纳入成分/技术等概念话题；top 50 后 source>=3 占比断崖（1/50 噪声混入）
+        topics = foundation.get("aligned_topics", [])[:30]
         topic_summaries = [
             {
                 "name": t.get("name"),

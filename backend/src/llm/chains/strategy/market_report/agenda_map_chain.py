@@ -239,7 +239,9 @@ def _format_news_slices_for_agenda(news_slices: list[dict]) -> str:
                     "sentiment_avg": e.get("sentiment_avg"),
                     "sentiment_by_tier": e.get("sentiment_by_tier"),
                 }
-                for e in (rd.get("entities") or [])[:10]
+                # 新闻切片 entities 上限 30（pass1_chain），取 [:15] 覆盖
+                # target+competitor+高 mention context；agenda_map 需看媒体讨论的全貌
+                for e in (rd.get("entities") or [])[:15]
                 if isinstance(e, dict)
             ],
             "key_quotes": [

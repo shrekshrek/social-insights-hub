@@ -43,8 +43,6 @@ services:
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
       - UV_HTTP_TIMEOUT=300
-      - UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple/
-      - UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple/
     env_file:
       - .env
     dns:
@@ -69,8 +67,6 @@ services:
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
       - UV_HTTP_TIMEOUT=300
-      - UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple/
-      - UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple/
     env_file:
       - .env
     dns:

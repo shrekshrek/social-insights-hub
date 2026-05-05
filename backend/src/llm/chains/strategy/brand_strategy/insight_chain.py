@@ -322,7 +322,8 @@ def _format_news_media_section(news_slices: list[dict]) -> str:
                     "source_name": q.get("source_name"),
                     "source_tier": q.get("source_tier"),
                 }
-                for q in (rd.get("quotes") or [])[:6]
+                # Pass 1 quotes 上限 12，取 [:12] = 全部高分级 quote
+                for q in (rd.get("quotes") or [])[:12]
                 if q.get("speaker_role") in ("official", "executive", "analyst")
             ],
             # 竞争投影（target / competitor 子集）

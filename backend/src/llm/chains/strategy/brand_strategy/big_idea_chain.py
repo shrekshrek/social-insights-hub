@@ -335,7 +335,9 @@ def format_data_for_big_idea(
             ]
 
         # 实体 top 特征（高互动内容关联）
-        entities = foundation.get("aligned_entities", [])[:20]
+        # 窗口 50：big_idea 需要更广概念素材做创意；aligned_entities 按 score 降序，
+        # top 20 仍以品牌实体为主，扩到 50 覆盖 source>=3 的 Context（成分/技术概念）
+        entities = foundation.get("aligned_entities", [])[:50]
         part["top_entities"] = [
             {
                 "name": e.get("name"),

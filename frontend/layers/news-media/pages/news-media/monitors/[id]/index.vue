@@ -566,15 +566,17 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
         </div>
 
         <div class="flex items-center gap-3">
-          <UButton
-            v-if="hasPermission(PERMISSIONS.NEWS_MONITOR_DELETE) || monitor?.user_id === currentUserId"
-            color="error"
-            variant="outline"
-            icon="i-heroicons-trash"
-            @click="handleDeleteMonitor"
-          >
-            删除项目
-          </UButton>
+          <ClientOnly>
+            <UButton
+              v-if="hasPermission(PERMISSIONS.NEWS_MONITOR_DELETE) || monitor?.user_id === currentUserId"
+              color="error"
+              variant="outline"
+              icon="i-heroicons-trash"
+              @click="handleDeleteMonitor"
+            >
+              删除项目
+            </UButton>
+          </ClientOnly>
         </div>
       </div>
 
@@ -712,24 +714,26 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
                 placeholder="全部状态"
                 class="w-28"
               />
-              <UButton
-                v-if="canWriteSlice"
-                size="sm"
-                icon="i-heroicons-sparkles"
-                :disabled="!selectedTaskIds.length"
-                :loading="generatingSlice"
-                @click="openSliceModal"
-              >
-                生成切片
-              </UButton>
-              <UButton
-                v-if="canWriteTask"
-                size="sm"
-                icon="i-heroicons-plus"
-                :to="`/news-media/tasks/create?monitor_id=${monitorId}`"
-              >
-                创建任务
-              </UButton>
+              <ClientOnly>
+                <UButton
+                  v-if="canWriteSlice"
+                  size="sm"
+                  icon="i-heroicons-sparkles"
+                  :disabled="!selectedTaskIds.length"
+                  :loading="generatingSlice"
+                  @click="openSliceModal"
+                >
+                  生成切片
+                </UButton>
+                <UButton
+                  v-if="canWriteTask"
+                  size="sm"
+                  icon="i-heroicons-plus"
+                  :to="`/news-media/tasks/create?monitor_id=${monitorId}`"
+                >
+                  创建任务
+                </UButton>
+              </ClientOnly>
               <UButton
                 size="sm"
                 variant="ghost"

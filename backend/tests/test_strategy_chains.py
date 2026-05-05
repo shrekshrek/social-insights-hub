@@ -17,6 +17,10 @@ from src.llm.chains.strategy.brand_strategy.big_idea_chain import (
 from src.llm.chains.strategy.research_design_chain import (
     _fix_orphan_dimensions,
 )
+from src.llm.chains.strategy.coverage_check_chain import (
+    _select_evidence,
+    format_coverage_check_inputs,
+)
 
 
 # ==================== Insight (brand_strategy 第 1 层) ====================
@@ -281,3 +285,90 @@ class TestFixOrphanDimensions:
         fixed = _fix_orphan_dimensions(data_plan, slice_blueprint, {"竞品A": "competitive"})
         # 已被引用 → 不视为孤儿，blueprint 不变
         assert fixed == slice_blueprint
+
+
+# ==================== _select_evidence（coverage_check 输入截断） ====================
+
+
+class TestSelectEvidence:
+    """覆盖 strategy 41 事故场景：低排序高 source 实体不能被截断丢弃。"""
+
+    def test_strategy_41_high_source_low_position_kept(self):
+        """乳脂球膜 source=12 处于第 50 位（远超 top 15）也必须传给 LLM。"""
+        items = (
+            [{"name": f"高频 {i}", "source_count": 100 - i} for i in range(20)]  # 0..19 高 source
+            + [{"name": f"中频 {i}", "source_count": 5} for i in range(30)]  # 20..49 中 source
+            + [{"name": "乳脂球膜", "source_count": 12}]  # 第 50 位 source=12
+            + [{"name": f"低频 {i}", "source_count": 1} for i in range(50)]  # 51..100 低 source
+        )
+        selected, total, covered = _select_evidence(items, source_key="source_count")
+        names = {i["name"] for i in selected}
+        assert "乳脂球膜" in names, "source>=3 的实体必须保留，不能被位置截断"
+        assert total == 101
+        assert covered == 51  # 20 高频 + 30 中频 + 乳脂球膜
+
+    def test_sorted_by_source_desc(self):
+        items = [
+            {"name": "low", "source_count": 1},
+            {"name": "high", "source_count": 50},
+            {"name": "mid", "source_count": 5},
+        ]
+        selected, _, _ = _select_evidence(items, source_key="source_count")
+        # source>=3 排前，source<3 兜底排后
+        assert selected[0]["name"] == "high"
+        assert selected[1]["name"] == "mid"
+        assert selected[-1]["name"] == "low"
+
+    def test_all_below_threshold_keeps_top_n(self):
+        """全部 source<3 时只保留兜底 top 15。"""
+        items = [{"name": f"x{i}", "source_count": 2} for i in range(50)]
+        selected, total, covered = _select_evidence(items, source_key="source_count")
+        assert total == 50
+        assert covered == 0
+        assert len(selected) == 15  # _PARTIAL_BACKUP_COUNT
+
+    def test_empty_input(self):
+        selected, total, covered = _select_evidence([], source_key="source_count")
+        assert selected == []
+        assert total == 0
+        assert covered == 0
+
+    def test_invalid_source_value_treated_as_zero(self):
+        items = [
+            {"name": "a", "source_count": None},
+            {"name": "b", "source_count": "abc"},
+            {"name": "c", "source_count": 5},
+        ]
+        selected, _, covered = _select_evidence(items, source_key="source_count")
+        assert covered == 1
+        assert selected[0]["name"] == "c"
+
+    def test_format_coverage_check_inputs_includes_low_position_high_source(self):
+        """端到端：strategy 41 切片 148 的真实结构在 LLM 输入里能看到「乳脂球膜」。"""
+        slices_data = [
+            (
+                "Enfinitas品牌认知与竞争对比",
+                {
+                    "foundation": {
+                        "aligned_entities": (
+                            [{"name": f"E{i}", "source_count": 100 - i} for i in range(15)]
+                            + [{"name": "乳脂球膜", "source_count": 12}]
+                            + [{"name": f"L{i}", "source_count": 1} for i in range(50)]
+                        ),
+                        "aligned_topics": [],
+                    },
+                    "layers": {"landscape": {"overview": {"total_volume": 100}}},
+                },
+            ),
+        ]
+        result = format_coverage_check_inputs(
+            brief={"subject": "Enfinitas", "analysis_goal": "MFGM"},
+            research_questions=[
+                {"id": "rq1", "question": "MFGM 认知", "dimension": "consumer_voice", "priority": "high"},
+            ],
+            slices_data=slices_data,
+        )
+        assert "乳脂球膜" in result["slices_summary_section"]
+        # 元信息体现全貌
+        assert "共 66 个" in result["slices_summary_section"]
+        assert "source≥3 的 16 个" in result["slices_summary_section"]

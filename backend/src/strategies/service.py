@@ -3862,7 +3862,9 @@ async def approve_probe(
                 NewsTaskCreate(
                     name=f"{npt.name} - 全量",
                     keywords=npt.keywords,
-                    search_params=None,
+                    # 继承 probe 阶段的 channels 选择（含用户勾选的 wechat_mp），避免全量阶段
+                    # fallback 到 baidu+sogou 默认值导致公众号不被采集
+                    search_params=npt.search_params,
                     auto_analyze=True,
                 ),
                 current_user_id,

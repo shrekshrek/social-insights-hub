@@ -243,7 +243,10 @@ def filter_node(state: ResearchState) -> dict:
         model=settings.DEEPSEEK_CHAT_MODEL,
         temperature=settings.DEEPSEEK_TEMPERATURE,
         max_tokens=settings.DEEPSEEK_CHAT_MAX_TOKENS,
-        timeout=60.0,
+        # filter 输入最长（最多 ~40 候选 × 250 字摘要 + 多 RQ 上下文）+ 输出最重（结构化 JSON
+        # 评分），与 synthesizer 同档；之前 60s 太紧，round 2 大 prompt 必触发 retry 并最终
+        # 超时（实测 ResearchTask 65 round2 失败两次均在此处）
+        timeout=120.0,
         max_retries=1,
     )
     response = llm.invoke(

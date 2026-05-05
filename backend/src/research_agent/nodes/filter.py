@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
+from openai import APITimeoutError
 
 from src.config import settings
 from src.llm.utils import build_flat_token_record
@@ -36,6 +37,12 @@ _HARD_CUTOFF_AGE = 5
 
 # 单域名在 selected 中最多占用的槽位数（防止一家来源垄断结果）—— 对所有 profile 通用
 _MAX_SLOTS_PER_DOMAIN = 3
+
+# 送入 LLM 评分的候选上限。search 节点候选池最大 50 条，但 round 越深累计越多，
+# round 3+ 经常踩到 50。即便 timeout 给到 120s，50 候选 × 250 字摘要 + 多 RQ 上下文
+# 仍会触发 DeepSeek 推理超时（实测 ResearchTask 65 round3 在 50 候选下两次 retry 均失败）。
+# 排序已按 content_type 优先级排过，截断丢的是最不重要的尾部。
+_LLM_INPUT_CAP = 30
 
 # 已知自动抓取失败的域名（服务端封堵，全文通常为空）
 # 这些域名 LLM 打分后额外扣 _FETCH_BLOCKED_PENALTY 分，让可抓取来源优先占槽位
@@ -214,6 +221,15 @@ def filter_node(state: ResearchState) -> dict:
         ),
     )
 
+    # 候选数硬上限：防止 round 3+ 大候选池触发 LLM 超时
+    if len(candidates) > _LLM_INPUT_CAP:
+        logger.info(
+            "filter 节点: 候选数 %d → 截断至 %d（保留 content_type 优先级靠前的）",
+            len(candidates),
+            _LLM_INPUT_CAP,
+        )
+        candidates = candidates[:_LLM_INPUT_CAP]
+
     # 构造候选列表文本（标注服务页 / 已知抓取失败域名，辅助 LLM 判断）
     candidates_text = "\n".join(
         f"[{i}] {c['title']}\n"
@@ -243,23 +259,34 @@ def filter_node(state: ResearchState) -> dict:
         model=settings.DEEPSEEK_CHAT_MODEL,
         temperature=settings.DEEPSEEK_TEMPERATURE,
         max_tokens=settings.DEEPSEEK_CHAT_MAX_TOKENS,
-        # filter 输入最长（最多 ~40 候选 × 250 字摘要 + 多 RQ 上下文）+ 输出最重（结构化 JSON
-        # 评分），与 synthesizer 同档；之前 60s 太紧，round 2 大 prompt 必触发 retry 并最终
-        # 超时（实测 ResearchTask 65 round2 失败两次均在此处）
+        # filter 是 graph 内 prompt 最重的节点（候选 × 250 字摘要 + 多 RQ + 结构化 JSON 评分）。
+        # 输入侧已用 _LLM_INPUT_CAP 截断到 30 条；retry 关掉，超时直接走下方 JSON 解析失败兜底
+        # （回退到 candidates[:MAX_CANDIDATES_PER_ROUND]），不要 retry 把 graph 卡 4 分钟才 fail。
         timeout=120.0,
-        max_retries=1,
+        max_retries=0,
     )
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=profile.filter.system_prompt.format(
-                    max_n=MAX_CANDIDATES_PER_ROUND,
-                    strategy_hint=strategy_hint,
-                )
-            ),
-            HumanMessage(content=user_content),
-        ]
-    )
+    try:
+        response = llm.invoke(
+            [
+                SystemMessage(
+                    content=profile.filter.system_prompt.format(
+                        max_n=MAX_CANDIDATES_PER_ROUND,
+                        strategy_hint=strategy_hint,
+                    )
+                ),
+                HumanMessage(content=user_content),
+            ]
+        )
+    except APITimeoutError:
+        # 超时兜底：不让整个 graph 失败，回退到按 content_type 优先级取前 N 条
+        # 没有 response 就没有 token 记录，evaluate 节点会基于这批 fallback 继续推进
+        logger.warning(
+            "filter 节点 LLM 超时（%d 候选 × %.0fs），回退取前 %d 条",
+            len(candidates),
+            120.0,
+            MAX_CANDIDATES_PER_ROUND,
+        )
+        return {"selected": candidates[:MAX_CANDIDATES_PER_ROUND]}
 
     try:
         content = response.content.strip()

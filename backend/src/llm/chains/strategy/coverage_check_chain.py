@@ -50,7 +50,7 @@ SYSTEM_TEMPLATE = """你是一位数据覆盖度评估专家，负责判断已�
 
 ## overall_ready 规则
 
-- **true**：所有 `priority=high` 的 RQ 状态 ∈ {covered, partial}
+- **true**：所有 `priority=high` 的 RQ 状态 ∈ {{covered, partial}}
 - **false**：任一 `priority=high` 的 RQ 状态 = uncovered
 - medium / low priority RQ 不影响 overall_ready，仅影响 warnings
 

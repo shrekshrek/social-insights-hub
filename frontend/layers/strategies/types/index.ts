@@ -66,11 +66,23 @@ export interface ChannelPlanItem {
   channel_brief: string
 }
 
+export interface AudienceSegment {
+  label: string
+  description?: string
+  behavior_signals?: string[] | null
+}
+
 export interface BrandBrief {
   subject: string
   analysis_goal: string
   constraints?: string | null
   channel_plan?: ChannelPlanItem[] | null
+
+  // 策略 Brief Framework 字段（brief 未提及时为 null/undefined）
+  target_audiences?: AudienceSegment[] | null
+  audience_insights?: string[] | null
+  core_propositions?: string[] | null
+  competitors?: string[] | null
 }
 
 // ==================== 切片摘要 ====================
@@ -767,4 +779,10 @@ export interface ParseBriefResponse {
   platform_note: string
   insufficient_reason: InsufficientReason
   channel_plan: ChannelPlanItem[]
+
+  // 策略 Brief Framework 字段（brief 未提及时为 null）
+  target_audiences?: AudienceSegment[] | null
+  audience_insights?: string[] | null
+  core_propositions?: string[] | null
+  competitors?: string[] | null
 }

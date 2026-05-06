@@ -144,6 +144,14 @@
             <div v-if="strategy.brand_brief.constraints" class="text-gray-400 mt-1">
               {{ strategy.brand_brief.constraints }}
             </div>
+            <BriefFrameworkDisplay
+              v-if="hasBriefFramework"
+              class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700"
+              :audiences="strategy.brand_brief.target_audiences"
+              :insights="strategy.brand_brief.audience_insights"
+              :propositions="strategy.brand_brief.core_propositions"
+              :competitors="strategy.brand_brief.competitors"
+            />
             <div
               v-if="strategy.brand_brief.channel_plan?.length"
               class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1.5"
@@ -701,6 +709,16 @@ const hasResearchDesign = computed(() => {
   return rd && rd.data_plan?.length > 0
 })
 
+const hasBriefFramework = computed(() => {
+  const b = strategy.value?.brand_brief
+  return !!(
+    b?.target_audiences?.length
+    || b?.audience_insights?.length
+    || b?.core_propositions?.length
+    || b?.competitors?.length
+  )
+})
+
 const editingBrief = ref(false)
 const editBrief = ref({ subject: '', analysis_goal: '', constraints: '' })
 const savingBrief = ref(false)
@@ -784,6 +802,10 @@ const handleSaveBrief = async () => {
         analysis_goal: editBrief.value.analysis_goal.trim(),
         constraints: editBrief.value.constraints.trim() || undefined,
         channel_plan: strategy.value?.brand_brief?.channel_plan ?? undefined,
+        target_audiences: strategy.value?.brand_brief?.target_audiences ?? undefined,
+        audience_insights: strategy.value?.brand_brief?.audience_insights ?? undefined,
+        core_propositions: strategy.value?.brand_brief?.core_propositions ?? undefined,
+        competitors: strategy.value?.brand_brief?.competitors ?? undefined,
       },
     })
     strategy.value = await strategiesApi.fetchStrategy(strategyId.value)

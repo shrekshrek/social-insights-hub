@@ -65,6 +65,23 @@
           />
         </UFormField>
       </UForm>
+
+      <!-- Framework 字段（AI 抽取，仅展示；如需修改可在补充说明中调整） -->
+      <div
+        v-if="hasParsedFramework"
+        class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
+      >
+        <div class="flex items-center gap-1.5 mb-2">
+          <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-primary-500" />
+          <span class="text-xs font-medium text-gray-500">AI 提取的策略要素</span>
+        </div>
+        <BriefFrameworkDisplay
+          :audiences="parsedFramework.target_audiences"
+          :insights="parsedFramework.audience_insights"
+          :propositions="parsedFramework.core_propositions"
+          :competitors="parsedFramework.competitors"
+        />
+      </div>
     </UCard>
 
     <!-- 渠道分析结果 / 平台适用性 -->
@@ -213,7 +230,7 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import type { ChannelPlanItem, InsufficientReason, ParseBriefResponse } from '../../types'
+import type { AudienceSegment, ChannelPlanItem, InsufficientReason, ParseBriefResponse } from '../../types'
 import { CHANNEL_LABELS } from '../../composables/useStrategyConstants'
 
 definePageMeta({
@@ -240,6 +257,27 @@ const platformVerdict = ref<ParseBriefResponse['platform_verdict'] | null>(null)
 const platformNote = ref('')
 const insufficientReason = ref<InsufficientReason>('')
 
+interface ParsedFramework {
+  target_audiences: AudienceSegment[] | null
+  audience_insights: string[] | null
+  core_propositions: string[] | null
+  competitors: string[] | null
+}
+
+const parsedFramework = reactive<ParsedFramework>({
+  target_audiences: null,
+  audience_insights: null,
+  core_propositions: null,
+  competitors: null,
+})
+
+const hasParsedFramework = computed(() => !!(
+  parsedFramework.target_audiences?.length
+  || parsedFramework.audience_insights?.length
+  || parsedFramework.core_propositions?.length
+  || parsedFramework.competitors?.length
+))
+
 const formState = reactive<FormState>({
   name: '',
   subject: '',
@@ -256,6 +294,10 @@ const applyResult = (result: Partial<ParseBriefResponse>) => {
   platformVerdict.value = result.platform_verdict ?? null
   platformNote.value = result.platform_note ?? ''
   insufficientReason.value = result.insufficient_reason ?? ''
+  parsedFramework.target_audiences = result.target_audiences ?? null
+  parsedFramework.audience_insights = result.audience_insights ?? null
+  parsedFramework.core_propositions = result.core_propositions ?? null
+  parsedFramework.competitors = result.competitors ?? null
 }
 
 const clearParsed = () => {
@@ -263,6 +305,10 @@ const clearParsed = () => {
   platformVerdict.value = null
   platformNote.value = ''
   insufficientReason.value = ''
+  parsedFramework.target_audiences = null
+  parsedFramework.audience_insights = null
+  parsedFramework.core_propositions = null
+  parsedFramework.competitors = null
 }
 
 
@@ -300,6 +346,10 @@ const handleSubmit = async () => {
         analysis_goal: formState.analysis_goal.trim(),
         ...(formState.constraints?.trim() && { constraints: formState.constraints.trim() }),
         ...(parsedChannelPlan.value && { channel_plan: parsedChannelPlan.value }),
+        ...(parsedFramework.target_audiences && { target_audiences: parsedFramework.target_audiences }),
+        ...(parsedFramework.audience_insights && { audience_insights: parsedFramework.audience_insights }),
+        ...(parsedFramework.core_propositions && { core_propositions: parsedFramework.core_propositions }),
+        ...(parsedFramework.competitors && { competitors: parsedFramework.competitors }),
       },
     })
     navigateTo(`/strategies/${result.id}`)

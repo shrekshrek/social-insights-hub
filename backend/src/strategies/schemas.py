@@ -38,13 +38,53 @@ class ChannelPlanItem(CustomBaseModel):
     channel_brief: str = Field("", description="针对该渠道的定制化研究描述，作为该渠道 research_design 的输入")
 
 
+class AudienceSegment(CustomBaseModel):
+    """受众/利益相关方画像（通用——B2C 是消费者人群、B2B 是决策角色、公益/危机是受众群体）
+
+    behavior_signals 是开放结构，不预设"渠道偏好"或"决策驱动"二分。可以是平台名
+    （"小红书"）、决策模式（"看 Gartner 报告"）、触媒习惯（"短视频获取信息"）、
+    讨论场景（"宝妈群口口相传"）。下游 research_design_chain 自己判断如何使用：
+    含具体平台名 → 影响 platform 选择；含主题/话题词 → 影响 keyword 设计。
+    """
+
+    label: str = Field(..., min_length=1, description="受众标签（人群名/角色名/群体名）")
+    description: str = Field("", description="一句话画像（不强制 demographic）")
+    behavior_signals: list[str] | None = Field(
+        None, description="决策驱动/触媒习惯/讨论场景（开放枚举）"
+    )
+
+
 class BrandBrief(CustomBaseModel):
-    """结构化品牌简报"""
+    """结构化品牌简报
+
+    核心字段（subject / analysis_goal / constraints / channel_plan）保留向后兼容。
+    新增四个 Optional 字段对齐经典策略 brief framework（Audience / Insight /
+    Proposition / Competition），仅当 brief 显性提及时才抽取，下游 research_design_chain
+    会按字段是否存在条件性消费——抽不到的字段下游会从 constraints 自由文本兜底。
+    """
 
     subject: str = Field(..., min_length=1, description="研究主体（品牌/产品/品类）")
     analysis_goal: str = Field(..., min_length=1, description="分析目标")
-    constraints: str | None = Field(None, description="其他约束/备注")
+    constraints: str | None = Field(None, description="其他约束/备注（兜底自由文本——未抽到结构化字段的关键背景都进这里）")
     channel_plan: list[ChannelPlanItem] | None = Field(None, description="渠道分发建议")
+
+    # 经典策略 Brief Framework 元素（全 Optional，brief 未提及时为 None）
+    target_audiences: list[AudienceSegment] | None = Field(
+        None,
+        description="受众/利益相关方画像（B2C/B2B/公益/危机均通用），下游用于 keyword/platform 差异化",
+    )
+    audience_insights: list[str] | None = Field(
+        None,
+        description="受众痛点/desires/jobs to be done，下游 RQ 锚定 + brand_voice keyword 用",
+    )
+    core_propositions: list[str] | None = Field(
+        None,
+        description="想传递的核心主张（差异化/价值/RTB），下游 brand_voice keyword 用",
+    )
+    competitors: list[str] | None = Field(
+        None,
+        description="brief 中明确列出的竞品/替代方案/对立叙事，下游 competitive 维度 + advisory 用",
+    )
 
 
 # ==================== Request Schemas ====================
@@ -550,4 +590,18 @@ class ParseBriefResponse(CustomBaseModel):
     )
     channel_plan: list[ChannelPlanItem] = Field(
         default_factory=list, description="渠道分发建议"
+    )
+
+    # 策略 Brief Framework 字段 — brief 未提及时为 None，与 BrandBrief 字段一一对应
+    target_audiences: list[AudienceSegment] | None = Field(
+        None, description="受众/利益相关方画像（brief 未提及时为 None）"
+    )
+    audience_insights: list[str] | None = Field(
+        None, description="受众痛点/desires/jobs to be done（brief 未提及时为 None）"
+    )
+    core_propositions: list[str] | None = Field(
+        None, description="核心主张/差异化/RTB（brief 未提及时为 None）"
+    )
+    competitors: list[str] | None = Field(
+        None, description="明确列出的竞品/替代方案（brief 未提及时为 None）"
     )

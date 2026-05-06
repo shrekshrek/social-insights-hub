@@ -25,9 +25,10 @@ SYSTEM_TEMPLATE = """你是一位数据策略分析师，负责从用户上传�
 ## 判断顺序（严格按此顺序执行，下游依赖上游）
 
 1. **先填基础字段**（strategy_name / subject / analysis_goal / constraints）——从 brief 文本直接提取
-2. **再生成 channel_plan**（按下文"渠道分发判断"各渠道规则独立判断，仅依赖 brief 内容）
-3. **再判 platform_verdict**（按下文"策略框架适配度"规则，输入 = brief + channel_plan）
-4. **最后填 insufficient_reason**（仅 verdict=insufficient 时非空，取值依赖 channel_plan 的渠道组合）
+2. **再抽策略 framework 字段**（target_audiences / audience_insights / core_propositions / competitors）——brief 显性提及才抽，未提及一律留 null
+3. **再生成 channel_plan**（按下文"渠道分发判断"各渠道规则独立判断，仅依赖 brief 内容）
+4. **再判 platform_verdict**（按下文"策略框架适配度"规则，输入 = brief + channel_plan）
+5. **最后填 insufficient_reason**（仅 verdict=insufficient 时非空，取值依赖 channel_plan 的渠道组合）
 
 JSON 输出字段顺序对应上述判断顺序，不得颠倒。
 
@@ -41,11 +42,11 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
   - **核心问题**：如果要搜索数据，最主要的研究对象是谁？
   - **三种典型情境**：
     - 品牌/产品洞察 → subject = 该品牌或产品名（如"小米SU7"、"元气森林"）
-    - 用户行为/决策研究 → subject = 行为主体（如"职场新人"、"中国B2B企业"），提到的品牌放入 constraints
+    - 用户行为/决策研究 → subject = 行为主体（如"职场新人"、"中国B2B企业"），提到的品牌按角色归位到 framework 字段（竞品 → competitors，不要塞 subject 或 constraints）
     - 品类竞争格局 → subject = 品类名（如"新能源汽车"、"功能性饮料"）
   - **辨别括号里的内容**：
     - "分析某品牌（如：小米）的用户口碑" → subject = "小米"
-    - "了解用户如何选择某类服务（如：EY、麦肯锡）" → subject = 用户群体，括号是示例竞品
+    - "了解用户如何选择某类服务（如：EY、麦肯锡）" → subject = 用户群体，括号里的示例品牌应进 competitors 字段
     - 判断依据：brief 的核心动词是"分析[某品牌]"还是"了解[某群体]的行为"
   - 若同时涉及集团和子品牌，取更具体的子品牌名
   - 若 brief 明确提到产品线/型号/品类细化，subject 必须包含产品锚（如"索尼 WH-1000XM5"而非光"索尼"、"Nike Air Jordan"而非光"Nike"）——否则下游研究主题锚定会丢失精度
@@ -55,9 +56,31 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
   - 是否适合策略 pipeline 由下游 `platform_verdict` 字段独立判断，本字段不参与这层决策
 
 - **constraints**: 补充说明（200字以内）
-  - 优先提取：具体产品/品类名称、主要竞品、目标受众、时间节点/范围、已有资料来源
-  - 格式：用分号分隔，如"产品：XX；竞品：A/B；时间：XX年XX月"
+  - 优先提取：具体产品/品类名称、时间节点/范围、已有资料来源、合规/品牌资产/历史 campaign 等关键背景
+  - 格式：用分号分隔，如"产品：XX；时间：XX年XX月；已有 campaign：XX"
   - 只提取文档中明确出现的信息，不推断，宁可留空
+  - **不要重复**：已经被下面 framework 字段（target_audiences / audience_insights / core_propositions / competitors）抽走的信息不要再写进 constraints；constraints 是兜底字段，只放无法归入 framework 字段的关键背景
+
+### 策略 Framework 字段（全部 Optional——brief 未显性提及时一律返回 null）
+
+这四个字段对齐经典策略 brief framework（Audience / Insight / Proposition / Competition）。**抽取原则**：brief 原文明确对应才抽，未提及一律返回 `null`（不是 `[]`）；不推断、不脑补、不补全。
+
+- **target_audiences**: 受众/利益相关方画像（list[AudienceSegment] | null）
+  - 概念通用——B2C 是消费者人群、B2B 是决策角色、公益是受众群体、危机公关是利益相关方
+  - 每个 segment 三个字段：`label`（必填）、`description`（一句话画像，无则留空字符串）、`behavior_signals`（决策驱动/触媒/讨论场景的开放枚举，brief 给出量化数据如 TGI/% resp 时保留到字符串中，例 `"医护/专家推荐 TGI 142"`，未提及为 null）
+  - 跨领域示例：
+    - FMCG（精品咖啡）：`[{{"label": "精品咖啡爱好者", "description": "一线城市白领，重视风味层次", "behavior_signals": ["小红书豆单收藏", "Specialty 咖啡店打卡"]}}, {{"label": "便利速饮派", "behavior_signals": ["便利店即饮咖啡"]}}]`
+    - B2B SaaS：`[{{"label": "CIO 决策者", "behavior_signals": ["Gartner 报告参考", "同行案例"]}}, {{"label": "IT 实施者", "behavior_signals": ["技术社区文档", "PoC 实测"]}}]`
+    - 公益反诈：`[{{"label": "65+ 老年人", "behavior_signals": ["短视频获取信息", "亲属提醒"]}}]`
+
+- **audience_insights**: 受众痛点 / desires / jobs to be done（list[str] | null）
+  - 抽 brief 中明确指出的受众层面的核心问题或诉求——是受众**主观感受/未满足需求**，不是品牌侧的目标。与 `core_propositions` 的边界：insights 是受众 pain（要解决什么），propositions 是品牌 say（怎么回应），不要把 proposition 当 insight
+
+- **core_propositions**: 核心主张 / 差异化 / RTB（list[str] | null）
+  - 抽 brief 中品牌方明确表达的"想传递什么"——主张、差异化定位、信服理由
+
+- **competitors**: 明确列出的竞品 / 替代方案 / 对立叙事（list[str] | null）
+  - 仅当 brief 显式提到具体名字/类型时抽取；"市场主要品牌"等模糊措辞不抽。概念通用：FMCG 同品类品牌、B2B 竞争方案（含自建/外包）、公益对立叙事 / 混淆信息
 
 ### channel_plan（渠道分发判断）
 
@@ -133,12 +156,22 @@ JSON 输出字段顺序对应上述判断顺序，不得颠倒。
 - 当 `platform_verdict == "sufficient"` 且 channel_plan 包含 social_media 或 news_media 时，不需要额外提示
 
 ## 输出格式
-只输出 JSON，不要额外文字或 markdown 代码块标记。channel_plan 只包含真正适合的渠道，不适合的渠道不输出：
+只输出 JSON，不要额外文字或 markdown 代码块标记。channel_plan 只包含真正适合的渠道，不适合的渠道不输出。framework 字段（target_audiences / audience_insights / core_propositions / competitors）brief 未显性提及时输出 `null`，**不要**输出空数组 `[]`：
 {{
   "strategy_name": "策略名称建议",
   "subject": "研究主体",
   "analysis_goal": "整体研究目标描述",
   "constraints": "补充说明（可为空字符串）",
+  "target_audiences": [
+    {{
+      "label": "受众标签",
+      "description": "一句话画像（可为空字符串）",
+      "behavior_signals": ["决策驱动/触媒/讨论场景信号", "..."]
+    }}
+  ],
+  "audience_insights": ["受众痛点/desire 1", "..."],
+  "core_propositions": ["核心主张 1", "..."],
+  "competitors": ["竞品 1", "..."],
   "channel_plan": [
     {{
       "type": "social_media / news_media / industry_research / creative_research",
@@ -158,7 +191,7 @@ USER_TEMPLATE = """以下是用户上传的 Brief 文档内容：
 
 {document_text}
 
-请按 SYSTEM 中的"判断顺序"完整输出四类内容：基础字段（strategy_name / subject / analysis_goal / constraints）→ channel_plan → platform_verdict + platform_note → insufficient_reason（仅 verdict=insufficient 时非空，否则留空字符串）。"""
+请按 SYSTEM 中的"判断顺序"完整输出五类内容：基础字段（strategy_name / subject / analysis_goal / constraints）→ framework 字段（target_audiences / audience_insights / core_propositions / competitors，未提及一律 null）→ channel_plan → platform_verdict + platform_note → insufficient_reason（仅 verdict=insufficient 时非空，否则留空字符串）。"""
 
 
 def create_brief_parser_chain() -> Runnable:
@@ -181,7 +214,13 @@ def parse_brief_parser_response(response_text: str) -> dict[str, Any]:
     try:
         result: dict[str, Any] = json.loads(text)
     except json.JSONDecodeError as e:
-        logger.error("Brief Parser Chain JSON 解析失败: %s...", text[:200])
+        # 失败时 dump 完整 raw response（不只是前 200 字）以便诊断 prompt 改动是否引入格式回归
+        logger.error(
+            "Brief Parser Chain JSON 解析失败 @ pos=%d: %s\n--- 完整 LLM 响应 ---\n%s\n--- end ---",
+            e.pos,
+            e.msg,
+            text,
+        )
         raise ValueError(f"LLM 输出无法解析为 JSON: {e}") from e
 
     result.setdefault("strategy_name", "")
@@ -193,6 +232,12 @@ def parse_brief_parser_response(response_text: str) -> dict[str, Any]:
     result.setdefault("insufficient_reason", "")
     if not result.get("channel_plan"):
         result["channel_plan"] = []
+
+    # framework 字段：保留 LLM 输出的 None 语义（区分"brief 未提及" vs "提及但空"），
+    # 不做 setdefault 兜底；但 LLM 若错误返回空数组，归一化为 None 以保持语义清晰
+    for field in ("target_audiences", "audience_insights", "core_propositions", "competitors"):
+        if field not in result or result[field] == [] or result[field] == "":
+            result[field] = None
 
     # 不信任 LLM 自报：非 insufficient 时强制清空 reason，避免下游前端路由错乱
     if result["platform_verdict"] != "insufficient":

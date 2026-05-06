@@ -102,6 +102,10 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 - **media_narrative**: 媒体叙事视角（新闻媒体如何报道/框架化事件、舆论态势、议程设置）——news_media 渠道的"媒体如何报道"类问题默认归此类
 - **industry**: 行业/品类结构趋势（市场规模、格局演化、政策监管、品类消费趋势）
 
+### 1.5 受众驱动的差异化（默认不拆）
+
+当 `target_audiences` 含 ≥ 2 受众，且至少两个受众的 `behavior_signals` 在采集层有可执行差异（提示出不同 platforms 或 keywords 主题；纯人口学描述如年龄段/收入不算）时，将 consumer_voice / competitive 维度按受众拆为独立维度，**dimension_name 带受众标识**（如 `consumer_voice_RA` + `consumer_voice_BBF`，与下游 advisory 检测协议）。否则保持统一设计。
+
 ### 2. 数据源与关键词质量
 
 数据采集方案支持两种渠道，每个维度通过 `channel` 字段指定：
@@ -142,7 +146,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
 ### 3. 控制采集规模
 方案必须精简：
 - 总维度 2-6 个，按输入的渠道分配：社媒维度 2-4 个（如有社媒方向），新闻维度 1-2 个（如有新闻方向）
-- 每个社媒维度 **典型 2-3 个关键词**（competitive 维度按竞品数量可扩充至 3-5 个；非 competitive 维度超过 3 个需有充分理由）
+- 每个社媒维度 **典型 2-3 个关键词**（competitive 维度按竞品数量可扩充至 3-5 个；非 competitive 维度超过 3 个需有充分理由）。**例外**：§2 横向对比维度的主品侧（仅含主品 1 个品牌的 consumer_voice 维度）按结构对等原则只 1 个 keyword；单品牌深挖维度（dimension_name 带"深挖"标识）可 1-3 个深度方向关键词，不受本条数量约束
 - 每个社媒维度选 **1-2 个平台**，最多 3 个（质量优先，宁精不滥）。**例外**：若 brief 中显式列举了具体平台名（如"小红书/抖音/B站"），相关维度的 platforms 必须**包含全部明示平台**，本条数量上限不适用——明示即用户对采集范围的硬约束
 - 每个新闻维度 **典型 1-2 个关键词**（覆盖多竞品/主体时按实体数扩至 3-5 个，每实体独立一条，禁止 `|` 拼接）；无需选平台
 - **社媒总任务数 = Σ(各社媒维度关键词数 × 平台数)**：常规 brief 目标 12-20 个；若 brief 明示 ≥ 3 个平台（即触发 L142 硬约束），目标可放宽至 18-30 个——但**不应通过削减明示平台来缩小任务数**（明示平台是 L142 硬约束）。生成后自行验算，超过目标值时优先策略：① 合并同主题关键词（特别检查主品+竞品是否被错误塞入同一维度产生重复，见 L116 对称规则）→ ② 削减非明示平台的覆盖 → ③ 砍掉低优先级 RQ 对应的可选维度
@@ -251,6 +255,27 @@ def create_research_design_chain() -> Runnable:
     return prompt | llm
 
 
+def _format_audiences_block(audiences: list[dict[str, Any]] | None) -> str:
+    """把 target_audiences 渲染为 prompt 可读的字符串块；空/None 返回空字符串"""
+    if not audiences:
+        return ""
+
+    lines: list[str] = []
+    for idx, seg in enumerate(audiences, start=1):
+        label = (seg.get("label") or "").strip()
+        if not label:
+            continue
+        desc = (seg.get("description") or "").strip()
+        signals = [s for s in (seg.get("behavior_signals") or []) if s and s.strip()]
+        seg_line = f"  {idx}. {label}"
+        if desc:
+            seg_line += f"——{desc}"
+        lines.append(seg_line)
+        if signals:
+            lines.append(f"     行为信号：{'、'.join(signals)}")
+    return "\n".join(lines)
+
+
 def format_research_design_inputs(
     user_input: str,
     social_channel_brief: str = "",
@@ -259,6 +284,10 @@ def format_research_design_inputs(
     analysis_goal: str = "",
     news_channel_brief: str = "",
     research_channel_brief: str = "",
+    target_audiences: list[dict[str, Any]] | None = None,
+    audience_insights: list[str] | None = None,
+    core_propositions: list[str] | None = None,
+    competitors: list[str] | None = None,
 ) -> dict[str, Any]:
     """格式化研究设计链输入
 
@@ -268,6 +297,12 @@ def format_research_design_inputs(
     subject / constraints 作为补充上下文。
     output_type 由后处理函数 _derive_primary_sources_and_output_type 从 data_plan
     channel 分布推导，不需要通过 prompt 传入。
+
+    新增的策略 framework 字段（target_audiences / audience_insights / core_propositions
+    / competitors）来自 brief_parser 抽取，brief 未显性提及时为 None；下游 SYSTEM_TEMPLATE
+    的 §1 / §2 规则按字段是否存在条件性消费——含具体平台名的 behavior_signals 影响 platform
+    选择，含主题词的 signals 影响 keyword 设计；audience_insights 用于 RQ 锚定，
+    core_propositions 用于 brand_voice keyword，competitors 用于 competitive 维度 keyword。
     """
     lines: list[str] = []
 
@@ -280,12 +315,35 @@ def format_research_design_inputs(
     if research_channel_brief:
         lines.append(f"\n## 行业研究方向\n{research_channel_brief}")
 
-    if subject or analysis_goal or constraints:
+    has_framework = any([target_audiences, audience_insights, core_propositions, competitors])
+    if subject or analysis_goal or constraints or has_framework:
         lines.append("\n## 研究背景（供参考）")
         if subject:
             lines.append(f"研究主体：{subject}")
         if analysis_goal:
             lines.append(f"原始分析目标：{analysis_goal}")
+
+        if target_audiences:
+            audiences_block = _format_audiences_block(target_audiences)
+            if audiences_block:
+                lines.append("目标受众：")
+                lines.append(audiences_block)
+
+        if audience_insights:
+            insights_str = "；".join(s for s in audience_insights if s)
+            if insights_str:
+                lines.append(f"受众痛点/诉求：{insights_str}")
+
+        if core_propositions:
+            propositions_str = "；".join(p for p in core_propositions if p)
+            if propositions_str:
+                lines.append(f"核心主张/差异化：{propositions_str}")
+
+        if competitors:
+            competitors_str = "、".join(c for c in competitors if c)
+            if competitors_str:
+                lines.append(f"明确竞品/替代方案：{competitors_str}")
+
         if constraints:
             lines.append(f"补充说明：{constraints}")
 

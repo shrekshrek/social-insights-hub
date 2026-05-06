@@ -2219,9 +2219,10 @@ async def _dispatch_strategy_research_tasks(
 # - 规则判断（不调 LLM），单一信号词，召回明确、漏报可接受
 # - 信号词为简体中文专有名词，不做正则、不做语义匹配（避免误报）
 
-# 用于检测竞品对比诉求的单一信号词。"竞品" 在 brand brief 中几乎无歧义；
+# 用于检测竞品对比诉求的单一信号词（兜底字面 grep）。"竞品" 在 brand brief 中几乎无歧义；
 # "对比/差异化/横向" 等词太宽泛（"消费者对比场景"/"产品差异化升级"/"用户横向调研"
 # 都不必然意味着 brand-vs-brand 的竞品分析），不纳入触发集。
+# 当 brand_brief.competitors 字段非空时优先使用结构化字段，字面 grep 退化为兜底。
 _COMPETITIVE_SIGNAL_TOKEN = "竞品"
 
 
@@ -2234,7 +2235,8 @@ def _check_missing_competitive_social_dimension(
     所有触发条件全部满足时返回 advisory dict，否则 None：
     1. data_plan 含 social_media 维度（纯新闻 brief 不适用）
     2. data_plan 不含 competitive 类型维度（通过 RQ.dimension 反查）
-    3. brand_brief 的 constraints / analysis_goal / channel_plan[social_media].solvable
+    3. 竞品诉求成立——优先看结构化字段 `brand_brief.competitors` 非空；为空时兜底
+       字面 grep `constraints / analysis_goal / channel_plan[social_media].solvable`
        任一字段含信号词「竞品」
     """
     data_plan = research_design.get("data_plan") or []
@@ -2256,17 +2258,23 @@ def _check_missing_competitive_social_dimension(
     if has_competitive:
         return None
 
-    constraints = brand_brief.get("constraints") or ""
-    analysis_goal = brand_brief.get("analysis_goal") or ""
+    # 优先：结构化字段——brief_parser 抽到的明确竞品列表
+    structured_competitors = brand_brief.get("competitors") or []
+    competitor_signal = bool([c for c in structured_competitors if c])
 
-    social_solvable: list[str] = []
-    for ch in brand_brief.get("channel_plan") or []:
-        if ch.get("type") == "social_media":
-            social_solvable = ch.get("solvable") or []
-            break
+    # 兜底：字面 grep 历史 brief（未升级 schema 时仍可工作）
+    if not competitor_signal:
+        constraints = brand_brief.get("constraints") or ""
+        analysis_goal = brand_brief.get("analysis_goal") or ""
+        social_solvable: list[str] = []
+        for ch in brand_brief.get("channel_plan") or []:
+            if ch.get("type") == "social_media":
+                social_solvable = ch.get("solvable") or []
+                break
+        text_pool = " ".join([constraints, analysis_goal, *social_solvable])
+        competitor_signal = _COMPETITIVE_SIGNAL_TOKEN in text_pool
 
-    text_pool = " ".join([constraints, analysis_goal, *social_solvable])
-    if _COMPETITIVE_SIGNAL_TOKEN not in text_pool:
+    if not competitor_signal:
         return None
 
     return {
@@ -2281,22 +2289,103 @@ def _check_missing_competitive_social_dimension(
     }
 
 
+def _check_multi_audience_no_keyword_diff(
+    research_design: dict,
+    brand_brief: dict,
+) -> dict | None:
+    """检测 brief 提供多受众且行为信号差异化，但 data_plan 未做关键词/平台差异化。
+
+    所有触发条件全部满足时返回 advisory dict，否则 None：
+    1. brand_brief.target_audiences 含 ≥ 2 个受众
+    2. 至少 2 个受众有非空 behavior_signals（仅 label 描述不算可执行差异化信号）
+    3. data_plan 中无任一 social_media consumer_voice/competitive 维度按受众拆分
+       （判定：维度的 dimension_name 不含任何受众 label 子串，认为未拆）
+
+    与 research_design_chain SYSTEM_TEMPLATE §1.5 的"受众驱动差异化"规则对应——
+    advisory 仅作非阻塞软提示，不强制要求拆维度（用户可能有合理决定不拆，例如
+    behavior_signals 都是 demographic 描述，不构成数据采集层差异）。
+    """
+    audiences = brand_brief.get("target_audiences") or []
+    if len(audiences) < 2:
+        return None
+
+    audiences_with_signals = [
+        a for a in audiences
+        if a.get("behavior_signals") and any(s for s in a.get("behavior_signals", []))
+    ]
+    if len(audiences_with_signals) < 2:
+        return None
+
+    audience_labels = [
+        (a.get("label") or "").strip()
+        for a in audiences_with_signals
+        if (a.get("label") or "").strip()
+    ]
+    if len(audience_labels) < 2:
+        return None
+
+    data_plan = research_design.get("data_plan") or []
+    research_questions = research_design.get("research_questions") or []
+    rq_dim_map = {rq.get("id"): rq.get("dimension") for rq in research_questions}
+
+    # 仅检查 social_media 的 consumer_voice / competitive 维度（这两类是受众差异化的主战场）
+    relevant_dims = [
+        dp for dp in data_plan
+        if (dp.get("channel") or "social_media") == "social_media"
+        and any(rq_dim_map.get(qid) in ("consumer_voice", "competitive")
+                for qid in (dp.get("question_ids") or []))
+    ]
+    if not relevant_dims:
+        return None  # 没有这两类维度（如纯品牌自发声 brief），不适用
+
+    has_audience_split = False
+    for dp in relevant_dims:
+        dim_name = (dp.get("dimension_name") or "")
+        if any(label in dim_name for label in audience_labels):
+            has_audience_split = True
+            break
+
+    if has_audience_split:
+        return None
+
+    return {
+        "code": "multi_audience_no_keyword_diff",
+        "severity": "warning",
+        "message": (
+            f"Brief 提供 {len(audiences_with_signals)} 个受众且行为信号差异化，"
+            "但当前 data_plan 的消费者声音/竞品维度未按受众拆分关键词或平台。"
+            "若不同受众的内容偏好/触媒习惯差异显著，建议把相关维度按受众分组采集"
+            "（如 consumer_voice_受众A + consumer_voice_受众B），避免数据混采。"
+            "若受众间 behavior_signals 仅为人口学描述（年龄/收入），无法驱动采集层差异，可忽略此提示。"
+        ),
+    }
+
+
+# Advisory 检测函数注册表——新增规则在此 append 即可，无需改 dispatcher
+_ADVISORY_CHECKS = [
+    _check_missing_competitive_social_dimension,
+    _check_multi_audience_no_keyword_diff,
+]
+
+
 def _compute_research_design_advisories(
     research_design: dict,
     brand_brief: dict,
 ) -> list[dict]:
     """计算研究计划 advisory（非阻塞软提示）。
 
-    第一版仅一条规则：missing_competitive_social_dimension。
-    后续可扩展更多 advisory 检测，每条独立函数，互不影响。
+    每条 advisory 是独立函数，互不影响。新增规则在 _ADVISORY_CHECKS 列表追加即可。
     """
     advisories: list[dict] = []
 
-    missing_competitive = _check_missing_competitive_social_dimension(
-        research_design, brand_brief,
-    )
-    if missing_competitive:
-        advisories.append(missing_competitive)
+    for check in _ADVISORY_CHECKS:
+        try:
+            result = check(research_design, brand_brief)
+        except Exception as exc:  # 单条规则异常不应阻塞其他规则
+            logger.warning("Advisory check %s 异常（已忽略）: %s", check.__name__, exc)
+            continue
+        if result:
+            advisories.append(result)
 
     return advisories
 
@@ -2322,6 +2411,10 @@ async def design_research(
         analysis_goal=brand_brief.get("analysis_goal") or "",
         news_channel_brief=_extract_channel_brief(brand_brief, "news_media"),
         research_channel_brief=_extract_channel_brief(brand_brief, "industry_research"),
+        target_audiences=brand_brief.get("target_audiences"),
+        audience_insights=brand_brief.get("audience_insights"),
+        core_propositions=brand_brief.get("core_propositions"),
+        competitors=brand_brief.get("competitors"),
     )
 
     start = time.time()

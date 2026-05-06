@@ -146,14 +146,10 @@ export default defineNuxtConfig({
     // 业务layer组件都在各自layer内部使用
   ],
   modules: [
-    // Nuxt UI v4 配置：禁用字体功能，使用内置 colorMode（不再单独引入 @nuxtjs/color-mode）
+    // Nuxt UI v4 的 colorMode 模块选项是 boolean 开关，不接受嵌套配置；
+    // @nuxtjs/color-mode 的真实配置须放在顶层 colorMode 字段（见下方）。
     ['@nuxt/ui', {
       fonts: false,
-      colorMode: {
-        preference: 'light',
-        fallback: 'light',
-        classSuffix: '',
-      }
     }],
     '@nuxt/eslint',
     // '@nuxt/image',
@@ -161,4 +157,11 @@ export default defineNuxtConfig({
     '@pinia/nuxt',
     'nuxt-auth-utils'  // 使用新的认证模块
   ],
+
+  // 默认 light，不跟随系统；用户通过顶栏 toggle 切换后由 localStorage 记忆
+  colorMode: {
+    preference: 'light',
+    fallback: 'light',
+    classSuffix: '',
+  },
 })

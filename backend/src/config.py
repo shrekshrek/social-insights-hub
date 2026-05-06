@@ -186,6 +186,54 @@ class Settings(BaseSettings):
         description="Embedding model name (1024-dim output)",
     )
 
+    # OCR Configuration (DeepSeek-OCR via SiliconFlow, OpenAI-compatible)
+    # 当 PDF 页文本稀疏（图片化表格、infographic、扫描页）时 fallback 调用
+    # 视觉模型转写为 Markdown，避免 brief/知识库文档关键信息丢失。
+    OCR_API_KEY: str | None = Field(
+        default=None,
+        description="OCR API Key（默认 fallback 至 EMBEDDING_API_KEY，可复用同一 SiliconFlow 账号）",
+    )
+    OCR_BASE_URL: str = Field(
+        default="https://api.siliconflow.cn/v1",
+        description="OCR API Base URL (OpenAI-compatible)",
+    )
+    OCR_MODEL: str = Field(
+        default="deepseek-ai/DeepSeek-OCR",
+        description="OCR 模型名（视觉输入 → Markdown 输出）",
+    )
+    OCR_FALLBACK_THRESHOLD: int = Field(
+        default=80,
+        ge=0,
+        description="单页文本字符数低于此阈值时触发 OCR fallback",
+    )
+    OCR_FALLBACK_FULL_DOC_THRESHOLD: int = Field(
+        default=500,
+        ge=0,
+        description="全文字符数低于此阈值时整篇 PDF 走 OCR（短文档图片化概率高）",
+    )
+    OCR_RENDER_SCALE: float = Field(
+        default=2.0,
+        gt=0,
+        description="PDF 页渲染倍数（2.0 ≈ 144 DPI，DeepSeek-OCR 视觉编码器固定预算约 1100 tokens，再调高也不会增加图像信号但会增加超时风险）",
+    )
+    OCR_TIMEOUT_SECONDS: float = Field(
+        default=180.0,
+        gt=0,
+        description="单次 OCR API 调用超时（秒，SiliconFlow 限免模型密集页常需 90s+）",
+    )
+    OCR_MAX_RETRIES: int = Field(
+        default=1,
+        ge=0,
+        le=3,
+        description="OCR 调用失败时的重试次数（仅对超时/网络错误重试，不重试 4xx）",
+    )
+    OCR_MAX_OUTPUT_TOKENS: int = Field(
+        default=4096,
+        ge=512,
+        le=8192,
+        description="OCR 单次输出 token 上限（DeepSeek-OCR 总上下文 8K，含输入图）",
+    )
+
     # Crawl4AI Configuration
     CRAWL4AI_BASE_URL: str = Field(
         default="http://crawl4ai:11235",

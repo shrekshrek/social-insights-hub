@@ -32,17 +32,19 @@ _RAG_MIN_SCORE = 0.5
 def parse_text(file_bytes: bytes, filename: str) -> str:
     """从文件字节提取纯文本
 
-    支持：PDF（pdfplumber）/ DOCX（python-docx）/ TXT / MD。
+    支持：PDF（pdfplumber + DeepSeek-OCR fallback）/ DOCX（python-docx）/ TXT / MD。
     文件大小上限由 router 层校验（50MB）。
+
+    PDF：pdfplumber 直出文本流；字符稀疏页（图片化表格、infographic 等）
+    fallback 到 DeepSeek-OCR via SiliconFlow（OpenAI-compatible），输出 Markdown。
+    OCR 调用失败优雅降级到 pdfplumber 原始文本，不阻塞主流程。详见 .ocr 模块。
     """
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
     if ext == "pdf":
-        import pdfplumber
+        from .ocr import extract_pdf_with_ocr_fallback
 
-        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-            pages = [page.extract_text() or "" for page in pdf.pages]
-        return "\n".join(pages)
+        return extract_pdf_with_ocr_fallback(file_bytes)
 
     if ext == "docx":
         from docx import Document

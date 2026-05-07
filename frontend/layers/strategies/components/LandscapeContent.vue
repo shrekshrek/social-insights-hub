@@ -67,8 +67,9 @@
     <div v-if="result.positioning_map?.positions?.length">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">定位图</h4>
       <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <div class="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-6 items-start">
-          <!-- 左：2D 象限网格（保留 aspect-square + 内 padding 留出端点标签空间） -->
+        <!-- 左列固定 420px（容纳 grid + 端点标签 padding），右列吸收剩余宽度避免大屏下的左右空档 -->
+        <div class="grid md:grid-cols-[420px_minmax(0,1fr)] gap-6 items-start">
+          <!-- 左：2D 象限网格（aspect-square + 内 padding 留出端点标签空间）-->
           <div class="px-6 py-5">
             <div class="relative w-full aspect-square bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded">
               <!-- 中线 -->
@@ -300,11 +301,6 @@
       </div>
     </div>
 
-    <!-- section 级"查看原始数据"入口 -->
-    <SectionDataDrawer
-      :chain-inputs="result.chain_inputs"
-      title="Landscape 竞争格局 · 原始数据来源"
-    />
   </div>
   <div v-else class="text-gray-400 text-center py-4">暂无数据</div>
 </template>
@@ -312,7 +308,7 @@
 <script setup lang="ts">
 import type { LandscapeResult } from '../types'
 import { sentimentColor, sentimentLabel } from '../composables/useStrategyConstants'
-import { UBadge, SectionDataDrawer } from '#components'
+import { UBadge } from '#components'
 
 const props = defineProps<{
   result: LandscapeResult | null

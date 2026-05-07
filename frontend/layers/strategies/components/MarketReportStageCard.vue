@@ -5,7 +5,12 @@
         <div class="flex items-center gap-2 flex-wrap">
           <UBadge :color="stageColor" variant="subtle" size="sm">第 {{ stageIndex }} 层</UBadge>
           <h3 class="text-lg font-semibold">{{ title }}</h3>
-          <DataProvenanceBadge v-if="provenance" :provenance="provenance" />
+          <DataProvenanceBadge
+            v-if="provenance"
+            :provenance="provenance"
+            :chain-inputs="chainInputs"
+            :modal-title="`${title} · 原始数据来源`"
+          />
         </div>
         <div class="flex items-center gap-2">
           <UButton
@@ -39,7 +44,7 @@
 
 <script setup lang="ts">
 import type { MarketReportStage } from '../composables/useStrategiesApi'
-import type { DataProvenance } from '../types'
+import type { ChainInputs, DataProvenance } from '../types'
 import { UCard, UBadge, UButton, UIcon } from '#components'
 
 const props = defineProps<{
@@ -93,6 +98,11 @@ const stageColor = computed(() => {
 const provenance = computed<DataProvenance | null>(() => {
   const r = props.result as { data_provenance?: DataProvenance } | null
   return r?.data_provenance ?? null
+})
+
+const chainInputs = computed<ChainInputs | null>(() => {
+  const r = props.result as { chain_inputs?: ChainInputs } | null
+  return r?.chain_inputs ?? null
 })
 
 const noResultText = computed(() => {

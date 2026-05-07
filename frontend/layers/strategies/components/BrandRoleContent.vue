@@ -1,9 +1,10 @@
 <template>
-  <div v-if="result" class="space-y-5">
+  <!-- Role 与 Strategy 双栏 grid（窄屏 stack；md+ 平级并列），整体减少垂直占用 -->
+  <div v-if="result" class="grid md:grid-cols-2 gap-4 items-stretch">
     <!-- Brand Social Role -->
-    <div v-if="result.brand_social_role">
+    <div v-if="result.brand_social_role" class="flex flex-col">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">品牌社媒角色 Brand Social Role</h4>
-      <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+      <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg flex-1">
         <p class="font-bold text-base text-gray-900 dark:text-white leading-relaxed">
           {{ result.brand_social_role.statement }}
         </p>
@@ -18,9 +19,9 @@
     </div>
 
     <!-- Social Strategy -->
-    <div v-if="result.social_strategy">
+    <div v-if="result.social_strategy" class="flex flex-col">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">社媒策略 Social Strategy</h4>
-      <div class="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+      <div class="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex-1">
         <p class="font-bold text-base text-gray-900 dark:text-white leading-relaxed">
           {{ result.social_strategy.statement }}
         </p>

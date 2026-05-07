@@ -4,10 +4,10 @@
     <div v-if="result.big_idea">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">创意概念 Big Idea</h4>
       <div class="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border-l-4 border-green-500">
-        <p class="font-bold text-xl text-gray-900 dark:text-white">
+        <p class="font-bold text-lg text-gray-900 dark:text-white leading-relaxed">
           {{ result.big_idea.statement }}
         </p>
-        <p v-if="result.big_idea.elaboration" class="mt-2 text-gray-600 dark:text-gray-400">
+        <p v-if="result.big_idea.elaboration" class="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
           {{ result.big_idea.elaboration }}
         </p>
         <div v-if="result.big_idea.tension_echo" class="mt-2 p-2 bg-white/50 dark:bg-gray-800/50 rounded">
@@ -18,29 +18,29 @@
       </div>
     </div>
 
-    <!-- Content Strategy -->
+    <!-- Content Strategy（4 支柱 2×2 grid 节省垂直占用；窄屏 stack）-->
     <div v-if="result.content_strategy">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">内容策略 Content Strategy</h4>
-      <div class="space-y-3">
+      <div class="grid md:grid-cols-2 gap-3">
         <div
           v-for="(pillar, idx) in result.content_strategy.pillars"
           :key="idx"
           class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
         >
-          <div class="flex items-center gap-2">
-            <p class="font-semibold text-gray-900 dark:text-white">
+          <div class="flex items-center gap-2 flex-wrap">
+            <p class="text-sm font-semibold text-gray-900 dark:text-white">
               支柱 {{ idx + 1 }}: {{ pillar.name }}
             </p>
             <UBadge v-if="pillar.strategic_role" :color="ROLE_COLOR[pillar.strategic_role] ?? 'neutral'" variant="subtle" size="sm">
               {{ ROLE_LABEL[pillar.strategic_role] ?? pillar.strategic_role }}
             </UBadge>
           </div>
-          <p v-if="pillar.description" class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <p v-if="pillar.description" class="mt-1 text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
             {{ pillar.description }}
           </p>
           <div v-if="pillar.reference_examples?.length" class="mt-2">
             <p class="text-xs font-medium text-gray-500 mb-1">参考案例:</p>
-            <ul class="list-disc list-inside text-sm text-gray-600 dark:text-gray-400">
+            <ul class="list-disc list-inside text-xs text-gray-600 dark:text-gray-400">
               <li v-for="(ex, eidx) in pillar.reference_examples" :key="eidx">{{ ex }}</li>
             </ul>
           </div>

@@ -10,7 +10,7 @@
           class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
         >
           <div class="flex items-start justify-between gap-2">
-            <p class="font-medium text-sm text-gray-900 dark:text-white">
+            <p class="font-medium text-base text-gray-900 dark:text-white">
               {{ idx + 1 }}. {{ tension.statement }}
             </p>
             <UBadge
@@ -59,7 +59,7 @@
           class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
         >
           <div class="flex items-start justify-between gap-2">
-            <p class="font-medium text-sm text-gray-900 dark:text-white">
+            <p class="font-medium text-base text-gray-900 dark:text-white">
               {{ idx + 1 }}. {{ opp.statement }}
             </p>
             <span v-if="opp.related_tensions?.length" class="text-[10px] text-gray-400 shrink-0">

@@ -1021,22 +1021,6 @@ def _parse_pass2_output(content: str) -> dict:
     }
 
 
-# ==================== Token 合并 ====================
-
-
-def _merge_token_usage(
-    pass1: dict | None,
-    pass2: dict | None,
-) -> dict | None:
-    """合并 Pass 1 + Pass 2 的 token_usage。"""
-    if pass1 is None and pass2 is None:
-        return None
-    keys = ("input_tokens", "output_tokens", "total_tokens", "prompt_tokens", "completion_tokens")
-    merged: dict[str, int] = {}
-    for u in (pass1, pass2):
-        if not u:
-            continue
-        for k in keys:
-            if k in u and u[k] is not None:
-                merged[k] = merged.get(k, 0) + (u[k] or 0)
-    return merged or None
+# Token 累积已统一走 src.llm.utils.extract_token_usage + merge_token_usage_stats。
+# 之前自实现的 _merge_token_usage 因输出非 TokenUsageStats 嵌套结构（无 summary
+# 包装、无成本计算），导致 AnalysisJob.token_usage 在前端被读成 0 次 / ¥0.0000。已移除。

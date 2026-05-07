@@ -9,6 +9,7 @@ insight 分析由切片（NewsSlice）按需触发，不在采集阶段执行。
 """
 
 import logging
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy import and_, select
@@ -240,13 +241,13 @@ def run_news_slice_insight_task(
         format_quotes_for_pass2,
     )
     from src.news_media.analysis.models import NewsSlice
+    from src.llm.utils import extract_token_usage, merge_token_usage_stats
     from src.news_media.analysis.service import (
         _articles_for_llm,
         _build_stats_summary,
         _compute_derived,
         _compute_descriptive,
         _dedupe_and_filter,
-        _merge_token_usage,
         _parse_pass1_output,
         _parse_pass2_output,
     )
@@ -303,6 +304,7 @@ def run_news_slice_insight_task(
             # Step 2：Pass 1 LLM（sync）
             pass1_chain = create_pass1_chain()
             pass1_input_articles = _articles_for_llm(filtered)
+            pass1_start = time.time()
             pass1_response = pass1_chain.invoke({
                 "analysis_goal": goal,
                 "subject": subject,
@@ -310,7 +312,9 @@ def run_news_slice_insight_task(
                 "article_count": len(filtered),
                 "articles_content": format_articles_for_pass1(pass1_input_articles),
             })
-            pass1_token_usage = (pass1_response.response_metadata or {}).get("token_usage")
+            pass1_token_usage = extract_token_usage(
+                pass1_response, duration_seconds=time.time() - pass1_start,
+            )
             pass1_parsed = _parse_pass1_output(pass1_response.content)
 
             # Step 3：派生层
@@ -325,6 +329,7 @@ def run_news_slice_insight_task(
             try:
                 pass2_chain = create_pass2_chain()
                 article_titles_by_id = {a.id: a.title for a in filtered}
+                pass2_start = time.time()
                 pass2_response = pass2_chain.invoke({
                     "analysis_goal": goal,
                     "subject": subject or "（独立监测，无指定主体）",
@@ -341,7 +346,9 @@ def run_news_slice_insight_task(
                         derived.get("event_clusters") or [], article_titles_by_id,
                     ),
                 })
-                pass2_token_usage = (pass2_response.response_metadata or {}).get("token_usage")
+                pass2_token_usage = extract_token_usage(
+                    pass2_response, duration_seconds=time.time() - pass2_start,
+                )
                 page_synthesis = _parse_pass2_output(pass2_response.content)
             except Exception as e:
                 logger.warning("NewsSlice %d Pass 2 failed (页面降级): %s", slice_id, e)
@@ -356,7 +363,9 @@ def run_news_slice_insight_task(
             slice_obj.stats = _build_stats_summary(descriptive, derived["entities"])
             slice_obj.status = "completed"
 
-            token_usage = _merge_token_usage(pass1_token_usage, pass2_token_usage)
+            # 用 merge_token_usage_stats（处理 {summary, call_details} 嵌套 schema）
+            # 累加 pass1 + pass2 调用，前端读到 total_calls=2 与累计成本。
+            token_usage = merge_token_usage_stats(pass1_token_usage, pass2_token_usage)
             complete_analysis_job_sync(
                 db, job,
                 analyzed_count=len(filtered),

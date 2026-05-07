@@ -230,6 +230,74 @@ def extract_token_usage(
     }
 
 
+def merge_token_usage_stats(
+    a: Dict[str, Any] | None,
+    b: Dict[str, Any] | None,
+) -> Dict[str, Any] | None:
+    """合并两个 :func:`extract_token_usage` 输出（``{summary, call_details}`` 结构）。
+
+    用于多次 LLM 调用聚合到单条 ``AnalysisJob.token_usage``：
+    - ``summary`` 内的数字字段（total_calls / total_*_tokens / total_cost_cny / ...）累加
+    - ``call_details`` 数组拼接，``call_index`` 重排
+    - ``avg_tokens_per_call`` / ``avg_cost_per_call`` 重算
+
+    Args:
+        a / b: 任一为 None 时返回另一个；都 None 时返回 None。
+
+    Note:
+        早期 ``strategies/service.py:_merge_token_usage_dicts`` 用 shallow 数字累加
+        处理这个结构，碰到 dict / list 字段会直接保留第一个值——会丢 ``summary``
+        里所有数字。本函数专门处理嵌套 schema，应作为新代码的统一入口。
+    """
+    if not a:
+        return b
+    if not b:
+        return a
+
+    sa = a.get("summary") or {}
+    sb = b.get("summary") or {}
+
+    summary: Dict[str, Any] = {}
+    sum_keys = (
+        "total_calls",
+        "total_input_tokens",
+        "total_output_tokens",
+        "total_tokens",
+        "total_cache_hit_tokens",
+        "total_cache_miss_tokens",
+        "total_cost_cny",
+        "total_duration_seconds",
+    )
+    for k in sum_keys:
+        va = sa.get(k) or 0
+        vb = sb.get(k) or 0
+        summary[k] = va + vb
+
+    total_calls = summary["total_calls"] or 0
+    if total_calls > 0:
+        summary["avg_tokens_per_call"] = round(
+            (summary["total_tokens"] or 0) / total_calls, 1
+        )
+        summary["avg_cost_per_call"] = round(
+            (summary["total_cost_cny"] or 0) / total_calls, 6
+        )
+    else:
+        summary["avg_tokens_per_call"] = 0.0
+        summary["avg_cost_per_call"] = 0.0
+
+    # 数值四舍五入对齐 extract_token_usage 精度
+    summary["total_cost_cny"] = round(summary["total_cost_cny"], 6)
+    summary["total_duration_seconds"] = round(summary["total_duration_seconds"], 2)
+
+    call_details = list(a.get("call_details") or []) + list(b.get("call_details") or [])
+    # 重排 call_index 让累积语义清晰
+    for idx, c in enumerate(call_details):
+        if isinstance(c, dict):
+            c["call_index"] = idx
+
+    return {"summary": summary, "call_details": call_details}
+
+
 def get_response_content(response: Any) -> str:
     """
     从LLM响应中提取文本内容（LangChain 1.0规范）

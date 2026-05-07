@@ -14,6 +14,7 @@ service.py 承担，task 层不再调 insight。
 import json
 import logging
 import re
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -209,16 +210,21 @@ def _tag_articles_batch_sync(
     subject / competitors：研究主体与已知竞品列表，供 role 硬绑定使用。
     策略场景由 slice_blueprint[].subject/competitors 传入；独立监测场景传空，
     chain 退化为全部 context。
+
+    返回 (tags, token_usage)；token_usage 为 ``{summary, call_details}`` 嵌套结构
+    （由 :func:`extract_token_usage` + :func:`merge_token_usage_stats` 累积每个 batch
+    的 LLM 调用），调用方直接传给 ``complete_analysis_job_sync(token_usage=...)`` 即可。
+    前端读 ``summary.total_calls`` / ``summary.total_cost_cny`` 渲染 AI 统计。
     """
     from src.llm.chains.news.tagging_chain import (
         create_tagging_chain,
         format_articles_for_tagging,
     )
+    from src.llm.utils import extract_token_usage, merge_token_usage_stats
 
     chain = create_tagging_chain()
     all_tags: list[dict] = []
-    total_input_tokens = 0
-    total_output_tokens = 0
+    token_usage: dict | None = None
 
     competitors_str = ", ".join(competitors or []) or "（未指定）"
     subject_str = subject or ""
@@ -237,6 +243,7 @@ def _tag_articles_batch_sync(
         ]
 
         articles_content = format_articles_for_tagging(batch_dicts, use_full_text=use_full_text)
+        batch_start = time.time()
         response = chain.invoke({
             "analysis_goal": analysis_goal,
             "subject": subject_str,
@@ -244,10 +251,10 @@ def _tag_articles_batch_sync(
             "article_count": len(batch),
             "articles_content": articles_content,
         })
-
-        usage = (response.response_metadata or {}).get("token_usage") or {}
-        total_input_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
-        total_output_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
+        batch_usage = extract_token_usage(
+            response, duration_seconds=time.time() - batch_start,
+        )
+        token_usage = merge_token_usage_stats(token_usage, batch_usage)
 
         try:
             tags = _parse_llm_json(response.content)
@@ -260,12 +267,6 @@ def _tag_articles_batch_sync(
                 logger.warning("news_tagging_chain returned non-list: %s", type(tags))
         except (json.JSONDecodeError, ValueError) as e:
             logger.error("Failed to parse tagging response: %s", e)
-
-    token_usage = {
-        "input_tokens": total_input_tokens,
-        "output_tokens": total_output_tokens,
-        "total_tokens": total_input_tokens + total_output_tokens,
-    } if (total_input_tokens or total_output_tokens) else None
 
     return all_tags, token_usage
 

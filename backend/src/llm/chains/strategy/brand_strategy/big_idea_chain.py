@@ -97,8 +97,8 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
       }}
     ],
     "evidence": [
-      {{"type": "content_insight", "description": "高互动内容特征", "source": "Social Slice #0: 蕉内品牌口碑聚焦"}},
-      {{"type": "kol_ecosystem", "description": "KOL 生态特征", "source": "Social Slice #1: 新能源车大盘讨论"}}
+      {{"type": "content_insight", "description": "高互动内容特征", "source": "<取自切片 _source_label>"}},
+      {{"type": "kol_ecosystem", "description": "KOL 生态特征", "source": "<取自切片 _source_label>"}}
     ]
   }}
 }}
@@ -133,7 +133,7 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - 新闻叙事聚类（narratives）揭示媒体如何定义品类议题，Big Idea 可以**借势或颠覆**媒体已有的叙事框架
 - 关键引述（key_quotes）中的行业权威发言可作为 Content Strategy 的话题锚点
 - Content Strategy 的支柱可考虑"媒体议题再造"——将新闻中的行业话题转化为社媒可传播的消费者语言
-- 新闻数据作为补充创意灵感，evidence.source 用 `News Slice #<i>: <name>`（不要写"新闻媒体数据"）
+- 新闻数据作为补充创意灵感
 
 ## 创意版图（creative_references）使用指南
 
@@ -143,7 +143,6 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - Big Idea 的 statement 应能在创意版图中定位到一个明确的**差异化坐标**
 - information_gaps（创意盲点）往往是品类未被尝试的方向，优先考虑作为 Big Idea 方向
 - 如 `{{creative_references}}` 段落为空，**正常忽略**，不影响创意推导
-- evidence 中引用创意参考时 source 写 `Creative: <案例名>`，例如 `Creative: Patagonia 'Don't Buy This' campaign`
 """
 
 USER_TEMPLATE = """{brief_section}

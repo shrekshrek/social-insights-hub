@@ -130,9 +130,8 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 
 ## 要求
 - players: 3-10 个，按 media_sov_pct 降序，必须包含至少 1 个 target + 2 个 competitor
-- positioning_map.positions: **仅包含 source_count > 0 的玩家**（在本次 news 样本里有实际媒体报道），
-  数量按实际可定位玩家而定，可少于 players（0-source 玩家不放上图）。若样本里实际有报道的玩家
-  少于 2 个（无法构成"格局"），输出空 positions 数组而非强行编造
+- positioning_map.positions: 数量按"严格约束"中的 source_count > 0 规则筛选后而定，可少于 players；
+  若样本里有报道的玩家不足 2 个（无法构成"格局"），输出空 positions 数组而非强行编造
 - discourse_battles: 条目必须能在 agenda_map 的 agenda_battles 里找到对应（禁止凭空杜撰）
 - 若某字段无数据支持，使用空数组而非伪造内容
 - momentum 判断需基于 `descriptive.coverage_timeseries` / `descriptive.sentiment_timeseries` 真实时序，
@@ -148,7 +147,7 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 
 `players[].rationale` / `discourse_battles[].evidence` 等说理性字段，引用切片层数据时
 应在文字中点明对应**切片标签**——格式 `News Slice #<i>: <slice_name>`，取每个切片对象内
-`_source_label` 字段值。例如：`"该结论基于 News Slice #0: Tesla 媒体报道聚焦中竞品 SOV 数据"`。
+`_source_label` 字段值。例如：`"该结论基于 <取自切片 _source_label> 中竞品 SOV 数据"`。
 **禁止**只写"切片数据"等模糊形式。
 
 ## 禁止行为
@@ -156,8 +155,6 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - 禁止脱离 agenda_map 议程图单独产生新的 battle
 - 禁止在 representative_voices 中编造未出现的原文
 - 禁止使用 `result_data.page_synthesis`（briefing / event_titles 是 LLM 散文，仅供 slice 页面阅读，不作策略输入）
-- **禁止用 industry_research 的市场份额 / 营收 / 增长率数据**作为 positioning_map 的轴定义或玩家坐标依据
-- **禁止把 source_count=0 的玩家放进 positioning_map.positions**（无媒体覆盖即无媒体定位可言）
 
 ## 行业研究数据（research_findings）使用指南
 - 行业研究数据来自自动化搜索引擎 + 行业报告 + 公开数据的综合分析，代表**专家/行业视角**

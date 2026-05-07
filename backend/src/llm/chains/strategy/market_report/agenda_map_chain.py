@@ -80,7 +80,7 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
         {{"quote": "key_quotes 字面引用", "speaker": "key_quote.speaker（无则空）", "source": "key_quote.source_name", "source_tier": "tier1/tier2/tier3/wechat_mp"}}
       ],
       "credibility": "high|medium|low",
-      "cross_slice_evidence": ["News Slice #0: Tesla 媒体报道聚焦", "News Slice #1: 户外品牌行业新闻"]
+      "cross_slice_evidence": ["<取自切片 _source_label>", "<取自切片 _source_label>"]
     }}
   ],
   "agenda_battles": [

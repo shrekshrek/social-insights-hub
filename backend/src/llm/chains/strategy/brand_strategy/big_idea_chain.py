@@ -103,18 +103,12 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
   }}
 }}
 
-## evidence.source 引用规范（重要）
+## evidence.source 来源约束
 
-每条 evidence.source 必须填**唯一可追溯标签**之一，禁止泛指如 "slice数据"。
-
-| 数据来源 | source 写法 |
-|---------|------------|
-| 社媒切片 | `Social Slice #<i>: <slice_name>`（取切片 JSON 内 `_source_label` 字段值） |
-| 新闻切片 | `News Slice #<i>: <slice_name>`（取新闻段落 `_source_label` 字段值） |
-| 上游 insight tension | `insight:tension:<i>` |
-| 上游 brand_role | `brand_role:role` 或 `brand_role:strategy` |
-| 行业研究 | `Research: <主题>`，例如 `Research: 户外露营赛道增长` |
-| 创意参考 | `Creative: <案例名>`，例如 `Creative: Patagonia 'Don't Buy This' campaign` |
+每条 evidence.source 必须填具体可追溯标签：
+- 切片：取切片对象 `_source_label` 字段值（如 `Social Slice #0: ...` / `News Slice #0: ...`）
+- 上游层：`insight:tension:<i>` / `brand_role:role` / `brand_role:strategy`
+- 行业研究 / 创意参考：`Research: <主题>` / `Creative: <案例名>`
 
 ## 要求
 - big_idea.statement 简洁、有创意张力，能引起共鸣

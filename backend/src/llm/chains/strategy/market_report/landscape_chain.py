@@ -136,21 +136,10 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - momentum 判断需基于 `descriptive.coverage_timeseries` / `descriptive.sentiment_timeseries` 真实时序，
   以及 `event_clusters` 的 `tier_weighted_score` 与 `peak_date` 分布；禁止"感觉上升"
 
-## evidence_quote 字段（强约束）
+## evidence_quote 来源约束
 
-**Quote 来源限定**：`players[].evidence_quote.quote` **必须从输入数据每个 slice 的 `key_quotes`
-数组里逐字选取**，不得改写、缩略、合并或自行从 article 标题 / event_clusters 等其它字段构造。
-若该玩家在 key_quotes 里没有合适的引述支撑，宁可 `evidence_quote=null` 也不要凭空造句。
-
-**字段对应**（与 key_quotes 一一映射）：
-
-- `quote` = 选中 key_quote.quote（**字面引用**）
-- `speaker` = 该 key_quote.speaker（pass1 已抽取的真实发言人，无则留空字符串）
-- `source` = 该 key_quote.source_name（媒体名）
-- `source_tier` = 该 key_quote.source_tier
-
-**禁止把 source 媒体名重复填到 speaker**——key_quote.speaker 为空时保留 `speaker=""`，
-不要补"新华网报道"等占位。
+`players[].evidence_quote` 必须从输入 `key_quotes` 数组逐字选取（quote/speaker/source/source_tier
+按对应 key_quote 字段填）；该玩家无合适 quote 时输出 `null`。
 
 ## 切片溯源规范（重要）
 

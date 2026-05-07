@@ -136,21 +136,12 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
   ]
 }}
 
-## evidence.source 引用规范（重要）
+## evidence.source 来源约束
 
-**目的**：让用户能精准溯源每条 evidence 来自哪份原始数据。
-
-**规则**：source 必须填**唯一可追溯标签**之一，禁止用泛指如 "slice数据"。
-
-| 数据来源 | source 写法 | 取值依据 |
-|---------|------------|---------|
-| 社媒切片 | `Social Slice #<i>: <slice_name>` | 引用切片 JSON 内的 `_source_label` 字段值 |
-| 新闻切片 | `News Slice #<i>: <slice_name>` | 引用新闻段落每个切片对象的 `_source_label` 字段值 |
-| 行业研究 | `Research: <主题或要点>` | research_findings 段落中具体研究发现 |
-| Landscape 二阶解读（full_strategy 专属） | `Landscape: players[<i>]` 或 `Landscape: positioning_map` | 仅 full_strategy 路径，标注信号是 Landscape 已结构化解读 |
-
-**示例**：`"source": "Social Slice #0: 蕉内品牌口碑聚焦"` ✅；
-`"source": "slice数据"` ❌（已弃用）。
+每条 evidence.source 必须填具体可追溯标签：
+- 切片：取切片对象 `_source_label` 字段值（如 `Social Slice #0: ...` / `News Slice #0: ...`）
+- 行业研究：`Research: <主题>`
+- Landscape 二阶解读（仅 full_strategy 路径）：`Landscape: players[<i>]` / `Landscape: positioning_map`
 
 ## 要求
 - social_tensions: 1-3 条，按重要性排序；至少 1 条须引用 ≥2 个切片的交叉数据

@@ -42,6 +42,14 @@ async def list_analysis_jobs(
     social_task_id: int | None = Query(None, description="按社媒采集任务ID筛选"),
     news_monitor_id: int | None = Query(None, description="按新闻监测项目ID筛选"),
     news_task_id: int | None = Query(None, description="按新闻采集任务ID筛选"),
+    strategy_id: int | None = Query(
+        None,
+        description=(
+            "按策略ID筛选（聚合该策略下的所有 AnalysisJob：包含其 social_monitor / "
+            "news_monitor 触发的分析、以及策略自身 chain 如 insight / brand_role / "
+            "big_idea / agenda_map / landscape / strategic_brief）"
+        ),
+    ),
     analysis_type: str | None = Query(None, description="按分析类型筛选"),
     status_filter: str | None = Query(None, alias="status", description="按状态筛选"),
     start_date: str | None = Query(None, description="开始日期 (YYYY-MM-DD)"),
@@ -49,7 +57,7 @@ async def list_analysis_jobs(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_jobs_read),
 ):
-    """全局分析任务列表，支持按渠道/任务/类型/状态/日期筛选。"""
+    """全局分析任务列表，支持按渠道/任务/策略/类型/状态/日期筛选。"""
     items, total = await crud.get_analysis_jobs(
         db=db,
         current_user_id=current_user.id,
@@ -59,6 +67,7 @@ async def list_analysis_jobs(
         social_task_id=social_task_id,
         news_monitor_id=news_monitor_id,
         news_task_id=news_task_id,
+        strategy_id=strategy_id,
         analysis_type=analysis_type,
         status=status_filter,
         start_date=start_date,

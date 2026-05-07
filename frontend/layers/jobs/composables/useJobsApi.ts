@@ -30,6 +30,8 @@ export const useJobsApi = () => {
           searchParams.set("news_monitor_id", String(p.news_monitor_id));
         if (p.news_task_id)
           searchParams.set("news_task_id", String(p.news_task_id));
+        if (p.strategy_id)
+          searchParams.set("strategy_id", String(p.strategy_id));
         if (p.analysis_type) searchParams.set("analysis_type", p.analysis_type);
         if (p.status) searchParams.set("status", p.status);
         if (p.start_date) searchParams.set("start_date", p.start_date);

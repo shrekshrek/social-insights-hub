@@ -133,6 +133,14 @@ export interface AnalysisJobFilterParams {
   social_task_id?: number;
   news_monitor_id?: number;
   news_task_id?: number;
+  /**
+   * 策略级聚合筛选：覆盖该策略下的所有 AnalysisJob。
+   *
+   * 包括其 social_monitor / news_monitor 触发的所有渠道分析、以及策略自身的
+   * chain（insight / brand_role / big_idea / agenda_map / landscape /
+   * strategic_brief / probe_review / coverage_check 等）。
+   */
+  strategy_id?: number;
   analysis_type?: AnalysisType;
   status?: AnalysisStatus;
   start_date?: string;

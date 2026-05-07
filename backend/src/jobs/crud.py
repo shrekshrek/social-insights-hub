@@ -6,7 +6,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from fastapi import HTTPException, status
 
 from src.jobs.models import AnalysisJob
@@ -44,6 +44,7 @@ async def get_analysis_jobs(
     social_task_id: int | None = None,
     news_monitor_id: int | None = None,
     news_task_id: int | None = None,
+    strategy_id: int | None = None,
     analysis_type: str | None = None,
     status: str | None = None,
     start_date: str | None = None,
@@ -90,6 +91,34 @@ async def get_analysis_jobs(
 
     if news_task_id is not None:
         conditions.append(AnalysisJob.news_task_id == news_task_id)
+
+    # 策略级聚合筛选：一个 strategy 横跨 social_monitor + news_monitor + 自身 chain
+    # 三种 AnalysisJob 来源，需 OR 三个分支：
+    #   1) social_monitor_id == strategy.social_monitor_id（社媒切片/原文等所有社媒分析）
+    #   2) news_monitor_id == strategy.news_monitor_id（新闻切片/原文标注等）
+    #   3) analysis_config->>'strategy_id' == strategy_id（策略自身的 chain：
+    #      insight / brand_role / big_idea / agenda_map / landscape / strategic_brief 等）
+    # 走预查询 strategy 拿 monitor IDs，比 SQL JOIN strategies 表更直白。
+    # analysis_config 是 JSON（非 JSONB）列，用 json_extract_path_text 抽取键值再比较。
+    if strategy_id is not None:
+        from src.strategies.models import Strategy as _Strategy
+
+        strategy_obj = await db.get(_Strategy, strategy_id)
+        or_clauses = [
+            func.json_extract_path_text(
+                AnalysisJob.analysis_config, "strategy_id"
+            ) == str(strategy_id),
+        ]
+        if strategy_obj:
+            if strategy_obj.social_monitor_id:
+                or_clauses.append(
+                    AnalysisJob.social_monitor_id == strategy_obj.social_monitor_id
+                )
+            if strategy_obj.news_monitor_id:
+                or_clauses.append(
+                    AnalysisJob.news_monitor_id == strategy_obj.news_monitor_id
+                )
+        conditions.append(or_(*or_clauses))
 
     if analysis_type:
         conditions.append(AnalysisJob.analysis_type == analysis_type)

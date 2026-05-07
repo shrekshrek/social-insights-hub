@@ -159,13 +159,15 @@ const columns = computed<TableColumn<NewsMonitorWithOwner>[]>(() => {
       </div>
 
       <div class="flex items-center gap-3">
-        <UButton
-          v-if="hasPermission(PERMISSIONS.NEWS_MONITOR_WRITE)"
-          icon="i-heroicons-plus"
-          to="/news-media/monitors/create"
-        >
-          新建项目
-        </UButton>
+        <ClientOnly>
+          <UButton
+            v-if="hasPermission(PERMISSIONS.NEWS_MONITOR_WRITE)"
+            icon="i-heroicons-plus"
+            to="/news-media/monitors/create"
+          >
+            新建项目
+          </UButton>
+        </ClientOnly>
         <UButton
           variant="ghost"
           icon="i-heroicons-arrow-path"

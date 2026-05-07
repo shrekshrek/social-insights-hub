@@ -13,13 +13,15 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <UButton
-          v-if="hasPermission(PERMISSIONS.RESEARCH_AGENT_WRITE)"
-          icon="i-heroicons-plus"
-          to="/research-agent/create"
-        >
-          新建研究
-        </UButton>
+        <ClientOnly>
+          <UButton
+            v-if="hasPermission(PERMISSIONS.RESEARCH_AGENT_WRITE)"
+            icon="i-heroicons-plus"
+            to="/research-agent/create"
+          >
+            新建研究
+          </UButton>
+        </ClientOnly>
         <UButton
           variant="ghost"
           icon="i-heroicons-arrow-path"

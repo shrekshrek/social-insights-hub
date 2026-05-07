@@ -610,17 +610,19 @@ defineExpose({
           />
 
           <!-- 删除分析结果按钮 -->
-          <UButton
-            v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_DELETE)"
-            size="sm"
-            color="error"
-            variant="soft"
-            icon="i-heroicons-trash"
-            :disabled="hasRunningTask || total === 0"
-            @click="openDeleteDialog"
-          >
-            清空结果
-          </UButton>
+          <ClientOnly>
+            <UButton
+              v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_DELETE)"
+              size="sm"
+              color="error"
+              variant="soft"
+              icon="i-heroicons-trash"
+              :disabled="hasRunningTask || total === 0"
+              @click="openDeleteDialog"
+            >
+              清空结果
+            </UButton>
+          </ClientOnly>
         </div>
       </div>
     </template>
@@ -628,7 +630,8 @@ defineExpose({
     <!-- 操作按钮区 + 进度 -->
     <div class="mb-4 flex justify-between items-start flex-wrap gap-3">
       <!-- 左侧：操作按钮 -->
-      <div v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE)" class="flex items-center gap-2 flex-wrap">
+      <ClientOnly>
+        <div v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE)" class="flex items-center gap-2 flex-wrap">
         <UTooltip
           :text="allPostsScreened ? '所有原文已完成初筛' : totalPostsCount === 0 ? '没有原文数据' : ''"
           :disabled="!allPostsScreened && totalPostsCount > 0"
@@ -676,7 +679,8 @@ defineExpose({
             评论深度
           </UButton>
         </UTooltip>
-      </div>
+        </div>
+      </ClientOnly>
 
       <!-- 右侧：阈值与统计显示 -->
       <div v-if="preview" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
@@ -1048,15 +1052,17 @@ defineExpose({
             {{ reportGeneratedAt }} 生成
           </UBadge>
         </div>
-        <UButton
-          v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE)"
-          icon="i-heroicons-sparkles"
-          :loading="actionLoading.aggregate"
-          :disabled="hasRunningTask || !hasScreeningResult"
-          @click="handleGenerateReport"
-        >
-          {{ hasAnalysisResult ? '重新生成' : '生成报告' }}
-        </UButton>
+        <ClientOnly>
+          <UButton
+            v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE)"
+            icon="i-heroicons-sparkles"
+            :loading="actionLoading.aggregate"
+            :disabled="hasRunningTask || !hasScreeningResult"
+            @click="handleGenerateReport"
+          >
+            {{ hasAnalysisResult ? '重新生成' : '生成报告' }}
+          </UButton>
+        </ClientOnly>
       </div>
     </template>
 

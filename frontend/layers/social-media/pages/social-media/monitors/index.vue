@@ -159,13 +159,15 @@ const columns = computed<TableColumn<SocialMonitor>[]>(() => {
       </div>
 
       <div class="flex items-center gap-3">
-        <UButton
-          v-if="hasPermission(PERMISSIONS.SOCIAL_MONITOR_WRITE)"
-          icon="i-heroicons-plus"
-          to="/social-media/monitors/create"
-        >
-          新建项目
-        </UButton>
+        <ClientOnly>
+          <UButton
+            v-if="hasPermission(PERMISSIONS.SOCIAL_MONITOR_WRITE)"
+            icon="i-heroicons-plus"
+            to="/social-media/monitors/create"
+          >
+            新建项目
+          </UButton>
+        </ClientOnly>
         <UButton
           variant="ghost"
           icon="i-heroicons-arrow-path"

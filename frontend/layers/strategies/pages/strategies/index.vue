@@ -13,13 +13,15 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <UButton
-          v-if="hasPermission(PERMISSIONS.STRATEGY_WRITE)"
-          icon="i-heroicons-plus"
-          to="/strategies/create"
-        >
-          新建策略
-        </UButton>
+        <ClientOnly>
+          <UButton
+            v-if="hasPermission(PERMISSIONS.STRATEGY_WRITE)"
+            icon="i-heroicons-plus"
+            to="/strategies/create"
+          >
+            新建策略
+          </UButton>
+        </ClientOnly>
         <UButton
           variant="ghost"
           icon="i-heroicons-arrow-path"

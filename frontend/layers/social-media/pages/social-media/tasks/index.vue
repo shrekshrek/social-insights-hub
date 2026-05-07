@@ -291,13 +291,15 @@ const columns = computed<TableColumn<DataTaskWithRelations>[]>(() => {
       </div>
 
       <div class="flex items-center gap-3">
-        <UButton
-          v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE)"
-          icon="i-heroicons-plus"
-          to="/social-media/tasks/create"
-        >
-          新建任务
-        </UButton>
+        <ClientOnly>
+          <UButton
+            v-if="hasPermission(PERMISSIONS.SOCIAL_TASK_WRITE)"
+            icon="i-heroicons-plus"
+            to="/social-media/tasks/create"
+          >
+            新建任务
+          </UButton>
+        </ClientOnly>
         <UButton
           variant="ghost"
           icon="i-heroicons-arrow-path"

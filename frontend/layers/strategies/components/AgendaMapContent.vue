@@ -52,7 +52,7 @@
               <span class="italic">
                 "{{ expandedNarratives.has(idx) ? voice.quote : truncateText(voice.quote, 150) }}"
               </span>
-              <span class="text-gray-400 ml-1">— {{ voice.speaker || voice.source || '媒体' }}</span>
+              <span class="text-gray-400 ml-1">— {{ voice.speaker ? `${voice.speaker} · ${voice.source}` : (voice.source || '媒体') }}</span>
             </div>
             <button
               v-if="narrative.representative_voices.length > 1 || (narrative.representative_voices[0]?.quote?.length ?? 0) > 150"

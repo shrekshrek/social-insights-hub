@@ -485,6 +485,14 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
 
           <div class="flex items-center gap-3">
             <UInput
+              v-model.number="searchStrategyId"
+              type="number"
+              placeholder="策略ID"
+              class="w-24"
+              :ui="{ base: 'text-sm' }"
+            />
+
+            <UInput
               v-model.number="searchMonitorId"
               type="number"
               placeholder="项目ID"
@@ -496,14 +504,6 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
               v-model.number="searchTaskId"
               type="number"
               placeholder="任务ID"
-              class="w-24"
-              :ui="{ base: 'text-sm' }"
-            />
-
-            <UInput
-              v-model.number="searchStrategyId"
-              type="number"
-              placeholder="策略ID"
               class="w-24"
               :ui="{ base: 'text-sm' }"
             />

@@ -88,7 +88,9 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
       "source_count": <int, 不同来源数>,
       "narrative_position": "该玩家在媒体叙事中的主要定位（一句话）",
       "key_claims": ["媒体围绕该玩家的代表性论述"],
-      "evidence_quote": {{"quote": "原文（必须从输入 key_quotes 字面选取）", "speaker": "key_quote.speaker（无则留空）", "source": "key_quote.source_name", "source_tier": "tier1/tier2/tier3/wechat_mp"}}
+      "representative_voices": [
+        {{"quote": "key_quotes 字面引用", "speaker": "key_quote.speaker（无则空）", "source": "key_quote.source_name", "source_tier": "tier1/tier2/tier3/wechat_mp"}}
+      ]
     }}
   ],
   "positioning_map": {{
@@ -136,10 +138,11 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - momentum 判断需基于 `descriptive.coverage_timeseries` / `descriptive.sentiment_timeseries` 真实时序，
   以及 `event_clusters` 的 `tier_weighted_score` 与 `peak_date` 分布；禁止"感觉上升"
 
-## evidence_quote 来源约束
+## representative_voices 来源约束
 
-`players[].evidence_quote` 必须从输入 `key_quotes` 数组逐字选取（quote/speaker/source/source_tier
-按对应 key_quote 字段填）；该玩家无合适 quote 时输出 `null`。
+`players[].representative_voices` 必须从输入 `key_quotes` 数组逐字选取
+（quote/speaker/source/source_tier 按对应 key_quote 字段填），每个 player 0-2 条；
+该玩家无合适 quote 时输出空数组。命名与 agenda_map 同名同 schema。
 
 ## 切片溯源规范（重要）
 
@@ -151,7 +154,7 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 ## 禁止行为
 - 禁止改判 NewsSlice.entities.role（target/competitor/context 以输入为准）
 - 禁止脱离 agenda_map 议程图单独产生新的 battle
-- 禁止在 evidence_quote 中编造未出现的原文
+- 禁止在 representative_voices 中编造未出现的原文
 - 禁止使用 `result_data.page_synthesis`（briefing / event_titles 是 LLM 散文，仅供 slice 页面阅读，不作策略输入）
 - **禁止用 industry_research 的市场份额 / 营收 / 增长率数据**作为 positioning_map 的轴定义或玩家坐标依据
 - **禁止把 source_count=0 的玩家放进 positioning_map.positions**（无媒体覆盖即无媒体定位可言）

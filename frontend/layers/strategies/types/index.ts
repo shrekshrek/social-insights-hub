@@ -571,10 +571,18 @@ export interface NarrativeSupportingSources {
   wechat_mp?: number
 }
 
-/** 与 backend agenda_map_chain prompt 对齐：source / source_tier 是 BE 实际字段名 */
-export interface NarrativeRepresentativeVoice {
+/**
+ * 媒体代表性引文：从 NewsSlice.key_quotes 字面选取的引语 + 出处。
+ *
+ * agenda_map 给每条 narrative 配 0-N 条；landscape 给每个 player 配 0-2 条。
+ * 与 backend pass1 抽取的 key_quotes 同 schema：speaker 由 pass1 决定，
+ * 编辑部撰文等 speaker 不明示场景下保持空字符串。
+ */
+export interface RepresentativeVoice {
   quote: string
+  /** key_quote.speaker：发言人；编辑部撰文等无明示发言人时为空字符串 */
   speaker?: string
+  /** key_quote.source_name：媒体名 */
   source: string
   /** tier1 | tier2 | tier3 | wechat_mp */
   source_tier: string
@@ -587,7 +595,7 @@ export interface NarrativeMapItem {
   sentiment: number | null
   heat_rank: number
   supporting_sources: NarrativeSupportingSources
-  representative_voices: NarrativeRepresentativeVoice[]
+  representative_voices: RepresentativeVoice[]
   credibility: 'high' | 'medium' | 'low'
   /** 跨切片证据：佐证该 narrative 的 slice 名称列表 */
   cross_slice_evidence?: string[]
@@ -652,12 +660,6 @@ export interface AgendaMapResult {
 
 // —— 第 2 层 Landscape: 竞争格局 ——
 
-export interface EvidenceQuote {
-  quote: string
-  source?: string
-  speaker?: string
-}
-
 export interface CompetitivePlayer {
   name: string
   role: 'target' | 'competitor' | 'context'
@@ -668,7 +670,8 @@ export interface CompetitivePlayer {
   narrative_position: string
   /** 媒体围绕该玩家的代表性论述（2-3 条要点列表） */
   key_claims?: string[]
-  evidence_quote?: string | EvidenceQuote
+  /** 该玩家的代表性媒体引文（0-2 条），与 agenda_map.narrative_map[].representative_voices 同 schema */
+  representative_voices?: RepresentativeVoice[]
 }
 
 /** 定位轴语义：label = 轴名，low/high = 两端语义 */

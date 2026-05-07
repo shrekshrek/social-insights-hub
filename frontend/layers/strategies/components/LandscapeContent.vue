@@ -48,9 +48,16 @@
               {{ claim }}
             </li>
           </ul>
-          <!-- 引用 -->
-          <div v-if="quoteText(player.evidence_quote)" class="mt-1 text-[11px] italic text-gray-400 border-l-2 border-gray-200 dark:border-gray-700 pl-2">
-            "{{ truncateText(quoteText(player.evidence_quote), 120) }}"
+          <!-- 代表性媒体引文（0-2 条，与 agenda_map narrative 同 schema）-->
+          <div
+            v-for="(voice, vi) in player.representative_voices"
+            :key="`v-${vi}`"
+            class="mt-1 text-[11px] italic text-gray-400 border-l-2 border-gray-200 dark:border-gray-700 pl-2"
+          >
+            "{{ truncateText(voice.quote, 120) }}"
+            <span v-if="voice.speaker || voice.source" class="not-italic ml-1 text-gray-500">
+              — {{ voice.speaker ? `${voice.speaker} · ${voice.source}` : voice.source }}
+            </span>
           </div>
         </div>
       </div>
@@ -303,7 +310,7 @@
 </template>
 
 <script setup lang="ts">
-import type { LandscapeResult, EvidenceQuote } from '../types'
+import type { LandscapeResult } from '../types'
 import { sentimentColor, sentimentLabel } from '../composables/useStrategyConstants'
 import { UBadge, SectionDataDrawer } from '#components'
 
@@ -314,13 +321,6 @@ const props = defineProps<{
 const truncateText = (text: string, max: number) => {
   if (!text || text.length <= max) return text
   return text.slice(0, max) + '…'
-}
-
-/** evidence_quote 兼容字符串 / 对象两种返回 */
-const quoteText = (q: string | EvidenceQuote | undefined | null): string => {
-  if (!q) return ''
-  if (typeof q === 'string') return q
-  return q.quote ?? ''
 }
 
 /** 把 [-1,1] 范围的坐标限制在 [-1,1]，避免 LLM 偶尔输出越界值导致点位飞出网格 */

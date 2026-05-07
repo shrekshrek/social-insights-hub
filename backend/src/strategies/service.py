@@ -71,6 +71,7 @@ from src.llm.chains.strategy.brief_parser_chain import (
 )
 from src.database import AsyncSessionLocal
 from src.llm import extract_token_usage
+from src.llm.utils import merge_token_usage_stats
 from src.jobs.factory import create_analysis_job_async
 from src.jobs.models import AnalysisType
 from src.feishu.client import fire_notification
@@ -1219,10 +1220,12 @@ async def generate_brand_role(
             for b in branches_to_run
         ])
 
-        # 写回 branches + 聚合 token usage
+        # 写回 branches + 聚合 token usage（merge_token_usage_stats 处理嵌套
+        # {summary, call_details} schema：summary 数字累加 + call_details 拼接，
+        # 否则前端按总和读到的就是第一个分支的 summary，多分支统计漏算）
         success_count = 0
         failed_count = 0
-        total_token_usage: dict[str, Any] = {}
+        total_token_usage: dict | None = None
         for branch_idx, result, token_usage, duration, error in results:
             target = next((b for b in branches if b.get("tension_id") == branch_idx), None)
             if target is None:
@@ -1242,7 +1245,7 @@ async def generate_brand_role(
                 target.pop("error_message", None)
                 success_count += 1
                 if token_usage:
-                    total_token_usage = _merge_token_usage_dicts(total_token_usage, token_usage)
+                    total_token_usage = merge_token_usage_stats(total_token_usage, token_usage)
                 logger.info(
                     "Strategy %d branch %d brand_role 完成 (%.1fs)",
                     strategy.id, branch_idx, duration,
@@ -1266,7 +1269,7 @@ async def generate_brand_role(
         job.completed_at = datetime.now(timezone.utc)
         job.analyzed_count = success_count
         job.processing_time = int(overall_duration)
-        job.token_usage = total_token_usage or None
+        job.token_usage = total_token_usage
         job.error_message = (
             f"{failed_count}/{len(branches_to_run)} 分支生成失败" if failed_count else None
         )
@@ -1423,7 +1426,9 @@ async def generate_big_idea(
 
         success_count = 0
         failed_count = 0
-        total_token_usage: dict[str, Any] = {}
+        # merge_token_usage_stats 处理嵌套 {summary, call_details} schema，
+        # 详见 generate_brand_role 同位置注释
+        total_token_usage: dict | None = None
         for branch_idx, result, token_usage, duration, error in results:
             target = next((b for b in branches if b.get("tension_id") == branch_idx), None)
             if target is None:
@@ -1443,7 +1448,7 @@ async def generate_big_idea(
                 target.pop("error_message", None)
                 success_count += 1
                 if token_usage:
-                    total_token_usage = _merge_token_usage_dicts(total_token_usage, token_usage)
+                    total_token_usage = merge_token_usage_stats(total_token_usage, token_usage)
                 logger.info(
                     "Strategy %d branch %d big_idea 完成 (%.1fs)",
                     strategy.id, branch_idx, duration,
@@ -1464,7 +1469,7 @@ async def generate_big_idea(
         job.completed_at = datetime.now(timezone.utc)
         job.analyzed_count = success_count
         job.processing_time = int(overall_duration)
-        job.token_usage = total_token_usage or None
+        job.token_usage = total_token_usage
         job.error_message = (
             f"{failed_count}/{len(branches_to_run)} 分支生成失败" if failed_count else None
         )
@@ -1799,17 +1804,10 @@ async def regenerate_big_idea_branch(
         raise
 
 
-def _merge_token_usage_dicts(a: dict, b: dict | None) -> dict:
-    """累加两个 token_usage dict（用于聚合多 branch 的 LLM 调用成本）"""
-    if not b:
-        return a
-    merged = dict(a)
-    for key, val in b.items():
-        if isinstance(val, (int, float)):
-            merged[key] = merged.get(key, 0) + val
-        elif key not in merged:
-            merged[key] = val
-    return merged
+# Token 累加统一走 src.llm.utils.merge_token_usage_stats（处理嵌套
+# {summary, call_details} schema）。早期 _merge_token_usage_dicts 用 shallow
+# 数字累加，碰到 dict / list 字段会保留首个值——summary 累加失效，
+# 多分支统计实际只反映第一个分支。已移除。
 
 
 # ==================== market_report 路径 agenda_map / landscape / strategic_brief ====================

@@ -68,7 +68,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
     "elaboration": "角色阐释（2-3句），必须包含'我们不是 X（品类惯常角色），我们是 Y（数据揭示的差异化角色）'",
     "evidence": [
       {{"type": "opportunity_ref", "description": "基于哪个机会推导", "source": "insight:opportunity:0"}},
-      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "slice数据"}}
+      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "Social Slice #0: 蕉内品牌口碑聚焦"}}
     ]
   }},
   "social_strategy": {{
@@ -76,11 +76,23 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
     "core_message": "核心沟通信息",
     "rhythm": "传播基调与内容态度（如'真实体验驱动'vs'专家背书驱动'，描述内容的底层态度和触发逻辑，具体内容类型比例由下游 Content Strategy 决定）",
     "evidence": [
-      {{"type": "platform_insight", "description": "平台特征支撑", "source": "slice数据"}},
-      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "slice数据"}}
+      {{"type": "platform_insight", "description": "平台特征支撑", "source": "Social Slice #1: 新能源车大盘讨论"}},
+      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "Social Slice #0: 蕉内品牌口碑聚焦"}}
     ]
   }}
 }}
+
+## evidence.source 引用规范（重要）
+
+每条 evidence.source 必须填**唯一可追溯标签**之一，禁止泛指如 "slice数据"。
+
+| 数据来源 | source 写法 |
+|---------|------------|
+| 社媒切片 | `Social Slice #<i>: <slice_name>`（取切片 JSON 内 `_source_label` 字段值） |
+| 新闻切片 | `News Slice #<i>: <slice_name>`（取新闻段落 `_source_label` 字段值） |
+| 上游 insight | `insight:tension:<i>` / `insight:opportunity:<i>` |
+| 行业研究 | `Research: <主题>`，例如 `Research: 户外露营赛道增长` |
+| 创意参考 | `Creative: <案例名>`，例如 `Creative: Patagonia 'Don't Buy This' campaign` |
 
 ## 要求
 - brand_social_role.statement 简洁有力，一句话定义角色
@@ -106,7 +118,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 新闻叙事聚类（narratives）反映媒体如何定义品类议题和品牌定位，可作为 Brand Social Role 的**外部锚点**——如果媒体已形成某种品牌叙事，角色定位需考虑是顺势强化还是主动打破
 - 新闻中的竞品格局（competitive_landscape）提供媒体视角的竞争定位，与社媒 SOV 互为补充
 - Social Strategy 可参考新闻中的关键引述（key_quotes）作为行业话语锚点
-- 新闻数据作为补充参考，evidence 中标明 source 为"新闻媒体数据"以区分
+- 新闻数据作为补充参考，evidence.source 用 `News Slice #<i>: <name>`（不要写"新闻媒体数据"）
 
 ## 行业研究数据（research_findings）使用指南
 
@@ -114,7 +126,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 可为 Brand Social Role 的差异化定位提供**行业事实锚点**——确保角色不违背行业趋势
 - 研究数据中的**置信度**标记（high/medium/low）反映证据充分程度
 - 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，仅基于洞察层结果和补充数据推导角色
-- evidence 中引用研究数据时标明 source 为"行业研究数据"以区分
+- evidence 中引用研究数据时 source 写 `Research: <主题>`，例如 `Research: 户外露营赛道增长`
 
 ## 创意版图（creative_references）使用指南
 
@@ -122,7 +134,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 核心用途：了解**竞品已占据的创意角色**，为 Brand Social Role 的差异化提供排除法依据
 - 使用逻辑：先识别"哪些角色已被竞品占领"→ 再确认"我们的角色在版图中的独特位置"
 - 如 `{{creative_references}}` 段落为空，**正常忽略**，不影响角色推导
-- evidence 中引用创意参考时标明 source 为"竞品创意案例"以区分
+- evidence 中引用创意参考时 source 写 `Creative: <案例名>`，例如 `Creative: Patagonia 'Don't Buy This' campaign`
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -161,6 +173,8 @@ def format_data_for_brand_role(
     brief: dict | None = None,
     research_design: dict | None = None,
     news_slices: list[dict] | None = None,
+    slice_refs: list[dict] | None = None,
+    news_slice_refs: list[dict] | None = None,
     research_findings: str = "",
     creative_references: str = "",
 ) -> dict[str, Any]:
@@ -169,6 +183,8 @@ def format_data_for_brand_role(
     Args:
         insight_result: 完整 insight 输出（含多 tensions / opportunities）
         selected_tension_id: 当前分支聚焦的 tension index（0-based）
+        slice_refs / news_slice_refs: 与 slices / news_slices 同序的 [{id, name}] 列表，
+            用于在每个 slice 部分注入 `_source_label`，让 LLM 在 evidence.source 精准引用
     """
     from src.llm.chains.strategy.brand_strategy.insight_chain import (
         _build_research_context_section,
@@ -192,8 +208,17 @@ def format_data_for_brand_role(
         landscape = layers.get("landscape") or {}
 
         subject = meta.get("subject") or None
+        ref_name = (
+            slice_refs[i].get("name")
+            if slice_refs and i < len(slice_refs)
+            else None
+        )
+        slice_label = (ref_name or "").strip()
         part: dict[str, Any] = {
             "slice_index": i,
+            "_source_label": (
+                f"Social Slice #{i}: {slice_label}" if slice_label else f"Social Slice #{i}"
+            ),
             "mode": "品牌聚焦" if subject else "大盘分析",
             "subject": subject,
         }
@@ -243,7 +268,7 @@ def format_data_for_brand_role(
 
         supplementary_parts.append(part)
 
-    news_media_section = _format_news_media_section(news_slices or [])
+    news_media_section = _format_news_media_section(news_slices or [], news_slice_refs)
 
     return {
         "brief_section": brief_section,

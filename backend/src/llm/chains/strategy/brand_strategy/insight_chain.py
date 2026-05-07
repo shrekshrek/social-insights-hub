@@ -116,8 +116,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
       "conventional_wisdom": "行业从业者通常会认为什么（一句话）",
       "data_reality": "但数据揭示了什么不同的事实，以及为何反直觉（一句话）",
       "evidence": [
-        {{"type": "topic_sentiment", "description": "具体数据发现", "source": "slice数据"}},
-        {{"type": "opinion_cluster", "description": "具体数据发现", "source": "slice数据"}}
+        {{"type": "topic_sentiment", "description": "具体数据发现", "source": "Social Slice #0: 蕉内品牌口碑聚焦"}},
+        {{"type": "opinion_cluster", "description": "具体数据发现", "source": "News Slice #0: Tesla 媒体报道聚焦"}}
       ],
       "confidence": "high/medium/low",
       "research_questions_addressed": ["rq1", "rq3"]
@@ -128,13 +128,29 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
       "statement": "一句话描述品牌机会",
       "why_non_obvious": "为什么这个机会不是显而易见的，以及竞品为何尚未占据此位置",
       "evidence": [
-        {{"type": "sov_gap", "description": "具体数据发现", "source": "slice数据"}}
+        {{"type": "sov_gap", "description": "具体数据发现", "source": "Social Slice #1: 新能源车大盘讨论"}}
       ],
       "related_tensions": [0],
       "research_questions_addressed": ["rq2"]
     }}
   ]
 }}
+
+## evidence.source 引用规范（重要）
+
+**目的**：让用户能精准溯源每条 evidence 来自哪份原始数据。
+
+**规则**：source 必须填**唯一可追溯标签**之一，禁止用泛指如 "slice数据"。
+
+| 数据来源 | source 写法 | 取值依据 |
+|---------|------------|---------|
+| 社媒切片 | `Social Slice #<i>: <slice_name>` | 引用切片 JSON 内的 `_source_label` 字段值 |
+| 新闻切片 | `News Slice #<i>: <slice_name>` | 引用新闻段落每个切片对象的 `_source_label` 字段值 |
+| 行业研究 | `Research: <主题或要点>` | research_findings 段落中具体研究发现 |
+| Landscape 二阶解读（full_strategy 专属） | `Landscape: players[<i>]` 或 `Landscape: positioning_map` | 仅 full_strategy 路径，标注信号是 Landscape 已结构化解读 |
+
+**示例**：`"source": "Social Slice #0: 蕉内品牌口碑聚焦"` ✅；
+`"source": "slice数据"` ❌（已弃用）。
 
 ## 要求
 - social_tensions: 1-3 条，按重要性排序；至少 1 条须引用 ≥2 个切片的交叉数据
@@ -170,7 +186,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **交叉验证**：当社媒消费者声音与新闻媒体报道出现矛盾时（如消费者负面但媒体正面），这本身就是高价值的 Tension 线索
 - **叙事聚类**（narratives）反映媒体如何定义和包装品类议题，可能与消费者实际关注点存在偏差
 - **实体角色**：新闻中的实体角色（target/competitor/context）代表媒体视角的竞争定位，与社媒 SOV 排名可能不同
-- 新闻数据作为**补充证据**使用，evidence 中标明 source 为"新闻媒体数据"以区分
+- 新闻数据作为**补充证据**使用，evidence.source 用 `News Slice #<i>: <name>`（不要写"新闻媒体数据"）
 - 不要仅凭新闻数据得出 Tension 结论——Tension 的核心依据应来自消费者真实声音（社媒切片），新闻数据用于验证或补充
 
 ## 行业研究数据（research_findings）使用指南
@@ -180,7 +196,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **交叉验证优先**：当研究数据与社媒/新闻数据出现矛盾时（如行业增长但消费者不满），这本身就是高价值的 Tension 线索
 - 研究数据中的**置信度**标记（high/medium/low）反映证据充分程度，high 数据可直接引用，low 数据需其他来源佐证
 - 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，仅基于切片和新闻数据进行分析
-- evidence 中引用研究数据时标明 source 为"行业研究数据"以区分
+- evidence 中引用研究数据时 source 写 `Research: <主题>`，例如 `Research: 户外露营赛道增长`
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -276,14 +292,20 @@ def _build_research_context_section(
     return "\n".join(lines)
 
 
-def _format_news_media_section(news_slices: list[dict]) -> str:
+def _format_news_media_section(
+    news_slices: list[dict],
+    news_slice_refs: list[dict] | None = None,
+) -> str:
     """从 NewsSlice 数据格式化新闻媒体视角补充段落（ADR-003 新 schema）。
 
     只消费**结构化数据**（descriptive / entities / quotes / media_landscape /
     competitive / event_clusters），不消费 page_synthesis（LLM 散文）。
+
+    `news_slice_refs` 与 news_slices 一一对应，提供 slice 显示标签 `News Slice #i: <name>`
+    供 LLM 在 evidence.source 中精准引用，便于前端反查上游数据。
     """
     all_insights: list[dict] = []
-    for ns in news_slices:
+    for idx, ns in enumerate(news_slices):
         rd = ns.get("result_data")
         if not rd or isinstance(rd, str):
             continue
@@ -291,8 +313,16 @@ def _format_news_media_section(news_slices: list[dict]) -> str:
         media_landscape = rd.get("media_landscape") or {}
         competitive = rd.get("competitive") or {}
 
+        # 优先用 refs 中的 name（与 service 层加载顺序对齐）兜底回 ns.name
+        ref_name = (
+            news_slice_refs[idx].get("name")
+            if news_slice_refs and idx < len(news_slice_refs)
+            else None
+        )
+        slice_label = ref_name or ns.get("name") or ""
         all_insights.append({
-            "slice_name": ns.get("name", ""),
+            "_source_label": f"News Slice #{idx}: {slice_label}".strip(": "),
+            "slice_name": slice_label,
             "article_count": descriptive.get("articles_filtered", 0),
             "source_tier_distribution": descriptive.get("source_tier_distribution"),
             "sentiment_overall": descriptive.get("sentiment_overall"),
@@ -350,6 +380,8 @@ def format_slice_data_for_insight(
     brief: dict | None = None,
     research_design: dict | None = None,
     news_slices: list[dict] | None = None,
+    slice_refs: list[dict] | None = None,
+    news_slice_refs: list[dict] | None = None,
     research_findings: str = "",
     coverage_check_result: dict | None = None,
 ) -> dict[str, Any]:
@@ -357,6 +389,10 @@ def format_slice_data_for_insight(
 
     从每个切片提取关键维度，严格控制总输入 ~30K tokens。
     结构化数据优先，按 Tension/Opportunity 两个产出目标精选字段。
+
+    `slice_refs` / `news_slice_refs` 与 slices / news_slices 一一对应（同序），
+    提供 slice 显示标签 `Social Slice #i: <name>` / `News Slice #i: <name>`
+    供 LLM 在 evidence.source 中精准引用。缺省时退化为 "Slice #i" 不带名称。
     """
     brief_section = ""
     if brief:
@@ -561,8 +597,17 @@ def format_slice_data_for_insight(
         ]
 
         subject = meta.get("subject") or None
+        ref_name = (
+            slice_refs[i].get("name")
+            if slice_refs and i < len(slice_refs)
+            else None
+        )
+        slice_label = (ref_name or "").strip()
         part: dict[str, Any] = {
             "slice_index": i,
+            "_source_label": (
+                f"Social Slice #{i}: {slice_label}" if slice_label else f"Social Slice #{i}"
+            ),
             "mode": "品牌聚焦" if subject else "大盘分析",
             "subject": subject,
             "competitors": meta.get("competitors"),
@@ -597,7 +642,7 @@ def format_slice_data_for_insight(
             + json.dumps(cross_slice_anomalies, ensure_ascii=False, indent=2)
         )
 
-    news_media_section = _format_news_media_section(news_slices or [])
+    news_media_section = _format_news_media_section(news_slices or [], news_slice_refs)
 
     coverage_signals = format_coverage_signals(coverage_check_result)
 

@@ -48,13 +48,19 @@
       </div>
       <StrategyEvidenceList :evidence="result.content_strategy.evidence" />
     </div>
+
+    <!-- section 级"查看原始数据"入口 -->
+    <SectionDataDrawer
+      :chain-inputs="result.chain_inputs"
+      title="Big Idea 创意 · 原始数据来源"
+    />
   </div>
   <div v-else class="text-gray-400 text-center py-4">暂无数据</div>
 </template>
 
 <script setup lang="ts">
 import type { BigIdeaResult } from '../types'
-import { UBadge } from '#components'
+import { UBadge, SectionDataDrawer } from '#components'
 
 const ROLE_LABEL: Record<string, string> = {
   anchor: '核心表达',

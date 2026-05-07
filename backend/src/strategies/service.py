@@ -498,6 +498,90 @@ async def load_strategy_inputs_with_names(
     return [(s.name, s.result_data) for s in slices if s.result_data]
 
 
+async def _load_social_slice_refs(
+    db: AsyncSession, strategy: Strategy
+) -> list[dict]:
+    """加载策略社媒切片的 (id, name, monitor_id)，与 `load_strategy_inputs` 同序同过滤。
+
+    用于 chain_inputs 元数据：记录本次 chain prompt 实际消费了哪些 SocialSlice，
+    供前端 section 级"查看原始数据"drawer 使用。
+    """
+    if not strategy.social_monitor_id:
+        return []
+
+    query = (
+        select(SocialSlice.id, SocialSlice.name, SocialSlice.monitor_id)
+        .where(
+            SocialSlice.monitor_id == strategy.social_monitor_id,
+            SocialSlice.status == "completed",
+        )
+    )
+    result = await db.execute(query)
+    return [
+        {"id": row.id, "name": row.name, "monitor_id": row.monitor_id}
+        for row in result.all()
+    ]
+
+
+async def _load_news_slice_refs(
+    db: AsyncSession, strategy: Strategy
+) -> list[dict]:
+    """加载策略新闻切片的 (id, name, monitor_id)，与 `load_strategy_news_inputs` 同序同过滤。"""
+    if not strategy.news_monitor_id:
+        return []
+
+    from src.news_media.analysis.models import NewsSlice as _NewsSlice
+
+    stmt = (
+        select(_NewsSlice.id, _NewsSlice.name, _NewsSlice.monitor_id)
+        .where(
+            _NewsSlice.monitor_id == strategy.news_monitor_id,
+            _NewsSlice.status == "completed",
+        )
+        .order_by(_NewsSlice.created_at)
+    )
+    result = await db.execute(stmt)
+    return [
+        {"id": row.id, "name": row.name, "monitor_id": row.monitor_id}
+        for row in result.all()
+    ]
+
+
+def _build_chain_inputs(
+    *,
+    social_slice_refs: list[dict],
+    news_slice_refs: list[dict],
+    research_task_id: int | None,
+    creative_task_id: int | None = None,
+) -> dict[str, Any]:
+    """构造 chain_inputs 元数据：本次 LLM 调用 prompt 中实际注入的上游数据 ID 清单。
+
+    与 LLM 输出无关，纯由 orchestrator 在调用前确定，不存在幻觉风险。
+    供前端 section 级"查看原始数据"drawer 反查上游切片 / 研究产出。
+    """
+    inputs: dict[str, Any] = {
+        "social_slices": [
+            {"id": r["id"], "name": r.get("name"), "monitor_id": r.get("monitor_id")}
+            for r in social_slice_refs
+        ],
+        "news_slices": [
+            {"id": r["id"], "name": r.get("name"), "monitor_id": r.get("monitor_id")}
+            for r in news_slice_refs
+        ],
+        "research_findings": (
+            [{"id": research_task_id, "profile": "industry"}]
+            if research_task_id
+            else []
+        ),
+        "creative_references": (
+            [{"id": creative_task_id, "profile": "creative"}]
+            if creative_task_id
+            else []
+        ),
+    }
+    return inputs
+
+
 
 
 
@@ -572,11 +656,14 @@ async def _get_research_agent_status(
 
 async def _retrieve_research_findings(
     db: AsyncSession, strategy: Strategy, stage_label: str
-) -> dict | None:
-    """加载策略关联的最新已完成 industry profile ResearchTask 的 result_data。
+) -> tuple[int | None, dict | None]:
+    """加载策略关联的最新已完成 industry profile ResearchTask。
 
-    返回 result_data dict 或 None（无研究任务/未完成），供 per-stage 格式化器使用。
-    失败时优雅降级为 None，不中断主流程。
+    返回 (task_id, result_data) 元组：
+    - 无任务/未完成 / 失败时返回 (None, None)
+    - chain_inputs 元数据需要 task_id 反查，因此始终携带
+
+    失败时优雅降级，不中断主流程。
     """
     try:
         from src.research_agent.models import ResearchTask
@@ -595,25 +682,25 @@ async def _retrieve_research_findings(
         task = result.scalar_one_or_none()
 
         if not task or not task.result_data:
-            return None
+            return (None, None)
 
         logger.info(
             "%s 加载行业研究发现: strategy=%d, research_task=%d",
             stage_label, strategy.id, task.id,
         )
-        return task.result_data
+        return (task.id, task.result_data)
     except Exception as e:
         logger.warning("%s 行业研究数据加载失败，降级为空: %s", stage_label, e)
-        return None
+        return (None, None)
 
 
 async def _retrieve_creative_research_findings(
     db: AsyncSession, strategy: Strategy, stage_label: str
-) -> dict | None:
-    """加载策略关联的最新已完成 creative profile ResearchTask 的 result_data。
+) -> tuple[int | None, dict | None]:
+    """加载策略关联的最新已完成 creative profile ResearchTask。
 
+    返回 (task_id, result_data) 元组，语义同 _retrieve_research_findings。
     仅 brand_strategy/full_strategy 路径的 Brand Role / Big Idea 层使用。
-    失败时优雅降级为 None，不中断主流程。
     """
     try:
         from src.research_agent.models import ResearchTask
@@ -632,16 +719,16 @@ async def _retrieve_creative_research_findings(
         task = result.scalar_one_or_none()
 
         if not task or not task.result_data:
-            return None
+            return (None, None)
 
         logger.info(
             "%s 加载创意研究发现: strategy=%d, research_task=%d",
             stage_label, strategy.id, task.id,
         )
-        return task.result_data
+        return (task.id, task.result_data)
     except Exception as e:
         logger.warning("%s 创意研究数据加载失败，降级为空: %s", stage_label, e)
-        return None
+        return (None, None)
 
 
 def _validate_slices_have_data(
@@ -761,8 +848,12 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
+    social_slice_refs = await _load_social_slice_refs(db, strategy)
+    news_slice_refs = await _load_news_slice_refs(db, strategy)
 
-    research_result = await _retrieve_research_findings(db, strategy, "Insight")
+    research_task_id, research_result = await _retrieve_research_findings(
+        db, strategy, "Insight"
+    )
     from src.llm.chains.strategy.research_findings import format_research_for_insight
     research_findings_text = format_research_for_insight(research_result)
 
@@ -772,6 +863,8 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
         strategy.brand_brief,
         research_design=strategy.research_design,
         news_slices=news_slices_data,  # 原始新闻切片始终注入（一阶事实信号）
+        slice_refs=social_slice_refs,
+        news_slice_refs=news_slice_refs,
         research_findings=research_findings_text,
         coverage_check_result=strategy.coverage_check_result,
     )
@@ -820,6 +913,11 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
             slices_data, news_slices_data,
             primary_channel="social_media",
             research_findings=research_findings_text,
+        )
+        result["chain_inputs"] = _build_chain_inputs(
+            social_slice_refs=social_slice_refs,
+            news_slice_refs=news_slice_refs,
+            research_task_id=research_task_id,
         )
         logger.info("Strategy %d Insight 生成完成 (%.1fs)", strategy.id, duration)
 
@@ -901,6 +999,9 @@ async def _run_brand_role_for_one_branch(
     research_design: dict | None,
     research_findings_text: str,
     creative_references_text: str,
+    chain_inputs: dict[str, Any],
+    slice_refs: list[dict] | None = None,
+    news_slice_refs: list[dict] | None = None,
 ) -> tuple[int, dict | None, dict | None, float, Exception | None]:
     """单分支 brand_role 调用 worker（不碰 DB session）。
 
@@ -915,6 +1016,8 @@ async def _run_brand_role_for_one_branch(
         brief=brief,
         research_design=research_design,
         news_slices=news_slices_data,
+        slice_refs=slice_refs,
+        news_slice_refs=news_slice_refs,
         research_findings=research_findings_text,
         creative_references=creative_references_text,
     )
@@ -928,6 +1031,7 @@ async def _run_brand_role_for_one_branch(
             primary_channel="social_media",
             research_findings=research_findings_text,
         )
+        result["chain_inputs"] = chain_inputs
         return (branch_idx, result, extract_token_usage(response, duration_seconds=duration), duration, None)
     except Exception as exc:
         return (branch_idx, None, None, time.time() - start, exc)
@@ -944,6 +1048,9 @@ async def _run_big_idea_for_one_branch(
     research_design: dict | None,
     research_findings_text: str,
     creative_references_text: str,
+    chain_inputs: dict[str, Any],
+    slice_refs: list[dict] | None = None,
+    news_slice_refs: list[dict] | None = None,
 ) -> tuple[int, dict | None, dict | None, float, Exception | None]:
     """单分支 big_idea 调用 worker（不碰 DB session）。"""
     chain = create_big_idea_chain()
@@ -955,6 +1062,8 @@ async def _run_big_idea_for_one_branch(
         brief=brief,
         research_design=research_design,
         news_slices=news_slices_data,
+        slice_refs=slice_refs,
+        news_slice_refs=news_slice_refs,
         research_findings=research_findings_text,
         creative_references=creative_references_text,
     )
@@ -968,6 +1077,7 @@ async def _run_big_idea_for_one_branch(
             primary_channel="social_media",
             research_findings=research_findings_text,
         )
+        result["chain_inputs"] = chain_inputs
         return (branch_idx, result, extract_token_usage(response, duration_seconds=duration), duration, None)
     except Exception as exc:
         return (branch_idx, None, None, time.time() - start, exc)
@@ -1013,16 +1123,29 @@ async def generate_brand_role(
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
+    social_slice_refs = await _load_social_slice_refs(db, strategy)
+    news_slice_refs = await _load_news_slice_refs(db, strategy)
 
-    research_result = await _retrieve_research_findings(db, strategy, "BrandRole")
+    research_task_id, research_result = await _retrieve_research_findings(
+        db, strategy, "BrandRole"
+    )
     from src.llm.chains.strategy.research_findings import (
         format_research_for_brand_role,
         format_creative_for_brand_role,
     )
     research_findings_text = format_research_for_brand_role(research_result)
 
-    creative_result = await _retrieve_creative_research_findings(db, strategy, "BrandRole")
+    creative_task_id, creative_result = await _retrieve_creative_research_findings(
+        db, strategy, "BrandRole"
+    )
     creative_references_text = format_creative_for_brand_role(creative_result)
+
+    chain_inputs = _build_chain_inputs(
+        social_slice_refs=social_slice_refs,
+        news_slice_refs=news_slice_refs,
+        research_task_id=research_task_id,
+        creative_task_id=creative_task_id,
+    )
 
     # 初始化/补齐分支骨架（覆盖所有 insight tensions）
     branches = _ensure_branches_skeleton(strategy)
@@ -1089,6 +1212,9 @@ async def generate_brand_role(
                 research_design=strategy.research_design,
                 research_findings_text=research_findings_text,
                 creative_references_text=creative_references_text,
+                chain_inputs=chain_inputs,
+                slice_refs=social_slice_refs,
+                news_slice_refs=news_slice_refs,
             )
             for b in branches_to_run
         ])
@@ -1233,16 +1359,29 @@ async def generate_big_idea(
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
+    social_slice_refs = await _load_social_slice_refs(db, strategy)
+    news_slice_refs = await _load_news_slice_refs(db, strategy)
 
-    research_result = await _retrieve_research_findings(db, strategy, "BigIdea")
+    research_task_id, research_result = await _retrieve_research_findings(
+        db, strategy, "BigIdea"
+    )
     from src.llm.chains.strategy.research_findings import (
         format_research_for_big_idea,
         format_creative_for_big_idea,
     )
     research_findings_text = format_research_for_big_idea(research_result)
 
-    creative_result = await _retrieve_creative_research_findings(db, strategy, "BigIdea")
+    creative_task_id, creative_result = await _retrieve_creative_research_findings(
+        db, strategy, "BigIdea"
+    )
     creative_references_text = format_creative_for_big_idea(creative_result)
+
+    chain_inputs = _build_chain_inputs(
+        social_slice_refs=social_slice_refs,
+        news_slice_refs=news_slice_refs,
+        research_task_id=research_task_id,
+        creative_task_id=creative_task_id,
+    )
 
     job = await create_analysis_job_async(
         db,
@@ -1275,6 +1414,9 @@ async def generate_big_idea(
                 research_design=strategy.research_design,
                 research_findings_text=research_findings_text,
                 creative_references_text=creative_references_text,
+                chain_inputs=chain_inputs,
+                slice_refs=social_slice_refs,
+                news_slice_refs=news_slice_refs,
             )
             for b in branches_to_run
         ])
@@ -1409,16 +1551,29 @@ async def regenerate_brand_role_branch(
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
+    social_slice_refs = await _load_social_slice_refs(db, strategy)
+    news_slice_refs = await _load_news_slice_refs(db, strategy)
 
-    research_result = await _retrieve_research_findings(db, strategy, "BrandRole")
+    research_task_id, research_result = await _retrieve_research_findings(
+        db, strategy, "BrandRole"
+    )
     from src.llm.chains.strategy.research_findings import (
         format_creative_for_brand_role,
         format_research_for_brand_role,
     )
     research_findings_text = format_research_for_brand_role(research_result)
 
-    creative_result = await _retrieve_creative_research_findings(db, strategy, "BrandRole")
+    creative_task_id, creative_result = await _retrieve_creative_research_findings(
+        db, strategy, "BrandRole"
+    )
     creative_references_text = format_creative_for_brand_role(creative_result)
+
+    chain_inputs = _build_chain_inputs(
+        social_slice_refs=social_slice_refs,
+        news_slice_refs=news_slice_refs,
+        research_task_id=research_task_id,
+        creative_task_id=creative_task_id,
+    )
 
     job = await create_analysis_job_async(
         db,
@@ -1447,6 +1602,9 @@ async def regenerate_brand_role_branch(
             research_design=strategy.research_design,
             research_findings_text=research_findings_text,
             creative_references_text=creative_references_text,
+            chain_inputs=chain_inputs,
+            slice_refs=social_slice_refs,
+            news_slice_refs=news_slice_refs,
         )
 
         if error is not None:
@@ -1533,16 +1691,29 @@ async def regenerate_big_idea_branch(
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
+    social_slice_refs = await _load_social_slice_refs(db, strategy)
+    news_slice_refs = await _load_news_slice_refs(db, strategy)
 
-    research_result = await _retrieve_research_findings(db, strategy, "BigIdea")
+    research_task_id, research_result = await _retrieve_research_findings(
+        db, strategy, "BigIdea"
+    )
     from src.llm.chains.strategy.research_findings import (
         format_creative_for_big_idea,
         format_research_for_big_idea,
     )
     research_findings_text = format_research_for_big_idea(research_result)
 
-    creative_result = await _retrieve_creative_research_findings(db, strategy, "BigIdea")
+    creative_task_id, creative_result = await _retrieve_creative_research_findings(
+        db, strategy, "BigIdea"
+    )
     creative_references_text = format_creative_for_big_idea(creative_result)
+
+    chain_inputs = _build_chain_inputs(
+        social_slice_refs=social_slice_refs,
+        news_slice_refs=news_slice_refs,
+        research_task_id=research_task_id,
+        creative_task_id=creative_task_id,
+    )
 
     job = await create_analysis_job_async(
         db,
@@ -1572,6 +1743,9 @@ async def regenerate_big_idea_branch(
             research_design=strategy.research_design,
             research_findings_text=research_findings_text,
             creative_references_text=creative_references_text,
+            chain_inputs=chain_inputs,
+            slice_refs=social_slice_refs,
+            news_slice_refs=news_slice_refs,
         )
 
         if error is not None:
@@ -1834,8 +2008,11 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
+    news_slice_refs = await _load_news_slice_refs(db, strategy)
 
-    research_result = await _retrieve_research_findings(db, strategy, "AgendaMap")
+    research_task_id, research_result = await _retrieve_research_findings(
+        db, strategy, "AgendaMap"
+    )
     from src.llm.chains.strategy.research_findings import format_research_for_agenda_map
     research_findings_text = format_research_for_agenda_map(research_result)
 
@@ -1844,6 +2021,7 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         news_slices=news_slices_data,
         brief=strategy.brand_brief,
         research_design=strategy.research_design,
+        news_slice_refs=news_slice_refs,
         research_findings=research_findings_text,
         coverage_check_result=strategy.coverage_check_result,
     )
@@ -1869,6 +2047,12 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
             slices_data, news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
+        )
+        # market_report 路径：agenda_map 仅消费新闻切片 + 行业研究，无社媒切片
+        result["chain_inputs"] = _build_chain_inputs(
+            social_slice_refs=[],
+            news_slice_refs=news_slice_refs,
+            research_task_id=research_task_id,
         )
         logger.info("Strategy %d Agenda Map 生成完成 (%.1fs)", strategy.id, duration)
 
@@ -1917,8 +2101,11 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
     _validate_slices_have_data(slices_data, strategy, news_slices_data)
+    news_slice_refs = await _load_news_slice_refs(db, strategy)
 
-    research_result = await _retrieve_research_findings(db, strategy, "Landscape")
+    research_task_id, research_result = await _retrieve_research_findings(
+        db, strategy, "Landscape"
+    )
     from src.llm.chains.strategy.research_findings import format_research_for_landscape
     research_findings_text = format_research_for_landscape(research_result)
 
@@ -1928,6 +2115,7 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         news_slices=news_slices_data,
         brief=strategy.brand_brief,
         research_design=strategy.research_design,
+        news_slice_refs=news_slice_refs,
         research_findings=research_findings_text,
     )
 
@@ -1952,6 +2140,12 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
             slices_data, news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
+        )
+        # market_report 路径：landscape 仅消费新闻切片 + 行业研究，无社媒切片
+        result["chain_inputs"] = _build_chain_inputs(
+            social_slice_refs=[],
+            news_slice_refs=news_slice_refs,
+            research_task_id=research_task_id,
         )
         logger.info("Strategy %d Landscape 生成完成 (%.1fs)", strategy.id, duration)
 
@@ -2023,18 +2217,27 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
                 detail="请先完成并确认 Landscape",
             )
 
-    # 加载切片数据（不直接喂给 chain，仅用于 data_provenance + 校验）
+    # 加载切片数据（不直接喂给 chain，仅用于 data_provenance + chain_inputs 透传 + 校验）
     slices_data = await load_strategy_inputs(db, strategy)
     news_slices_data = await load_strategy_news_inputs(db, strategy)
+    # Strategic Brief 不直接消费切片，但 chain_inputs 透传上游切片（agenda_map / landscape
+    # / insight 各层的输入），便于前端 drawer 反查"本节最终基于哪些切片"
+    news_slice_refs = await _load_news_slice_refs(db, strategy)
+    social_slice_refs = await _load_social_slice_refs(db, strategy) if is_full else []
 
-    research_result = await _retrieve_research_findings(db, strategy, "StrategicBrief")
+    research_task_id, research_result = await _retrieve_research_findings(
+        db, strategy, "StrategicBrief"
+    )
     from src.llm.chains.strategy.research_findings import format_research_for_strategic_brief
     research_findings_text = format_research_for_strategic_brief(research_result)
 
     # comprehensive 模式：额外拉取 creative_references（与 Big Idea 阶段同源）
     creative_references_text = ""
+    creative_task_id: int | None = None
     if is_full:
-        creative_result = await _retrieve_creative_research_findings(db, strategy, "StrategicBrief")
+        creative_task_id, creative_result = await _retrieve_creative_research_findings(
+            db, strategy, "StrategicBrief"
+        )
         from src.llm.chains.strategy.research_findings import format_creative_for_big_idea
         creative_references_text = format_creative_for_big_idea(creative_result)
 
@@ -2077,6 +2280,14 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
             slices_data, news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
+        )
+        # Strategic Brief chain_inputs：透传上游各层切片（media_only 仅新闻；
+        # comprehensive 加入社媒）+ research / creative 任务 ID
+        result["chain_inputs"] = _build_chain_inputs(
+            social_slice_refs=social_slice_refs,
+            news_slice_refs=news_slice_refs,
+            research_task_id=research_task_id,
+            creative_task_id=creative_task_id,
         )
         # 标记生成模式（前端展示「媒体视角」vs「综合视角」标签依据）
         result["generation_mode"] = "comprehensive" if is_full else "media_only"
@@ -4432,27 +4643,28 @@ async def _create_strategy_news_slice(
     name: str,
     news_task_ids: list[int],
     user_id: int,
+    subject: str | None,
+    competitors: list[str],
 ) -> "NewsSlice":
-    """为策略创建 NewsSlice 行（status=pending），不在此处跑 insight。
+    """为策略创建 NewsSlice：同步落 stage1（subject/competitors 列 + descriptive + stats）。
 
-    insight 由调用方 commit 主事务后通过 Celery 派发 run_news_slice_insight_task
-    异步执行，避免长事务（LLM ~90s）持有 INSERT 不 commit、其他事务读不到该行
-    导致 APScheduler / 轮询误判"未建切片"重复创建。
-
-    subject / competitors / keywords 由调用方在派发 Celery 时直接传入，
-    不在 NewsSlice 行上持久化。
+    HTTP 立即返回 status=analyzing 的切片行（无文章则 completed），LLM stage2
+    由调用方 commit 主事务后异步派发 `run_news_slice_insight_task`。这样避免长
+    事务（LLM ~120s）持有 INSERT 不 commit，APScheduler / 轮询读得到该行；同时
+    subject / competitors 写入 NewsSlice 表列（与 SocialSlice 列存储对齐），
+    与分析产物 result_data 解耦。
     """
-    from src.news_media.analysis.models import NewsSlice
+    from src.news_media.analysis.service import initialize_slice
 
-    ns = NewsSlice(
-        name=name,
+    return await initialize_slice(
+        db,
         monitor_id=strategy.news_monitor_id,
+        name=name,
         included_task_ids=news_task_ids,
         user_id=user_id,
+        subject=subject,
+        competitors=competitors,
     )
-    db.add(ns)
-    await db.flush()
-    return ns
 
 
 async def _create_auto_slices(
@@ -4501,8 +4713,9 @@ async def _create_auto_slices(
         blueprint = research_design.get("slice_blueprint") or []
 
     slice_objs: list = []  # 本轮新建的社媒 SocialSlice
-    # 本轮新建的新闻 NewsSlice 派发载荷：(slice_id, analysis_goal, subject, competitors)
-    news_dispatch_payloads: list[tuple[int, str, str, list[str]]] = []
+    # 本轮新建的新闻 NewsSlice 派发载荷：(slice_id, analysis_goal)
+    # subject/competitors 已持久化到 NewsSlice 行，由 Celery task 直接读
+    news_dispatch_payloads: list[tuple[int, str]] = []
 
     if blueprint:
         task_dim_map = research_design.get("_task_dimension_map") or {}
@@ -4594,15 +4807,15 @@ async def _create_auto_slices(
                     name=bp_name,
                     news_task_ids=matched_news_task_ids,
                     user_id=current_user_id,
+                    subject=bp_subject or None,
+                    competitors=bp_competitors or [],
                 )
                 goal = (
                     f"{bp_name}（关键词：{', '.join(matched_news_keywords)}）"
                     if matched_news_keywords
                     else bp_name
                 )
-                news_dispatch_payloads.append(
-                    (ns.id, goal, bp_subject or "", bp_competitors or [])
-                )
+                news_dispatch_payloads.append((ns.id, goal))
                 existing_news_names.add(bp_name)
     else:
         # 无 blueprint：合并为综合切片
@@ -4630,13 +4843,15 @@ async def _create_auto_slices(
                 name="综合分析",
                 news_task_ids=all_news_ids,
                 user_id=current_user_id,
+                subject=None,
+                competitors=[],
             )
             goal = (
                 f"综合分析（关键词：{', '.join(all_keywords)}）"
                 if all_keywords
                 else "综合分析"
             )
-            news_dispatch_payloads.append((ns.id, goal, "", []))
+            news_dispatch_payloads.append((ns.id, goal))
 
     # 社媒切片 Stage2/Stage3 pipeline 设置
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -4696,15 +4911,18 @@ async def _create_auto_slices(
 
     # commit 之后异步派发新闻 insight（避免长事务窗口）
     if news_dispatch_payloads:
+        from src.news_media.analysis.models import NewsSlice as _NewsSlice
         from src.news_media.tasks.tasks import run_news_slice_insight_task
 
-        for slice_id, goal, subj, comps in news_dispatch_payloads:
+        for slice_id, goal in news_dispatch_payloads:
+            ns = await db.get(_NewsSlice, slice_id)
+            if ns is None or ns.status != "analyzing":
+                # 0 篇文章场景 initialize_slice 直接置 completed，无需派发 LLM
+                continue
             run_news_slice_insight_task.delay(
                 slice_id=slice_id,
                 user_id=current_user_id,
                 analysis_goal=goal,
-                subject=subj,
-                competitors=comps,
             )
             logger.info(
                 "Strategy %s: triggered news insight for slice %s",
@@ -4939,17 +5157,11 @@ async def adjust_slices(
         if "name" in adj and adj["name"] is not None:
             slice_obj.name = adj["name"]
 
-        # result_data 中存 subject / competitors（供 LLM 使用）
-        if "subject" in adj or "competitors" in adj:
-            result_data = dict(slice_obj.result_data or {})
-            meta = dict(result_data.get("meta") or {})
-            if "subject" in adj and adj["subject"] is not None:
-                meta["subject"] = adj["subject"]
-            if "competitors" in adj and adj["competitors"] is not None:
-                meta["competitors"] = adj["competitors"]
-            result_data["meta"] = meta
-            slice_obj.result_data = result_data
-            flag_modified(slice_obj, "result_data")
+        # subject / competitors 是切片配置，写到表列上（与分析产物 result_data 解耦）
+        if "subject" in adj and adj["subject"] is not None:
+            slice_obj.subject = adj["subject"] or None
+        if "competitors" in adj and adj["competitors"] is not None:
+            slice_obj.competitors = list(adj["competitors"])
 
     await db.flush()
 

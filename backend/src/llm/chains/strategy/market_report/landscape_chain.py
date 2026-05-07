@@ -136,6 +136,15 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - momentum 判断需基于 `descriptive.coverage_timeseries` / `descriptive.sentiment_timeseries` 真实时序，
   以及 `event_clusters` 的 `tier_weighted_score` 与 `peak_date` 分布；禁止"感觉上升"
 
+## 切片溯源规范（重要）
+
+`evidence_quote.source` 字段填**真实媒体来源**（如"央视新闻"、"新华网"），保持原语义。
+
+`players[].rationale` / `discourse_battles[].evidence` 等说理性字段，引用切片层数据时
+应在文字中点明对应**切片标签**——格式 `News Slice #<i>: <slice_name>`，取每个切片对象内
+`_source_label` 字段值。例如：`"该结论基于 News Slice #0: Tesla 媒体报道聚焦中竞品 SOV 数据"`。
+**禁止**只写"切片数据"等模糊形式。
+
 ## 禁止行为
 - 禁止改判 NewsSlice.entities.role（target/competitor/context 以输入为准）
 - 禁止脱离 agenda_map 议程图单独产生新的 battle
@@ -194,17 +203,23 @@ def _build_research_context_section(research_design: dict | None) -> str:
     return "\n".join(lines)
 
 
-def _format_news_slices_for_landscape(news_slices: list[dict]) -> str:
+def _format_news_slices_for_landscape(
+    news_slices: list[dict],
+    news_slice_refs: list[dict] | None = None,
+) -> str:
     """将 NewsSlice 数据格式化为 Landscape 层输入（ADR-003 新 schema）。
 
     重点字段：entities（含 role / by_tier sentiment）+ competitive（players + quote_share）+
     media_landscape + 时序（用于 momentum 判断）。
+
+    `news_slice_refs` 与 news_slices 同序，用于在每个切片对象注入 `_source_label`
+    （`News Slice #i: <name>`），让 LLM 在 evidence 字段中以稳定标签引用切片。
     """
     if not news_slices:
         return "（无新闻切片数据）"
 
     parts: list[dict[str, Any]] = []
-    for ns in news_slices:
+    for idx, ns in enumerate(news_slices):
         rd = ns.get("result_data")
         if not rd or isinstance(rd, str):
             continue
@@ -212,7 +227,16 @@ def _format_news_slices_for_landscape(news_slices: list[dict]) -> str:
         media_landscape = rd.get("media_landscape") or {}
         competitive = rd.get("competitive") or {}
 
+        ref_name = (
+            news_slice_refs[idx].get("name")
+            if news_slice_refs and idx < len(news_slice_refs)
+            else None
+        )
+        slice_label = (ref_name or ns.get("name") or "").strip()
         parts.append({
+            "_source_label": (
+                f"News Slice #{idx}: {slice_label}" if slice_label else f"News Slice #{idx}"
+            ),
             "slice_name": ns.get("name", ""),
             "article_count": descriptive.get("articles_filtered", 0),
             "source_tier_distribution": descriptive.get("source_tier_distribution"),
@@ -304,9 +328,14 @@ def format_inputs_for_landscape(
     news_slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
+    news_slice_refs: list[dict] | None = None,
     research_findings: str = "",
 ) -> dict[str, Any]:
-    """构建 Landscape chain 的输入参数字典。"""
+    """构建 Landscape chain 的输入参数字典。
+
+    `news_slice_refs` 与 news_slices 同序的 [{id, name}] 列表，用于让 LLM 在
+    evidence 字段中以 `News Slice #<i>: <name>` 形式精准引用。
+    """
     brief_section = ""
     if brief:
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
@@ -316,7 +345,7 @@ def format_inputs_for_landscape(
         "research_context_section": _build_research_context_section(research_design),
         "research_findings": research_findings,
         "agenda_map_section": _format_agenda_map_section(agenda_map_result),
-        "news_slice_data": _format_news_slices_for_landscape(news_slices),
+        "news_slice_data": _format_news_slices_for_landscape(news_slices, news_slice_refs),
     }
 
 

@@ -292,6 +292,12 @@
         </div>
       </div>
     </div>
+
+    <!-- section 级"查看原始数据"入口 -->
+    <SectionDataDrawer
+      :chain-inputs="result.chain_inputs"
+      title="Landscape 竞争格局 · 原始数据来源"
+    />
   </div>
   <div v-else class="text-gray-400 text-center py-4">暂无数据</div>
 </template>
@@ -299,7 +305,7 @@
 <script setup lang="ts">
 import type { LandscapeResult, EvidenceQuote } from '../types'
 import { sentimentColor, sentimentLabel } from '../composables/useStrategyConstants'
-import { UBadge } from '#components'
+import { UBadge, SectionDataDrawer } from '#components'
 
 const props = defineProps<{
   result: LandscapeResult | null

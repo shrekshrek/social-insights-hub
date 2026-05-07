@@ -77,7 +77,7 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
       "heat_rank": <int, 1 = 最强>,
       "supporting_sources": {{"tier1": <int>, "tier2": <int>, "tier3": <int>, "wechat_mp": <int>}},
       "representative_voices": [
-        {{"quote": "原文引述", "speaker": "发言人", "source": "来源媒体", "source_tier": "tier1/tier2/tier3/wechat_mp"}}
+        {{"quote": "key_quotes 字面引用", "speaker": "key_quote.speaker（无则空）", "source": "key_quote.source_name", "source_tier": "tier1/tier2/tier3/wechat_mp"}}
       ],
       "credibility": "high|medium|low",
       "cross_slice_evidence": ["News Slice #0: Tesla 媒体报道聚焦", "News Slice #1: 户外品牌行业新闻"]
@@ -119,22 +119,10 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 - attention_gaps: 1-3 条，禁止输出"一切都已充分覆盖"这类空内容
 - credibility=high 要求 tier1+tier2 共同支撑；仅 tier3/wechat_mp 支撑的 narrative 必须 low
 
-## representative_voices 字段填写（强约束）
+## representative_voices 来源约束
 
-**Quote 来源限定**：`representative_voices[].quote` **必须从输入数据的 `key_quotes` 数组里逐字选取**，
-不得改写、缩略、合并或自行从 article 标题 / event_clusters / page_synthesis / source_pyramid
-等其它字段构造引述。如果 key_quotes 里没有合适的引述支撑某条 narrative，宁可
-`representative_voices=[]` 也不要凭空造句。
-
-**字段对应**（与 key_quotes 一一映射）：
-
-- `quote` = 选中的 key_quote.quote（**字面引用**，含标点）
-- `speaker` = 该 key_quote.speaker（**真实发言人**，如"熊辉"、"肖婧婧"、"John Colombo教授"）
-- `source` = 该 key_quote.source_name（**媒体名**，如"扬子晚报"、"新浪财经"）
-- `source_tier` = 该 key_quote.source_tier
-
-**禁止把 source 媒体名重复填到 speaker**——pass1 抽取时若 key_quote.speaker 已为空（编辑部撰文未明示），
-你也保持 `speaker=""`，不要补"新华网报道"/"奶粉速递" 这种与 source 重复的占位。
+`representative_voices` 必须从输入 `key_quotes` 数组逐字选取（quote/speaker/source/source_tier
+按对应 key_quote 字段填）；找不到合适 quote 时输出空数组。
 
 ## 切片溯源规范（重要）
 
@@ -142,7 +130,7 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 取每个切片对象内 `_source_label` 字段值。**禁止**只写切片名（如 `slice_name#1`）等模糊形式——
 前端依赖这个标签反查上游切片。
 
-`representative_voices[].source` 仍指**真实媒体来源**（如"央视新闻"、"新华网"），不是切片标签。两者语义不同，不要混用。
+`representative_voices[].source` 指**真实媒体来源**（key_quote.source_name 字段值），不是切片标签。两者语义不同，不要混用。
 
 ## 字段解读（NewsSlice 新 schema，仅消费结构化层）
 

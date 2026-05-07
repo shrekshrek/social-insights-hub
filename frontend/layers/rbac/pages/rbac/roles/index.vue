@@ -13,13 +13,15 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <UButton
-          v-if="hasPermission(PERMISSIONS.ROLE_WRITE)"
-          icon="i-heroicons-plus"
-          to="/rbac/roles/create"
-        >
-          新增角色
-        </UButton>
+        <ClientOnly>
+          <UButton
+            v-if="hasPermission(PERMISSIONS.ROLE_WRITE)"
+            icon="i-heroicons-plus"
+            to="/rbac/roles/create"
+          >
+            新增角色
+          </UButton>
+        </ClientOnly>
         <UButton
           variant="ghost"
           icon="i-heroicons-arrow-path"

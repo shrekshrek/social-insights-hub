@@ -25,8 +25,10 @@
         >
           {{ item.type }}
         </UBadge>
-        <span>{{ item.description }}</span>
-        <span v-if="item.source" class="text-gray-400 shrink-0">({{ item.source }})</span>
+        <span class="min-w-0 flex-1">
+          {{ item.description }}
+          <span v-if="item.source" class="text-gray-400">（{{ item.source }}）</span>
+        </span>
       </div>
     </div>
   </div>

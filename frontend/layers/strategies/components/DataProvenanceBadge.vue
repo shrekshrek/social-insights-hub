@@ -34,6 +34,21 @@
       <UIcon name="i-heroicons-building-library" class="size-3 mr-0.5" />
       行业研究
     </UBadge>
+    <!-- 创意研究视角 chip：仅当本节注入了创意参考时显示 -->
+    <UBadge
+      v-if="chainInputs.creative_references.length > 0"
+      color="neutral"
+      variant="subtle"
+      size="sm"
+      :class="[
+        'flex items-center',
+        canDrillDown ? 'cursor-pointer hover:opacity-80 transition-opacity' : '',
+      ]"
+      @click="canDrillDown && (open = true)"
+    >
+      <UIcon name="i-heroicons-light-bulb" class="size-3 mr-0.5" />
+      创意研究
+    </UBadge>
 
     <!-- 详情 modal：当 chainInputs 有数据时由 chip 点击触发 -->
     <UModal v-if="canDrillDown" v-model:open="open" :title="modalTitle">

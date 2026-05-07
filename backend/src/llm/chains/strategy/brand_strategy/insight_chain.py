@@ -84,7 +84,6 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **`top_issues`**（top 10 实体均有）：用户对该实体的痛点/不满 → **产品层 tension**（功能缺陷、体验落差）
 - **`top_scenarios`**（top 10 实体均有）：该实体被讨论的常见使用场景 → **场景层 tension**（特定场景下的痛点、场景缺失、场景不便）
 - **`top_market_factors`**（top 10 实体均有）：消费者讨论时的宏观背景（价格/政策/经济环境/促销/渠道） → **宏观层 tension**（消费降级、价格敏感、政策影响等大背景下的需求转变）
-- **`original_terms`**（top 5 实体）：用户原始表述，供 evidence 引用真实语言，长尾实体原话稀疏不附加
 
 不同层面的 tension 价值不同：
 - 产品层 tension 易被竞品复制（短期机会）
@@ -116,8 +115,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
       "conventional_wisdom": "行业从业者通常会认为什么（一句话）",
       "data_reality": "但数据揭示了什么不同的事实，以及为何反直觉（一句话）",
       "evidence": [
-        {{"type": "topic_sentiment", "description": "具体数据发现", "source": "Social Slice #0: 蕉内品牌口碑聚焦"}},
-        {{"type": "opinion_cluster", "description": "具体数据发现", "source": "News Slice #0: Tesla 媒体报道聚焦"}}
+        {{"type": "topic_sentiment", "description": "具体数据发现", "source": "<取自切片 _source_label>"}},
+        {{"type": "opinion_cluster", "description": "具体数据发现", "source": "<取自切片 _source_label>"}}
       ],
       "confidence": "high/medium/low",
       "research_questions_addressed": ["rq1", "rq3"]
@@ -128,7 +127,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
       "statement": "一句话描述品牌机会",
       "why_non_obvious": "为什么这个机会不是显而易见的，以及竞品为何尚未占据此位置",
       "evidence": [
-        {{"type": "sov_gap", "description": "具体数据发现", "source": "Social Slice #1: 新能源车大盘讨论"}}
+        {{"type": "sov_gap", "description": "具体数据发现", "source": "<取自切片 _source_label>"}}
       ],
       "related_tensions": [0],
       "research_questions_addressed": ["rq2"]
@@ -177,8 +176,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **交叉验证**：当社媒消费者声音与新闻媒体报道出现矛盾时（如消费者负面但媒体正面），这本身就是高价值的 Tension 线索
 - **叙事聚类**（narratives）反映媒体如何定义和包装品类议题，可能与消费者实际关注点存在偏差
 - **实体角色**：新闻中的实体角色（target/competitor/context）代表媒体视角的竞争定位，与社媒 SOV 排名可能不同
-- 新闻数据作为**补充证据**使用，evidence.source 用 `News Slice #<i>: <name>`（不要写"新闻媒体数据"）
-- 不要仅凭新闻数据得出 Tension 结论——Tension 的核心依据应来自消费者真实声音（社媒切片），新闻数据用于验证或补充
+- 新闻数据作为**补充证据**使用，不要仅凭新闻数据得出 Tension 结论——Tension 的核心依据应来自消费者真实声音（社媒切片），新闻数据用于验证或补充
 
 ## 行业研究数据（research_findings）使用指南
 
@@ -187,7 +185,6 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **交叉验证优先**：当研究数据与社媒/新闻数据出现矛盾时（如行业增长但消费者不满），这本身就是高价值的 Tension 线索
 - 研究数据中的**置信度**标记（high/medium/low）反映证据充分程度，high 数据可直接引用，low 数据需其他来源佐证
 - 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，仅基于切片和新闻数据进行分析
-- evidence 中引用研究数据时 source 写 `Research: <主题>`，例如 `Research: 户外露营赛道增长`
 """
 
 USER_TEMPLATE = """{brief_section}

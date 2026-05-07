@@ -68,7 +68,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
     "elaboration": "角色阐释（2-3句），必须包含'我们不是 X（品类惯常角色），我们是 Y（数据揭示的差异化角色）'",
     "evidence": [
       {{"type": "opportunity_ref", "description": "基于哪个机会推导", "source": "insight:opportunity:0"}},
-      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "Social Slice #0: 蕉内品牌口碑聚焦"}}
+      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "<取自切片 _source_label>"}}
     ]
   }},
   "social_strategy": {{
@@ -76,8 +76,8 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
     "core_message": "核心沟通信息",
     "rhythm": "传播基调与内容态度（如'真实体验驱动'vs'专家背书驱动'，描述内容的底层态度和触发逻辑，具体内容类型比例由下游 Content Strategy 决定）",
     "evidence": [
-      {{"type": "platform_insight", "description": "平台特征支撑", "source": "Social Slice #1: 新能源车大盘讨论"}},
-      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "Social Slice #0: 蕉内品牌口碑聚焦"}}
+      {{"type": "platform_insight", "description": "平台特征支撑", "source": "<取自切片 _source_label>"}},
+      {{"type": "kol_style", "description": "KOL 声音风格支撑", "source": "<取自切片 _source_label>"}}
     ]
   }}
 }}
@@ -91,7 +91,6 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 
 ## 要求
 - brand_social_role.statement 简洁有力，一句话定义角色
-- brand_social_role.elaboration 必须包含"我们不是 X（品类惯常角色），我们是 Y（数据揭示的差异化角色）"
 - social_strategy.rhythm 描述传播的底层基调和内容态度（如"真实体验驱动 vs 专家背书驱动""用户共创优先 vs 品牌叙事优先"），不涉及具体内容类型比例或平台选择（这些由下游 Big Idea 的 Content Strategy 决定）
 - evidence 至少 2 条，类型可选: opportunity_ref, kol_style, platform_insight, brief_alignment, audience_insight
 - 如切片数据中包含 audiences（受众画像），需在 brand_social_role 和 social_strategy 中明确品牌面向的主要目标受众，而非泛泛而谈
@@ -113,7 +112,7 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 新闻叙事聚类（narratives）反映媒体如何定义品类议题和品牌定位，可作为 Brand Social Role 的**外部锚点**——如果媒体已形成某种品牌叙事，角色定位需考虑是顺势强化还是主动打破
 - 新闻中的竞品格局（competitive_landscape）提供媒体视角的竞争定位，与社媒 SOV 互为补充
 - Social Strategy 可参考新闻中的关键引述（key_quotes）作为行业话语锚点
-- 新闻数据作为补充参考，evidence.source 用 `News Slice #<i>: <name>`（不要写"新闻媒体数据"）
+- 新闻数据作为补充参考
 
 ## 行业研究数据（research_findings）使用指南
 
@@ -121,7 +120,6 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 可为 Brand Social Role 的差异化定位提供**行业事实锚点**——确保角色不违背行业趋势
 - 研究数据中的**置信度**标记（high/medium/low）反映证据充分程度
 - 如 `{{research_findings}}` 段落为空，**正常忽略**该部分，仅基于洞察层结果和补充数据推导角色
-- evidence 中引用研究数据时 source 写 `Research: <主题>`，例如 `Research: 户外露营赛道增长`
 
 ## 创意版图（creative_references）使用指南
 
@@ -129,7 +127,6 @@ SYSTEM_TEMPLATE = """你是一位资深品牌策略师，擅长从数据洞察�
 - 核心用途：了解**竞品已占据的创意角色**，为 Brand Social Role 的差异化提供排除法依据
 - 使用逻辑：先识别"哪些角色已被竞品占领"→ 再确认"我们的角色在版图中的独特位置"
 - 如 `{{creative_references}}` 段落为空，**正常忽略**，不影响角色推导
-- evidence 中引用创意参考时 source 写 `Creative: <案例名>`，例如 `Creative: Patagonia 'Don't Buy This' campaign`
 """
 
 USER_TEMPLATE = """{brief_section}

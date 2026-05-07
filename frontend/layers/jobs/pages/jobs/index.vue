@@ -26,6 +26,7 @@ const selectedType = ref<AnalysisType | 'all'>('all')
 const selectedStatus = ref<AnalysisStatus | 'all'>('all')
 const searchMonitorId = ref<number | undefined>()
 const searchTaskId = ref<number | undefined>()
+const searchStrategyId = ref<number | undefined>()
 const refreshing = ref(false)
 
 // 构建查询参数
@@ -40,6 +41,10 @@ const params = computed(() => ({
     : undefined,
   social_task_id: typeof searchTaskId.value === 'number' && !Number.isNaN(searchTaskId.value)
     ? searchTaskId.value
+    : undefined,
+  // 策略ID 聚合筛选：覆盖该策略下所有 AnalysisJob（社媒/新闻 monitor 触发的 + 策略自身 chain）
+  strategy_id: typeof searchStrategyId.value === 'number' && !Number.isNaN(searchStrategyId.value)
+    ? searchStrategyId.value
     : undefined,
 }))
 
@@ -491,6 +496,14 @@ const columns = computed<TableColumn<AnalysisJob>[]>(() => {
               v-model.number="searchTaskId"
               type="number"
               placeholder="任务ID"
+              class="w-24"
+              :ui="{ base: 'text-sm' }"
+            />
+
+            <UInput
+              v-model.number="searchStrategyId"
+              type="number"
+              placeholder="策略ID"
               class="w-24"
               :ui="{ base: 'text-sm' }"
             />

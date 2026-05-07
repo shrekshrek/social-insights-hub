@@ -179,10 +179,14 @@ const toggleSelectAll = () => {
 
 const showSliceModal = ref(false)
 const sliceNameInput = ref('')
+const sliceSubjectInput = ref('')
+const sliceCompetitorsInput = ref('')
 const generatingSlice = ref(false)
 
 const openSliceModal = () => {
   sliceNameInput.value = ''
+  sliceSubjectInput.value = ''
+  sliceCompetitorsInput.value = ''
   showSliceModal.value = true
 }
 
@@ -191,11 +195,18 @@ const handleCreateSlice = async () => {
     toast.add({ title: '请输入切片名称', color: 'warning' })
     return
   }
+  const subject = sliceSubjectInput.value.trim() || null
+  const competitors = sliceCompetitorsInput.value
+    .split(/[,，、\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
   generatingSlice.value = true
   try {
     const created = await createSlice(monitorId, {
       name: sliceNameInput.value.trim(),
       included_task_ids: selectedTaskIds.value,
+      subject,
+      competitors: subject ? competitors : [],
     })
     showSliceModal.value = false
     selectedTaskIds.value = []
@@ -321,13 +332,29 @@ const sliceColumns = computed<TableColumn<NewsSlice>[]>(() => {
     {
       accessorKey: 'name',
       header: '切片',
-      meta: { class: { th: 'w-[240px]', td: 'w-[240px] whitespace-normal' } },
+      meta: { class: { th: 'w-[260px]', td: 'w-[260px] whitespace-normal' } },
       cell: ({ row }) => {
         const s = row.original
-        return h('div', { class: 'flex items-center gap-1.5 flex-wrap' }, [
-          h('span', { class: 'font-medium text-gray-900 dark:text-white leading-snug line-clamp-2' }, s.name || `切片 ${s.id}`),
-          h('span', { class: 'text-xs text-gray-400 font-normal shrink-0' }, `#${s.id}`),
-          h(Badge, { size: 'sm', variant: 'subtle', color: getSliceStatusColor(s.status) }, () => getSliceStatusText(s.status)),
+        const subject = s.subject ?? null
+        const competitors = s.competitors ?? []
+        const hasFocus = Boolean(subject)
+        const competitorsLabel = competitors.length
+          ? competitors.slice(0, 3).join('、') + (competitors.length > 3 ? `…(+${competitors.length - 3})` : '')
+          : '-'
+        return h('div', {}, [
+          h('div', { class: 'flex items-center gap-1.5 flex-wrap' }, [
+            h('span', { class: 'font-medium text-gray-900 dark:text-white leading-snug line-clamp-2' }, s.name || `切片 ${s.id}`),
+            h('span', { class: 'text-xs text-gray-400 font-normal shrink-0' }, `#${s.id}`),
+            hasFocus
+              ? h(Badge, { size: 'sm', variant: 'subtle', color: 'primary' }, () => 'Focus')
+              : h(Badge, { size: 'sm', variant: 'subtle', color: 'neutral' }, () => '大盘'),
+            h(Badge, { size: 'sm', variant: 'subtle', color: getSliceStatusColor(s.status) }, () => getSliceStatusText(s.status)),
+          ]),
+          h('div', { class: 'mt-1 text-xs text-gray-500 dark:text-gray-400 truncate' },
+            hasFocus
+              ? `主体：${subject} · 竞品：${competitorsLabel}`
+              : '议程视角（无主体 / 无竞品区分）',
+          ),
         ])
       },
     },
@@ -921,6 +948,24 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
               <UInput
                 v-model="sliceNameInput"
                 placeholder="例如：品牌声量总览、竞品对比分析"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="主体（可选，用于 Focus 切片）" help="填写后切片会做主体/竞品角色归类；留空 = 大盘视角，所有实体平权。">
+              <UInput
+                v-model="sliceSubjectInput"
+                placeholder="例如：美赞臣蓝臻"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              v-if="sliceSubjectInput.trim()"
+              label="竞品（可选，多个用逗号分隔）"
+              help="填写后这些品牌将归为 competitor 角色；留空 = 由 LLM 自动发现同品类竞品。"
+            >
+              <UInput
+                v-model="sliceCompetitorsInput"
+                placeholder="例如：惠氏启赋, 飞鹤星飞帆, 皇家美素佳儿"
                 class="w-full"
               />
             </UFormField>

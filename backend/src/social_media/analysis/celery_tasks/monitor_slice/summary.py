@@ -89,6 +89,7 @@ def _extract_entity_terms_by_role_sentiment(
 
 def generate_project_reports(
     *,
+    subject: str | None,
     meta: dict[str, Any],
     foundation: dict[str, Any],
     layers: dict[str, Any],
@@ -96,10 +97,11 @@ def generate_project_reports(
 ) -> dict[str, Any]:
     """Step4：并行生成三份报告（Landscape/Topic/Focus）。
 
-    Focus report 在 meta.subject 为空时跳过，返回 None。
+    Focus report 在 subject 为空时跳过，返回 None。subject 由调用方从
+    SocialSlice.subject 列读取；meta 是 result_data.meta 内的分析时刻元数据
+    （timestamp / scope / weights_used），作为 LLM 的上下文注入。
     """
-    subject = (meta or {}).get("subject")
-    subject = str(subject).strip() if subject is not None else ""
+    subject = (subject or "").strip()
 
     aligned_entities = (foundation or {}).get("aligned_entities") or []
     aligned_topics = (foundation or {}).get("aligned_topics") or []

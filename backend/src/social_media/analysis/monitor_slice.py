@@ -1313,21 +1313,22 @@ def build_monitor_slice_result(
     }
 
     # ===== 输出（最终方案结构）=====
-    # meta: 切片配置；foundation: 原始聚合数据（Stage2 归一后覆盖）；
+    # meta: 分析时刻**运行参数**（weights / spam_config / 诊断 / scope.platforms+keywords）；
+    # foundation: 原始聚合数据（Stage2 归一后覆盖）；
     # layers: 三层指标（Stage2 计算）；reports: LLM 报告（Stage3 生成）；
     # pipeline: 各阶段执行状态追踪（stage1 同步、stage2/stage3 异步由 router 写入）。
     # 注：SocialSlice.status 语义 = Stage2 完成（下游可用）。
     # Stage3 的 3 报告是独立附加产出，失败只记在 pipeline.stage3，不回退 status。
+    # 不在此处的字段及理由：
+    #   - subject / competitors → SocialSlice 表列（配置 vs 产物解耦）
+    #   - monitor_id → SocialSlice.monitor_id 列
+    #   - generated_at → AnalysisJob.completed_at（精确语义；result_data 内的曾是冗余）
+    #   - scope.mode → 始终 "selected_tasks"，无分支无读者
+    #   - scope.included_task_ids → SocialSlice.included_task_ids 列
     return {
         "meta": {
-            "monitor_id": monitor_id,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "subject": subject,
-            "competitors": competitors or [],
             "weights_used": weights_used,
             "scope": {
-                "mode": "selected_tasks",
-                "included_task_ids": included_task_ids,
                 "platforms": list(platform_volume.keys()),
                 "keywords": list(keyword_volume.keys()),
             },

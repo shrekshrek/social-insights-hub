@@ -579,8 +579,8 @@ const sliceColumns = computed<TableColumn<MonitorSlice>[]>(() => {
       meta: { class: { th: 'w-[240px]', td: 'w-[240px] whitespace-normal' } },
       cell: ({ row }) => {
         const s = row.original
-        const subject = s.result_data?.meta?.subject || null
-        const competitors = formatCompetitors(s.result_data?.meta?.competitors)
+        const subject = s.subject || null
+        const competitors = formatCompetitors(s.competitors)
         const hasFocus = Boolean(subject)
         return h('div', {}, [
           h('div', { class: 'flex items-center gap-1.5 flex-wrap' }, [

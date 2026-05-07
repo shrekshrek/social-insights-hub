@@ -170,10 +170,9 @@ def _run_pipeline_body(
     task_keywords = (
         scope.get("keywords") if isinstance(scope.get("keywords"), list) else []
     )
-    subject = (result.get("meta") or {}).get("subject")
-    competitors = (result.get("meta") or {}).get("competitors")
-    if not isinstance(competitors, list):
-        competitors = []
+    # subject / competitors 是切片配置（表列），不在 result_data.meta
+    subject = slice_record.subject
+    competitors = list(slice_record.competitors or [])
 
     # ========== 并行：实体归一 + 观点归一 ==========
     # 1. 先创建两个 AnalysisJob（串行，很快）
@@ -418,7 +417,7 @@ def _run_pipeline_body(
         result.get("foundation") if isinstance(result.get("foundation"), dict) else {}
     )
     layers = build_slice_layers(
-        meta=result.get("meta") or {},
+        subject=subject,
         overview=land0.get("overview")
         if isinstance(land0.get("overview"), dict)
         else {},
@@ -477,7 +476,6 @@ def _run_pipeline_body(
     stage3["updated_at"] = now_iso()
     commit_result()
 
-    meta = result.get("meta") or {}
     foundation_final = result.get("foundation") or {}
     layers = result.get("layers") or {}
     drivers_matrix = (
@@ -487,7 +485,8 @@ def _run_pipeline_body(
     )
 
     rep = generate_project_reports(
-        meta=meta,
+        subject=subject,
+        meta=result.get("meta") or {},
         foundation=foundation_final,
         layers=layers,
         drivers_matrix=drivers_matrix,

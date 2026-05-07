@@ -8,16 +8,16 @@
       </p>
     </div>
 
-    <!-- 叙事地图 -->
+    <!-- 叙事地图（双栏 grid，4 条 narrative 排成 2×2，避免单列横向留白）-->
     <div v-if="result.narrative_map?.length">
       <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">叙事地图</h4>
-      <div class="space-y-2">
+      <div class="grid md:grid-cols-2 gap-2">
         <div
           v-for="(narrative, idx) in sortedNarrativeMap"
           :key="idx"
           class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
         >
-          <!-- 标题行：排名 + 主题 + 标签 -->
+          <!-- 标题行：排名 + 主题 + 状态标签（仅 sentiment / credibility 两个核心 chip，位置稳定）-->
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2 min-w-0">
               <span class="text-xs font-mono text-gray-400 shrink-0">#{{ narrative.heat_rank || idx + 1 }}</span>
@@ -30,13 +30,16 @@
               <UBadge :color="credibilityColor(narrative.credibility)" variant="subtle" size="sm">
                 {{ narrative.credibility === 'high' ? '高可信' : narrative.credibility === 'medium' ? '中可信' : '低可信' }}
               </UBadge>
-              <!-- 来源分布内联 -->
-              <span v-if="narrative.supporting_sources" class="text-[10px] text-gray-400 ml-1">
-                <template v-for="(count, tier) in narrative.supporting_sources" :key="tier">
-                  <span v-if="count" class="mr-1">{{ tierLabel(tier as string) }}×{{ count }}</span>
-                </template>
-              </span>
             </div>
+          </div>
+          <!-- tier 来源分布独立一行：紧凑、左对齐，不抢标题行位置 -->
+          <div
+            v-if="narrative.supporting_sources"
+            class="mt-1 text-[10px] text-gray-400 flex items-center gap-2 flex-wrap"
+          >
+            <template v-for="(count, tier) in narrative.supporting_sources" :key="tier">
+              <span v-if="count">{{ tierLabel(tier as string) }}·{{ count }}</span>
+            </template>
           </div>
           <!-- 框架（合并到主题下方，更紧凑） -->
           <p v-if="narrative.framing" class="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
@@ -83,8 +86,8 @@
         >
           <p class="font-medium text-gray-900 dark:text-white text-sm">{{ battle.contested_topic }}</p>
 
-          <!-- 各方立场（camps） -->
-          <div v-if="battle.camps?.length" class="mt-2 space-y-2">
+          <!-- 各方立场（camps）：2-camp 时横向并列体现"对立"语义；1 / 3+ 也优雅降级 -->
+          <div v-if="battle.camps?.length" class="mt-2 grid md:grid-cols-2 gap-2">
             <div
               v-for="(camp, ci) in battle.camps"
               :key="ci"
@@ -220,10 +223,23 @@
           <div
             v-for="(gap, idx) in result.attention_gaps"
             :key="idx"
-            class="p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg"
+            class="p-2.5 rounded-lg border-l-4"
+            :class="gap.risk_or_opportunity === 'risk'
+              ? 'bg-red-50 dark:bg-red-900/20 border-red-400 dark:border-red-600'
+              : gap.risk_or_opportunity === 'opportunity'
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-400 dark:border-emerald-600'
+                : 'bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600'"
           >
             <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-medium text-gray-800 dark:text-gray-200">{{ gap.topic }}</p>
+              <p class="text-xs font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                <UIcon
+                  v-if="gap.risk_or_opportunity"
+                  :name="gap.risk_or_opportunity === 'risk' ? 'i-heroicons-exclamation-triangle' : 'i-heroicons-light-bulb'"
+                  :class="gap.risk_or_opportunity === 'risk' ? 'text-red-500' : 'text-emerald-500'"
+                  class="size-3.5 shrink-0"
+                />
+                {{ gap.topic }}
+              </p>
               <UBadge
                 v-if="gap.risk_or_opportunity"
                 :color="gap.risk_or_opportunity === 'risk' ? 'error' : 'success'"
@@ -248,12 +264,6 @@
         </div>
       </div>
     </div>
-
-    <!-- section 级"查看原始数据"入口 -->
-    <SectionDataDrawer
-      :chain-inputs="result.chain_inputs"
-      title="Agenda Map 媒体议程图 · 原始数据来源"
-    />
   </div>
   <div v-else class="text-gray-400 text-center py-4">暂无数据</div>
 </template>
@@ -261,7 +271,7 @@
 <script setup lang="ts">
 import type { AgendaMapResult } from '../types'
 import { sentimentColor, sentimentLabel } from '../composables/useStrategyConstants'
-import { UBadge, SectionDataDrawer } from '#components'
+import { UBadge, UIcon } from '#components'
 
 const props = defineProps<{
   result: AgendaMapResult | null

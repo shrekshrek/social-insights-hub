@@ -135,9 +135,15 @@
         <!-- Brand Role 区 -->
         <div class="border-t border-gray-100 dark:border-gray-800 pt-3 mt-2">
           <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-200">
-              <UBadge color="warning" variant="subtle" size="xs" class="mr-1">第 2 层</UBadge>
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-2 flex-wrap">
+              <UBadge color="warning" variant="subtle" size="xs">第 2 层</UBadge>
               Brand Role 品牌角色
+              <DataProvenanceBadge
+                v-if="branchProvenance(branch, 'brand_role')"
+                :provenance="branchProvenance(branch, 'brand_role')"
+                :chain-inputs="branchChainInputs(branch, 'brand_role')"
+                :modal-title="`分支 #${branch.tension_id + 1} · Brand Role · 原始数据来源`"
+              />
             </span>
             <UButton
               v-if="branch.brand_role && canEdit"
@@ -173,9 +179,15 @@
         <!-- Big Idea 区 -->
         <div class="border-t border-gray-100 dark:border-gray-800 pt-3 mt-3">
           <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-200">
-              <UBadge color="success" variant="subtle" size="xs" class="mr-1">第 3 层</UBadge>
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-2 flex-wrap">
+              <UBadge color="success" variant="subtle" size="xs">第 3 层</UBadge>
               Big Idea 创意
+              <DataProvenanceBadge
+                v-if="branchProvenance(branch, 'big_idea')"
+                :provenance="branchProvenance(branch, 'big_idea')"
+                :chain-inputs="branchChainInputs(branch, 'big_idea')"
+                :modal-title="`分支 #${branch.tension_id + 1} · Big Idea · 原始数据来源`"
+              />
             </span>
             <UButton
               v-if="branch.big_idea && canEdit"
@@ -216,11 +228,32 @@
 </template>
 
 <script setup lang="ts">
-import type { BrandStrategyBranch, BrandRoleResult, BigIdeaResult } from '../types'
+import type {
+  BrandStrategyBranch, BrandRoleResult, BigIdeaResult, ChainInputs, DataProvenance,
+} from '../types'
 import {
   UCard, UBadge, UButton, UIcon, UCheckbox,
   BrandRoleContent, BigIdeaContent, BrandRoleEditForm, BigIdeaEditForm,
+  DataProvenanceBadge,
 } from '#components'
+
+/** 从 branch 的 brand_role / big_idea 结果里提取 data_provenance */
+const branchProvenance = (
+  branch: BrandStrategyBranch,
+  layer: 'brand_role' | 'big_idea',
+): DataProvenance | null => {
+  const r = (branch[layer] as { data_provenance?: DataProvenance } | null) ?? null
+  return r?.data_provenance ?? null
+}
+
+/** 从 branch 的 brand_role / big_idea 结果里提取 chain_inputs */
+const branchChainInputs = (
+  branch: BrandStrategyBranch,
+  layer: 'brand_role' | 'big_idea',
+): ChainInputs | null => {
+  const r = (branch[layer] as { chain_inputs?: ChainInputs } | null) ?? null
+  return r?.chain_inputs ?? null
+}
 
 const props = defineProps<{
   branches: BrandStrategyBranch[]

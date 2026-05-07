@@ -47,12 +47,19 @@
         <StrategyEvidenceList :evidence="result.social_strategy.evidence" />
       </div>
     </div>
+
+    <!-- section 级"查看原始数据"入口 -->
+    <SectionDataDrawer
+      :chain-inputs="result.chain_inputs"
+      title="Brand Role 品牌角色 · 原始数据来源"
+    />
   </div>
   <div v-else class="text-gray-400 text-center py-4">暂无数据</div>
 </template>
 
 <script setup lang="ts">
 import type { BrandRoleResult } from '../types'
+import { SectionDataDrawer } from '#components'
 
 defineProps<{
   result: BrandRoleResult | null

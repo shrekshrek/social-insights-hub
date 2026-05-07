@@ -97,11 +97,24 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
       }}
     ],
     "evidence": [
-      {{"type": "content_insight", "description": "高互动内容特征", "source": "slice数据"}},
-      {{"type": "kol_ecosystem", "description": "KOL 生态特征", "source": "slice数据"}}
+      {{"type": "content_insight", "description": "高互动内容特征", "source": "Social Slice #0: 蕉内品牌口碑聚焦"}},
+      {{"type": "kol_ecosystem", "description": "KOL 生态特征", "source": "Social Slice #1: 新能源车大盘讨论"}}
     ]
   }}
 }}
+
+## evidence.source 引用规范（重要）
+
+每条 evidence.source 必须填**唯一可追溯标签**之一，禁止泛指如 "slice数据"。
+
+| 数据来源 | source 写法 |
+|---------|------------|
+| 社媒切片 | `Social Slice #<i>: <slice_name>`（取切片 JSON 内 `_source_label` 字段值） |
+| 新闻切片 | `News Slice #<i>: <slice_name>`（取新闻段落 `_source_label` 字段值） |
+| 上游 insight tension | `insight:tension:<i>` |
+| 上游 brand_role | `brand_role:role` 或 `brand_role:strategy` |
+| 行业研究 | `Research: <主题>`，例如 `Research: 户外露营赛道增长` |
+| 创意参考 | `Creative: <案例名>`，例如 `Creative: Patagonia 'Don't Buy This' campaign` |
 
 ## 要求
 - big_idea.statement 简洁、有创意张力，能引起共鸣
@@ -126,7 +139,7 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - 新闻叙事聚类（narratives）揭示媒体如何定义品类议题，Big Idea 可以**借势或颠覆**媒体已有的叙事框架
 - 关键引述（key_quotes）中的行业权威发言可作为 Content Strategy 的话题锚点
 - Content Strategy 的支柱可考虑"媒体议题再造"——将新闻中的行业话题转化为社媒可传播的消费者语言
-- 新闻数据作为补充创意灵感，evidence 中标明 source 为"新闻媒体数据"以区分
+- 新闻数据作为补充创意灵感，evidence.source 用 `News Slice #<i>: <name>`（不要写"新闻媒体数据"）
 
 ## 创意版图（creative_references）使用指南
 
@@ -136,7 +149,7 @@ SYSTEM_TEMPLATE = """你是一位资深创意策略师，擅长从策略洞察�
 - Big Idea 的 statement 应能在创意版图中定位到一个明确的**差异化坐标**
 - information_gaps（创意盲点）往往是品类未被尝试的方向，优先考虑作为 Big Idea 方向
 - 如 `{{creative_references}}` 段落为空，**正常忽略**，不影响创意推导
-- evidence 中引用创意参考时标明 source 为"竞品创意案例"以区分
+- evidence 中引用创意参考时 source 写 `Creative: <案例名>`，例如 `Creative: Patagonia 'Don't Buy This' campaign`
 """
 
 USER_TEMPLATE = """{brief_section}
@@ -258,6 +271,8 @@ def format_data_for_big_idea(
     brief: dict | None = None,
     research_design: dict | None = None,
     news_slices: list[dict] | None = None,
+    slice_refs: list[dict] | None = None,
+    news_slice_refs: list[dict] | None = None,
     research_findings: str = "",
     creative_references: str = "",
 ) -> dict[str, Any]:
@@ -267,6 +282,8 @@ def format_data_for_big_idea(
         insight_result: 完整 insight 输出（含多 tensions），内部提取 selected_tension
         selected_tension_id: 当前分支聚焦的 tension index
         branch_brand_role: 当前分支的 brand_role 结果（与该 tension 同源）
+        slice_refs / news_slice_refs: 与 slices / news_slices 同序的 [{id, name}] 列表，
+            用于在每个 slice 部分注入 `_source_label`，让 LLM 在 evidence.source 精准引用
     """
     from src.llm.chains.strategy.brand_strategy.insight_chain import (
         _build_research_context_section,
@@ -288,8 +305,17 @@ def format_data_for_big_idea(
         foundation = s.get("foundation") or {}
 
         subject = meta.get("subject") or None
+        ref_name = (
+            slice_refs[i].get("name")
+            if slice_refs and i < len(slice_refs)
+            else None
+        )
+        slice_label = (ref_name or "").strip()
         part: dict[str, Any] = {
             "slice_index": i,
+            "_source_label": (
+                f"Social Slice #{i}: {slice_label}" if slice_label else f"Social Slice #{i}"
+            ),
             "mode": "品牌聚焦" if subject else "大盘分析",
             "subject": subject,
         }
@@ -353,7 +379,7 @@ def format_data_for_big_idea(
 
         supplementary_parts.append(part)
 
-    news_media_section = _format_news_media_section(news_slices or [])
+    news_media_section = _format_news_media_section(news_slices or [], news_slice_refs)
 
     return {
         "brief_section": brief_section,

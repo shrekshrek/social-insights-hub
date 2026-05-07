@@ -56,6 +56,41 @@ export interface DataProvenance {
   }
 }
 
+// ==================== chain_inputs（section 级溯源）====================
+
+/**
+ * 切片引用（chain_inputs 中的 social_slices / news_slices 元素）
+ * monitor_id 用于前端跳详情页（社媒 slice 路由需要 monitor_id）
+ */
+export interface SliceRef {
+  id: number
+  name: string | null
+  monitor_id: number | null
+}
+
+/**
+ * 研究任务引用（chain_inputs 中的 research_findings / creative_references 元素）
+ */
+export interface ResearchRef {
+  id: number
+  profile: 'industry' | 'creative'
+}
+
+/**
+ * Phase 结果中的 chain_inputs 字段：本次 LLM 调用 prompt 中实际注入的上游数据 ID 清单。
+ *
+ * 与 LLM 输出无关，由 orchestrator 在调用前确定，无幻觉风险。
+ * 用于前端 section 级"查看原始数据"drawer，反查上游切片 / 研究产出。
+ *
+ * 对齐后端 _build_chain_inputs 函数的输出结构。
+ */
+export interface ChainInputs {
+  social_slices: SliceRef[]
+  news_slices: SliceRef[]
+  research_findings: ResearchRef[]
+  creative_references: ResearchRef[]
+}
+
 // ==================== Brand Brief ====================
 
 export interface ChannelPlanItem {
@@ -474,6 +509,7 @@ export interface InsightResult {
   social_tensions: SocialTension[]
   brand_opportunities: BrandOpportunity[]
   data_provenance?: DataProvenance
+  chain_inputs?: ChainInputs
 }
 
 export interface BrandSocialRole {
@@ -494,6 +530,7 @@ export interface BrandRoleResult {
   brand_social_role: BrandSocialRole
   social_strategy: SocialStrategy
   data_provenance?: DataProvenance
+  chain_inputs?: ChainInputs
 }
 
 export interface BigIdea {
@@ -520,6 +557,7 @@ export interface BigIdeaResult {
   big_idea: BigIdea
   content_strategy: ContentStrategy
   data_provenance?: DataProvenance
+  chain_inputs?: ChainInputs
 }
 
 // ==================== market_report 路径结果类型 ====================
@@ -609,6 +647,7 @@ export interface AgendaMapResult {
   media_voice_patterns: MediaVoicePatterns
   attention_gaps: AttentionGapItem[]
   data_provenance?: DataProvenance
+  chain_inputs?: ChainInputs
 }
 
 // —— 第 2 层 Landscape: 竞争格局 ——
@@ -699,6 +738,7 @@ export interface LandscapeResult {
   discourse_battles: DiscourseBattle[]
   market_dynamics: MarketDynamics
   data_provenance?: DataProvenance
+  chain_inputs?: ChainInputs
 }
 
 // —— 第 3 层 Strategic Brief: 战略简报 ——
@@ -748,6 +788,9 @@ export interface StrategicBriefResult {
   risks_and_threats: RiskAndThreat[]
   recommended_positioning: RecommendedPositioning
   data_provenance?: DataProvenance
+  chain_inputs?: ChainInputs
+  /** "media_only" | "comprehensive"（后端 _build_chain_inputs 注入） */
+  generation_mode?: 'media_only' | 'comprehensive'
 }
 
 // ==================== Brief 文档解析 ====================

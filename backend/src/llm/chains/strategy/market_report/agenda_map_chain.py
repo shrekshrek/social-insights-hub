@@ -80,7 +80,7 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
         {{"quote": "原文引述", "speaker": "发言人", "source": "来源媒体", "source_tier": "tier1/tier2/tier3/wechat_mp"}}
       ],
       "credibility": "high|medium|low",
-      "cross_slice_evidence": ["slice_name#1"]
+      "cross_slice_evidence": ["News Slice #0: Tesla 媒体报道聚焦", "News Slice #1: 户外品牌行业新闻"]
     }}
   ],
   "agenda_battles": [
@@ -118,6 +118,14 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 - agenda_battles: 0-3 条，仅在确实存在分歧时输出
 - attention_gaps: 1-3 条，禁止输出"一切都已充分覆盖"这类空内容
 - credibility=high 要求 tier1+tier2 共同支撑；仅 tier3/wechat_mp 支撑的 narrative 必须 low
+
+## 切片溯源规范（重要）
+
+`narrative_map[].cross_slice_evidence` 必须填**News Slice 完整标签**，格式 `News Slice #<i>: <slice_name>`，
+取每个切片对象内 `_source_label` 字段值。**禁止**只写切片名（如 `slice_name#1`）等模糊形式——
+前端依赖这个标签反查上游切片。
+
+`representative_voices[].source` 仍指**真实媒体来源**（如"央视新闻"、"新华网"），不是切片标签。两者语义不同，不要混用。
 
 ## 字段解读（NewsSlice 新 schema，仅消费结构化层）
 
@@ -187,17 +195,24 @@ def _build_research_context_section(research_design: dict | None) -> str:
     return "\n".join(lines)
 
 
-def _format_news_slices_for_agenda(news_slices: list[dict]) -> str:
+def _format_news_slices_for_agenda(
+    news_slices: list[dict],
+    news_slice_refs: list[dict] | None = None,
+) -> str:
     """将 NewsSlice 数据格式化为 Agenda Map 层输入（ADR-003 新 schema）。
 
     只消费结构化层（descriptive / entities / quotes / event_clusters /
     media_landscape / competitive），不消费 page_synthesis。
+
+    `news_slice_refs` 与 news_slices 同序，用于在每个切片对象注入 `_source_label`
+    （`News Slice #i: <name>`），让 LLM 在 cross_slice_evidence / evidence 字段中
+    精准引用切片，便于前端反查。
     """
     if not news_slices:
         return "（无新闻切片数据）"
 
     parts: list[dict[str, Any]] = []
-    for ns in news_slices:
+    for idx, ns in enumerate(news_slices):
         rd = ns.get("result_data")
         if not rd or isinstance(rd, str):
             continue
@@ -205,7 +220,16 @@ def _format_news_slices_for_agenda(news_slices: list[dict]) -> str:
         media_landscape = rd.get("media_landscape") or {}
         competitive = rd.get("competitive") or {}
 
+        ref_name = (
+            news_slice_refs[idx].get("name")
+            if news_slice_refs and idx < len(news_slice_refs)
+            else None
+        )
+        slice_label = (ref_name or ns.get("name") or "").strip()
         parts.append({
+            "_source_label": (
+                f"News Slice #{idx}: {slice_label}" if slice_label else f"News Slice #{idx}"
+            ),
             "slice_name": ns.get("name", ""),
             "article_count": descriptive.get("articles_filtered", 0),
             "source_tier_distribution": descriptive.get("source_tier_distribution"),
@@ -272,10 +296,15 @@ def format_inputs_for_agenda_map(
     news_slices: list[dict],
     brief: dict | None = None,
     research_design: dict | None = None,
+    news_slice_refs: list[dict] | None = None,
     research_findings: str = "",
     coverage_check_result: dict | None = None,
 ) -> dict[str, Any]:
-    """构建 Agenda Map chain 的输入参数字典。"""
+    """构建 Agenda Map chain 的输入参数字典。
+
+    `news_slice_refs` 与 news_slices 同序的 [{id, name}] 列表，用于让 LLM 在
+    cross_slice_evidence 字段中以 `News Slice #<i>: <name>` 形式精准引用。
+    """
     brief_section = ""
     if brief:
         brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
@@ -285,7 +314,7 @@ def format_inputs_for_agenda_map(
         "research_context_section": _build_research_context_section(research_design),
         "coverage_signals": format_coverage_signals(coverage_check_result),
         "research_findings": research_findings,
-        "news_slice_data": _format_news_slices_for_agenda(news_slices),
+        "news_slice_data": _format_news_slices_for_agenda(news_slices, news_slice_refs),
     }
 
 

@@ -119,6 +119,23 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 - attention_gaps: 1-3 条，禁止输出"一切都已充分覆盖"这类空内容
 - credibility=high 要求 tier1+tier2 共同支撑；仅 tier3/wechat_mp 支撑的 narrative 必须 low
 
+## representative_voices 字段填写（强约束）
+
+**Quote 来源限定**：`representative_voices[].quote` **必须从输入数据的 `key_quotes` 数组里逐字选取**，
+不得改写、缩略、合并或自行从 article 标题 / event_clusters / page_synthesis / source_pyramid
+等其它字段构造引述。如果 key_quotes 里没有合适的引述支撑某条 narrative，宁可
+`representative_voices=[]` 也不要凭空造句。
+
+**字段对应**（与 key_quotes 一一映射）：
+
+- `quote` = 选中的 key_quote.quote（**字面引用**，含标点）
+- `speaker` = 该 key_quote.speaker（**真实发言人**，如"熊辉"、"肖婧婧"、"John Colombo教授"）
+- `source` = 该 key_quote.source_name（**媒体名**，如"扬子晚报"、"新浪财经"）
+- `source_tier` = 该 key_quote.source_tier
+
+**禁止把 source 媒体名重复填到 speaker**——pass1 抽取时若 key_quote.speaker 已为空（编辑部撰文未明示），
+你也保持 `speaker=""`，不要补"新华网报道"/"奶粉速递" 这种与 source 重复的占位。
+
 ## 切片溯源规范（重要）
 
 `narrative_map[].cross_slice_evidence` 必须填**News Slice 完整标签**，格式 `News Slice #<i>: <slice_name>`，

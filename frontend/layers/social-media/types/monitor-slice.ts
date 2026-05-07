@@ -395,14 +395,22 @@ export interface FocusLayer {
 // 完整切片结构
 // ===========================================
 
-/** 切片元数据 */
+/**
+ * 切片分析时刻**运行参数**元数据。
+ * 以下字段已升格到 SocialSlice 表列或权威源，不在此处：
+ * - subject / competitors → 表列
+ * - monitor_id → 表列 SocialSlice.monitor_id
+ * - generated_at → AnalysisJob.completed_at（精确语义）
+ * - scope.mode / scope.included_task_ids → 表列 / 硬编码无意义
+ */
 export interface SliceMeta {
-  monitor_id: number
-  generated_at: string
-  subject?: string | null
-  competitors?: string[]
   weights_used?: Record<string, number>
-  scope?: Record<string, unknown>
+  scope?: {
+    platforms?: string[]
+    keywords?: string[]
+  }
+  task_diagnostics?: unknown
+  spam_config?: { threshold: number }
 }
 
 /** 切片基础数据 (归一化后) */
@@ -524,6 +532,10 @@ export interface MonitorSlice {
   monitor_id: number
   user_id: number
   included_task_ids: number[]
+  /** 聚焦切片的主体品牌名（null = 无 Focus，不生成 Focus 报告） */
+  subject: string | null
+  /** 聚焦切片的竞品品牌名列表（subject 为 null 时应为空） */
+  competitors: string[]
   result_data: MonitorSliceResultData
   created_at: string
   updated_at: string

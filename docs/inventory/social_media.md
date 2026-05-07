@@ -111,13 +111,15 @@
 | `social_posts` | id, task_id, platform_id, post_id_on_platform, title, content, likes_count, comments_count, collected_count, cii(计算) | → comments (1:N), post_analysis (1:1) |
 | `social_comments` | id, post_id, task_id, comment_id_on_platform, parent_comment_id, content, likes_count | |
 | `post_analysis` | id, post_id(unique), spam_score, value_score, relevance_score, sentiment(-2~+2), cii, post_deep_result(JSON), comment_deep_result(JSON) | ← post (1:1) |
-| `social_slices` | id, monitor_id, name, status, included_task_ids[], **result_data(JSON)**, **stats(JSON)** | 无 FK 到 task |
+| `social_slices` | id, monitor_id, name, status, included_task_ids[], **subject**, **competitors[]**, **result_data(JSON)**, **stats(JSON)** | 无 FK 到 task。subject/competitors 是切片**配置**（一等列），与分析产物 result_data 解耦 |
 
 ### 2.2 `SocialSlice.result_data` 关键结构(前端重度消费)
 
 ```
+# subject / competitors 已从 result_data.meta 升格为 social_slices 表列；
+# result_data.meta 仅存"分析时刻元数据"。
 result_data = {
-  meta:       { monitor_id, subject, competitors[], scope{ keywords[] }, ... },
+  meta:       { monitor_id, generated_at, weights_used, scope{ keywords[] }, task_diagnostics, ... },
   foundation: {
     aligned_entities[]: { name, role, parent, heat, sentiment,
                           organic_heat, promo_heat, organic_sentiment, promo_sentiment,

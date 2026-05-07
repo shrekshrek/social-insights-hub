@@ -216,20 +216,12 @@ def run_news_slice_insight_task(
     slice_id: int,
     user_id: int,
     analysis_goal: str = "",
-    subject: str = "",
-    competitors: list[str] | None = None,
 ) -> None:
-    """运行 NewsSlice 综合分析（同步版，策略场景专用，ADR-003 4 步流程）。
+    """运行 NewsSlice LLM 阶段（Pass 1 → derived → Pass 2，sync 版本）。
 
-    策略场景下 _create_auto_slices 创建 NewsSlice 行（status=pending）后，commit 主事务再
-    异步派发本任务跑分析。这样避免长事务（LLM 调用合计 ~120s）持有 INSERT 不 commit，
-    导致 APScheduler / 轮询读不到该行重复建切片。
-
-    独立监测场景走 news_media.analysis.service.run_slice_analysis（async）。两条路径
-    共享 service.py 的纯函数（_dedupe_and_filter / _compute_descriptive /
-    _compute_derived / _enforce_entity_roles / _build_stats_summary / _articles_for_llm /
-    _parse_pass1_output / _parse_pass2_output / _merge_token_usage），仅 chain 调用
-    用 sync `.invoke()` 取代 async `.ainvoke()`。
+    前置：调用方已在主事务里跑过 `initialize_slice`，切片行带 subject/competitors
+    列 + result_data.descriptive，status=analyzing。本任务从切片列直接读配置，
+    重算 descriptive 后跑 LLM 阶段，把 LLM 产出键 merge 进 result_data。
     """
     from src.database import SyncSessionLocal
     from src.jobs.factory import (
@@ -266,7 +258,9 @@ def run_news_slice_insight_task(
             logger.error("NewsSlice %d not found, aborting insight", slice_id)
             return
 
-        slice_obj.status = "analyzing"
+        subject = slice_obj.subject or ""
+        competitors = list(slice_obj.competitors or [])
+
         slice_obj.error_message = None
         db.commit()
 
@@ -294,8 +288,11 @@ def run_news_slice_insight_task(
             descriptive = _compute_descriptive(filtered, url_to_task_ids)
 
             if not filtered:
+                # initialize_slice 已置 completed；本路径理论上不会进来。兜底 merge 下。
+                merged = dict(slice_obj.result_data or {})
+                merged["descriptive"] = descriptive
+                slice_obj.result_data = merged
                 slice_obj.stats = _build_stats_summary(descriptive, entities=[])
-                slice_obj.result_data = {"descriptive": descriptive}
                 slice_obj.status = "completed"
                 complete_analysis_job_sync(db, job, analyzed_count=0)
                 logger.info("NewsSlice %d: no valid articles, marked completed", slice_id)
@@ -308,8 +305,8 @@ def run_news_slice_insight_task(
             pass1_input_articles = _articles_for_llm(filtered)
             pass1_response = pass1_chain.invoke({
                 "analysis_goal": goal,
-                "subject": subject or "",
-                "competitors": ", ".join(competitors or []) or "（未指定）",
+                "subject": subject,
+                "competitors": ", ".join(competitors) or "（未指定）",
                 "article_count": len(filtered),
                 "articles_content": format_articles_for_pass1(pass1_input_articles),
             })
@@ -319,7 +316,7 @@ def run_news_slice_insight_task(
             # Step 3：派生层
             derived = _compute_derived(
                 pass1_parsed, filtered, url_to_task_ids,
-                subject=subject or "", competitors=competitors or [],
+                subject=subject, competitors=competitors,
             )
 
             # Step 4：Pass 2 LLM（sync，失败容错）
@@ -349,11 +346,13 @@ def run_news_slice_insight_task(
             except Exception as e:
                 logger.warning("NewsSlice %d Pass 2 failed (页面降级): %s", slice_id, e)
 
-            slice_obj.result_data = {
-                "descriptive": descriptive,
-                **derived,
-                "page_synthesis": page_synthesis,
-            }
+            # Merge：保留已有 result_data 键，覆写 descriptive 与 LLM 产出键。
+            # subject/competitors 不在 result_data，无需保护——它们是切片表列。
+            merged = dict(slice_obj.result_data or {})
+            merged["descriptive"] = descriptive
+            merged.update(derived)
+            merged["page_synthesis"] = page_synthesis
+            slice_obj.result_data = merged
             slice_obj.stats = _build_stats_summary(descriptive, derived["entities"])
             slice_obj.status = "completed"
 

@@ -290,6 +290,10 @@ export interface NewsSlice {
   name: string
   monitor_id: number
   included_task_ids: number[]
+  /** 聚焦切片的主体品牌名（null = 大盘视角，无 target/competitor 区分） */
+  subject: string | null
+  /** 聚焦切片的竞品品牌名列表（subject 为 null 时应为空） */
+  competitors: string[]
   status: string
   result_data: NewsSliceResultData | null
   stats: NewsSliceStatsSummary | null
@@ -302,6 +306,9 @@ export interface NewsSlice {
 export interface NewsSliceCreate {
   name: string
   included_task_ids: number[]
+  /** null = 大盘视角，不做 target/competitor 区分 */
+  subject?: string | null
+  competitors?: string[]
 }
 
 export interface NewsSliceWithRelations extends NewsSlice {

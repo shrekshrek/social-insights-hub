@@ -26,7 +26,6 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.news_media.analysis import crud
 from src.news_media.analysis.models import NewsSlice
 from src.news_media.analysis.schemas import NewsSliceCreate
 
@@ -49,12 +48,10 @@ async def create_slice(
     data: NewsSliceCreate,
     user_id: int,
 ) -> NewsSlice:
-    """创建新闻切片并自动触发综合分析。
+    """创建新闻切片：同步落 stage1（meta + descriptive），异步派发 LLM stage2。
 
-    对齐社媒切片：创建即分析，无需手动触发。独立监测场景 subject 传空（无明确研究主体），
-    Pass 1 退化为全部实体归 context；策略场景走 Celery 异步路径
-    （`run_news_slice_insight_task`），由 `_create_auto_slices` 在派发时透传 blueprint 的
-    subject / competitors。
+    HTTP 立即返回切片行（status=analyzing 或 completed），不阻塞 ~120s LLM 调用。
+    与 SocialSlice 创建语义对齐：stage1 同步、stage2/3 LLM 部分由 Celery 跑。
     """
     from src.news_media.tasks.models import NewsTask
 
@@ -76,138 +73,81 @@ async def create_slice(
                 detail=f"任务 {tid} 尚未完成采集",
             )
 
-    slice_obj = await crud.create_news_slice(
+    slice_obj = await initialize_slice(
         db,
         monitor_id=monitor_id,
         name=data.name,
         included_task_ids=data.included_task_ids,
         user_id=user_id,
+        subject=data.subject,
+        competitors=data.competitors,
     )
 
-    return await run_slice_analysis(
-        db, slice_obj, user_id=user_id,
-        analysis_goal=data.name, subject="", competitors=[],
-    )
+    if slice_obj.status == "analyzing":
+        from src.news_media.tasks.tasks import run_news_slice_insight_task
+        run_news_slice_insight_task.delay(
+            slice_id=slice_obj.id,
+            user_id=user_id,
+            analysis_goal=data.name,
+        )
+
+    return slice_obj
 
 
-async def run_slice_analysis(
+async def initialize_slice(
     db: AsyncSession,
-    slice_obj: NewsSlice,
+    *,
+    monitor_id: int,
+    name: str,
+    included_task_ids: list[int],
     user_id: int,
-    analysis_goal: str = "",
-    subject: str = "",
-    competitors: list[str] | None = None,
+    subject: str | None,
+    competitors: list[str],
 ) -> NewsSlice:
-    """运行切片综合分析（async 路径，独立监测场景使用）。
+    """同步创建切片行 + 写入 stage1 状态（subject/competitors 列 + descriptive + stats）。
 
-    创建 NEWS_INSIGHT AnalysisJob 追踪 token / 耗时 / 状态。Pass 1 + Pass 2 token 合并。
+    与社媒 stage1 语义对齐：纯 SQL 聚合，无 LLM 调用，毫秒级完成。
+    无文章时直接 status=completed；有文章时 status=analyzing，由调用方派发 Celery
+    跑 LLM stage2（Pass 1 → derived → Pass 2）。
+
+    切片配置（subject / competitors）持久化到表列，与分析产物 result_data 解耦。
     """
     from sqlalchemy import select
 
-    from src.jobs.factory import complete_analysis_job_async, create_analysis_job_async
-    from src.jobs.models import AnalysisType
     from src.news_media.tasks.models import NewsArticle, NewsTask
 
-    slice_obj.status = "analyzing"
-    slice_obj.error_message = None
-    await db.commit()
-
-    job = await create_analysis_job_async(
-        db=db,
-        news_monitor_id=slice_obj.monitor_id,
-        user_id=user_id,
-        analysis_type=AnalysisType.NEWS_INSIGHT.value,
-        source_count=0,
-        analysis_config={"slice_id": slice_obj.id},
-        status="running",
+    stmt = (
+        select(NewsArticle)
+        .join(NewsTask, NewsArticle.task_id == NewsTask.id)
+        .where(
+            NewsTask.id.in_(included_task_ids),
+            NewsTask.status == "completed",
+        )
+        .order_by(NewsArticle.published_at.desc().nulls_last())
     )
+    all_articles = list((await db.execute(stmt)).scalars().all())
+    filtered, url_to_task_ids = _dedupe_and_filter(all_articles)
+    descriptive = _compute_descriptive(filtered, url_to_task_ids)
 
-    try:
-        stmt = (
-            select(NewsArticle)
-            .join(NewsTask, NewsArticle.task_id == NewsTask.id)
-            .where(
-                NewsTask.id.in_(slice_obj.included_task_ids),
-                NewsTask.status == "completed",
-            )
-            .order_by(NewsArticle.published_at.desc().nulls_last())
-        )
-        result = await db.execute(stmt)
-        all_articles = list(result.scalars().all())
+    initial_status = "completed" if not filtered else "analyzing"
+    result_data = {"descriptive": descriptive}
+    stats = _build_stats_summary(descriptive, entities=[])
 
-        filtered, url_to_task_ids = _dedupe_and_filter(all_articles)
-        job.source_count = len(filtered)
-
-        # Step 1：描述层（SQL）
-        descriptive = _compute_descriptive(filtered, url_to_task_ids)
-
-        if not filtered:
-            slice_obj.stats = _build_stats_summary(descriptive, entities=[])
-            slice_obj.result_data = {"descriptive": descriptive}
-            slice_obj.status = "completed"
-            await complete_analysis_job_async(db, job, analyzed_count=0)
-            await db.refresh(slice_obj)
-            return slice_obj
-
-        # Step 2：Pass 1 LLM
-        from src.llm.chains.news.pass1_chain import (
-            create_pass1_chain,
-            format_articles_for_pass1,
-        )
-
-        pass1_chain = create_pass1_chain()
-        pass1_input_articles = _articles_for_llm(filtered)
-        pass1_response = await pass1_chain.ainvoke({
-            "analysis_goal": analysis_goal or slice_obj.name,
-            "subject": subject or "",
-            "competitors": ", ".join(competitors or []) or "（未指定）",
-            "article_count": len(filtered),
-            "articles_content": format_articles_for_pass1(pass1_input_articles),
-        })
-        pass1_token_usage = (pass1_response.response_metadata or {}).get("token_usage")
-        pass1_parsed = _parse_pass1_output(pass1_response.content)
-
-        # Step 3：派生层（SQL，基于 Pass 1 + filtered）
-        derived = _compute_derived(
-            pass1_parsed, filtered, url_to_task_ids,
-            subject=subject or "", competitors=competitors or [],
-        )
-
-        # Step 4：Pass 2 LLM（仅页面用，失败可降级）
-        page_synthesis = await _run_pass2_safely(
-            descriptive=descriptive,
-            derived=derived,
-            articles=filtered,
-            subject=subject or "",
-            analysis_goal=analysis_goal or slice_obj.name,
-        )
-
-        # 组合 result_data
-        slice_obj.result_data = {
-            "descriptive": descriptive,
-            **derived,
-            "page_synthesis": page_synthesis["data"],
-        }
-        slice_obj.stats = _build_stats_summary(descriptive, derived["entities"])
-        slice_obj.status = "completed"
-
-        token_usage = _merge_token_usage(pass1_token_usage, page_synthesis["token_usage"])
-        await complete_analysis_job_async(
-            db, job, analyzed_count=len(filtered), token_usage=token_usage,
-        )
-        await db.refresh(slice_obj)
-        return slice_obj
-
-    except Exception as e:
-        logger.error("NewsSlice %d analysis failed: %s", slice_obj.id, e, exc_info=True)
-        slice_obj.status = "failed"
-        slice_obj.error_message = str(e)[:1000]
-        await complete_analysis_job_async(db, job, error_message=str(e)[:500])
-        await db.refresh(slice_obj)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"切片分析失败: {e}",
-        ) from e
+    slice_obj = NewsSlice(
+        name=name,
+        monitor_id=monitor_id,
+        included_task_ids=included_task_ids,
+        user_id=user_id,
+        subject=subject,
+        competitors=list(competitors or []),
+        result_data=result_data,
+        stats=stats,
+        status=initial_status,
+    )
+    db.add(slice_obj)
+    await db.commit()
+    await db.refresh(slice_obj)
+    return slice_obj
 
 
 # ==================== Step 1：合并 / 去重 / 过滤 / 描述层 ====================

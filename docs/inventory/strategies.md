@@ -112,8 +112,8 @@ Formatter 入口:[`insight_chain.py::format_slice_data_for_insight()`](../../bac
 
 | 字段路径 | 消费链 | 用途 | 必要性 |
 |---------|-----|-----|------|
-| `meta.subject` | insight | 区分品牌聚焦 vs 大盘切片 | 🔴 必需 |
-| `meta.competitors` | insight | 竞品列表背景 | 🟡 可选 |
+| `SocialSlice.subject`（表列） | insight | 区分品牌聚焦 vs 大盘切片 | 🔴 必需 |
+| `SocialSlice.competitors`（表列） | insight | 竞品列表背景 | 🟡 可选 |
 | `foundation.aligned_entities[0:50]` | insight | 实体热度 + 情感 | 🔴 必需 |
 | `foundation.aligned_entities[].original_terms[0:5]` | insight | 用户原话(Top 5 实体) | 🟡 强烈推荐(evidence 引用) |
 | `foundation.aligned_entities[].organic_sentiment` | insight | 非推广情感(真实痛点) | 🔴 必需 |

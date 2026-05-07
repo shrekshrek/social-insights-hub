@@ -297,12 +297,12 @@ interface SliceFoundation {
 
 interface SliceResultData {
   meta?: {
-    monitor_id: number
-    generated_at: string
-    subject?: string | null
-    competitors?: string[]
+    /** 运行参数：weights / scope.platforms+keywords / spam_config / task_diagnostics。
+     * subject/competitors/monitor_id/generated_at/scope.included_task_ids 已升格到列或 AnalysisJob */
     weights_used?: Record<string, number>
-    scope?: Record<string, unknown>
+    scope?: { platforms?: string[]; keywords?: string[] }
+    task_diagnostics?: unknown
+    spam_config?: { threshold: number }
   }
   foundation?: SliceFoundation
   layers?: SliceLayers
@@ -364,6 +364,10 @@ interface MonitorSlice{
   monitor_id: number
   user_id: number
   included_task_ids: number[]
+  /** 聚焦切片的主体品牌名（null = 无 Focus，不生成 Focus 报告） */
+  subject: string | null
+  /** 聚焦切片的竞品品牌名列表 */
+  competitors: string[]
   result_data: SliceResultData
   created_at: string
   updated_at: string
@@ -459,7 +463,8 @@ const stage2 = computed(() => pipeline.value?.stage2 || null)
 const stage3 = computed(() => pipeline.value?.stage3 || null)
 
 const meta = computed(() => sliceResult.value?.meta || null)
-const competitors = computed(() => (meta.value?.competitors || []))
+// subject / competitors 已升格为 SocialSlice 表列（与 result_data 解耦）
+const competitors = computed(() => (slice.value?.competitors || []))
 const foundation = computed(() => sliceResult.value?.foundation || null)
 const layers = computed(() => sliceResult.value?.layers || null)
 const reports = computed(() => sliceResult.value?.reports || null)
@@ -830,7 +835,7 @@ const productLineHealth = computed(() => focus.value?.product_line_health || nul
 const platformScissors = computed(() => focus.value?.platform_scissors || null)
 const gapData = computed(() => focus.value?.gap || null)
 
-const subject = computed(() => (meta.value?.subject || '').toString().trim())
+const subject = computed(() => (slice.value?.subject || '').toString().trim())
 const showFocusLayer = computed(() => Boolean(subject.value))
 const showFocusReport = computed(() => Boolean(subject.value))
 

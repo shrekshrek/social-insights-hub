@@ -274,6 +274,8 @@ class ProjectSliceResponse(CustomBaseModel):
     monitor_id: int
     user_id: int
     included_task_ids: list[int]
+    subject: str | None = None
+    competitors: list[str] = Field(default_factory=list)
     status: str
     result_data: dict | None = None
     stats: dict | None = None

@@ -382,6 +382,8 @@ async def create_monitor_slice(
         monitor_id=monitor_id,
         user_id=current_user_id,
         included_task_ids=task_ids,
+        subject=subject,
+        competitors=list(competitors or []),
         result_data=slice_result,
     )
     db.add(slice_record)

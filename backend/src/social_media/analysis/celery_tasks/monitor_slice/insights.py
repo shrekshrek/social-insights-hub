@@ -1051,7 +1051,7 @@ def _build_focus(
 
 def build_slice_layers(
     *,
-    meta: dict[str, Any],
+    subject: str | None,
     overview: dict[str, Any],
     freshness: dict[str, Any] | None,
     entities_aligned: list[dict[str, Any]],
@@ -1064,11 +1064,10 @@ def build_slice_layers(
 
     说明：
     - 输出结构与 PROJECT_SLICE_PIPELINE_FINAL.md 对齐，但保持 KISS：先覆盖核心指标。
-    - Focus 仅在 meta.subject 存在时返回。
+    - Focus 仅在 subject 非空时返回（subject 由调用方从 SocialSlice.subject 列读取）。
     - time_distribution / kol_voices 由 Stage 1 预计算，此处透传。
     """
-    subject_raw = (meta or {}).get("subject")
-    subject = str(subject_raw).strip() if subject_raw is not None else ""
+    subject = (subject or "").strip()
 
     landscape = _build_landscape(
         entities_aligned=entities_aligned,

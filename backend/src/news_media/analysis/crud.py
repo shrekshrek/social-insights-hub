@@ -1,28 +1,13 @@
-"""新闻切片 CRUD"""
+"""新闻切片 CRUD
+
+切片创建走 `service.initialize_slice`（同步落 stage1：meta + descriptive），
+此处仅提供查询 / 删除。
+"""
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.news_media.analysis.models import NewsSlice
-
-
-async def create_news_slice(
-    db: AsyncSession,
-    monitor_id: int,
-    name: str,
-    included_task_ids: list[int],
-    user_id: int,
-) -> NewsSlice:
-    slice_obj = NewsSlice(
-        name=name,
-        monitor_id=monitor_id,
-        included_task_ids=included_task_ids,
-        user_id=user_id,
-    )
-    db.add(slice_obj)
-    await db.commit()
-    await db.refresh(slice_obj)
-    return slice_obj
 
 
 async def get_news_slice(

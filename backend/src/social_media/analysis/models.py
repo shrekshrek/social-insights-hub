@@ -17,6 +17,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    text,
 )
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -167,6 +168,23 @@ class SocialSlice(Base):
         JSON,
         nullable=False,
         comment="参与合并的任务ID列表",
+    )
+
+    subject: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment=(
+            "聚焦切片的主体品牌名（None=无 Focus，不生成 Focus 报告与 SWOT/Gap 图表）。"
+            "驱动 Stage3 Focus 报告生成 + entity role 硬绑定。"
+        ),
+    )
+
+    competitors: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::json"),
+        comment="聚焦切片的竞品品牌名列表（subject 为 None 时应为空）",
     )
 
     status: Mapped[str] = mapped_column(

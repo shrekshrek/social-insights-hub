@@ -237,12 +237,14 @@
 
       <!-- 调整建议 -->
       <div v-if="probeReview.refinement_suggestions?.length" class="space-y-2">
-        <h4 class="text-xs font-medium text-gray-500">AI 调整建议（默认采纳，可逐条改词/删除/跳过）</h4>
+        <h4 class="text-xs font-medium text-gray-500">
+          {{ readonly ? 'AI 调整建议（历史记录，仅供参考）' : 'AI 调整建议（默认采纳，可逐条改词/删除/跳过）' }}
+        </h4>
         <div
           v-for="(s, i) in probeReview.refinement_suggestions"
           :key="i"
           class="text-sm p-2.5 rounded space-y-2 transition-colors"
-          :class="rowBg(decisions[i]?.action)"
+          :class="readonly ? 'bg-gray-50 dark:bg-gray-800' : rowBg(decisions[i]?.action)"
         >
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-gray-500 line-through">{{ s.original_keyword }}</span>
@@ -251,7 +253,7 @@
             <UBadge v-else variant="subtle" size="sm" color="error" class="shrink-0">建议移除</UBadge>
             <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(s.platform) }}</UBadge>
 
-            <div class="ml-auto flex items-center gap-1">
+            <div v-if="!readonly" class="ml-auto flex items-center gap-1">
               <UButton
                 size="xs"
                 :variant="(decisions[i]?.action ?? 'accept') === 'accept' ? 'solid' : 'ghost'"
@@ -288,7 +290,7 @@
           </div>
 
           <UInput
-            v-if="decisions[i]?.action === 'edit'"
+            v-if="!readonly && decisions[i]?.action === 'edit'"
             v-model="decisions[i]!.customKeyword"
             placeholder="输入新关键词，留空 = 删除任务"
             size="xs"
@@ -348,6 +350,9 @@ const props = defineProps<{
   dimensionNames?: string[]
   /** 当前策略关联的 SocialMonitor ID，用于失败任务横幅深链跳转到监测项目页 */
   socialMonitorId?: number | null
+  /** 只读模式：探测阶段已结束（status > probing 或无编辑权限）时为 true，
+   *  此时调整建议区域隐藏 per-item 动作按钮，仅作历史展示 */
+  readonly?: boolean
 }>()
 
 /** 失败的社媒任务计数：方案 B 下这些任务阻塞 all_analyzed，需要 retry 或人工删除 */

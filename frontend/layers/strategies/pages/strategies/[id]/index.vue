@@ -301,6 +301,7 @@
           :task-dimension-map="taskDimensionMap"
           :dimension-names="dimensionNames"
           :social-monitor-id="strategy.social_monitor_id"
+          :readonly="!canEdit || strategy.status !== 'probing'"
         />
 
         <div v-if="canEdit && probeData.probeReview && strategy.status === 'probing'" class="flex items-center gap-3 mt-4">

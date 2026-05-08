@@ -3587,13 +3587,16 @@ async def _run_probe_review(
         research_design = strategy.research_design or {}
         brief = strategy.brand_brief
 
-        # 查询当前 strategy 下所有活跃 probe task 的 (keyword, platform_name) 元组，
-        # 供 LLM 校验建议词不与已有任务重复。必须查 DB 实际任务，而非从 data_plan 派生
+        # 查询当前 strategy 下所有活跃 probe task 的 (keyword, platform_code) 元组，
+        # 供 LLM 校验建议词不与已有任务重复。必须查 DB 实际任务而非从 data_plan 派生
         # ——data_plan 在 refine_probe 时不更新，会 stale。
+        # 使用 Platform.code（如 xhs/dy）而非 Platform.name（如 小红书/抖音），
+        # 因为 task_summary 的 platform 字段是 .code（见 _build_social_probe_summaries
+        # 第 3096 行 task.platform.code），三处都用 code 才能让 LLM 字符串比对生效。
         from src.social_media.monitors.models import Platform as _Platform
 
         active_tasks_rows = await db.execute(
-            select(SocialTask.keywords, _Platform.name)
+            select(SocialTask.keywords, _Platform.code)
             .join(_Platform, SocialTask.platform_id == _Platform.id)
             .where(and_(
                 SocialTask.strategy_id == strategy.id,

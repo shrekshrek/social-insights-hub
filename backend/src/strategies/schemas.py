@@ -43,8 +43,8 @@ class AudienceSegment(CustomBaseModel):
 
     behavior_signals 是开放结构，不预设"渠道偏好"或"决策驱动"二分。可以是平台名
     （"小红书"）、决策模式（"看 Gartner 报告"）、触媒习惯（"短视频获取信息"）、
-    讨论场景（"宝妈群口口相传"）。下游 research_design_chain 自己判断如何使用：
-    含具体平台名 → 影响 platform 选择；含主题/话题词 → 影响 keyword 设计。
+    讨论场景（"宝妈群口口相传"）。受众画像供切片/Insight 链从已采集帖子的内容信号
+    反推使用，不作为 data_plan 拆分依据（详见 research_design_chain.py §1.5）。
     """
 
     label: str = Field(..., min_length=1, description="受众标签（人群名/角色名/群体名）")
@@ -71,7 +71,7 @@ class BrandBrief(CustomBaseModel):
     # 经典策略 Brief Framework 元素（全 Optional，brief 未提及时为 None）
     target_audiences: list[AudienceSegment] | None = Field(
         None,
-        description="受众/利益相关方画像（B2C/B2B/公益/危机均通用），下游用于 keyword/platform 差异化",
+        description="受众/利益相关方画像（B2C/B2B/公益/危机均通用），受众识别由切片/Insight 链从内容反推",
     )
     audience_insights: list[str] | None = Field(
         None,

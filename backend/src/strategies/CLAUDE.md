@@ -111,6 +111,7 @@ draft → planned → probing → collecting → ready ┬─ [campaign_strategy
 - **研究主题锚定优先于泛属性词**：品牌关键词默认采用"品牌 + 研究主题/事件锚"（如 "3M 车衣"、"索尼 降噪耳机"），不要依赖 LLM 判断品牌"广谱 vs 专精"，统一加锚即可
 - **维度词汇隔离**：brand_voice / consumer_voice / competitive / media_narrative / industry 各自有严格的词汇边界
 - **维度归属唯一性**：主品归 consumer_voice、竞品归 competitive，**同一品牌不在两个维度的 keywords 中重复出现**；维度命名应只反映单一 dimension type（dimension_name 与 RQ.dimension 一一对应），避免"主品+竞品塞同一维度"导致重复采集
+- **采集指纹唯一性**：data_plan 中任意两个维度的 `(platforms 集合, keywords 集合)` 元组必须不同。受众/情绪/话题等只能从内容判定的差异属于切片或分析阶段的职责，不通过 data_plan 拆分（拆了元组相同纯翻倍成本）。受众拆分的具体规则见 [`research_design_chain.py`](../llm/chains/strategy/research_design_chain.py) §1.5
 - **评估维度 ≠ 采集主题**：brief_parser 以 `(评估维度：X、Y、Z)` 标注的词是**分析框架**，归属于 RQ 表述 + 切片分析阶段（从 UGC 提取），**禁止作 keyword 主题或附加词**；keyword 一律使用统一主题锚（品类/事件/场景/趋势）
 - **同维度结构语义双重一致**：同维度所有品牌关键词共享主题锚，召回数据落在同一研究主题范围，保证横向对比公平
 - **情绪中立**：同维度关键词需覆盖正/中/负三类情绪表达

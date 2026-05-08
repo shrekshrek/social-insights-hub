@@ -291,6 +291,7 @@
         </template>
 
         <ProbeReportPanel
+          ref="probePanelRef"
           :social-tasks="probeData.socialTasks"
           :news-tasks="probeData.newsTasks"
           :analyzed-count="probeData.analyzedCount"
@@ -579,6 +580,8 @@ import type {
   SliceBlueprintItem,
   AdjustSliceItem,
   OutputType,
+  SocialRefinementItem,
+  NewsRefinementItem,
 } from '../../../types'
 import type { BrandStrategyStage, MarketReportStage } from '../../../composables/useStrategiesApi'
 import { STATUS_MAP, STATUS_ORDER, formatDate, CHANNEL_LABELS } from '../../../composables/useStrategyConstants'
@@ -898,35 +901,40 @@ const handleApproveProbe = async () => {
   }
 }
 
+/** ProbeReportPanel 通过 defineExpose 暴露的方法签名 */
+interface ProbePanelExposed {
+  buildRefinements: () => {
+    social: SocialRefinementItem[]
+    news: NewsRefinementItem[]
+  }
+  decisionsSummary: () => string
+}
+const probePanelRef = ref<ProbePanelExposed | null>(null)
+
 const handleRefineProbe = async () => {
-  const suggestions = probeData.probeReview?.refinement_suggestions
-  if (!suggestions?.length) return
+  if (!probePanelRef.value) return
 
-  // 按平台分流：news_media 走 news_refinements，其他走社媒 refinements
-  const socialSuggestions = suggestions.filter(s => s.platform !== 'news_media')
-  const newsSuggestions = suggestions.filter(s => s.platform === 'news_media')
+  const { social, news } = probePanelRef.value.buildRefinements()
+  const totalCount = social.length + news.length
 
-  const detail = suggestions
-    .map(s => `${s.original_keyword} → ${s.suggested_keyword ?? '(移除)'}`)
-    .join('、')
+  if (!totalCount) {
+    const { $confirm } = useNuxtApp()
+    await $confirm('未选择任何调整项（全部"保留原状"）。如需进入全量采集，请点击"忽略问题，继续采集"按钮。')
+    return
+  }
+
+  const detail = probePanelRef.value.decisionsSummary()
   const { $confirm } = useNuxtApp()
   const confirmed = await $confirm(
-    `将调整 ${suggestions.length} 个关键词（社媒 ${socialSuggestions.length} / 新闻 ${newsSuggestions.length}）：${detail}，确定继续？`,
+    `将调整 ${totalCount} 个任务（社媒 ${social.length} / 新闻 ${news.length}）：${detail}，确定继续？`,
   )
   if (!confirmed) return
 
   refineProbeLoading.value = true
   try {
     const result = await strategiesApi.refineProbe(strategyId.value, {
-      social_refinements: socialSuggestions.map(s => ({
-        task_id: s.task_id,
-        new_keyword: s.suggested_keyword,
-        platform: s.platform,
-      })),
-      news_refinements: newsSuggestions.map(s => ({
-        task_id: s.task_id,
-        new_keyword: s.suggested_keyword,
-      })),
+      social_refinements: social,
+      news_refinements: news,
     })
     strategy.value = result.strategy
     probeData.probeReview = null

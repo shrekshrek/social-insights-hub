@@ -94,8 +94,12 @@ SINGLE_TASK_SYSTEM_TEMPLATE = """你是一位研究设计顾问，负责评估�
 
 **替换关键词必须遵守研究设计的维度规则**：
 - **维度词汇隔离**：brand_voice 只用品牌自发声相关词（官方账号/Campaign名），competitive 只用竞品品牌词，consumer_voice 可用「主品名+评价/主题词」或通用需求词（不与竞品混用），media_narrative 用事件+报道类词，industry 只用品类通用词——替换关键词不得跨维度混入不属于该维度的词汇
+- **competitive 维度严格不含主品名**：若当前任务在 competitive 维度，建议词**禁止包含 subject（主品名/Subject 字段中的任何一项）**。即使初始关键词召回缺主品对比内容，也不能通过"加主品名"解决——主品+竞品同时在 competitive keyword 中会破坏维度归属唯一性、且与同维度其他单品牌 keyword 结构不对等。竞品 keyword 召回不到对比内容时，正确处理是换主题锚或建议移除该平台，**不是加主品名**
+- **采集指纹唯一性**：建议的 (suggested_keyword, platform) 元组**不得与本研究设计中已有任何 task 的 (keyword, platform) 元组完全相同**（输入会列出所有现存 task 的元组清单）——否则会创建完全重复的采集任务。若想让某 dim 召回类似内容，必须用**字面不同但语义相关**的词（如"X MFGM 体验" vs 已有"X MFGM"）
+- **评估维度禁止作 keyword 主题/附加词**：若研究背景中标注了「评估维度：A、B、C」（消费者用于评价/对比品牌的分析框架词），这些词归属 RQ 表述与切片分析阶段，**禁止作 keyword 主题或附加词**。例：标注含"成分认知"、"价值感知"，则"X 成分 认知"、"X 价值感知"等都不允许——keyword 一律使用品类锚/事件锚/场景锚/趋势锚
 - **研究主题锚定优先于泛属性词**：替换关键词**默认采用「品牌/主体 + 研究主题/核心事件词」形式**（如"3M 车衣"、"蔚来 固态电池"、"索尼 降噪耳机"、"瑞幸 9.9退场"），而非裸品牌名或"品牌 + 泛评价词"（如"怎么样/测评/体验/价格/吐槽"）。主题锚的价值在于**让同维度所有品牌关键词结构对齐、召回数据落在同一话题范围内**——尤其对广谱品牌（业务横跨多品类，如 3M、索尼、西门子），裸名会引入大量跨领域噪音；对专精品牌加锚略减召回量但不损精度，是保持横向一致性的可接受成本。不要判断品牌"是否广谱"，统一加锚即可。只有当研究主题本身无合适锚词（如目标就是观察品牌整体声量）才退化为裸名；泛评价词仅作最后兜底
 - **同维度内结构与语义双重一致**：本维度所有品牌关键词应采用相同的「品牌 + 主题锚」结构，召回数据落在同一研究主题范围内。若本维度其它关键词已加主题锚（输入中会列出），替换建议必须采用相同或等价的锚词，不得单独用裸名或换成不同主题的锚词，否则破坏横向对比基准
+- **维度 dim 类型不偏移**：替换 keyword 不能改变本 dim 的语义性质。例：industry/media_narrative 维度替换词应保持品类/媒体视角，**不要换成 brand-specific 词**（会让维度从"行业大盘"变成"主品报道"，污染下游分析）
 
 **竞品维度的平台对称保护**：若当前 fail 任务属于竞品维度（competitive），且其所在平台同时被主品 UGC 维度（consumer_voice）使用，应优先尝试换词（调整 suggested_keyword）而非建议移除该平台（suggested_keyword=null）。主品和竞品在相同平台采集是横向对比的基础，轻易移除竞品在某平台的任务会破坏数据对称性，导致后续对比结论失真。只有在确认该平台对竞品研究完全无效（无论如何换词都无法召回相关内容）时，才允许建议移除。
 
@@ -150,8 +154,15 @@ def format_single_task_probe_review_inputs(
     research_design: dict,
     task: dict,
     brief: dict | None = None,
+    existing_task_tuples: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """格式化单任务探测审查输入（供并行调用使用）"""
+    """格式化单任务探测审查输入（供并行调用使用）
+
+    Args:
+        existing_task_tuples: 当前 strategy 下所有活跃 (keyword, platform) 元组。
+            供 LLM 校验建议词不与已有任务重复。**调用方必须从 DB 查活跃 task 构造**，
+            不能从 data_plan 派生——data_plan 在 refine_probe 时不会更新，会 stale。
+    """
     task_dim_map = research_design.get("_task_dimension_map") or {}
     data_plan = research_design.get("data_plan", [])
     all_rqs = research_design.get("research_questions", [])
@@ -189,6 +200,15 @@ def format_single_task_probe_review_inputs(
     understanding = research_design.get("understanding_summary", "")
     if understanding:
         lines.append(f"需求理解：{understanding}")
+
+    # 注入所有现存 social_media task 的 (keyword, platform) 元组清单，
+    # 供 LLM 校验建议词不与已有任务重复（避免创建完全相同的采集任务）
+    if existing_task_tuples:
+        tuple_strs = [f"({kw}, {plat})" for kw, plat in existing_task_tuples]
+        lines.append(
+            "已有 task 元组清单（建议词的 (suggested_keyword, platform) 必须与下列**全部不同**）："
+        )
+        lines.append("、".join(tuple_strs))
 
     research_design_section = "\n".join(lines)
 

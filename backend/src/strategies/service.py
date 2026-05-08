@@ -3587,6 +3587,24 @@ async def _run_probe_review(
         research_design = strategy.research_design or {}
         brief = strategy.brand_brief
 
+        # 查询当前 strategy 下所有活跃 probe task 的 (keyword, platform_name) 元组，
+        # 供 LLM 校验建议词不与已有任务重复。必须查 DB 实际任务，而非从 data_plan 派生
+        # ——data_plan 在 refine_probe 时不更新，会 stale。
+        from src.social_media.monitors.models import Platform as _Platform
+
+        active_tasks_rows = await db.execute(
+            select(SocialTask.keywords, _Platform.name)
+            .join(_Platform, SocialTask.platform_id == _Platform.id)
+            .where(and_(
+                SocialTask.strategy_id == strategy.id,
+                SocialTask.phase == "probe",
+                SocialTask.is_deleted.is_(False),
+            ))
+        )
+        existing_task_tuples: list[tuple[str, str]] = [
+            (kw, plat) for kw, plat in active_tasks_rows.all() if kw and plat
+        ]
+
         job = await create_analysis_job_async(
             db,
             social_monitor_id=strategy.social_monitor_id,
@@ -3604,6 +3622,7 @@ async def _run_probe_review(
                 research_design=research_design,
                 task=task_summary,
                 brief=brief,
+                existing_task_tuples=existing_task_tuples,
             )
             t0 = time.time()
             try:

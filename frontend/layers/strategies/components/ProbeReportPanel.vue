@@ -237,20 +237,65 @@
 
       <!-- 调整建议 -->
       <div v-if="probeReview.refinement_suggestions?.length" class="space-y-2">
-        <h4 class="text-xs font-medium text-gray-500">AI 调整建议</h4>
+        <h4 class="text-xs font-medium text-gray-500">AI 调整建议（默认采纳，可逐条改词/删除/跳过）</h4>
         <div
           v-for="(s, i) in probeReview.refinement_suggestions"
           :key="i"
-          class="text-sm p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded"
+          class="text-sm p-2.5 rounded space-y-2 transition-colors"
+          :class="rowBg(decisions[i]?.action)"
         >
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="text-gray-500 line-through">{{ s.original_keyword }}</span>
             <UIcon name="i-heroicons-arrow-right" class="text-gray-400 text-xs shrink-0" />
             <span v-if="s.suggested_keyword" class="font-medium text-amber-700 dark:text-amber-300">{{ s.suggested_keyword }}</span>
             <UBadge v-else variant="subtle" size="sm" color="error" class="shrink-0">建议移除</UBadge>
             <UBadge variant="subtle" size="sm" color="neutral" class="shrink-0">{{ platformLabel(s.platform) }}</UBadge>
+
+            <div class="ml-auto flex items-center gap-1">
+              <UButton
+                size="xs"
+                :variant="(decisions[i]?.action ?? 'accept') === 'accept' ? 'solid' : 'ghost'"
+                color="primary"
+                @click="setAction(i, 'accept')"
+              >
+                采纳
+              </UButton>
+              <UButton
+                size="xs"
+                :variant="decisions[i]?.action === 'edit' ? 'solid' : 'ghost'"
+                color="primary"
+                @click="setAction(i, 'edit')"
+              >
+                改词
+              </UButton>
+              <UButton
+                size="xs"
+                :variant="decisions[i]?.action === 'delete' ? 'solid' : 'ghost'"
+                color="error"
+                @click="setAction(i, 'delete')"
+              >
+                删除任务
+              </UButton>
+              <UButton
+                size="xs"
+                :variant="decisions[i]?.action === 'skip' ? 'solid' : 'ghost'"
+                color="neutral"
+                @click="setAction(i, 'skip')"
+              >
+                保留原状
+              </UButton>
+            </div>
           </div>
-          <p v-if="s.reason" class="text-xs text-gray-500 mt-1">{{ s.reason }}</p>
+
+          <UInput
+            v-if="decisions[i]?.action === 'edit'"
+            v-model="decisions[i]!.customKeyword"
+            placeholder="输入新关键词，留空 = 删除任务"
+            size="xs"
+            class="w-full"
+          />
+
+          <p v-if="s.reason" class="text-xs text-gray-500">{{ s.reason }}</p>
         </div>
       </div>
     </div>
@@ -258,8 +303,16 @@
 </template>
 
 <script setup lang="ts">
-import type { SocialProbeTaskStatus, NewsProbeTaskStatus, ProbeReviewResult, ProbeAssessment } from '../types'
+import type { SocialProbeTaskStatus, NewsProbeTaskStatus, ProbeReviewResult, ProbeAssessment, SocialRefinementItem, NewsRefinementItem } from '../types'
 import { platformLabel } from '../composables/useStrategyConstants'
+
+/** 用户对每条 AI 建议的处置 */
+type DecisionAction = 'accept' | 'edit' | 'delete' | 'skip'
+interface Decision {
+  action: DecisionAction
+  /** edit 模式下用户输入的自定义关键词 */
+  customKeyword?: string
+}
 
 const VERDICT_MAP = {
   all_pass: {
@@ -393,6 +446,103 @@ const socialTaskIconColor = (t: SocialProbeTaskStatus): string => {
   if (t.has_analysis) return 'text-green-500'
   return 'text-gray-400'
 }
+
+/** 用户对 AI 调整建议的逐条处置（key = suggestion 在数组中的索引）
+ *
+ * 默认行为：所有建议初始为 'accept'，与之前"整批接受"语义一致。
+ * 用户可通过按钮切换 edit/delete/skip 进行 per-item 控制。
+ * probeReview 变化时（如新一轮 review）自动重置。
+ */
+const decisions = reactive<Record<number, Decision>>({})
+
+watch(
+  () => props.probeReview?.refinement_suggestions,
+  (suggestions) => {
+    // 清空旧 decisions：用 length=0 清空 + 重新填充，避免 dynamic delete
+    Object.keys(decisions).forEach((key) => {
+      decisions[Number(key)] = { action: 'accept' }
+    })
+    if (!suggestions?.length) return
+    // 重置为新一轮建议，默认全部 accept
+    suggestions.forEach((_, i) => {
+      decisions[i] = { action: 'accept' }
+    })
+  },
+  { immediate: true },
+)
+
+const setAction = (i: number, action: DecisionAction) => {
+  if (!decisions[i]) decisions[i] = { action }
+  else decisions[i].action = action
+}
+
+const rowBg = (action?: DecisionAction): string => {
+  switch (action) {
+    case 'edit': return 'bg-blue-50 dark:bg-blue-900/20'
+    case 'delete': return 'bg-red-50 dark:bg-red-900/20'
+    case 'skip': return 'bg-gray-100 dark:bg-gray-800'
+    case 'accept':
+    default:
+      return 'bg-amber-50 dark:bg-amber-900/20'
+  }
+}
+
+/** 根据用户决策构造 refine_probe API 的 payload。
+ *
+ * - skip: 不进 list（保留任务原状）
+ * - accept: 用 AI 的 suggested_keyword
+ * - edit: 用用户自定义词；trim 后为空则归一化为 null = 删除任务
+ * - delete: new_keyword 强制为 null = 删除任务
+ *
+ * 返回按 channel 拆分的两个数组，供父组件直接传入 refine API。
+ */
+const buildRefinements = (): { social: SocialRefinementItem[]; news: NewsRefinementItem[] } => {
+  const review = props.probeReview
+  if (!review?.refinement_suggestions?.length) return { social: [], news: [] }
+
+  const social: SocialRefinementItem[] = []
+  const news: NewsRefinementItem[] = []
+
+  review.refinement_suggestions.forEach((s, i) => {
+    const decision = decisions[i] ?? { action: 'accept' as DecisionAction }
+    if (decision.action === 'skip') return
+
+    let new_keyword: string | null
+    if (decision.action === 'accept') new_keyword = s.suggested_keyword || null
+    else if (decision.action === 'edit') new_keyword = (decision.customKeyword ?? '').trim() || null
+    else /* delete */ new_keyword = null
+
+    if (s.platform === 'news_media') {
+      news.push({ task_id: s.task_id, new_keyword })
+    } else {
+      social.push({ task_id: s.task_id, new_keyword, platform: s.platform })
+    }
+  })
+
+  return { social, news }
+}
+
+/** 用户决策的可读 summary（确认对话框展示用）：仅含非 skip 项 */
+const decisionsSummary = (): string => {
+  const review = props.probeReview
+  if (!review?.refinement_suggestions?.length) return ''
+
+  const parts: string[] = []
+  review.refinement_suggestions.forEach((s, i) => {
+    const decision = decisions[i] ?? { action: 'accept' as DecisionAction }
+    if (decision.action === 'skip') return
+
+    let target: string
+    if (decision.action === 'accept') target = s.suggested_keyword || '(移除)'
+    else if (decision.action === 'edit') target = (decision.customKeyword ?? '').trim() || '(移除)'
+    else target = '(移除)'
+
+    parts.push(`${s.original_keyword} → ${target}`)
+  })
+  return parts.join('、')
+}
+
+defineExpose({ buildRefinements, decisionsSummary })
 
 /** 按维度分组的审查结果（用于 probeReview 展示） */
 const assessmentDimensionGroups = computed((): Record<string, { assessments: ProbeAssessment[], failCount: number }> | null => {

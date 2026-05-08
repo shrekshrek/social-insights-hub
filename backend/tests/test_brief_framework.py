@@ -4,7 +4,6 @@
 - brief_parser_chain.parse_brief_parser_response 对 4 个 framework 字段的处理
 - research_design_chain.format_research_design_inputs 把字段注入 prompt
 - strategies.service._check_missing_competitive_social_dimension（升级后读结构化字段）
-- strategies.service._check_multi_audience_no_keyword_diff（新增）
 
 跨领域 fixtures：FMCG / B2B SaaS / 公益反诈 — 验证 schema 通用性。
 """
@@ -15,7 +14,6 @@ from src.llm.chains.strategy.brief_parser_chain import parse_brief_parser_respon
 from src.llm.chains.strategy.research_design_chain import format_research_design_inputs
 from src.strategies.service import (
     _check_missing_competitive_social_dimension,
-    _check_multi_audience_no_keyword_diff,
     _compute_research_design_advisories,
 )
 
@@ -271,76 +269,13 @@ def test_missing_competitive_not_triggered_for_news_only_brief():
     assert _check_missing_competitive_social_dimension(design, brief) is None
 
 
-def test_multi_audience_no_diff_triggered_for_fmcg():
-    """FMCG 双人群 + signals 差异化 + dim_name 未含人群标签 → 触发"""
-    design = _make_design_with_dims([
-        ("品牌声量", "consumer_voice", "social_media"),
-    ])
-    brief = {
-        "target_audiences": [
-            {"label": "RA", "behavior_signals": ["小红书"]},
-            {"label": "BBF", "behavior_signals": ["抖音"]},
-        ],
-    }
-    result = _check_multi_audience_no_keyword_diff(design, brief)
-    assert result is not None
-    assert result["code"] == "multi_audience_no_keyword_diff"
-
-
-def test_multi_audience_no_diff_not_triggered_when_already_split():
-    """dim_name 含人群 label → 已经拆了，不触发"""
-    design = _make_design_with_dims([
-        ("consumer_voice_RA", "consumer_voice", "social_media"),
-        ("consumer_voice_BBF", "consumer_voice", "social_media"),
-    ])
-    brief = {
-        "target_audiences": [
-            {"label": "RA", "behavior_signals": ["小红书"]},
-            {"label": "BBF", "behavior_signals": ["抖音"]},
-        ],
-    }
-    assert _check_multi_audience_no_keyword_diff(design, brief) is None
-
-
-def test_multi_audience_no_diff_not_triggered_for_single_audience():
-    """单受众 → 不触发"""
-    design = _make_design_with_dims([("品牌声量", "consumer_voice", "social_media")])
-    brief = {"target_audiences": [{"label": "X", "behavior_signals": ["小红书"]}]}
-    assert _check_multi_audience_no_keyword_diff(design, brief) is None
-
-
-def test_multi_audience_no_diff_not_triggered_when_signals_missing():
-    """多人群但其中一个 signals 为空 → 不触发（差异化信号不足）"""
-    design = _make_design_with_dims([("品牌声量", "consumer_voice", "social_media")])
-    brief = {
-        "target_audiences": [
-            {"label": "RA", "behavior_signals": ["小红书"]},
-            {"label": "BBF"},  # 无 behavior_signals
-        ],
-    }
-    assert _check_multi_audience_no_keyword_diff(design, brief) is None
-
-
-def test_multi_audience_no_diff_not_triggered_for_news_only():
-    """纯新闻 brief 无 consumer_voice/competitive 维度 → 不触发（规则不适用）"""
-    design = _make_design_with_dims([("媒体报道", "media_narrative", "news_media")])
-    brief = {
-        "target_audiences": [
-            {"label": "RA", "behavior_signals": ["小红书"]},
-            {"label": "BBF", "behavior_signals": ["抖音"]},
-        ],
-    }
-    assert _check_multi_audience_no_keyword_diff(design, brief) is None
-
-
 def test_compute_advisories_isolates_check_failures():
     """单条规则异常时不应阻塞其他规则——dispatcher 兜底"""
     design = _make_design_with_dims([("品牌声量", "consumer_voice", "social_media")])
     brief = {
         "competitors": ["A"],  # 触发 missing_competitive
-        "target_audiences": "not_a_list",  # 会让 multi_audience check 出错
+        "constraints": "需要做竞品对比",
     }
-    # 异常被吞掉，其他规则仍执行
     advisories = _compute_research_design_advisories(design, brief)
     codes = [a["code"] for a in advisories]
     assert "missing_competitive_social_dimension" in codes

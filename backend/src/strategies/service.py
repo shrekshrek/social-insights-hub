@@ -2498,82 +2498,9 @@ def _check_missing_competitive_social_dimension(
     }
 
 
-def _check_multi_audience_no_keyword_diff(
-    research_design: dict,
-    brand_brief: dict,
-) -> dict | None:
-    """检测 brief 提供多受众且行为信号差异化，但 data_plan 未做关键词/平台差异化。
-
-    所有触发条件全部满足时返回 advisory dict，否则 None：
-    1. brand_brief.target_audiences 含 ≥ 2 个受众
-    2. 至少 2 个受众有非空 behavior_signals（仅 label 描述不算可执行差异化信号）
-    3. data_plan 中无任一 social_media consumer_voice/competitive 维度按受众拆分
-       （判定：维度的 dimension_name 不含任何受众 label 子串，认为未拆）
-
-    与 research_design_chain SYSTEM_TEMPLATE §1.5 的"受众驱动差异化"规则对应——
-    advisory 仅作非阻塞软提示，不强制要求拆维度（用户可能有合理决定不拆，例如
-    behavior_signals 都是 demographic 描述，不构成数据采集层差异）。
-    """
-    audiences = brand_brief.get("target_audiences") or []
-    if len(audiences) < 2:
-        return None
-
-    audiences_with_signals = [
-        a for a in audiences
-        if a.get("behavior_signals") and any(s for s in a.get("behavior_signals", []))
-    ]
-    if len(audiences_with_signals) < 2:
-        return None
-
-    audience_labels = [
-        (a.get("label") or "").strip()
-        for a in audiences_with_signals
-        if (a.get("label") or "").strip()
-    ]
-    if len(audience_labels) < 2:
-        return None
-
-    data_plan = research_design.get("data_plan") or []
-    research_questions = research_design.get("research_questions") or []
-    rq_dim_map = {rq.get("id"): rq.get("dimension") for rq in research_questions}
-
-    # 仅检查 social_media 的 consumer_voice / competitive 维度（这两类是受众差异化的主战场）
-    relevant_dims = [
-        dp for dp in data_plan
-        if (dp.get("channel") or "social_media") == "social_media"
-        and any(rq_dim_map.get(qid) in ("consumer_voice", "competitive")
-                for qid in (dp.get("question_ids") or []))
-    ]
-    if not relevant_dims:
-        return None  # 没有这两类维度（如纯品牌自发声 brief），不适用
-
-    has_audience_split = False
-    for dp in relevant_dims:
-        dim_name = (dp.get("dimension_name") or "")
-        if any(label in dim_name for label in audience_labels):
-            has_audience_split = True
-            break
-
-    if has_audience_split:
-        return None
-
-    return {
-        "code": "multi_audience_no_keyword_diff",
-        "severity": "warning",
-        "message": (
-            f"Brief 提供 {len(audiences_with_signals)} 个受众且行为信号差异化，"
-            "但当前 data_plan 的消费者声音/竞品维度未按受众拆分关键词或平台。"
-            "若不同受众的内容偏好/触媒习惯差异显著，建议把相关维度按受众分组采集"
-            "（如 consumer_voice_受众A + consumer_voice_受众B），避免数据混采。"
-            "若受众间 behavior_signals 仅为人口学描述（年龄/收入），无法驱动采集层差异，可忽略此提示。"
-        ),
-    }
-
-
 # Advisory 检测函数注册表——新增规则在此 append 即可，无需改 dispatcher
 _ADVISORY_CHECKS = [
     _check_missing_competitive_social_dimension,
-    _check_multi_audience_no_keyword_diff,
 ]
 
 

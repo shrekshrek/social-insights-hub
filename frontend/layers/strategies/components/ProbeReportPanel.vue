@@ -20,7 +20,7 @@
       <p class="text-sm text-gray-400">新的探测任务已创建，等待采集...</p>
     </div>
 
-    <!-- 社媒任务失败提示：阻塞探测验证，需 retry 或人工删除 -->
+    <!-- 社媒任务失败提示：阻塞探测验证，可逐条点击"重试"，或在监测项目页人工删除 -->
     <div
       v-if="failedSocialCount > 0 && !probeReview"
       class="p-3 rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20"
@@ -32,10 +32,31 @@
             {{ failedSocialCount }} 个社媒探测任务采集失败，探测验证暂停
           </p>
           <p class="text-xs text-red-600 dark:text-red-300">
-            等待爬虫自动续采，或前往监测项目页手动删除失败任务以继续。删除时请筛选 phase=探测，避免误删全量任务。
+            点击失败卡片右侧的刷新图标重试该任务；若反复失败可前往监测项目页删除（筛选 phase=探测，避免误删全量任务）。
           </p>
+          <div v-if="!readonly" class="flex items-center gap-3 mt-1.5">
+            <UButton
+              size="xs"
+              color="error"
+              variant="soft"
+              icon="i-heroicons-arrow-path"
+              :loading="retryingAll"
+              :disabled="retryingAll"
+              @click="handleRetryAllFailed"
+            >
+              重试全部失败 ({{ failedSocialCount }})
+            </UButton>
+            <NuxtLink
+              v-if="socialMonitorId"
+              :to="`/social-media/monitors/${socialMonitorId}`"
+              class="inline-flex items-center gap-1 text-xs text-red-700 dark:text-red-400 hover:underline"
+            >
+              <UIcon name="i-heroicons-arrow-top-right-on-square" class="size-3.5" />
+              前往监测项目页
+            </NuxtLink>
+          </div>
           <NuxtLink
-            v-if="socialMonitorId"
+            v-else-if="socialMonitorId"
             :to="`/social-media/monitors/${socialMonitorId}`"
             class="inline-flex items-center gap-1 text-xs text-red-700 dark:text-red-400 hover:underline mt-1"
           >
@@ -78,6 +99,19 @@
               <span v-if="t.status === 'failed'" class="text-red-500 shrink-0 ml-auto text-[10px]">
                 {{ formatRelativeTime(t.last_updated_at) }}
               </span>
+              <UButton
+                v-if="t.status === 'failed' && !readonly"
+                size="xs"
+                variant="ghost"
+                color="error"
+                icon="i-heroicons-arrow-path"
+                :loading="!!retryingTaskIds[t.task_id]"
+                :disabled="retryingAll"
+                aria-label="重试此任务"
+                title="重试此任务"
+                class="shrink-0"
+                @click="handleRetryFailed(t)"
+              />
             </div>
           </div>
         </div>
@@ -102,6 +136,19 @@
           <span v-if="t.status === 'failed'" class="text-red-500 shrink-0 ml-auto text-[10px]">
             {{ formatRelativeTime(t.last_updated_at) }}
           </span>
+          <UButton
+            v-if="t.status === 'failed' && !readonly"
+            size="xs"
+            variant="ghost"
+            color="error"
+            icon="i-heroicons-arrow-path"
+            :loading="!!retryingTaskIds[t.task_id]"
+            :disabled="retryingAll"
+            aria-label="重试此任务"
+            title="重试此任务"
+            class="shrink-0"
+            @click="handleRetryFailed(t)"
+          />
         </div>
       </div>
     </div>
@@ -354,6 +401,81 @@ const props = defineProps<{
    *  此时调整建议区域隐藏 per-item 动作按钮，仅作历史展示 */
   readonly?: boolean
 }>()
+
+const emit = defineEmits<{
+  /** 用户点击失败社媒任务卡片的"重试"按钮且后端成功重置后触发，父组件可立即重拉 probe-status */
+  retried: [taskId: number]
+}>()
+
+const { clearTaskData } = useSocialTasks()
+
+/** 正在重试的 task_id 集合：用于按钮 loading 状态，允许多个任务并发重试 */
+const retryingTaskIds = reactive<Record<number, boolean>>({})
+
+/** 批量重试 loading：与单条互斥（批量进行中时单条按钮 disabled） */
+const retryingAll = ref(false)
+
+/** 失败任务重试：底层调 clear-data 把 SocialTask 状态重置为 pending，
+ *  agent 端会按 Pull 模型重新拉取该任务采集。成功后通知父组件立即刷新 probe-status，
+ *  避免等 10s 轮询。
+ *
+ *  clear-data 会硬删 posts/comments + 重置分析状态，对 0 数据的失败任务（probe 阶段
+ *  常见）无害；任务已采过数据时弹确认避免静默删除。错误由 apiRequest 全局 toast。
+ */
+const handleRetryFailed = async (task: SocialProbeTaskStatus) => {
+  if (retryingTaskIds[task.task_id]) return
+  if (task.posts_count > 0) {
+    const { $confirm } = useNuxtApp()
+    const ok = await $confirm(
+      `该任务已采集 ${task.posts_count} 条数据，重试将清空这些数据并重新采集。确定继续？`,
+    )
+    if (!ok) return
+  }
+  retryingTaskIds[task.task_id] = true
+  try {
+    await clearTaskData(task.task_id)
+    emit('retried', task.task_id)
+  } catch {
+    // 错误已 toast，避免重复 reactive 副作用
+  } finally {
+    retryingTaskIds[task.task_id] = false
+  }
+}
+
+/** 批量重试所有失败社媒任务：串行调用避免同时打爆 agent 的 accept_task；
+ *  任何任务有已采数据时一次性确认（不逐条问），错误吞掉继续下一条。
+ *  完成后只 emit 一次 retried 让父刷新。
+ */
+const handleRetryAllFailed = async () => {
+  const failed = props.socialTasks.filter(t => t.status === 'failed')
+  if (!failed.length || retryingAll.value) return
+
+  const totalPosts = failed.reduce((sum, t) => sum + (t.posts_count || 0), 0)
+  const { $confirm } = useNuxtApp()
+  const msg = totalPosts > 0
+    ? `将重试 ${failed.length} 个失败任务，其中已采集的 ${totalPosts} 条数据会被清空并重新采集。确定继续？`
+    : `将重试 ${failed.length} 个失败任务。确定继续？`
+  const ok = await $confirm(msg)
+  if (!ok) return
+
+  retryingAll.value = true
+  try {
+    for (const t of failed) {
+      if (retryingTaskIds[t.task_id]) continue
+      retryingTaskIds[t.task_id] = true
+      try {
+        await clearTaskData(t.task_id)
+      } catch {
+        // 单条失败不阻断后续，toast 已弹
+      } finally {
+        retryingTaskIds[t.task_id] = false
+      }
+    }
+    emit('retried', -1)
+  } finally {
+    retryingAll.value = false
+  }
+}
 
 /** 失败的社媒任务计数：方案 B 下这些任务阻塞 all_analyzed，需要 retry 或人工删除 */
 const failedSocialCount = computed(

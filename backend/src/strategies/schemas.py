@@ -230,6 +230,13 @@ class SocialProbeTaskStatus(CustomBaseModel):
             "failed 任务恒为 False，强制等待 retry 或人工删除"
         ),
     )
+    posts_count: int = Field(
+        0,
+        description=(
+            "该任务当前已采集帖文数，用于前端在失败重试时判断是否需要二次确认"
+            "（clear-data 会硬删 posts/comments，有数据时应提示用户）"
+        ),
+    )
     last_updated_at: datetime | None = Field(
         None,
         description="任务最近更新时间（用于 UI 展示失败时长，如'失败于 5 分钟前'）",

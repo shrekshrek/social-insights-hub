@@ -236,5 +236,7 @@ export const useStrategyPolling = (
     stopCollectionPolling,
     initPollingFromStatus,
     initFromStrategy,
+    /** 立即拉一次 probe-status（不影响轮询节奏），供外部触发刷新（如失败任务重试后） */
+    refreshProbeStatus: pollProbeStatus,
   }
 }

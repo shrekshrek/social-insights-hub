@@ -3068,9 +3068,13 @@ async def _build_social_probe_summaries(
     tasks = result.scalars().all()
 
     # 社媒探测"成功完结"终态（爬虫结束 + 数据可信）。failed 不在此集合：
-    # - agent 启用 enable_checkpoint=1 时支持 auto_retry，failed 不是永久状态
-    # - 等 retry 拿到数据后 status 会推进到 probe_ready / completed，再触发审查
-    # - 永久失败（如账号风控）走人工出口：用户去监测项目页删除该任务
+    # - agent 的 auto_retry 仅本地最多 2 次（MAX_AUTO_RETRY_COUNT），用完后 failed
+    #   即为终态——agent 拉任务只查 status=pending，不会再主动碰 failed 行
+    # - 因此 failed 任务**不会自动恢复**，需要外部介入：
+    #   a) 前端策略页点失败卡片的"重试"图标（调 /social-media/tasks/{id}/clear-data
+    #      把 status 重置为 pending，agent 下次轮询会重新认领）
+    #   b) 用户去监测项目页删除该任务（永久放弃此关键词×平台组合）
+    #   c) 账号问题时由运维在 agent UI 修好账号 + 点继续任务（人工出口）
     # 与新闻探测的非对称设计：新闻 Celery push 模型无 retry 机制，failed 在新闻侧
     # 仍按"保守 pass + 人工核查标注"处理（见 _NEWS_PROBE_TERMINAL）
     _PROBE_OK_TERMINAL_STATUSES = {"probe_ready", "approved", "completed"}
@@ -3096,6 +3100,7 @@ async def _build_social_probe_summaries(
                 platform=task.platform.code if task.platform else "",
                 status=task.status,
                 has_analysis=has_analysis_real or no_data,
+                posts_count=task.posts_count or 0,
                 last_updated_at=task.updated_at,
             )
         )

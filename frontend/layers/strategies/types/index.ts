@@ -190,6 +190,8 @@ export interface SocialProbeTaskStatus {
   status: string
   /** 是否已成功完成可供审查；failed 任务恒为 false（强制等待 retry 或人工删除）*/
   has_analysis: boolean
+  /** 该任务当前已采集帖文数，用于失败重试前判断是否需要二次确认（clear-data 会硬删 posts/comments） */
+  posts_count: number
   /** 任务最近更新时间 ISO string，用于展示"失败于 X 分钟前" */
   last_updated_at: string | null
 }

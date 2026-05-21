@@ -108,8 +108,8 @@
               </td>
               <td class="p-3 text-gray-600 dark:text-gray-400 align-top">顶尖推理深度，单点创意发散和策略思辨能力极强，是最好的"思考伙伴"</td>
               <td class="p-3 text-gray-800 dark:text-gray-200 align-top">
-                <span class="font-semibold text-emerald-700 dark:text-emerald-400">几百条 UGC 一次跑完结构化分析</span>
-                <span class="text-gray-600 dark:text-gray-400">——LLM 只做提取、代码做聚合，统计数字真实可信；跨任务实体自动归一沉淀</span>
+                <span class="font-semibold text-emerald-700 dark:text-emerald-400">几百条原始 UGC 一次跑完结构化分析</span>
+                <span class="text-gray-600 dark:text-gray-400">——LLM 只做提取与判断，统计数字由代码聚合，结论可追到每条原文</span>
               </td>
             </tr>
             <tr>
@@ -122,8 +122,8 @@
               </td>
               <td class="p-3 text-gray-600 dark:text-gray-400 align-top">公开网信息综述能力强，行业报告/学术资料整合迅速，研究类查询体验最佳</td>
               <td class="p-3 text-gray-800 dark:text-gray-200 align-top">
-                <span class="font-semibold text-emerald-700 dark:text-emerald-400">多源数据按策略场景定制</span>
-                <span class="text-gray-600 dark:text-gray-400">——社媒/新闻/行业报告三条链路分别优化，采集前先校准方向再跑全量，产出策略素材而非综述</span>
+                <span class="font-semibold text-emerald-700 dark:text-emerald-400">社媒 / 新闻 / 行业报告三条链路分别调优</span>
+                <span class="text-gray-600 dark:text-gray-400">——社媒拿到 Deep Research 看不见的中文闭源 UGC，新闻按事件维度切片，行业报告 Agent 深读权威源</span>
               </td>
             </tr>
             <tr>
@@ -137,7 +137,7 @@
               <td class="p-3 text-gray-600 dark:text-gray-400 align-top">数据广度与历史回溯无可替代，仪表盘成熟，AI 分析能力深度集成，行业沉淀十年以上</td>
               <td class="p-3 text-gray-800 dark:text-gray-200 align-top">
                 <span class="font-semibold text-emerald-700 dark:text-emerald-400">按品类深度定制的策略生产链路</span>
-                <span class="text-gray-600 dark:text-gray-400">——从 brief 解析到 big idea 整套按垂类场景调优，结论可追溯到原始素材，贴合策略 deck 形态</span>
+                <span class="text-gray-600 dark:text-gray-400">——从 brief 解析到 big idea 整套按垂类调优，结论可追溯到原始素材，贴合策略 deck 形态而非数据仪表盘</span>
               </td>
             </tr>
             <tr>
@@ -151,7 +151,7 @@
               <td class="p-3 text-gray-600 dark:text-gray-400 align-top">任意任务通用执行，零部署即用，新需求即时响应，演进速度快</td>
               <td class="p-3 text-gray-800 dark:text-gray-200 align-top">
                 <span class="font-semibold text-emerald-700 dark:text-emerald-400">项目化资产沉淀 + 生产级稳定</span>
-                <span class="text-gray-600 dark:text-gray-400">——一个项目重复跑会越来越准（不是每次重做），后台并发采集，分析链路稳定可复现</span>
+                <span class="text-gray-600 dark:text-gray-400">——监测项目持续跑、跨任务实体自动归一，后台并发采集，分析链路可复现可审计</span>
               </td>
             </tr>
           </tbody>

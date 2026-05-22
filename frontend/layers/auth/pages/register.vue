@@ -51,10 +51,6 @@
         </UFormField>
       </div>
 
-      <div v-if="errorMsg" class="text-sm text-red-600 text-center bg-red-50 p-3 rounded-md">
-        {{ errorMsg }}
-      </div>
-
       <UButton
         type="submit"
         block
@@ -87,9 +83,9 @@ definePageMeta({
 })
 
 const { register } = useAuthApi();
+const { showError } = useApi();
 
 const loading = ref(false);
-const errorMsg = ref<string | null>(null);
 
 const state = reactive({
   username: '',
@@ -109,7 +105,6 @@ const schema = z.object({
 });
 
 const handleSubmit = async (event: FormSubmitEvent<z.output<typeof schema>>) => {
-  errorMsg.value = null;
   loading.value = true;
   try {
     await register({
@@ -122,11 +117,27 @@ const handleSubmit = async (event: FormSubmitEvent<z.output<typeof schema>>) => 
     await navigateTo('/dashboard');
 
   } catch (e) {
-    const error = e as { data?: { statusMessage?: string; detail?: string; error?: { message: string } } };
-    errorMsg.value = error.data?.error?.message 
-      || error.data?.statusMessage 
-      || error.data?.detail 
-      || '注册失败，请稍后重试';
+    console.error("Register error:", e);
+    const err = e as {
+      data?: { statusMessage?: string; message?: string; detail?: string; error?: { message?: string } };
+      statusMessage?: string;
+      message?: string;
+      statusCode?: number;
+      status?: number;
+    };
+    const status = err.statusCode ?? err.status;
+    const backendMessage =
+      err.data?.error?.message ||
+      err.data?.statusMessage ||
+      err.data?.message ||
+      err.data?.detail ||
+      err.statusMessage ||
+      err.message;
+    const message =
+      status === 409
+        ? "用户名或邮箱已被注册"
+        : backendMessage || "注册失败，请稍后重试";
+    showError(message);
   } finally {
     loading.value = false;
   }

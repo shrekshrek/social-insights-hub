@@ -84,6 +84,7 @@ definePageMeta({
 });
 
 const { login, feishuLogin } = useAuthApi();
+const { showError } = useApi();
 const isLoading = ref(false);
 const isFeishuLoading = ref(false);
 const showPasswordLogin = ref(false);
@@ -104,7 +105,9 @@ async function handleFeishuLogin() {
   isFeishuLoading.value = true;
   try {
     await feishuLogin();
-  } catch {
+  } catch (error) {
+    console.error("Feishu login error:", error);
+    showError("飞书登录跳转失败，请稍后重试");
     isFeishuLoading.value = false;
   }
 }
@@ -119,6 +122,25 @@ async function handleLogin(event: FormSubmitEvent<Schema>) {
     await navigateTo("/dashboard", { replace: true });
   } catch (error) {
     console.error("Login error:", error);
+    const err = error as {
+      data?: { statusMessage?: string; message?: string; detail?: string };
+      statusMessage?: string;
+      message?: string;
+      statusCode?: number;
+      status?: number;
+    };
+    const status = err.statusCode ?? err.status;
+    const backendMessage =
+      err.data?.statusMessage ||
+      err.data?.message ||
+      err.data?.detail ||
+      err.statusMessage ||
+      err.message;
+    const message =
+      status === 401
+        ? "用户名或密码错误"
+        : backendMessage || "登录失败，请稍后重试";
+    showError(message);
   } finally {
     isLoading.value = false;
   }

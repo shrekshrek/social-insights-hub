@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from sqlalchemy import String, func
+from sqlalchemy import String, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 
@@ -18,6 +18,11 @@ class User(Base):
         String(100), unique=True, index=True, nullable=True
     )
     hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # 邮箱验证状态（OAuth 用户默认已验证）
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
 
     # OAuth 字段
     oauth_provider: Mapped[str | None] = mapped_column(

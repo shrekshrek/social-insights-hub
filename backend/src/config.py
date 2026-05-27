@@ -269,6 +269,26 @@ class Settings(BaseSettings):
         default=2.0, description="Hours before accepted task is reset to pending"
     )
 
+    # ========== 腾讯云 SES 邮件配置 ==========
+    SES_SECRET_ID: str | None = Field(default=None, description="腾讯云 SES SecretId")
+    SES_SECRET_KEY: str | None = Field(default=None, description="腾讯云 SES SecretKey")
+    SES_REGION: str = Field(default="ap-hongkong", description="腾讯云 SES 地域")
+    SES_FROM_EMAIL: str = Field(
+        default="noreply@shrek.wang", description="发件人邮箱地址"
+    )
+    # 前端 URL，用于拼接验证链接
+    FRONTEND_URL: str = Field(
+        default="https://shrek.wang", description="前端基础 URL"
+    )
+    # 邮箱验证 token 有效期（秒）
+    EMAIL_VERIFY_TOKEN_EXPIRE_SECONDS: int = Field(
+        default=86400, description="邮箱验证链接有效期（秒），默认 24h"
+    )
+    # 密码重置 token 有效期（秒）
+    PASSWORD_RESET_TOKEN_EXPIRE_SECONDS: int = Field(
+        default=3600, description="密码重置链接有效期（秒），默认 1h"
+    )
+
     # ========== Feishu Configuration ==========
     FEISHU_APP_ID: str | None = Field(
         default=None, description="Feishu app ID for OAuth login and messaging API"

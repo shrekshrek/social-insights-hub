@@ -29,7 +29,7 @@ class UserCreate(CustomBaseModel):
     """
 
     username: str = Field(..., min_length=3, max_length=50, description="用户名")
-    email: EmailStr | None = Field(None, description="邮箱地址（可选）")
+    email: EmailStr = Field(..., description="邮箱地址（必填，用于验证和密码重置）")
     password: str = Field(..., min_length=8, description="密码")
 
     @field_validator("username")
@@ -56,6 +56,7 @@ class UserRead(CustomBaseModel):
     id: int
     username: str
     email: EmailStr | None
+    email_verified: bool = False
     oauth_provider: str | None = None
     avatar_url: str | None = None
     created_at: datetime
@@ -120,3 +121,25 @@ class FeishuCallbackRequest(CustomBaseModel):
 
     code: str = Field(..., description="飞书授权码")
     state: str = Field(..., description="CSRF 防护 state 参数")
+
+
+# --- Password Reset Schemas ---
+
+
+class ForgotPasswordRequest(CustomBaseModel):
+    """忘记密码请求"""
+
+    email: EmailStr = Field(..., description="注册邮箱")
+
+
+class ResetPasswordRequest(CustomBaseModel):
+    """重置密码请求"""
+
+    token: str = Field(..., description="重置 token")
+    new_password: str = Field(..., min_length=8, description="新密码")
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return _validate_password_strength(v)
+

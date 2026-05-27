@@ -124,7 +124,11 @@ export default defineNuxtConfig({
       '/api/v1': 'http://localhost:8000/api/v1'
     },
     // 启用静态资源预压缩（gzip + brotli），减少首屏加载体积 60%+
-    compressPublicAssets: true
+    compressPublicAssets: true,
+    // 信任反向代理（nginx）传来的 X-Forwarded-Proto 等 header，
+    // 确保 useRequestURL() 在生产环境返回 https:// 而不是 http://，
+    // 避免 Nuxt SSR 将相对路径补全为 http:// 绝对 URL 后传给客户端造成 Mixed Content。
+    trustProxy: true,
   },
   extends: [
     './layers/ui-kit',

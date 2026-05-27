@@ -293,7 +293,18 @@ export const useApi = () => {
    * @param options.silent404 - 静默处理 404 错误（不显示 toast），适用于可选数据查询
    */
   const useApiData = <T = unknown>(path: MaybeRef<string>, options: Record<string, unknown> = {}) => {
-    const fullPath = computed(() => buildApiPath(unref(path)))
+    // 服务端：使用内网绝对地址（NUXT_API_BASE_INTERNAL），避免 Nuxt 将相对路径
+    // 补全为 http://frontend:3000/... 后序列化到客户端 payload，造成 Mixed Content。
+    // 客户端：使用相对路径，经浏览器同源补全为 https://...，走 nginx → backend。
+    const fullPath = computed(() => {
+      const p = unref(path)
+      const cleanPath = p.startsWith('/') ? p : `/${p}`
+      if (import.meta.server) {
+        const internal = (config as Record<string, unknown>).apiBaseInternal as string | undefined
+        if (internal) return `${internal}${cleanPath}`
+      }
+      return `${config.public.apiBase}${cleanPath}`
+    })
     const userOnRequest = options.onRequest as ((ctx: unknown) => unknown | Promise<unknown>) | undefined
     const userOnResponseError = options.onResponseError as
       ((ctx: unknown) => unknown | Promise<unknown>) | undefined
@@ -302,7 +313,7 @@ export const useApi = () => {
 
     return useFetch<T>(fullPath, {
       ...options,
-      baseURL: '', // 使用空字符串确保相对路径，避免CORS问题
+      baseURL: '',
       async onRequest(context) {
         const token = await ensureAuthenticated()
 

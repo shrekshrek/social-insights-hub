@@ -1,20 +1,22 @@
+import json
+import logging
+import secrets
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-import secrets
-import logging
-from datetime import timedelta
 
-from src.auth import models, schemas
+from src.auth import models
+from src.auth.security import pwd_context, verify_password
+from src.config import settings
 from src.exceptions import UserAlreadyExists
-from src.auth.security import verify_password, pwd_context
 from src.rbac import service as rbac_service
 from src.rbac.models import SystemRoles, UserRole
 
 logger = logging.getLogger(__name__)
 
 # Redis key 前缀
-EMAIL_VERIFY_PREFIX = "email_verify:"
+INVITE_TOKEN_PREFIX = "invite:"
 PASSWORD_RESET_PREFIX = "password_reset:"
 
 
@@ -68,38 +70,43 @@ async def authenticate_user(
 
 
 async def create_user(
-    db: AsyncSession, user: schemas.UserCreate, role_ids: list[int] | None = None
-):
+    db: AsyncSession,
+    username: str,
+    password: str,
+    email: str | None = None,
+    email_verified: bool = False,
+    role_ids: list[int] | None = None,
+) -> models.User:
     """
-    创建新用户，注册后发送邮箱验证邮件
+    创建新用户（密码登录）。
+
+    调用方负责决定 email_verified：
+    - 邀请注册：True（邀请邮件能送达即证明邮箱真实）
+    - 管理员直建：调用方按场景决定（紧急兜底场景 admin 可直接信任）
+    - email 可为 None，但没有邮箱的用户无法走密码重置流程
     """
-    # Check if user already exists
-    db_user = await get_user_by_username(db, username=user.username)
+    db_user = await get_user_by_username(db, username=username)
     if db_user:
-        raise UserAlreadyExists("username", user.username)
+        raise UserAlreadyExists("username", username)
 
-    # 邮箱唯一性检查
-    db_user = await get_user_by_email(db, email=user.email)
-    if db_user:
-        raise UserAlreadyExists("email", user.email)
+    if email:
+        db_user = await get_user_by_email(db, email=email)
+        if db_user:
+            raise UserAlreadyExists("email", email)
 
-    # Hash the password
-    hashed_password = pwd_context.hash(user.password)
+    hashed_password = pwd_context.hash(password)
 
-    # Create user instance
     db_user = models.User(
-        username=user.username,
-        email=user.email,
+        username=username,
+        email=email,
         hashed_password=hashed_password,
-        email_verified=False,
+        email_verified=email_verified,
     )
 
-    # Add to database
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
 
-    # 分配角色
     if role_ids:
         unique_role_ids = list(dict.fromkeys(role_ids))
         await rbac_service.assign_user_roles(db, db_user.id, unique_role_ids)
@@ -194,65 +201,88 @@ async def get_or_create_feishu_user(
     return db_user
 
 
-# ========== 邮箱验证 ==========
+# ========== 邀请注册 token ==========
 
-async def create_email_verify_token(redis_client, user_id: int) -> str:
-    """生成邮箱验证 token，存入 Redis"""
-    from src.config import settings
+
+async def create_invite_token(
+    redis_client,
+    email: str,
+    default_role_id: int | None = None,
+) -> str:
+    """生成邀请 token，存入 Redis。value 是 JSON {email, default_role_id?}。"""
     token = secrets.token_urlsafe(32)
-    key = f"{EMAIL_VERIFY_PREFIX}{token}"
-    await redis_client.set(key, str(user_id), ex=settings.EMAIL_VERIFY_TOKEN_EXPIRE_SECONDS)
+    key = f"{INVITE_TOKEN_PREFIX}{token}"
+    payload: dict = {"email": email}
+    if default_role_id is not None:
+        payload["default_role_id"] = default_role_id
+    await redis_client.set(
+        key,
+        json.dumps(payload),
+        ex=settings.INVITE_TOKEN_EXPIRE_SECONDS,
+    )
     return token
 
 
-async def verify_email_token(db: AsyncSession, redis_client, token: str) -> models.User | None:
-    """验证邮箱 token，成功则标记用户邮箱已验证"""
-    key = f"{EMAIL_VERIFY_PREFIX}{token}"
-    user_id_bytes = await redis_client.get(key)
-    if not user_id_bytes:
+async def peek_invite_token(redis_client, token: str) -> dict | None:
+    """读取邀请 token payload（不消费）。无效返回 None。"""
+    key = f"{INVITE_TOKEN_PREFIX}{token}"
+    raw = await redis_client.get(key)
+    if not raw:
         return None
-
-    user_id = int(user_id_bytes)
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id)
-    )
-    user = result.scalar_one_or_none()
-    if not user:
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning("invite token payload 解析失败：token=%s", token)
         return None
+    if not isinstance(payload, dict) or "email" not in payload:
+        return None
+    return payload
 
-    user.email_verified = True
-    await db.commit()
-    await db.refresh(user)
-    await redis_client.delete(key)
-    return user
+
+async def consume_invite_token(redis_client, token: str) -> dict | None:
+    """消费邀请 token：读取并立即删除（一次性）。返回 payload 或 None。"""
+    payload = await peek_invite_token(redis_client, token)
+    if payload is None:
+        return None
+    await redis_client.delete(f"{INVITE_TOKEN_PREFIX}{token}")
+    return payload
 
 
 # ========== 密码重置 ==========
 
+
 async def create_password_reset_token(redis_client, user_id: int) -> str:
-    """生成密码重置 token，存入 Redis"""
-    from src.config import settings
+    """生成密码重置 token，存入 Redis（仅 admin 触发调用）。"""
     token = secrets.token_urlsafe(32)
     key = f"{PASSWORD_RESET_PREFIX}{token}"
-    await redis_client.set(key, str(user_id), ex=settings.PASSWORD_RESET_TOKEN_EXPIRE_SECONDS)
+    await redis_client.set(
+        key,
+        str(user_id),
+        ex=settings.PASSWORD_RESET_TOKEN_EXPIRE_SECONDS,
+    )
     return token
 
 
 async def reset_password_with_token(
     db: AsyncSession, redis_client, token: str, new_password: str
 ) -> models.User | None:
-    """用重置 token 更新密码，成功返回用户"""
+    """用重置 token 更新密码，成功返回用户。token 一次性消费。"""
     key = f"{PASSWORD_RESET_PREFIX}{token}"
     user_id_bytes = await redis_client.get(key)
     if not user_id_bytes:
         return None
 
-    user_id = int(user_id_bytes)
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id)
-    )
+    try:
+        user_id = int(user_id_bytes)
+    except (TypeError, ValueError):
+        return None
+
+    result = await db.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
+        return None
+    if not user.hashed_password:
+        # OAuth-only 用户不允许通过密码重置接管账号
         return None
 
     user.hashed_password = pwd_context.hash(new_password)
@@ -260,4 +290,3 @@ async def reset_password_with_token(
     await db.refresh(user)
     await redis_client.delete(key)
     return user
-

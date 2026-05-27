@@ -106,7 +106,7 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import type { User, UserCreate, UserUpdate } from '../types'
+import type { User, AdminUserCreate, UserUpdate } from '../types'
 
 // Props
 interface Props {
@@ -125,7 +125,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'submit': [data: (UserCreate & { role_ids?: number[] }) | UserUpdate]
+  'submit': [data: AdminUserCreate | UserUpdate]
   'cancel': []
 }>()
 
@@ -166,7 +166,7 @@ const schema = z.object({
 watch(() => props.user, (user) => {
   if (user) {
     formState.username = user.username
-    formState.email = user.email
+    formState.email = user.email ?? ''
     formState.password = ''
     formState.confirmPassword = ''
   }
@@ -194,12 +194,12 @@ const handleSubmit = async () => {
       emit('submit', updateData)
     } else {
       // 创建模式：提交所有必需字段
-      const createData: UserCreate = {
+      const createData: AdminUserCreate = {
         username: formState.username,
         email: formState.email,
         password: formState.password
       }
-      
+
       emit('submit', createData)
     }
   } catch (error) {

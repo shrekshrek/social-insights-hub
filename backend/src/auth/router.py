@@ -1,28 +1,30 @@
+import logging
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+
+import redis.asyncio as redis
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-import redis.asyncio as redis
-import logging
 
-from src.auth import schemas, service, models, security
-from src.schemas import MessageResponse
-from src.auth.dependencies import get_current_user, oauth2_scheme
+from src.auth import models, schemas, security, service
 from src.auth.blacklist import add_token_to_blacklist
-from src.users import service as user_service
+from src.auth.dependencies import get_current_user, oauth2_scheme
 from src.config import settings
 from src.database import get_async_db
-from src.rate_limit import auth_limiter, password_reset_limiter
-from src.redis_client import get_redis_client
-from src.email_service import send_email_verification, send_password_reset
+from src.email.client import send_invite_email, send_password_reset_email
 from src.feishu.oauth import (
-    generate_state,
-    build_authorize_url,
-    exchange_code_for_token,
-    get_feishu_user_info,
     OAUTH_STATE_PREFIX,
     OAUTH_STATE_TTL_SECONDS,
+    build_authorize_url,
+    exchange_code_for_token,
+    generate_state,
+    get_feishu_user_info,
 )
+from src.rate_limit import auth_limiter
+from src.rbac.dependencies import require_user_write
+from src.redis_client import get_redis_client
+from src.schemas import MessageResponse
+from src.users import service as user_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -32,7 +34,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     "/register",
     response_model=schemas.UserRead,
     status_code=status.HTTP_201_CREATED,
-    summary="用户注册",
+    summary="用户注册（邀请制）",
 )
 @auth_limiter
 async def register(
@@ -42,16 +44,31 @@ async def register(
     redis_client: redis.Redis = Depends(get_redis_client),
 ):
     """
-    Register a new user and send email verification.
-    """
-    db_user = await service.create_user(db=db, user=user)
+    通过管理员邀请的 invite_token 完成注册。
 
-    # 发送验证邮件（异步，失败不阻断注册）
-    try:
-        token = await service.create_email_verify_token(redis_client, db_user.id)
-        await send_email_verification(db_user.email, db_user.username, token)
-    except Exception as e:
-        logger.warning(f"注册验证邮件发送失败，user_id={db_user.id}：{e}")
+    - email 由邀请决定，不接受用户自填
+    - invite_token 一次性消费
+    - 注册成功即视为邮箱已验证（邀请邮件能送达 = 邮箱真实）
+    """
+    payload = await service.consume_invite_token(redis_client, user.invite_token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="邀请链接无效或已过期，请联系管理员重新发送",
+        )
+
+    email = payload["email"]
+    default_role_id = payload.get("default_role_id")
+    role_ids = [default_role_id] if default_role_id else None
+
+    db_user = await service.create_user(
+        db=db,
+        username=user.username,
+        email=email,
+        password=user.password,
+        email_verified=True,
+        role_ids=role_ids,
+    )
 
     return await user_service.user_to_schema(db, db_user)
 
@@ -136,84 +153,117 @@ async def change_password_endpoint(
 
 
 @router.post(
-    "/send-verification-email",
+    "/invitations",
     response_model=MessageResponse,
-    status_code=status.HTTP_200_OK,
-    summary="重新发送邮箱验证邮件",
+    status_code=status.HTTP_201_CREATED,
+    summary="管理员发送注册邀请邮件",
 )
-@auth_limiter
-async def send_verification_email(
-    request: Request,
+async def create_invitation(
+    body: schemas.InvitationCreateRequest,
     db: AsyncSession = Depends(get_async_db),
     redis_client: redis.Redis = Depends(get_redis_client),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_write),
 ):
-    """重新发送邮箱验证邮件（已验证则直接返回）"""
-    if current_user.email_verified:
-        return MessageResponse(message="邮箱已验证。")
-    if not current_user.email:
-        raise HTTPException(status_code=400, detail="账号未绑定邮箱")
-    token = await service.create_email_verify_token(redis_client, current_user.id)
-    await send_email_verification(current_user.email, current_user.username, token)
-    return MessageResponse(message="验证邮件已发送，请检查您的邮箱。")
+    """
+    管理员邀请用户注册：生成 invite token 并发送邀请邮件。
 
+    - 邮箱已被注册时拒绝
+    - SES 失败会回滚 token 让管理员重试
+    """
+    existing = await service.get_user_by_email(db, body.email)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="该邮箱已注册",
+        )
 
-@router.get(
-    "/verify-email",
-    response_model=MessageResponse,
-    status_code=status.HTTP_200_OK,
-    summary="验证邮箱",
-)
-async def verify_email(
-    token: str,
-    db: AsyncSession = Depends(get_async_db),
-    redis_client: redis.Redis = Depends(get_redis_client),
-):
-    """通过 token 验证邮箱"""
-    user = await service.verify_email_token(db, redis_client, token)
-    if not user:
-        raise HTTPException(status_code=400, detail="验证链接无效或已过期")
-    return MessageResponse(message="邮箱验证成功！")
+    token = await service.create_invite_token(
+        redis_client, body.email, body.default_role_id
+    )
+    sent = await send_invite_email(
+        to_email=body.email,
+        invite_token=token,
+        inviter_username=current_user.username,
+    )
+    if not sent:
+        await redis_client.delete(f"{service.INVITE_TOKEN_PREFIX}{token}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="邀请邮件发送失败，请稍后重试或检查 SES 配置",
+        )
+
+    return MessageResponse(message=f"邀请邮件已发送至 {body.email}")
 
 
 @router.post(
-    "/forgot-password",
+    "/users/{user_id}/send-reset-email",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
-    summary="忘记密码 - 发送重置邮件",
+    summary="管理员触发用户密码重置邮件",
 )
-@password_reset_limiter
-async def forgot_password(
-    request: Request,
-    body: schemas.ForgotPasswordRequest,
+async def admin_send_reset_email(
+    user_id: int,
     db: AsyncSession = Depends(get_async_db),
     redis_client: redis.Redis = Depends(get_redis_client),
+    current_user: models.User = Depends(require_user_write),
 ):
-    """发送密码重置邮件（无论邮箱是否存在都返回相同提示，防止枚举）"""
-    user = await service.get_user_by_email(db, body.email)
-    if user and user.hashed_password:  # 仅密码用户可重置，OAuth 用户无密码
-        token = await service.create_password_reset_token(redis_client, user.id)
-        await send_password_reset(user.email, user.username, token)
-    return MessageResponse(message="如果该邮箱已注册，重置链接已发送，请检查您的邮箱。")
+    """
+    管理员代为发起密码重置：生成 reset token 并将链接发送到目标用户邮箱。
+
+    - 目标用户必须有密码（OAuth-only 用户应通过原渠道找回）
+    - 目标用户必须有 email
+    - SES 失败会回滚 token
+    """
+    target_user = await user_service.get_user_by_id(db, user_id)
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    if not target_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该用户未绑定邮箱，无法发送重置邮件",
+        )
+    if not target_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该用户为 OAuth 登录用户，不支持密码重置",
+        )
+
+    token = await service.create_password_reset_token(redis_client, target_user.id)
+    sent = await send_password_reset_email(
+        to_email=target_user.email,
+        username=target_user.username,
+        reset_token=token,
+    )
+    if not sent:
+        await redis_client.delete(f"{service.PASSWORD_RESET_PREFIX}{token}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="重置邮件发送失败，请稍后重试或检查 SES 配置",
+        )
+
+    return MessageResponse(message=f"重置邮件已发送至 {target_user.email}")
 
 
 @router.post(
     "/reset-password",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
-    summary="重置密码",
+    summary="消费 reset token 设置新密码",
 )
 async def reset_password(
     body: schemas.ResetPasswordRequest,
     db: AsyncSession = Depends(get_async_db),
     redis_client: redis.Redis = Depends(get_redis_client),
 ):
-    """用重置 token 设置新密码"""
+    """用 admin 发出的 reset token 设置新密码。"""
     user = await service.reset_password_with_token(
         db, redis_client, body.token, body.new_password
     )
     if not user:
-        raise HTTPException(status_code=400, detail="重置链接无效或已过期")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="重置链接无效或已过期",
+        )
     return MessageResponse(message="密码重置成功，请重新登录。")
 
 

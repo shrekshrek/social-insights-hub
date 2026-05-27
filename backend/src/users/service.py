@@ -142,14 +142,13 @@ async def create_user_admin(
                 )
             role_ids.append(role_id)
 
-    # 复用通用创建逻辑
+    # 复用通用创建逻辑（admin 直建：信任 admin 输入的邮箱 = 已验证）
     new_user = await auth_service.create_user(
         db,
-        auth_schemas.UserCreate(
-            username=user_create.username,
-            email=user_create.email,
-            password=user_create.password,
-        ),
+        username=user_create.username,
+        password=user_create.password,
+        email=user_create.email,
+        email_verified=bool(user_create.email),
         role_ids=role_ids,
     )
 

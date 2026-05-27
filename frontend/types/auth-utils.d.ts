@@ -10,7 +10,8 @@ declare module '#auth-utils' {
    */
   interface User {
     id: number
-    email: string
+    email: string | null
+    email_verified: boolean
     username: string
     is_active: boolean
     is_superuser: boolean

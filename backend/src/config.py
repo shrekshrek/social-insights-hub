@@ -66,19 +66,23 @@ class Settings(BaseSettings):
     # 默认值仅作 fallback；权威值在 .env / .env.production 中维护
     # 当前对齐：Chat = deepseek-v4-flash；Reasoner = deepseek-v4-pro 标准价
     DEEPSEEK_CHAT_INPUT_PRICE_PER_MILLION: float = Field(
-        default=1.0, description="Chat model input price (cache miss): CNY/million tokens"
+        default=1.0,
+        description="Chat model input price (cache miss): CNY/million tokens",
     )
     DEEPSEEK_CHAT_INPUT_CACHE_HIT_PRICE_PER_MILLION: float = Field(
-        default=0.02, description="Chat model input price (cache hit): CNY/million tokens"
+        default=0.02,
+        description="Chat model input price (cache hit): CNY/million tokens",
     )
     DEEPSEEK_CHAT_OUTPUT_PRICE_PER_MILLION: float = Field(
         default=2.0, description="Chat model output price: CNY/million tokens"
     )
     DEEPSEEK_REASONER_INPUT_PRICE_PER_MILLION: float = Field(
-        default=12.0, description="Reasoner model input price (cache miss): CNY/million tokens"
+        default=12.0,
+        description="Reasoner model input price (cache miss): CNY/million tokens",
     )
     DEEPSEEK_REASONER_INPUT_CACHE_HIT_PRICE_PER_MILLION: float = Field(
-        default=0.1, description="Reasoner model input price (cache hit): CNY/million tokens"
+        default=0.1,
+        description="Reasoner model input price (cache hit): CNY/million tokens",
     )
     DEEPSEEK_REASONER_OUTPUT_PRICE_PER_MILLION: float = Field(
         default=24.0, description="Reasoner model output price: CNY/million tokens"
@@ -168,7 +172,9 @@ class Settings(BaseSettings):
 
     # Initial admin account
     ADMIN_USERNAME: str = Field(default="admin", description="初始超管用户名")
-    ADMIN_PASSWORD: str = Field(default="admin123", description="初始超管密码，生产环境必须修改")
+    ADMIN_PASSWORD: str = Field(
+        default="admin123", description="初始超管密码，生产环境必须修改"
+    )
 
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 60
@@ -259,7 +265,8 @@ class Settings(BaseSettings):
         default=None, description="Tavily Search API key (required for Research Agent)"
     )
     TAVILY_API_KEY_2: str | None = Field(
-        default=None, description="Tavily backup API key, auto-fallback when primary key quota exceeded"
+        default=None,
+        description="Tavily backup API key, auto-fallback when primary key quota exceeded",
     )
     # ========== Agent API Configuration ==========
     AGENT_API_KEY: str | None = Field(
@@ -273,16 +280,16 @@ class Settings(BaseSettings):
     SES_SECRET_ID: str | None = Field(default=None, description="腾讯云 SES SecretId")
     SES_SECRET_KEY: str | None = Field(default=None, description="腾讯云 SES SecretKey")
     SES_REGION: str = Field(default="ap-hongkong", description="腾讯云 SES 地域")
-    SES_FROM_EMAIL: str = Field(
-        default="noreply@shrek.wang", description="发件人邮箱地址"
+    SES_FROM_EMAIL: str | None = Field(
+        default=None, description="发件人邮箱地址（已验证的 SES 发信地址）"
     )
-    # 前端 URL，用于拼接验证链接
-    FRONTEND_URL: str = Field(
-        default="https://shrek.wang", description="前端基础 URL"
+    # 前端 URL，用于拼接邀请/重置链接
+    FRONTEND_URL: str | None = Field(
+        default=None, description="前端基础 URL，邀请/重置链接拼接所需"
     )
-    # 邮箱验证 token 有效期（秒）
-    EMAIL_VERIFY_TOKEN_EXPIRE_SECONDS: int = Field(
-        default=86400, description="邮箱验证链接有效期（秒），默认 24h"
+    # 邀请注册 token 有效期（秒）
+    INVITE_TOKEN_EXPIRE_SECONDS: int = Field(
+        default=604800, description="邀请注册链接有效期（秒），默认 7 天"
     )
     # 密码重置 token 有效期（秒）
     PASSWORD_RESET_TOKEN_EXPIRE_SECONDS: int = Field(
@@ -297,7 +304,8 @@ class Settings(BaseSettings):
         default=None, description="Feishu app secret for OAuth login and messaging API"
     )
     FEISHU_FRONTEND_URL: str = Field(
-        default="", description="Frontend base URL for strategy deep links in notifications"
+        default="",
+        description="Frontend base URL for strategy deep links in notifications",
     )
     FEISHU_OAUTH_REDIRECT_URI: str | None = Field(
         default=None,

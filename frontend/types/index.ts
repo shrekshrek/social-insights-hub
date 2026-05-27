@@ -4,8 +4,6 @@
 export type {
   Token,
   TokenData,
-  PasswordResetRequest,
-  PasswordReset,
   MessageResponse,
   LoginRequest,
   RegisterRequest,
@@ -21,6 +19,9 @@ export type {
   UserCreate,
   UserUpdate,
   UserProfile,
+  AdminUserCreate,
+  InvitationCreateRequest,
+  ResetPasswordRequest,
 } from './user'
 
 // 通用类型

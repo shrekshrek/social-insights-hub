@@ -127,6 +127,7 @@ export const ROUTE_CONFIG: Record<string, RouteConfig> = {
     target: "user",
   },
   "/users/create": { permission: PERMISSIONS.USER_WRITE },
+  "/users/invite": { permission: PERMISSIONS.USER_WRITE },
   "/users/[id]": { permission: PERMISSIONS.USER_READ },
   "/users/[id]/edit": { permission: PERMISSIONS.USER_WRITE },
   "/users/[id]/roles": { permission: PERMISSIONS.USER_WRITE },

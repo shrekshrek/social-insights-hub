@@ -9,17 +9,6 @@ export interface TokenData {
   username: string | null;
 }
 
-// 与后端 PasswordResetRequest schema 同步的密码重置请求类型
-export interface PasswordResetRequest {
-  email: string;
-}
-
-// 与后端 PasswordReset schema 同步的密码重置类型
-export interface PasswordReset {
-  token: string;
-  new_password: string;
-}
-
 // 与后端 MessageResponse schema 同步的消息类型
 export interface MessageResponse {
   message: string;
@@ -31,11 +20,11 @@ export interface LoginRequest {
   password: string;
 }
 
-// 注册请求类型（用于表单）
+// 注册请求类型（邀请制：必须携带 invite_token，email 由 token 决定）
 export interface RegisterRequest {
   username: string;
-  email: string;
   password: string;
+  invite_token: string;
   confirmPassword?: string; // 前端表单验证用
 }
 

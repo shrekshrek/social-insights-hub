@@ -195,7 +195,7 @@ watch(data, (newData) => {
   if (newData) {
     formState.value = {
       username: newData.username,
-      email: newData.email
+      email: newData.email ?? ''
     }
   }
 }, { immediate: true })
@@ -232,7 +232,7 @@ const cancelEdit = () => {
   if (data.value) {
     formState.value = {
       username: data.value.username,
-      email: data.value.email
+      email: data.value.email ?? ''
     }
   }
   isEditing.value = false

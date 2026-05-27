@@ -16,6 +16,14 @@
         <ClientOnly>
           <UButton
             v-if="hasPermission(PERMISSIONS.USER_WRITE)"
+            icon="i-heroicons-envelope"
+            to="/users/invite"
+          >
+            邀请用户
+          </UButton>
+          <UButton
+            v-if="hasPermission(PERMISSIONS.USER_WRITE)"
+            variant="outline"
             icon="i-heroicons-plus"
             to="/users/create"
           >
@@ -164,7 +172,7 @@ const displayUsers = computed(() => {
   return items.filter(
     (user) =>
       user.username.toLowerCase().includes(query) ||
-      user.email.toLowerCase().includes(query)
+      (user.email ?? "").toLowerCase().includes(query)
   );
 });
 
@@ -222,25 +230,45 @@ const columns: TableColumn<User>[] = [
   {
     accessorKey: "username",
     header: "用户信息",
-    meta: { class: { th: "w-[220px]", td: "w-[220px] whitespace-normal" } },
+    meta: { class: { th: "w-[280px]", td: "w-[280px] whitespace-normal" } },
     cell: ({ row }) => {
       const username = row.getValue("username") as string;
+      const email = row.original.email;
+      const verified = row.original.email_verified;
+      const emailLine = email
+        ? h("span", { class: "flex items-center gap-1.5" }, [
+            h(
+              "span",
+              { class: "text-sm text-gray-500 dark:text-gray-400 truncate" },
+              email
+            ),
+            h(
+              UBadge as Component,
+              {
+                color: verified ? "success" : "warning",
+                variant: "subtle",
+                size: "xs",
+              },
+              () => (verified ? "已验证" : "未验证")
+            ),
+          ])
+        : h(
+            "span",
+            { class: "text-sm text-gray-400 italic" },
+            "未绑定邮箱"
+          );
       return h("div", { class: "flex items-center space-x-3" }, [
         h(UAvatar as Component, {
           size: "sm",
           text: username.charAt(0).toUpperCase(),
         }),
-        h("div", { class: "flex flex-col" }, [
+        h("div", { class: "flex flex-col min-w-0" }, [
           h(
             "span",
             { class: "font-medium text-gray-900 dark:text-white" },
             username
           ),
-          h(
-            "span",
-            { class: "text-sm text-gray-500 dark:text-gray-400" },
-            row.original.email || "未知"
-          ),
+          emailLine,
         ]),
       ]);
     },
@@ -315,6 +343,14 @@ const columns: TableColumn<User>[] = [
               to: `/users/${row.original.id}/edit`,
             }, () => "编辑")
           : null,
+        hasPermission(PERMISSIONS.USER_WRITE) && !row.original.oauth_provider
+          ? h(UButton as Component, {
+              size: "xs",
+              variant: "ghost",
+              icon: "i-heroicons-key",
+              onClick: () => confirmSendResetEmail(row.original),
+            }, () => "重置密码邮件")
+          : null,
         canDeleteUser(row.original)
           ? h(UButton as Component, {
               size: "xs",
@@ -338,6 +374,21 @@ const confirmDeleteUser = async (user: User) => {
 
     await usersApi.deleteUser(user.id);
     await handleRefresh();
+  } catch {
+    // 错误已由 useApi 自动处理
+  }
+};
+
+// 发送密码重置邮件确认
+const confirmSendResetEmail = async (user: User) => {
+  try {
+    const { $confirm } = useNuxtApp();
+    const message = user.email_verified
+      ? `向 "${user.username}" 的邮箱 ${user.email} 发送密码重置邮件？`
+      : `⚠️ 用户 "${user.username}" 的邮箱 ${user.email} 尚未验证，重置邮件可能投递到无效邮箱。确认继续发送？`;
+    const confirmed = await $confirm(message);
+    if (!confirmed) return;
+    await usersApi.sendPasswordResetEmail(user.id);
   } catch {
     // 错误已由 useApi 自动处理
   }

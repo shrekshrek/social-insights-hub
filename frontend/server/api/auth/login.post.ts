@@ -15,7 +15,8 @@ interface TokenResponse {
 
 interface UserResponse {
   id: number
-  email: string
+  email: string | null
+  email_verified: boolean
   username: string
   is_active: boolean
   is_superuser: boolean
@@ -62,6 +63,7 @@ export default defineEventHandler(async (event) => {
       user: {
         id: userInfo.id,
         email: userInfo.email,
+        email_verified: userInfo.email_verified,
         username: userInfo.username,
         is_active: userInfo.is_active,
         is_superuser: userInfo.is_superuser,

@@ -1,4 +1,4 @@
-import type { User, UserUpdate, UserListResponse, AdminUserCreate } from '../types'
+import type { User, UserUpdate, UserListResponse, AdminUserCreate, InvitationCreateRequest } from '../types'
 
 export const useUsersApi = () => {
   const { apiRequest, useApiData, showSuccess } = useApi()
@@ -67,6 +67,26 @@ export const useUsersApi = () => {
     })
   }
 
+  // 管理员发送注册邀请邮件
+  const sendInvitation = async (data: InvitationCreateRequest) => {
+    const result = await apiRequest<{ message: string }>('/auth/invitations', {
+      method: 'POST',
+      body: data,
+    })
+    showSuccess(result.message || '邀请邮件已发送')
+    return result
+  }
+
+  // 管理员触发用户密码重置邮件
+  const sendPasswordResetEmail = async (userId: number) => {
+    const result = await apiRequest<{ message: string }>(
+      `/auth/users/${userId}/send-reset-email`,
+      { method: 'POST' },
+    )
+    showSuccess(result.message || '重置邮件已发送')
+    return result
+  }
+
   return {
     getUsers,
     getUser,
@@ -74,5 +94,7 @@ export const useUsersApi = () => {
     updateUser,
     deleteUser,
     getCurrentUser,
+    sendInvitation,
+    sendPasswordResetEmail,
   }
 } 

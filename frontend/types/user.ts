@@ -15,7 +15,8 @@ export interface Role {
 export interface User {
   id: number;
   username: string;
-  email: string;
+  email: string | null;
+  email_verified: boolean;
   oauth_provider?: string | null;
   avatar_url?: string | null;
   roles?: string[]; // 用户的角色名称数组（与后端一致）
@@ -23,16 +24,32 @@ export interface User {
   updated_at: string; // ISO 8601 格式的时间字符串
 }
 
-// 与后端 UserCreate schema 同步的用户创建类型
+// 与后端 UserCreate schema 同步的用户创建类型（邀请制注册）
+// 邮箱由 invite_token 决定，不在请求体中
 export interface UserCreate {
   username: string;
-  email?: string | null; // 邮箱是可选的，与后端保持一致
   password: string;
+  invite_token: string;
 }
 
-// 管理员创建用户时可选携带角色ID
-export interface AdminUserCreate extends UserCreate {
+// 管理员创建用户时直接传 email + 可选角色 ID（不走邀请流程）
+export interface AdminUserCreate {
+  username: string;
+  email?: string | null;
+  password: string;
   role_ids?: number[];
+}
+
+// 管理员发送邀请的请求体
+export interface InvitationCreateRequest {
+  email: string;
+  default_role_id?: number | null;
+}
+
+// 密码重置请求体
+export interface ResetPasswordRequest {
+  token: string;
+  new_password: string;
 }
 
 // 用户更新类型

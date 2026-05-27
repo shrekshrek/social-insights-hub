@@ -29,8 +29,8 @@ class UserCreate(CustomBaseModel):
     """
 
     username: str = Field(..., min_length=3, max_length=50, description="用户名")
-    email: EmailStr = Field(..., description="邮箱地址（必填，用于验证和密码重置）")
     password: str = Field(..., min_length=8, description="密码")
+    invite_token: str = Field(..., description="管理员发出的邀请 token（决定邮箱）")
 
     @field_validator("username")
     @classmethod
@@ -123,17 +123,24 @@ class FeishuCallbackRequest(CustomBaseModel):
     state: str = Field(..., description="CSRF 防护 state 参数")
 
 
+# --- Invitation Schemas ---
+
+
+class InvitationCreateRequest(CustomBaseModel):
+    """管理员创建邀请请求"""
+
+    email: EmailStr = Field(..., description="被邀请人邮箱")
+    default_role_id: int | None = Field(
+        default=None,
+        description="可选默认角色 ID，注册时自动分配；不填则用系统默认 USER 角色",
+    )
+
+
 # --- Password Reset Schemas ---
 
 
-class ForgotPasswordRequest(CustomBaseModel):
-    """忘记密码请求"""
-
-    email: EmailStr = Field(..., description="注册邮箱")
-
-
 class ResetPasswordRequest(CustomBaseModel):
-    """重置密码请求"""
+    """重置密码请求（消费 admin 发出的 reset token）"""
 
     token: str = Field(..., description="重置 token")
     new_password: str = Field(..., min_length=8, description="新密码")
@@ -142,4 +149,3 @@ class ResetPasswordRequest(CustomBaseModel):
     @classmethod
     def validate_new_password(cls, v: str) -> str:
         return _validate_password_strength(v)
-

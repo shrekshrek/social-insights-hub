@@ -29,7 +29,11 @@ class User(Base):
         String(20), nullable=True, comment="OAuth provider: feishu"
     )
     oauth_open_id: Mapped[str | None] = mapped_column(
-        String(128), unique=True, nullable=True, index=True, comment="OAuth provider open_id"
+        String(128),
+        unique=True,
+        nullable=True,
+        index=True,
+        comment="OAuth provider open_id",
     )
     avatar_url: Mapped[str | None] = mapped_column(
         String(500), nullable=True, comment="User avatar URL from OAuth provider"

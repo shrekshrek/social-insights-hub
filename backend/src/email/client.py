@@ -10,6 +10,7 @@ SES SDK 是同步阻塞的，通过 asyncio.to_thread 让出事件循环。
 """
 
 import asyncio
+import base64
 import html
 import logging
 
@@ -124,7 +125,7 @@ async def _send(to_email: str, subject: str, html_body: str) -> bool:
         req.Destination = [to_email]
         req.Subject = subject
         req.Simple = models.Simple()
-        req.Simple.Html = html_body
+        req.Simple.Html = base64.b64encode(html_body.encode("utf-8")).decode("ascii")
         client.SendEmail(req)
 
     try:

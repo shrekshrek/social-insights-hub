@@ -299,7 +299,9 @@ export const useApi = () => {
     const fullPath = computed(() => {
       const p = unref(path)
       const cleanPath = p.startsWith('/') ? p : `/${p}`
-      if (import.meta.server) {
+      // typeof window === 'undefined' 是纯运行时判断（不被 tree-shake），
+      // 确保只有服务端才使用内网绝对路径，客户端始终用相对路径避免 Mixed Content。
+      if (typeof window === 'undefined') {
         const internal = (config as Record<string, unknown>).apiBaseInternal as string | undefined
         if (internal) return `${internal}${cleanPath}`
       }

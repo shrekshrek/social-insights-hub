@@ -4,13 +4,21 @@ export const useUsersApi = () => {
   const { apiRequest, useApiData, showSuccess } = useApi()
 
   // 获取用户列表
-  const getUsers = (params?: Record<string, unknown>) => {
+  // query 支持传入包含 Ref/ComputedRef 的对象，这里用 computed 将其展平为普通对象，
+  // 避免 useFetch 将 Ref 对象本身作为值序列化，导致 key 不匹配而重复请求。
+  const getUsers = (params?: MaybeRef<Record<string, unknown>> | Record<string, MaybeRef<unknown>>) => {
+    const flatQuery = computed(() => {
+      const p = unref(params) as Record<string, unknown> | undefined
+      if (!p) return {}
+      const result: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(p)) {
+        result[k] = unref(v)
+      }
+      return result
+    })
     return useApiData<UserListResponse>('/users/', {
-      query: params,
-      key: computed(() => {
-        const p = unref(params);
-        return `users-list-${p?.page || 1}-${p?.page_size || 10}`;
-      })
+      query: flatQuery,
+      key: computed(() => `users-list-${flatQuery.value.page || 1}-${flatQuery.value.page_size || 10}`),
     });
   }
 

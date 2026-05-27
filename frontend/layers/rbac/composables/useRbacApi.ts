@@ -4,13 +4,19 @@ export const useRbacApi = () => {
   const { apiRequest, useApiData, showSuccess } = useApi()
 
   // 角色管理
-  const getRoles = (params?: Record<string, unknown>) => {
+  const getRoles = (params?: MaybeRef<Record<string, unknown>> | Record<string, MaybeRef<unknown>>) => {
+    const flatQuery = computed(() => {
+      const p = unref(params) as Record<string, unknown> | undefined
+      if (!p) return {}
+      const result: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(p)) {
+        result[k] = unref(v)
+      }
+      return result
+    })
     return useApiData<RoleListResponse>('/rbac/roles', {
-      query: params,
-      key: computed(() => {
-        const p = unref(params);
-        return `rbac-roles-list-${p?.page || 1}-${p?.page_size || 10}`;
-      })
+      query: flatQuery,
+      key: computed(() => `rbac-roles-list-${flatQuery.value.page || 1}-${flatQuery.value.page_size || 10}`),
     })
   }
 
@@ -56,13 +62,19 @@ export const useRbacApi = () => {
   }
 
   // 权限管理
-  const getPermissions = (params?: Record<string, unknown>) => {
+  const getPermissions = (params?: MaybeRef<Record<string, unknown>> | Record<string, MaybeRef<unknown>>) => {
+    const flatQuery = computed(() => {
+      const p = unref(params) as Record<string, unknown> | undefined
+      if (!p) return {}
+      const result: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(p)) {
+        result[k] = unref(v)
+      }
+      return result
+    })
     return useApiData<PermissionListResponse>('/rbac/permissions', {
-      query: params,
-      key: computed(() => {
-        const p = unref(params);
-        return `rbac-permissions-list-${p?.page || 1}-${p?.page_size || 10}`;
-      })
+      query: flatQuery,
+      key: computed(() => `rbac-permissions-list-${flatQuery.value.page || 1}-${flatQuery.value.page_size || 10}`),
     })
   }
 

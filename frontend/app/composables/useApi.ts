@@ -316,8 +316,9 @@ export const useApi = () => {
         // http://frontend:3000/... 后序列化到客户端 payload，造成 Mixed Content。
         if (typeof window === 'undefined') {
           const internal = (config as Record<string, unknown>).apiBaseInternal as string | undefined
-          if (internal && typeof context.options.url === 'string') {
-            context.options.url = context.options.url.replace(config.public.apiBase, internal)
+          const ctxOpts = context.options as { url?: string }
+          if (internal && typeof ctxOpts.url === 'string') {
+            ctxOpts.url = ctxOpts.url.replace(config.public.apiBase, internal)
           }
         }
 

@@ -16,7 +16,11 @@ export const useUsersApi = () => {
       }
       return result
     })
-    return useApiData<UserListResponse>('/users/', {
+    // 路径不带尾斜杠：后端 prefix='/users' + @router.get('') 实际匹配 '/users'。
+    // 写成 '/users/' 会触发 FastAPI redirect_slashes 307，Location 用 http://（uvicorn
+    // 未启 proxy-headers 时不知道自己在 https 反代后），从 https 页面发出会被浏览器
+    // 拒绝跟随并报 Mixed Content。其他模块 API 路径也都按这个约定（不带尾斜杠）。
+    return useApiData<UserListResponse>('/users', {
       query: flatQuery,
       key: computed(() => `users-list-${flatQuery.value.page || 1}-${flatQuery.value.page_size || 10}`),
     });

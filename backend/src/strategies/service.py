@@ -14,6 +14,7 @@ from fastapi import HTTPException, status
 if TYPE_CHECKING:
     from src.news_media.analysis.models import NewsSlice
 from sqlalchemy import select, func, update, and_, delete
+from sqlalchemy.exc import IntegrityError
 from src.utils import run_cpu_bound_task
 from src.knowledge_base.service import parse_text as _extract_text_from_bytes
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -4735,17 +4736,26 @@ async def _create_auto_slices(
 
             # 创建社媒 SocialSlice（已存在则跳过）
             if matched_task_ids and not social_already_exists:
-                slice_obj = await create_monitor_slice(
-                    db,
-                    monitor_id=strategy.social_monitor_id,
-                    task_ids=matched_task_ids,
-                    current_user_id=current_user_id,
-                    name=bp_name,
-                    subject=bp_subject,
-                    competitors=bp_competitors,
-                )
-                slice_objs.append(slice_obj)
-                existing_social_names.add(bp_name)
+                try:
+                    slice_obj = await create_monitor_slice(
+                        db,
+                        monitor_id=strategy.social_monitor_id,
+                        task_ids=matched_task_ids,
+                        current_user_id=current_user_id,
+                        name=bp_name,
+                        subject=bp_subject,
+                        competitors=bp_competitors,
+                    )
+                    slice_objs.append(slice_obj)
+                    existing_social_names.add(bp_name)
+                except IntegrityError:
+                    # 并发 INSERT 被数据库唯一约束拦截（另一个 uvicorn worker 抢先建完）
+                    await db.rollback()
+                    logger.info(
+                        "Strategy %s: SocialSlice '%s' 已被其他 worker 创建，跳过",
+                        strategy.id, bp_name,
+                    )
+                    existing_social_names.add(bp_name)
 
             # 创建新闻 NewsSlice 行（已存在则跳过；不在此处跑 insight）
             if (
@@ -4753,34 +4763,46 @@ async def _create_auto_slices(
                 and strategy.news_monitor_id
                 and not news_already_exists
             ):
-                ns = await _create_strategy_news_slice(
-                    db,
-                    strategy=strategy,
-                    name=bp_name,
-                    news_task_ids=matched_news_task_ids,
-                    user_id=current_user_id,
-                    subject=bp_subject or None,
-                    competitors=bp_competitors or [],
-                )
-                goal = (
-                    f"{bp_name}（关键词：{', '.join(matched_news_keywords)}）"
-                    if matched_news_keywords
-                    else bp_name
-                )
-                news_dispatch_payloads.append((ns.id, goal))
-                existing_news_names.add(bp_name)
+                try:
+                    ns = await _create_strategy_news_slice(
+                        db,
+                        strategy=strategy,
+                        name=bp_name,
+                        news_task_ids=matched_news_task_ids,
+                        user_id=current_user_id,
+                        subject=bp_subject or None,
+                        competitors=bp_competitors or [],
+                    )
+                    goal = (
+                        f"{bp_name}（关键词：{', '.join(matched_news_keywords)}）"
+                        if matched_news_keywords
+                        else bp_name
+                    )
+                    news_dispatch_payloads.append((ns.id, goal))
+                    existing_news_names.add(bp_name)
+                except IntegrityError:
+                    await db.rollback()
+                    logger.info(
+                        "Strategy %s: NewsSlice '%s' 已被其他 worker 创建，跳过",
+                        strategy.id, bp_name,
+                    )
+                    existing_news_names.add(bp_name)
     else:
         # 无 blueprint：合并为综合切片
         if collect_tasks and "综合分析" not in existing_social_names:
             all_task_ids = [t.id for t in collect_tasks]
-            slice_obj = await create_monitor_slice(
-                db,
-                monitor_id=strategy.social_monitor_id,
-                task_ids=all_task_ids,
-                current_user_id=current_user_id,
-                name="综合分析",
-            )
-            slice_objs.append(slice_obj)
+            try:
+                slice_obj = await create_monitor_slice(
+                    db,
+                    monitor_id=strategy.social_monitor_id,
+                    task_ids=all_task_ids,
+                    current_user_id=current_user_id,
+                    name="综合分析",
+                )
+                slice_objs.append(slice_obj)
+            except IntegrityError:
+                await db.rollback()
+                logger.info("Strategy %s: 综合分析 SocialSlice 已被其他 worker 创建，跳过", strategy.id)
 
         if (
             news_tasks
@@ -4789,21 +4811,25 @@ async def _create_auto_slices(
         ):
             all_news_ids = [t.id for t in news_tasks]
             all_keywords = [t.keywords for t in news_tasks if t.keywords]
-            ns = await _create_strategy_news_slice(
-                db,
-                strategy=strategy,
-                name="综合分析",
-                news_task_ids=all_news_ids,
-                user_id=current_user_id,
-                subject=None,
-                competitors=[],
-            )
-            goal = (
-                f"综合分析（关键词：{', '.join(all_keywords)}）"
-                if all_keywords
-                else "综合分析"
-            )
-            news_dispatch_payloads.append((ns.id, goal))
+            try:
+                ns = await _create_strategy_news_slice(
+                    db,
+                    strategy=strategy,
+                    name="综合分析",
+                    news_task_ids=all_news_ids,
+                    user_id=current_user_id,
+                    subject=None,
+                    competitors=[],
+                )
+                goal = (
+                    f"综合分析（关键词：{', '.join(all_keywords)}）"
+                    if all_keywords
+                    else "综合分析"
+                )
+                news_dispatch_payloads.append((ns.id, goal))
+            except IntegrityError:
+                await db.rollback()
+                logger.info("Strategy %s: 综合分析 NewsSlice 已被其他 worker 创建，跳过", strategy.id)
 
     # 社媒切片 Stage2/Stage3 pipeline 设置
     now_iso = datetime.now(timezone.utc).isoformat()

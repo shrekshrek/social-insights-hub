@@ -7,7 +7,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, text
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, UniqueConstraint, text
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -119,4 +119,5 @@ class NewsSlice(Base):
     __table_args__ = (
         Index("idx_news_slices_monitor", "monitor_id"),
         Index("idx_news_slices_created_at", "created_at"),
+        UniqueConstraint("monitor_id", "name", name="uq_news_slices_monitor_name"),
     )

@@ -3018,10 +3018,12 @@ async def confirm_research(
 # 防止多个并发请求同时触发同一策略的 LLM 审查
 _probe_review_in_progress: set[int] = set()
 
-# 单 worker 内的早期短路，省去无意义的 DB 来回。
-# 真正的并发兜底是 social_slices / news_slices 的 (monitor_id, name) DB 唯一约束
-# （migration 2026052801 / 2026052802）+ _create_auto_slices 里的 IntegrityError 捕获。
-# 多 uvicorn worker 之间这个 set 不共享，但 DB 层会阻挡重复 INSERT。
+# 防止同进程内多个并发请求/APScheduler tick 同时触发同一策略的自动建切片。
+# 当前部署是 workers=1（见 scheduler.py docstring 硬约束）——此 set 即为主防线。
+# DB 层 (monitor_id, name) 唯一约束（migration 2026052801 / 2026052802）
+# + _create_auto_slices 的 IntegrityError 捕获作为永久纵深，
+# 同时也为未来扩展到 multi-worker 留出 DB 层兜底（届时此 set 会失效，
+# 需补 Redis 分布式锁或 leader election，详见 scheduler.py）。
 _slice_creation_in_progress: set[int] = set()
 
 # 防止多个并发请求同时触发同一策略的 coverage_check + ready 推进

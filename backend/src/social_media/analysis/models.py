@@ -17,6 +17,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.ext.mutable import MutableDict
@@ -240,4 +241,7 @@ class SocialSlice(Base):
 
     __table_args__ = (
         Index("idx_social_slices_created_at", "created_at"),
+        # (monitor_id, name) 唯一约束：防止多 uvicorn worker 并发建出同名重复切片
+        # NULL name 不参与唯一校验（SQL 标准行为），手动切片可允许 name=NULL
+        UniqueConstraint("monitor_id", "name", name="uq_social_slices_monitor_name"),
     )

@@ -4757,36 +4757,52 @@ async def _create_auto_slices(
                     )
                     existing_social_names.add(bp_name)
 
-            # 创建新闻 NewsSlice 行（已存在则跳过；不在此处跑 insight）
-            if (
-                matched_news_task_ids
-                and strategy.news_monitor_id
-                and not news_already_exists
-            ):
-                try:
-                    ns = await _create_strategy_news_slice(
-                        db,
-                        strategy=strategy,
-                        name=bp_name,
-                        news_task_ids=matched_news_task_ids,
-                        user_id=current_user_id,
-                        subject=bp_subject or None,
-                        competitors=bp_competitors or [],
+            # 创建新闻 NewsSlice 行（已存在则检查是否需要补派 insight）
+            if matched_news_task_ids and strategy.news_monitor_id:
+                goal = (
+                    f"{bp_name}（关键词：{', '.join(matched_news_keywords)}）"
+                    if matched_news_keywords
+                    else bp_name
+                )
+                if not news_already_exists:
+                    try:
+                        ns = await _create_strategy_news_slice(
+                            db,
+                            strategy=strategy,
+                            name=bp_name,
+                            news_task_ids=matched_news_task_ids,
+                            user_id=current_user_id,
+                            subject=bp_subject or None,
+                            competitors=bp_competitors or [],
+                        )
+                        news_dispatch_payloads.append((ns.id, goal))
+                        existing_news_names.add(bp_name)
+                    except IntegrityError:
+                        await db.rollback()
+                        logger.info(
+                            "Strategy %s: NewsSlice '%s' 已被其他 worker 创建，检查是否需补派",
+                            strategy.id, bp_name,
+                        )
+                        existing_news_names.add(bp_name)
+                        # 并发抢建成功的切片也要检查补派（下方统一处理）
+                        news_already_exists = True
+
+                if news_already_exists:
+                    # 切片已存在：检查是否卡在 analyzing（上次派发丢失），若是则补派
+                    stale = await db.execute(
+                        select(NewsSlice).where(
+                            NewsSlice.monitor_id == strategy.news_monitor_id,
+                            NewsSlice.name == bp_name,
+                            NewsSlice.status == "analyzing",
+                        )
                     )
-                    goal = (
-                        f"{bp_name}（关键词：{', '.join(matched_news_keywords)}）"
-                        if matched_news_keywords
-                        else bp_name
-                    )
-                    news_dispatch_payloads.append((ns.id, goal))
-                    existing_news_names.add(bp_name)
-                except IntegrityError:
-                    await db.rollback()
-                    logger.info(
-                        "Strategy %s: NewsSlice '%s' 已被其他 worker 创建，跳过",
-                        strategy.id, bp_name,
-                    )
-                    existing_news_names.add(bp_name)
+                    stale_ns = stale.scalar_one_or_none()
+                    if stale_ns is not None:
+                        news_dispatch_payloads.append((stale_ns.id, goal))
+                        logger.info(
+                            "Strategy %s: NewsSlice '%s' (id=%s) 处于 analyzing，补派 insight",
+                            strategy.id, bp_name, stale_ns.id,
+                        )
     else:
         # 无 blueprint：合并为综合切片
         if collect_tasks and "综合分析" not in existing_social_names:
@@ -4804,32 +4820,47 @@ async def _create_auto_slices(
                 await db.rollback()
                 logger.info("Strategy %s: 综合分析 SocialSlice 已被其他 worker 创建，跳过", strategy.id)
 
-        if (
-            news_tasks
-            and strategy.news_monitor_id
-            and "综合分析" not in existing_news_names
-        ):
+        if news_tasks and strategy.news_monitor_id:
             all_news_ids = [t.id for t in news_tasks]
             all_keywords = [t.keywords for t in news_tasks if t.keywords]
-            try:
-                ns = await _create_strategy_news_slice(
-                    db,
-                    strategy=strategy,
-                    name="综合分析",
-                    news_task_ids=all_news_ids,
-                    user_id=current_user_id,
-                    subject=None,
-                    competitors=[],
+            goal = (
+                f"综合分析（关键词：{', '.join(all_keywords)}）"
+                if all_keywords
+                else "综合分析"
+            )
+            综合_already_exists = "综合分析" in existing_news_names
+            if not 综合_already_exists:
+                try:
+                    ns = await _create_strategy_news_slice(
+                        db,
+                        strategy=strategy,
+                        name="综合分析",
+                        news_task_ids=all_news_ids,
+                        user_id=current_user_id,
+                        subject=None,
+                        competitors=[],
+                    )
+                    news_dispatch_payloads.append((ns.id, goal))
+                except IntegrityError:
+                    await db.rollback()
+                    logger.info("Strategy %s: 综合分析 NewsSlice 已被其他 worker 创建，检查是否需补派", strategy.id)
+                    综合_already_exists = True
+
+            if 综合_already_exists:
+                stale = await db.execute(
+                    select(NewsSlice).where(
+                        NewsSlice.monitor_id == strategy.news_monitor_id,
+                        NewsSlice.name == "综合分析",
+                        NewsSlice.status == "analyzing",
+                    )
                 )
-                goal = (
-                    f"综合分析（关键词：{', '.join(all_keywords)}）"
-                    if all_keywords
-                    else "综合分析"
-                )
-                news_dispatch_payloads.append((ns.id, goal))
-            except IntegrityError:
-                await db.rollback()
-                logger.info("Strategy %s: 综合分析 NewsSlice 已被其他 worker 创建，跳过", strategy.id)
+                stale_ns = stale.scalar_one_or_none()
+                if stale_ns is not None:
+                    news_dispatch_payloads.append((stale_ns.id, goal))
+                    logger.info(
+                        "Strategy %s: 综合分析 NewsSlice (id=%s) 处于 analyzing，补派 insight",
+                        strategy.id, stale_ns.id,
+                    )
 
     # 社媒切片 Stage2/Stage3 pipeline 设置
     now_iso = datetime.now(timezone.utc).isoformat()

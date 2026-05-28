@@ -276,6 +276,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 | `strategy_probe` | `check_probing_strategies` | 2 分钟 | 扫描 `status=probing` 的策略，所有探测任务（社媒 + 新闻）均达到终态后自动触发 LLM probe review |
 | `strategy_collection` | `check_collecting_strategies` | 2 分钟 | 扫描 `status=collecting` 的策略，两阶段推进：① 任务全分析完成且切片未建 → 自动建切片；② 切片已建 + 所有切片 Stage2/新闻 insight 到终态 + coverage 未跑 → `_try_advance_to_ready` 推进到 ready |
 | `news_task_watchdog` | `reset_stuck_news_tasks` | 5 分钟 | 将策略新闻任务（probe + collect）中 `running`（Worker 崩溃）或 `pending`（Worker 宕机未消费）超过 20 分钟的记录标记为 `failed`，防止策略永久卡住 |
+| `social_slice_watchdog` | `reset_stuck_social_slices` | 5 分钟 | 将社媒切片 Stage2 卡在 pending/processing 超过 30 分钟的记录标记为 `failed`（Celery worker 崩溃场景），防止策略永久卡在 collecting。**标 failed 不补派**——`run_monitor_slice_task` 不幂等（重复建 AnalysisJob + 重复烧 token），补派比卡住更糟；标 failed 让 `_social_slice_stage2_terminal` 判为终态，coverage_check 据此推进 |
 
 ### 终态定义
 

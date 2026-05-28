@@ -4,12 +4,14 @@
 - check_probing_strategies:       探测任务全部分析完成 → 自动触发 LLM 审查
 - check_collecting_strategies:    全量采集全部完成   → 自动触发建切片 + 覆盖度验证
 - reset_stuck_news_tasks:         超时的 running/pending 新闻任务（probe + collect）→ 自动标记为 failed
+- reset_stuck_social_slices:      Stage2 超时的社媒切片 → 自动标记为 failed（防策略卡 collecting）
 """
 
 import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, select, update
+from sqlalchemy.orm.attributes import flag_modified
 
 from src.database import AsyncSessionLocal
 
@@ -18,6 +20,10 @@ _NEWS_PROBE_TERMINAL = {"completed", "failed"}
 
 # 新闻探测任务超时阈值（分钟）：超过此时长仍为 running 视为卡死
 _NEWS_PROBE_TIMEOUT_MINUTES = 20
+
+# 社媒切片 Stage2 超时阈值（分钟）：Stage2 含 entity/opinion LLM 归一化 + drivers + layers，
+# 比新闻 probe 重，给更宽容的阈值避免误杀正在跑的慢任务
+_SOCIAL_SLICE_STAGE2_TIMEOUT_MINUTES = 30
 
 logger = logging.getLogger(__name__)
 
@@ -285,3 +291,75 @@ async def reset_stuck_news_tasks() -> int:
             return len(stuck_ids)
 
     return 0
+
+
+async def reset_stuck_social_slices() -> int:
+    """将 Stage2 超时的社媒切片标记为 failed，防止策略永久卡在 collecting。
+
+    场景：run_monitor_slice_task 的 Celery worker 崩溃/OOM/broker 抖动导致任务丢失，
+    切片 status 停在 pending/analyzing、pipeline.stage2.status 停在 pending/processing
+    永不推进，_try_advance_to_ready 永远等不到所有切片终态，策略卡死在 collecting。
+
+    为什么标 failed 而不补派：run_monitor_slice_task 不幂等——重复执行会重复创建
+    entity/opinion/summary AnalysisJob、重复消耗 LLM token、用非确定性的新结果覆盖旧
+    结果（详见调研结论）。盲目补派比卡住更糟。标 failed 让 _social_slice_stage2_terminal
+    判它为终态，coverage_check 据此推进策略到 ready（该切片不进下游分析，但它本就卡住没
+    有效数据）。与 reset_stuck_news_tasks「标 failed 不补派」哲学一致。
+
+    覆盖所有 SocialSlice（含独立监测页手动建的切片），不限策略——卡住的切片对任何场景
+    都是坏的。手动场景下用户看到 failed 可重建。
+    """
+    from src.social_media.analysis.models import SocialSlice
+
+    timeout_before = datetime.now(tz=timezone.utc) - timedelta(
+        minutes=_SOCIAL_SLICE_STAGE2_TIMEOUT_MINUTES
+    )
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(SocialSlice).where(
+                and_(
+                    SocialSlice.status.in_(["pending", "analyzing"]),
+                    SocialSlice.updated_at < timeout_before,
+                )
+            )
+        )
+        stuck = list(result.scalars().all())
+        if not stuck:
+            return 0
+
+        now = datetime.now(tz=timezone.utc)
+        reset_ids: list[int] = []
+        for s in stuck:
+            # 二次确认 pipeline.stage2 确实非终态（status 列与 pipeline 不一致时不误杀）
+            rd = s.result_data if isinstance(s.result_data, dict) else {}
+            pipeline = rd.get("pipeline") or {}
+            stage2 = pipeline.get("stage2") or {}
+            if stage2.get("status") in ("completed", "failed", "skipped"):
+                continue
+
+            s.status = "failed"
+            s.error_message = (
+                f"Stage2 超时（>{_SOCIAL_SLICE_STAGE2_TIMEOUT_MINUTES} 分钟未完成，"
+                "watchdog 自动标记，疑似 Celery worker 崩溃）"
+            )
+            # 同步 pipeline.stage2.status，保证 _social_slice_stage2_terminal 判定一致
+            new_rd = dict(rd)
+            new_pipeline = dict(pipeline)
+            new_stage2 = dict(stage2)
+            new_stage2["status"] = "failed"
+            new_stage2["updated_at"] = now.isoformat()
+            new_pipeline["stage2"] = new_stage2
+            new_rd["pipeline"] = new_pipeline
+            s.result_data = new_rd
+            flag_modified(s, "result_data")
+            reset_ids.append(s.id)
+
+        if reset_ids:
+            await db.commit()
+            logger.warning(
+                "Watchdog: reset %d stuck social slices Stage2 → failed: %s",
+                len(reset_ids),
+                reset_ids,
+            )
+        return len(reset_ids)

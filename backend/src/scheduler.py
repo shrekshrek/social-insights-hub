@@ -28,6 +28,7 @@ def create_scheduler() -> AsyncIOScheduler:
         check_collecting_strategies,
         check_probing_strategies,
         reset_stuck_news_tasks,
+        reset_stuck_social_slices,
     )
 
     scheduler.add_job(
@@ -51,6 +52,14 @@ def create_scheduler() -> AsyncIOScheduler:
         "interval",
         minutes=5,
         id="news_task_watchdog",
+        max_instances=1,
+        misfire_grace_time=60,
+    )
+    scheduler.add_job(
+        reset_stuck_social_slices,
+        "interval",
+        minutes=5,
+        id="social_slice_watchdog",
         max_instances=1,
         misfire_grace_time=60,
     )

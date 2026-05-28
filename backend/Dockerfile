@@ -29,4 +29,5 @@ COPY alembic ./alembic
 EXPOSE 8000
 
 # 8. Command to run the application
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# 单 worker：FastAPI 只做 I/O 编排（CPU 密集走 Celery），与本地 dev 对齐避免 module-level lock + APScheduler 多进程问题。
+CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

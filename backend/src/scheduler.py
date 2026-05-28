@@ -3,9 +3,15 @@
 所有任务均在 FastAPI asyncio 事件循环中原生运行，无需 gevent 桥接。
 Celery 保留 AI 分析流水线 + 文档处理（需要进程隔离的长时任务）。
 
-注意：AsyncIOScheduler 绑定单一 asyncio 事件循环，不支持多进程/多副本部署。
-本项目 docker-compose 使用单 uvicorn worker，此约束不影响当前部署。
-若将来需要横向扩容，可迁移至 APScheduler SQLAlchemyJobStore（带分布式锁）。
+⚠️ 必须单 worker 部署约束
+AsyncIOScheduler 绑定单一 asyncio 事件循环，每个 uvicorn worker 进程都会
+独立启动一份 scheduler 实例，多 worker 时会导致所有定时任务重复执行 N 次
+（LLM 多倍调用、KB 爬虫多倍请求等）。`docker-compose.prod.yml` 和
+`backend/Dockerfile` 都已显式 `--workers 1`，与本地 dev 环境对齐。
+若将来确实需要横向扩容（用户量、CPU 占用持续打满）才考虑下列任一方案：
+  - Redis SETNX leader election（只让 leader worker 启动 scheduler）
+  - 改用 Celery Beat（独立进程跑定时任务）
+  - APScheduler SQLAlchemyJobStore + 分布式锁
 """
 
 import logging

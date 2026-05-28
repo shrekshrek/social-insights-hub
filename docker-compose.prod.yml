@@ -1,5 +1,5 @@
 # Docker Compose 生产配置
-# 使用 .env 作为环境变量来源（服务器上只维护一个 .env 文件）
+# 使用 .env.production 作为环境变量来源
 
 services:
   nginx:
@@ -28,7 +28,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env  # 使用根目录的统一配置
+      - .env.production  # 使用根目录的统一配置
     volumes:
       - kb_storage_prod:/app/storage
     depends_on:
@@ -48,7 +48,7 @@ services:
         PROJECT_NAME: ${PROJECT_NAME}
     container_name: prod-frontend
     env_file:
-      - .env  # 使用根目录的统一配置
+      - .env.production  # 使用根目录的统一配置
     expose:
       - 3000
     restart: unless-stopped
@@ -58,7 +58,7 @@ services:
     container_name: prod-postgres-db
     command: postgres -c max_connections=200
     env_file:
-      - .env  # 使用根目录的统一配置
+      - .env.production  # 使用根目录的统一配置
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
     healthcheck:
@@ -75,7 +75,7 @@ services:
     container_name: prod-celery-worker
     command: uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=100
     env_file:
-      - .env  # 使用根目录的统一配置
+      - .env.production  # 使用根目录的统一配置
     volumes:
       - kb_storage_prod:/app/storage
     depends_on:

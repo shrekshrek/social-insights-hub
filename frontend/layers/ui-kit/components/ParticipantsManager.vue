@@ -27,28 +27,34 @@
       </UBadge>
     </div>
 
-    <!-- 添加参与者（仅 owner 可见） -->
-    <div v-if="canManage" class="flex gap-2">
-      <USelectMenu
-        v-model="selectedUserIds"
-        :items="availableUsers"
-        multiple
-        value-key="id"
-        label-key="username"
-        placeholder="搜索并选择用户..."
-        :search-attributes="['username']"
-        class="flex-1"
-        :loading="loadingUsers"
-      />
-      <UButton
-        :disabled="!selectedUserIds.length || adding"
-        :loading="adding"
-        size="sm"
-        @click="handleAdd"
-      >
-        添加
-      </UButton>
-    </div>
+    <!-- 添加参与者（仅 owner 可见）。USelectMenu 来自 reka-ui，含 teleport portal，
+         在 SSR 下会 hydration mismatch，因此整段包 ClientOnly。 -->
+    <ClientOnly>
+      <div v-if="canManage" class="flex gap-2">
+        <USelectMenu
+          v-model="selectedUserIds"
+          :items="availableUsers"
+          multiple
+          value-key="id"
+          label-key="username"
+          placeholder="搜索并选择用户..."
+          :search-attributes="['username']"
+          class="flex-1"
+          :loading="loadingUsers"
+        />
+        <UButton
+          :disabled="!selectedUserIds.length || adding"
+          :loading="adding"
+          size="sm"
+          @click="handleAdd"
+        >
+          添加
+        </UButton>
+      </div>
+      <template #fallback>
+        <div v-if="canManage" class="h-10 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+      </template>
+    </ClientOnly>
   </div>
 </template>
 
@@ -92,7 +98,9 @@ const availableUsers = computed(() =>
 async function loadUsers() {
   loadingUsers.value = true;
   try {
-    const res = await apiRequest<{ items: UserOption[] }>("/users/?page_size=100");
+    // 路径不带尾斜杠：后端 prefix='/users' + @router.get('') 实际匹配 '/users'，
+    // 用 '/users/' 会触发 FastAPI redirect_slashes=True 的 307，HTTPS 反代后会变 Mixed Content
+    const res = await apiRequest<{ items: UserOption[] }>("/users?page_size=100");
     allUsers.value = res.items || [];
   } catch {
     // ignore

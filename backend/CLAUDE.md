@@ -84,6 +84,7 @@ backend/src/
 - 新模块路由在 `main.py` 中注册
 - 权限在 `rbac/init_data.py` 中用 `create_module_permissions()` 定义
 - **资源型 API 统一使用子资源 URL 风格**：父子关系通过路径表达，例如 `POST /{channel}/monitors/{monitor_id}/tasks`、`/strategies/{id}/participants`、`/news-media/monitors/{id}/participants`。禁止把 parent_id 放 body/query
+- **async session 新建对象禁止访问未加载的关系属性**：`db.add(obj) + await db.flush()` 后访问 `obj.<relation>`（如 `monitor.participants`）会触发 lazy load，async session 里因属性同步访问无法 await 而抛 `MissingGreenlet`。`Mapped[list[...]]` 的 secondary 关系尤其常见 —— `lazy="selectin"` 只在 SELECT 主对象时预加载，**INSERT 路径不触发预加载**。正确做法二选一：① **直接 INSERT 关联表**（推荐，参考 `news_media/monitors/crud.create_monitor` 用 `news_monitor_participants.insert().values(...)`，`social_media/monitors/crud.create_social_monitor` 同款）；② 先 `await db.refresh(obj, ["<relation>"])` 让 selectin 加载后再用 ORM 操作。反模式：刚 `add+flush` 的对象上调 `obj.participants.append(user)` 或 `obj.participants = [...]`
 
 ## 架构约定
 

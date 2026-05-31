@@ -88,13 +88,14 @@ async def create_monitor(
     await db.flush()
 
     if participant_ids:
-        from src.auth.models import User
-        users = await db.execute(select(User).where(User.id.in_(participant_ids)))
-        new_participants = users.scalars().all()
-        existing_ids = {u.id for u in monitor.participants}
-        for user in new_participants:
-            if user.id not in existing_ids and user.id != user_id:
-                monitor.participants.append(user)
+        from src.news_media.monitors.models import news_monitor_participants
+        for pid in participant_ids:
+            if pid != user_id:
+                await db.execute(
+                    news_monitor_participants.insert().values(
+                        monitor_id=monitor.id, user_id=pid
+                    )
+                )
 
     return monitor
 

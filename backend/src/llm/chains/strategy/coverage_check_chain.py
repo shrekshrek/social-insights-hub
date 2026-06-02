@@ -151,10 +151,12 @@ USER_TEMPLATE = """{brief_section}
 def create_coverage_check_chain() -> Runnable:
     """创建覆盖度验证 LLM 链"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -202,6 +204,7 @@ def _select_evidence(
     Returns:
         (selected_items, total_count, covered_count)
     """
+
     def src(i: dict) -> int:
         try:
             return int(i.get(source_key) or 0)
@@ -265,55 +268,83 @@ def format_coverage_check_inputs(
             descriptive = data.get("descriptive") or {}
             entities = data.get("entities") or []
             dist = descriptive.get("sentiment_distribution") or {}
-            total_articles = sum(dist.get(k, 0) for k in ("positive", "neutral", "negative"))
+            total_articles = sum(
+                dist.get(k, 0) for k in ("positive", "neutral", "negative")
+            )
             slice_lines.append(f"渠道: 新闻 | 原文数: {total_articles}")
             overall_sent = descriptive.get("sentiment_overall")
             if overall_sent is not None:
-                label = "正面" if overall_sent > 0.6 else "负面" if overall_sent < 0.4 else "中性"
+                label = (
+                    "正面"
+                    if overall_sent > 0.6
+                    else "负面"
+                    if overall_sent < 0.4
+                    else "中性"
+                )
                 slice_lines.append(f"整体情感: {label}（{overall_sent:.2f}）")
             if entities:
-                ents, total, covered_n = _select_evidence(entities, source_key="source_count")
+                ents, total, covered_n = _select_evidence(
+                    entities, source_key="source_count"
+                )
                 slice_lines.append(
                     f"实体（共 {total} 个，其中 source≥{_COVERED_SOURCE_THRESHOLD} 的 {covered_n} 个，"
                     f"按 source 降序展示 {len(ents)} 个）:"
                 )
                 for e in ents:
                     if e.get("name"):
-                        slice_lines.append(_format_entity_line(e, source_key="source_count"))
+                        slice_lines.append(
+                            _format_entity_line(e, source_key="source_count")
+                        )
         else:
             # 社媒切片 result_data 结构: {meta, foundation, layers, reports, pipeline}
             foundation = data.get("foundation") or {}
             landscape = (data.get("layers") or {}).get("landscape") or {}
             overview = landscape.get("overview") or {}
-            total_volume = overview.get("total_volume", 0) or overview.get("unique_posts", 0)
+            total_volume = overview.get("total_volume", 0) or overview.get(
+                "unique_posts", 0
+            )
             slice_lines.append(f"渠道: 社媒 | 总声量: {total_volume}")
 
             global_nsr = overview.get("global_nsr")
             if global_nsr is not None:
-                label = "正面" if global_nsr > 0.3 else "负面" if global_nsr < -0.3 else "中性"
+                label = (
+                    "正面"
+                    if global_nsr > 0.3
+                    else "负面"
+                    if global_nsr < -0.3
+                    else "中性"
+                )
                 slice_lines.append(f"整体情感: {label}（NSR={global_nsr:.2f}）")
 
             all_entities = foundation.get("aligned_entities") or []
             if all_entities:
-                ents, total, covered_n = _select_evidence(all_entities, source_key="source_count")
+                ents, total, covered_n = _select_evidence(
+                    all_entities, source_key="source_count"
+                )
                 slice_lines.append(
                     f"实体（共 {total} 个，其中 source≥{_COVERED_SOURCE_THRESHOLD} 的 {covered_n} 个，"
                     f"按 source 降序展示 {len(ents)} 个）:"
                 )
                 for e in ents:
                     if e.get("name"):
-                        slice_lines.append(_format_entity_line(e, source_key="source_count"))
+                        slice_lines.append(
+                            _format_entity_line(e, source_key="source_count")
+                        )
 
             all_topics = foundation.get("aligned_topics") or []
             if all_topics:
-                tps, total, covered_n = _select_evidence(all_topics, source_key="source_count")
+                tps, total, covered_n = _select_evidence(
+                    all_topics, source_key="source_count"
+                )
                 slice_lines.append(
                     f"话题（共 {total} 个，其中 source≥{_COVERED_SOURCE_THRESHOLD} 的 {covered_n} 个，"
                     f"按 source 降序展示 {len(tps)} 个）:"
                 )
                 for t in tps:
                     if t.get("name"):
-                        slice_lines.append(_format_entity_line(t, source_key="source_count"))
+                        slice_lines.append(
+                            _format_entity_line(t, source_key="source_count")
+                        )
 
     slices_summary_section = "\n".join(slice_lines)
 

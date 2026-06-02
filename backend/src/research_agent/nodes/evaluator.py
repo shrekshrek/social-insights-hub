@@ -17,9 +17,19 @@ logger = logging.getLogger(__name__)
 
 # 回避性表述：包含这些词的 relevance 文本不计入有效覆盖
 _HEDGING_PHRASES = [
-    "缺乏", "没有直接", "未直接", "未提供", "没有提供",
-    "没有专项", "不足", "没有针对", "无专项", "缺少",
-    "没有相关", "未涉及", "不涉及",
+    "缺乏",
+    "没有直接",
+    "未直接",
+    "未提供",
+    "没有提供",
+    "没有专项",
+    "不足",
+    "没有针对",
+    "无专项",
+    "缺少",
+    "没有相关",
+    "未涉及",
+    "不涉及",
 ]
 # relevance 文本最低有效长度（过短说明 LLM 只给了泛泛一句话）
 _MIN_SUBSTANTIVE_LEN = 60
@@ -52,7 +62,9 @@ def evaluate_node(state: ResearchState) -> dict:
             if not relevance:
                 q_lower = q.lower()
                 for rtq_key, rtq_val in rtq.items():
-                    if rtq_key and (q_lower in rtq_key.lower() or rtq_key.lower() in q_lower):
+                    if rtq_key and (
+                        q_lower in rtq_key.lower() or rtq_key.lower() in q_lower
+                    ):
                         relevance = rtq_val
                         # 同步查找对应 key 的分数
                         if score is None:
@@ -83,16 +95,12 @@ def evaluate_node(state: ResearchState) -> dict:
             gap_questions.append(q)
 
     # 统计 tier1 来源
-    tier1_count = sum(
-        1 for c in selected if c.get("source_tier") == "tier1"
-    )
+    tier1_count = sum(1 for c in selected if c.get("source_tier") == "tier1")
 
     # 决策：是否继续
     # selected 为空说明本轮没有新内容，继续也没有意义
     should_continue = (
-        len(gap_questions) > 0
-        and current_round < max_rounds
-        and len(selected) > 0
+        len(gap_questions) > 0 and current_round < max_rounds and len(selected) > 0
     )
 
     logger.info(

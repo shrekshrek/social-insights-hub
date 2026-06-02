@@ -27,10 +27,10 @@ _YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
 
 # 时效分层（相对当前年，运行时计算）—— 对所有 profile 通用
 _RECENCY_TIERS = [
-    (0, 1,  +0.1, "最新，高度优先"),
-    (2, 2,  +0, "近期"),
-    (3, 3,  -0.10, "偏旧"),
-    (4, 5,  -0.20, "过旧"),
+    (0, 1, +0.1, "最新，高度优先"),
+    (2, 2, +0, "近期"),
+    (3, 3, -0.10, "偏旧"),
+    (4, 5, -0.20, "过旧"),
 ]
 # 硬截止：超过此年限的候选在代码层直接剔除
 _HARD_CUTOFF_AGE = 5
@@ -52,8 +52,8 @@ _FETCH_BLOCKED_DOMAINS = {
     "bcg.com",
     "gartner.com",
     "deloitte.com",
-    "ey.com",           # ey.com 全站；mckinsey.com.cn 可抓到部分内容，不列入
-    "mckinsey.com",     # PDF ReadTimeout 实测失败；.cn 子站单独可访问，不受影响
+    "ey.com",  # ey.com 全站；mckinsey.com.cn 可抓到部分内容，不列入
+    "mckinsey.com",  # PDF ReadTimeout 实测失败；.cn 子站单独可访问，不受影响
 }
 
 # 扣分幅度：够把"相关但抓不到"的来源排在"稍弱但可抓到"的来源后面
@@ -61,12 +61,10 @@ _FETCH_BLOCKED_PENALTY = 0.20
 
 # 跨轮次域名饱和度惩罚：同一域名在历史 findings 中出现越多，本轮新条目扣分越重
 _DOMAIN_SATURATION_PENALTIES: list[tuple[int, float]] = [
-    (3, 0.25),   # ≥3 篇 findings → -0.25
-    (2, 0.15),   # ≥2 篇 findings → -0.15
-    (1, 0.05),   # ≥1 篇 findings → -0.05（轻微，保留高质量二次引用的可能）
+    (3, 0.25),  # ≥3 篇 findings → -0.25
+    (2, 0.15),  # ≥2 篇 findings → -0.15
+    (1, 0.05),  # ≥1 篇 findings → -0.05（轻微，保留高质量二次引用的可能）
 ]
-
-
 
 
 def _is_fetch_blocked(url: str) -> bool:
@@ -204,7 +202,9 @@ def filter_node(state: ResearchState) -> dict:
     cutoff_removed = before_cutoff - len(candidates)
     if cutoff_removed:
         cutoff_year = datetime.now().year - _HARD_CUTOFF_AGE
-        logger.info("filter 节点: 时效截止剔除 %d 条（>%d年前）", cutoff_removed, cutoff_year)
+        logger.info(
+            "filter 节点: 时效截止剔除 %d 条（>%d年前）", cutoff_removed, cutoff_year
+        )
 
     if not candidates:
         return {"selected": []}
@@ -234,8 +234,16 @@ def filter_node(state: ResearchState) -> dict:
     candidates_text = "\n".join(
         f"[{i}] {c['title']}\n"
         f"    URL: {c['url']}"
-        + (" [服务介绍页，非报告]" if _is_service_page(c.get("url", ""), service_patterns) else "")
-        + (" [全文通常不可访问，仅有摘要]" if _is_fetch_blocked(c.get("url", "")) else "")
+        + (
+            " [服务介绍页，非报告]"
+            if _is_service_page(c.get("url", ""), service_patterns)
+            else ""
+        )
+        + (
+            " [全文通常不可访问，仅有摘要]"
+            if _is_fetch_blocked(c.get("url", ""))
+            else ""
+        )
         + f"\n    类型: {c.get('content_type', 'html')}\n    摘要: {c['snippet'][:200]}"
         for i, c in enumerate(candidates)
     )
@@ -337,10 +345,12 @@ def filter_node(state: ResearchState) -> dict:
                 if finding_count >= threshold:
                     score = max(0.0, score - penalty)
                     break
-            scored_candidates.append({
-                **candidate,
-                "relevance_score": score,
-            })
+            scored_candidates.append(
+                {
+                    **candidate,
+                    "relevance_score": score,
+                }
+            )
 
     # 按调整后分数降序取 top N
     scored_candidates.sort(key=lambda x: x["relevance_score"], reverse=True)
@@ -365,6 +375,11 @@ def filter_node(state: ResearchState) -> dict:
 
     logger.info(
         "filter 节点: %d → %d 条（低分丢弃 %d）",
-        len(candidates), len(selected), low_score_dropped,
+        len(candidates),
+        len(selected),
+        low_score_dropped,
     )
-    return {"selected": selected, "token_usage_records": [build_flat_token_record(response)]}
+    return {
+        "selected": selected,
+        "token_usage_records": [build_flat_token_record(response)],
+    }

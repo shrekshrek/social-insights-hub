@@ -38,9 +38,7 @@ def analyze_node(state: ResearchState) -> dict:
         return {"findings": []}
 
     # 建立 URL → selected 映射，获取 source_tier
-    url_to_tier = {
-        c["url"]: c.get("source_tier", "tier3") for c in selected
-    }
+    url_to_tier = {c["url"]: c.get("source_tier", "tier3") for c in selected}
 
     # 研究分析专用 LLM：较短超时（90s），减少重试（1 次）
     # 避免单文档 LLM 调用阻塞整个任务
@@ -53,6 +51,7 @@ def analyze_node(state: ResearchState) -> dict:
         timeout=90.0,
         max_retries=1,
     )
+
     def _analyze_doc(doc: dict) -> dict:
         """分析单篇文档，返回 finding（供并发调用）"""
         # snippet 过短时跳过 LLM（内容不够分析）；足够长时仍走 LLM 提取
@@ -118,6 +117,7 @@ def analyze_node(state: ResearchState) -> dict:
     #   信号无法跨 greenlet 传播；gevent.pool.Pool 是原生 greenlet pool，异常可正常传播
     # - LLM 调用本质是 HTTP I/O，greenlet 完全够用，无需 OS 线程
     from gevent.pool import Pool as GeventPool
+
     pool = GeventPool(MAX_CONCURRENT_TASKS)
     raw_findings = list(pool.map(_analyze_doc, documents))
 

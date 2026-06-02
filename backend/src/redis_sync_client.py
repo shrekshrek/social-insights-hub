@@ -75,7 +75,6 @@ if keepalive_opts:
 sync_redis_pool = redis.ConnectionPool.from_url(settings.REDIS_URL, **REDIS_POOL_CONFIG)
 
 
-
 def get_sync_redis() -> redis.Redis:
     """
     获取同步Redis客户端（用于Celery任务，gevent友好）

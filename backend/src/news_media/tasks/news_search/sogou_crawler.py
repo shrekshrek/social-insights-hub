@@ -105,11 +105,15 @@ def _parse_sogou_date(date_str: str) -> datetime | None:
         # 绝对日期：2026年4月10日 或 2026-04-10
         m = re.search(r"(\d{4})[年\-](\d{1,2})[月\-](\d{1,2})", date_str)
         if m:
-            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc)
+            return datetime(
+                int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc
+            )
         # 不带年份：4月10日
         m = re.search(r"(\d{1,2})月(\d{1,2})日", date_str)
         if m:
-            return datetime(now.year, int(m.group(1)), int(m.group(2)), tzinfo=timezone.utc)
+            return datetime(
+                now.year, int(m.group(1)), int(m.group(2)), tzinfo=timezone.utc
+            )
     except (AttributeError, ValueError):
         pass
     return None
@@ -153,7 +157,9 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
 
     blocks = _RESULT_BLOCK_RE.findall(html)
     if not blocks:
-        logger.warning("搜狗新闻: 未匹配到 vrwrap 结果块，cleaned_html 长度=%d", len(html))
+        logger.warning(
+            "搜狗新闻: 未匹配到 vrwrap 结果块，cleaned_html 长度=%d", len(html)
+        )
         return []
 
     for block in blocks:
@@ -189,16 +195,18 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
         if snippet_match:
             snippet = _clean_html_text(snippet_match.group(1))[:300] or None
 
-        articles.append({
-            "title": title,
-            "url": url,
-            "snippet": snippet,
-            "source_name": source_name or "未知来源",
-            "published_at": published_at,
-            "image_url": None,
-            "raw_data": {"title": title, "url": url, "source": source_name},
-            "search_source": "sogou",
-        })
+        articles.append(
+            {
+                "title": title,
+                "url": url,
+                "snippet": snippet,
+                "source_name": source_name or "未知来源",
+                "published_at": published_at,
+                "image_url": None,
+                "raw_data": {"title": title, "url": url, "source": source_name},
+                "search_source": "sogou",
+            }
+        )
 
     return articles
 
@@ -214,7 +222,9 @@ def _fetch_one_page(session: requests.Session, url: str, headers: dict) -> str:
     指数退避重试，抹平搜狗反爬的瞬时抖动。
     """
     result = fetch_via_crawl4ai(
-        session, url, headers,
+        session,
+        url,
+        headers,
         page_timeout=25000,
         wait_until="networkidle",
         http_timeout=35.0,
@@ -254,7 +264,9 @@ def search_sogou_news(query: str, max_results: int = 10) -> list[dict]:
 
                 cleaned_html = _fetch_one_page(session, target_url, headers)
                 if not cleaned_html.strip():
-                    logger.warning("搜狗新闻: 第 %d 页 cleaned_html 为空, query=%r", page, query)
+                    logger.warning(
+                        "搜狗新闻: 第 %d 页 cleaned_html 为空, query=%r", page, query
+                    )
                     break
 
                 page_articles = _extract_articles_from_html(cleaned_html, _PAGE_SIZE)
@@ -271,13 +283,20 @@ def search_sogou_news(query: str, max_results: int = 10) -> list[dict]:
                 if added_this_page == 0:
                     logger.info(
                         "搜狗新闻: 第 %d 页无新增 URL（%d 条全为重复），判定结果已耗尽, query=%r",
-                        page, len(page_articles), query,
+                        page,
+                        len(page_articles),
+                        query,
                     )
                     break
 
                 page += 1
 
-        logger.info("搜狗新闻: query=%r, 提取文章数=%d (翻页=%d)", query, len(all_articles), page - 1)
+        logger.info(
+            "搜狗新闻: query=%r, 提取文章数=%d (翻页=%d)",
+            query,
+            len(all_articles),
+            page - 1,
+        )
         return all_articles
 
     except requests.RequestException as e:

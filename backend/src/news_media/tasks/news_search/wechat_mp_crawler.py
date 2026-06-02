@@ -74,7 +74,9 @@ _ACCOUNT_RE = re.compile(
 # 发布时间有两种形式：
 #   1) crawl4ai 跑过 JS → 渲染结果直接写进 <span class="s2">2026-1-30</span>（首选）
 #   2) 原始 timeConvert('unix_ts') 脚本（cleaned_html 一般会被剥掉 <script>，几乎匹配不到，留作降级）
-_RENDERED_DATE_RE = re.compile(r'<span[^>]*class="[^"]*\bs2\b[^"]*"[^>]*>([^<]+)</span>')
+_RENDERED_DATE_RE = re.compile(
+    r'<span[^>]*class="[^"]*\bs2\b[^"]*"[^>]*>([^<]+)</span>'
+)
 _TIME_CONVERT_RE = re.compile(r"timeConvert\(['\"](\d+)['\"]\)")
 
 
@@ -97,7 +99,12 @@ def _parse_time_convert(html_block: str) -> datetime | None:
         m = re.match(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", date_str)
         if m:
             try:
-                return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc)
+                return datetime(
+                    int(m.group(1)),
+                    int(m.group(2)),
+                    int(m.group(3)),
+                    tzinfo=timezone.utc,
+                )
             except ValueError:
                 pass
 
@@ -180,16 +187,18 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
         # 发布时间
         published_at = _parse_time_convert(item_html)
 
-        articles.append({
-            "title": title,
-            "url": url,
-            "snippet": snippet,
-            "source_name": source_name,
-            "published_at": published_at,
-            "image_url": None,
-            "raw_data": {"title": title, "url": url, "source": source_name},
-            "search_source": "wechat_mp",
-        })
+        articles.append(
+            {
+                "title": title,
+                "url": url,
+                "snippet": snippet,
+                "source_name": source_name,
+                "published_at": published_at,
+                "image_url": None,
+                "raw_data": {"title": title, "url": url, "source": source_name},
+                "search_source": "wechat_mp",
+            }
+        )
 
     return articles
 
@@ -205,7 +214,9 @@ def _fetch_one_page(session: requests.Session, url: str, headers: dict) -> str:
     指数退避重试，抹平搜狗微信入口反爬的瞬时抖动。
     """
     result = fetch_via_crawl4ai(
-        session, url, headers,
+        session,
+        url,
+        headers,
         page_timeout=30000,
         wait_until="networkidle",
         http_timeout=40.0,
@@ -245,7 +256,9 @@ def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
 
                 cleaned_html = _fetch_one_page(session, target_url, headers)
                 if not cleaned_html.strip():
-                    logger.warning("搜狗微信: 第 %d 页 cleaned_html 为空, query=%r", page, query)
+                    logger.warning(
+                        "搜狗微信: 第 %d 页 cleaned_html 为空, query=%r", page, query
+                    )
                     break
 
                 page_articles = _extract_articles_from_html(cleaned_html, _PAGE_SIZE)
@@ -262,13 +275,20 @@ def search_wechat_mp(query: str, max_results: int = 10) -> list[dict]:
                 if added_this_page == 0:
                     logger.info(
                         "搜狗微信: 第 %d 页无新增 URL（%d 条全为重复），判定结果已耗尽, query=%r",
-                        page, len(page_articles), query,
+                        page,
+                        len(page_articles),
+                        query,
                     )
                     break
 
                 page += 1
 
-        logger.info("搜狗微信: query=%r, 提取文章数=%d (翻页=%d)", query, len(all_articles), page - 1)
+        logger.info(
+            "搜狗微信: query=%r, 提取文章数=%d (翻页=%d)",
+            query,
+            len(all_articles),
+            page - 1,
+        )
         return all_articles
 
     except requests.RequestException as e:

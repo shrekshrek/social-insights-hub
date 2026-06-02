@@ -24,7 +24,6 @@ from .dependencies import (
 from .models import SocialMonitor, Platform
 
 
-
 router = APIRouter(
     prefix="/social-media",
     tags=["Social Media - Monitors"],
@@ -242,7 +241,9 @@ async def delete_monitor(
     删除项目会级联删除所有关联数据（任务、原文、评论等）。
     """
     await service.delete_monitor(db, monitor)
-    return MessageResponse(message=f"SocialMonitor '{monitor.name}' deleted successfully")
+    return MessageResponse(
+        message=f"SocialMonitor '{monitor.name}' deleted successfully"
+    )
 
 
 # ==================== Batch Task Creation ====================
@@ -280,9 +281,7 @@ async def batch_create_tasks(
         task_dict["monitor_name"] = monitor.name
         task_dict["platform_name"] = task.platform.name if task.platform else None
         task_dict["platform_code"] = task.platform.code if task.platform else None
-        task_dict["user_username"] = (
-            task.user.username if task.user else None
-        )
+        task_dict["user_username"] = task.user.username if task.user else None
         tasks_list.append(task_dict)
 
     return schemas.BatchTasksCreateResponse(created_tasks=tasks_list)

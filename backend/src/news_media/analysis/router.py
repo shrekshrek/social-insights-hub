@@ -97,8 +97,11 @@ async def analyze_slice(
             detail="切片不存在",
         )
     return await service.run_slice_analysis(
-        db, slice_obj, user_id=current_user.id,
-        analysis_goal=analysis_goal, subject=subject,
+        db,
+        slice_obj,
+        user_id=current_user.id,
+        analysis_goal=analysis_goal,
+        subject=subject,
     )
 
 

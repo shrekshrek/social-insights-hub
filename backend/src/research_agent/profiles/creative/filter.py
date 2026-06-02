@@ -23,34 +23,38 @@ SYSTEM_PROMPT = """你是一个创意案例筛选专家。给定一组搜索结�
 
 
 STRATEGY_HINT = (
-    '辅助评分规则（在参考价值基础上叠加，不改变参考价值主导地位）：\n'
-    '- 标题含具体品牌名 + campaign/案例/创意/营销等词的结果，加 0.10 分\n'
-    '- 标题纯属新闻通稿/融资公告/人事变动/榜单排名类，减 0.15 分\n'
-    '- 来源为垂直创意媒体（数英/TOPYS/广告门/梅花网/SocialBeta 等），加 0.05 分\n'
-    '- 内容仅涉及无关品类（即使是知名媒体），不加分，并受 0.35 上限约束'
+    "辅助评分规则（在参考价值基础上叠加，不改变参考价值主导地位）：\n"
+    "- 标题含具体品牌名 + campaign/案例/创意/营销等词的结果，加 0.10 分\n"
+    "- 标题纯属新闻通稿/融资公告/人事变动/榜单排名类，减 0.15 分\n"
+    "- 来源为垂直创意媒体（数英/TOPYS/广告门/梅花网/SocialBeta 等），加 0.05 分\n"
+    "- 内容仅涉及无关品类（即使是知名媒体），不加分，并受 0.35 上限约束"
 )
 
 
 # 创意研究不需要"权威 tier"概念——所有来源都是编辑部内容，品质差异不体现在 tier 上。
 # 保留 tier1/tier2 作为可选的"推荐程度"标签：核心垂直媒体进 tier1，辅助来源进 tier2。
-TIER1_DOMAINS = frozenset({
-    "digitaling.com",       # 数英
-    "topys.cn",             # TOPYS
-    "adquan.com",           # 广告门
-    "meihua.info",          # 梅花网
-    "socialbeta.com",       # SocialBeta
-    "campaignchina.com",    # Campaign 中国
-})
+TIER1_DOMAINS = frozenset(
+    {
+        "digitaling.com",  # 数英
+        "topys.cn",  # TOPYS
+        "adquan.com",  # 广告门
+        "meihua.info",  # 梅花网
+        "socialbeta.com",  # SocialBeta
+        "campaignchina.com",  # Campaign 中国
+    }
+)
 
 
-TIER2_DOMAINS = frozenset({
-    "adfame.cn",
-    "adage.com",
-    "campaignbrief.com",
-    "dmunion.com",
-    "xinpianchang.com",
-    "36kr.com",             # 新消费品牌报道
-})
+TIER2_DOMAINS = frozenset(
+    {
+        "adfame.cn",
+        "adage.com",
+        "campaignbrief.com",
+        "dmunion.com",
+        "xinpianchang.com",
+        "36kr.com",  # 新消费品牌报道
+    }
+)
 
 
 # 创意研究不需要过滤"服务页"模式——创意站没有这种页面。留空即可。

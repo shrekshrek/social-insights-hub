@@ -105,10 +105,12 @@ USER_TEMPLATE = """{research_design_section}
 def create_single_news_probe_review_chain() -> Runnable:
     """创建单任务新闻探测审查 LLM 链（用于并行评估）"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SINGLE_TASK_SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SINGLE_TASK_SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 

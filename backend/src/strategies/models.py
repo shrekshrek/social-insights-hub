@@ -55,9 +55,7 @@ class Strategy(Base):
     __tablename__ = "strategies"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(
-        String(255), nullable=False, comment="策略名称"
-    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="策略名称")
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"
     )
@@ -84,7 +82,9 @@ class Strategy(Base):
         JSON, nullable=True, comment="探测审查结果（probe_review_chain 输出）"
     )
     probe_round: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0",
+        Integer,
+        nullable=False,
+        server_default="0",
         comment="当前探测轮次（最多 3）",
     )
 
@@ -98,11 +98,13 @@ class Strategy(Base):
     #   - campaign_strategy: 填充 insight_result → brand_strategy_branches（多分支）
     #   - market_report:  填充 agenda_map_result → landscape_result → strategic_brief_result
     output_type: Mapped[str | None] = mapped_column(
-        String(30), nullable=True,
+        String(30),
+        nullable=True,
         comment="产出类型: campaign_strategy(=campaign_strategy) / market_report / full_strategy",
     )
     insight_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True,
+        JSON,
+        nullable=True,
         comment="campaign_strategy 第 1 层 Insight: 含多 tensions + opportunities",
     )
     # campaign_strategy 第 2/3 层：每个 tension 一个独立分支
@@ -115,29 +117,35 @@ class Strategy(Base):
     # - status: pending | brand_role_done | big_idea_done | failed
     # - error_message: 该分支生成失败时的错误信息（可选）
     brand_strategy_branches: Mapped[list | None] = mapped_column(
-        JSON, nullable=True,
+        JSON,
+        nullable=True,
         comment="campaign_strategy 第 2/3 层多分支：每个 insight tension 独立 brand_role + big_idea 路径",
     )
     agenda_map_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True,
+        JSON,
+        nullable=True,
         comment="market_report 第 1 层 Agenda Map: 媒体议程图",
     )
     landscape_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True,
+        JSON,
+        nullable=True,
         comment="market_report 第 2 层 Landscape: 竞争格局 + 话语权",
     )
     strategic_brief_result: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True,
+        JSON,
+        nullable=True,
         comment="market_report 第 3 层 Strategic Brief: 战略简报",
     )
 
     # 关联
     social_monitor_id: Mapped[int | None] = mapped_column(
-        ForeignKey("social_monitors.id"), nullable=True,
+        ForeignKey("social_monitors.id"),
+        nullable=True,
         comment="策略创建的社媒 SocialMonitor ID",
     )
     news_monitor_id: Mapped[int | None] = mapped_column(
-        ForeignKey("news_monitors.id"), nullable=True,
+        ForeignKey("news_monitors.id"),
+        nullable=True,
         comment="策略创建的新闻 NewsMonitor ID",
     )
 
@@ -197,5 +205,3 @@ class Strategy(Base):
             name="valid_status",
         ),
     )
-
-

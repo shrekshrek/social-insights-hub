@@ -536,10 +536,13 @@ def run_auto_analysis(
         # 4. 聚合报告生成
         logger.info(
             "Task %s: Step 4/4 - Running aggregation (skip_llm=%s)...",
-            task_id, skip_llm_normalization,
+            task_id,
+            skip_llm_normalization,
         )
         aggregation_job_id = _run_aggregation(
-            task_id, user_id, skip_llm_normalization=skip_llm_normalization,
+            task_id,
+            user_id,
+            skip_llm_normalization=skip_llm_normalization,
         )
         results["aggregation"] = {"job_id": aggregation_job_id}
 

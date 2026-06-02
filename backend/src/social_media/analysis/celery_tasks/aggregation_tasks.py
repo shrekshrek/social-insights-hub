@@ -112,7 +112,9 @@ def run_aggregation_task(
 
     except Exception as e:
         db.rollback()
-        logger.error("聚合分析失败: task_id=%s, error=%s", task_id, str(e), exc_info=True)
+        logger.error(
+            "聚合分析失败: task_id=%s, error=%s", task_id, str(e), exc_info=True
+        )
 
         # 重试或抛出异常
         raise self.retry(exc=e)

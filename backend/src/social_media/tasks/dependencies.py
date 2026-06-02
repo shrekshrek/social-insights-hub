@@ -12,7 +12,6 @@ from . import crud
 from .models import SocialTask, SocialPost
 
 
-
 async def validate_task_exists(
     task_id: Annotated[int, Path()], db: AsyncSession = Depends(get_async_db)
 ) -> SocialTask:
@@ -33,7 +32,10 @@ async def validate_task_access(
 ) -> SocialTask:
     """验证用户是否有任务访问权限（通过项目权限）"""
     await social_crud.assert_monitor_access(
-        db, task.monitor_id, current_user.id, detail="You don't have access to this task"
+        db,
+        task.monitor_id,
+        current_user.id,
+        detail="You don't have access to this task",
     )
     return task
 
@@ -89,6 +91,9 @@ async def validate_post_access(
 
     # 检查用户是否有项目访问权限
     await social_crud.assert_monitor_access(
-        db, task.monitor_id, current_user.id, detail="You don't have access to this post"
+        db,
+        task.monitor_id,
+        current_user.id,
+        detail="You don't have access to this post",
     )
     return post

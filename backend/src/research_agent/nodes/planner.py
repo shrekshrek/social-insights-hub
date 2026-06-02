@@ -89,7 +89,9 @@ def call_planner_llm(
     if context:
         user_content += f"\n研究背景：{context}"
     if research_questions:
-        user_content += "\n研究问题：\n" + "\n".join(f"- {q}" for q in research_questions)
+        user_content += "\n研究问题：\n" + "\n".join(
+            f"- {q}" for q in research_questions
+        )
 
     llm = ChatDeepSeek(
         api_key=settings.DEEPSEEK_API_KEY,
@@ -117,7 +119,9 @@ def call_planner_llm(
             content = content.strip()
         return json.loads(content), token_rec
     except (json.JSONDecodeError, IndexError):
-        logger.warning("planner LLM 输出解析失败，使用回退方案: %s", response.content[:200])
+        logger.warning(
+            "planner LLM 输出解析失败，使用回退方案: %s", response.content[:200]
+        )
         return {
             "title": query[:20],
             "analysis_goal": query[:100],
@@ -128,13 +132,16 @@ def call_planner_llm(
         }, token_rec
 
 
-def _build_tried_domains(findings: list[dict], selected: list[dict] | None = None) -> list[str]:
+def _build_tried_domains(
+    findings: list[dict], selected: list[dict] | None = None
+) -> list[str]:
     """从历史 findings + 上轮 selected 中提取已尝试过的域名（去重，最多返回15个）
 
     selected 补充 findings 的覆盖盲区：fetch 完全失败且无 snippet 的来源不会生成
     finding，但其域名仍应纳入"已尝试"名单，避免 planner 重复推荐。
     """
     from urllib.parse import urlparse
+
     seen: dict[str, int] = {}
     for f in findings:
         url = f.get("source_url", "")
@@ -143,7 +150,7 @@ def _build_tried_domains(findings: list[dict], selected: list[dict] | None = Non
         domain = urlparse(url).netloc.removeprefix("www.")
         seen[domain] = seen.get(domain, 0) + 1
     # 补充 selected 中尚未出现在 findings 的域名（计入 1 次，不影响已有计数）
-    for s in (selected or []):
+    for s in selected or []:
         url = s.get("url", "")
         if not url:
             continue
@@ -194,12 +201,12 @@ def plan_node(state: ResearchState) -> dict:
         # 覆盖率偏低时，注入方向诊断
         if total_count > 0 and covered_count < total_count / 2:
             suffix_parts.append(
-                '⚠️ 前几轮覆盖率不足（已覆盖研究问题少于一半）。'
-                '请结合当前研究主题自行诊断原因，常见情况包括：\n'
-                '- 搜索角度单一，需要换维度（如从行业整体→细分领域、从国内→全球、从现状→趋势）\n'
-                '- 来源类型集中，需要多元化（如从行业参与者自身发布→独立第三方研究机构、从中文→中英混搜）\n'
-                '- 关键词过于宽泛或过于专业，需要调整颗粒度\n'
-                '请根据具体研究主题生成差异化的新关键词，避免重复前几轮的搜索方向。'
+                "⚠️ 前几轮覆盖率不足（已覆盖研究问题少于一半）。"
+                "请结合当前研究主题自行诊断原因，常见情况包括：\n"
+                "- 搜索角度单一，需要换维度（如从行业整体→细分领域、从国内→全球、从现状→趋势）\n"
+                "- 来源类型集中，需要多元化（如从行业参与者自身发布→独立第三方研究机构、从中文→中英混搜）\n"
+                "- 关键词过于宽泛或过于专业，需要调整颗粒度\n"
+                "请根据具体研究主题生成差异化的新关键词，避免重复前几轮的搜索方向。"
             )
 
         if suffix_parts:

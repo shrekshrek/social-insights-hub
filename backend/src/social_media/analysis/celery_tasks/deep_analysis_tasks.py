@@ -265,7 +265,9 @@ def finalize_post_deep_analysis(
             )
 
             if completed >= total_count:
-                logger.info("[Finalizer] 所有子任务已完成: %s/%s", completed, total_count)
+                logger.info(
+                    "[Finalizer] 所有子任务已完成: %s/%s", completed, total_count
+                )
                 break
 
             logger.info(
@@ -277,7 +279,10 @@ def finalize_post_deep_analysis(
             time.sleep(poll_interval)
         else:
             # 等待 2 小时仍有子任务未完成，标记为失败而非 completed
-            logger.warning("[Finalizer] 等待超时，部分任务可能未完成，标记 AnalysisJob %s 为失败", result_id)
+            logger.warning(
+                "[Finalizer] 等待超时，部分任务可能未完成，标记 AnalysisJob %s 为失败",
+                result_id,
+            )
             progress_mgr.mark_failed("等待子任务超时（2小时）")
             final_progress = progress_mgr.get_progress()
             return {
@@ -308,7 +313,9 @@ def finalize_post_deep_analysis(
             if isinstance(exc, SoftTimeLimitExceeded)
             else f"Finalizer 异常: {str(exc)[:200]}"
         )
-        logger.warning("[Finalizer] posts 异常，标记 AnalysisJob %s 为失败: %s", result_id, msg)
+        logger.warning(
+            "[Finalizer] posts 异常，标记 AnalysisJob %s 为失败: %s", result_id, msg
+        )
         progress_mgr.mark_failed(msg)
         raise
 
@@ -710,7 +717,10 @@ def finalize_comment_deep_analysis(
             time.sleep(poll_interval)
         else:
             # 等待 2 小时仍有子任务未完成，标记为失败而非 completed
-            logger.warning("[Finalizer] 等待超时，部分评论分析任务可能未完成，标记 AnalysisJob %s 为失败", result_id)
+            logger.warning(
+                "[Finalizer] 等待超时，部分评论分析任务可能未完成，标记 AnalysisJob %s 为失败",
+                result_id,
+            )
             progress_mgr.mark_failed("等待评论分析子任务超时（2小时）")
             final_progress = progress_mgr.get_progress()
             return {
@@ -741,7 +751,9 @@ def finalize_comment_deep_analysis(
             if isinstance(exc, SoftTimeLimitExceeded)
             else f"Finalizer 异常: {str(exc)[:200]}"
         )
-        logger.warning("[Finalizer] comments 异常，标记 AnalysisJob %s 为失败: %s", result_id, msg)
+        logger.warning(
+            "[Finalizer] comments 异常，标记 AnalysisJob %s 为失败: %s", result_id, msg
+        )
         progress_mgr.mark_failed(msg)
         raise
 

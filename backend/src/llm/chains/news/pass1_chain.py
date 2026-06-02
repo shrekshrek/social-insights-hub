@@ -148,10 +148,12 @@ NEWS_PASS1_USER = """以下是 {article_count} 篇已标注新闻文章（多个
 def create_pass1_chain() -> Runnable:
     """创建 Slice Pass 1 清洗归一抽取链"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", NEWS_PASS1_SYSTEM),
-        ("user", NEWS_PASS1_USER),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", NEWS_PASS1_SYSTEM),
+            ("user", NEWS_PASS1_USER),
+        ]
+    )
     return prompt | llm
 
 
@@ -169,12 +171,14 @@ def format_articles_for_pass1(articles: list[dict]) -> str:
         ents_raw = a.get("mentioned_entities") or []
         ents_str = ", ".join(
             f"{(e or {}).get('name', '')}({(e or {}).get('role', '')})"
-            for e in ents_raw if (e or {}).get("name")
+            for e in ents_raw
+            if (e or {}).get("name")
         )
         quotes_raw = a.get("key_quotes") or []
         quotes_str = " || ".join(
-            f"{(q or {}).get('speaker', '')}: \"{(q or {}).get('quote', '')}\""
-            for q in quotes_raw if (q or {}).get("quote")
+            f'{(q or {}).get("speaker", "")}: "{(q or {}).get("quote", "")}"'
+            for q in quotes_raw
+            if (q or {}).get("quote")
         )
         parts.append(
             f"[{i}] {a.get('title', '')}\n"

@@ -5,7 +5,11 @@ from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .models import Platform, SocialMonitor, social_monitor_participants as monitor_participants
+from .models import (
+    Platform,
+    SocialMonitor,
+    social_monitor_participants as monitor_participants,
+)
 from src.auth.models import User
 
 
@@ -68,7 +72,9 @@ async def get_social_monitor_by_id(
     return result.scalar_one_or_none()
 
 
-async def get_social_monitor_by_name(db: AsyncSession, name: str) -> Optional[SocialMonitor]:
+async def get_social_monitor_by_name(
+    db: AsyncSession, name: str
+) -> Optional[SocialMonitor]:
     """根据名称获取项目"""
     result = await db.execute(select(SocialMonitor).where(SocialMonitor.name == name))
     return result.scalar_one_or_none()

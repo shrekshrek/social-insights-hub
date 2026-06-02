@@ -208,10 +208,12 @@ USER_TEMPLATE = """{brief_section}
 def create_strategic_brief_chain() -> Runnable:
     """创建 Strategic Brief (战略简报) LLM 链 — market_report 三层第 3 层"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -261,9 +263,8 @@ def _format_insight_section(insight_result: dict | None) -> str:
             if isinstance(o, dict)
         ],
     }
-    return (
-        "## 消费者洞察 (Insight)\n\n"
-        + json.dumps(slim, ensure_ascii=False, indent=2)
+    return "## 消费者洞察 (Insight)\n\n" + json.dumps(
+        slim, ensure_ascii=False, indent=2
     )
 
 
@@ -304,7 +305,8 @@ def _format_brand_strategy_branches_section(
                 "big_idea_statement": bi.get("statement"),
                 "tension_echo": bi.get("tension_echo"),
                 "content_pillars": [
-                    p.get("name") for p in (content.get("pillars") or [])
+                    p.get("name")
+                    for p in (content.get("pillars") or [])
                     if isinstance(p, dict) and p.get("name")
                 ],
             }
@@ -339,15 +341,19 @@ def format_inputs_for_strategic_brief(
     """
     brief_section = ""
     if brief:
-        brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        brief_section = (
+            f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        )
 
     agenda_map_section = (
         json.dumps(agenda_map_result, ensure_ascii=False, indent=2)
-        if agenda_map_result else "（agenda_map 未生成）"
+        if agenda_map_result
+        else "（agenda_map 未生成）"
     )
     landscape_section = (
         json.dumps(landscape_result, ensure_ascii=False, indent=2)
-        if landscape_result else "（landscape 未生成）"
+        if landscape_result
+        else "（landscape 未生成）"
     )
 
     return {
@@ -359,7 +365,9 @@ def format_inputs_for_strategic_brief(
         "agenda_map_section": agenda_map_section,
         "landscape_section": landscape_section,
         "insight_section": _format_insight_section(insight_result),
-        "brand_strategy_branches_section": _format_brand_strategy_branches_section(brand_strategy_branches),
+        "brand_strategy_branches_section": _format_brand_strategy_branches_section(
+            brand_strategy_branches
+        ),
     }
 
 

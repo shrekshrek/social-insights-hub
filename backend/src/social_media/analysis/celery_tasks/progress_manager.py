@@ -313,7 +313,9 @@ class AnalysisProgressManager:
                         analysis_job.processing_time = int(
                             (completed_at - started_at).total_seconds()
                         )
-                        logger.info("任务完成，耗时: %s秒", analysis_job.processing_time)
+                        logger.info(
+                            "任务完成，耗时: %s秒", analysis_job.processing_time
+                        )
 
                     db.commit()
 
@@ -347,9 +349,13 @@ class AnalysisProgressManager:
             if analysis_job and analysis_job.status == "running":
                 analysis_job.status = "failed"
                 analysis_job.completed_at = datetime.now(timezone.utc)
-                analysis_job.error_message = (error_message[:500] if error_message else "任务异常中断")
+                analysis_job.error_message = (
+                    error_message[:500] if error_message else "任务异常中断"
+                )
                 db.commit()
-                logger.info("AnalysisJob %s 已标记为失败: %s", self.result_id, error_message)
+                logger.info(
+                    "AnalysisJob %s 已标记为失败: %s", self.result_id, error_message
+                )
             else:
                 logger.debug(
                     "AnalysisJob %s 状态为 %s，跳过失败标记",

@@ -57,6 +57,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
+[tool.ruff]
+# 显式锁定行宽与目标版本，不依赖 ruff 默认值（未来版本可能变更）。
+# 实测 line-length=88（ruff 默认）对现有代码改动最小，调宽反而更多文件被重排。
+line-length = 88
+target-version = "py311"
+
 [[tool.uv.index]]
 url = "https://pypi.org/simple/"
 default = true

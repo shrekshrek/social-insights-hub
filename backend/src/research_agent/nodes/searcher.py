@@ -58,7 +58,8 @@ def search_node(state: ResearchState) -> dict:
         saturated = _saturated_domains(findings, min_count=2)
         if saturated:
             reduced = [
-                d for d in all_domains
+                d
+                for d in all_domains
                 if not any(
                     d == s or d.endswith("." + s) or s.endswith("." + d)
                     for s in saturated
@@ -68,7 +69,9 @@ def search_node(state: ResearchState) -> dict:
             if len(reduced) >= 10:
                 logger.info(
                     "search 节点 round=%d: 移除已饱和域名 %d 个，剩余 %d 个",
-                    current_round, len(saturated), len(reduced),
+                    current_round,
+                    len(saturated),
+                    len(reduced),
                 )
                 all_domains = reduced
 
@@ -77,7 +80,9 @@ def search_node(state: ResearchState) -> dict:
     # 候选池域名限流：单域名最多 _MAX_CANDIDATES_PER_DOMAIN 条
     # 防止 assets.kpmg.com 等高产域名霸占候选池，挤占其他来源的曝光机会
     before_cap = len(all_candidates)
-    all_candidates = _cap_candidates_by_domain(all_candidates, _MAX_CANDIDATES_PER_DOMAIN)
+    all_candidates = _cap_candidates_by_domain(
+        all_candidates, _MAX_CANDIDATES_PER_DOMAIN
+    )
     if len(all_candidates) < before_cap:
         logger.info(
             "search 节点: 候选池域名限流 %d → %d 条",
@@ -115,22 +120,26 @@ def _search_tavily(keywords: list[str], target_domains: list[str]) -> list[dict]
             snippet = r["snippet"]
             # snippet 通常含发布年份，作为 URL/标题都无年份时的兜底
             year = _extract_year(url) or _extract_year(title) or _extract_year(snippet)
-            candidates.append({
-                "title": title,
-                "url": url,
-                "snippet": snippet,
-                "full_text": "",  # fetcher 节点负责填充
-                "source": _extract_domain(url),
-                "content_type": _guess_content_type(url),
-                "source_tier": "",
-                "relevance_score": r.get("score", 0.0),
-                "published_date": str(year) if year else "",
-            })
+            candidates.append(
+                {
+                    "title": title,
+                    "url": url,
+                    "snippet": snippet,
+                    "full_text": "",  # fetcher 节点负责填充
+                    "source": _extract_domain(url),
+                    "content_type": _guess_content_type(url),
+                    "source_tier": "",
+                    "relevance_score": r.get("score", 0.0),
+                    "published_date": str(year) if year else "",
+                }
+            )
 
     return candidates
 
 
-def _cap_candidates_by_domain(candidates: list[dict], max_per_domain: int) -> list[dict]:
+def _cap_candidates_by_domain(
+    candidates: list[dict], max_per_domain: int
+) -> list[dict]:
     """对候选池按域名限流，保留每个域名最靠前的 max_per_domain 条"""
     domain_count: dict[str, int] = {}
     result = []

@@ -105,7 +105,9 @@ async def get_social_tasks(
     return list(tasks), total
 
 
-async def create_social_task(db: AsyncSession, task_data: dict, user_id: int) -> SocialTask:
+async def create_social_task(
+    db: AsyncSession, task_data: dict, user_id: int
+) -> SocialTask:
     """创建任务"""
     task = SocialTask(**task_data, user_id=user_id)
     db.add(task)
@@ -114,7 +116,9 @@ async def create_social_task(db: AsyncSession, task_data: dict, user_id: int) ->
     return task
 
 
-async def update_social_task(db: AsyncSession, task: SocialTask, update_data: dict) -> SocialTask:
+async def update_social_task(
+    db: AsyncSession, task: SocialTask, update_data: dict
+) -> SocialTask:
     """更新任务"""
     for key, value in update_data.items():
         if value is not None:
@@ -583,8 +587,6 @@ async def bulk_create_tasks(
     refreshed_tasks = result.scalars().all()
 
     return list(refreshed_tasks)
-
-
 
 
 # ==================== Backward-compatible aliases ====================

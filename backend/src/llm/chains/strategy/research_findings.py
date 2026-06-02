@@ -23,7 +23,6 @@ Token 预算指引（creative profile）：
 from __future__ import annotations
 
 
-
 def _load_result(result_data: dict | None) -> dict:
     """安全提取 result_data 字段"""
     if not result_data or not isinstance(result_data, dict):
@@ -42,11 +41,13 @@ def format_coverage_signals(coverage_check_result: dict | None) -> str:
         return ""
 
     warnings = [
-        w for w in (coverage_check_result.get("warnings") or [])
+        w
+        for w in (coverage_check_result.get("warnings") or [])
         if isinstance(w, str) and w.strip()
     ]
     highlights = [
-        h for h in (coverage_check_result.get("data_highlights") or [])
+        h
+        for h in (coverage_check_result.get("data_highlights") or [])
         if isinstance(h, str) and h.strip()
     ]
 
@@ -61,9 +62,7 @@ def format_coverage_signals(coverage_check_result: dict | None) -> str:
         )
         parts.extend(f"- ⚠ {w}" for w in warnings)
     if highlights:
-        parts.append(
-            "\n**跨切片数据亮点**（高密度信号，可作为重点结论的支撑）："
-        )
+        parts.append("\n**跨切片数据亮点**（高密度信号，可作为重点结论的支撑）：")
         parts.extend(f"- ★ {h}" for h in highlights)
     return "\n".join(parts)
 
@@ -100,7 +99,9 @@ def format_research_for_insight(result_data: dict | None) -> str:
                 source = dp.get("source", "")
                 period = dp.get("period", "")
                 suffix = f" ({period}, {source})" if period and source else ""
-                parts.append(f"  - {dp.get('metric', '')}: {dp.get('value', '')}{suffix}")
+                parts.append(
+                    f"  - {dp.get('metric', '')}: {dp.get('value', '')}{suffix}"
+                )
         parts.append("")
 
     if gaps:
@@ -146,7 +147,9 @@ def format_research_for_brand_role(result_data: dict | None) -> str:
             parts.append("### 高置信度数据点\n")
             for dp in high_conf_points[:8]:
                 source = dp.get("source", "")
-                parts.append(f"- {dp.get('metric', '')}: {dp.get('value', '')} ({source})")
+                parts.append(
+                    f"- {dp.get('metric', '')}: {dp.get('value', '')} ({source})"
+                )
             parts.append("")
 
     return "\n".join(parts)
@@ -175,7 +178,9 @@ def format_research_for_big_idea(result_data: dict | None) -> str:
             if finding.get("confidence") in ("high", "medium"):
                 summary = finding.get("answer_summary", "")
                 # 取首句（句号或换行截断）
-                first_sentence = summary.split("。")[0] + "。" if "。" in summary else summary[:100]
+                first_sentence = (
+                    summary.split("。")[0] + "。" if "。" in summary else summary[:100]
+                )
                 parts.append(f"- {first_sentence}")
         parts.append("")
 
@@ -214,7 +219,9 @@ def format_research_for_agenda_map(result_data: dict | None) -> str:
                 source = dp.get("source", "")
                 period = dp.get("period", "")
                 suffix = f" ({period}, {source})" if period and source else ""
-                parts.append(f"  - {dp.get('metric', '')}: {dp.get('value', '')}{suffix}")
+                parts.append(
+                    f"  - {dp.get('metric', '')}: {dp.get('value', '')}{suffix}"
+                )
         parts.append("")
 
     if gaps:
@@ -279,10 +286,7 @@ def format_research_for_strategic_brief(result_data: dict | None) -> str:
     if not findings:
         return ""
 
-    high_conf = [
-        (q, f) for q, f in findings.items()
-        if f.get("confidence") == "high"
-    ]
+    high_conf = [(q, f) for q, f in findings.items() if f.get("confidence") == "high"]
 
     if not high_conf:
         return ""
@@ -293,7 +297,9 @@ def format_research_for_strategic_brief(result_data: dict | None) -> str:
     ]
     for question, finding in high_conf[:5]:
         summary = finding.get("answer_summary", "")
-        first_sentence = summary.split("。")[0] + "。" if "。" in summary else summary[:100]
+        first_sentence = (
+            summary.split("。")[0] + "。" if "。" in summary else summary[:100]
+        )
         parts.append(f"- **{question}**: {first_sentence}")
 
     parts.append("")
@@ -303,6 +309,7 @@ def format_research_for_strategic_brief(result_data: dict | None) -> str:
 # ---------------------------------------------------------------------------
 # 创意研究格式化器（creative profile）
 # ---------------------------------------------------------------------------
+
 
 def format_creative_for_brand_role(result_data: dict | None) -> str:
     """Brand Role 层的创意研究注入（~450 tokens）：竞品已占据的创意角色 + 创意盲点
@@ -342,7 +349,9 @@ def format_creative_for_brand_role(result_data: dict | None) -> str:
         for question, finding in findings.items():
             if finding.get("confidence") in ("high", "medium"):
                 summary = finding.get("answer_summary", "")
-                first_sentence = summary.split("。")[0] + "。" if "。" in summary else summary[:80]
+                first_sentence = (
+                    summary.split("。")[0] + "。" if "。" in summary else summary[:80]
+                )
                 occupied_roles.append(f"- **{question}**: {first_sentence}")
 
         if occupied_roles:
@@ -354,8 +363,10 @@ def format_creative_for_brand_role(result_data: dict | None) -> str:
     # 可能是"没人做过"也可能是"搜索未覆盖"——Brand Role 排除时需留意
     if gaps:
         parts.append("### 创意参考缺口（现有案例未覆盖的方向）\n")
-        parts.append("以下方向在竞品案例库中缺乏清晰参考，可能是尚未被探索的空白，"
-                     "也可能只是搜索覆盖不足——排除竞品角色时应考虑这些方向的不确定性。\n")
+        parts.append(
+            "以下方向在竞品案例库中缺乏清晰参考，可能是尚未被探索的空白，"
+            "也可能只是搜索覆盖不足——排除竞品角色时应考虑这些方向的不确定性。\n"
+        )
         for gap in gaps[:3]:
             parts.append(f"- {gap}")
         parts.append("")
@@ -403,14 +414,18 @@ def format_creative_for_big_idea(result_data: dict | None) -> str:
             if data_points:
                 for dp in data_points[:3]:
                     source = dp.get("source", "")
-                    parts.append(f"  - {dp.get('metric', '')}: {dp.get('value', '')} ({source})")
+                    parts.append(
+                        f"  - {dp.get('metric', '')}: {dp.get('value', '')} ({source})"
+                    )
             parts.append("")
 
     # 创意研究的信息缺口 = 品类创意盲点 = Big Idea 的潜在机会
     if gaps:
         parts.append("### 创意盲点（可能的白空间）\n")
-        parts.append("以下是创意研究中发现的信息缺口——品类内罕见或缺失的创意主题，"
-                     "可能是 Big Idea 的白空间方向：\n")
+        parts.append(
+            "以下是创意研究中发现的信息缺口——品类内罕见或缺失的创意主题，"
+            "可能是 Big Idea 的白空间方向：\n"
+        )
         for gap in gaps[:5]:
             parts.append(f"- {gap}")
         parts.append("")

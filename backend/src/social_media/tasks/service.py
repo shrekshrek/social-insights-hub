@@ -30,9 +30,7 @@ async def create_social_task(
     """
     from src.social_media.monitors import crud as social_crud
 
-    monitor = await social_crud.get_monitor_by_id(
-        db, monitor_id, load_relations=False
-    )
+    monitor = await social_crud.get_monitor_by_id(db, monitor_id, load_relations=False)
     if not monitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -69,7 +67,12 @@ async def get_social_task(
     # 验证用户是否有项目访问权限
     from src.social_media.monitors import crud as social_crud
 
-    await social_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don't have access to this task")
+    await social_crud.assert_monitor_access(
+        db,
+        task.monitor_id,
+        current_user_id,
+        detail="You don't have access to this task",
+    )
 
     return task
 
@@ -454,7 +457,8 @@ async def clear_task_data(db: AsyncSession, task: SocialTask) -> SocialTask:
 
     # 先清分析状态（Redis 锁 + Celery 撤销 + 删 PostAnalysis/AnalysisJob + 清 task.analysis_result）
     await reset_task_analysis_state(
-        db, task.id,
+        db,
+        task.id,
         task=task,
         delete_post_analysis=True,
         delete_analysis_jobs=True,

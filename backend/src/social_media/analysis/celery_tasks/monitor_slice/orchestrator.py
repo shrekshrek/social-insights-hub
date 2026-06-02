@@ -40,9 +40,7 @@ def run_monitor_slice_pipeline_sync(
     """
     db = SyncSessionLocal()
     try:
-        stmt = select(SocialSlice).where(
-            SocialSlice.id == slice_id
-        )
+        stmt = select(SocialSlice).where(SocialSlice.id == slice_id)
         slice_record = db.execute(stmt).scalar_one_or_none()
         if not slice_record:
             return {
@@ -84,9 +82,7 @@ def run_monitor_slice_pipeline_sync(
                 min_cell_mentions=min_cell_mentions,
             )
         except Exception as exc:
-            logger.exception(
-                "[项目切片] 流水线异常中止: slice_id=%s", slice_id
-            )
+            logger.exception("[项目切片] 流水线异常中止: slice_id=%s", slice_id)
             # 按阶段区分异常处理：
             # - Stage2 阶段异常：切片数据不完整 → slice.status=failed
             # - Stage3 阶段异常（Stage2 已完成）：切片对下游仍可用 →
@@ -115,9 +111,7 @@ def run_monitor_slice_pipeline_sync(
             try:
                 commit_result()
             except Exception:
-                logger.exception(
-                    "[项目切片] 异常恢复写入失败: slice_id=%s", slice_id
-                )
+                logger.exception("[项目切片] 异常恢复写入失败: slice_id=%s", slice_id)
             return {
                 "status": "failed",
                 "error": "pipeline_exception",
@@ -142,9 +136,7 @@ def _run_pipeline_body(
     """流水线主体逻辑（从 run_monitor_slice_pipeline_sync 提取，便于统一异常处理）。"""
 
     foundation = (
-        result.get("foundation")
-        if isinstance(result.get("foundation"), dict)
-        else {}
+        result.get("foundation") if isinstance(result.get("foundation"), dict) else {}
     )
     top_entities = foundation.get("aligned_entities") or []
     top_topics = foundation.get("aligned_topics") or []
@@ -312,9 +304,7 @@ def _run_pipeline_body(
     op_input_count = op_norm_result.get("input_count") or len(
         [t for t in top_topics if isinstance(t, dict)]
     )
-    op_program_count = (
-        op_norm_result.get("program_clustered_count") or op_input_count
-    )
+    op_program_count = op_norm_result.get("program_clustered_count") or op_input_count
 
     topics_for_norm = op_norm_result.get("topics_for_norm") or []
     stage2["category_alignment"] = op_norm_result.get("category_alignment") or {}
@@ -329,8 +319,7 @@ def _run_pipeline_body(
     }
     topics_aligned = build_topics_aligned(
         topics_for_norm=[t for t in topics_for_norm if isinstance(t, dict)],
-        topic_mapping_by_category=op_norm_result.get("topic_mapping_by_category")
-        or {},
+        topic_mapping_by_category=op_norm_result.get("topic_mapping_by_category") or {},
     )
     stage2["alias_normalization"]["topics"]["after_count"] = len(topics_aligned)
     set_step(
@@ -383,7 +372,10 @@ def _run_pipeline_body(
         result.get("foundation") if isinstance(result.get("foundation"), dict) else {}
     )
     if drv.get("status") != "completed":
-        foundation_for_drv["drivers"] = {"status": "skipped", "reason": drv.get("reason")}
+        foundation_for_drv["drivers"] = {
+            "status": "skipped",
+            "reason": drv.get("reason"),
+        }
     else:
         stage2["llm"] = drv.get("llm")
         foundation_for_drv["drivers"] = drv.get("drivers")
@@ -398,9 +390,7 @@ def _run_pipeline_body(
 
     # Step0-2 输出对齐：把 Stage2 的对齐结果写回 foundation（不破坏旧字段）
     foundation = (
-        result.get("foundation")
-        if isinstance(result.get("foundation"), dict)
-        else {}
+        result.get("foundation") if isinstance(result.get("foundation"), dict) else {}
     )
     foundation["aligned_entities"] = entities_aligned[:300]
     foundation["aligned_topics"] = topics_aligned[:300]
@@ -409,9 +399,7 @@ def _run_pipeline_body(
     # Step3：分层指标（Landscape/Topic/Focus）——覆盖 Stage1 预计算的层数据
     layers0 = result.get("layers") if isinstance(result.get("layers"), dict) else {}
     land0 = (
-        layers0.get("landscape")
-        if isinstance(layers0.get("landscape"), dict)
-        else {}
+        layers0.get("landscape") if isinstance(layers0.get("landscape"), dict) else {}
     )
     foundation_cur = (
         result.get("foundation") if isinstance(result.get("foundation"), dict) else {}
@@ -444,7 +432,9 @@ def _run_pipeline_body(
     # Stage2 完成即视为切片"下游可用"（与 NewsSlice.status 语义对齐）。
     # Stage3 的 3 报告是独立附加产出，不参与策略 chain，不阻塞切片整体可用性。
     meta_now = result.get("meta") or {}
-    data_volume_now = (meta_now.get("data_volume") or {}) if isinstance(meta_now, dict) else {}
+    data_volume_now = (
+        (meta_now.get("data_volume") or {}) if isinstance(meta_now, dict) else {}
+    )
     scope_now = (meta_now.get("scope") or {}) if isinstance(meta_now, dict) else {}
     slice_record.status = "completed"
     slice_record.error_message = None

@@ -549,9 +549,7 @@ def build_entity_name_mapping(
                     f"[名称映射] LLM 归一化后: {final_unique} 个唯一实体 (合并了 {llm_merged} 个)"
                 )
     except Exception as e:
-        logger.warning(
-            f"[名称映射] LLM 归一化失败，使用程序映射: {e}", exc_info=True
-        )
+        logger.warning(f"[名称映射] LLM 归一化失败，使用程序映射: {e}", exc_info=True)
 
     return similarity_mapping, tags_mapping, token_stats
 

@@ -299,12 +299,14 @@ async def assign_user_roles(
     from sqlalchemy import select, func
     from src.rbac.models import UserRole, Role as RoleModel
 
-    target_is_super_admin = (await db.execute(
-        select(func.count())
-        .select_from(UserRole)
-        .join(RoleModel)
-        .where(UserRole.user_id == user_id, RoleModel.name == "super_admin")
-    )).scalar()
+    target_is_super_admin = (
+        await db.execute(
+            select(func.count())
+            .select_from(UserRole)
+            .join(RoleModel)
+            .where(UserRole.user_id == user_id, RoleModel.name == "super_admin")
+        )
+    ).scalar()
 
     if target_is_super_admin:
         # 目标用户当前是超管，检查操作后是否还有其他超管
@@ -313,16 +315,18 @@ async def assign_user_roles(
             roles_result = await db.execute(
                 select(RoleModel.name).where(RoleModel.id.in_(role_assign.role_ids))
             )
-            new_role_names = [r for r, in roles_result.all()]
+            new_role_names = [r for (r,) in roles_result.all()]
 
         if "super_admin" not in new_role_names:
             # 目标用户将失去 super_admin，检查是否还有其他超管
-            other_super_admins = (await db.execute(
-                select(func.count())
-                .select_from(UserRole)
-                .join(RoleModel)
-                .where(UserRole.user_id != user_id, RoleModel.name == "super_admin")
-            )).scalar()
+            other_super_admins = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(UserRole)
+                    .join(RoleModel)
+                    .where(UserRole.user_id != user_id, RoleModel.name == "super_admin")
+                )
+            ).scalar()
 
             if other_super_admins == 0:
                 raise HTTPException(

@@ -49,16 +49,18 @@ def build_probe_aggregation(
         `_build_social_probe_summaries` 消费的所有字段都在其中。
     """
     # 0. 任务关键词（用于 target/competitor 分类）
-    task = db.execute(select(SocialTask).where(SocialTask.id == task_id)).scalar_one_or_none()
+    task = db.execute(
+        select(SocialTask).where(SocialTask.id == task_id)
+    ).scalar_one_or_none()
     task_keywords: list[str] = []
     if task and task.keywords:
         task_keywords = [k.strip() for k in task.keywords.split(",") if k.strip()]
 
     # 1. 所有 PostAnalysis 行 + 原文总数
     analyses = list(
-        db.execute(
-            select(PostAnalysis).where(PostAnalysis.task_id == task_id)
-        ).scalars().all()
+        db.execute(select(PostAnalysis).where(PostAnalysis.task_id == task_id))
+        .scalars()
+        .all()
     )
     total_posts = int(
         db.execute(

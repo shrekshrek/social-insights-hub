@@ -114,9 +114,7 @@ def _align_categories_for_topics(
                     llm_used = True
                     token_stats = stats
     except Exception as e:
-        logger.error(
-            f"[Slice Opinion] Category alignment failed: {e}", exc_info=True
-        )
+        logger.error(f"[Slice Opinion] Category alignment failed: {e}", exc_info=True)
 
     def map_category(cat: str) -> str:
         cat = (cat or "").strip() or "其他"
@@ -233,7 +231,9 @@ def normalize_opinion_aliases_by_category(
     logger.info("[项目级观点归一化] 统计总结:")
     logger.info("  - 原始输入: %s 个观点", input_count)
     logger.info(
-        "  - 程序归一后: %s 个观点（跨 %s 个类目）", total_program_clustered, len(grouped)
+        "  - 程序归一后: %s 个观点（跨 %s 个类目）",
+        total_program_clustered,
+        len(grouped),
     )
 
     # 打印输入观点名称（前30）
@@ -262,7 +262,10 @@ def normalize_opinion_aliases_by_category(
         if merged_in_cat:
             logger.info(
                 "  [%s] 输入:%s → 输出:%s, 合并组:%s",
-                cat_name, len(mapping), unique_canons, len(merged_in_cat),
+                cat_name,
+                len(mapping),
+                unique_canons,
+                len(merged_in_cat),
             )
             for canon, members in sorted(
                 merged_in_cat.items(), key=lambda x: len(x[1]), reverse=True

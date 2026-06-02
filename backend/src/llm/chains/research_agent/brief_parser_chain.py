@@ -110,10 +110,12 @@ def create_brief_parser_chain(profile_name: str | None) -> Runnable:
     """创建 brief 解析链。profile_name 影响方案字段的生成规则与 note 措辞。"""
     profile = get_profile(profile_name)
     llm = get_llm("chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("human", USER_TEMPLATE),
-    ]).partial(
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("human", USER_TEMPLATE),
+        ]
+    ).partial(
         current_profile=profile.name,
         planner_context=profile.planner_context,
     )

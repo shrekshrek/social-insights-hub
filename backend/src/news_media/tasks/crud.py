@@ -62,8 +62,7 @@ async def get_tasks(
     total = (await db.execute(count_stmt)).scalar() or 0
 
     query_stmt = (
-        base_stmt
-        .options(
+        base_stmt.options(
             selectinload(NewsTask.monitor),
             selectinload(NewsTask.user),
         )
@@ -151,8 +150,7 @@ async def get_articles_by_task(
     total = (await db.execute(count_stmt)).scalar() or 0
 
     query_stmt = (
-        base_stmt
-        .offset(skip)
+        base_stmt.offset(skip)
         .limit(limit)
         .order_by(NewsArticle.published_at.desc().nulls_last())
     )
@@ -168,9 +166,7 @@ async def create_article(db: AsyncSession, article_data: dict) -> NewsArticle:
     return article
 
 
-async def get_channel_stats_by_task(
-    db: AsyncSession, task_id: int
-) -> dict[str, int]:
+async def get_channel_stats_by_task(db: AsyncSession, task_id: int) -> dict[str, int]:
     """按搜索渠道聚合统计任务的文章数量
 
     SELECT search_source, COUNT(*) FROM news_articles
@@ -211,9 +207,7 @@ async def update_article(
     return article
 
 
-async def get_articles_by_urls(
-    db: AsyncSession, urls: list[str]
-) -> list[NewsArticle]:
+async def get_articles_by_urls(db: AsyncSession, urls: list[str]) -> list[NewsArticle]:
     """按 URL 列表批量查询已存在的文章（用于去重）"""
     if not urls:
         return []

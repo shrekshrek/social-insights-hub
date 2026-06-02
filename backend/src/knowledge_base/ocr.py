@@ -44,7 +44,9 @@ def _strip_grounding_tokens(markdown: str) -> str:
     return cleaned.strip()
 
 
-def _render_page_to_png(pdf_doc: pdfium.PdfDocument, page_index: int, scale: float) -> bytes:
+def _render_page_to_png(
+    pdf_doc: pdfium.PdfDocument, page_index: int, scale: float
+) -> bytes:
     """渲染 PDF 单页为 PNG 字节"""
     page = pdf_doc[page_index]
     bitmap = page.render(scale=scale)
@@ -61,7 +63,9 @@ def _ocr_image_via_siliconflow(image_bytes: bytes, *, timeout: float) -> str:
     """
     api_key = settings.OCR_API_KEY or settings.EMBEDDING_API_KEY
     if not api_key:
-        raise RuntimeError("OCR_API_KEY / EMBEDDING_API_KEY 未配置，无法调用 DeepSeek-OCR")
+        raise RuntimeError(
+            "OCR_API_KEY / EMBEDDING_API_KEY 未配置，无法调用 DeepSeek-OCR"
+        )
 
     image_b64 = base64.b64encode(image_bytes).decode("ascii")
     payload = {
@@ -104,7 +108,9 @@ def _ocr_image_via_siliconflow(image_bytes: bytes, *, timeout: float) -> str:
                     exc,
                 )
                 continue
-            raise RuntimeError(f"DeepSeek-OCR 重试 {settings.OCR_MAX_RETRIES} 次后仍失败: {exc}") from last_exc
+            raise RuntimeError(
+                f"DeepSeek-OCR 重试 {settings.OCR_MAX_RETRIES} 次后仍失败: {exc}"
+            ) from last_exc
 
     choices = data.get("choices") or []
     if not choices:
@@ -144,7 +150,11 @@ def _select_weak_pages(page_texts: list[str]) -> list[int]:
         )
         return list(range(len(page_texts)))
 
-    weak = [i for i, t in enumerate(page_texts) if len(t.strip()) < settings.OCR_FALLBACK_THRESHOLD]
+    weak = [
+        i
+        for i, t in enumerate(page_texts)
+        if len(t.strip()) < settings.OCR_FALLBACK_THRESHOLD
+    ]
     if weak:
         logger.info(
             "PDF %d/%d 页字符稀疏（< %d），走 OCR fallback: pages=%s",

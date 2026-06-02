@@ -123,4 +123,6 @@ class SocialMonitor(Base):
     )
 
     def __repr__(self):
-        return f"<SocialMonitor(id={self.id}, name='{self.name}', user_id={self.user_id})>"
+        return (
+            f"<SocialMonitor(id={self.id}, name='{self.name}', user_id={self.user_id})>"
+        )

@@ -42,18 +42,26 @@ router = APIRouter(prefix="/news-media", tags=["News Media - Tasks"])
 async def list_all_tasks(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    status_filter: Literal["pending", "running", "completed", "failed"] | None = Query(default=None, alias="status"),
+    status_filter: Literal["pending", "running", "completed", "failed"] | None = Query(
+        default=None, alias="status"
+    ),
     phase: Literal["probe", "collect"] | None = Query(default=None),
     search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
     _current_user: User = Depends(require_news_task_read),
 ):
     tasks, total = await service.get_news_tasks(
-        db, page=page, page_size=page_size,
-        status_filter=status_filter, phase=phase, search=search,
+        db,
+        page=page,
+        page_size=page_size,
+        status_filter=status_filter,
+        phase=phase,
+        search=search,
     )
     items = [NewsTaskReadWithRelations.from_orm_full(t) for t in tasks]
-    return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)
+    return PaginatedResponse.create(
+        items=items, total=total, page=page, page_size=page_size
+    )
 
 
 async def _dispatch_news_collect_task(
@@ -118,7 +126,9 @@ async def create_task(
             detail="独立 monitor 不支持 probe 任务，probe 仅用于策略研究流程",
         )
 
-    task = await service.create_news_task(db, monitor.id, data, current_user.id, phase=data.phase)
+    task = await service.create_news_task(
+        db, monitor.id, data, current_user.id, phase=data.phase
+    )
     task = await _dispatch_news_collect_task(task, db, current_user.id)
     return task
 
@@ -133,19 +143,27 @@ async def list_monitor_tasks(
     monitor: NewsMonitor = Depends(validate_news_monitor_exists),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    status_filter: Literal["pending", "running", "completed", "failed"] | None = Query(default=None, alias="status"),
+    status_filter: Literal["pending", "running", "completed", "failed"] | None = Query(
+        default=None, alias="status"
+    ),
     phase: Literal["probe", "collect"] | None = Query(default=None),
     search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
     _current_user: User = Depends(require_news_task_read),
 ):
     tasks, total = await service.get_news_tasks(
-        db, page=page, page_size=page_size,
-        monitor_id=monitor.id, status_filter=status_filter,
-        phase=phase, search=search,
+        db,
+        page=page,
+        page_size=page_size,
+        monitor_id=monitor.id,
+        status_filter=status_filter,
+        phase=phase,
+        search=search,
     )
     items = [NewsTaskReadWithRelations.from_orm_full(t) for t in tasks]
-    return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)
+    return PaginatedResponse.create(
+        items=items, total=total, page=page, page_size=page_size
+    )
 
 
 @router.get(
@@ -228,7 +246,9 @@ async def list_task_articles(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     relevance: Literal["high", "medium", "low"] | None = Query(default=None),
-    source_tier: Literal["tier1", "tier2", "tier3", "wechat_mp"] | None = Query(default=None),
+    source_tier: Literal["tier1", "tier2", "tier3", "wechat_mp"] | None = Query(
+        default=None
+    ),
     db: AsyncSession = Depends(get_async_db),
     _current_user: User = Depends(require_news_task_read),
 ):
@@ -236,11 +256,17 @@ async def list_task_articles(
 
     skip = (page - 1) * page_size
     articles, total = await tasks_crud.get_articles_by_task(
-        db, task_id=task.id, skip=skip, limit=page_size,
-        relevance=relevance, source_tier=source_tier,
+        db,
+        task_id=task.id,
+        skip=skip,
+        limit=page_size,
+        relevance=relevance,
+        source_tier=source_tier,
     )
     items = [NewsArticleRead.model_validate(a) for a in articles]
-    return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)
+    return PaginatedResponse.create(
+        items=items, total=total, page=page, page_size=page_size
+    )
 
 
 @router.get(

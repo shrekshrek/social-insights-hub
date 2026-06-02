@@ -123,10 +123,12 @@ NEWS_PASS2_USER = """## 基础统计
 def create_pass2_chain() -> Runnable:
     """创建 Slice Pass 2 解读综述链"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", NEWS_PASS2_SYSTEM),
-        ("user", NEWS_PASS2_USER),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", NEWS_PASS2_SYSTEM),
+            ("user", NEWS_PASS2_USER),
+        ]
+    )
     return prompt | llm
 
 
@@ -170,7 +172,7 @@ def format_quotes_for_pass2(quotes: list[dict], max_items: int = 8) -> str:
     lines: list[str] = []
     for q in sorted_quotes:
         lines.append(
-            f"- [{q.get('speaker_role')}] {q.get('speaker')}: \"{q.get('quote')}\" "
+            f'- [{q.get("speaker_role")}] {q.get("speaker")}: "{q.get("quote")}" '
             f"（{q.get('source_name')} / {q.get('source_tier')} / {q.get('published_at') or '日期未知'}）"
         )
     return "\n".join(lines)
@@ -191,7 +193,11 @@ def format_events_for_pass2(
         cluster_id = cluster.get("cluster_id")
         article_ids = cluster.get("article_ids") or []
         rep_ids = cluster.get("representative_article_ids") or article_ids[:5]
-        titles = [article_titles_by_id.get(aid, "") for aid in rep_ids if aid in article_titles_by_id]
+        titles = [
+            article_titles_by_id.get(aid, "")
+            for aid in rep_ids
+            if aid in article_titles_by_id
+        ]
         titles_str = "\n    ".join(f"· {t}" for t in titles if t)
 
         meta_parts = [f"文章数={cluster.get('article_count', len(article_ids))}"]

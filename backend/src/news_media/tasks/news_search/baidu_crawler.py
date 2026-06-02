@@ -93,10 +93,14 @@ def _parse_baidu_date(date_str: str) -> datetime | None:
             return now - timedelta(days=2)
         m = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", date_str)
         if m:
-            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc)
+            return datetime(
+                int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc
+            )
         m = re.search(r"(\d{1,2})月(\d{1,2})日", date_str)
         if m:
-            return datetime(now.year, int(m.group(1)), int(m.group(2)), tzinfo=timezone.utc)
+            return datetime(
+                now.year, int(m.group(1)), int(m.group(2)), tzinfo=timezone.utc
+            )
     except (AttributeError, ValueError):
         pass
     return None
@@ -131,27 +135,35 @@ def _extract_articles_from_html(html: str, max_results: int) -> list[dict]:
         published_at = _parse_baidu_date(published_raw)
 
         snippet_match = _SNIPPET_RE.search(block)
-        snippet = _clean_html_text(snippet_match.group(1))[:300] if snippet_match else ""
+        snippet = (
+            _clean_html_text(snippet_match.group(1))[:300] if snippet_match else ""
+        )
 
         source_match = _SOURCE_RE.search(block)
-        source_name = _clean_html_text(source_match.group(1)) if source_match else "未知来源"
+        source_name = (
+            _clean_html_text(source_match.group(1)) if source_match else "未知来源"
+        )
 
-        articles.append({
-            "title": title,
-            "url": url,
-            "snippet": snippet or None,
-            "source_name": source_name,
-            "published_at": published_at,
-            "image_url": None,
-            "raw_data": {"title": title, "url": url, "source": source_name},
-            "search_source": "baidu",
-        })
+        articles.append(
+            {
+                "title": title,
+                "url": url,
+                "snippet": snippet or None,
+                "source_name": source_name,
+                "published_at": published_at,
+                "image_url": None,
+                "raw_data": {"title": title, "url": url, "source": source_name},
+                "search_source": "baidu",
+            }
+        )
 
     return articles
 
 
 _PAGE_SIZE = 10  # 百度新闻每页实际返回约 10 条
-_MAX_PAGES = 6  # 最多翻 6 页（60 条）兜底——防止百度在结果耗尽后返回重复内容导致的无限翻页
+_MAX_PAGES = (
+    6  # 最多翻 6 页（60 条）兜底——防止百度在结果耗尽后返回重复内容导致的无限翻页
+)
 
 
 def _fetch_one_page(session: requests.Session, url: str, headers: dict) -> str:
@@ -197,7 +209,11 @@ def search_baidu_news(query: str, max_results: int = 10) -> list[dict]:
 
                 cleaned_html = _fetch_one_page(session, target_url, headers)
                 if not cleaned_html.strip():
-                    logger.warning("百度新闻: 第 %d 页 cleaned_html 为空, query=%r", page + 1, query)
+                    logger.warning(
+                        "百度新闻: 第 %d 页 cleaned_html 为空, query=%r",
+                        page + 1,
+                        query,
+                    )
                     break
 
                 page_articles = _extract_articles_from_html(cleaned_html, _PAGE_SIZE)
@@ -215,13 +231,20 @@ def search_baidu_news(query: str, max_results: int = 10) -> list[dict]:
                 if added_this_page == 0:
                     logger.info(
                         "百度新闻: 第 %d 页无新增 URL（%d 条全为重复），判定结果已耗尽, query=%r",
-                        page + 1, len(page_articles), query,
+                        page + 1,
+                        len(page_articles),
+                        query,
                     )
                     break
 
                 page += 1
 
-        logger.info("百度新闻: query=%r, 提取文章数=%d (翻页=%d)", query, len(all_articles), page)
+        logger.info(
+            "百度新闻: query=%r, 提取文章数=%d (翻页=%d)",
+            query,
+            len(all_articles),
+            page,
+        )
         return all_articles
 
     except requests.RequestException as e:

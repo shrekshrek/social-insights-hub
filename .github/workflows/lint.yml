@@ -1,0 +1,39 @@
+name: lint
+
+# 静态检查门禁：PR 与 push 到 main 时自动跑，挡住未格式化/不合规的代码。
+# 后端用 ruff（pin 0.12.12，与 backend/pyproject.toml 一致），前端用 eslint + vue-tsc。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend-ruff:
+    name: Backend (ruff check + format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # 非改写检查：check 不带 --fix，format 用 --check，CI 只判定不修改文件
+      - name: ruff check
+        run: uvx ruff@0.12.12 check backend/src
+      - name: ruff format --check
+        run: uvx ruff@0.12.12 format --check backend/src
+
+  frontend-lint:
+    name: Frontend (eslint + vue-tsc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # 读取 package.json 的 packageManager 字段确定 pnpm 版本
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      # 根 install 覆盖 frontend workspace 包，并触发其 postinstall(nuxt prepare) 生成 .nuxt 类型
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+      - name: eslint
+        run: pnpm fe:lint
+      - name: typecheck
+        run: pnpm fe:typecheck

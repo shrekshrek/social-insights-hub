@@ -39,7 +39,9 @@ def run_news_probe_task(self, task_id: int) -> None:
             execute_news_probe_sync(db, task)
             db.commit()
         except Exception as exc:
-            logger.error("NewsTask %d: probe celery failed: %s", task_id, exc, exc_info=True)
+            logger.error(
+                "NewsTask %d: probe celery failed: %s", task_id, exc, exc_info=True
+            )
             db.rollback()
 
 
@@ -109,7 +111,8 @@ def run_news_collect_task(
 
             raw_counts: dict[str, int] = {}
             articles = _search_and_store_articles_sync(
-                db, task,
+                db,
+                task,
                 max_results=40,
                 channels=_resolve_channels(task),
                 raw_counts_out=raw_counts,
@@ -165,7 +168,8 @@ def run_news_collect_task(
             if tagging_job:
                 tagging_job.source_count = len(all_articles)
                 complete_analysis_job_sync(
-                    db, tagging_job,
+                    db,
+                    tagging_job,
                     analyzed_count=len(all_articles),
                     token_usage=tag_token_usage,
                 )
@@ -187,7 +191,9 @@ def run_news_collect_task(
 
             logger.info(
                 "NewsTask %d: collect completed, %d articles, %d crawled",
-                task_id, len(all_articles), articles_crawled,
+                task_id,
+                len(all_articles),
+                articles_crawled,
             )
 
         except Exception as e:
@@ -296,7 +302,9 @@ def run_news_slice_insight_task(
                 slice_obj.stats = _build_stats_summary(descriptive, entities=[])
                 slice_obj.status = "completed"
                 complete_analysis_job_sync(db, job, analyzed_count=0)
-                logger.info("NewsSlice %d: no valid articles, marked completed", slice_id)
+                logger.info(
+                    "NewsSlice %d: no valid articles, marked completed", slice_id
+                )
                 return
 
             goal = analysis_goal or slice_obj.name
@@ -305,22 +313,28 @@ def run_news_slice_insight_task(
             pass1_chain = create_pass1_chain()
             pass1_input_articles = _articles_for_llm(filtered)
             pass1_start = time.time()
-            pass1_response = pass1_chain.invoke({
-                "analysis_goal": goal,
-                "subject": subject,
-                "competitors": ", ".join(competitors) or "（未指定）",
-                "article_count": len(filtered),
-                "articles_content": format_articles_for_pass1(pass1_input_articles),
-            })
+            pass1_response = pass1_chain.invoke(
+                {
+                    "analysis_goal": goal,
+                    "subject": subject,
+                    "competitors": ", ".join(competitors) or "（未指定）",
+                    "article_count": len(filtered),
+                    "articles_content": format_articles_for_pass1(pass1_input_articles),
+                }
+            )
             pass1_token_usage = extract_token_usage(
-                pass1_response, duration_seconds=time.time() - pass1_start,
+                pass1_response,
+                duration_seconds=time.time() - pass1_start,
             )
             pass1_parsed = _parse_pass1_output(pass1_response.content)
 
             # Step 3：派生层
             derived = _compute_derived(
-                pass1_parsed, filtered, url_to_task_ids,
-                subject=subject, competitors=competitors,
+                pass1_parsed,
+                filtered,
+                url_to_task_ids,
+                subject=subject,
+                competitors=competitors,
             )
 
             # Step 4：Pass 2 LLM（sync，失败容错）
@@ -330,24 +344,36 @@ def run_news_slice_insight_task(
                 pass2_chain = create_pass2_chain()
                 article_titles_by_id = {a.id: a.title for a in filtered}
                 pass2_start = time.time()
-                pass2_response = pass2_chain.invoke({
-                    "analysis_goal": goal,
-                    "subject": subject or "（独立监测，无指定主体）",
-                    "articles_filtered": descriptive.get("articles_filtered"),
-                    "source_tier_dist": descriptive.get("source_tier_distribution"),
-                    "search_source_dist": descriptive.get("search_source_distribution"),
-                    "article_type_dist": descriptive.get("article_type_distribution"),
-                    "sentiment_dist": descriptive.get("sentiment_distribution"),
-                    "sentiment_overall": descriptive.get("sentiment_overall"),
-                    "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
-                    "entities_block": format_entities_for_pass2(derived.get("entities") or []),
-                    "quotes_block": format_quotes_for_pass2(derived.get("quotes") or []),
-                    "events_block": format_events_for_pass2(
-                        derived.get("event_clusters") or [], article_titles_by_id,
-                    ),
-                })
+                pass2_response = pass2_chain.invoke(
+                    {
+                        "analysis_goal": goal,
+                        "subject": subject or "（独立监测，无指定主体）",
+                        "articles_filtered": descriptive.get("articles_filtered"),
+                        "source_tier_dist": descriptive.get("source_tier_distribution"),
+                        "search_source_dist": descriptive.get(
+                            "search_source_distribution"
+                        ),
+                        "article_type_dist": descriptive.get(
+                            "article_type_distribution"
+                        ),
+                        "sentiment_dist": descriptive.get("sentiment_distribution"),
+                        "sentiment_overall": descriptive.get("sentiment_overall"),
+                        "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+                        "entities_block": format_entities_for_pass2(
+                            derived.get("entities") or []
+                        ),
+                        "quotes_block": format_quotes_for_pass2(
+                            derived.get("quotes") or []
+                        ),
+                        "events_block": format_events_for_pass2(
+                            derived.get("event_clusters") or [],
+                            article_titles_by_id,
+                        ),
+                    }
+                )
                 pass2_token_usage = extract_token_usage(
-                    pass2_response, duration_seconds=time.time() - pass2_start,
+                    pass2_response,
+                    duration_seconds=time.time() - pass2_start,
                 )
                 page_synthesis = _parse_pass2_output(pass2_response.content)
             except Exception as e:
@@ -367,11 +393,14 @@ def run_news_slice_insight_task(
             # 累加 pass1 + pass2 调用，前端读到 total_calls=2 与累计成本。
             token_usage = merge_token_usage_stats(pass1_token_usage, pass2_token_usage)
             complete_analysis_job_sync(
-                db, job,
+                db,
+                job,
                 analyzed_count=len(filtered),
                 token_usage=token_usage,
             )
-            logger.info("NewsSlice %d analysis completed: %d articles", slice_id, len(filtered))
+            logger.info(
+                "NewsSlice %d analysis completed: %d articles", slice_id, len(filtered)
+            )
 
         except Exception as e:
             logger.error("NewsSlice %d analysis failed: %s", slice_id, e, exc_info=True)

@@ -143,10 +143,12 @@ USER_TEMPLATE = """{research_design_section}
 def create_single_task_probe_review_chain() -> Runnable:
     """创建单任务探测审查 LLM 链（用于并行评估，每个任务独立调用）"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SINGLE_TASK_SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SINGLE_TASK_SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -185,11 +187,16 @@ def format_single_task_probe_review_inputs(
     consumer_voice_platforms: list[str] = []
     for dp in data_plan:
         dp_type = dim_to_type.get(dp.get("dimension_name", ""), "")
-        if dp_type == "consumer_voice" and dp.get("channel", "social_media") == "social_media":
+        if (
+            dp_type == "consumer_voice"
+            and dp.get("channel", "social_media") == "social_media"
+        ):
             consumer_voice_platforms.extend(dp.get("platforms") or [])
     # 去重保序
     seen: set[str] = set()
-    consumer_voice_platforms = [p for p in consumer_voice_platforms if not (p in seen or seen.add(p))]  # type: ignore[func-returns-value]
+    consumer_voice_platforms = [
+        p for p in consumer_voice_platforms if not (p in seen or seen.add(p))
+    ]  # type: ignore[func-returns-value]
 
     lines = ["## 研究背景"]
     if brief:
@@ -230,7 +237,10 @@ def format_single_task_probe_review_inputs(
     # 注入同维度的其他关键词，供 LLM 保持替换建议的风格一致性
     if dim_name:
         for dp in data_plan:
-            if dp.get("dimension_name") == dim_name and dp.get("channel", "social_media") == "social_media":
+            if (
+                dp.get("dimension_name") == dim_name
+                and dp.get("channel", "social_media") == "social_media"
+            ):
                 other_keywords = dp.get("keywords") or []
                 other_platforms = dp.get("platforms") or []
                 if other_keywords:
@@ -238,7 +248,9 @@ def format_single_task_probe_review_inputs(
                         f"本维度（{dim_name}）现有关键词: {', '.join(other_keywords)}"
                         f" | 平台: {', '.join(other_platforms)}"
                     )
-                    task_lines.append("↑ 替换建议应与上述关键词风格保持一致，确保跨平台可比性")
+                    task_lines.append(
+                        "↑ 替换建议应与上述关键词风格保持一致，确保跨平台可比性"
+                    )
                 break
 
     rqs_for_dim = dim_to_rqs.get(dim_name) if dim_name else None
@@ -257,9 +269,13 @@ def format_single_task_probe_review_inputs(
     if expected_subjects or expected_competitors:
         task_lines.append("本任务关联切片预期实体：")
         if expected_subjects:
-            task_lines.append(f"  - 预期主体（subject）: {', '.join(expected_subjects)}")
+            task_lines.append(
+                f"  - 预期主体（subject）: {', '.join(expected_subjects)}"
+            )
         if expected_competitors:
-            task_lines.append(f"  - 预期竞品（competitors）: {', '.join(expected_competitors)}")
+            task_lines.append(
+                f"  - 预期竞品（competitors）: {', '.join(expected_competitors)}"
+            )
 
     # 实际识别到的实体名样本（让 LLM 看清是否匹配 expected_*）
     target_sample = task.get("target_entities_sample") or []
@@ -273,7 +289,9 @@ def format_single_task_probe_review_inputs(
         f"识别到的 competitor 实体（{len(competitor_sample)} 个）: "
         f"{', '.join(competitor_sample) if competitor_sample else '（无）'}"
     )
-    task_lines.append(f"entity_match: {entity_match}（target/competitor 任一非空即 True）")
+    task_lines.append(
+        f"entity_match: {entity_match}（target/competitor 任一非空即 True）"
+    )
 
     posts = task.get("posts_count", 0)
     screened = task.get("screened", 0)
@@ -305,7 +323,9 @@ def format_single_task_probe_review_inputs(
         task_lines.append("主要话题: （暂无，深度分析样本不足）")
 
     if task.get("promotion_ratio") is not None:
-        task_lines.append(f"广告占比: {task['promotion_ratio']:.0%}（推广/软文帖子比例）")
+        task_lines.append(
+            f"广告占比: {task['promotion_ratio']:.0%}（推广/软文帖子比例）"
+        )
 
     return {
         "research_design_section": research_design_section,
@@ -358,7 +378,7 @@ def detect_and_replace_symmetry_suggestions(
     dim_to_type: dict[str, str] = {}
     for dp in data_plan:
         dim_name = dp.get("dimension_name", "")
-        for qid in (dp.get("question_ids") or []):
+        for qid in dp.get("question_ids") or []:
             rq = rq_by_id.get(qid)
             if rq and rq.get("dimension"):
                 dim_to_type[dim_name] = rq["dimension"]
@@ -376,7 +396,9 @@ def detect_and_replace_symmetry_suggestions(
         if dim_type not in ("consumer_voice", "competitive"):
             continue
         verdict = a.get("verdict", "pass")
-        platform_results.setdefault(dim_type, {}).setdefault(platform, {"pass": [], "fail": []})
+        platform_results.setdefault(dim_type, {}).setdefault(
+            platform, {"pass": [], "fail": []}
+        )
         platform_results[dim_type][platform][verdict].append(a)
 
     cv = platform_results.get("consumer_voice", {})
@@ -389,7 +411,11 @@ def detect_and_replace_symmetry_suggestions(
         return {p for p, r in results.items() if len(r["fail"]) > len(r["pass"])}
 
     def _majority_passing(results: dict[str, dict[str, list]]) -> set[str]:
-        return {p for p, r in results.items() if r["pass"] and len(r["pass"]) >= len(r["fail"])}
+        return {
+            p
+            for p, r in results.items()
+            if r["pass"] and len(r["pass"]) >= len(r["fail"])
+        }
 
     cv_failing = _majority_failing(cv)
     cv_passing = _majority_passing(cv)
@@ -408,7 +434,8 @@ def detect_and_replace_symmetry_suggestions(
     if common_passing:
         target = max(
             common_passing,
-            key=lambda p: len(cv.get(p, {}).get("pass", [])) + len(comp.get(p, {}).get("pass", [])),
+            key=lambda p: len(cv.get(p, {}).get("pass", []))
+            + len(comp.get(p, {}).get("pass", [])),
         )
     elif cv_passing:
         target = max(cv_passing, key=lambda p: len(cv.get(p, {}).get("pass", [])))
@@ -431,25 +458,29 @@ def detect_and_replace_symmetry_suggestions(
         for a in cv[platform]["fail"]:
             tid = int(a["task_id"])
             affected_ids.add(tid)
-            consolidation.append({
-                "task_id": tid,
-                "original_keyword": a.get("keyword", ""),
-                "suggested_keyword": a.get("keyword", ""),
-                "platform": target,
-                "reason": reason,
-            })
+            consolidation.append(
+                {
+                    "task_id": tid,
+                    "original_keyword": a.get("keyword", ""),
+                    "suggested_keyword": a.get("keyword", ""),
+                    "platform": target,
+                    "reason": reason,
+                }
+            )
 
     for platform in comp_fails_where_cv_passes:
         for a in comp[platform]["fail"]:
             tid = int(a["task_id"])
             affected_ids.add(tid)
-            consolidation.append({
-                "task_id": tid,
-                "original_keyword": a.get("keyword", ""),
-                "suggested_keyword": a.get("keyword", ""),
-                "platform": target,
-                "reason": reason,
-            })
+            consolidation.append(
+                {
+                    "task_id": tid,
+                    "original_keyword": a.get("keyword", ""),
+                    "suggested_keyword": a.get("keyword", ""),
+                    "platform": target,
+                    "reason": reason,
+                }
+            )
 
     # 替换受影响任务的原有建议（原建议是针对同一平台换词，已不适用）
     kept = [s for s in existing_suggestions if s.get("task_id") not in affected_ids]
@@ -464,4 +495,3 @@ def detect_and_replace_symmetry_suggestions(
     )
 
     return final
-

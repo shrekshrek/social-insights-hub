@@ -35,17 +35,19 @@ async def reset_timed_out_tasks() -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=timeout_hours)
 
     async with AsyncSessionLocal() as db:
-        stmt = (
-            select(SocialTask.id, SocialTask.keywords, SocialTask.status,
-                   SocialTask.accepted_at, SocialTask.updated_at)
-            .where(
-                or_(
-                    SocialTask.status == "accepted",
-                    SocialTask.status == "running",
-                ),
-                SocialTask.updated_at < cutoff,
-                SocialTask.is_deleted.is_(False),
-            )
+        stmt = select(
+            SocialTask.id,
+            SocialTask.keywords,
+            SocialTask.status,
+            SocialTask.accepted_at,
+            SocialTask.updated_at,
+        ).where(
+            or_(
+                SocialTask.status == "accepted",
+                SocialTask.status == "running",
+            ),
+            SocialTask.updated_at < cutoff,
+            SocialTask.is_deleted.is_(False),
         )
         timed_out = (await db.execute(stmt)).all()
 
@@ -66,7 +68,11 @@ async def reset_timed_out_tasks() -> int:
         hours_stuck = (now - ref_time).total_seconds() / 3600 if ref_time else 0
         logger.warning(
             "Task %d (keywords=%r, status=%s) reset to pending after %.1fh idle (updated_at=%s)",
-            row.id, row.keywords, row.status, hours_stuck, row.updated_at,
+            row.id,
+            row.keywords,
+            row.status,
+            hours_stuck,
+            row.updated_at,
         )
 
     logger.info("Reset %d timed-out tasks to pending", len(task_ids))

@@ -53,11 +53,17 @@ class AnalysisType(str, Enum):
     STRATEGY_NEWS_PROBE_REVIEW = "strategy_news_probe_review"  # 新闻探测审查
     STRATEGY_COVERAGE_CHECK = "strategy_coverage_check"  # 覆盖度验证
     STRATEGY_INSIGHT = "strategy_insight"  # brand_strategy 路径 - 第 1 层 洞察
-    STRATEGY_BRAND_ROLE = "strategy_brand_role"  # brand_strategy 路径 - 第 2 层 品牌角色
+    STRATEGY_BRAND_ROLE = (
+        "strategy_brand_role"  # brand_strategy 路径 - 第 2 层 品牌角色
+    )
     STRATEGY_BIG_IDEA = "strategy_big_idea"  # brand_strategy 路径 - 第 3 层 创意
-    STRATEGY_AGENDA_MAP = "strategy_agenda_map"  # market_report 路径 - 第 1 层 媒体议程图
+    STRATEGY_AGENDA_MAP = (
+        "strategy_agenda_map"  # market_report 路径 - 第 1 层 媒体议程图
+    )
     STRATEGY_LANDSCAPE = "strategy_landscape"  # market_report 路径 - 第 2 层 竞争格局
-    STRATEGY_STRATEGIC_BRIEF = "strategy_strategic_brief"  # market_report 路径 - 第 3 层 战略简报
+    STRATEGY_STRATEGIC_BRIEF = (
+        "strategy_strategic_brief"  # market_report 路径 - 第 3 层 战略简报
+    )
 
     # 新闻媒体分析（关联 news_monitor_id / news_task_id）
     NEWS_TAGGING = "news_tagging"  # 逐篇标注（news_tagging_chain）

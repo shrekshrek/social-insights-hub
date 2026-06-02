@@ -539,7 +539,9 @@ def build_entities_aligned(
                 b["_spam_low_comment"] += int(ls.get("comment") or 0)
             # 有机/推广情感累加（按 spam_distribution 总量加权）
             low_total = int((ls or {}).get("total") or 0) if isinstance(ls, dict) else 0
-            high_total = int((hs or {}).get("total") or 0) if isinstance(hs, dict) else 0
+            high_total = (
+                int((hs or {}).get("total") or 0) if isinstance(hs, dict) else 0
+            )
             organic_sent = e.get("organic_sentiment")
             promo_sent = e.get("promo_sentiment")
             if organic_sent is not None and low_total > 0:
@@ -622,10 +624,14 @@ def build_entities_aligned(
         # 有机/推广情感
         organic_sentiment = None
         if (b.get("organic_sent_weight") or 0) > 0:
-            organic_sentiment = round(b["organic_sent_weighted_sum"] / b["organic_sent_weight"], 2)
+            organic_sentiment = round(
+                b["organic_sent_weighted_sum"] / b["organic_sent_weight"], 2
+            )
         promo_sentiment = None
         if (b.get("promo_sent_weight") or 0) > 0:
-            promo_sentiment = round(b["promo_sent_weighted_sum"] / b["promo_sent_weight"], 2)
+            promo_sentiment = round(
+                b["promo_sent_weighted_sum"] / b["promo_sent_weight"], 2
+            )
 
         aligned.append(
             {
@@ -654,8 +660,10 @@ def build_entities_aligned(
                 },
                 "spam_distribution": spam_distribution,
                 "platform_distribution": b["platform_distribution"],
-                "organic_platform_distribution": b.get("organic_platform_distribution") or {},
-                "promo_platform_distribution": b.get("promo_platform_distribution") or {},
+                "organic_platform_distribution": b.get("organic_platform_distribution")
+                or {},
+                "promo_platform_distribution": b.get("promo_platform_distribution")
+                or {},
                 "keyword_distribution": b["keyword_distribution"],
                 "source_tasks": [
                     {"task_id": tid, "mentions": cnt}

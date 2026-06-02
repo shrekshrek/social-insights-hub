@@ -113,12 +113,8 @@ def run_parallel_normalization(
             combined_stats["summary"]["total_output_tokens"] = combined_stats[
                 "summary"
             ].get("total_output_tokens", 0) + s.get("total_output_tokens", 0)
-            combined_stats["summary"]["total_tokens"] += s.get(
-                "total_tokens", 0
-            )
-            combined_stats["summary"]["total_cost_cny"] += s.get(
-                "total_cost_cny", 0.0
-            )
+            combined_stats["summary"]["total_tokens"] += s.get("total_tokens", 0)
+            combined_stats["summary"]["total_cost_cny"] += s.get("total_cost_cny", 0.0)
             # duration 不需要累加用于计费，但用于统计总的计算资源占用
             combined_stats["summary"]["total_duration_seconds"] += s.get(
                 "total_duration_seconds", 0.0

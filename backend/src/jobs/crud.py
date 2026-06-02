@@ -56,6 +56,7 @@ async def get_analysis_jobs(
     from src.news_media.monitors.models import NewsMonitor
     from src.news_media.tasks.models import NewsTask
     from src.auth.models import User
+
     # NOTE: SocialSlice 仍住在 src.social_media.analysis.models（社媒专属，P3 会迁往 social_media/analysis/）
     # 这里 lazy import 是为了避免 jobs → analysis 的顶层循环依赖。
     from src.social_media.analysis.models import SocialSlice
@@ -70,7 +71,11 @@ async def get_analysis_jobs(
             NewsTask.name.label("news_task_name"),
             User.username.label("user_name"),
         )
-        .join(SocialMonitor, AnalysisJob.social_monitor_id == SocialMonitor.id, isouter=True)
+        .join(
+            SocialMonitor,
+            AnalysisJob.social_monitor_id == SocialMonitor.id,
+            isouter=True,
+        )
         .join(SocialTask, AnalysisJob.social_task_id == SocialTask.id, isouter=True)
         .join(NewsMonitor, AnalysisJob.news_monitor_id == NewsMonitor.id, isouter=True)
         .join(NewsTask, AnalysisJob.news_task_id == NewsTask.id, isouter=True)
@@ -105,9 +110,8 @@ async def get_analysis_jobs(
 
         strategy_obj = await db.get(_Strategy, strategy_id)
         or_clauses = [
-            func.json_extract_path_text(
-                AnalysisJob.analysis_config, "strategy_id"
-            ) == str(strategy_id),
+            func.json_extract_path_text(AnalysisJob.analysis_config, "strategy_id")
+            == str(strategy_id),
         ]
         if strategy_obj:
             if strategy_obj.social_monitor_id:
@@ -167,9 +171,9 @@ async def get_analysis_jobs(
 
     slice_name_by_id: dict[int, str | None] = {}
     if slice_ids:
-        snap_stmt = select(
-            SocialSlice.id, SocialSlice.name
-        ).where(SocialSlice.id.in_(list(slice_ids)))
+        snap_stmt = select(SocialSlice.id, SocialSlice.name).where(
+            SocialSlice.id.in_(list(slice_ids))
+        )
         snap_rows = (await db.execute(snap_stmt)).all()
         slice_name_by_id = {int(r[0]): r[1] for r in snap_rows}
 
@@ -240,7 +244,11 @@ async def get_analysis_job(
             NewsTask.name.label("news_task_name"),
             User.username.label("user_name"),
         )
-        .join(SocialMonitor, AnalysisJob.social_monitor_id == SocialMonitor.id, isouter=True)
+        .join(
+            SocialMonitor,
+            AnalysisJob.social_monitor_id == SocialMonitor.id,
+            isouter=True,
+        )
         .join(SocialTask, AnalysisJob.social_task_id == SocialTask.id, isouter=True)
         .join(NewsMonitor, AnalysisJob.news_monitor_id == NewsMonitor.id, isouter=True)
         .join(NewsTask, AnalysisJob.news_task_id == NewsTask.id, isouter=True)
@@ -291,13 +299,18 @@ async def get_analysis_job(
     }
 
 
-async def _assert_job_access(db: AsyncSession, job: AnalysisJob, current_user_id: int) -> None:
+async def _assert_job_access(
+    db: AsyncSession, job: AnalysisJob, current_user_id: int
+) -> None:
     """验证用户对 AnalysisJob 的访问权限（按模块判断）"""
     if job.social_monitor_id:
         from src.social_media.monitors import crud as monitor_crud
+
         await monitor_crud.assert_monitor_access(
-            db, job.social_monitor_id, current_user_id,
-            detail="You don't have access to this analysis job"
+            db,
+            job.social_monitor_id,
+            current_user_id,
+            detail="You don't have access to this analysis job",
         )
     elif job.news_monitor_id:
         from src.news_media.monitors.crud import get_monitor_by_id as get_news_monitor
@@ -316,7 +329,9 @@ async def _assert_job_access(db: AsyncSession, job: AnalysisJob, current_user_id
         user = (await db.execute(user_stmt)).scalar_one_or_none()
         if user and is_admin_or_super_admin(user):
             return
-        if monitor.user_id != current_user_id and current_user_id not in {p.id for p in monitor.participants}:
+        if monitor.user_id != current_user_id and current_user_id not in {
+            p.id for p in monitor.participants
+        }:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this analysis job",

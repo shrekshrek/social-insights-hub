@@ -54,7 +54,12 @@ def _extract_detail(node_name: str, node_output: dict) -> str:
             return "未找到候选内容"
         # 统计各域名出现次数
         from collections import Counter
-        domains = [urlparse(c.get("url", "")).netloc.removeprefix("www.") for c in candidates if c.get("url")]
+
+        domains = [
+            urlparse(c.get("url", "")).netloc.removeprefix("www.")
+            for c in candidates
+            if c.get("url")
+        ]
         top = Counter(domains).most_common(5)
         domain_str = "、".join(f"{d}×{n}" if n > 1 else d for d, n in top)
         extra = f"，另 {len(domains) - 5} 个域名" if len(set(domains)) > 5 else ""
@@ -73,7 +78,11 @@ def _extract_detail(node_name: str, node_output: dict) -> str:
         selected = node_output.get("selected", [])
         if not selected:
             return "无内容通过相关性筛选"
-        domains = [urlparse(s.get("url", "")).netloc.removeprefix("www.") for s in selected if s.get("url")]
+        domains = [
+            urlparse(s.get("url", "")).netloc.removeprefix("www.")
+            for s in selected
+            if s.get("url")
+        ]
         domain_str = "、".join(list(dict.fromkeys(domains))[:5])
         return f"保留 {len(selected)} 条：{domain_str}"
 
@@ -103,7 +112,7 @@ def _extract_detail(node_name: str, node_output: dict) -> str:
     name="research_agent.run_research",
     bind=True,
     max_retries=0,
-    time_limit=1800,      # 4轮×~160s + synthesize(120s) + 余量 ≈ 900s；1800s 留足缓冲
+    time_limit=1800,  # 4轮×~160s + synthesize(120s) + 余量 ≈ 900s；1800s 留足缓冲
     soft_time_limit=1700,
 )
 def run_research_task(self, research_task_id: int) -> None:
@@ -165,7 +174,9 @@ def run_research_task(self, research_task_id: int) -> None:
         ):
             # 每步开始前确认任务未被删除
             if not db.get(ResearchTask, research_task_id):
-                logger.info("ResearchTask %d was deleted, aborting stream", research_task_id)
+                logger.info(
+                    "ResearchTask %d was deleted, aborting stream", research_task_id
+                )
                 # AnalysisJob 也需要终止，否则会永远停留在 running 状态
                 db.refresh(job)
                 if job.status in ("pending", "running"):
@@ -218,9 +229,7 @@ def run_research_task(self, research_task_id: int) -> None:
         findings = result_state.get("findings", [])
 
         # 用 selected 构建 URL → 元数据映射（补充 relevance_score / content_type 等字段）
-        url_meta: dict[str, dict] = {
-            s["url"]: s for s in selected if s.get("url")
-        }
+        url_meta: dict[str, dict] = {s["url"]: s for s in selected if s.get("url")}
 
         # sources 按 findings 顺序枚举（与 synthesize 节点 src_N 索引一致），URL 去重
         seen_urls: set[str] = set()
@@ -231,16 +240,18 @@ def run_research_task(self, research_task_id: int) -> None:
                 continue
             seen_urls.add(url)
             meta = url_meta.get(url, {})
-            sources.append({
-                "id": f"src_{i}",
-                "title": f.get("source_title", "") or meta.get("title", ""),
-                "url": url,
-                "source": meta.get("source", ""),
-                "source_tier": f.get("source_tier", "tier3"),
-                "content_type": meta.get("content_type", "html"),
-                "relevance_score": meta.get("relevance_score", 0.0),
-                "published_date": f.get("published_date", ""),
-            })
+            sources.append(
+                {
+                    "id": f"src_{i}",
+                    "title": f.get("source_title", "") or meta.get("title", ""),
+                    "url": url,
+                    "source": meta.get("source", ""),
+                    "source_tier": f.get("source_tier", "tier3"),
+                    "content_type": meta.get("content_type", "html"),
+                    "relevance_score": meta.get("relevance_score", 0.0),
+                    "published_date": f.get("published_date", ""),
+                }
+            )
 
         if not task.title:
             generated_title = result_state.get("title", "")
@@ -274,9 +285,7 @@ def run_research_task(self, research_task_id: int) -> None:
 
         # 成本按命中/未命中分别计价(Research Agent 全部走 chat 模型)
         cost = sum_cost_from_flat_records(token_records, llm_type="chat")
-        cache_hit_ratio = (
-            total_cache_hit / total_input if total_input > 0 else 0.0
-        )
+        cache_hit_ratio = total_cache_hit / total_input if total_input > 0 else 0.0
 
         token_usage = {
             "summary": {
@@ -289,8 +298,12 @@ def run_research_task(self, research_task_id: int) -> None:
                 "cache_hit_ratio": round(cache_hit_ratio, 4),
                 "total_cost_cny": round(cost, 6),
                 "total_duration_seconds": 0.0,
-                "avg_tokens_per_call": round(total_tokens / total_calls, 1) if total_calls else 0.0,
-                "avg_cost_per_call": round(cost / total_calls, 6) if total_calls else 0.0,
+                "avg_tokens_per_call": round(total_tokens / total_calls, 1)
+                if total_calls
+                else 0.0,
+                "avg_cost_per_call": round(cost / total_calls, 6)
+                if total_calls
+                else 0.0,
             },
             "call_details": [],
         }
@@ -327,7 +340,9 @@ def run_research_task(self, research_task_id: int) -> None:
         else:
             error_msg = str(exc)[:500]
         # quota 耗尽 / timeout 都属于正常业务事件，不打 ERROR + 堆栈（避免告警系统误报）
-        log_level = logger.warning if (is_timeout or is_quota_exhausted) else logger.error
+        log_level = (
+            logger.warning if (is_timeout or is_quota_exhausted) else logger.error
+        )
         log_level(
             "ResearchTask %d 失败: %s",
             research_task_id,
@@ -343,7 +358,9 @@ def run_research_task(self, research_task_id: int) -> None:
                 if task.job_id:
                     job = db.get(AnalysisJob, task.job_id)
                     if job:
-                        complete_analysis_job_sync(db=db, job=job, error_message=error_msg)
+                        complete_analysis_job_sync(
+                            db=db, job=job, error_message=error_msg
+                        )
                 db.commit()
         except Exception as inner_exc:
             logger.error("更新失败状态时出错: %s", inner_exc)

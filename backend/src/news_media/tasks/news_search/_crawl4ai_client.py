@@ -83,20 +83,36 @@ def fetch_via_crawl4ai(
             # 4xx 是请求问题，重试无意义；5xx 和无 status 才重试
             if status < 500 or attempt >= max_retries:
                 raise
-            delay = retry_delays[attempt] if attempt < len(retry_delays) else retry_delays[-1]
+            delay = (
+                retry_delays[attempt]
+                if attempt < len(retry_delays)
+                else retry_delays[-1]
+            )
             logger.warning(
                 "Crawl4AI %d, 重试 %d/%d，%.1fs 后重试: url=%s",
-                status, attempt + 1, max_retries, delay, url,
+                status,
+                attempt + 1,
+                max_retries,
+                delay,
+                url,
             )
             time.sleep(delay)
 
         except (requests.ConnectionError, requests.Timeout) as e:
             if attempt >= max_retries:
                 raise
-            delay = retry_delays[attempt] if attempt < len(retry_delays) else retry_delays[-1]
+            delay = (
+                retry_delays[attempt]
+                if attempt < len(retry_delays)
+                else retry_delays[-1]
+            )
             logger.warning(
                 "Crawl4AI %s, 重试 %d/%d，%.1fs 后重试: url=%s",
-                type(e).__name__, attempt + 1, max_retries, delay, url,
+                type(e).__name__,
+                attempt + 1,
+                max_retries,
+                delay,
+                url,
             )
             time.sleep(delay)
 

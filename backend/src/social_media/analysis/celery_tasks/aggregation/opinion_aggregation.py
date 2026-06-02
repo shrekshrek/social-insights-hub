@@ -137,7 +137,8 @@ def aggregate_opinions(
             unique_categories = set(category_map.values())
             logger.info(
                 "[观点聚合] 类别归一化完成: %s -> %s 个标准类别",
-                raw_category_count, len(unique_categories),
+                raw_category_count,
+                len(unique_categories),
             )
 
         except Exception as e:
@@ -470,7 +471,8 @@ def aggregate_opinions(
 
     logger.info(
         "[观点聚合] 最终输出: %s 个话题 (共 %s 个，保留 Top 60)",
-        len(aggregated_opinions), total_count,
+        len(aggregated_opinions),
+        total_count,
     )
 
     return {"opinions": aggregated_opinions, "llm_token_stats": token_stats}

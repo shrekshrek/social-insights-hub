@@ -56,7 +56,9 @@ class NewsTask(Base):
         Integer, server_default="0", comment="采集到的文章数量"
     )
     auto_analyze: Mapped[bool] = mapped_column(
-        Boolean, server_default="false", nullable=False,
+        Boolean,
+        server_default="false",
+        nullable=False,
         comment="采集完成后是否自动触发分析链（对标 SocialTask.auto_analyze）",
     )
     analysis_result: Mapped[dict | None] = mapped_column(
@@ -89,7 +91,10 @@ class NewsTask(Base):
         "src.auth.models.User", foreign_keys=[user_id], lazy="selectin"
     )
     strategy: Mapped["Strategy | None"] = relationship(
-        "Strategy", foreign_keys=[strategy_id], lazy="select", back_populates="news_tasks"
+        "Strategy",
+        foreign_keys=[strategy_id],
+        lazy="select",
+        back_populates="news_tasks",
     )
     articles: Mapped[list["NewsArticle"]] = relationship(
         back_populates="task", cascade="all, delete-orphan", lazy="select"
@@ -124,7 +129,9 @@ class NewsArticle(Base):
         String(255), nullable=False, comment="来源媒体名称"
     )
     source_tier: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="tier3",
+        String(20),
+        nullable=False,
+        server_default="tier3",
         comment="来源等级: tier1(权威央媒) / tier2(行业门户) / tier3(其他) / wechat_mp(微信公众号)",
     )
     author: Mapped[str | None] = mapped_column(
@@ -147,13 +154,17 @@ class NewsArticle(Base):
         String(20), nullable=True, comment="与研究目标的相关程度: high / medium / low"
     )
     sentiment: Mapped[float | None] = mapped_column(
-        Float, nullable=True, comment="情感分 -2 ~ 2: -2强烈负面 / -1轻度负面 / 0中性 / 1轻度正面 / 2强烈正面"
+        Float,
+        nullable=True,
+        comment="情感分 -2 ~ 2: -2强烈负面 / -1轻度负面 / 0中性 / 1轻度正面 / 2强烈正面",
     )
     article_type: Mapped[str | None] = mapped_column(
         String(50), nullable=True, comment="文章类型: report / opinion / pr / analysis"
     )
     mentioned_entities: Mapped[list | None] = mapped_column(
-        JSON, nullable=True, comment='提及的实体名单: [{"name": "...", "role": "target/competitor/context"}]'
+        JSON,
+        nullable=True,
+        comment='提及的实体名单: [{"name": "...", "role": "target/competitor/context"}]',
     )
     key_quotes: Mapped[list | None] = mapped_column(
         JSON, nullable=True, comment='关键引述: [{"speaker": "...", "quote": "..."}]'
@@ -164,8 +175,10 @@ class NewsArticle(Base):
 
     # 搜索渠道
     search_source: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="baidu",
-        comment="搜索渠道: baidu / sogou / wechat_mp（bing 已下线，历史数据可能仍存在）"
+        String(20),
+        nullable=False,
+        server_default="baidu",
+        comment="搜索渠道: baidu / sogou / wechat_mp（bing 已下线，历史数据可能仍存在）",
     )
 
     # 原始数据
@@ -180,6 +193,4 @@ class NewsArticle(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    task: Mapped["NewsTask"] = relationship(
-        back_populates="articles", lazy="select"
-    )
+    task: Mapped["NewsTask"] = relationship(back_populates="articles", lazy="select")

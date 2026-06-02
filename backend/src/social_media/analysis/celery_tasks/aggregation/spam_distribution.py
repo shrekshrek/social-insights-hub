@@ -14,9 +14,7 @@ from src.social_media.analysis.constants import SPAM_HIGH_THRESHOLD
 logger = logging.getLogger(__name__)
 
 
-def _build_spam_map(
-    posts_data: list[dict], threshold: float
-) -> dict[int, str]:
+def _build_spam_map(posts_data: list[dict], threshold: float) -> dict[int, str]:
     """构建 post_id → spam 分组映射，仅处理 spam_score 非 None 的原文。"""
     spam_map: dict[int, str] = {}
     for post in posts_data:
@@ -105,9 +103,7 @@ def _compute_spam_dist_2d(
     return {"high": high, "low": low}
 
 
-def _compute_spam_group(
-    post_id: int | None, spam_map: dict[int, str]
-) -> str | None:
+def _compute_spam_group(post_id: int | None, spam_map: dict[int, str]) -> str | None:
     """获取单帖的 spam 分组标记。"""
     if post_id is None:
         return None
@@ -152,15 +148,11 @@ def build_spam_distributions(
 
     # 单帖标记: 四象限
     for point in quadrant_data:
-        point["spam_group"] = _compute_spam_group(
-            point.get("post_id"), spam_map
-        )
+        point["spam_group"] = _compute_spam_group(point.get("post_id"), spam_map)
 
     # 单帖标记: KOL 声音
     for voice in kol_voices:
-        voice["spam_group"] = _compute_spam_group(
-            voice.get("post_id"), spam_map
-        )
+        voice["spam_group"] = _compute_spam_group(voice.get("post_id"), spam_map)
 
     # 4 维: IPA 分析
     for point in ipa_points:

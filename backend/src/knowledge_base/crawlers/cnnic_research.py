@@ -19,13 +19,13 @@ _LIST_URL = "https://www.cnnic.net.cn/6/86/88/index.html"
 _BASE_URL = "https://www.cnnic.net.cn"
 
 # 文章路径模式：/n4/{year}/{date}/c88-{id}.html（HTML 中为相对路径）
-_ARTICLE_PATTERN = re.compile(r'(/n4/\d{4}/\d{4}/c88-\d+\.html)')
+_ARTICLE_PATTERN = re.compile(r"(/n4/\d{4}/\d{4}/c88-\d+\.html)")
 
 # 文章页内 PDF 链接：/NMediaFile/...
 _PDF_PATTERN = re.compile(r'href="(/NMediaFile/[^"]+\.pdf)"', re.IGNORECASE)
 
 # 文章标题：《...》
-_TITLE_PATTERN = re.compile(r'[《「\u201c]([^》」\u201d]+)[》」\u201d]')
+_TITLE_PATTERN = re.compile(r"[《「\u201c]([^》」\u201d]+)[》」\u201d]")
 
 
 class CNNICResearchCrawler(BaseCrawler):
@@ -45,7 +45,9 @@ class CNNICResearchCrawler(BaseCrawler):
             try:
                 pdf_url, title = await self._extract_pdf_from_article(article_url)
                 if not pdf_url:
-                    logger.info("[cnnic_research] 无 PDF 下载链接，跳过: %s", article_url)
+                    logger.info(
+                        "[cnnic_research] 无 PDF 下载链接，跳过: %s", article_url
+                    )
                     continue
                 full_pdf_url = _BASE_URL + pdf_url
                 pdf_bytes = await self._download_pdf(full_pdf_url)
@@ -73,7 +75,9 @@ class CNNICResearchCrawler(BaseCrawler):
             timeout=30.0,
             follow_redirects=True,
             verify=False,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
@@ -110,7 +114,11 @@ class CNNICResearchCrawler(BaseCrawler):
         raw_title = title_match.group(1).strip() if title_match else ""
         # 整个标题被《》包裹时去掉外层引号（如《数字消费发展报告（2025）》→数字消费发展报告（2025））
         # 标题含前缀时保留完整内容（如第57次《中国互联网络发展状况统计报告》）
-        title = re.sub(r"^《(.+)》$", r"\1", raw_title) if raw_title else url.rsplit("/", 1)[-1]
+        title = (
+            re.sub(r"^《(.+)》$", r"\1", raw_title)
+            if raw_title
+            else url.rsplit("/", 1)[-1]
+        )
 
         return pdf_path, title
 
@@ -128,4 +136,5 @@ class CNNICResearchCrawler(BaseCrawler):
 
 def settings_timeout() -> float:
     from src.config import settings
+
     return float(settings.CRAWLER_PDF_TIMEOUT)

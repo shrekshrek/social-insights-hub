@@ -548,7 +548,6 @@ def build_context_graph(
     }
 
 
-
 # ============================================================================
 # 3. 精细化竞品雷达 (Competitor Radar)
 # ============================================================================
@@ -701,9 +700,7 @@ def analyze_competitor_radar(
         return False
 
     # 辅助函数：按维度重新聚合实体统计
-    def _aggregate_entity_stats_by_dimension(
-        entity: dict, dimension: str
-    ) -> dict:
+    def _aggregate_entity_stats_by_dimension(entity: dict, dimension: str) -> dict:
         """按 spam 维度重新聚合实体的统计字段"""
         if spam_map is None or posts_data is None or dimension == "all":
             # 无 spam_map 或 all 维度，返回原始统计
@@ -792,7 +789,9 @@ def analyze_competitor_radar(
             and target_brands[target_parent]["product_count"] > 1
         ):
             target_data_single = target_brands[target_parent]
-            target_name = f"{target_parent} ({target_data_single['product_count']}个产品)"
+            target_name = (
+                f"{target_parent} ({target_data_single['product_count']}个产品)"
+            )
         else:
             target_data_single = dim_target_data
             target_name = dim_target_data["name"]
@@ -849,11 +848,17 @@ def analyze_competitor_radar(
                 {
                     "name": target_name,
                     "sentiment": target_data_single.get("sentiment", 0),
-                    "sentiment_distribution": target_data_single.get("sentiment_distribution", {}),
-                    "products": target_data_single.get("products", [dim_target_data["name"]]),
+                    "sentiment_distribution": target_data_single.get(
+                        "sentiment_distribution", {}
+                    ),
+                    "products": target_data_single.get(
+                        "products", [dim_target_data["name"]]
+                    ),
                     "post_ids": target_data_single.get("post_ids", []),
                     "post_source_ids": target_data_single.get("post_source_ids", []),
-                    "comment_source_ids": target_data_single.get("comment_source_ids", []),
+                    "comment_source_ids": target_data_single.get(
+                        "comment_source_ids", []
+                    ),
                 }
             ]
             for comp in competitor_data_list:
@@ -861,11 +866,15 @@ def analyze_competitor_radar(
                     {
                         "name": comp["name"],
                         "sentiment": comp["data"].get("sentiment", 0),
-                        "sentiment_distribution": comp["data"].get("sentiment_distribution", {}),
+                        "sentiment_distribution": comp["data"].get(
+                            "sentiment_distribution", {}
+                        ),
                         "products": comp["products"],
                         "post_ids": comp["data"].get("post_ids", []),
                         "post_source_ids": comp["data"].get("post_source_ids", []),
-                        "comment_source_ids": comp["data"].get("comment_source_ids", []),
+                        "comment_source_ids": comp["data"].get(
+                            "comment_source_ids", []
+                        ),
                     }
                 )
             return {"mode": "bar", "series": series}
@@ -877,7 +886,8 @@ def analyze_competitor_radar(
             m_score = min(entity.get("mentions", 0) / (max_mentions + 1), 1.0)
             s_score = (entity.get("sentiment", 0) + 1) / 2
             h_score = min(
-                math.log(entity.get("heat", 0) + 1) / (math.log(max_heat + 1) + 0.1), 1.0
+                math.log(entity.get("heat", 0) + 1) / (math.log(max_heat + 1) + 0.1),
+                1.0,
             )
             dist = entity.get("sentiment_distribution", {})
             total = sum(dist.values()) if dist else 1
@@ -902,7 +912,9 @@ def analyze_competitor_radar(
             {
                 "name": target_name,
                 "data": _get_radar_score(target_data_single, max_mentions, max_heat),
-                "products": target_data_single.get("products", [dim_target_data["name"]]),
+                "products": target_data_single.get(
+                    "products", [dim_target_data["name"]]
+                ),
                 "post_ids": target_data_single.get("post_ids", []),
                 "post_source_ids": target_data_single.get("post_source_ids", []),
                 "comment_source_ids": target_data_single.get("comment_source_ids", []),

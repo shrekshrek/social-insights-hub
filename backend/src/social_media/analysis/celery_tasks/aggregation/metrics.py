@@ -159,7 +159,9 @@ def calculate_sentiment_conflict(posts_data: list[dict[str, Any]]) -> dict[str, 
         if not opinions:
             continue
 
-        comment_sentiment = sum(op.get("sentiment", 0) for op in opinions) / len(opinions)
+        comment_sentiment = sum(op.get("sentiment", 0) for op in opinions) / len(
+            opinions
+        )
 
         if post_sentiment is not None:
             conflict = post_sentiment - comment_sentiment

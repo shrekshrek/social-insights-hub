@@ -240,12 +240,12 @@ def create_monitor_slice_focus_report_chain() -> Runnable:
 
 def parse_monitor_slice_report_response(response_text: str) -> Dict[str, Any]:
     """解析 report 响应。
-    
+
     新策略：LLM 直接输出 Markdown 文本。
     为了兼容性，如果 LLM 还是输出了 JSON 或 Markdown 代码块，尝试清理。
     """
     text = response_text.strip()
-    
+
     # 1. 尝试清理 Markdown 代码块标记
     if text.startswith("```"):
         # 移除开头的 ```json 或 ```markdown
@@ -253,7 +253,7 @@ def parse_monitor_slice_report_response(response_text: str) -> Dict[str, Any]:
         if len(lines) >= 2:
             # 移除第一行 (```xxx) 和最后一行 (```)
             text = "\n".join(lines[1:-1]).strip()
-    
+
     # 2. 尝试解析 JSON（以防 LLM 仍然顽固地输出 JSON）
     if text.startswith("{") and text.endswith("}"):
         try:

@@ -33,7 +33,10 @@ class KnowledgeDocument(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     workspace_id: Mapped[int | None] = mapped_column(
-        Integer(), nullable=True, index=False, comment="NULL=平台公共；user_id=用户私有上传"
+        Integer(),
+        nullable=True,
+        index=False,
+        comment="NULL=平台公共；user_id=用户私有上传",
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False, comment="文档标题")
     source_type: Mapped[str] = mapped_column(

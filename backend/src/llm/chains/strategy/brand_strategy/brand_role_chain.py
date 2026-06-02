@@ -151,10 +151,12 @@ USER_TEMPLATE = """{brief_section}
 def create_brand_role_chain() -> Runnable:
     """创建 Brand Role (策略层) LLM 链 — brand_strategy 三阶段第 2 层"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -185,12 +187,16 @@ def format_data_for_brand_role(
 
     brief_section = ""
     if brief:
-        brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        brief_section = (
+            f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        )
 
     research_context_section = _build_research_context_section(research_design)
 
     # 提取当前分支聚焦的 tension + 相关 opportunities
-    insight_focused_section = _build_focused_tension_section(insight_result, selected_tension_id)
+    insight_focused_section = _build_focused_tension_section(
+        insight_result, selected_tension_id
+    )
 
     # 提取 KOL 声音、平台特征
     supplementary_parts = []
@@ -201,15 +207,15 @@ def format_data_for_brand_role(
 
         subject = meta.get("subject") or None
         ref_name = (
-            slice_refs[i].get("name")
-            if slice_refs and i < len(slice_refs)
-            else None
+            slice_refs[i].get("name") if slice_refs and i < len(slice_refs) else None
         )
         slice_label = (ref_name or "").strip()
         part: dict[str, Any] = {
             "slice_index": i,
             "_source_label": (
-                f"Social Slice #{i}: {slice_label}" if slice_label else f"Social Slice #{i}"
+                f"Social Slice #{i}: {slice_label}"
+                if slice_label
+                else f"Social Slice #{i}"
             ),
             "mode": "品牌聚焦" if subject else "大盘分析",
             "subject": subject,
@@ -291,9 +297,9 @@ def _build_focused_tension_section(insight_result: dict, tension_id: int) -> str
     selected_tension = tensions[tension_id]
     # 收集与该 tension 关联的 opportunities（按 related_tensions 字段过滤）
     related_opps = [
-        opp for opp in opportunities
-        if isinstance(opp, dict)
-        and tension_id in (opp.get("related_tensions") or [])
+        opp
+        for opp in opportunities
+        if isinstance(opp, dict) and tension_id in (opp.get("related_tensions") or [])
     ]
     # 若无显式关联，至少给前 2 个 opportunities 作为参考（避免空白）
     if not related_opps and opportunities:
@@ -327,16 +333,23 @@ def parse_brand_role_response(response_text: str) -> dict[str, Any]:
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
             try:
-                result = json.loads(text[start: end + 1])
+                result = json.loads(text[start : end + 1])
             except json.JSONDecodeError:
                 pass
             else:
-                logger.warning("Brand Role JSON 从 {...} 块中提取成功（原响应有额外内容）")
+                logger.warning(
+                    "Brand Role JSON 从 {...} 块中提取成功（原响应有额外内容）"
+                )
                 return _ensure_brand_role_fields(result)
         logger.error("Brand Role JSON 解析失败: %s...", text[:200])
         return {
             "brand_social_role": {"statement": "", "elaboration": "", "evidence": []},
-            "social_strategy": {"statement": "", "core_message": "", "rhythm": "", "evidence": []},
+            "social_strategy": {
+                "statement": "",
+                "core_message": "",
+                "rhythm": "",
+                "evidence": [],
+            },
         }
 
     return _ensure_brand_role_fields(result)
@@ -345,7 +358,16 @@ def parse_brand_role_response(response_text: str) -> dict[str, Any]:
 def _ensure_brand_role_fields(result: dict) -> dict[str, Any]:
     """确保必要字段存在"""
     if "brand_social_role" not in result:
-        result["brand_social_role"] = {"statement": "", "elaboration": "", "evidence": []}
+        result["brand_social_role"] = {
+            "statement": "",
+            "elaboration": "",
+            "evidence": [],
+        }
     if "social_strategy" not in result:
-        result["social_strategy"] = {"statement": "", "core_message": "", "rhythm": "", "evidence": []}
+        result["social_strategy"] = {
+            "statement": "",
+            "core_message": "",
+            "rhythm": "",
+            "evidence": [],
+        }
     return result

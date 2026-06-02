@@ -77,23 +77,27 @@ async def validate_not_last_super_admin(
     from src.rbac.models import UserRole, Role
 
     # 检查目标用户是否持有 super_admin 角色
-    is_super_admin = (await db.execute(
-        select(func.count())
-        .select_from(UserRole)
-        .join(Role)
-        .where(UserRole.user_id == user_id, Role.name == "super_admin")
-    )).scalar()
+    is_super_admin = (
+        await db.execute(
+            select(func.count())
+            .select_from(UserRole)
+            .join(Role)
+            .where(UserRole.user_id == user_id, Role.name == "super_admin")
+        )
+    ).scalar()
 
     if not is_super_admin:
         return
 
     # 统计全局 super_admin 持有人数
-    total = (await db.execute(
-        select(func.count())
-        .select_from(UserRole)
-        .join(Role)
-        .where(Role.name == "super_admin")
-    )).scalar()
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(UserRole)
+            .join(Role)
+            .where(Role.name == "super_admin")
+        )
+    ).scalar()
 
     if total <= 1:
         raise HTTPException(

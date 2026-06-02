@@ -29,6 +29,12 @@ services:
       - "8000:8000"
     env_file:
       - .env.production  # 使用根目录的统一配置
+    # 抬高文件描述符上限，避免 Redis/PG/HTTP 连接池在高并发下耗尽 FD（Errno 24）。
+    # 容器默认 nofile 常为 1024，不足以支撑多连接池叠加。
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     volumes:
       - kb_storage_prod:/app/storage
     depends_on:
@@ -73,9 +79,17 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: prod-celery-worker
-    command: uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=100
+    # 并发由 100 降至 50：LLM 任务多在等待 I/O，降并发对吞吐影响小，
+    # 但显著减少 Redis/PG 连接池占用的 FD，缓解 Errno 24（Too many open files）。
+    command: uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=50
     env_file:
       - .env.production  # 使用根目录的统一配置
+    # 抬高文件描述符上限：gevent 并发 ×（Redis 同步池 + PG 池 + Celery broker/backend 池）
+    # 在 chord 扇出汇总时峰值很高，容器默认 1024 会被打满。
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     volumes:
       - kb_storage_prod:/app/storage
     depends_on:
@@ -90,6 +104,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: prod-redis
+    # 抬高 FD 上限：作为 broker + result backend + 应用缓存，承接所有 worker/backend 连接，
+    # 默认 1024 在高并发下会成为服务端瓶颈。
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     volumes:
       - redis_data_prod:/data
     restart: unless-stopped

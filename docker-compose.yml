@@ -21,6 +21,11 @@ services:
   redis:
     image: redis:7-alpine
     # 不使用固定 container_name，让 Docker Compose 基于项目名自动生成
+    # 与生产对齐：抬高 FD 上限（broker + result backend + 缓存，承接所有连接）。
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     ports:
       - "6379:6379"
     volumes:
@@ -45,6 +50,11 @@ services:
       - UV_HTTP_TIMEOUT=300
     env_file:
       - .env
+    # 与生产对齐：抬高 FD 上限，避免连接池在高并发下耗尽（Errno 24）。
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     dns:
       - 8.8.8.8
     depends_on:
@@ -61,7 +71,8 @@ services:
       - backend_venv:/app/.venv
       - uv_cache:/root/.cache/uv
     # Celery 自动处理 gevent monkey patching（--pool=gevent 触发）
-    command: sh -c "uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=100"
+    # 与生产对齐：并发 50（LLM 任务多在等 I/O，降并发省连接、缓解 Errno 24）。
+    command: sh -c "uv run celery -A src.celery_app worker --loglevel=info --pool=gevent --concurrency=50"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
@@ -69,6 +80,11 @@ services:
       - UV_HTTP_TIMEOUT=300
     env_file:
       - .env
+    # 与生产对齐：抬高 FD 上限，避免连接池在高并发下耗尽（Errno 24）。
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     dns:
       - 8.8.8.8
     depends_on:

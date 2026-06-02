@@ -1,7 +1,7 @@
 """同步Redis客户端 - 用于Celery任务（gevent环境）
 
 针对高并发场景的Redis连接池优化：
-- 100 gevent greenlets 并发执行任务
+- 50 gevent greenlets 并发执行任务（与 docker-compose --concurrency 对齐）
 - 每个任务可能需要多次Redis操作（INCR, HINCRBY, RPUSH等）
 - 连接池需要支持足够的并发连接数
 
@@ -52,7 +52,7 @@ def get_keepalive_options():
 
 REDIS_POOL_CONFIG = {
     # 核心连接池参数
-    "max_connections": 150,  # 最大连接数 = 并发数 × 1.5（100 × 1.5）
+    "max_connections": 75,  # 最大连接数 = 并发数 × 1.5（50 × 1.5）
     "decode_responses": True,  # 自动解码为字符串
     # 超时配置（防止连接卡死）
     "socket_timeout": 5,  # 单次操作超时：5秒

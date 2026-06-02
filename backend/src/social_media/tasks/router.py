@@ -22,7 +22,6 @@ from .dependencies import validate_task_access, validate_task_owner
 from .models import SocialTask
 
 
-
 router = APIRouter(
     prefix="/social-media",
     tags=["Social Media - Tasks"],
@@ -124,11 +123,13 @@ async def get_tasks(
     task_ids = [t.id for t in tasks]
     latest_job_map: dict[int, str] = {}
     if task_ids:
-        job_rows = (await db.execute(
-            sa_select(AnalysisJob.social_task_id, AnalysisJob.status)
-            .where(AnalysisJob.social_task_id.in_(task_ids))
-            .order_by(AnalysisJob.created_at.desc())
-        )).all()
+        job_rows = (
+            await db.execute(
+                sa_select(AnalysisJob.social_task_id, AnalysisJob.status)
+                .where(AnalysisJob.social_task_id.in_(task_ids))
+                .order_by(AnalysisJob.created_at.desc())
+            )
+        ).all()
         for row in job_rows:
             if row.social_task_id not in latest_job_map:
                 latest_job_map[int(row.social_task_id)] = row.status
@@ -179,12 +180,14 @@ async def get_task(
     if task.analysis_result_at:
         aggregation_status = "completed"
     else:
-        aggregation_status = (await db.execute(
-            sa_select(AnalysisJob.status)
-            .where(AnalysisJob.social_task_id == task.id)
-            .order_by(AnalysisJob.created_at.desc())
-            .limit(1)
-        )).scalar_one_or_none()
+        aggregation_status = (
+            await db.execute(
+                sa_select(AnalysisJob.status)
+                .where(AnalysisJob.social_task_id == task.id)
+                .order_by(AnalysisJob.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
 
     # 转换为带关联信息的response
     task_dict = schemas.SocialTaskRead.model_validate(task).model_dump()

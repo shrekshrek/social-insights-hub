@@ -4,7 +4,10 @@ import math
 from collections import defaultdict
 from typing import Any
 
-from src.social_media.analysis.constants import MAX_POST_IDS_SAMPLE, ORIGINAL_TERM_MAX_LEN
+from src.social_media.analysis.constants import (
+    MAX_POST_IDS_SAMPLE,
+    ORIGINAL_TERM_MAX_LEN,
+)
 
 
 def _norm_role(role: Any) -> str:
@@ -20,7 +23,9 @@ def _norm_role(role: Any) -> str:
     return "Context"
 
 
-def _compute_platform_dna(items: list[dict[str, Any]], *, top_n: int = 20) -> list[dict[str, Any]]:
+def _compute_platform_dna(
+    items: list[dict[str, Any]], *, top_n: int = 20
+) -> list[dict[str, Any]]:
     """从带有 platform_distribution 的条目列表计算平台 DNA。
 
     复用于 sov_ranking（个体）和 group_share（品牌聚合）。
@@ -55,9 +60,15 @@ def _compute_platform_dna(items: list[dict[str, Any]], *, top_n: int = 20) -> li
             cnt = int(p_dist.get(p) or 0)
             org_cnt = int(org_dist.get(p) or 0)
             promo_cnt = int(promo_dist.get(p) or 0)
-            platform_shares[p] = round(cnt / total_mentions, 4) if total_mentions > 0 else 0.0
-            organic_platform_shares[p] = round(org_cnt / total_organic, 4) if total_organic > 0 else 0.0
-            promo_platform_shares[p] = round(promo_cnt / total_promo, 4) if total_promo > 0 else 0.0
+            platform_shares[p] = (
+                round(cnt / total_mentions, 4) if total_mentions > 0 else 0.0
+            )
+            organic_platform_shares[p] = (
+                round(org_cnt / total_organic, 4) if total_organic > 0 else 0.0
+            )
+            promo_platform_shares[p] = (
+                round(promo_cnt / total_promo, 4) if total_promo > 0 else 0.0
+            )
         result.append(
             {
                 "name": name,
@@ -124,7 +135,9 @@ def _build_landscape(
         sov_ranking.append(
             {
                 "name": e.get("name") or "",
-                "parent": (e.get("parent") or "") if isinstance(e.get("parent"), str) else "",
+                "parent": (e.get("parent") or "")
+                if isinstance(e.get("parent"), str)
+                else "",
                 "role": _norm_role(e.get("role")),
                 "heat": round(heat, 3),
                 "organic_heat": e.get("organic_heat"),
@@ -135,8 +148,10 @@ def _build_landscape(
                 "organic_sentiment": e.get("organic_sentiment"),
                 "promo_sentiment": e.get("promo_sentiment"),
                 "platform_distribution": e.get("platform_distribution") or {},
-                "organic_platform_distribution": e.get("organic_platform_distribution") or {},
-                "promo_platform_distribution": e.get("promo_platform_distribution") or {},
+                "organic_platform_distribution": e.get("organic_platform_distribution")
+                or {},
+                "promo_platform_distribution": e.get("promo_platform_distribution")
+                or {},
                 "post_ids_sample": e.get("post_ids_sample") or [],
                 "source_tasks": e.get("source_tasks") or [],
                 "spam_distribution": e.get("spam_distribution"),
@@ -279,7 +294,9 @@ def _build_landscape(
                 promo_sent = e.get("promo_sentiment")
                 if organic_sent is not None and low_total > 0:
                     try:
-                        b["organic_sent_weighted_sum"] += float(organic_sent) * low_total
+                        b["organic_sent_weighted_sum"] += (
+                            float(organic_sent) * low_total
+                        )
                         b["organic_sent_weight"] += low_total
                     except Exception:
                         pass
@@ -304,11 +321,15 @@ def _build_landscape(
 
         # role: 按 mentions 加权投票取多数
         role_votes = v.get("_role_votes") or {}
-        item["role"] = max(role_votes, key=lambda r: role_votes[r]) if role_votes else "Context"
+        item["role"] = (
+            max(role_votes, key=lambda r: role_votes[r]) if role_votes else "Context"
+        )
 
         # sentiment: 按 mentions 加权平均
         sw = float(v.get("_sent_weight") or 0.0)
-        item["sentiment"] = round(float(v["_sent_weighted_sum"]) / sw, 2) if sw > 0 else 0.0
+        item["sentiment"] = (
+            round(float(v["_sent_weighted_sum"]) / sw, 2) if sw > 0 else 0.0
+        )
 
         # platform_distribution
         plat = dict(v.get("_plat_dist") or {})
@@ -458,7 +479,9 @@ def _build_intent(
             "source_tasks": t.get("source_tasks") or [],
         }
         polar_total = pos_m + neg_m
-        controversy_depth = round(min(pos_m, neg_m) / polar_total, 3) if polar_total >= 6 else 0.0
+        controversy_depth = (
+            round(min(pos_m, neg_m) / polar_total, 3) if polar_total >= 6 else 0.0
+        )
         item["polar_total"] = polar_total
         item["controversy_depth"] = controversy_depth
         is_controversial = controversy_depth >= 0.3
@@ -547,8 +570,16 @@ def _build_intent(
     for x in pains:
         if not x.get("name"):
             continue
-        p_dist = x.get("platform_distribution") if isinstance(x.get("platform_distribution"), dict) else {}
-        k_dist = x.get("keyword_distribution") if isinstance(x.get("keyword_distribution"), dict) else {}
+        p_dist = (
+            x.get("platform_distribution")
+            if isinstance(x.get("platform_distribution"), dict)
+            else {}
+        )
+        k_dist = (
+            x.get("keyword_distribution")
+            if isinstance(x.get("keyword_distribution"), dict)
+            else {}
+        )
         p_cov = len([k for k, v in p_dist.items() if int(v or 0) > 0])
         k_cov = len([k for k, v in k_dist.items() if int(v or 0) > 0])
         coverage = p_cov + k_cov
@@ -627,9 +658,7 @@ def _build_focus(
     focus: dict[str, Any] = {
         "subject": subject,
         "targets": [
-            t.get("name")
-            for t in targets[:10]
-            if isinstance(t, dict) and t.get("name")
+            t.get("name") for t in targets[:10] if isinstance(t, dict) and t.get("name")
         ],
         "competitors": [
             c.get("name")
@@ -747,14 +776,10 @@ def _build_focus(
         min_mentions = 5
 
     target_names = {
-        str(t.get("name"))
-        for t in targets
-        if isinstance(t, dict) and t.get("name")
+        str(t.get("name")) for t in targets if isinstance(t, dict) and t.get("name")
     }
     comp_names = {
-        str(c.get("name"))
-        for c in competitors
-        if isinstance(c, dict) and c.get("name")
+        str(c.get("name")) for c in competitors if isinstance(c, dict) and c.get("name")
     }
 
     dim_agg: dict[str, dict[str, float]] = {}
@@ -952,7 +977,17 @@ def _build_focus(
                 cell_promo_m = int(cell.get("promo_mentions") or 0)
             except Exception:
                 cell_promo_m = 0
-            _acc(which, str(dim), sent, m, spam_dist, cell_org_sent, cell_promo_sent, cell_org_m, cell_promo_m)
+            _acc(
+                which,
+                str(dim),
+                sent,
+                m,
+                spam_dist,
+                cell_org_sent,
+                cell_promo_sent,
+                cell_org_m,
+                cell_promo_m,
+            )
             dim_key = str(dim)
             evd = dim_evidence.setdefault(dim_key, {"target": {}, "comp": {}})
             bucket = evd["target"] if which == "target" else evd["comp"]
@@ -1034,7 +1069,10 @@ def _build_focus(
     opportunities.sort(key=lambda x: x.get("competitor_mentions", 0), reverse=True)
     threats.sort(key=lambda x: x.get("competitor_mentions", 0), reverse=True)
     gaps.sort(
-        key=lambda x: (x.get("competitor_mentions", 0), x.get("competitor_sentiment", 0.0)),
+        key=lambda x: (
+            x.get("competitor_mentions", 0),
+            x.get("competitor_sentiment", 0.0),
+        ),
         reverse=True,
     )
 
@@ -1081,7 +1119,9 @@ def build_slice_layers(
 
     focus = None
     if subject:
-        industry_platform = (landscape["overview"] or {}).get("unique_platform_volume") or {}
+        industry_platform = (landscape["overview"] or {}).get(
+            "unique_platform_volume"
+        ) or {}
         focus = _build_focus(
             subject=subject,
             entities_aligned=entities_aligned,

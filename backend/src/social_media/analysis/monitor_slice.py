@@ -280,10 +280,7 @@ def _compute_time_distribution(
             promo_counts[date_str] += 1
 
     def _to_list(counts: dict[str, int]) -> list[dict[str, Any]]:
-        return [
-            {"date": d, "count": c}
-            for d, c in sorted(counts.items())
-        ]
+        return [{"date": d, "count": c} for d, c in sorted(counts.items())]
 
     return {
         "distribution": _to_list(all_counts),
@@ -1346,10 +1343,13 @@ def build_monitor_slice_result(
                 "freshness": freshness,
                 "overview": overview,
                 "time_distribution": _compute_time_distribution(
-                    post_info_by_key, spam_map_by_key,
+                    post_info_by_key,
+                    spam_map_by_key,
                 ),
                 "kol_voices": _merge_kol_voices(
-                    task_data_list, post_key_by_id, spam_map_by_key,
+                    task_data_list,
+                    post_key_by_id,
+                    spam_map_by_key,
                 ),
             },
             # intent 层由 Stage2 build_slice_layers 填充

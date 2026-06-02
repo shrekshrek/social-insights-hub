@@ -42,15 +42,17 @@ def fetch_node(state: ResearchState) -> dict:
         # Exa 搜索已返回全文，直接使用（优先级最高，不受封堵名单影响）
         prefetched = candidate.get("full_text", "").strip()
         if prefetched:
-            documents.append({
-                "url": url,
-                "title": candidate["title"],
-                "content": prefetched[:max_content_len],
-                "source": candidate.get("source", ""),
-                "content_type": content_type,
-                "page_count": None,
-                "published_date": candidate.get("published_date", ""),
-            })
+            documents.append(
+                {
+                    "url": url,
+                    "title": candidate["title"],
+                    "content": prefetched[:max_content_len],
+                    "source": candidate.get("source", ""),
+                    "content_type": content_type,
+                    "page_count": None,
+                    "published_date": candidate.get("published_date", ""),
+                }
+            )
             continue
 
         # 已知封堵域名：直接降级 snippet，省掉 Crawl4AI + httpx / PDF 下载的无谓等待
@@ -59,15 +61,17 @@ def fetch_node(state: ResearchState) -> dict:
             logger.info("跳过已知封堵域名，降级 snippet: %s", url)
             snippet = candidate.get("snippet", "")
             if snippet:
-                documents.append({
-                    "url": url,
-                    "title": candidate["title"],
-                    "content": snippet,
-                    "source": candidate.get("source", ""),
-                    "content_type": "snippet",
-                    "page_count": None,
-                    "published_date": candidate.get("published_date", ""),
-                })
+                documents.append(
+                    {
+                        "url": url,
+                        "title": candidate["title"],
+                        "content": snippet,
+                        "source": candidate.get("source", ""),
+                        "content_type": "snippet",
+                        "page_count": None,
+                        "published_date": candidate.get("published_date", ""),
+                    }
+                )
             continue
 
         try:
@@ -79,9 +83,15 @@ def fetch_node(state: ResearchState) -> dict:
                 if (
                     text
                     and fetcher_cfg.enable_pdf_extract
-                    and _is_landing_page(text, fetcher_cfg.landing_page_max_len, fetcher_cfg.download_indicators)
+                    and _is_landing_page(
+                        text,
+                        fetcher_cfg.landing_page_max_len,
+                        fetcher_cfg.download_indicators,
+                    )
                 ):
-                    pdf_text = _extract_and_fetch_pdf(text, base_url=url, timeout=pdf_timeout)
+                    pdf_text = _extract_and_fetch_pdf(
+                        text, base_url=url, timeout=pdf_timeout
+                    )
                     if pdf_text:
                         logger.info("从介绍页提取到 PDF 全文: %s", url)
                         text = pdf_text
@@ -91,28 +101,32 @@ def fetch_node(state: ResearchState) -> dict:
             text = None
 
         if text and text.strip():
-            documents.append({
-                "url": url,
-                "title": candidate["title"],
-                "content": text[:max_content_len],
-                "source": candidate.get("source", ""),
-                "content_type": content_type,
-                "page_count": None,
-                "published_date": candidate.get("published_date", ""),
-            })
+            documents.append(
+                {
+                    "url": url,
+                    "title": candidate["title"],
+                    "content": text[:max_content_len],
+                    "source": candidate.get("source", ""),
+                    "content_type": content_type,
+                    "page_count": None,
+                    "published_date": candidate.get("published_date", ""),
+                }
+            )
         else:
             # 全文获取失败时回退到 snippet
             snippet = candidate.get("snippet", "")
             if snippet:
-                documents.append({
-                    "url": url,
-                    "title": candidate["title"],
-                    "content": snippet,
-                    "source": candidate.get("source", ""),
-                    "content_type": "snippet",
-                    "page_count": None,
-                    "published_date": candidate.get("published_date", ""),
-                })
+                documents.append(
+                    {
+                        "url": url,
+                        "title": candidate["title"],
+                        "content": snippet,
+                        "source": candidate.get("source", ""),
+                        "content_type": "snippet",
+                        "page_count": None,
+                        "published_date": candidate.get("published_date", ""),
+                    }
+                )
 
     logger.info(
         "fetch 节点: %d 个来源, %d 全文成功, %d 回退 snippet",
@@ -145,6 +159,7 @@ def _fetch_html(url: str) -> str | None:
     if result is None:
         logger.info("Crawl4AI 首次失败，重试: %s", url)
         import gevent
+
         gevent.sleep(2)
         result = _crawl4ai_fetch(url)
         if result and len(result.strip()) >= _MIN_CRAWL_CONTENT_LEN:
@@ -221,7 +236,9 @@ def _httpx_fetch(url: str) -> str | None:
         text = re.sub(r"\s+", " ", text).strip()
         return text if len(text) >= _MIN_CRAWL_CONTENT_LEN else None
     except Exception:
-        logger.debug("requests 直接获取失败（JS站或超时，正常降级）: %s", url, exc_info=False)
+        logger.debug(
+            "requests 直接获取失败（JS站或超时，正常降级）: %s", url, exc_info=False
+        )
         return None
 
 
@@ -288,6 +305,7 @@ def _fetch_pdf(url: str, timeout: int = FETCH_PDF_TIMEOUT) -> str | None:
         # 网络层错误（DNS、连接超时等）：等待后重试一次
         logger.info("PDF 下载网络错误，重试: %s", url)
         import gevent
+
         gevent.sleep(2)
         try:
             content = _download(url)

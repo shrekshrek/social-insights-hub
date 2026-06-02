@@ -35,9 +35,7 @@ class NewsSlice(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    name: Mapped[str] = mapped_column(
-        String(255), nullable=False, comment="切片名称"
-    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="切片名称")
 
     monitor_id: Mapped[int] = mapped_column(
         ForeignKey("news_monitors.id", ondelete="CASCADE"),

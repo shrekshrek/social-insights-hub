@@ -156,7 +156,9 @@ async def create_social_monitor_batch_tasks(
     return created_tasks
 
 
-async def get_social_monitor(db: AsyncSession, monitor_id: int) -> Optional[SocialMonitor]:
+async def get_social_monitor(
+    db: AsyncSession, monitor_id: int
+) -> Optional[SocialMonitor]:
     """获取项目详情"""
     return await crud.get_monitor_by_id(db, monitor_id, load_relations=True)
 

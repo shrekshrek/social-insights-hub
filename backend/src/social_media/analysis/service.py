@@ -49,7 +49,12 @@ async def run_post_screening(
         )
 
     # 验证用户权限
-    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
+    await monitor_crud.assert_monitor_access(
+        db,
+        task.monitor_id,
+        current_user_id,
+        detail="You don't have access to this task",
+    )
 
     # 获取要分析的原文ID列表
     post_ids = request.post_ids or []
@@ -128,7 +133,12 @@ async def run_post_deep_analysis(
             detail=f"Task {request.task_id} not found",
         )
 
-    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
+    await monitor_crud.assert_monitor_access(
+        db,
+        task.monitor_id,
+        current_user_id,
+        detail="You don't have access to this task",
+    )
 
     # 获取要分析的原文ID列表
     post_ids = request.post_ids or []
@@ -353,7 +363,9 @@ async def create_monitor_slice(
                 "post_id_on_platform": post_id_on_platform,
                 "published_at": row[2],
                 "raw_cii": raw_cii,
-                "spam_score": float(spam_score_val) if spam_score_val is not None else None,
+                "spam_score": float(spam_score_val)
+                if spam_score_val is not None
+                else None,
             }
 
         # 主归属（首见原则）——用于 keyword 分布在去重后仍能“总和=总量”
@@ -413,7 +425,12 @@ async def run_comment_deep_analysis(
             detail=f"Task {request.task_id} not found",
         )
 
-    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
+    await monitor_crud.assert_monitor_access(
+        db,
+        task.monitor_id,
+        current_user_id,
+        detail="You don't have access to this task",
+    )
 
     # 获取要分析的原文ID列表（因为评论分析是基于原文的）
     post_ids = request.post_ids or []
@@ -519,7 +536,12 @@ async def get_task_post_analyses(
         )
 
     # 验证用户权限
-    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
+    await monitor_crud.assert_monitor_access(
+        db,
+        task.monitor_id,
+        current_user_id,
+        detail="You don't have access to this task",
+    )
 
     # 构建查询
     stmt = (
@@ -650,7 +672,12 @@ async def preview_deep_analysis_candidates(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
         )
-    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
+    await monitor_crud.assert_monitor_access(
+        db,
+        task.monitor_id,
+        current_user_id,
+        detail="You don't have access to this task",
+    )
 
     # 查询所有原文与分析结果
     stmt = (
@@ -796,7 +823,9 @@ async def reset_task_analysis_state(
     except Exception as e:
         _logger.warning(
             "Task %s: failed to clear auto-analysis Redis lock: %s",
-            task_id, e, exc_info=True,
+            task_id,
+            e,
+            exc_info=True,
         )
 
     # 2) 撤销进行中的 Celery 分析任务
@@ -815,12 +844,15 @@ async def reset_task_analysis_state(
         if celery_task_ids:
             _logger.info(
                 "Task %s: revoked %d in-flight analysis celery task(s)",
-                task_id, len(celery_task_ids),
+                task_id,
+                len(celery_task_ids),
             )
     except Exception as e:
         _logger.warning(
             "Task %s: failed to revoke analysis celery tasks: %s",
-            task_id, e, exc_info=True,
+            task_id,
+            e,
+            exc_info=True,
         )
 
     # 3) 可选：清空聚合分析报告（需要传入 task 对象）
@@ -868,12 +900,15 @@ async def delete_task_analyses(
 
     # 验证用户权限
     await monitor_crud.assert_monitor_access(
-        db, task.monitor_id, current_user_id,
+        db,
+        task.monitor_id,
+        current_user_id,
         detail="You don't have access to this task",
     )
 
     summary = await reset_task_analysis_state(
-        db, task_id,
+        db,
+        task_id,
         task=task,
         delete_post_analysis=True,
         delete_analysis_jobs=True,
@@ -932,7 +967,12 @@ async def run_task_aggregation(
         )
 
     # 验证用户权限
-    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
+    await monitor_crud.assert_monitor_access(
+        db,
+        task.monitor_id,
+        current_user_id,
+        detail="You don't have access to this task",
+    )
 
     # 检查是否有已分析的原文
     stmt = (
@@ -1015,7 +1055,12 @@ async def get_task_aggregation(
         )
 
     # 验证用户权限
-    await monitor_crud.assert_monitor_access(db, task.monitor_id, current_user_id, detail="You don\'t have access to this task")
+    await monitor_crud.assert_monitor_access(
+        db,
+        task.monitor_id,
+        current_user_id,
+        detail="You don't have access to this task",
+    )
 
     # 从 SocialTask 获取 analysis_result
     stmt = select(SocialTask).where(SocialTask.id == task_id)

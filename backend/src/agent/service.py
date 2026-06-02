@@ -344,7 +344,10 @@ async def upload_result(
         # 单任务多阶段模型：同一 task_id 在 probe / collect / comment 多个阶段被多次 upload。
         # 必须从 DB 加载已有原文映射，否则 collect 阶段重复 upload 同一笔记会创建重复记录。
         from src.social_media.tasks.models import SocialPost as _ExistingPost
-        existing_posts_stmt = select(_ExistingPost.id, _ExistingPost.post_id_on_platform).where(
+
+        existing_posts_stmt = select(
+            _ExistingPost.id, _ExistingPost.post_id_on_platform
+        ).where(
             _ExistingPost.task_id == task.id,
             _ExistingPost.is_deleted.is_(False),
         )
@@ -387,6 +390,7 @@ async def upload_result(
         # 转换并导入评论数据（按 comment_id_on_platform 去重）
         # 与 posts 同理：从 DB 加载已有评论映射，重复 upload 同一评论时跳过创建。
         from src.social_media.tasks.models import SocialComment as _ExistingComment
+
         existing_comments_stmt = select(
             _ExistingComment.id,
             _ExistingComment.comment_id_on_platform,
@@ -451,6 +455,7 @@ async def upload_result(
             SocialPost as _SocialPost,
             SocialComment as _SocialComment,
         )
+
         total_posts_result = await db.execute(
             _select(_func.count(_SocialPost.id)).where(
                 _SocialPost.task_id == task.id,
@@ -481,7 +486,9 @@ async def upload_result(
             final_status = "completed"
 
         await task_crud.update_task_status(
-            db, task, final_status,
+            db,
+            task,
+            final_status,
             error_message=request.error_message if request.error_message else None,
         )
 
@@ -535,7 +542,10 @@ async def upload_result(
                     )
                     logger.info(
                         "Task %s: Auto analysis triggered (phase=%s, new_posts=%s, new_comments=%s)",
-                        task_id, task.phase, new_posts_count, new_comments_count,
+                        task_id,
+                        task.phase,
+                        new_posts_count,
+                        new_comments_count,
                     )
                 else:
                     logger.info(

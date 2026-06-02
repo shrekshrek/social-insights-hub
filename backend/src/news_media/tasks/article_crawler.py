@@ -95,6 +95,8 @@ def crawl_articles(urls: list[str]) -> dict[str, str | None]:
     success = sum(1 for v in results.values() if v is not None)
     logger.info(
         "Crawl4AI batch: total=%d, success=%d, failed=%d",
-        len(urls), success, len(urls) - success,
+        len(urls),
+        success,
+        len(urls) - success,
     )
     return results

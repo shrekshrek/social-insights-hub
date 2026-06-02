@@ -177,10 +177,12 @@ USER_TEMPLATE = """{brief_section}
 def create_agenda_map_chain() -> Runnable:
     """创建 Agenda Map (媒体议程图) LLM 链 — market_report 三层第 1 层"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -231,66 +233,74 @@ def _format_news_slices_for_agenda(
             else None
         )
         slice_label = (ref_name or ns.get("name") or "").strip()
-        parts.append({
-            "_source_label": (
-                f"News Slice #{idx}: {slice_label}" if slice_label else f"News Slice #{idx}"
-            ),
-            "slice_name": ns.get("name", ""),
-            "article_count": descriptive.get("articles_filtered", 0),
-            "source_tier_distribution": descriptive.get("source_tier_distribution"),
-            "sentiment_overall": descriptive.get("sentiment_overall"),
-            "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
-            "cross_task_overlap": (descriptive.get("cross_task_overlap") or {}).get("distribution"),
-            "coverage_timeseries": (descriptive.get("coverage_timeseries") or [])[-30:],  # 最多最近 30 个时间点
-            "media_landscape": {
-                "source_pyramid": media_landscape.get("source_pyramid"),
-                "top_sources": media_landscape.get("top_sources"),
-            },
-            "event_clusters": [
-                {
-                    "cluster_id": c.get("cluster_id"),
-                    "article_count": c.get("article_count"),
-                    "first_reported_at": c.get("first_reported_at"),
-                    "peak_date": c.get("peak_date"),
-                    "tier_weighted_score": c.get("tier_weighted_score"),
-                    "first_reporter": c.get("first_reporter"),
-                    "in_task_ids": c.get("in_task_ids"),
-                }
-                for c in (rd.get("event_clusters") or [])[:8]
-            ],
-            "entities": [
-                {
-                    "name": e.get("name"),
-                    "role": e.get("role"),
-                    "mention_count": e.get("mention_count"),
-                    "source_count": e.get("source_count"),
-                    "cross_task_count": e.get("cross_task_count"),
-                    "sentiment_avg": e.get("sentiment_avg"),
-                    "sentiment_by_tier": e.get("sentiment_by_tier"),
-                }
-                # 新闻切片 entities 上限 30（pass1_chain），取 [:15] 覆盖
-                # target+competitor+高 mention context；agenda_map 需看媒体讨论的全貌
-                for e in (rd.get("entities") or [])[:15]
-                if isinstance(e, dict)
-            ],
-            "key_quotes": [
-                {
-                    "speaker": q.get("speaker"),
-                    "speaker_role": q.get("speaker_role"),
-                    "quote": q.get("quote"),
-                    "source_name": q.get("source_name"),
-                    "source_tier": q.get("source_tier"),
-                    "context": q.get("context"),
-                }
-                # Pass 1 quotes 上限 12，取 [:12] = 全部高分级 quote
-                for q in (rd.get("quotes") or [])[:12]
-                if q.get("speaker_role") in ("official", "executive", "analyst")
-            ],
-            "competitive": {
-                "players": competitive.get("players"),
-                "quote_share": competitive.get("quote_share"),
-            },
-        })
+        parts.append(
+            {
+                "_source_label": (
+                    f"News Slice #{idx}: {slice_label}"
+                    if slice_label
+                    else f"News Slice #{idx}"
+                ),
+                "slice_name": ns.get("name", ""),
+                "article_count": descriptive.get("articles_filtered", 0),
+                "source_tier_distribution": descriptive.get("source_tier_distribution"),
+                "sentiment_overall": descriptive.get("sentiment_overall"),
+                "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+                "cross_task_overlap": (descriptive.get("cross_task_overlap") or {}).get(
+                    "distribution"
+                ),
+                "coverage_timeseries": (descriptive.get("coverage_timeseries") or [])[
+                    -30:
+                ],  # 最多最近 30 个时间点
+                "media_landscape": {
+                    "source_pyramid": media_landscape.get("source_pyramid"),
+                    "top_sources": media_landscape.get("top_sources"),
+                },
+                "event_clusters": [
+                    {
+                        "cluster_id": c.get("cluster_id"),
+                        "article_count": c.get("article_count"),
+                        "first_reported_at": c.get("first_reported_at"),
+                        "peak_date": c.get("peak_date"),
+                        "tier_weighted_score": c.get("tier_weighted_score"),
+                        "first_reporter": c.get("first_reporter"),
+                        "in_task_ids": c.get("in_task_ids"),
+                    }
+                    for c in (rd.get("event_clusters") or [])[:8]
+                ],
+                "entities": [
+                    {
+                        "name": e.get("name"),
+                        "role": e.get("role"),
+                        "mention_count": e.get("mention_count"),
+                        "source_count": e.get("source_count"),
+                        "cross_task_count": e.get("cross_task_count"),
+                        "sentiment_avg": e.get("sentiment_avg"),
+                        "sentiment_by_tier": e.get("sentiment_by_tier"),
+                    }
+                    # 新闻切片 entities 上限 30（pass1_chain），取 [:15] 覆盖
+                    # target+competitor+高 mention context；agenda_map 需看媒体讨论的全貌
+                    for e in (rd.get("entities") or [])[:15]
+                    if isinstance(e, dict)
+                ],
+                "key_quotes": [
+                    {
+                        "speaker": q.get("speaker"),
+                        "speaker_role": q.get("speaker_role"),
+                        "quote": q.get("quote"),
+                        "source_name": q.get("source_name"),
+                        "source_tier": q.get("source_tier"),
+                        "context": q.get("context"),
+                    }
+                    # Pass 1 quotes 上限 12，取 [:12] = 全部高分级 quote
+                    for q in (rd.get("quotes") or [])[:12]
+                    if q.get("speaker_role") in ("official", "executive", "analyst")
+                ],
+                "competitive": {
+                    "players": competitive.get("players"),
+                    "quote_share": competitive.get("quote_share"),
+                },
+            }
+        )
 
     if not parts:
         return "（新闻切片数据均无有效结构化结果）"
@@ -312,7 +322,9 @@ def format_inputs_for_agenda_map(
     """
     brief_section = ""
     if brief:
-        brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        brief_section = (
+            f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        )
 
     return {
         "brief_section": brief_section,

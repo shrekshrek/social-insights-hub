@@ -48,9 +48,7 @@ async def check_probing_strategies() -> int:
     to_review: list[tuple[int, list[dict], list[dict]]] = []
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Strategy).where(Strategy.status == "probing")
-        )
+        result = await db.execute(select(Strategy).where(Strategy.status == "probing"))
         strategies = result.scalars().all()
 
         for strategy in strategies:
@@ -72,7 +70,9 @@ async def check_probing_strategies() -> int:
             probe_tasks = list(tasks_result.scalars().all())
 
             # 查询该策略的所有新闻 probe 任务
-            news_probe_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="probe")
+            news_probe_tasks = await get_news_tasks_by_strategy(
+                db, strategy.id, phase="probe"
+            )
 
             if not probe_tasks and not news_probe_tasks:
                 continue
@@ -100,7 +100,9 @@ async def check_probing_strategies() -> int:
                 news_probe_summaries = await _build_news_probe_summaries(
                     db, news_probe_tasks
                 )
-                to_review.append((strategy.id, analyzed_summaries, news_probe_summaries))
+                to_review.append(
+                    (strategy.id, analyzed_summaries, news_probe_summaries)
+                )
 
     # 在 session 关闭后调用，_run_probe_review_bg_task 内部自开 session
     for strategy_id, analyzed_summaries, news_probe_summaries in to_review:
@@ -157,7 +159,9 @@ async def check_collecting_strategies() -> int:
             tasks = list(tasks_result.scalars().all())
 
             # 查询该策略的所有新闻 collect 任务
-            news_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="collect")
+            news_tasks = await get_news_tasks_by_strategy(
+                db, strategy.id, phase="collect"
+            )
 
             if not tasks and not news_tasks:
                 continue
@@ -167,7 +171,11 @@ async def check_collecting_strategies() -> int:
             if not all(t.status in social_terminal for t in tasks):
                 continue
             # 至少有一个 completed 且有分析结果的社媒任务
-            completed_social = [t for t in tasks if t.status == "completed" and t.analysis_result is not None]
+            completed_social = [
+                t
+                for t in tasks
+                if t.status == "completed" and t.analysis_result is not None
+            ]
             if not completed_social:
                 continue
 
@@ -176,7 +184,11 @@ async def check_collecting_strategies() -> int:
             if not all(t.status in news_terminal for t in news_tasks):
                 continue
             # 新闻允许全部 failed（新闻是补充数据源，不阻塞）
-            completed_news = [t for t in news_tasks if t.status == "completed" and t.analysis_result is not None]
+            completed_news = [
+                t
+                for t in news_tasks
+                if t.status == "completed" and t.analysis_result is not None
+            ]
 
             # 幂等保护：社媒切片 + 新闻切片是否已建（按 monitor_id 判定）
             has_social = False
@@ -193,8 +205,11 @@ async def check_collecting_strategies() -> int:
             has_news = False
             if strategy.news_monitor_id:
                 from src.news_media.analysis.models import NewsSlice as _NS
+
                 existing_news = await db.execute(
-                    select(_NS.id).where(_NS.monitor_id == strategy.news_monitor_id).limit(1)
+                    select(_NS.id)
+                    .where(_NS.monitor_id == strategy.news_monitor_id)
+                    .limit(1)
                 )
                 has_news = existing_news.scalar_one_or_none() is not None
             else:
@@ -203,12 +218,18 @@ async def check_collecting_strategies() -> int:
             # 阶段 A：切片尚未建 → 建切片（保持 collecting，由后续轮次或 get_collection_status 推进 ready）
             # 幂等保护：跳过 polling 正在创建中的策略，避免与 get_collection_status 重入
             # （_create_auto_slices 内部按 monitor_id+name 跳过已存在切片，本检查为额外防御）
-            if not (has_social and has_news) and strategy.id not in _slice_creation_in_progress:
+            if (
+                not (has_social and has_news)
+                and strategy.id not in _slice_creation_in_progress
+            ):
                 _slice_creation_in_progress.add(strategy.id)
                 try:
                     full_strategy = await get_strategy_by_id(db, strategy.id)
                     await _create_auto_slices(
-                        db, full_strategy, completed_social, current_user_id=strategy.user_id,
+                        db,
+                        full_strategy,
+                        completed_social,
+                        current_user_id=strategy.user_id,
                         news_tasks=completed_news,
                     )
                     triggered += 1
@@ -259,7 +280,9 @@ async def reset_stuck_news_tasks() -> int:
     from src.news_media.tasks.models import NewsTask
     from sqlalchemy import or_
 
-    timeout_before = datetime.now(tz=timezone.utc) - timedelta(minutes=_NEWS_PROBE_TIMEOUT_MINUTES)
+    timeout_before = datetime.now(tz=timezone.utc) - timedelta(
+        minutes=_NEWS_PROBE_TIMEOUT_MINUTES
+    )
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -268,8 +291,14 @@ async def reset_stuck_news_tasks() -> int:
                 and_(
                     NewsTask.strategy_id.is_not(None),
                     or_(
-                        and_(NewsTask.status == "running", NewsTask.created_at < timeout_before),
-                        and_(NewsTask.status == "pending", NewsTask.created_at < timeout_before),
+                        and_(
+                            NewsTask.status == "running",
+                            NewsTask.created_at < timeout_before,
+                        ),
+                        and_(
+                            NewsTask.status == "pending",
+                            NewsTask.created_at < timeout_before,
+                        ),
                     ),
                 )
             )

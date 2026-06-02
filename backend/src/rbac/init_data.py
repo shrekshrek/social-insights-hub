@@ -448,7 +448,9 @@ async def init_rbac_data(db: AsyncSession) -> None:
     """
 
     # 多 worker 并发启动时，用 PostgreSQL advisory lock 确保只有一个 worker 执行初始化
-    lock_acquired = (await db.execute(text("SELECT pg_try_advisory_lock(1000000)"))).scalar()
+    lock_acquired = (
+        await db.execute(text("SELECT pg_try_advisory_lock(1000000)"))
+    ).scalar()
     if not lock_acquired:
         logger.info("其他 worker 正在执行 RBAC 初始化，跳过")
         return

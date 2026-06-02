@@ -5,7 +5,17 @@ import logging
 import mimetypes
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Path, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Path,
+    Query,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -171,18 +181,29 @@ async def get_document_file(
     """返回文档原始文件（PDF/DOCX/TXT）供浏览器直接查看"""
     doc = await service.get_document(db, doc_id)
     if not doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"文档 {doc_id} 不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"文档 {doc_id} 不存在"
+        )
     if doc.workspace_id is not None and doc.workspace_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该文档")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该文档"
+        )
     if not doc.file_path or not os.path.exists(doc.file_path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在，可能在处理前未保存")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文件不存在，可能在处理前未保存",
+        )
 
-    media_type = mimetypes.guess_type(doc.file_name or "")[0] or "application/octet-stream"
+    media_type = (
+        mimetypes.guess_type(doc.file_name or "")[0] or "application/octet-stream"
+    )
     return FileResponse(
         path=doc.file_path,
         media_type=media_type,
         filename=doc.file_name or f"document_{doc_id}",
-        headers={"Content-Disposition": f"inline; filename=\"{doc.file_name or f'document_{doc_id}'}\""},
+        headers={
+            "Content-Disposition": f'inline; filename="{doc.file_name or f"document_{doc_id}"}"'
+        },
     )
 
 
@@ -323,12 +344,12 @@ async def get_crawler_status(
         result = await db.execute(
             select(
                 func.count(KnowledgeDocument.id).label("total"),
-                func.count(
-                    case((KnowledgeDocument.status == "ready", 1))
-                ).label("ready"),
-                func.count(
-                    case((KnowledgeDocument.status == "failed", 1))
-                ).label("failed"),
+                func.count(case((KnowledgeDocument.status == "ready", 1))).label(
+                    "ready"
+                ),
+                func.count(case((KnowledgeDocument.status == "failed", 1))).label(
+                    "failed"
+                ),
                 func.max(KnowledgeDocument.updated_at).label("last_at"),
             ).where(KnowledgeDocument.source_type == source_type)
         )

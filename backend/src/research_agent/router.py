@@ -28,10 +28,7 @@ async def list_research_profiles(
     _: User = Depends(require_research_agent_read),
 ):
     """返回可选的研究类型（industry / creative / ...），供前端选择器使用"""
-    return [
-        {"name": p.name, "display_name": p.display_name}
-        for p in list_profiles()
-    ]
+    return [{"name": p.name, "display_name": p.display_name} for p in list_profiles()]
 
 
 @router.post(
@@ -59,7 +56,9 @@ async def parse_brief_file(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="文件大小不能超过 10 MB",
         )
-    return await service.parse_brief_from_file(content, file.filename or "", profile_name)
+    return await service.parse_brief_from_file(
+        content, file.filename or "", profile_name
+    )
 
 
 @router.post(
@@ -115,7 +114,9 @@ async def list_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
-    profile_name: str | None = Query(None, description="按研究类型过滤：industry / creative"),
+    profile_name: str | None = Query(
+        None, description="按研究类型过滤：industry / creative"
+    ),
     search: str | None = Query(None),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_research_agent_read),

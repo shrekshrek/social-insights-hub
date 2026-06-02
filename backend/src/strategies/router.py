@@ -18,7 +18,11 @@ from src.rbac.dependencies import (
 from src.schemas import CustomBaseModel, MessageResponse, PaginatedResponse
 
 from . import service
-from .dependencies import is_admin_or_super_admin, validate_strategy_access, validate_strategy_owner
+from .dependencies import (
+    is_admin_or_super_admin,
+    validate_strategy_access,
+    validate_strategy_owner,
+)
 from .models import Strategy
 from .schemas import (
     AdjustSlicesRequest,
@@ -221,7 +225,10 @@ async def confirm_research(
 ):
     """确认研究计划，一键创建 SocialMonitor 和探测任务，状态推进到 probing"""
     return await service.confirm_research(
-        db, strategy, data.research_design, current_user.id,
+        db,
+        strategy,
+        data.research_design,
+        current_user.id,
         output_type=data.output_type,
         notes_per_task=data.notes_per_task,
         probe_notes=data.probe_notes,
@@ -278,7 +285,8 @@ async def refine_probe(
 ):
     """调整不合格的关键词，创建新探测任务，probe_round++"""
     return await service.refine_probe(
-        db, strategy,
+        db,
+        strategy,
         data,
         current_user.id,
     )
@@ -334,7 +342,8 @@ async def adjust_slices(
 ):
     """微调切片配置（名称/主体/竞品），自动重新验证覆盖度"""
     updated = await service.adjust_slices(
-        db, strategy,
+        db,
+        strategy,
         [item.model_dump() for item in data.adjustments],
         current_user.id,
     )
@@ -662,9 +671,7 @@ async def export_strategy(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={
-            "Content-Disposition": (
-                f"attachment; filename*=UTF-8''{encoded_filename}"
-            ),
+            "Content-Disposition": (f"attachment; filename*=UTF-8''{encoded_filename}"),
         },
     )
 

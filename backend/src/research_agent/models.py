@@ -59,12 +59,16 @@ class ResearchTask(Base):
     title: Mapped[str | None] = mapped_column(
         String(200), nullable=True, comment="研究标题（可选，planner 自动生成）"
     )
-    analysis_goal: Mapped[str] = mapped_column(Text, nullable=False, comment="核心研究意图")
+    analysis_goal: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="核心研究意图"
+    )
     research_questions: Mapped[list | None] = mapped_column(
         JSON, nullable=True, comment="研究问题列表"
     )
     search_config: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="搜索配置：research_angles, focus_domains, context(brief) 等"
+        JSON,
+        nullable=True,
+        comment="搜索配置：research_angles, focus_domains, context(brief) 等",
     )
     profile_name: Mapped[str] = mapped_column(
         String(32),
@@ -152,9 +156,7 @@ class ResearchTask(Base):
         lazy="selectin",
     )
 
-    __table_args__ = (
-        Index("idx_research_task_created_at", "created_at"),
-    )
+    __table_args__ = (Index("idx_research_task_created_at", "created_at"),)
 
     def __repr__(self):
         return f"<ResearchTask(id={self.id}, status='{self.status}')>"

@@ -12,7 +12,9 @@ class NewsMonitorCreate(CustomBaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
-    participant_ids: list[int] = Field(default_factory=list, description="参与者用户ID列表")
+    participant_ids: list[int] = Field(
+        default_factory=list, description="参与者用户ID列表"
+    )
 
 
 class NewsMonitorUpdate(CustomBaseModel):
@@ -58,4 +60,6 @@ class NewsMonitorReadWithOwner(NewsMonitorRead):
 class NewsMonitorParticipantAssignment(CustomBaseModel):
     """新闻监测项目参与者批量添加请求"""
 
-    user_ids: list[int] = Field(..., min_length=1, description="要添加的参与者用户ID列表")
+    user_ids: list[int] = Field(
+        ..., min_length=1, description="要添加的参与者用户ID列表"
+    )

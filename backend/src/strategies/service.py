@@ -103,6 +103,7 @@ from .schemas import (
 
 _MAX_BRIEF_TEXT_CHARS = 10000
 
+
 async def _load_strategy_slice_summaries(
     db: AsyncSession, strategy: Strategy
 ) -> list[SliceSummary]:
@@ -188,11 +189,10 @@ async def _strategy_read(db: AsyncSession, strategy: Strategy) -> StrategyRead:
     return StrategyRead.from_orm_full(strategy, slices=slices)
 
 
-async def _strategy_list_item(
-    db: AsyncSession, strategy: Strategy
-) -> StrategyListItem:
+async def _strategy_list_item(db: AsyncSession, strategy: Strategy) -> StrategyListItem:
     slice_count = await _count_strategy_slices(db, strategy)
     return StrategyListItem.from_orm_full(strategy, slice_count=slice_count)
+
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +226,9 @@ async def create_strategy(
 
         filtered_ids = [uid for uid in data.participant_ids if uid != user_id]
         if filtered_ids:
-            users = await db.execute(select(UserModel).where(UserModel.id.in_(filtered_ids)))
+            users = await db.execute(
+                select(UserModel).where(UserModel.id.in_(filtered_ids))
+            )
             for u in users.scalars().all():
                 strategy.participants.append(u)
 
@@ -318,11 +320,19 @@ async def delete_strategy(db: AsyncSession, strategy: Strategy) -> None:
 
     if strategy.social_monitor_id:
         from src.social_media.monitors.crud import get_social_monitor_by_id
-        social_monitor = await get_social_monitor_by_id(db, strategy.social_monitor_id, load_relations=False)
+
+        social_monitor = await get_social_monitor_by_id(
+            db, strategy.social_monitor_id, load_relations=False
+        )
 
     if strategy.news_monitor_id:
-        from src.news_media.monitors.crud import get_monitor_by_id as get_news_monitor_by_id
-        news_monitor = await get_news_monitor_by_id(db, strategy.news_monitor_id, load_relations=False)
+        from src.news_media.monitors.crud import (
+            get_monitor_by_id as get_news_monitor_by_id,
+        )
+
+        news_monitor = await get_news_monitor_by_id(
+            db, strategy.news_monitor_id, load_relations=False
+        )
 
     strategy.social_monitor_id = None
     strategy.news_monitor_id = None
@@ -383,7 +393,9 @@ async def remove_participant_from_strategy(
     return await get_strategy_by_id(db, strategy.id)
 
 
-async def _sync_participants_to_associated_resources(db: AsyncSession, strategy: Strategy) -> None:
+async def _sync_participants_to_associated_resources(
+    db: AsyncSession, strategy: Strategy
+) -> None:
     """将策略 participants 同步（覆盖）到关联的 SocialMonitor / NewsMonitor / ResearchTask。
 
     只同步由策略创建/关联的资源（通过 social_monitor_id / news_monitor_id / strategy_id 判断）。
@@ -399,20 +411,30 @@ async def _sync_participants_to_associated_resources(db: AsyncSession, strategy:
     if strategy.social_monitor_id:
         from src.social_media.monitors.crud import get_social_monitor_by_id
 
-        monitor = await get_social_monitor_by_id(db, strategy.social_monitor_id, load_relations=True)
+        monitor = await get_social_monitor_by_id(
+            db, strategy.social_monitor_id, load_relations=True
+        )
         if monitor:
             users = await db.execute(select(User).where(User.id.in_(participant_ids)))
-            new_participants = [u for u in users.scalars().all() if u.id != monitor.user_id]
+            new_participants = [
+                u for u in users.scalars().all() if u.id != monitor.user_id
+            ]
             monitor.participants = new_participants
             await db.flush()
 
     if strategy.news_monitor_id:
-        from src.news_media.monitors.crud import get_monitor_by_id as get_news_monitor_by_id
+        from src.news_media.monitors.crud import (
+            get_monitor_by_id as get_news_monitor_by_id,
+        )
 
-        news_monitor = await get_news_monitor_by_id(db, strategy.news_monitor_id, load_relations=True)
+        news_monitor = await get_news_monitor_by_id(
+            db, strategy.news_monitor_id, load_relations=True
+        )
         if news_monitor:
             users2 = await db.execute(select(User).where(User.id.in_(participant_ids)))
-            new_participants2 = [u for u in users2.scalars().all() if u.id != news_monitor.user_id]
+            new_participants2 = [
+                u for u in users2.scalars().all() if u.id != news_monitor.user_id
+            ]
             news_monitor.participants = new_participants2
             await db.flush()
 
@@ -425,8 +447,12 @@ async def _sync_participants_to_associated_resources(db: AsyncSession, strategy:
     research_tasks = (await db.execute(research_tasks_stmt)).scalars().all()
     if research_tasks:
         users_for_research = (
-            await db.execute(select(User).where(User.id.in_(participant_ids)))
-        ).scalars().all() if participant_ids else []
+            (await db.execute(select(User).where(User.id.in_(participant_ids))))
+            .scalars()
+            .all()
+            if participant_ids
+            else []
+        )
         for rtask in research_tasks:
             new_rparticipants = [u for u in users_for_research if u.id != rtask.user_id]
             rtask.participants = new_rparticipants
@@ -452,9 +478,7 @@ async def load_strategy_inputs(db: AsyncSession, strategy: Strategy) -> list[dic
     return [s.result_data for s in slices if s.result_data]
 
 
-async def load_strategy_news_inputs(
-    db: AsyncSession, strategy: Strategy
-) -> list[dict]:
+async def load_strategy_news_inputs(db: AsyncSession, strategy: Strategy) -> list[dict]:
     """加载策略关联的 NewsSlice 数据，供 Phase chains 使用。
 
     通过 strategy.news_monitor_id → NewsSlice.monitor_id 隐式关联。
@@ -500,9 +524,7 @@ async def load_strategy_inputs_with_names(
     return [(s.name, s.result_data) for s in slices if s.result_data]
 
 
-async def _load_social_slice_refs(
-    db: AsyncSession, strategy: Strategy
-) -> list[dict]:
+async def _load_social_slice_refs(db: AsyncSession, strategy: Strategy) -> list[dict]:
     """加载策略社媒切片的 (id, name, monitor_id)，与 `load_strategy_inputs` 同序同过滤。
 
     用于 chain_inputs 元数据：记录本次 chain prompt 实际消费了哪些 SocialSlice，
@@ -511,12 +533,9 @@ async def _load_social_slice_refs(
     if not strategy.social_monitor_id:
         return []
 
-    query = (
-        select(SocialSlice.id, SocialSlice.name, SocialSlice.monitor_id)
-        .where(
-            SocialSlice.monitor_id == strategy.social_monitor_id,
-            SocialSlice.status == "completed",
-        )
+    query = select(SocialSlice.id, SocialSlice.name, SocialSlice.monitor_id).where(
+        SocialSlice.monitor_id == strategy.social_monitor_id,
+        SocialSlice.status == "completed",
     )
     result = await db.execute(query)
     return [
@@ -525,9 +544,7 @@ async def _load_social_slice_refs(
     ]
 
 
-async def _load_news_slice_refs(
-    db: AsyncSession, strategy: Strategy
-) -> list[dict]:
+async def _load_news_slice_refs(db: AsyncSession, strategy: Strategy) -> list[dict]:
     """加载策略新闻切片的 (id, name, monitor_id)，与 `load_strategy_news_inputs` 同序同过滤。"""
     if not strategy.news_monitor_id:
         return []
@@ -582,10 +599,6 @@ def _build_chain_inputs(
         ),
     }
     return inputs
-
-
-
-
 
 
 # ==================== 生成 + 编辑 ====================
@@ -688,7 +701,9 @@ async def _retrieve_research_findings(
 
         logger.info(
             "%s 加载行业研究发现: strategy=%d, research_task=%d",
-            stage_label, strategy.id, task.id,
+            stage_label,
+            strategy.id,
+            task.id,
         )
         return (task.id, task.result_data)
     except Exception as e:
@@ -725,7 +740,9 @@ async def _retrieve_creative_research_findings(
 
         logger.info(
             "%s 加载创意研究发现: strategy=%d, research_task=%d",
-            stage_label, strategy.id, task.id,
+            stage_label,
+            strategy.id,
+            task.id,
         )
         return (task.id, task.result_data)
     except Exception as e:
@@ -750,9 +767,7 @@ def _validate_slices_have_data(
     加载，两者均只返回 status=completed 的切片。因此此处"为空"的语义是
     "切片聚合分析尚未就绪或已失败"，而非"切片根本不存在"——提示文案按此口径。
     """
-    social_msg = (
-        "社媒切片聚合分析尚未就绪（Stage2 未完成或失败），请在数据就绪后重试。"
-    )
+    social_msg = "社媒切片聚合分析尚未就绪（Stage2 未完成或失败），请在数据就绪后重试。"
     news_msg = "新闻切片分析尚未就绪或已失败，请在数据就绪后重试。"
 
     output_type = strategy.output_type or "campaign_strategy"
@@ -857,6 +872,7 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
         db, strategy, "Insight"
     )
     from src.llm.chains.strategy.research_findings import format_research_for_insight
+
     research_findings_text = format_research_for_insight(research_result)
 
     chain = create_insight_chain()
@@ -912,7 +928,8 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
 
         result = parse_insight_response(response.content)
         result["data_provenance"] = _build_data_provenance(
-            slices_data, news_slices_data,
+            slices_data,
+            news_slices_data,
             primary_channel="social_media",
             research_findings=research_findings_text,
         )
@@ -943,7 +960,9 @@ async def generate_insight(db: AsyncSession, strategy: Strategy) -> Strategy:
         await db.commit()
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
-        logger.error("Strategy %d Insight 生成失败: %s", strategy.id, exc, exc_info=True)
+        logger.error(
+            "Strategy %d Insight 生成失败: %s", strategy.id, exc, exc_info=True
+        )
         try:
             job.status = "failed"
             job.error_message = str(exc)[:500]
@@ -978,14 +997,16 @@ def _ensure_branches_skeleton(strategy: Strategy) -> list[dict]:
     for idx, tension in enumerate(tensions):
         if idx in existing_ids:
             continue
-        branches.append({
-            "tension_id": idx,
-            "tension_summary": _build_tension_summary(tension),
-            "brand_role": None,
-            "big_idea": None,
-            "selected": False,
-            "status": "pending",
-        })
+        branches.append(
+            {
+                "tension_id": idx,
+                "tension_summary": _build_tension_summary(tension),
+                "brand_role": None,
+                "big_idea": None,
+                "selected": False,
+                "status": "pending",
+            }
+        )
     # 按 tension_id 排序保持稳定顺序
     branches.sort(key=lambda b: b.get("tension_id", 0))
     return branches
@@ -1029,12 +1050,19 @@ async def _run_brand_role_for_one_branch(
         duration = time.time() - start
         result = parse_brand_role_response(response.content)
         result["data_provenance"] = _build_data_provenance(
-            slices_data, news_slices_data,
+            slices_data,
+            news_slices_data,
             primary_channel="social_media",
             research_findings=research_findings_text,
         )
         result["chain_inputs"] = chain_inputs
-        return (branch_idx, result, extract_token_usage(response, duration_seconds=duration), duration, None)
+        return (
+            branch_idx,
+            result,
+            extract_token_usage(response, duration_seconds=duration),
+            duration,
+            None,
+        )
     except Exception as exc:
         return (branch_idx, None, None, time.time() - start, exc)
 
@@ -1075,12 +1103,19 @@ async def _run_big_idea_for_one_branch(
         duration = time.time() - start
         result = parse_big_idea_response(response.content)
         result["data_provenance"] = _build_data_provenance(
-            slices_data, news_slices_data,
+            slices_data,
+            news_slices_data,
             primary_channel="social_media",
             research_findings=research_findings_text,
         )
         result["chain_inputs"] = chain_inputs
-        return (branch_idx, result, extract_token_usage(response, duration_seconds=duration), duration, None)
+        return (
+            branch_idx,
+            result,
+            extract_token_usage(response, duration_seconds=duration),
+            duration,
+            None,
+        )
     except Exception as exc:
         return (branch_idx, None, None, time.time() - start, exc)
 
@@ -1135,6 +1170,7 @@ async def generate_brand_role(
         format_research_for_brand_role,
         format_creative_for_brand_role,
     )
+
     research_findings_text = format_research_for_brand_role(research_result)
 
     creative_task_id, creative_result = await _retrieve_creative_research_findings(
@@ -1170,9 +1206,7 @@ async def generate_brand_role(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"tension_ids 包含不存在的分支: {unknown_ids}（已有分支 tension_id={sorted(existing_ids)}）",
             )
-        branches_to_run = [
-            b for b in branches if b.get("tension_id") in target_ids
-        ]
+        branches_to_run = [b for b in branches if b.get("tension_id") in target_ids]
         if not branches_to_run:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1203,23 +1237,25 @@ async def generate_brand_role(
     overall_start = time.time()
     try:
         # 所有要跑的分支并行调用 LLM（不共享 DB session，纯外部 API 调用）
-        results = await asyncio.gather(*[
-            _run_brand_role_for_one_branch(
-                branch_idx=b["tension_id"],
-                selected_tension_id=b["tension_id"],
-                insight_result=strategy.insight_result,
-                slices_data=slices_data,
-                news_slices_data=news_slices_data,
-                brief=strategy.brand_brief,
-                research_design=strategy.research_design,
-                research_findings_text=research_findings_text,
-                creative_references_text=creative_references_text,
-                chain_inputs=chain_inputs,
-                slice_refs=social_slice_refs,
-                news_slice_refs=news_slice_refs,
-            )
-            for b in branches_to_run
-        ])
+        results = await asyncio.gather(
+            *[
+                _run_brand_role_for_one_branch(
+                    branch_idx=b["tension_id"],
+                    selected_tension_id=b["tension_id"],
+                    insight_result=strategy.insight_result,
+                    slices_data=slices_data,
+                    news_slices_data=news_slices_data,
+                    brief=strategy.brand_brief,
+                    research_design=strategy.research_design,
+                    research_findings_text=research_findings_text,
+                    creative_references_text=creative_references_text,
+                    chain_inputs=chain_inputs,
+                    slice_refs=social_slice_refs,
+                    news_slice_refs=news_slice_refs,
+                )
+                for b in branches_to_run
+            ]
+        )
 
         # 写回 branches + 聚合 token usage（merge_token_usage_stats 处理嵌套
         # {summary, call_details} schema：summary 数字累加 + call_details 拼接，
@@ -1228,7 +1264,9 @@ async def generate_brand_role(
         failed_count = 0
         total_token_usage: dict | None = None
         for branch_idx, result, token_usage, duration, error in results:
-            target = next((b for b in branches if b.get("tension_id") == branch_idx), None)
+            target = next(
+                (b for b in branches if b.get("tension_id") == branch_idx), None
+            )
             if target is None:
                 continue
             if error is not None:
@@ -1238,7 +1276,9 @@ async def generate_brand_role(
                 failed_count += 1
                 logger.error(
                     "Strategy %d branch %d brand_role 失败: %s",
-                    strategy.id, branch_idx, error,
+                    strategy.id,
+                    branch_idx,
+                    error,
                 )
             else:
                 target["status"] = "brand_role_done"
@@ -1246,10 +1286,14 @@ async def generate_brand_role(
                 target.pop("error_message", None)
                 success_count += 1
                 if token_usage:
-                    total_token_usage = merge_token_usage_stats(total_token_usage, token_usage)
+                    total_token_usage = merge_token_usage_stats(
+                        total_token_usage, token_usage
+                    )
                 logger.info(
                     "Strategy %d branch %d brand_role 完成 (%.1fs)",
-                    strategy.id, branch_idx, duration,
+                    strategy.id,
+                    branch_idx,
+                    duration,
                 )
 
         if success_count == 0:
@@ -1266,19 +1310,25 @@ async def generate_brand_role(
 
         # 更新 AnalysisJob
         overall_duration = time.time() - overall_start
-        job.status = "completed" if failed_count == 0 else "completed"  # 部分失败也算完成
+        job.status = (
+            "completed" if failed_count == 0 else "completed"
+        )  # 部分失败也算完成
         job.completed_at = datetime.now(timezone.utc)
         job.analyzed_count = success_count
         job.processing_time = int(overall_duration)
         job.token_usage = total_token_usage
         job.error_message = (
-            f"{failed_count}/{len(branches_to_run)} 分支生成失败" if failed_count else None
+            f"{failed_count}/{len(branches_to_run)} 分支生成失败"
+            if failed_count
+            else None
         )
 
         await db.commit()
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
-        logger.error("Strategy %d Brand Role 多分支生成失败: %s", strategy.id, exc, exc_info=True)
+        logger.error(
+            "Strategy %d Brand Role 多分支生成失败: %s", strategy.id, exc, exc_info=True
+        )
         try:
             job.status = "failed"
             job.error_message = str(exc)[:500]
@@ -1373,6 +1423,7 @@ async def generate_big_idea(
         format_research_for_big_idea,
         format_creative_for_big_idea,
     )
+
     research_findings_text = format_research_for_big_idea(research_result)
 
     creative_task_id, creative_result = await _retrieve_creative_research_findings(
@@ -1406,24 +1457,26 @@ async def generate_big_idea(
     overall_start = time.time()
     try:
         # 对要跑的分支并行生成 big_idea
-        results = await asyncio.gather(*[
-            _run_big_idea_for_one_branch(
-                branch_idx=b["tension_id"],
-                selected_tension_id=b["tension_id"],
-                branch_brand_role=b["brand_role"],
-                insight_result=strategy.insight_result,
-                slices_data=slices_data,
-                news_slices_data=news_slices_data,
-                brief=strategy.brand_brief,
-                research_design=strategy.research_design,
-                research_findings_text=research_findings_text,
-                creative_references_text=creative_references_text,
-                chain_inputs=chain_inputs,
-                slice_refs=social_slice_refs,
-                news_slice_refs=news_slice_refs,
-            )
-            for b in branches_to_run
-        ])
+        results = await asyncio.gather(
+            *[
+                _run_big_idea_for_one_branch(
+                    branch_idx=b["tension_id"],
+                    selected_tension_id=b["tension_id"],
+                    branch_brand_role=b["brand_role"],
+                    insight_result=strategy.insight_result,
+                    slices_data=slices_data,
+                    news_slices_data=news_slices_data,
+                    brief=strategy.brand_brief,
+                    research_design=strategy.research_design,
+                    research_findings_text=research_findings_text,
+                    creative_references_text=creative_references_text,
+                    chain_inputs=chain_inputs,
+                    slice_refs=social_slice_refs,
+                    news_slice_refs=news_slice_refs,
+                )
+                for b in branches_to_run
+            ]
+        )
 
         success_count = 0
         failed_count = 0
@@ -1431,7 +1484,9 @@ async def generate_big_idea(
         # 详见 generate_brand_role 同位置注释
         total_token_usage: dict | None = None
         for branch_idx, result, token_usage, duration, error in results:
-            target = next((b for b in branches if b.get("tension_id") == branch_idx), None)
+            target = next(
+                (b for b in branches if b.get("tension_id") == branch_idx), None
+            )
             if target is None:
                 continue
             if error is not None:
@@ -1441,7 +1496,9 @@ async def generate_big_idea(
                 failed_count += 1
                 logger.error(
                     "Strategy %d branch %d big_idea 失败: %s",
-                    strategy.id, branch_idx, error,
+                    strategy.id,
+                    branch_idx,
+                    error,
                 )
             else:
                 target["status"] = "big_idea_done"
@@ -1449,10 +1506,14 @@ async def generate_big_idea(
                 target.pop("error_message", None)
                 success_count += 1
                 if token_usage:
-                    total_token_usage = merge_token_usage_stats(total_token_usage, token_usage)
+                    total_token_usage = merge_token_usage_stats(
+                        total_token_usage, token_usage
+                    )
                 logger.info(
                     "Strategy %d branch %d big_idea 完成 (%.1fs)",
-                    strategy.id, branch_idx, duration,
+                    strategy.id,
+                    branch_idx,
+                    duration,
                 )
 
         if success_count == 0:
@@ -1472,7 +1533,9 @@ async def generate_big_idea(
         job.processing_time = int(overall_duration)
         job.token_usage = total_token_usage
         job.error_message = (
-            f"{failed_count}/{len(branches_to_run)} 分支生成失败" if failed_count else None
+            f"{failed_count}/{len(branches_to_run)} 分支生成失败"
+            if failed_count
+            else None
         )
 
         await db.commit()
@@ -1482,7 +1545,9 @@ async def generate_big_idea(
         )
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
-        logger.error("Strategy %d Big Idea 多分支生成失败: %s", strategy.id, exc, exc_info=True)
+        logger.error(
+            "Strategy %d Big Idea 多分支生成失败: %s", strategy.id, exc, exc_info=True
+        )
         try:
             job.status = "failed"
             job.error_message = str(exc)[:500]
@@ -1507,7 +1572,11 @@ async def select_branch(
     """
     branches = list(strategy.brand_strategy_branches or [])
     target = next(
-        (b for b in branches if isinstance(b, dict) and b.get("tension_id") == tension_id),
+        (
+            b
+            for b in branches
+            if isinstance(b, dict) and b.get("tension_id") == tension_id
+        ),
         None,
     )
     if target is None:
@@ -1532,7 +1601,10 @@ async def regenerate_brand_role_branch(
     tension_id: int,
 ) -> Strategy:
     """单分支重生成 brand_role：仅刷新指定 tension 的 brand_role + 清空其 big_idea。"""
-    if strategy.output_type and strategy.output_type not in ("campaign_strategy", "full_strategy"):
+    if strategy.output_type and strategy.output_type not in (
+        "campaign_strategy",
+        "full_strategy",
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"当前策略产出路径为 {strategy.output_type}，无法生成 brand_role",
@@ -1545,7 +1617,11 @@ async def regenerate_brand_role_branch(
 
     branches = list(strategy.brand_strategy_branches or [])
     target = next(
-        (b for b in branches if isinstance(b, dict) and b.get("tension_id") == tension_id),
+        (
+            b
+            for b in branches
+            if isinstance(b, dict) and b.get("tension_id") == tension_id
+        ),
         None,
     )
     if target is None:
@@ -1567,6 +1643,7 @@ async def regenerate_brand_role_branch(
         format_creative_for_brand_role,
         format_research_for_brand_role,
     )
+
     research_findings_text = format_research_for_brand_role(research_result)
 
     creative_task_id, creative_result = await _retrieve_creative_research_findings(
@@ -1598,7 +1675,13 @@ async def regenerate_brand_role_branch(
 
     overall_start = time.time()
     try:
-        branch_idx, result, token_usage, duration, error = await _run_brand_role_for_one_branch(
+        (
+            branch_idx,
+            result,
+            token_usage,
+            duration,
+            error,
+        ) = await _run_brand_role_for_one_branch(
             branch_idx=tension_id,
             selected_tension_id=tension_id,
             insight_result=strategy.insight_result,
@@ -1644,7 +1727,9 @@ async def regenerate_brand_role_branch(
             )
         logger.info(
             "Strategy %d branch %d brand_role 单分支重生成完成 (%.1fs)",
-            strategy.id, tension_id, duration,
+            strategy.id,
+            tension_id,
+            duration,
         )
         return await get_strategy_by_id(db, strategy.id)
     except HTTPException:
@@ -1652,7 +1737,10 @@ async def regenerate_brand_role_branch(
     except Exception as exc:
         logger.error(
             "Strategy %d branch %d brand_role 单分支重生成失败: %s",
-            strategy.id, tension_id, exc, exc_info=True,
+            strategy.id,
+            tension_id,
+            exc,
+            exc_info=True,
         )
         try:
             job.status = "failed"
@@ -1672,7 +1760,10 @@ async def regenerate_big_idea_branch(
     tension_id: int,
 ) -> Strategy:
     """单分支重生成 big_idea：仅刷新指定 tension 的 big_idea。"""
-    if strategy.output_type and strategy.output_type not in ("campaign_strategy", "full_strategy"):
+    if strategy.output_type and strategy.output_type not in (
+        "campaign_strategy",
+        "full_strategy",
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"当前策略产出路径为 {strategy.output_type}，无法生成 big_idea",
@@ -1680,7 +1771,11 @@ async def regenerate_big_idea_branch(
 
     branches = list(strategy.brand_strategy_branches or [])
     target = next(
-        (b for b in branches if isinstance(b, dict) and b.get("tension_id") == tension_id),
+        (
+            b
+            for b in branches
+            if isinstance(b, dict) and b.get("tension_id") == tension_id
+        ),
         None,
     )
     if target is None:
@@ -1707,6 +1802,7 @@ async def regenerate_big_idea_branch(
         format_creative_for_big_idea,
         format_research_for_big_idea,
     )
+
     research_findings_text = format_research_for_big_idea(research_result)
 
     creative_task_id, creative_result = await _retrieve_creative_research_findings(
@@ -1738,7 +1834,13 @@ async def regenerate_big_idea_branch(
 
     overall_start = time.time()
     try:
-        branch_idx, result, token_usage, duration, error = await _run_big_idea_for_one_branch(
+        (
+            branch_idx,
+            result,
+            token_usage,
+            duration,
+            error,
+        ) = await _run_big_idea_for_one_branch(
             branch_idx=tension_id,
             selected_tension_id=tension_id,
             branch_brand_role=target["brand_role"],
@@ -1784,7 +1886,9 @@ async def regenerate_big_idea_branch(
             )
         logger.info(
             "Strategy %d branch %d big_idea 单分支重生成完成 (%.1fs)",
-            strategy.id, tension_id, duration,
+            strategy.id,
+            tension_id,
+            duration,
         )
         return await get_strategy_by_id(db, strategy.id)
     except HTTPException:
@@ -1792,7 +1896,10 @@ async def regenerate_big_idea_branch(
     except Exception as exc:
         logger.error(
             "Strategy %d branch %d big_idea 单分支重生成失败: %s",
-            strategy.id, tension_id, exc, exc_info=True,
+            strategy.id,
+            tension_id,
+            exc,
+            exc_info=True,
         )
         try:
             job.status = "failed"
@@ -1845,7 +1952,10 @@ async def edit_brand_strategy_result(
     - brand_role / big_idea: 多分支，必须传 tension_id 指定要编辑的分支；
       编辑 brand_role 会清空该分支的 big_idea。
     """
-    if strategy.output_type and strategy.output_type not in ("campaign_strategy", "full_strategy"):
+    if strategy.output_type and strategy.output_type not in (
+        "campaign_strategy",
+        "full_strategy",
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
@@ -1885,7 +1995,11 @@ async def edit_brand_strategy_result(
             )
         branches = list(strategy.brand_strategy_branches or [])
         target = next(
-            (b for b in branches if isinstance(b, dict) and b.get("tension_id") == tension_id),
+            (
+                b
+                for b in branches
+                if isinstance(b, dict) and b.get("tension_id") == tension_id
+            ),
             None,
         )
         if target is None:
@@ -1946,9 +2060,7 @@ async def edit_market_report_result(
     if stage not in _MARKET_REPORT_STAGES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"stage 必须为 agenda_map/landscape/strategic_brief，收到 {stage}"
-            ),
+            detail=(f"stage 必须为 agenda_map/landscape/strategic_brief，收到 {stage}"),
         )
 
     is_full = strategy.output_type == "full_strategy"
@@ -2013,6 +2125,7 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         db, strategy, "AgendaMap"
     )
     from src.llm.chains.strategy.research_findings import format_research_for_agenda_map
+
     research_findings_text = format_research_for_agenda_map(research_result)
 
     chain = create_agenda_map_chain()
@@ -2043,7 +2156,8 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
 
         result = parse_agenda_map_response(response.content)
         result["data_provenance"] = _build_data_provenance(
-            slices_data, news_slices_data,
+            slices_data,
+            news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
         )
@@ -2075,7 +2189,9 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         await db.commit()
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
-        logger.error("Strategy %d Agenda Map 生成失败: %s", strategy.id, exc, exc_info=True)
+        logger.error(
+            "Strategy %d Agenda Map 生成失败: %s", strategy.id, exc, exc_info=True
+        )
         try:
             job.status = "failed"
             job.error_message = str(exc)[:500]
@@ -2106,6 +2222,7 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         db, strategy, "Landscape"
     )
     from src.llm.chains.strategy.research_findings import format_research_for_landscape
+
     research_findings_text = format_research_for_landscape(research_result)
 
     chain = create_landscape_chain()
@@ -2136,7 +2253,8 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
 
         result = parse_landscape_response(response.content)
         result["data_provenance"] = _build_data_provenance(
-            slices_data, news_slices_data,
+            slices_data,
+            news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
         )
@@ -2166,7 +2284,9 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         await db.commit()
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
-        logger.error("Strategy %d Landscape 生成失败: %s", strategy.id, exc, exc_info=True)
+        logger.error(
+            "Strategy %d Landscape 生成失败: %s", strategy.id, exc, exc_info=True
+        )
         try:
             job.status = "failed"
             job.error_message = str(exc)[:500]
@@ -2199,10 +2319,7 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
     if is_full:
         # comprehensive 模式：需要 Big Idea 至少一个分支完成（保证 brand_strategy_branches 有内容可综合）
         branches = strategy.brand_strategy_branches or []
-        has_big_idea = any(
-            isinstance(b, dict) and b.get("big_idea")
-            for b in branches
-        )
+        has_big_idea = any(isinstance(b, dict) and b.get("big_idea") for b in branches)
         if not has_big_idea:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -2227,7 +2344,10 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
     research_task_id, research_result = await _retrieve_research_findings(
         db, strategy, "StrategicBrief"
     )
-    from src.llm.chains.strategy.research_findings import format_research_for_strategic_brief
+    from src.llm.chains.strategy.research_findings import (
+        format_research_for_strategic_brief,
+    )
+
     research_findings_text = format_research_for_strategic_brief(research_result)
 
     # comprehensive 模式：额外拉取 creative_references（与 Big Idea 阶段同源）
@@ -2237,7 +2357,10 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         creative_task_id, creative_result = await _retrieve_creative_research_findings(
             db, strategy, "StrategicBrief"
         )
-        from src.llm.chains.strategy.research_findings import format_creative_for_big_idea
+        from src.llm.chains.strategy.research_findings import (
+            format_creative_for_big_idea,
+        )
+
         creative_references_text = format_creative_for_big_idea(creative_result)
 
     chain = create_strategic_brief_chain()
@@ -2276,7 +2399,8 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         result = parse_strategic_brief_response(response.content)
         # comprehensive 模式 primary 标 mixed（消费者+媒体），media_only 标 news_media
         result["data_provenance"] = _build_data_provenance(
-            slices_data, news_slices_data,
+            slices_data,
+            news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
         )
@@ -2295,8 +2419,11 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
         total_refs = sum(len(sp.get("evidence_refs") or []) for sp in priorities)
         logger.info(
             "Strategy %d Strategic Brief (%s 模式) 生成完成 (%.1fs): %d priorities, %d evidence_refs",
-            strategy.id, "comprehensive" if is_full else "media_only", duration,
-            len(priorities), total_refs,
+            strategy.id,
+            "comprehensive" if is_full else "media_only",
+            duration,
+            len(priorities),
+            total_refs,
         )
 
         now = datetime.now(timezone.utc)
@@ -2313,10 +2440,15 @@ async def generate_strategic_brief(db: AsyncSession, strategy: Strategy) -> Stra
             strategy.status = "completed"
 
         await db.commit()
-        fire_notification(feishu_tmpl.strategic_brief_done_card(strategy.name, strategy.id), _strategy_open_ids(strategy))
+        fire_notification(
+            feishu_tmpl.strategic_brief_done_card(strategy.name, strategy.id),
+            _strategy_open_ids(strategy),
+        )
         return await get_strategy_by_id(db, strategy.id)
     except Exception as exc:
-        logger.error("Strategy %d Strategic Brief 生成失败: %s", strategy.id, exc, exc_info=True)
+        logger.error(
+            "Strategy %d Strategic Brief 生成失败: %s", strategy.id, exc, exc_info=True
+        )
         try:
             job.status = "failed"
             job.error_message = str(exc)[:500]
@@ -2410,9 +2542,7 @@ async def _dispatch_strategy_research_tasks(
                     strategy_id=strategy.id,
                     profile_name="creative",
                 )
-                logger.info(
-                    "策略 %d: 进入 collecting，创建创意研究任务", strategy.id
-                )
+                logger.info("策略 %d: 进入 collecting，创建创意研究任务", strategy.id)
             except Exception as e:
                 logger.warning(
                     "策略 %d: 创建创意研究任务失败（不阻塞主流程）: %s",
@@ -2453,8 +2583,7 @@ def _check_missing_competitive_social_dimension(
     research_questions = research_design.get("research_questions") or []
 
     has_social = any(
-        (dp.get("channel") or "social_media") == "social_media"
-        for dp in data_plan
+        (dp.get("channel") or "social_media") == "social_media" for dp in data_plan
     )
     if not has_social:
         return None
@@ -2630,7 +2759,10 @@ async def reset_to_design(
     # 删除所有新闻任务
     deleted_news_count = 0
     if strategy.news_monitor_id:
-        from src.news_media.tasks.service import get_news_tasks_by_strategy, delete_news_task
+        from src.news_media.tasks.service import (
+            get_news_tasks_by_strategy,
+            delete_news_task,
+        )
 
         news_tasks = await get_news_tasks_by_strategy(db, strategy.id)
         for nt in news_tasks:
@@ -2655,9 +2787,8 @@ async def reset_to_design(
         )
     if strategy.news_monitor_id:
         from src.news_media.analysis.models import NewsSlice as _NS
-        await db.execute(
-            delete(_NS).where(_NS.monitor_id == strategy.news_monitor_id)
-        )
+
+        await db.execute(delete(_NS).where(_NS.monitor_id == strategy.news_monitor_id))
 
     await db.commit()
 
@@ -2850,6 +2981,7 @@ async def confirm_research(
     if has_news_channel:
         if strategy.news_monitor_id:
             from src.news_media.monitors.models import NewsMonitor
+
             news_monitor = await db.get(NewsMonitor, strategy.news_monitor_id)
         else:
             from src.news_media.monitors.service import create_news_monitor
@@ -3054,14 +3186,16 @@ async def _build_social_probe_summaries(
     # 构造 dimension_name → (subjects, competitors) 映射
     # 来自 slice_blueprint：每个聚焦切片显式声明了 subject + competitors，
     # 通过 source_dimensions 关联到 data_plan 的 dimension_name
-    task_dim_map: dict[str, str] = (research_design or {}).get("_task_dimension_map") or {}
+    task_dim_map: dict[str, str] = (research_design or {}).get(
+        "_task_dimension_map"
+    ) or {}
     slice_blueprint: list[dict] = (research_design or {}).get("slice_blueprint") or []
     dim_to_subjects: dict[str, set[str]] = {}
     dim_to_competitors: dict[str, set[str]] = {}
     for sb in slice_blueprint:
         subj = (sb.get("subject") or "").strip()
         comps = [c.strip() for c in (sb.get("competitors") or []) if c and c.strip()]
-        for src_dim in (sb.get("source_dimensions") or []):
+        for src_dim in sb.get("source_dimensions") or []:
             if subj:
                 dim_to_subjects.setdefault(src_dim, set()).add(subj)
             for c in comps:
@@ -3095,9 +3229,8 @@ async def _build_social_probe_summaries(
         has_analysis_real = task.analysis_result is not None and not is_failed
         # 0 条数据 + 成功终态：爬虫已完成但无结果，无需 LLM 判断，视为已处理
         no_data = (
-            (task.posts_count or 0) == 0
-            and task.status in _PROBE_OK_TERMINAL_STATUSES
-        )
+            task.posts_count or 0
+        ) == 0 and task.status in _PROBE_OK_TERMINAL_STATUSES
 
         statuses.append(
             SocialProbeTaskStatus(
@@ -3136,8 +3269,12 @@ async def _build_social_probe_summaries(
             # 实际识别到的实体名样本（前 20 个），让 LLM 看清是否匹配 expected_subjects/competitors
             # 取 20 而非 10：probe_lite 不做实体归一，主品名常见 3-5 种变体占位；
             # 强竞品对比场景下竞品品牌也常 10+ 个。20 能覆盖典型长尾，prompt 长度可控。
-            target_entities_sample = [e.get("name", "") for e in target_entities[:20] if e.get("name")]
-            competitor_entities_sample = [e.get("name", "") for e in competitor_entities[:20] if e.get("name")]
+            target_entities_sample = [
+                e.get("name", "") for e in target_entities[:20] if e.get("name")
+            ]
+            competitor_entities_sample = [
+                e.get("name", "") for e in competitor_entities[:20] if e.get("name")
+            ]
 
             # 来自 slice_blueprint 的预期主体/竞品（per-task，按 dimension_name 关联）
             # 防御性上限 50：实际场景不会触达，避免 slice_blueprint 异常时 prompt 爆炸
@@ -3163,21 +3300,23 @@ async def _build_social_probe_summaries(
             analyzed_summaries.append(summary)
         elif no_data:
             # 0 条帖子：加入 summaries 供客观规则层直接 fail，不送 LLM
-            analyzed_summaries.append({
-                "task_id": task.id,
-                "keyword": task.keywords or "",
-                "platform": task.platform.code if task.platform else "",
-                "posts_count": 0,
-                "screened": 0,
-                "deep_analyzed": 0,
-                "entity_match": False,
-                "target_entities_sample": [],
-                "competitor_entities_sample": [],
-                "expected_subjects": [],
-                "expected_competitors": [],
-                "top_topics": [],
-                "promotion_ratio": None,
-            })
+            analyzed_summaries.append(
+                {
+                    "task_id": task.id,
+                    "keyword": task.keywords or "",
+                    "platform": task.platform.code if task.platform else "",
+                    "posts_count": 0,
+                    "screened": 0,
+                    "deep_analyzed": 0,
+                    "entity_match": False,
+                    "target_entities_sample": [],
+                    "competitor_entities_sample": [],
+                    "expected_subjects": [],
+                    "expected_competitors": [],
+                    "top_topics": [],
+                    "promotion_ratio": None,
+                }
+            )
 
     return statuses, analyzed_summaries
 
@@ -3203,22 +3342,24 @@ async def _build_news_probe_summaries(
         articles, _ = await news_crud.get_articles_by_task(
             db, task_id=npt.id, skip=0, limit=40
         )
-        summaries.append({
-            "task_id": npt.id,
-            "keyword": npt.keywords or "",
-            "articles_total": meta.get("articles_total", 0),
-            "source_tier_distribution": meta.get("source_tier_distribution") or {},
-            "articles": [
-                {
-                    "title": a.title,
-                    "source_name": a.source_name,
-                    "source_tier": a.source_tier,
-                    "snippet": a.snippet,
-                }
-                for a in articles
-            ],
-            "channel": "news_media",
-        })
+        summaries.append(
+            {
+                "task_id": npt.id,
+                "keyword": npt.keywords or "",
+                "articles_total": meta.get("articles_total", 0),
+                "source_tier_distribution": meta.get("source_tier_distribution") or {},
+                "articles": [
+                    {
+                        "title": a.title,
+                        "source_name": a.source_name,
+                        "source_tier": a.source_tier,
+                        "snippet": a.snippet,
+                    }
+                    for a in articles
+                ],
+                "channel": "news_media",
+            }
+        )
     return summaries
 
 
@@ -3277,7 +3418,8 @@ def _override_suggestions_for_all_fail_channels(
         return suggestions
 
     fail_channels = {
-        ch for ch, info in channel_summary.items()
+        ch
+        for ch, info in channel_summary.items()
         if info.get("channel_verdict") == "all_fail"
     }
     if not fail_channels:
@@ -3290,14 +3432,16 @@ def _override_suggestions_for_all_fail_channels(
         if channel in fail_channels:
             total = channel_summary[channel].get("total", 0)
             channel_label = "社交媒体" if channel == "social_media" else "新闻媒体"
-            result.append({
-                **s,
-                "suggested_keyword": None,
-                "reason": (
-                    f"{channel_label}渠道已 refine 过仍 {total} 个任务全部未通过，"
-                    f"判定为结构性数据稀疏，换词无法突破，建议移除该任务"
-                ),
-            })
+            result.append(
+                {
+                    **s,
+                    "suggested_keyword": None,
+                    "reason": (
+                        f"{channel_label}渠道已 refine 过仍 {total} 个任务全部未通过，"
+                        f"判定为结构性数据稀疏，换词无法突破，建议移除该任务"
+                    ),
+                }
+            )
         else:
             result.append(s)
     return result
@@ -3354,7 +3498,8 @@ async def _run_news_probe_review_one(
     except Exception as exc:
         logger.warning(
             "News probe review failed for task #%s: %s",
-            task_summary.get("task_id"), exc,
+            task_summary.get("task_id"),
+            exc,
         )
         return None, None, time.time() - t0
 
@@ -3386,29 +3531,36 @@ async def _run_probe_review_bg_task(
                 result = _auto_verdict_social_probe_task(summary)
                 if result is not None:
                     verdict, note = result
-                    auto_assessments.append({
-                        "task_id": summary["task_id"],
-                        "keyword": summary["keyword"],
-                        "platform": summary["platform"],
-                        "entity_match": summary.get("entity_match", False),
-                        "verdict": verdict,
-                        "note": note,
-                    })
+                    auto_assessments.append(
+                        {
+                            "task_id": summary["task_id"],
+                            "keyword": summary["keyword"],
+                            "platform": summary["platform"],
+                            "entity_match": summary.get("entity_match", False),
+                            "verdict": verdict,
+                            "note": note,
+                        }
+                    )
                     if verdict == "fail":
                         # 规则 fail：内容极少或几乎全是广告，LLM 无法从中获取有效话题
                         # 给出通用建议，具体关键词由用户根据研究方向决定
-                        rule_suggestions.append({
-                            "task_id": summary["task_id"],
-                            "original_keyword": summary["keyword"],
-                            "suggested_keyword": None,
-                            "platform": summary["platform"],
-                            "reason": note,
-                        })
+                        rule_suggestions.append(
+                            {
+                                "task_id": summary["task_id"],
+                                "original_keyword": summary["keyword"],
+                                "suggested_keyword": None,
+                                "platform": summary["platform"],
+                                "reason": note,
+                            }
+                        )
                 else:
                     ambiguous_summaries.append(summary)
 
             # 加载所有新闻 probe 任务（含失败任务，用于后续补规则建议）
-            from src.news_media.tasks.service import get_news_tasks_by_strategy as _get_news_tasks
+            from src.news_media.tasks.service import (
+                get_news_tasks_by_strategy as _get_news_tasks,
+            )
+
             news_probe_tasks = await _get_news_tasks(db, strategy.id, phase="probe")
 
             # 新闻 probe：LLM 审查（并行每任务一次调用），走 AnalysisJob 记录成本
@@ -3434,10 +3586,14 @@ async def _run_probe_review_bg_task(
 
                 start_news = time.time()
                 try:
-                    news_results = await asyncio.gather(*[
-                        _run_news_probe_review_one(news_chain, research_design, brief, nps)
-                        for nps in news_probe_summaries
-                    ])
+                    news_results = await asyncio.gather(
+                        *[
+                            _run_news_probe_review_one(
+                                news_chain, research_design, brief, nps
+                            )
+                            for nps in news_probe_summaries
+                        ]
+                    )
                     duration_news = time.time() - start_news
 
                     total_input = total_output = total_tokens = 0
@@ -3460,14 +3616,16 @@ async def _run_probe_review_bg_task(
                         if assessment is None:
                             failed_calls += 1
                             # LLM 调用失败：保守判 pass 让用户人工把关（不阻塞流程）
-                            auto_assessments.append({
-                                "task_id": nps["task_id"],
-                                "keyword": nps["keyword"],
-                                "platform": "news_media",
-                                "entity_match": False,
-                                "verdict": "pass",
-                                "note": "LLM 审查失败，已默认通过，请人工核查卡片后决定",
-                            })
+                            auto_assessments.append(
+                                {
+                                    "task_id": nps["task_id"],
+                                    "keyword": nps["keyword"],
+                                    "platform": "news_media",
+                                    "entity_match": False,
+                                    "verdict": "pass",
+                                    "note": "LLM 审查失败，已默认通过，请人工核查卡片后决定",
+                                }
+                            )
                             continue
                         news_llm_assessments.append(assessment)
 
@@ -3480,8 +3638,12 @@ async def _run_probe_review_bg_task(
                             "total_tokens": total_tokens,
                             "total_cost_cny": round(total_cost, 6),
                             "total_duration_seconds": round(duration_news, 2),
-                            "avg_tokens_per_call": float(total_tokens) / news_total if news_total else 0.0,
-                            "avg_cost_per_call": round(total_cost / news_total, 6) if news_total else 0.0,
+                            "avg_tokens_per_call": float(total_tokens) / news_total
+                            if news_total
+                            else 0.0,
+                            "avg_cost_per_call": round(total_cost / news_total, 6)
+                            if news_total
+                            else 0.0,
                         },
                         "call_details": call_details,
                     }
@@ -3490,14 +3652,23 @@ async def _run_probe_review_bg_task(
                     news_job.completed_at = datetime.now(timezone.utc)
                     if failed_calls and failed_calls == news_total:
                         news_job.status = "failed"
-                        news_job.error_message = f"全部 {failed_calls} 个新闻 probe LLM 调用失败"
+                        news_job.error_message = (
+                            f"全部 {failed_calls} 个新闻 probe LLM 调用失败"
+                        )
                     else:
                         news_job.status = "completed"
                         if failed_calls:
-                            news_job.error_message = f"{failed_calls} 个调用失败（已保守判 pass）"
+                            news_job.error_message = (
+                                f"{failed_calls} 个调用失败（已保守判 pass）"
+                            )
                     await db.commit()
                 except Exception as exc:
-                    logger.error("Strategy %d news probe review 异常: %s", strategy.id, exc, exc_info=True)
+                    logger.error(
+                        "Strategy %d news probe review 异常: %s",
+                        strategy.id,
+                        exc,
+                        exc_info=True,
+                    )
                     news_job.status = "failed"
                     news_job.error_message = str(exc)[:500]
                     news_job.completed_at = datetime.now(timezone.utc)
@@ -3507,27 +3678,35 @@ async def _run_probe_review_bg_task(
 
                 logger.info(
                     "Strategy %d news probe review 完成 (%.1fs, 任务=%d, 成功=%d, 失败=%d)",
-                    strategy.id, duration_news, news_total, len(news_llm_assessments), failed_calls,
+                    strategy.id,
+                    duration_news,
+                    news_total,
+                    len(news_llm_assessments),
+                    failed_calls,
                 )
 
             # 新闻 LLM 结果直接合入 auto_assessments（已是终态，不进二次 LLM）
             for a in news_llm_assessments:
-                auto_assessments.append({
-                    "task_id": a.get("task_id"),
-                    "keyword": a.get("keyword", ""),
-                    "platform": "news_media",
-                    "entity_match": False,
-                    "verdict": a.get("verdict", "pass"),
-                    "note": a.get("note", ""),
-                })
-                if a.get("verdict") == "fail":
-                    rule_suggestions.append({
+                auto_assessments.append(
+                    {
                         "task_id": a.get("task_id"),
-                        "original_keyword": a.get("keyword", ""),
-                        "suggested_keyword": a.get("suggested_keyword"),
+                        "keyword": a.get("keyword", ""),
                         "platform": "news_media",
-                        "reason": a.get("suggestion_reason") or a.get("note", ""),
-                    })
+                        "entity_match": False,
+                        "verdict": a.get("verdict", "pass"),
+                        "note": a.get("note", ""),
+                    }
+                )
+                if a.get("verdict") == "fail":
+                    rule_suggestions.append(
+                        {
+                            "task_id": a.get("task_id"),
+                            "original_keyword": a.get("keyword", ""),
+                            "suggested_keyword": a.get("suggested_keyword"),
+                            "platform": "news_media",
+                            "reason": a.get("suggestion_reason") or a.get("note", ""),
+                        }
+                    )
 
             # 失败的新闻探测任务未进 LLM 审查（无文章数据可评估），补规则建议
             # `news_probe_summaries or []`：scheduler 路径在历史 bug 修复前可能传 None；
@@ -3537,23 +3716,27 @@ async def _run_probe_review_bg_task(
                 if npt.status == "failed" and npt.id not in reviewed_news_ids:
                     note = npt.error_message or "新闻探测任务失败，未能采集到搜索结果"
                     keyword = npt.keywords or ""
-                    auto_assessments.append({
-                        "task_id": npt.id,
-                        "keyword": keyword,
-                        "platform": "news_media",
-                        "entity_match": False,
-                        "verdict": "fail",
-                        "note": note,
-                    })
+                    auto_assessments.append(
+                        {
+                            "task_id": npt.id,
+                            "keyword": keyword,
+                            "platform": "news_media",
+                            "entity_match": False,
+                            "verdict": "fail",
+                            "note": note,
+                        }
+                    )
                     # suggested_keyword 与原词相同：应用建议时移除失败任务并以原词重新创建，
                     # 相当于重试；用户可在确认弹窗前手动改词
-                    rule_suggestions.append({
-                        "task_id": npt.id,
-                        "original_keyword": keyword,
-                        "suggested_keyword": keyword,
-                        "platform": "news_media",
-                        "reason": f"采集失败（{note}），已恢复原词重新探测。如需换词可在应用前修改。",
-                    })
+                    rule_suggestions.append(
+                        {
+                            "task_id": npt.id,
+                            "original_keyword": keyword,
+                            "suggested_keyword": keyword,
+                            "platform": "news_media",
+                            "reason": f"采集失败（{note}），已恢复原词重新探测。如需换词可在应用前修改。",
+                        }
+                    )
 
             # LLM 层：处理模糊案例（话题相关性判断）
             review_result = await _run_probe_review(
@@ -3568,7 +3751,10 @@ async def _run_probe_review_bg_task(
                 await approve_probe(db, strategy, current_user_id=strategy.user_id)
     except Exception as e:
         logger.error(
-            "Strategy %d probe review background task failed: %s", strategy_id, e, exc_info=True
+            "Strategy %d probe review background task failed: %s",
+            strategy_id,
+            e,
+            exc_info=True,
         )
     finally:
         _probe_review_in_progress.discard(strategy_id)
@@ -3609,11 +3795,13 @@ async def _run_probe_review(
         active_tasks_rows = await db.execute(
             select(SocialTask.keywords, _Platform.code)
             .join(_Platform, SocialTask.platform_id == _Platform.id)
-            .where(and_(
-                SocialTask.strategy_id == strategy.id,
-                SocialTask.phase == "probe",
-                SocialTask.is_deleted.is_(False),
-            ))
+            .where(
+                and_(
+                    SocialTask.strategy_id == strategy.id,
+                    SocialTask.phase == "probe",
+                    SocialTask.is_deleted.is_(False),
+                )
+            )
         )
         existing_task_tuples: list[tuple[str, str]] = [
             (kw, plat) for kw, plat in active_tasks_rows.all() if kw and plat
@@ -3630,7 +3818,9 @@ async def _run_probe_review(
             analysis_config={"strategy_id": strategy.id},
         )
 
-        async def _evaluate_one(task_summary: dict) -> tuple[dict | None, dict | None, float]:
+        async def _evaluate_one(
+            task_summary: dict,
+        ) -> tuple[dict | None, dict | None, float]:
             """评估单个任务，返回 (assessment, token_usage, duration)"""
             inputs = format_single_task_probe_review_inputs(
                 research_design=research_design,
@@ -3648,7 +3838,9 @@ async def _run_probe_review(
             except Exception as exc:
                 logger.warning(
                     "Strategy %d task #%s probe review 失败: %s",
-                    strategy.id, task_summary.get("task_id"), exc,
+                    strategy.id,
+                    task_summary.get("task_id"),
+                    exc,
                 )
                 return None, None, time.time() - t0
 
@@ -3690,8 +3882,13 @@ async def _run_probe_review(
                     "total_tokens": total_tokens,
                     "total_cost_cny": round(total_cost, 6),
                     "total_duration_seconds": round(duration, 2),
-                    "avg_tokens_per_call": float(total_tokens) / len(ambiguous_summaries) if ambiguous_summaries else 0.0,
-                    "avg_cost_per_call": round(total_cost / len(ambiguous_summaries), 6) if ambiguous_summaries else 0.0,
+                    "avg_tokens_per_call": float(total_tokens)
+                    / len(ambiguous_summaries)
+                    if ambiguous_summaries
+                    else 0.0,
+                    "avg_cost_per_call": round(total_cost / len(ambiguous_summaries), 6)
+                    if ambiguous_summaries
+                    else 0.0,
                 },
                 "call_details": call_details,
             }
@@ -3707,10 +3904,18 @@ async def _run_probe_review(
 
             logger.info(
                 "Strategy %d probe review 并行 LLM 完成 (%.1fs, 模糊=%d, 成功=%d)",
-                strategy.id, duration, len(ambiguous_summaries), len(llm_assessments),
+                strategy.id,
+                duration,
+                len(ambiguous_summaries),
+                len(llm_assessments),
             )
         except Exception as exc:
-            logger.error("Strategy %d social probe review 异常: %s", strategy.id, exc, exc_info=True)
+            logger.error(
+                "Strategy %d social probe review 异常: %s",
+                strategy.id,
+                exc,
+                exc_info=True,
+            )
             job.status = "failed"
             job.error_message = str(exc)[:500]
             job.completed_at = datetime.now(timezone.utc)
@@ -3739,16 +3944,21 @@ async def _run_probe_review(
     all_suggestions: list[dict] = list(rule_suggestions or [])
     for a in llm_assessments:
         if a.get("verdict") == "fail" and a.get("suggested_keyword"):
-            all_suggestions.append({
-                "task_id": a["task_id"],
-                "original_keyword": a.get("keyword", ""),
-                "suggested_keyword": a["suggested_keyword"],
-                "platform": a.get("platform", ""),
-                "reason": a.get("suggestion_reason", ""),
-            })
+            all_suggestions.append(
+                {
+                    "task_id": a["task_id"],
+                    "original_keyword": a.get("keyword", ""),
+                    "suggested_keyword": a["suggested_keyword"],
+                    "platform": a.get("platform", ""),
+                    "reason": a.get("suggestion_reason", ""),
+                }
+            )
 
     # 后处理：检测 consumer_voice / competitive 互补平台失败，替换为平台统一建议
-    from src.llm.chains.strategy.social_probe_review_chain import detect_and_replace_symmetry_suggestions
+    from src.llm.chains.strategy.social_probe_review_chain import (
+        detect_and_replace_symmetry_suggestions,
+    )
+
     all_suggestions = detect_and_replace_symmetry_suggestions(
         all_assessments=all_assessments,
         existing_suggestions=all_suggestions,
@@ -3761,13 +3971,17 @@ async def _run_probe_review(
     # 渠道 all_fail 覆盖（仅 probe_round≥1，即至少 refine 过一次）：
     # 首轮 all_fail 保留 LLM 换词建议（多为关键词质量问题）；重复 all_fail 才判定结构性稀疏，统一建议移除
     all_suggestions = _override_suggestions_for_all_fail_channels(
-        all_suggestions, channel_summary, strategy.probe_round or 0,
+        all_suggestions,
+        channel_summary,
+        strategy.probe_round or 0,
     )
 
     logger.info(
         "Strategy %d probe review 完成 (verdict=%s, 规则自动=%d, LLM=%d)",
-        strategy.id, overall,
-        len(auto_assessments or []), len(llm_assessments),
+        strategy.id,
+        overall,
+        len(auto_assessments or []),
+        len(llm_assessments),
     )
 
     result: dict = {
@@ -3785,12 +3999,16 @@ async def _run_probe_review(
     await db.commit()
 
     if overall != "all_pass":
-        fire_notification(feishu_tmpl.probe_needs_review_card(
-            strategy.name, strategy.id, overall_verdict=overall,
-        ), _strategy_open_ids(strategy))
+        fire_notification(
+            feishu_tmpl.probe_needs_review_card(
+                strategy.name,
+                strategy.id,
+                overall_verdict=overall,
+            ),
+            _strategy_open_ids(strategy),
+        )
 
     return result
-
 
 
 async def parse_brief_from_file(content: bytes, filename: str) -> ParseBriefResponse:
@@ -3883,6 +4101,7 @@ async def check_probe_status(
 
     # 查询该策略的所有新闻 probe 任务
     from src.news_media.tasks.service import get_news_tasks_by_strategy
+
     news_probe_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="probe")
 
     if not probe_tasks and not news_probe_tasks:
@@ -3893,17 +4112,24 @@ async def check_probe_status(
 
     task_ids = [t.id for t in probe_tasks]
     task_statuses, analyzed_summaries = await _build_social_probe_summaries(
-        db, task_ids, research_design=strategy.research_design,
+        db,
+        task_ids,
+        research_design=strategy.research_design,
     )
 
     # 新闻任务状态（进入终态即视为已处理，failed 不阻塞审查触发）
     _NEWS_PROBE_TERMINAL = {"completed", "failed"}
     news_all_analyzed = all(t.status in _NEWS_PROBE_TERMINAL for t in news_probe_tasks)
-    news_analyzed_count = sum(1 for t in news_probe_tasks if t.status in _NEWS_PROBE_TERMINAL)
+    news_analyzed_count = sum(
+        1 for t in news_probe_tasks if t.status in _NEWS_PROBE_TERMINAL
+    )
 
     # 构建新闻任务状态列表（供前端展示）
     from src.strategies.schemas import NewsProbeTaskStatus
-    news_probe_dim_map: dict[str, str] = (strategy.research_design or {}).get("_news_task_dimension_map") or {}
+
+    news_probe_dim_map: dict[str, str] = (strategy.research_design or {}).get(
+        "_news_task_dimension_map"
+    ) or {}
     news_task_statuses = [
         NewsProbeTaskStatus(
             task_id=npt.id,
@@ -3912,7 +4138,9 @@ async def check_probe_status(
             status=npt.status,
             completed=npt.status == "completed" and bool(npt.analysis_result),
             failed=npt.status == "failed",
-            articles_count=(npt.analysis_result or {}).get("meta", {}).get("articles_total", 0)
+            articles_count=(npt.analysis_result or {})
+            .get("meta", {})
+            .get("articles_total", 0)
             if npt.analysis_result
             else 0,
         )
@@ -3924,18 +4152,31 @@ async def check_probe_status(
     news_probe_summaries = await _build_news_probe_summaries(db, news_probe_tasks)
 
     # 兼容纯新闻策略（无社媒任务时 task_statuses 为空）
-    social_all_analyzed = not task_statuses or all(t.has_analysis for t in task_statuses)
+    social_all_analyzed = not task_statuses or all(
+        t.has_analysis for t in task_statuses
+    )
     news_check = not news_probe_tasks or news_all_analyzed
-    all_analyzed = bool(social_all_analyzed and news_check and (task_statuses or news_probe_tasks))
-    analyzed_count = sum(1 for t in task_statuses if t.has_analysis) + news_analyzed_count
+    all_analyzed = bool(
+        social_all_analyzed and news_check and (task_statuses or news_probe_tasks)
+    )
+    analyzed_count = (
+        sum(1 for t in task_statuses if t.has_analysis) + news_analyzed_count
+    )
     total_count = len(task_statuses) + len(news_probe_tasks)
 
     # 全部分析完成且尚无审查结果 → 触发后台 LLM 审查（仅针对社媒数据）
-    if all_analyzed and not strategy.probe_review_result and strategy.id not in _probe_review_in_progress:
+    if (
+        all_analyzed
+        and not strategy.probe_review_result
+        and strategy.id not in _probe_review_in_progress
+    ):
         _probe_review_in_progress.add(strategy.id)
         import asyncio
+
         asyncio.ensure_future(
-            _run_probe_review_bg_task(strategy.id, analyzed_summaries, news_probe_summaries)
+            _run_probe_review_bg_task(
+                strategy.id, analyzed_summaries, news_probe_summaries
+            )
         )
 
     return ProbeStatusResponse(
@@ -3992,7 +4233,8 @@ async def _advance_probe_task_to_collect(
     # delete_analysis_jobs=False：保留作业历史，便于追溯
     # clear_aggregated=False：保留 probe 聚合作为 0-new-data 边缘场景兜底（详见函数 docstring）
     await reset_task_analysis_state(
-        db, task.id,
+        db,
+        task.id,
         task=task,
         delete_post_analysis=False,
         delete_analysis_jobs=False,
@@ -4021,7 +4263,9 @@ async def approve_probe(
     # 入口幂等：已推进到 collecting/ready/产出阶段时，直接返回当前 collect 任务数
     if STATUS_ORDER.get(strategy.status, 0) >= STATUS_ORDER["collecting"]:
         existing = await db.execute(
-            select(func.count()).select_from(SocialTask).where(
+            select(func.count())
+            .select_from(SocialTask)
+            .where(
                 and_(
                     SocialTask.strategy_id == strategy.id,
                     SocialTask.phase == "collect",
@@ -4031,6 +4275,7 @@ async def approve_probe(
         )
         social_count = int(existing.scalar() or 0)
         from src.news_media.tasks.service import get_news_tasks_by_strategy as _get_news
+
         existing_news = await _get_news(db, strategy.id, phase="collect")
         return ApproveProbeResponse(
             approved_task_count=social_count + len(existing_news),
@@ -4050,6 +4295,7 @@ async def approve_probe(
 
     # 获取新闻 probe 任务
     from src.news_media.tasks.service import get_news_tasks_by_strategy
+
     news_probe_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="probe")
 
     if not probe_tasks and not news_probe_tasks:
@@ -4165,7 +4411,7 @@ async def approve_probe(
         _comp_seen: set[str] = set()
         tagging_competitors: list[str] = []
         for bp in blueprint:
-            for c in (bp.get("competitors") or []):
+            for c in bp.get("competitors") or []:
                 c_norm = (c or "").strip()
                 if c_norm and c_norm.lower() not in _comp_seen:
                     _comp_seen.add(c_norm.lower())
@@ -4195,6 +4441,7 @@ async def approve_probe(
         approved_task_count=len(collect_task_ids),
         strategy=await _strategy_read(db, updated),
     )
+
 
 async def refine_probe(
     db: AsyncSession,
@@ -4226,10 +4473,13 @@ async def refine_probe(
             )
         )
     )
-    old_tasks_map: dict[int, SocialTask] = {t.id: t for t in old_tasks_result.scalars().all()}
+    old_tasks_map: dict[int, SocialTask] = {
+        t.id: t for t in old_tasks_result.scalars().all()
+    }
 
     # 加载现有 news probe 任务
     from src.news_media.tasks.models import NewsTask
+
     old_news_result = await db.execute(
         select(NewsTask).where(
             and_(
@@ -4238,7 +4488,9 @@ async def refine_probe(
             )
         )
     )
-    old_news_map: dict[int, NewsTask] = {t.id: t for t in old_news_result.scalars().all()}
+    old_news_map: dict[int, NewsTask] = {
+        t.id: t for t in old_news_result.scalars().all()
+    }
 
     if not old_tasks_map and not old_news_map:
         raise HTTPException(
@@ -4343,7 +4595,9 @@ async def refine_probe(
     if data.news_refinements:
         from src.news_media.tasks.crud import delete_task as delete_news_task_crud
         from src.news_media.tasks.schemas import NewsTaskCreate
-        from src.news_media.tasks.service import create_news_task as create_news_task_svc
+        from src.news_media.tasks.service import (
+            create_news_task as create_news_task_svc,
+        )
         from src.news_media.tasks.tasks import run_news_probe_task
 
         if not strategy.news_monitor_id:
@@ -4420,6 +4674,7 @@ async def refine_probe(
         strategy=await _strategy_read(db, updated),
     )
 
+
 async def check_collection_status(
     db: AsyncSession,
     strategy: Strategy,
@@ -4441,6 +4696,7 @@ async def check_collection_status(
 
     # 查询该策略的所有新闻 collect 任务
     from src.news_media.tasks.service import get_news_tasks_by_strategy
+
     news_tasks = await get_news_tasks_by_strategy(db, strategy.id, phase="collect")
 
     if not tasks and not news_tasks:
@@ -4470,9 +4726,8 @@ async def check_collection_status(
 
     # 终态判定：completed 或 failed 均视为终态（failed = 爬虫/Worker 故障，不应永久阻塞策略）
     _terminal = {"completed", "failed"}
-    all_completed = (
-        all(task.status in _terminal for task in tasks)
-        and all(t.status in _terminal for t in news_tasks)
+    all_completed = all(task.status in _terminal for task in tasks) and all(
+        t.status in _terminal for t in news_tasks
     )
     # 已分析判定：所有任务都终态 + 至少有 1 个 completed（非全失败） + 所有 completed 任务有 analysis_result
     # 注意：必须要求 all_completed 为前置，否则单个任务完成就会触发 all_analyzed=True，让前端进度条提前消失
@@ -4498,9 +4753,9 @@ async def check_collection_status(
         for task in tasks
     ]
 
-    news_task_dim_map: dict[str, str] = (
-        (strategy.research_design or {}).get("_news_task_dimension_map") or {}
-    )
+    news_task_dim_map: dict[str, str] = (strategy.research_design or {}).get(
+        "_news_task_dimension_map"
+    ) or {}
     news_task_statuses = [
         NewsCollectionTaskStatus(
             task_id=nt.id,
@@ -4527,6 +4782,7 @@ async def check_collection_status(
     has_news_slices = False
     if strategy.news_monitor_id:
         from src.news_media.analysis.models import NewsSlice as _NS
+
         _ns_result = await db.execute(
             select(_NS.id).where(_NS.monitor_id == strategy.news_monitor_id).limit(1)
         )
@@ -4534,15 +4790,29 @@ async def check_collection_status(
 
     # 全部终态且已分析 → 自动建切片（若尚无任何切片且未在进行中）
     if all_completed and all_analyzed:
-        if not has_social_slices and not has_news_slices and strategy.id not in _slice_creation_in_progress:
+        if (
+            not has_social_slices
+            and not has_news_slices
+            and strategy.id not in _slice_creation_in_progress
+        ):
             _slice_creation_in_progress.add(strategy.id)
             logger.info(
                 "Strategy %s: 所有任务完成且已分析，开始自动建切片", strategy.id
             )
             try:
-                completed_tasks = [t for t in tasks if t.status == "completed" and t.analysis_result is not None]
-                completed_news = [t for t in news_tasks if t.status == "completed" and t.analysis_result is not None]
-                await _create_auto_slices(db, strategy, completed_tasks, current_user_id, completed_news)
+                completed_tasks = [
+                    t
+                    for t in tasks
+                    if t.status == "completed" and t.analysis_result is not None
+                ]
+                completed_news = [
+                    t
+                    for t in news_tasks
+                    if t.status == "completed" and t.analysis_result is not None
+                ]
+                await _create_auto_slices(
+                    db, strategy, completed_tasks, current_user_id, completed_news
+                )
                 slices_created = True
                 logger.info("Strategy %s: 自动建切片完成", strategy.id)
             except Exception as e:
@@ -4560,7 +4830,9 @@ async def check_collection_status(
 
     # 切片已建、但 coverage_check 尚未跑 → 在 Stage2/新闻 insight 全完时主动推进到 ready
     # （利用前端 15s 轮询实现近实时推进，不依赖 APScheduler 2min tick）
-    if (has_social_slices or has_news_slices) and strategy.coverage_check_result is None:
+    if (
+        has_social_slices or has_news_slices
+    ) and strategy.coverage_check_result is None:
         try:
             await _try_advance_to_ready(db, strategy)
         except Exception as e:
@@ -4571,9 +4843,8 @@ async def check_collection_status(
                 exc_info=True,
             )
 
-    completed_count = (
-        sum(1 for t in tasks if t.status == "completed")
-        + sum(1 for t in news_tasks if t.status == "completed")
+    completed_count = sum(1 for t in tasks if t.status == "completed") + sum(
+        1 for t in news_tasks if t.status == "completed"
     )
     total_count = len(tasks) + len(news_tasks)
 
@@ -4758,7 +5029,8 @@ async def _create_auto_slices(
                     await db.rollback()
                     logger.info(
                         "Strategy %s: SocialSlice '%s' 已被其他 worker 创建，跳过",
-                        strategy.id, bp_name,
+                        strategy.id,
+                        bp_name,
                     )
                     existing_social_names.add(bp_name)
 
@@ -4786,7 +5058,8 @@ async def _create_auto_slices(
                         await db.rollback()
                         logger.info(
                             "Strategy %s: NewsSlice '%s' 已被其他 worker 创建，检查是否需补派",
-                            strategy.id, bp_name,
+                            strategy.id,
+                            bp_name,
                         )
                         existing_news_names.add(bp_name)
                         # 并发抢建成功的切片也要检查补派（下方统一处理）
@@ -4806,7 +5079,9 @@ async def _create_auto_slices(
                         news_dispatch_payloads.append((stale_ns.id, goal))
                         logger.info(
                             "Strategy %s: NewsSlice '%s' (id=%s) 处于 analyzing，补派 insight",
-                            strategy.id, bp_name, stale_ns.id,
+                            strategy.id,
+                            bp_name,
+                            stale_ns.id,
                         )
     else:
         # 无 blueprint：合并为综合切片
@@ -4823,7 +5098,10 @@ async def _create_auto_slices(
                 slice_objs.append(slice_obj)
             except IntegrityError:
                 await db.rollback()
-                logger.info("Strategy %s: 综合分析 SocialSlice 已被其他 worker 创建，跳过", strategy.id)
+                logger.info(
+                    "Strategy %s: 综合分析 SocialSlice 已被其他 worker 创建，跳过",
+                    strategy.id,
+                )
 
         if news_tasks and strategy.news_monitor_id:
             all_news_ids = [t.id for t in news_tasks]
@@ -4848,7 +5126,10 @@ async def _create_auto_slices(
                     news_dispatch_payloads.append((ns.id, goal))
                 except IntegrityError:
                     await db.rollback()
-                    logger.info("Strategy %s: 综合分析 NewsSlice 已被其他 worker 创建，检查是否需补派", strategy.id)
+                    logger.info(
+                        "Strategy %s: 综合分析 NewsSlice 已被其他 worker 创建，检查是否需补派",
+                        strategy.id,
+                    )
                     general_already_exists = True
 
             if general_already_exists:
@@ -4864,7 +5145,8 @@ async def _create_auto_slices(
                     news_dispatch_payloads.append((stale_ns.id, goal))
                     logger.info(
                         "Strategy %s: 综合分析 NewsSlice (id=%s) 处于 analyzing，补派 insight",
-                        strategy.id, stale_ns.id,
+                        strategy.id,
+                        stale_ns.id,
                     )
 
     # 社媒切片 Stage2/Stage3 pipeline 设置
@@ -4876,7 +5158,10 @@ async def _create_auto_slices(
         if not isinstance(rd, dict):
             continue
         pipeline = rd.get("pipeline")
-        if not isinstance(pipeline, dict) or pipeline.get("stage1", {}).get("status") != "completed":
+        if (
+            not isinstance(pipeline, dict)
+            or pipeline.get("stage1", {}).get("status") != "completed"
+        ):
             continue
 
         rd = dict(rd)
@@ -5009,12 +5294,8 @@ async def _try_advance_to_ready(
         return False  # 切片尚未建出
 
     # 等待所有切片 Stage2 / 新闻 insight 到终态
-    social_all_done = all(
-        _social_slice_stage2_terminal(s) for s in social_slices
-    )
-    news_all_done = all(
-        ns.status in _NEWS_SLICE_TERMINAL for ns in news_slices_list
-    )
+    social_all_done = all(_social_slice_stage2_terminal(s) for s in social_slices)
+    news_all_done = all(ns.status in _NEWS_SLICE_TERMINAL for ns in news_slices_list)
     if not (social_all_done and news_all_done):
         return False
 
@@ -5208,9 +5489,7 @@ async def adjust_slices(
 
         if coverage_result.get("overall_ready") and strategy.status == "collecting":
             strategy.status = "ready"
-            logger.info(
-                "Strategy %s: 调整后覆盖度通过，状态推进到 ready", strategy.id
-            )
+            logger.info("Strategy %s: 调整后覆盖度通过，状态推进到 ready", strategy.id)
     except Exception as e:
         logger.error(
             "Strategy %s: 调整切片后覆盖度验证失败: %s", strategy.id, e, exc_info=True

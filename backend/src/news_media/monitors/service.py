@@ -23,7 +23,9 @@ async def create_news_monitor(
             detail=f"监测项目名称 '{data.name}' 已存在",
         )
     monitor_data = data.model_dump(exclude={"participant_ids"})
-    monitor = await crud.create_monitor(db, monitor_data, user_id, participant_ids=data.participant_ids)
+    monitor = await crud.create_monitor(
+        db, monitor_data, user_id, participant_ids=data.participant_ids
+    )
     await db.commit()
     await db.refresh(monitor, ["owner", "participants"])
     return monitor
@@ -40,8 +42,12 @@ async def get_news_monitors(
     """获取新闻监测项目列表"""
     skip = (page - 1) * page_size
     return await crud.get_monitors(
-        db, skip=skip, limit=page_size,
-        user_id=user_id, participant_id=participant_id, search=search,
+        db,
+        skip=skip,
+        limit=page_size,
+        user_id=user_id,
+        participant_id=participant_id,
+        search=search,
     )
 
 
@@ -100,5 +106,3 @@ async def remove_participant_from_news_monitor(
             detail=f"用户 {user_id} 不是该项目的参与者",
         )
     return await crud.remove_participant_from_news_monitor(db, monitor, user_id)
-
-

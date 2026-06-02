@@ -197,10 +197,12 @@ USER_TEMPLATE = """以下是用户上传的 Brief 文档内容：
 def create_brief_parser_chain() -> Runnable:
     """创建 Brief 解析 Chain"""
     llm = get_llm("chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("human", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("human", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -235,7 +237,12 @@ def parse_brief_parser_response(response_text: str) -> dict[str, Any]:
 
     # framework 字段：保留 LLM 输出的 None 语义（区分"brief 未提及" vs "提及但空"），
     # 不做 setdefault 兜底；但 LLM 若错误返回空数组，归一化为 None 以保持语义清晰
-    for field in ("target_audiences", "audience_insights", "core_propositions", "competitors"):
+    for field in (
+        "target_audiences",
+        "audience_insights",
+        "core_propositions",
+        "competitors",
+    ):
         if field not in result or result[field] == [] or result[field] == "":
             result[field] = None
 

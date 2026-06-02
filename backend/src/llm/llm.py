@@ -275,4 +275,3 @@ def get_model_info(model_type: str = "chat") -> Dict[str, Any]:
             "temperature": getattr(settings, "DEEPSEEK_TEMPERATURE", 0.0),
             "use_cases": ["主题聚类", "竞品分析", "趋势分析", "复杂推理", "深度分析"],
         }
-

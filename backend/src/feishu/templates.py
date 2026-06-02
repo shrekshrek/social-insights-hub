@@ -26,17 +26,19 @@ def _build_card(
 
     if strategy_id and settings.FEISHU_FRONTEND_URL:
         url = f"{settings.FEISHU_FRONTEND_URL.rstrip('/')}/strategies/{strategy_id}"
-        elements.append({
-            "tag": "action",
-            "actions": [
-                {
-                    "tag": "button",
-                    "text": {"tag": "plain_text", "content": "查看策略"},
-                    "type": "primary",
-                    "url": url,
-                }
-            ],
-        })
+        elements.append(
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "查看策略"},
+                        "type": "primary",
+                        "url": url,
+                    }
+                ],
+            }
+        )
 
     return {
         "header": {
@@ -50,6 +52,7 @@ def _build_card(
 # ---------------------------------------------------------------------------
 # 探测阶段
 # ---------------------------------------------------------------------------
+
 
 def probe_needs_review_card(
     strategy_name: str,
@@ -70,8 +73,7 @@ def probe_needs_review_card(
     return _build_card(
         title="❌ 探测审查：未通过",
         content=(
-            f"**策略：** {strategy_name}\n"
-            "探测数据质量不足，请调整关键词后重新探测"
+            f"**策略：** {strategy_name}\n探测数据质量不足，请调整关键词后重新探测"
         ),
         color="red",
         strategy_id=strategy_id,
@@ -100,6 +102,7 @@ def data_ready_card(
 # 产出生成阶段（brand_strategy 路径）
 # ---------------------------------------------------------------------------
 
+
 def big_idea_done_card(strategy_name: str, strategy_id: int) -> dict:
     return _build_card(
         title="🎉 策略研究完成（Brand Strategy）",
@@ -112,6 +115,7 @@ def big_idea_done_card(strategy_name: str, strategy_id: int) -> dict:
 # ---------------------------------------------------------------------------
 # 产出生成阶段（market_report 路径）
 # ---------------------------------------------------------------------------
+
 
 def strategic_brief_done_card(strategy_name: str, strategy_id: int) -> dict:
     return _build_card(

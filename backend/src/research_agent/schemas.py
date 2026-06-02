@@ -63,10 +63,14 @@ class ParseBriefResponse(CustomBaseModel):
 class ResearchTaskCreate(CustomBaseModel):
     """创建研究任务"""
 
-    analysis_goal: str = Field(..., min_length=2, max_length=2000, description="核心研究意图，贯穿整个研究链")
+    analysis_goal: str = Field(
+        ..., min_length=2, max_length=2000, description="核心研究意图，贯穿整个研究链"
+    )
     title: str = Field(..., min_length=1, max_length=200, description="研究标题")
     brief: str | None = Field(
-        default=None, max_length=10000, description="原始 Brief 文本（可选，作为 planner 背景参考）"
+        default=None,
+        max_length=10000,
+        description="原始 Brief 文本（可选，作为 planner 背景参考）",
     )
     research_questions: list[str] | None = Field(
         default=None, description="研究问题列表（可选，plan 节点会自动生成）"
@@ -101,9 +105,7 @@ class ResearchTaskRead(CustomBaseModel):
     progress: list | None = None
     created_at: datetime
     updated_at: datetime
-    participant_ids: List[int] = Field(
-        default_factory=list, description="参与者ID列表"
-    )
+    participant_ids: List[int] = Field(default_factory=list, description="参与者ID列表")
     participant_usernames: List[str] = Field(
         default_factory=list, description="参与者用户名列表"
     )

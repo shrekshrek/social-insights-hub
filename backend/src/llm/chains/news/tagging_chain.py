@@ -83,14 +83,18 @@ NEWS_TAGGING_USER = """请对以下 {article_count} 篇新闻文章进行标注�
 def create_tagging_chain() -> Runnable:
     """创建新闻逐篇标注链"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", NEWS_TAGGING_SYSTEM),
-        ("user", NEWS_TAGGING_USER),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", NEWS_TAGGING_SYSTEM),
+            ("user", NEWS_TAGGING_USER),
+        ]
+    )
     return prompt | llm
 
 
-def format_articles_for_tagging(articles: list[dict], use_full_text: bool = False) -> str:
+def format_articles_for_tagging(
+    articles: list[dict], use_full_text: bool = False
+) -> str:
     """格式化文章内容用于标注
 
     Args:

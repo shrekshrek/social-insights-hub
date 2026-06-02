@@ -119,9 +119,7 @@ def iter_insight_claims(output: dict[str, Any]) -> list[dict[str, Any]]:
                 "statement": t.get("statement", "") or "",
                 "evidence": t.get("evidence") or [],
                 "extra": {
-                    k: v
-                    for k, v in t.items()
-                    if k not in {"statement", "evidence"}
+                    k: v for k, v in t.items() if k not in {"statement", "evidence"}
                 },
             }
         )
@@ -132,9 +130,7 @@ def iter_insight_claims(output: dict[str, Any]) -> list[dict[str, Any]]:
                 "statement": o.get("statement", "") or "",
                 "evidence": o.get("evidence") or [],
                 "extra": {
-                    k: v
-                    for k, v in o.items()
-                    if k not in {"statement", "evidence"}
+                    k: v for k, v in o.items() if k not in {"statement", "evidence"}
                 },
             }
         )

@@ -17,7 +17,14 @@ _INDEX_URL = "https://www.stats.gov.cn/sj/zxfb/"
 _BASE_URL = "https://www.stats.gov.cn"
 
 # 只抓含这些关键词的月报，过滤季报/年报/专题
-_KEYWORDS = ["居民消费价格", "工业生产者出厂价格", "国内生产总值", "社会消费品零售", "全国居民人均", "国民经济"]
+_KEYWORDS = [
+    "居民消费价格",
+    "工业生产者出厂价格",
+    "国内生产总值",
+    "社会消费品零售",
+    "全国居民人均",
+    "国民经济",
+]
 
 # Markdown 链接模式：[标题](URL) 或 [标题](URL "title")，只取 URL 部分
 _LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\s\)]+)")

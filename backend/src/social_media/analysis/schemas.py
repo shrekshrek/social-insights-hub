@@ -563,9 +563,7 @@ class TaskAnalysisCharts(CustomBaseModel):
     time_distribution: list[TimeDistributionItem] = Field(
         default_factory=list, description="时间分布"
     )
-    time_distribution_skipped: int = Field(
-        0, description="无发布时间的原文数量"
-    )
+    time_distribution_skipped: int = Field(0, description="无发布时间的原文数量")
     # 新增图表字段
     ipa_analysis: IpaAnalysis | None = None
     context_graph: ContextGraphWithDimensions | None = None

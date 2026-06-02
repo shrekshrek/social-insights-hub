@@ -114,7 +114,10 @@ async def create_research_task(
 
     logger.info(
         "创建研究任务 %d: profile=%s, analysis_goal=%s, strategy_id=%s",
-        task.id, profile_name, analysis_goal, strategy_id,
+        task.id,
+        profile_name,
+        analysis_goal,
+        strategy_id,
     )
     return task
 
@@ -292,7 +295,10 @@ async def list_research_tasks(
     if search:
         pattern = f"%{search}%"
         base = base.where(
-            or_(ResearchTask.title.ilike(pattern), ResearchTask.analysis_goal.ilike(pattern))
+            or_(
+                ResearchTask.title.ilike(pattern),
+                ResearchTask.analysis_goal.ilike(pattern),
+            )
         )
 
     # total
@@ -352,11 +358,18 @@ async def delete_research_task(db: AsyncSession, task_id: int) -> bool:
         job = await db.get(AnalysisJob, task.job_id)
         if job:
             if job.celery_task_id:
-                celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
-                logger.info("revoked celery task %s for ResearchTask %d", job.celery_task_id, task_id)
+                celery_app.control.revoke(
+                    job.celery_task_id, terminate=True, signal="SIGTERM"
+                )
+                logger.info(
+                    "revoked celery task %s for ResearchTask %d",
+                    job.celery_task_id,
+                    task_id,
+                )
             # 主动标记 AnalysisJob 为失败，避免 revoke 竞态时 job 永远停在 running
             if job.status in ("pending", "running"):
                 from datetime import datetime, timezone
+
                 job.status = "failed"
                 job.error_message = "研究任务已被删除"
                 job.completed_at = datetime.now(timezone.utc)
@@ -366,9 +379,7 @@ async def delete_research_task(db: AsyncSession, task_id: int) -> bool:
     return True
 
 
-async def get_strategy_research_synthesis(
-    db: AsyncSession, strategy_id: int
-) -> str:
+async def get_strategy_research_synthesis(db: AsyncSession, strategy_id: int) -> str:
     """获取策略关联的最新研究综合分析
 
     供 strategies/service.py 中 _retrieve_strategy_market_context 替换调用。

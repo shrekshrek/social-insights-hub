@@ -172,10 +172,12 @@ def create_big_idea_chain() -> Runnable:
     """创建 Big Idea (创意层) LLM 链 — brand_strategy 三阶段第 3 层"""
     # 创意生成任务不需要 CoT 推理，chat 模型 token 预算更稳定
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -210,9 +212,9 @@ def _slim_insight_focused(insight_result: dict, tension_id: int) -> dict:
 
     selected_tension = tensions[tension_id]
     related_opps = [
-        opp for opp in opportunities
-        if isinstance(opp, dict)
-        and tension_id in (opp.get("related_tensions") or [])
+        opp
+        for opp in opportunities
+        if isinstance(opp, dict) and tension_id in (opp.get("related_tensions") or [])
     ]
     if not related_opps and opportunities:
         related_opps = opportunities[:2]
@@ -285,7 +287,9 @@ def format_data_for_big_idea(
 
     brief_section = ""
     if brief:
-        brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        brief_section = (
+            f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        )
 
     research_context_section = _build_research_context_section(research_design)
 
@@ -299,15 +303,15 @@ def format_data_for_big_idea(
 
         subject = meta.get("subject") or None
         ref_name = (
-            slice_refs[i].get("name")
-            if slice_refs and i < len(slice_refs)
-            else None
+            slice_refs[i].get("name") if slice_refs and i < len(slice_refs) else None
         )
         slice_label = (ref_name or "").strip()
         part: dict[str, Any] = {
             "slice_index": i,
             "_source_label": (
-                f"Social Slice #{i}: {slice_label}" if slice_label else f"Social Slice #{i}"
+                f"Social Slice #{i}: {slice_label}"
+                if slice_label
+                else f"Social Slice #{i}"
             ),
             "mode": "品牌聚焦" if subject else "大盘分析",
             "subject": subject,
@@ -347,7 +351,9 @@ def format_data_for_big_idea(
                     "category": ta.get("category"),
                     "mention_count": ta.get("mention_count"),
                     "sentiment": ta.get("sentiment"),
-                    "representative_topics": (ta.get("representative_topics") or [])[:4],
+                    "representative_topics": (ta.get("representative_topics") or [])[
+                        :4
+                    ],
                 }
                 for ta in topic_aspects[:8]
                 if isinstance(ta, dict)
@@ -363,7 +369,8 @@ def format_data_for_big_idea(
                 "role": e.get("role"),
                 "heat": e.get("heat"),
                 "top_features": [
-                    f.get("text") for f in (e.get("top_features") or [])[:3]
+                    f.get("text")
+                    for f in (e.get("top_features") or [])[:3]
                     if isinstance(f, dict) and f.get("text")
                 ],
             }
@@ -379,10 +386,13 @@ def format_data_for_big_idea(
         "research_context_section": research_context_section,
         "insight_focused_section": json.dumps(
             _slim_insight_focused(insight_result, selected_tension_id),
-            ensure_ascii=False, indent=2,
+            ensure_ascii=False,
+            indent=2,
         ),
         "branch_brand_role_section": json.dumps(
-            _slim_brand_role(branch_brand_role), ensure_ascii=False, indent=2,
+            _slim_brand_role(branch_brand_role),
+            ensure_ascii=False,
+            indent=2,
         ),
         "supplementary_data": json.dumps(
             supplementary_parts, ensure_ascii=False, indent=2
@@ -413,7 +423,9 @@ def parse_big_idea_response(response_text: str) -> dict[str, Any]:
             except json.JSONDecodeError:
                 pass
             else:
-                logger.warning("Big Idea JSON 从 {...} 块中提取成功（原响应有额外内容）")
+                logger.warning(
+                    "Big Idea JSON 从 {...} 块中提取成功（原响应有额外内容）"
+                )
                 # 跳到字段补全逻辑
                 if "big_idea" not in result:
                     result["big_idea"] = {

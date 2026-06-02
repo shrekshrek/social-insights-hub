@@ -245,10 +245,12 @@ USER_TEMPLATE = """{brief_section}
 def create_research_design_chain() -> Runnable:
     """创建研究设计 LLM 链"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -312,7 +314,9 @@ def format_research_design_inputs(
     if research_channel_brief:
         lines.append(f"\n## 行业研究方向\n{research_channel_brief}")
 
-    has_framework = any([target_audiences, audience_insights, core_propositions, competitors])
+    has_framework = any(
+        [target_audiences, audience_insights, core_propositions, competitors]
+    )
     if subject or analysis_goal or constraints or has_framework:
         lines.append("\n## 研究背景（供参考）")
         if subject:
@@ -370,8 +374,7 @@ def _derive_primary_sources_and_output_type(
     campaign_strategy 不含 news_media 渠道推荐，因此其 data_plan 中不会出现 news_media 条目。
     """
     has_social = any(
-        (dp.get("channel") or "social_media") == "social_media"
-        for dp in data_plan
+        (dp.get("channel") or "social_media") == "social_media" for dp in data_plan
     )
     has_news = any((dp.get("channel") == "news_media") for dp in data_plan)
 
@@ -429,12 +432,14 @@ def _fix_platform_symmetry(
     交集为空时跳过（宁可不对称也不清空平台），并写 warning 日志。
     """
     consumer_voice_dims = [
-        dp for dp in data_plan
+        dp
+        for dp in data_plan
         if (dp.get("channel") or "social_media") == "social_media"
         and dim_type_map.get(dp.get("dimension_name", "")) == "consumer_voice"
     ]
     competitive_dims = [
-        dp for dp in data_plan
+        dp
+        for dp in data_plan
         if (dp.get("channel") or "social_media") == "social_media"
         and dim_type_map.get(dp.get("dimension_name", "")) == "competitive"
     ]
@@ -486,7 +491,10 @@ def _fix_platform_symmetry(
 # 孤儿维度按 dim_type 归位的目标切片类型
 # focused = 有 subject 的切片（品牌聚焦）；general = 无 subject 的切片（大盘分析）
 _ORPHAN_DIM_TARGETS: dict[str, tuple[str, ...]] = {
-    "competitive": ("focused", "general"),  # 与 prompt §4 对齐：品牌聚焦供质性对比 + 大盘供 SOV
+    "competitive": (
+        "focused",
+        "general",
+    ),  # 与 prompt §4 对齐：品牌聚焦供质性对比 + 大盘供 SOV
     "consumer_voice": ("focused",),
     "brand_voice": ("focused",),
     "media_narrative": ("general",),
@@ -552,7 +560,8 @@ def _fix_orphan_dimensions(
             target_indices = [0]
             logger.warning(
                 "孤儿维度「%s」(dim_type=%s) 无对应切片类型，兜底加入第一个切片「%s」",
-                dim_name, dim_type or "unknown",
+                dim_name,
+                dim_type or "unknown",
                 slice_blueprint[0].get("name", ""),
             )
 
@@ -569,7 +578,8 @@ def _fix_orphan_dimensions(
         merged = existing + [n for n in adds if n not in existing]
         logger.info(
             "孤儿维度 %s 自动追加到切片「%s」",
-            adds, sb.get("name", ""),
+            adds,
+            sb.get("name", ""),
         )
         result.append({**sb, "source_dimensions": merged})
 
@@ -615,7 +625,9 @@ def parse_research_design_response(response_text: str) -> dict[str, Any]:
     result["output_type"] = derived_type
 
     # 后端结构校正（不依赖 LLM 严格遵守 prompt）
-    dim_type_map = _build_dim_type_map(result["data_plan"], result["research_questions"])
+    dim_type_map = _build_dim_type_map(
+        result["data_plan"], result["research_questions"]
+    )
     result["data_plan"] = _fix_platform_symmetry(result["data_plan"], dim_type_map)
     result["slice_blueprint"] = _fix_orphan_dimensions(
         result["data_plan"], result["slice_blueprint"], dim_type_map

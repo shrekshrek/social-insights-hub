@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 class CrawlSource(NamedTuple):
     """单条待入库内容"""
 
-    url: str            # 原始 URL（用于去重）
+    url: str  # 原始 URL（用于去重）
     title: str
-    file_bytes: bytes   # PDF 字节 或 Markdown → UTF-8 编码字节
-    filename: str       # "report.pdf" 或 "content.md"
-    source_meta: dict   # 年份、期次等元信息
+    file_bytes: bytes  # PDF 字节 或 Markdown → UTF-8 编码字节
+    filename: str  # "report.pdf" 或 "content.md"
+    source_meta: dict  # 年份、期次等元信息
 
 
 class BaseCrawler(ABC):
@@ -60,7 +60,9 @@ class BaseCrawler(ABC):
                 if not skipped:
                     count += 1
             except Exception as e:
-                logger.warning("[%s] upsert 失败 url=%s: %s", self.source_type, src.url, e)
+                logger.warning(
+                    "[%s] upsert 失败 url=%s: %s", self.source_type, src.url, e
+                )
 
         logger.info("[%s] 爬取完成，新入库 %d 篇", self.source_type, count)
         return count

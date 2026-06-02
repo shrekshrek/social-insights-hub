@@ -42,7 +42,9 @@ class NewsMonitor(Base):
     name: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True, comment="监测项目名称"
     )
-    description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="项目描述")
+    description: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="项目描述"
+    )
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True, comment="创建者用户ID"
     )

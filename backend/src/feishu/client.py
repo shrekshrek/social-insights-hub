@@ -84,9 +84,7 @@ async def _send_message_to_user(open_id: str, card: dict) -> None:
             )
             data = resp.json()
             if data.get("code", 0) != 0:
-                logger.warning(
-                    "飞书消息发送失败 (open_id=%s): %s", open_id, data
-                )
+                logger.warning("飞书消息发送失败 (open_id=%s): %s", open_id, data)
     except Exception as exc:
         logger.warning("飞书消息发送异常 (open_id=%s): %s", open_id, exc)
 

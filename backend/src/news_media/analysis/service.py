@@ -85,6 +85,7 @@ async def create_slice(
 
     if slice_obj.status == "analyzing":
         from src.news_media.tasks.tasks import run_news_slice_insight_task
+
         run_news_slice_insight_task.delay(
             slice_id=slice_obj.id,
             user_id=user_id,
@@ -223,12 +224,14 @@ def _compute_descriptive(
 
     sentiment_overall = (
         round(sum(sentiment_scores) / len(sentiment_scores), 3)
-        if sentiment_scores else None
+        if sentiment_scores
+        else None
     )
     sentiment_by_tier = {
         t: (
             round(sum(scores) / len(scores), 3)
-            if (scores := sentiment_by_tier_buckets.get(t)) else None
+            if (scores := sentiment_by_tier_buckets.get(t))
+            else None
         )
         for t in _TIER_KEYS
     }
@@ -251,14 +254,17 @@ def _compute_descriptive(
                 "date": d,
                 "sentiment_avg": (
                     round(sum(s for s, _ in v["sentiments"]) / len(v["sentiments"]), 3)
-                    if v["sentiments"] else None
+                    if v["sentiments"]
+                    else None
                 ),
                 "sentiment_weighted_by_tier": (
                     round(
                         sum(s * _TIER_WEIGHT.get(t, 1.0) for s, t in v["sentiments"])
                         / sum(_TIER_WEIGHT.get(t, 1.0) for _, t in v["sentiments"]),
                         3,
-                    ) if v["sentiments"] else None
+                    )
+                    if v["sentiments"]
+                    else None
                 ),
             }
             for d, v in by_date_count.items()
@@ -281,32 +287,31 @@ def _compute_descriptive(
 
         if unique_tasks >= 2 and url in article_by_url:
             a = article_by_url[url]
-            high_overlap.append({
-                "url": url,
-                "task_ids": sorted(set(task_ids)),
-                "title": a.title,
-                "article_id": a.id,
-                "task_count": unique_tasks,
-            })
+            high_overlap.append(
+                {
+                    "url": url,
+                    "task_ids": sorted(set(task_ids)),
+                    "title": a.title,
+                    "article_id": a.id,
+                    "task_count": unique_tasks,
+                }
+            )
     high_overlap.sort(key=lambda x: x["task_count"], reverse=True)
 
     return {
         "articles_total": sum(len(set(tids)) for tids in url_to_task_ids.values()),
         "articles_unique": len(url_to_task_ids),
         "articles_filtered": len(articles),
-
         "source_tier_distribution": tier_counts,
         "search_source_distribution": source_dist,
         "article_type_distribution": article_type_counts,
         "sentiment_distribution": sentiment_dist,
         "sentiment_overall": sentiment_overall,
         "sentiment_by_tier": sentiment_by_tier,
-
         "cross_task_overlap": {
             "distribution": overlap_counts,
             "high_overlap_articles": high_overlap[:20],
         },
-
         "coverage_timeseries": coverage_timeseries,
         "sentiment_timeseries": sentiment_timeseries,
     }
@@ -402,7 +407,9 @@ def _compute_derived(
 
     # entities 派生
     entities = _derive_entities(
-        pass1.get("entities") or [], article_by_index, article_by_id,
+        pass1.get("entities") or [],
+        article_by_index,
+        article_by_id,
     )
     # role 兜底（subject/competitors 显式列表模式可能合并变体，改变 article_ids）
     _enforce_entity_roles(entities, subject=subject, competitors=competitors)
@@ -414,7 +421,9 @@ def _compute_derived(
 
     # event_clusters 派生
     event_clusters = _derive_event_clusters(
-        pass1.get("event_clusters") or [], article_by_index, article_by_id,
+        pass1.get("event_clusters") or [],
+        article_by_index,
+        article_by_id,
     )
 
     # 把 quotes 反向挂到 entities[].top_quote_ids
@@ -458,14 +467,17 @@ def _compute_entity_sentiments(
 
     sentiment_avg = (
         round(sum(s for s, _ in sentiments) / len(sentiments), 3)
-        if sentiments else None
+        if sentiments
+        else None
     )
     weight_total = sum(_TIER_WEIGHT.get(t, 1.0) for _, t in sentiments)
     sentiment_weighted = (
         round(
             sum(s * _TIER_WEIGHT.get(t, 1.0) for s, t in sentiments) / weight_total,
             3,
-        ) if weight_total > 0 else None
+        )
+        if weight_total > 0
+        else None
     )
 
     by_tier_buckets: dict[str, list[float]] = defaultdict(list)
@@ -474,7 +486,8 @@ def _compute_entity_sentiments(
     sentiment_by_tier = {
         t: (
             round(sum(buckets) / len(buckets), 3)
-            if (buckets := by_tier_buckets.get(t)) else None
+            if (buckets := by_tier_buckets.get(t))
+            else None
         )
         for t in _TIER_KEYS
     }
@@ -512,25 +525,31 @@ def _derive_entities(
                 rep_article_ids.append(a.id)
 
         sentiment_fields = _compute_entity_sentiments(article_ids, article_by_id)
-        derived.append({
-            "name": e.get("name"),
-            "role": e.get("role", "context"),
-            "mention_count": len(article_ids),
-            "source_count": sentiment_fields["source_count"],
-            "cross_task_count": 0,  # 后面补
-            "article_ids": article_ids,
-            "representative_article_ids": rep_article_ids[:5],
-            "sentiment_avg": sentiment_fields["sentiment_avg"],
-            "sentiment_weighted_by_tier": sentiment_fields["sentiment_weighted_by_tier"],
-            "sentiment_by_tier": sentiment_fields["sentiment_by_tier"],
-            "top_quote_ids": [],  # 后面补
-        })
+        derived.append(
+            {
+                "name": e.get("name"),
+                "role": e.get("role", "context"),
+                "mention_count": len(article_ids),
+                "source_count": sentiment_fields["source_count"],
+                "cross_task_count": 0,  # 后面补
+                "article_ids": article_ids,
+                "representative_article_ids": rep_article_ids[:5],
+                "sentiment_avg": sentiment_fields["sentiment_avg"],
+                "sentiment_weighted_by_tier": sentiment_fields[
+                    "sentiment_weighted_by_tier"
+                ],
+                "sentiment_by_tier": sentiment_fields["sentiment_by_tier"],
+                "top_quote_ids": [],  # 后面补
+            }
+        )
 
-    derived.sort(key=lambda x: (
-        # target 排第一，competitor 第二，按 mention_count 降序
-        {"target": 0, "competitor": 1, "context": 2}.get(x["role"], 9),
-        -x["mention_count"],
-    ))
+    derived.sort(
+        key=lambda x: (
+            # target 排第一，competitor 第二，按 mention_count 降序
+            {"target": 0, "competitor": 1, "context": 2}.get(x["role"], 9),
+            -x["mention_count"],
+        )
+    )
     return derived
 
 
@@ -545,7 +564,8 @@ def _recompute_entity_sentiments(
     """
     for e in entities:
         sentiment_fields = _compute_entity_sentiments(
-            e.get("article_ids") or [], article_by_id,
+            e.get("article_ids") or [],
+            article_by_id,
         )
         e["source_count"] = sentiment_fields["source_count"]
         e["sentiment_avg"] = sentiment_fields["sentiment_avg"]
@@ -566,16 +586,18 @@ def _derive_quotes(
         a = article_by_index.get(idx) if idx is not None else None
         if a is None:
             continue
-        derived.append({
-            "speaker": q.get("speaker"),
-            "speaker_role": q.get("speaker_role", "other"),
-            "quote": q.get("quote"),
-            "context": q.get("context", ""),
-            "article_id": a.id,
-            "source_name": a.source_name,
-            "source_tier": a.source_tier or "tier3",
-            "published_at": str(a.published_at) if a.published_at else None,
-        })
+        derived.append(
+            {
+                "speaker": q.get("speaker"),
+                "speaker_role": q.get("speaker_role", "other"),
+                "quote": q.get("quote"),
+                "context": q.get("context", ""),
+                "article_id": a.id,
+                "source_name": a.source_name,
+                "source_tier": a.source_tier or "tier3",
+                "published_at": str(a.published_at) if a.published_at else None,
+            }
+        )
     return derived
 
 
@@ -607,19 +629,28 @@ def _derive_event_clusters(
         first = min(with_time, key=lambda a: a.published_at, default=None)
         first_reported_at = str(first.published_at) if first else None
         first_reporter = (
-            {"source_name": first.source_name, "source_tier": first.source_tier or "tier3"}
-            if first else None
+            {
+                "source_name": first.source_name,
+                "source_tier": first.source_tier or "tier3",
+            }
+            if first
+            else None
         )
 
         # peak_date：文章数最多的日期
         date_counts: dict[str, int] = defaultdict(int)
         for a in with_time:
             date_counts[a.published_at.strftime("%Y-%m-%d")] += 1
-        peak_date = max(date_counts.items(), key=lambda x: x[1])[0] if date_counts else None
+        peak_date = (
+            max(date_counts.items(), key=lambda x: x[1])[0] if date_counts else None
+        )
 
         # 加权热度
         tier_weighted = round(
-            sum(_TIER_WEIGHT.get(a.source_tier or "tier3", 1.0) for a in cluster_articles),
+            sum(
+                _TIER_WEIGHT.get(a.source_tier or "tier3", 1.0)
+                for a in cluster_articles
+            ),
             2,
         )
 
@@ -636,17 +667,19 @@ def _derive_event_clusters(
         )
         rep_article_ids = [a.id for a in cluster_articles_sorted[:5]]
 
-        derived.append({
-            "cluster_id": cid,
-            "article_ids": article_ids,
-            "article_count": len(article_ids),
-            "first_reported_at": first_reported_at,
-            "first_reporter": first_reporter,
-            "peak_date": peak_date,
-            "tier_weighted_score": tier_weighted,
-            "in_task_ids": in_task_ids,
-            "representative_article_ids": rep_article_ids,
-        })
+        derived.append(
+            {
+                "cluster_id": cid,
+                "article_ids": article_ids,
+                "article_count": len(article_ids),
+                "first_reported_at": first_reported_at,
+                "first_reporter": first_reporter,
+                "peak_date": peak_date,
+                "tier_weighted_score": tier_weighted,
+                "in_task_ids": in_task_ids,
+                "representative_article_ids": rep_article_ids,
+            }
+        )
 
     derived.sort(key=lambda x: x["tier_weighted_score"], reverse=True)
     # 重排 cluster_id 保证连续（影响 Pass 2 输入与输出对齐）
@@ -664,17 +697,24 @@ def _attach_top_quote_ids_to_entities(
 
     quote 的 "id" 这里用 list 中的下标。
     """
-    speaker_priority = {"official": 0, "executive": 1, "analyst": 2, "kol": 3, "other": 4}
+    speaker_priority = {
+        "official": 0,
+        "executive": 1,
+        "analyst": 2,
+        "kol": 3,
+        "other": 4,
+    }
     for e in entities:
         eid_set = set(e.get("article_ids") or [])
         candidates = [
-            (i, q) for i, q in enumerate(quotes)
-            if q.get("article_id") in eid_set
+            (i, q) for i, q in enumerate(quotes) if q.get("article_id") in eid_set
         ]
-        candidates.sort(key=lambda iq: (
-            speaker_priority.get(iq[1].get("speaker_role", "other"), 9),
-            _TIER_PRIORITY.get(iq[1].get("source_tier", "tier3"), 9),
-        ))
+        candidates.sort(
+            key=lambda iq: (
+                speaker_priority.get(iq[1].get("speaker_role", "other"), 9),
+                _TIER_PRIORITY.get(iq[1].get("source_tier", "tier3"), 9),
+            )
+        )
         e["top_quote_ids"] = [i for i, _ in candidates[:5]]
 
 
@@ -687,7 +727,7 @@ def _attach_cross_task_count_to_entities(
     url_by_id = {a.id: a.url for a in article_by_id.values()}
     for e in entities:
         task_ids: set[int] = set()
-        for aid in (e.get("article_ids") or []):
+        for aid in e.get("article_ids") or []:
             url = url_by_id.get(aid)
             if url:
                 for tid in url_to_task_ids.get(url, []):
@@ -705,15 +745,22 @@ def _compute_media_landscape(articles: list) -> dict:
     for tier in _TIER_KEYS:
         tier_articles = by_tier.get(tier, [])
         sentiments = [a.sentiment for a in tier_articles if a.sentiment is not None]
-        sentiment_avg = round(sum(sentiments) / len(sentiments), 3) if sentiments else None
+        sentiment_avg = (
+            round(sum(sentiments) / len(sentiments), 3) if sentiments else None
+        )
 
         source_counts: dict[str, int] = defaultdict(int)
         for a in tier_articles:
             if a.source_name:
                 source_counts[a.source_name] += 1
-        top_sources = [s for s, _ in sorted(
-            source_counts.items(), key=lambda x: x[1], reverse=True,
-        )[:3]]
+        top_sources = [
+            s
+            for s, _ in sorted(
+                source_counts.items(),
+                key=lambda x: x[1],
+                reverse=True,
+            )[:3]
+        ]
 
         rep_articles = [
             {
@@ -722,16 +769,19 @@ def _compute_media_landscape(articles: list) -> dict:
                 "url": a.url,
                 "source_name": a.source_name,
             }
-            for a in tier_articles[:3] if a.title
+            for a in tier_articles[:3]
+            if a.title
         ]
 
-        pyramid.append({
-            "tier": tier,
-            "article_count": len(tier_articles),
-            "sentiment_avg": sentiment_avg,
-            "top_source_names": top_sources,
-            "representative_articles": rep_articles,
-        })
+        pyramid.append(
+            {
+                "tier": tier,
+                "article_count": len(tier_articles),
+                "sentiment_avg": sentiment_avg,
+                "top_source_names": top_sources,
+                "representative_articles": rep_articles,
+            }
+        )
 
     # 全局 top sources
     global_source_counts: dict[str, int] = defaultdict(int)
@@ -741,7 +791,9 @@ def _compute_media_landscape(articles: list) -> dict:
     total = sum(global_source_counts.values()) or 1
     top_sources_global = [
         {"name": s, "count": c, "share": round(c / total, 3)}
-        for s, c in sorted(global_source_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        for s, c in sorted(
+            global_source_counts.items(), key=lambda x: x[1], reverse=True
+        )[:5]
     ]
 
     return {
@@ -770,18 +822,22 @@ def _compute_competitive(entities: list[dict], quotes: list[dict]) -> dict:
 
     players: list[dict] = []
     for p in players_raw:
-        players.append({
-            "name": p.get("name"),
-            "role": p.get("role"),
-            "tier_weighted_sov": round(p.get("mention_count", 0) / total_mentions, 3),
-            "mention_count": p.get("mention_count", 0),
-            "source_count": p.get("source_count", 0),
-            "cross_task_count": p.get("cross_task_count", 0),
-            "sentiment_avg": p.get("sentiment_avg"),
-            "sentiment_by_tier": p.get("sentiment_by_tier"),
-            "article_ids": p.get("article_ids", []),  # 供前端下钻
-            "top_quote_ids": p.get("top_quote_ids", []),
-        })
+        players.append(
+            {
+                "name": p.get("name"),
+                "role": p.get("role"),
+                "tier_weighted_sov": round(
+                    p.get("mention_count", 0) / total_mentions, 3
+                ),
+                "mention_count": p.get("mention_count", 0),
+                "source_count": p.get("source_count", 0),
+                "cross_task_count": p.get("cross_task_count", 0),
+                "sentiment_avg": p.get("sentiment_avg"),
+                "sentiment_by_tier": p.get("sentiment_by_tier"),
+                "article_ids": p.get("article_ids", []),  # 供前端下钻
+                "top_quote_ids": p.get("top_quote_ids", []),
+            }
+        )
 
     # quote_share：以 player name 匹配 quote.speaker / quote.context 中的实体
     quote_share: list[dict] = []
@@ -790,16 +846,24 @@ def _compute_competitive(entities: list[dict], quotes: list[dict]) -> dict:
         quote_count = 0
         official_count = 0
         for q in quotes:
-            text = (q.get("speaker") or "") + " " + (q.get("quote") or "") + " " + (q.get("context") or "")
+            text = (
+                (q.get("speaker") or "")
+                + " "
+                + (q.get("quote") or "")
+                + " "
+                + (q.get("context") or "")
+            )
             if name and name.lower() in text.lower():
                 quote_count += 1
                 if q.get("speaker_role") == "official":
                     official_count += 1
-        quote_share.append({
-            "name": name,
-            "quote_count": quote_count,
-            "official_quote_count": official_count,
-        })
+        quote_share.append(
+            {
+                "name": name,
+                "quote_count": quote_count,
+                "official_quote_count": official_count,
+            }
+        )
 
     return {"players": players, "quote_share": quote_share}
 
@@ -891,26 +955,30 @@ def _enforce_entity_roles(
 
     # target 即使 0 提及也保留
     if subject and not any(e.get("role") == "target" for e in merged_canonical):
-        merged_canonical.append({
-            "name": subject,
-            "role": "target",
-            "mention_count": 0,
-            "source_count": 0,
-            "cross_task_count": 0,
-            "article_ids": [],
-            "representative_article_ids": [],
-            "sentiment_avg": None,
-            "sentiment_weighted_by_tier": None,
-            "sentiment_by_tier": {t: None for t in _TIER_KEYS},
-            "top_quote_ids": [],
-        })
+        merged_canonical.append(
+            {
+                "name": subject,
+                "role": "target",
+                "mention_count": 0,
+                "source_count": 0,
+                "cross_task_count": 0,
+                "article_ids": [],
+                "representative_article_ids": [],
+                "sentiment_avg": None,
+                "sentiment_weighted_by_tier": None,
+                "sentiment_by_tier": {t: None for t in _TIER_KEYS},
+                "top_quote_ids": [],
+            }
+        )
 
     # 重排：target → competitor → context（mention 降序）
     new_entities = merged_canonical + other_entities
-    new_entities.sort(key=lambda x: (
-        {"target": 0, "competitor": 1, "context": 2}.get(x.get("role"), 9),
-        -x.get("mention_count", 0),
-    ))
+    new_entities.sort(
+        key=lambda x: (
+            {"target": 0, "competitor": 1, "context": 2}.get(x.get("role"), 9),
+            -x.get("mention_count", 0),
+        )
+    )
     entities[:] = new_entities
 
 
@@ -929,14 +997,18 @@ def _merge_entity_records(bucket: list[dict]) -> dict:
                 seen_aids.add(aid)
                 merged_article_ids.append(aid)
 
-    rep_ids = list({aid for e in bucket for aid in (e.get("representative_article_ids") or [])})
+    rep_ids = list(
+        {aid for e in bucket for aid in (e.get("representative_article_ids") or [])}
+    )
 
     return {
         "name": bucket[0].get("name"),
         "role": bucket[0].get("role", "context"),
         "mention_count": len(merged_article_ids),
         "source_count": 0,  # _recompute_entity_sentiments 会重算
-        "cross_task_count": max((e.get("cross_task_count", 0) for e in bucket), default=0),
+        "cross_task_count": max(
+            (e.get("cross_task_count", 0) for e in bucket), default=0
+        ),
         "article_ids": merged_article_ids,
         "representative_article_ids": rep_ids[:5],
         "sentiment_avg": None,
@@ -971,22 +1043,27 @@ async def _run_pass2_safely(
 
     try:
         chain = create_pass2_chain()
-        response = await chain.ainvoke({
-            "analysis_goal": analysis_goal,
-            "subject": subject or "（独立监测，无指定主体）",
-            "articles_filtered": descriptive.get("articles_filtered"),
-            "source_tier_dist": descriptive.get("source_tier_distribution"),
-            "search_source_dist": descriptive.get("search_source_distribution"),
-            "article_type_dist": descriptive.get("article_type_distribution"),
-            "sentiment_dist": descriptive.get("sentiment_distribution"),
-            "sentiment_overall": descriptive.get("sentiment_overall"),
-            "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
-            "entities_block": format_entities_for_pass2(derived.get("entities") or []),
-            "quotes_block": format_quotes_for_pass2(derived.get("quotes") or []),
-            "events_block": format_events_for_pass2(
-                derived.get("event_clusters") or [], article_titles_by_id,
-            ),
-        })
+        response = await chain.ainvoke(
+            {
+                "analysis_goal": analysis_goal,
+                "subject": subject or "（独立监测，无指定主体）",
+                "articles_filtered": descriptive.get("articles_filtered"),
+                "source_tier_dist": descriptive.get("source_tier_distribution"),
+                "search_source_dist": descriptive.get("search_source_distribution"),
+                "article_type_dist": descriptive.get("article_type_distribution"),
+                "sentiment_dist": descriptive.get("sentiment_distribution"),
+                "sentiment_overall": descriptive.get("sentiment_overall"),
+                "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+                "entities_block": format_entities_for_pass2(
+                    derived.get("entities") or []
+                ),
+                "quotes_block": format_quotes_for_pass2(derived.get("quotes") or []),
+                "events_block": format_events_for_pass2(
+                    derived.get("event_clusters") or [],
+                    article_titles_by_id,
+                ),
+            }
+        )
         token_usage = (response.response_metadata or {}).get("token_usage")
         parsed = _parse_pass2_output(response.content)
         return {"data": parsed, "token_usage": token_usage}
@@ -1016,8 +1093,12 @@ def _parse_pass2_output(content: str) -> dict:
         return {}
 
     return {
-        "briefing": parsed.get("briefing") if isinstance(parsed.get("briefing"), dict) else {},
-        "event_titles": parsed.get("event_titles") if isinstance(parsed.get("event_titles"), dict) else {},
+        "briefing": parsed.get("briefing")
+        if isinstance(parsed.get("briefing"), dict)
+        else {},
+        "event_titles": parsed.get("event_titles")
+        if isinstance(parsed.get("event_titles"), dict)
+        else {},
     }
 
 

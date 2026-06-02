@@ -67,9 +67,11 @@ def _extract_username(request: Request) -> str | None:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None
-    token = auth_header[len("Bearer "):]
+    token = auth_header[len("Bearer ") :]
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
         return payload.get("sub")
     except JWTError:
         return None

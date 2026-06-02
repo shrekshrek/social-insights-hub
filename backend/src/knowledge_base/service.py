@@ -96,7 +96,9 @@ def chunk_text(
     return chunks
 
 
-async def process_document(db: AsyncSession, doc_id: int, embedding_svc: EmbeddingService | None = None) -> None:
+async def process_document(
+    db: AsyncSession, doc_id: int, embedding_svc: EmbeddingService | None = None
+) -> None:
     """解析 → 分块 → 向量化 → 批量写入 knowledge_chunks → 更新 status=ready
 
     异常时 status=failed + error_message，不抛出（Celery 任务不重试）。
@@ -124,7 +126,10 @@ async def process_document(db: AsyncSession, doc_id: int, embedding_svc: Embeddi
 
         # 保存原始文件到磁盘（供查看原文使用）
         from pathlib import Path
-        storage_dir = Path("/app/storage/knowledge_base") / (doc.source_type or "upload")
+
+        storage_dir = Path("/app/storage/knowledge_base") / (
+            doc.source_type or "upload"
+        )
         storage_dir.mkdir(parents=True, exist_ok=True)
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
         saved_path = storage_dir / f"{doc_id}.{ext}"
@@ -153,7 +158,9 @@ async def process_document(db: AsyncSession, doc_id: int, embedding_svc: Embeddi
             await db.delete(old_chunk)
 
         # 批量写入新分块
-        for idx, (content, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
+        for idx, (content, embedding) in enumerate(
+            zip(chunks, embeddings, strict=True)
+        ):
             db.add(
                 KnowledgeChunk(
                     document_id=doc_id,
@@ -212,17 +219,23 @@ async def retrieve_market_context(
 
         # pgvector 余弦相似度（<=> 操作符）
         # 过滤条件：平台公共 OR 用户私有
-        filter_cond = or_(
-            KnowledgeDocument.workspace_id.is_(None),
-            KnowledgeDocument.workspace_id == user_id,
-        ) if user_id is not None else KnowledgeDocument.workspace_id.is_(None)
+        filter_cond = (
+            or_(
+                KnowledgeDocument.workspace_id.is_(None),
+                KnowledgeDocument.workspace_id == user_id,
+            )
+            if user_id is not None
+            else KnowledgeDocument.workspace_id.is_(None)
+        )
 
         stmt = (
             select(
                 KnowledgeChunk.content,
                 KnowledgeChunk.chunk_index,
                 KnowledgeDocument.title,
-                (1 - KnowledgeChunk.embedding.cosine_distance(query_vec)).label("score"),
+                (1 - KnowledgeChunk.embedding.cosine_distance(query_vec)).label(
+                    "score"
+                ),
             )
             .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
             .where(KnowledgeDocument.status == "ready")
@@ -240,7 +253,8 @@ async def retrieve_market_context(
                 top_score = max((r.score or 0) for r in rows)
                 logger.info(
                     "retrieve_market_context: top_score=%.3f 未达阈值 %.2f，降级为空",
-                    top_score, _RAG_MIN_SCORE,
+                    top_score,
+                    _RAG_MIN_SCORE,
                 )
             return ""
 
@@ -283,7 +297,9 @@ async def list_documents(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar() or 0
 
-    query = query.order_by(KnowledgeDocument.created_at.desc()).offset(skip).limit(limit)
+    query = (
+        query.order_by(KnowledgeDocument.created_at.desc()).offset(skip).limit(limit)
+    )
     result = await db.execute(query)
     items = list(result.scalars().all())
 
@@ -298,6 +314,7 @@ async def get_document(db: AsyncSession, doc_id: int) -> KnowledgeDocument | Non
 async def delete_document(db: AsyncSession, doc: KnowledgeDocument) -> None:
     """删除文档及所有分块（CASCADE），同时清理磁盘文件"""
     import os
+
     file_path = doc.file_path
     await db.delete(doc)
     await db.commit()

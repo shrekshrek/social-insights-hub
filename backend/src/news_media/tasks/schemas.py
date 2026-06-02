@@ -163,5 +163,7 @@ class NewsArticleReadWithTask(NewsArticleRead):
             created_at=article.created_at,
             updated_at=article.updated_at,
             task_name=article.task.name if article.task else None,
-            monitor_name=article.task.monitor.name if article.task and article.task.monitor else None,
+            monitor_name=article.task.monitor.name
+            if article.task and article.task.monitor
+            else None,
         )

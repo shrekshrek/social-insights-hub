@@ -395,8 +395,10 @@ def aggregate_task_analysis(
     # (1) 关联网络 (Context Graph) - 以 Top 1 Target 实体为中心
     # 节点包括：人群、场景、产品属性(features/issues)、话题、竞品
     context_graph = build_context_graph(
-        top_target_full, aggregated_opinions, competitor_entities_full,
-        spam_map=spam_map
+        top_target_full,
+        aggregated_opinions,
+        competitor_entities_full,
+        spam_map=spam_map,
     )
 
     # (2) 产品力诊断 (IPA) - 使用 opinions + target 实体的 features/issues
@@ -404,17 +406,18 @@ def aggregate_task_analysis(
 
     # (3) 竞品雷达 (Competitor Radar)
     competitor_radar = analyze_competitor_radar(
-        top_target_full, competitor_entities_full, aggregated_entities,
-        spam_map=spam_map, posts_data=posts_data
+        top_target_full,
+        competitor_entities_full,
+        aggregated_entities,
+        spam_map=spam_map,
+        posts_data=posts_data,
     )
 
     # (4) KOL 声音提取
     kol_voices = extract_kol_voices(posts_data, db, top_n=10)
 
     # 9. NSR 按 spam 分组拆分
-    screened_posts_list = [
-        p for p in posts_data if p.get("spam_score") is not None
-    ]
+    screened_posts_list = [p for p in posts_data if p.get("spam_score") is not None]
     nsr_by_spam = None
     if screened_posts_list:
         high_spam_posts = [

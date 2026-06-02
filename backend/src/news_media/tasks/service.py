@@ -94,9 +94,13 @@ async def get_news_tasks(
     """获取新闻任务列表"""
     skip = (page - 1) * page_size
     return await crud.get_tasks(
-        db, skip=skip, limit=page_size,
-        monitor_id=monitor_id, status=status_filter,
-        phase=phase, search=search,
+        db,
+        skip=skip,
+        limit=page_size,
+        monitor_id=monitor_id,
+        status=status_filter,
+        phase=phase,
+        search=search,
     )
 
 
@@ -231,7 +235,7 @@ def _tag_articles_batch_sync(
 
     batch_size = settings.CELERY_AI_NEWS_TAGGING_BATCH_SIZE
     for i in range(0, len(articles), batch_size):
-        batch = articles[i:i + batch_size]
+        batch = articles[i : i + batch_size]
         batch_dicts = [
             {
                 "title": a.title,
@@ -242,17 +246,22 @@ def _tag_articles_batch_sync(
             for a in batch
         ]
 
-        articles_content = format_articles_for_tagging(batch_dicts, use_full_text=use_full_text)
+        articles_content = format_articles_for_tagging(
+            batch_dicts, use_full_text=use_full_text
+        )
         batch_start = time.time()
-        response = chain.invoke({
-            "analysis_goal": analysis_goal,
-            "subject": subject_str,
-            "competitors": competitors_str,
-            "article_count": len(batch),
-            "articles_content": articles_content,
-        })
+        response = chain.invoke(
+            {
+                "analysis_goal": analysis_goal,
+                "subject": subject_str,
+                "competitors": competitors_str,
+                "article_count": len(batch),
+                "articles_content": articles_content,
+            }
+        )
         batch_usage = extract_token_usage(
-            response, duration_seconds=time.time() - batch_start,
+            response,
+            duration_seconds=time.time() - batch_start,
         )
         token_usage = merge_token_usage_stats(token_usage, batch_usage)
 
@@ -364,35 +373,39 @@ def _compute_task_stats(articles: list) -> dict:
                 bucket["sentiments"].append(a.sentiment)
 
         # 实体原始计数（不归一，归一是 slice 的事）
-        for ent in (a.mentioned_entities or []):
+        for ent in a.mentioned_entities or []:
             name = (ent or {}).get("name", "")
             if name:
                 entity_mentions[name] = entity_mentions.get(name, 0) + 1
 
-        for q in (a.key_quotes or []):
+        for q in a.key_quotes or []:
             speaker = (q or {}).get("speaker", "")
             quote_text = (q or {}).get("quote", "")
             if speaker and quote_text:
-                quotes_with_priority.append((
-                    _TIER_PRIORITY.get(tier, 99),
-                    {
-                        "speaker": speaker,
-                        "quote": quote_text,
-                        "source_name": a.source_name,
-                        "source_tier": tier,
-                        "article_id": a.id,
-                    },
-                ))
+                quotes_with_priority.append(
+                    (
+                        _TIER_PRIORITY.get(tier, 99),
+                        {
+                            "speaker": speaker,
+                            "quote": quote_text,
+                            "source_name": a.source_name,
+                            "source_tier": tier,
+                            "article_id": a.id,
+                        },
+                    )
+                )
 
     sentiment_overall = (
         round(sum(sentiment_scores) / len(sentiment_scores), 3)
-        if sentiment_scores else None
+        if sentiment_scores
+        else None
     )
 
     sentiment_by_tier = {
         t: (
             round(sum(scores) / len(scores), 3)
-            if (scores := sentiment_by_tier_buckets.get(t)) else None
+            if (scores := sentiment_by_tier_buckets.get(t))
+            else None
         )
         for t in _TIER_KEYS
     }
@@ -405,7 +418,8 @@ def _compute_task_stats(articles: list) -> dict:
                 "count_by_tier": v["by_tier"],
                 "sentiment_avg": (
                     round(sum(v["sentiments"]) / len(v["sentiments"]), 3)
-                    if v["sentiments"] else None
+                    if v["sentiments"]
+                    else None
                 ),
             }
             for d, v in by_date.items()
@@ -454,7 +468,8 @@ def execute_news_probe_sync(
 
         raw_counts: dict[str, int] = {}
         articles = _search_and_store_articles_sync(
-            db, task,
+            db,
+            task,
             max_results=_PROBE_MAX_RESULTS,
             channels=_resolve_channels(task),
             raw_counts_out=raw_counts,
@@ -486,7 +501,8 @@ def execute_news_probe_sync(
         db.flush()
         logger.info(
             "NewsTask %d: probe completed, %d articles",
-            task.id, task.articles_count,
+            task.id,
+            task.articles_count,
         )
 
     except Exception as e:
@@ -496,4 +512,3 @@ def execute_news_probe_sync(
         db.flush()
         logger.error("NewsTask %d: probe failed: %s", task.id, e, exc_info=True)
         raise
-

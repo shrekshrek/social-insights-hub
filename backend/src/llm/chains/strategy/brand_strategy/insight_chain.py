@@ -207,10 +207,12 @@ USER_TEMPLATE = """{brief_section}
 def create_insight_chain() -> Runnable:
     """创建 Insight (洞察层) LLM 链 — brand_strategy 三阶段第 1 层"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -232,11 +234,13 @@ def _compute_cross_slice_anomalies(slice_parts: list[dict]) -> list[dict]:
             name = e.get("name")
             sentiment = e.get("sentiment")
             if name and sentiment is not None:
-                entity_sentiment_map.setdefault(name, []).append({
-                    "slice_index": s["slice_index"],
-                    "mode": s["mode"],
-                    "sentiment": sentiment,
-                })
+                entity_sentiment_map.setdefault(name, []).append(
+                    {
+                        "slice_index": s["slice_index"],
+                        "mode": s["mode"],
+                        "sentiment": sentiment,
+                    }
+                )
 
     anomalies: list[dict] = []
     for name, records in entity_sentiment_map.items():
@@ -245,16 +249,18 @@ def _compute_cross_slice_anomalies(slice_parts: list[dict]) -> list[dict]:
         sentiments = [r["sentiment"] for r in records]
         delta = max(sentiments) - min(sentiments)
         if delta >= 0.5:
-            anomalies.append({
-                "type": "entity_sentiment_divergence",
-                "entity": name,
-                "delta": round(delta, 2),
-                "detail": records,
-                "insight_hint": (
-                    f"「{name}」跨切片情感落差 {delta:.2f}，"
-                    "可能反映场景/人群差异，值得交叉分析"
-                ),
-            })
+            anomalies.append(
+                {
+                    "type": "entity_sentiment_divergence",
+                    "entity": name,
+                    "delta": round(delta, 2),
+                    "detail": records,
+                    "insight_hint": (
+                        f"「{name}」跨切片情感落差 {delta:.2f}，"
+                        "可能反映场景/人群差异，值得交叉分析"
+                    ),
+                }
+            )
 
     # 按落差降序，最多返回 5 条
     anomalies.sort(key=lambda x: x["delta"], reverse=True)
@@ -308,48 +314,50 @@ def _format_news_media_section(
             else None
         )
         slice_label = ref_name or ns.get("name") or ""
-        all_insights.append({
-            "_source_label": f"News Slice #{idx}: {slice_label}".strip(": "),
-            "slice_name": slice_label,
-            "article_count": descriptive.get("articles_filtered", 0),
-            "source_tier_distribution": descriptive.get("source_tier_distribution"),
-            "sentiment_overall": descriptive.get("sentiment_overall"),
-            "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
-            "source_pyramid": media_landscape.get("source_pyramid"),
-            # 实体清单（已归一 + role 标注）
-            "entities": [
-                {
-                    "name": e.get("name"),
-                    "role": e.get("role"),
-                    "mention_count": e.get("mention_count"),
-                    "source_count": e.get("source_count"),
-                    "cross_task_count": e.get("cross_task_count"),
-                    "sentiment_avg": e.get("sentiment_avg"),
-                    "sentiment_by_tier": e.get("sentiment_by_tier"),
-                }
-                # 新闻切片 entities 上限 30（pass1_chain），取 [:15] 覆盖 target+competitor+
-                # 高 mention context；规模上限 30 时 [:15] 已含全部 source>=2 实体
-                for e in (rd.get("entities") or [])[:15]
-            ],
-            # 引述（已 speaker 分级，原文 + 来源 + 文章 ID 锚点）
-            "key_quotes": [
-                {
-                    "speaker": q.get("speaker"),
-                    "speaker_role": q.get("speaker_role"),
-                    "quote": q.get("quote"),
-                    "source_name": q.get("source_name"),
-                    "source_tier": q.get("source_tier"),
-                }
-                # Pass 1 quotes 上限 12，取 [:12] = 全部高分级 quote
-                for q in (rd.get("quotes") or [])[:12]
-                if q.get("speaker_role") in ("official", "executive", "analyst")
-            ],
-            # 竞争投影（target / competitor 子集）
-            "competitive": {
-                "players": competitive.get("players"),
-                "quote_share": competitive.get("quote_share"),
-            },
-        })
+        all_insights.append(
+            {
+                "_source_label": f"News Slice #{idx}: {slice_label}".strip(": "),
+                "slice_name": slice_label,
+                "article_count": descriptive.get("articles_filtered", 0),
+                "source_tier_distribution": descriptive.get("source_tier_distribution"),
+                "sentiment_overall": descriptive.get("sentiment_overall"),
+                "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+                "source_pyramid": media_landscape.get("source_pyramid"),
+                # 实体清单（已归一 + role 标注）
+                "entities": [
+                    {
+                        "name": e.get("name"),
+                        "role": e.get("role"),
+                        "mention_count": e.get("mention_count"),
+                        "source_count": e.get("source_count"),
+                        "cross_task_count": e.get("cross_task_count"),
+                        "sentiment_avg": e.get("sentiment_avg"),
+                        "sentiment_by_tier": e.get("sentiment_by_tier"),
+                    }
+                    # 新闻切片 entities 上限 30（pass1_chain），取 [:15] 覆盖 target+competitor+
+                    # 高 mention context；规模上限 30 时 [:15] 已含全部 source>=2 实体
+                    for e in (rd.get("entities") or [])[:15]
+                ],
+                # 引述（已 speaker 分级，原文 + 来源 + 文章 ID 锚点）
+                "key_quotes": [
+                    {
+                        "speaker": q.get("speaker"),
+                        "speaker_role": q.get("speaker_role"),
+                        "quote": q.get("quote"),
+                        "source_name": q.get("source_name"),
+                        "source_tier": q.get("source_tier"),
+                    }
+                    # Pass 1 quotes 上限 12，取 [:12] = 全部高分级 quote
+                    for q in (rd.get("quotes") or [])[:12]
+                    if q.get("speaker_role") in ("official", "executive", "analyst")
+                ],
+                # 竞争投影（target / competitor 子集）
+                "competitive": {
+                    "players": competitive.get("players"),
+                    "quote_share": competitive.get("quote_share"),
+                },
+            }
+        )
 
     if not all_insights:
         return ""
@@ -384,7 +392,9 @@ def format_slice_data_for_insight(
     """
     brief_section = ""
     if brief:
-        brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        brief_section = (
+            f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        )
 
     research_context_section = _build_research_context_section(research_design)
 
@@ -419,21 +429,24 @@ def format_slice_data_for_insight(
                 "sentiment": e.get("sentiment"),
                 "organic_sentiment": e.get("organic_sentiment"),
                 "top_issues": [
-                    f.get("text") for f in (e.get("top_issues") or [])[:3]
+                    f.get("text")
+                    for f in (e.get("top_issues") or [])[:3]
                     if isinstance(f, dict) and f.get("text")
                 ],
             }
 
             # 场景层 + 宏观层 tension 字段（top 10 全覆盖）
             scenarios = [
-                s.get("text") for s in (e.get("top_scenarios") or [])[:3]
+                s.get("text")
+                for s in (e.get("top_scenarios") or [])[:3]
                 if isinstance(s, dict) and s.get("text")
             ]
             if scenarios:
                 entry["top_scenarios"] = scenarios
 
             market_factors = [
-                m.get("text") for m in (e.get("top_market_factors") or [])[:3]
+                m.get("text")
+                for m in (e.get("top_market_factors") or [])[:3]
                 if isinstance(m, dict) and m.get("text")
             ]
             if market_factors:
@@ -516,7 +529,11 @@ def format_slice_data_for_insight(
         # controversies 按两极均衡度降序排列（min/total 越接近 0.5 越撕裂），而非热度
         # 这样能找到真正意见分裂的话题，而非仅仅讨论量大的话题
         controversies_sorted = sorted(
-            [c for c in (topic_radar.get("controversies") or []) if isinstance(c, dict)],
+            [
+                c
+                for c in (topic_radar.get("controversies") or [])
+                if isinstance(c, dict)
+            ],
             key=_controversy_depth,
             reverse=True,
         )
@@ -586,15 +603,15 @@ def format_slice_data_for_insight(
 
         subject = meta.get("subject") or None
         ref_name = (
-            slice_refs[i].get("name")
-            if slice_refs and i < len(slice_refs)
-            else None
+            slice_refs[i].get("name") if slice_refs and i < len(slice_refs) else None
         )
         slice_label = (ref_name or "").strip()
         part: dict[str, Any] = {
             "slice_index": i,
             "_source_label": (
-                f"Social Slice #{i}: {slice_label}" if slice_label else f"Social Slice #{i}"
+                f"Social Slice #{i}: {slice_label}"
+                if slice_label
+                else f"Social Slice #{i}"
             ),
             "mode": "品牌聚焦" if subject else "大盘分析",
             "subject": subject,

@@ -14,14 +14,18 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def ensure_pipeline_state(result: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def ensure_pipeline_state(
+    result: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """确保 result_data 中存在 pipeline.stage2/stage3 的基础结构。
 
     Stage1 由 monitor_slice.py 在切片创建时同步写入 pipeline.stage1。
     Stage2 = 实体归一 / 观点归一 / 程序化衍生（异步 Celery）。
     Stage3 = LLM 报告生成（异步，stage3 为唯一追踪器，不在 stage2.steps 中重复）。
     """
-    pipeline = result.get("pipeline") if isinstance(result.get("pipeline"), dict) else {}
+    pipeline = (
+        result.get("pipeline") if isinstance(result.get("pipeline"), dict) else {}
+    )
     stage2 = pipeline.get("stage2") if isinstance(pipeline.get("stage2"), dict) else {}
     stage3 = pipeline.get("stage3") if isinstance(pipeline.get("stage3"), dict) else {}
 
@@ -57,7 +61,9 @@ def set_step(stage2: dict[str, Any], step: str, status: str, **extra: Any) -> No
     stage2["updated_at"] = now_iso()
 
 
-def format_terms_for_llm(term_counts: dict[str, int], top_k: int = TOP_TERMS_FOR_LLM) -> str:
+def format_terms_for_llm(
+    term_counts: dict[str, int], top_k: int = TOP_TERMS_FOR_LLM
+) -> str:
     items = sorted(term_counts.items(), key=lambda x: x[1], reverse=True)[:top_k]
     return "\n".join([f"- {t} ({c})" for t, c in items if t and c > 0])
 

@@ -318,7 +318,9 @@ def build_drivers_from_entities(
             org_total = int(cell["organic_pos"]) + int(cell["organic_neg"])
             if org_total > 0:
                 cell["organic_sentiment"] = round(
-                    (float(cell["organic_pos"]) - float(cell["organic_neg"])) / float(org_total), 2
+                    (float(cell["organic_pos"]) - float(cell["organic_neg"]))
+                    / float(org_total),
+                    2,
                 )
                 cell["organic_mentions"] = org_total
             else:
@@ -328,7 +330,9 @@ def build_drivers_from_entities(
             promo_total = int(cell["promo_pos"]) + int(cell["promo_neg"])
             if promo_total > 0:
                 cell["promo_sentiment"] = round(
-                    (float(cell["promo_pos"]) - float(cell["promo_neg"])) / float(promo_total), 2
+                    (float(cell["promo_pos"]) - float(cell["promo_neg"]))
+                    / float(promo_total),
+                    2,
                 )
                 cell["promo_mentions"] = promo_total
             else:

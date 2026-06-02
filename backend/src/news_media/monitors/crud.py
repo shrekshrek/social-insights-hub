@@ -66,8 +66,7 @@ async def get_monitors(
     total = (await db.execute(count_stmt)).scalar() or 0
 
     query_stmt = (
-        base_stmt
-        .options(
+        base_stmt.options(
             selectinload(NewsMonitor.owner),
             selectinload(NewsMonitor.participants),
         )
@@ -81,7 +80,10 @@ async def get_monitors(
 
 
 async def create_monitor(
-    db: AsyncSession, monitor_data: dict, user_id: int, participant_ids: list[int] | None = None
+    db: AsyncSession,
+    monitor_data: dict,
+    user_id: int,
+    participant_ids: list[int] | None = None,
 ) -> NewsMonitor:
     monitor = NewsMonitor(**monitor_data, user_id=user_id)
     db.add(monitor)
@@ -89,6 +91,7 @@ async def create_monitor(
 
     if participant_ids:
         from src.news_media.monitors.models import news_monitor_participants
+
         for pid in participant_ids:
             if pid != user_id:
                 await db.execute(

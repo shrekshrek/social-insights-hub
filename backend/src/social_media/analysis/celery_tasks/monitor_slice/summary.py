@@ -258,7 +258,5 @@ def generate_project_reports(
         "status": "completed" if ok else "failed",
         "llm": {"used": llm_used, "token_stats": token_usage},
         "reports": reports,
-        "error": None
-        if ok
-        else ("focus_report_empty" if subject else "empty_reports"),
+        "error": None if ok else ("focus_report_empty" if subject else "empty_reports"),
     }

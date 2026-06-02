@@ -47,16 +47,22 @@ async def _ensure_admin_user(db: AsyncSession) -> None:
     from src.rbac.models import UserRole, Role
 
     username = settings.ADMIN_USERNAME
-    existing = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+    existing = (
+        await db.execute(select(User).where(User.username == username))
+    ).scalar_one_or_none()
     if existing:
         return
 
     hashed = pwd_context.hash(settings.ADMIN_PASSWORD)
-    user = User(username=username, email=f"{username}@example.com", hashed_password=hashed)
+    user = User(
+        username=username, email=f"{username}@example.com", hashed_password=hashed
+    )
     db.add(user)
     await db.flush()
 
-    super_admin_role = (await db.execute(select(Role).where(Role.name == "super_admin"))).scalar_one_or_none()
+    super_admin_role = (
+        await db.execute(select(Role).where(Role.name == "super_admin"))
+    ).scalar_one_or_none()
     if super_admin_role:
         db.add(UserRole(user_id=user.id, role_id=super_admin_role.id))
 
@@ -81,7 +87,9 @@ async def lifespan(app: FastAPI):
         if (settings.ENVIRONMENT or "").lower() == "production":
             logger.critical("RBAC sync failed in production, aborting startup")
             raise
-        logger.warning("RBAC sync failed, starting with existing permissions (dev mode)")
+        logger.warning(
+            "RBAC sync failed, starting with existing permissions (dev mode)"
+        )
 
     # 确保初始超管用户存在
     try:
@@ -104,6 +112,7 @@ async def lifespan(app: FastAPI):
     scheduler = None
     try:
         from src.scheduler import create_scheduler
+
         scheduler = create_scheduler()
         scheduler.start()
         logger.info("APScheduler started")

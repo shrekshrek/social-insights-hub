@@ -22,6 +22,7 @@ async def _resolve_user_id(username: str | None) -> int | None:
         return None
     try:
         from src.auth.models import User
+
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(User.id).where(User.username == username))
             return result.scalar_one_or_none()

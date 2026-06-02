@@ -184,10 +184,12 @@ USER_TEMPLATE = """{brief_section}
 def create_landscape_chain() -> Runnable:
     """创建 Landscape (竞争格局) LLM 链 — market_report 三层第 2 层"""
     llm = get_llm(llm_type="chat")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_TEMPLATE),
-        ("user", USER_TEMPLATE),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_TEMPLATE),
+            ("user", USER_TEMPLATE),
+        ]
+    )
     return prompt | llm
 
 
@@ -236,64 +238,74 @@ def _format_news_slices_for_landscape(
             else None
         )
         slice_label = (ref_name or ns.get("name") or "").strip()
-        parts.append({
-            "_source_label": (
-                f"News Slice #{idx}: {slice_label}" if slice_label else f"News Slice #{idx}"
-            ),
-            "slice_name": ns.get("name", ""),
-            "article_count": descriptive.get("articles_filtered", 0),
-            "source_tier_distribution": descriptive.get("source_tier_distribution"),
-            "sentiment_overall": descriptive.get("sentiment_overall"),
-            "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
-            # 时序信号（最近 30 个时间点），供 momentum 判断
-            "coverage_timeseries": (descriptive.get("coverage_timeseries") or [])[-30:],
-            "sentiment_timeseries": (descriptive.get("sentiment_timeseries") or [])[-30:],
-            "media_landscape": {
-                "source_pyramid": media_landscape.get("source_pyramid"),
-                "top_sources": media_landscape.get("top_sources"),
-            },
-            "entities": [
-                {
-                    "name": e.get("name"),
-                    "role": e.get("role"),
-                    "mention_count": e.get("mention_count"),
-                    "source_count": e.get("source_count"),
-                    "cross_task_count": e.get("cross_task_count"),
-                    "sentiment_avg": e.get("sentiment_avg"),
-                    "sentiment_weighted_by_tier": e.get("sentiment_weighted_by_tier"),
-                    "sentiment_by_tier": e.get("sentiment_by_tier"),
-                }
-                for e in (rd.get("entities") or [])[:15]
-                if isinstance(e, dict)
-            ],
-            "competitive": {
-                "players": competitive.get("players"),
-                "quote_share": competitive.get("quote_share"),
-            },
-            "event_clusters_summary": [
-                {
-                    "cluster_id": c.get("cluster_id"),
-                    "article_count": c.get("article_count"),
-                    "first_reported_at": c.get("first_reported_at"),
-                    "peak_date": c.get("peak_date"),
-                    "tier_weighted_score": c.get("tier_weighted_score"),
-                }
-                for c in (rd.get("event_clusters") or [])[:8]
-                if isinstance(c, dict)
-            ],
-            "key_quotes": [
-                {
-                    "speaker": q.get("speaker"),
-                    "speaker_role": q.get("speaker_role"),
-                    "quote": q.get("quote"),
-                    "source_name": q.get("source_name"),
-                    "source_tier": q.get("source_tier"),
-                }
-                # Pass 1 quotes 上限 12，取 [:12] = 全部高分级 quote
-                for q in (rd.get("quotes") or [])[:12]
-                if q.get("speaker_role") in ("official", "executive", "analyst")
-            ],
-        })
+        parts.append(
+            {
+                "_source_label": (
+                    f"News Slice #{idx}: {slice_label}"
+                    if slice_label
+                    else f"News Slice #{idx}"
+                ),
+                "slice_name": ns.get("name", ""),
+                "article_count": descriptive.get("articles_filtered", 0),
+                "source_tier_distribution": descriptive.get("source_tier_distribution"),
+                "sentiment_overall": descriptive.get("sentiment_overall"),
+                "sentiment_by_tier": descriptive.get("sentiment_by_tier"),
+                # 时序信号（最近 30 个时间点），供 momentum 判断
+                "coverage_timeseries": (descriptive.get("coverage_timeseries") or [])[
+                    -30:
+                ],
+                "sentiment_timeseries": (descriptive.get("sentiment_timeseries") or [])[
+                    -30:
+                ],
+                "media_landscape": {
+                    "source_pyramid": media_landscape.get("source_pyramid"),
+                    "top_sources": media_landscape.get("top_sources"),
+                },
+                "entities": [
+                    {
+                        "name": e.get("name"),
+                        "role": e.get("role"),
+                        "mention_count": e.get("mention_count"),
+                        "source_count": e.get("source_count"),
+                        "cross_task_count": e.get("cross_task_count"),
+                        "sentiment_avg": e.get("sentiment_avg"),
+                        "sentiment_weighted_by_tier": e.get(
+                            "sentiment_weighted_by_tier"
+                        ),
+                        "sentiment_by_tier": e.get("sentiment_by_tier"),
+                    }
+                    for e in (rd.get("entities") or [])[:15]
+                    if isinstance(e, dict)
+                ],
+                "competitive": {
+                    "players": competitive.get("players"),
+                    "quote_share": competitive.get("quote_share"),
+                },
+                "event_clusters_summary": [
+                    {
+                        "cluster_id": c.get("cluster_id"),
+                        "article_count": c.get("article_count"),
+                        "first_reported_at": c.get("first_reported_at"),
+                        "peak_date": c.get("peak_date"),
+                        "tier_weighted_score": c.get("tier_weighted_score"),
+                    }
+                    for c in (rd.get("event_clusters") or [])[:8]
+                    if isinstance(c, dict)
+                ],
+                "key_quotes": [
+                    {
+                        "speaker": q.get("speaker"),
+                        "speaker_role": q.get("speaker_role"),
+                        "quote": q.get("quote"),
+                        "source_name": q.get("source_name"),
+                        "source_tier": q.get("source_tier"),
+                    }
+                    # Pass 1 quotes 上限 12，取 [:12] = 全部高分级 quote
+                    for q in (rd.get("quotes") or [])[:12]
+                    if q.get("speaker_role") in ("official", "executive", "analyst")
+                ],
+            }
+        )
 
     if not parts:
         return "（新闻切片数据均无有效 insight 结果）"
@@ -341,14 +353,18 @@ def format_inputs_for_landscape(
     """
     brief_section = ""
     if brief:
-        brief_section = f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        brief_section = (
+            f"## Brand Brief\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
+        )
 
     return {
         "brief_section": brief_section,
         "research_context_section": _build_research_context_section(research_design),
         "research_findings": research_findings,
         "agenda_map_section": _format_agenda_map_section(agenda_map_result),
-        "news_slice_data": _format_news_slices_for_landscape(news_slices, news_slice_refs),
+        "news_slice_data": _format_news_slices_for_landscape(
+            news_slices, news_slice_refs
+        ),
     }
 
 

@@ -31,11 +31,17 @@ PrimarySource = Literal["social_media", "news_media"]
 class ChannelPlanItem(CustomBaseModel):
     """渠道分发条目"""
 
-    type: str = Field(description="渠道类型: social_media / news_media / industry_research / creative_research")
+    type: str = Field(
+        description="渠道类型: social_media / news_media / industry_research / creative_research"
+    )
     available: bool = Field(description="当前是否可用")
-    solvable: list[str] = Field(default_factory=list, description="该渠道能解决的研究问题")
+    solvable: list[str] = Field(
+        default_factory=list, description="该渠道能解决的研究问题"
+    )
     unsolvable: list[str] = Field(default_factory=list, description="该渠道的局限")
-    channel_brief: str = Field("", description="针对该渠道的定制化研究描述，作为该渠道 research_design 的输入")
+    channel_brief: str = Field(
+        "", description="针对该渠道的定制化研究描述，作为该渠道 research_design 的输入"
+    )
 
 
 class AudienceSegment(CustomBaseModel):
@@ -47,7 +53,9 @@ class AudienceSegment(CustomBaseModel):
     反推使用，不作为 data_plan 拆分依据（详见 research_design_chain.py §1.5）。
     """
 
-    label: str = Field(..., min_length=1, description="受众标签（人群名/角色名/群体名）")
+    label: str = Field(
+        ..., min_length=1, description="受众标签（人群名/角色名/群体名）"
+    )
     description: str = Field("", description="一句话画像（不强制 demographic）")
     behavior_signals: list[str] | None = Field(
         None, description="决策驱动/触媒习惯/讨论场景（开放枚举）"
@@ -65,7 +73,10 @@ class BrandBrief(CustomBaseModel):
 
     subject: str = Field(..., min_length=1, description="研究主体（品牌/产品/品类）")
     analysis_goal: str = Field(..., min_length=1, description="分析目标")
-    constraints: str | None = Field(None, description="其他约束/备注（兜底自由文本——未抽到结构化字段的关键背景都进这里）")
+    constraints: str | None = Field(
+        None,
+        description="其他约束/备注（兜底自由文本——未抽到结构化字段的关键背景都进这里）",
+    )
     channel_plan: list[ChannelPlanItem] | None = Field(None, description="渠道分发建议")
 
     # 经典策略 Brief Framework 元素（全 Optional，brief 未提及时为 None）
@@ -94,8 +105,12 @@ class StrategyCreate(CustomBaseModel):
     """创建策略请求"""
 
     name: str = Field(..., min_length=1, max_length=255, description="策略名称")
-    brand_brief: BrandBrief | None = Field(None, description="结构化 Brand Brief（可选）")
-    participant_ids: list[int] = Field(default_factory=list, description="参与者用户ID列表")
+    brand_brief: BrandBrief | None = Field(
+        None, description="结构化 Brand Brief（可选）"
+    )
+    participant_ids: list[int] = Field(
+        default_factory=list, description="参与者用户ID列表"
+    )
 
 
 class StrategyUpdate(CustomBaseModel):
@@ -142,7 +157,9 @@ class BrandStrategyBatchGenerateRequest(CustomBaseModel):
 class DesignResearchRequest(CustomBaseModel):
     """AI 研究设计请求"""
 
-    user_input: str = Field("", description="用户补充说明（可为空，AI 将基于 Brief 直接设计）")
+    user_input: str = Field(
+        "", description="用户补充说明（可为空，AI 将基于 Brief 直接设计）"
+    )
 
 
 class ResearchDesignAdvisory(CustomBaseModel):
@@ -152,7 +169,9 @@ class ResearchDesignAdvisory(CustomBaseModel):
     不影响 confirm-research 流程，前端展示为可关闭的提示卡片。
     """
 
-    code: str = Field(description="advisory 代码，如 missing_competitive_social_dimension")
+    code: str = Field(
+        description="advisory 代码，如 missing_competitive_social_dimension"
+    )
     severity: Literal["warning"] = Field("warning", description="严重级别")
     message: str = Field(description="给用户的提示文案")
 
@@ -195,9 +214,7 @@ class ConfirmResearchRequest(CustomBaseModel):
     output_type: OutputType = Field(
         ..., description="用户显式选择的产出路径，后端会校验与 primary_sources 的一致性"
     )
-    notes_per_task: int = Field(
-        50, ge=10, le=100, description="每个任务的全量采集数量"
-    )
+    notes_per_task: int = Field(50, ge=10, le=100, description="每个任务的全量采集数量")
     probe_notes: int = Field(
         20, ge=20, le=20, description="每个任务的探测采集数量（固定 20 条）"
     )
@@ -247,7 +264,9 @@ class ResearchAgentStatus(CustomBaseModel):
     """Research Agent 任务状态（不阻塞主流程）"""
 
     has_task: bool = Field(False, description="是否有关联的研究任务")
-    status: str = Field("", description="研究任务状态: pending / running / completed / failed")
+    status: str = Field(
+        "", description="研究任务状态: pending / running / completed / failed"
+    )
     task_id: int | None = Field(None, description="研究任务 ID")
 
 
@@ -271,7 +290,9 @@ class ProbeStatusResponse(CustomBaseModel):
     news_tasks: list[NewsProbeTaskStatus] = Field(default_factory=list)
     analyzed_count: int = 0
     total_count: int = 0
-    probe_review_result: dict | None = Field(None, description="审查结果（全部分析完成后自动填充）")
+    probe_review_result: dict | None = Field(
+        None, description="审查结果（全部分析完成后自动填充）"
+    )
     strategy: "StrategyRead | None" = None
 
 
@@ -289,10 +310,16 @@ class SocialRefinementItem(CustomBaseModel):
     - 新增：task_id=None + new_keyword + dimension
     """
 
-    task_id: int | None = Field(None, description="要操作的任务 ID；为 None 时表示新增任务")
-    new_keyword: str | None = Field(None, description="新关键词；为 None 时仅移除旧任务")
+    task_id: int | None = Field(
+        None, description="要操作的任务 ID；为 None 时表示新增任务"
+    )
+    new_keyword: str | None = Field(
+        None, description="新关键词；为 None 时仅移除旧任务"
+    )
     platform: str = Field(..., description="平台代码")
-    dimension: str | None = Field(None, description="新增任务所属维度（task_id=None 时必填）")
+    dimension: str | None = Field(
+        None, description="新增任务所属维度（task_id=None 时必填）"
+    )
 
     @model_validator(mode="after")
     def validate_operation(self) -> "SocialRefinementItem":
@@ -312,9 +339,15 @@ class NewsRefinementItem(CustomBaseModel):
     - 新增：task_id=None + new_keyword + dimension
     """
 
-    task_id: int | None = Field(None, description="要操作的新闻任务 ID；为 None 时表示新增任务")
-    new_keyword: str | None = Field(None, description="新关键词；为 None 时仅移除旧任务")
-    dimension: str | None = Field(None, description="新增任务所属维度（task_id=None 时必填）")
+    task_id: int | None = Field(
+        None, description="要操作的新闻任务 ID；为 None 时表示新增任务"
+    )
+    new_keyword: str | None = Field(
+        None, description="新关键词；为 None 时仅移除旧任务"
+    )
+    dimension: str | None = Field(
+        None, description="新增任务所属维度（task_id=None 时必填）"
+    )
 
     @model_validator(mode="after")
     def validate_operation(self) -> "NewsRefinementItem":
@@ -464,7 +497,9 @@ class StrategyListItem(CustomBaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_orm_full(cls, strategy: "Strategy", slice_count: int) -> "StrategyListItem":
+    def from_orm_full(
+        cls, strategy: "Strategy", slice_count: int
+    ) -> "StrategyListItem":
         return cls(
             id=strategy.id,
             name=strategy.name,
@@ -562,7 +597,9 @@ class StrategyRead(CustomBaseModel):
 class StrategyParticipantAssignment(CustomBaseModel):
     """策略参与者批量添加请求"""
 
-    user_ids: list[int] = Field(..., min_length=1, description="要添加的参与者用户ID列表")
+    user_ids: list[int] = Field(
+        ..., min_length=1, description="要添加的参与者用户ID列表"
+    )
 
 
 StrategyListResponse = PaginatedResponse[StrategyListItem]

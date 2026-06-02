@@ -60,11 +60,16 @@ async def list_monitors(
     current_user: User = Depends(require_news_monitor_read),
 ):
     monitors, total = await service.get_news_monitors(
-        db, page=page, page_size=page_size,
-        participant_id=current_user.id, search=search,
+        db,
+        page=page,
+        page_size=page_size,
+        participant_id=current_user.id,
+        search=search,
     )
     items = [NewsMonitorReadWithOwner.from_orm_full(m) for m in monitors]
-    return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)
+    return PaginatedResponse.create(
+        items=items, total=total, page=page, page_size=page_size
+    )
 
 
 @router.get(

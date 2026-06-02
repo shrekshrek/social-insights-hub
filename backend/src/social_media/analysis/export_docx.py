@@ -24,9 +24,7 @@ def generate_slice_report_docx(slice_record: SocialSlice) -> BytesIO:
     overview_data = (
         result_data.get("layers", {}).get("landscape", {}).get("overview") or {}
     )
-    monitor_name = (
-        slice_record.monitor.name if slice_record.monitor else "未命名项目"
-    )
+    monitor_name = slice_record.monitor.name if slice_record.monitor else "未命名项目"
     slice_name = slice_record.name or f"切片 #{slice_record.id}"
     generated_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 

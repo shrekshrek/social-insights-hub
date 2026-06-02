@@ -152,7 +152,10 @@ def parse_monitor_entity_merge_response(response_text: str) -> Dict[str, Any]:
         tail = stripped[-200:] if len(stripped) > 200 else stripped
         logger.error(
             "JSON Parse Error: %s | raw_len=%d stripped_len=%d | tail=%r",
-            reason, raw_len, len(stripped), tail,
+            reason,
+            raw_len,
+            len(stripped),
+            tail,
         )
         return {
             "entities": [],

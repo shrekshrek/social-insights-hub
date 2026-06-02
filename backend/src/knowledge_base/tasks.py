@@ -30,6 +30,7 @@ def _run_async(coro):
     牵连较大；且 KB 并发度低（单文档处理），每任务一次 engine 握手开销可接受。
     """
     from gevent import get_hub
+
     return get_hub().threadpool.apply(asyncio.run, (coro,))
 
 
@@ -50,7 +51,9 @@ def process_document_task(document_id: int) -> None:
     async def _run() -> None:
         from src.knowledge_base.embedding import EmbeddingService
 
-        db_url = str(settings.DATABASE_URL).replace("postgresql+psycopg://", "postgresql+asyncpg://")
+        db_url = str(settings.DATABASE_URL).replace(
+            "postgresql+psycopg://", "postgresql+asyncpg://"
+        )
         engine = create_async_engine(db_url, poolclass=NullPool)
         svc = EmbeddingService()
         try:
@@ -77,7 +80,11 @@ async def crawl_source(source_type: str) -> dict:
 
     crawler_cls = CRAWLER_REGISTRY.get(source_type)
     if crawler_cls is None:
-        return {"source_type": source_type, "new_docs": 0, "error": f"未知来源: {source_type}"}
+        return {
+            "source_type": source_type,
+            "new_docs": 0,
+            "error": f"未知来源: {source_type}",
+        }
 
     try:
         async with AsyncSessionLocal() as db:

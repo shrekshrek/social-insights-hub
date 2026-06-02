@@ -740,4 +740,3 @@ async def invoke_llm_with_stats(
     except Exception as e:
         logger.error("Error in invoke_llm_with_stats: %s", e)
         raise
-

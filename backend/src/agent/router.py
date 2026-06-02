@@ -110,7 +110,11 @@ async def accept_task(
         return AcceptTaskResponse(ok=True, message="任务已接收")
     except HTTPException as e:
         # 返回扁平 JSON（爬虫客户端解析 ok/error_code 字段，不兼容 FastAPI 默认的 {"detail": ...} 包装）
-        content = e.detail if isinstance(e.detail, dict) else {"ok": False, "message": str(e.detail)}
+        content = (
+            e.detail
+            if isinstance(e.detail, dict)
+            else {"ok": False, "message": str(e.detail)}
+        )
         return JSONResponse(status_code=e.status_code, content=content)
 
 
@@ -162,5 +166,9 @@ async def upload_result(
         stored = await service.upload_result(db, task_id, request)
         return UploadResultResponse(ok=True, stored=stored)
     except HTTPException as e:
-        content = e.detail if isinstance(e.detail, dict) else {"ok": False, "message": str(e.detail)}
+        content = (
+            e.detail
+            if isinstance(e.detail, dict)
+            else {"ok": False, "message": str(e.detail)}
+        )
         return JSONResponse(status_code=e.status_code, content=content)

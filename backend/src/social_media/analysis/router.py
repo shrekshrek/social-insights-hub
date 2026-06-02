@@ -164,7 +164,9 @@ async def get_task_post_analyses(
     search_query: str | None = Query(None, description="关键词搜索（搜索标题和内容）"),
     search_id: int | None = Query(None, description="按原文ID精确搜索（对应表格ID列）"),
     post_ids: str | None = Query(None, description="按原文ID列表筛选（逗号分隔）"),
-    spam_group: str | None = Query(None, description="按垃圾分组筛选（high=推广/low=有机）"),
+    spam_group: str | None = Query(
+        None, description="按垃圾分组筛选（high=推广/low=有机）"
+    ),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_social_task_read),
 ):
@@ -321,7 +323,9 @@ async def list_task_analysis_jobs(
             detail="Task not found",
         )
     await monitor_crud.assert_monitor_access(
-        db, task.monitor_id, current_user.id,
+        db,
+        task.monitor_id,
+        current_user.id,
         detail="You don't have access to this task",
     )
 
@@ -577,9 +581,7 @@ async def export_monitor_slice(
 
     buf: BytesIO = generate_slice_report_docx(slice_record)
 
-    monitor_name = (
-        slice_record.monitor.name if slice_record.monitor else "report"
-    )
+    monitor_name = slice_record.monitor.name if slice_record.monitor else "report"
     slice_name = slice_record.name or f"slice_{slice_id}"
     filename = f"{monitor_name}_{slice_name}.docx"
     encoded_filename = quote(filename)
@@ -588,9 +590,7 @@ async def export_monitor_slice(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={
-            "Content-Disposition": (
-                f"attachment; filename*=UTF-8''{encoded_filename}"
-            ),
+            "Content-Disposition": (f"attachment; filename*=UTF-8''{encoded_filename}"),
         },
     )
 

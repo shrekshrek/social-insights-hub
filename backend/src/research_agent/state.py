@@ -40,7 +40,9 @@ class Finding(TypedDict):
     key_points: list[str]
     data_points: list[DataPoint]
     relevance_to_questions: dict[str, str]
-    question_relevance_scores: dict[str, float]  # 每题实质相关度 0.0–1.0，Analyzer LLM 打分
+    question_relevance_scores: dict[
+        str, float
+    ]  # 每题实质相关度 0.0–1.0，Analyzer LLM 打分
 
 
 class QuestionFinding(TypedDict):
@@ -75,7 +77,9 @@ class ResearchState(TypedDict):
     context: str  # 研究背景/补充说明（可选，planner 使用）
     title: str  # 研究标题（planner 自动生成）
     research_questions: list[str]
-    profile_name: str  # 研究类型："industry" / "creative"，决定各节点使用的 prompt 与规则
+    profile_name: (
+        str  # 研究类型："industry" / "creative"，决定各节点使用的 prompt 与规则
+    )
 
     # 过程数据（每轮替换）
     search_plan: SearchPlan

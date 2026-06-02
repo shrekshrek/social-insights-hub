@@ -114,7 +114,9 @@ def _analyze_batch_posts(
                     raise ValueError("响应不是数组格式")
 
             except (json.JSONDecodeError, ValueError) as e:
-                logger.error("解析AI批量响应失败: %s\nResponse: %s", e, response.content)
+                logger.error(
+                    "解析AI批量响应失败: %s\nResponse: %s", e, response.content
+                )
                 raise ValueError(f"无法解析AI响应: {e}")
 
             # 5. 批量保存结果

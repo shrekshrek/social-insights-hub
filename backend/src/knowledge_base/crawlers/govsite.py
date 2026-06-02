@@ -19,13 +19,13 @@ _MIN_YEAR = _CURRENT_YEAR - 3
 
 _SEARCH_URLS = [
     # 基础互联网/数字经济
-    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E4%BA%92%E8%81%94%E7%BD%91&t=zhengcelibrary",        # 互联网
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E4%BA%92%E8%81%94%E7%BD%91&t=zhengcelibrary",  # 互联网
     "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E6%95%B0%E5%AD%97%E7%BB%8F%E6%B5%8E&t=zhengcelibrary",  # 数字经济
     "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E5%B9%B3%E5%8F%B0%E7%BB%8F%E6%B5%8E&t=zhengcelibrary",  # 平台经济
     # 社媒/营销相关
     "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E4%BA%92%E8%81%94%E7%BD%91%E5%B9%BF%E5%91%8A&t=zhengcelibrary",  # 互联网广告
-    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E7%94%B5%E5%AD%90%E5%95%86%E5%8A%A1&t=zhengcelibrary",          # 电子商务
-    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E6%B6%88%E8%B4%B9%E8%80%85%E6%9D%83%E7%9B%8A&t=zhengcelibrary", # 消费者权益
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E7%94%B5%E5%AD%90%E5%95%86%E5%8A%A1&t=zhengcelibrary",  # 电子商务
+    "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?q=%E6%B6%88%E8%B4%B9%E8%80%85%E6%9D%83%E7%9B%8A&t=zhengcelibrary",  # 消费者权益
 ]
 
 _BASE_URL = "https://www.gov.cn"

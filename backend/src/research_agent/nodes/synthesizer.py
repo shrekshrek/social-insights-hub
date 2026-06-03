@@ -151,6 +151,13 @@ def _parse_synthesis_response(
         parsed = json.loads(text)
 
         findings_by_question = parsed.get("findings_by_question", {})
+        # LLM 偶尔输出 list 格式，统一转为 dict
+        if isinstance(findings_by_question, list):
+            findings_by_question = {
+                item.get("question", f"q{i}"): item
+                for i, item in enumerate(findings_by_question)
+                if isinstance(item, dict)
+            }
         synthesis = parsed.get("synthesis", "")
         information_gaps = _normalize_gaps(parsed.get("information_gaps", []))
 
@@ -179,10 +186,18 @@ def _parse_synthesis_response(
 
 
 def _build_coverage(
-    findings_by_question: dict,
+    findings_by_question: dict | list,
     selected: list[dict],
 ) -> dict:
     """构建 coverage 元信息"""
+    # LLM 偶尔将 findings_by_question 输出为 list 而非 dict，兜底转换
+    if isinstance(findings_by_question, list):
+        findings_by_question = {
+            item.get("question", f"q{i}"): item
+            for i, item in enumerate(findings_by_question)
+            if isinstance(item, dict)
+        }
+
     high_count = 0
     covered_count = 0
     for qf in findings_by_question.values():

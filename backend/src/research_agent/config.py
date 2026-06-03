@@ -14,5 +14,5 @@ MAX_CANDIDATES_PER_ROUND = 15
 FETCH_HTML_TIMEOUT = 45  # HTML 抓取（Crawl4AI + httpx 渲染）
 FETCH_PDF_TIMEOUT = 120  # PDF 下载：文件通常 5-20MB，网络慢时 45s 不够
 
-# 并发
+# 并发（analyze 节点 LLM；fetch 节点是串行，无并发常量）
 MAX_CONCURRENT_TASKS = 10

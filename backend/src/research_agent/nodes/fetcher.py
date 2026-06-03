@@ -3,8 +3,8 @@
 HTML 通过 Crawl4AI REST API 获取 markdown，PDF 通过 requests 下载后提取文本。
 当 profile 允许 pdf_extract 且 HTML 页面判断为"报告介绍页"（内容短且含下载指引）时，
 尝试从页面中提取 PDF 直链并直接下载全文，以获取比摘要更完整的报告内容。
-同步调用（Celery gevent worker，requests 被 monkey-patch 自动协作式让出），
-per-document 30s 超时，失败不阻塞。
+候选逐篇串行下载（Celery gevent worker，requests 被 monkey-patch 自动协作式让出）；
+各 requests 调用自带超时故整体有界，单篇失败回退 snippet，不阻塞其余来源。
 """
 
 import logging
@@ -12,6 +12,7 @@ import re
 from urllib.parse import urljoin
 
 import requests
+from billiard.exceptions import SoftTimeLimitExceeded
 
 from src.config import get_settings
 from src.research_agent.config import FETCH_HTML_TIMEOUT, FETCH_PDF_TIMEOUT
@@ -22,7 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_node(state: ResearchState) -> dict:
-    """并行下载全文，产出 documents 列表"""
+    """串行逐篇下载全文，产出 documents 列表
+
+    单篇失败回退 snippet，不阻塞其余来源。SoftTimeLimitExceeded 必须向上传播
+    （见 _fetch_one），否则任务无法在 soft_time_limit 时优雅标 failed、只能硬等强杀。
+    """
     selected = state.get("selected", [])
     if not selected:
         return {"documents": []}
@@ -32,47 +37,46 @@ def fetch_node(state: ResearchState) -> dict:
     max_content_len = fetcher_cfg.max_content_len
     pdf_timeout = FETCH_PDF_TIMEOUT
 
-    documents = []
-    for candidate in selected:
+    from src.research_agent.nodes.filter import _is_fetch_blocked
+
+    def _snippet_doc(candidate: dict) -> dict | None:
+        """全文缺失时回退 snippet（无 snippet 则丢弃该候选）"""
+        snippet = candidate.get("snippet", "")
+        if not snippet:
+            return None
+        return {
+            "url": candidate["url"],
+            "title": candidate["title"],
+            "content": snippet,
+            "source": candidate.get("source", ""),
+            "content_type": "snippet",
+            "page_count": None,
+            "published_date": candidate.get("published_date", ""),
+        }
+
+    def _fetch_one(candidate: dict) -> dict | None:
+        """下载单篇候选全文，返回 document（None=丢弃）；失败回退 snippet"""
         url = candidate["url"]
         content_type = candidate.get("content_type", "html")
-
-        from src.research_agent.nodes.filter import _is_fetch_blocked
 
         # Exa 搜索已返回全文，直接使用（优先级最高，不受封堵名单影响）
         prefetched = candidate.get("full_text", "").strip()
         if prefetched:
-            documents.append(
-                {
-                    "url": url,
-                    "title": candidate["title"],
-                    "content": prefetched[:max_content_len],
-                    "source": candidate.get("source", ""),
-                    "content_type": content_type,
-                    "page_count": None,
-                    "published_date": candidate.get("published_date", ""),
-                }
-            )
-            continue
+            return {
+                "url": url,
+                "title": candidate["title"],
+                "content": prefetched[:max_content_len],
+                "source": candidate.get("source", ""),
+                "content_type": content_type,
+                "page_count": None,
+                "published_date": candidate.get("published_date", ""),
+            }
 
         # 已知封堵域名：直接降级 snippet，省掉 Crawl4AI + httpx / PDF 下载的无谓等待
         # (filter 层已降分；HTML 页面均为 JS SPA，Crawl4AI 和 httpx 均无法渲染)
         if _is_fetch_blocked(url):
             logger.info("跳过已知封堵域名，降级 snippet: %s", url)
-            snippet = candidate.get("snippet", "")
-            if snippet:
-                documents.append(
-                    {
-                        "url": url,
-                        "title": candidate["title"],
-                        "content": snippet,
-                        "source": candidate.get("source", ""),
-                        "content_type": "snippet",
-                        "page_count": None,
-                        "published_date": candidate.get("published_date", ""),
-                    }
-                )
-            continue
+            return _snippet_doc(candidate)
 
         try:
             if content_type == "pdf":
@@ -96,37 +100,32 @@ def fetch_node(state: ResearchState) -> dict:
                         logger.info("从介绍页提取到 PDF 全文: %s", url)
                         text = pdf_text
                         content_type = "pdf"
+        except SoftTimeLimitExceeded:
+            raise  # 软超时必须向上传播，让任务层更新 DB 状态（与 analyze 节点一致）
         except Exception:
             logger.warning("fetch 失败: %s", url, exc_info=True)
             text = None
 
         if text and text.strip():
-            documents.append(
-                {
-                    "url": url,
-                    "title": candidate["title"],
-                    "content": text[:max_content_len],
-                    "source": candidate.get("source", ""),
-                    "content_type": content_type,
-                    "page_count": None,
-                    "published_date": candidate.get("published_date", ""),
-                }
-            )
-        else:
-            # 全文获取失败时回退到 snippet
-            snippet = candidate.get("snippet", "")
-            if snippet:
-                documents.append(
-                    {
-                        "url": url,
-                        "title": candidate["title"],
-                        "content": snippet,
-                        "source": candidate.get("source", ""),
-                        "content_type": "snippet",
-                        "page_count": None,
-                        "published_date": candidate.get("published_date", ""),
-                    }
-                )
+            return {
+                "url": url,
+                "title": candidate["title"],
+                "content": text[:max_content_len],
+                "source": candidate.get("source", ""),
+                "content_type": content_type,
+                "page_count": None,
+                "published_date": candidate.get("published_date", ""),
+            }
+        # 全文获取失败时回退到 snippet
+        return _snippet_doc(candidate)
+
+    # 串行逐篇下载：Crawl4AI 是单实例容器，重页面下并发会放大它的 500（shm 压力），
+    # 串行对它最温和；各 requests 调用自带超时，整体有界。failed 项返回 None，丢弃。
+    documents = []
+    for candidate in selected:
+        doc = _fetch_one(candidate)
+        if doc is not None:
+            documents.append(doc)
 
     logger.info(
         "fetch 节点: %d 个来源, %d 全文成功, %d 回退 snippet",

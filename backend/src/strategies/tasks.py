@@ -18,8 +18,13 @@ from src.database import AsyncSessionLocal
 # 新闻探测任务终态：completed（采集成功）或 failed（失败/超时）
 _NEWS_PROBE_TERMINAL = {"completed", "failed"}
 
-# 新闻探测任务超时阈值（分钟）：超过此时长仍为 running 视为卡死
+# 新闻探测任务超时阈值（分钟）：probe 纯搜索（快），超过此时长仍 running/pending 视为卡死
 _NEWS_PROBE_TIMEOUT_MINUTES = 20
+
+# 新闻全量采集超时阈值（分钟）：collect 含 Crawl4AI 抓全文 + 逐篇 LLM 打标，单任务可达 ~85 分钟。
+# 必须长于 celery 硬超时（task_time_limit=7200s=120min），否则会把正在跑的健康 collect 任务误标 failed
+# （误标后任务跑完又 UPDATE 回 completed，造成 failed↔completed 翻转）。
+_NEWS_COLLECT_TIMEOUT_MINUTES = 150
 
 # 社媒切片 Stage2 超时阈值（分钟）：Stage2 含 entity/opinion LLM 归一化 + drivers + layers，
 # 比新闻 probe 重，给更宽容的阈值避免误杀正在跑的慢任务
@@ -275,14 +280,15 @@ async def reset_stuck_news_tasks() -> int:
     - probe running/pending 超时：Celery Worker 崩溃或宕机
     - collect running/pending 超时：同上（gevent + asyncio.run 兼容问题等）
 
-    以 created_at 超过阈值为判断依据（started_at 可能为 NULL）。
+    以 created_at 超过阈值为判断依据（started_at 可能为 NULL）。probe 与 collect 阈值分开：
+    collect 合法耗时远长于 probe，共用 20min 会把正在跑的健康 collect 任务误标 failed。
     """
     from src.news_media.tasks.models import NewsTask
     from sqlalchemy import or_
 
-    timeout_before = datetime.now(tz=timezone.utc) - timedelta(
-        minutes=_NEWS_PROBE_TIMEOUT_MINUTES
-    )
+    now = datetime.now(tz=timezone.utc)
+    probe_before = now - timedelta(minutes=_NEWS_PROBE_TIMEOUT_MINUTES)
+    collect_before = now - timedelta(minutes=_NEWS_COLLECT_TIMEOUT_MINUTES)
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -290,21 +296,26 @@ async def reset_stuck_news_tasks() -> int:
             .where(
                 and_(
                     NewsTask.strategy_id.is_not(None),
+                    NewsTask.status.in_(["running", "pending"]),
                     or_(
                         and_(
-                            NewsTask.status == "running",
-                            NewsTask.created_at < timeout_before,
+                            NewsTask.phase == "probe",
+                            NewsTask.created_at < probe_before,
                         ),
                         and_(
-                            NewsTask.status == "pending",
-                            NewsTask.created_at < timeout_before,
+                            NewsTask.phase == "collect",
+                            NewsTask.created_at < collect_before,
                         ),
                     ),
                 )
             )
             .values(
                 status="failed",
-                error_message=f"任务超时（>{_NEWS_PROBE_TIMEOUT_MINUTES} 分钟仍未完成，watchdog 自动标记）",
+                error_message=(
+                    "任务超时，watchdog 自动标记"
+                    f"（probe>{_NEWS_PROBE_TIMEOUT_MINUTES}min / "
+                    f"collect>{_NEWS_COLLECT_TIMEOUT_MINUTES}min 仍未完成）"
+                ),
             )
             .returning(NewsTask.id, NewsTask.phase)
         )

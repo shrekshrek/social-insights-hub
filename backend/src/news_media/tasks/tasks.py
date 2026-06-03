@@ -176,6 +176,16 @@ def run_news_collect_task(
             else:
                 db.flush()
 
+            # 长时间任务结束后 ORM 对象可能 stale，重新从数据库加载确保 UPDATE 能命中行
+            db.expire(task)
+            task = db.get(NewsTask, task_id)
+            if not task:
+                logger.warning(
+                    "NewsTask %d: task was deleted before final commit, aborting",
+                    task_id,
+                )
+                return
+
             task.status = "completed"
             task.completed_at = datetime.now(timezone.utc)
             task.articles_count = len(all_articles)

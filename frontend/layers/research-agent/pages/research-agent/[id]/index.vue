@@ -519,7 +519,8 @@ useHead({
 
 
 // 进度：下一步预测标签
-const NODE_SEQUENCE = ['plan', 'search', 'fetch', 'filter', 'analyze', 'evaluate', 'synthesize']
+// 顺序必须与后端 graph.py 一致：plan → search → filter → fetch → analyze → evaluate → synthesize
+const NODE_SEQUENCE = ['plan', 'search', 'filter', 'fetch', 'analyze', 'evaluate', 'synthesize']
 const NODE_LABELS: Record<string, string> = {
   plan: '生成研究计划', search: '搜索报告资料', fetch: '抓取全文',
   filter: '筛选相关内容', analyze: '分析文档', evaluate: '评估覆盖度', synthesize: '综合分析报告',

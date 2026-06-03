@@ -119,6 +119,9 @@ services:
     container_name: crawl4ai
     environment:
       - CRAWL4AI_API_TOKEN=${CRAWL4AI_TOKEN:-}
+    # Chromium 共享内存：默认 64MB 在重页面下会 OOM → /crawl 返回 500。官方生产建议 2g。
+    # 资源（若宿主机允许）：官方建议 mem 8g / cpu 4，视服务器实际内存再加 mem_limit/cpus。
+    shm_size: "2gb"
     restart: unless-stopped
 
 

@@ -97,6 +97,9 @@ services:
       - "11235:11235"
     environment:
       - CRAWL4AI_API_TOKEN=${CRAWL4AI_TOKEN:-}
+    # Chromium 渲染依赖共享内存：默认 /dev/shm 仅 64MB，重页面会 OOM → /crawl 返回 500。
+    # 官方 docker run 示例用 --shm-size=1g（生产建议 2g）。
+    shm_size: "1gb"
     restart: unless-stopped
 
 

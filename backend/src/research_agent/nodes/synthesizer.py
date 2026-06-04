@@ -135,6 +135,23 @@ def _normalize_gaps(gaps: list) -> list[str]:
     return result
 
 
+def _coerce_findings_dict(value: object) -> dict:
+    """把 LLM 的 findings_by_question 规整为 dict。
+
+    LLM 偶尔把它输出成 list（甚至 null / 标量）而非对象：list 按每项 question 字段建 key
+    （缺失则 q{i}），其余非 dict 类型一律退化为空 dict，避免下游 .values() 抛 AttributeError。
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        return {
+            item.get("question", f"q{i}"): item
+            for i, item in enumerate(value)
+            if isinstance(item, dict)
+        }
+    return {}
+
+
 def _parse_synthesis_response(
     content: str,
     questions: list[str],
@@ -150,14 +167,7 @@ def _parse_synthesis_response(
             text = text.strip()
         parsed = json.loads(text)
 
-        findings_by_question = parsed.get("findings_by_question", {})
-        # LLM 偶尔输出 list 格式，统一转为 dict
-        if isinstance(findings_by_question, list):
-            findings_by_question = {
-                item.get("question", f"q{i}"): item
-                for i, item in enumerate(findings_by_question)
-                if isinstance(item, dict)
-            }
+        findings_by_question = _coerce_findings_dict(parsed.get("findings_by_question"))
         synthesis = parsed.get("synthesis", "")
         information_gaps = _normalize_gaps(parsed.get("information_gaps", []))
 
@@ -186,18 +196,10 @@ def _parse_synthesis_response(
 
 
 def _build_coverage(
-    findings_by_question: dict | list,
+    findings_by_question: dict,
     selected: list[dict],
 ) -> dict:
-    """构建 coverage 元信息"""
-    # LLM 偶尔将 findings_by_question 输出为 list 而非 dict，兜底转换
-    if isinstance(findings_by_question, list):
-        findings_by_question = {
-            item.get("question", f"q{i}"): item
-            for i, item in enumerate(findings_by_question)
-            if isinstance(item, dict)
-        }
-
+    """构建 coverage 元信息（findings_by_question 已由 _coerce_findings_dict 规整为 dict）"""
     high_count = 0
     covered_count = 0
     for qf in findings_by_question.values():

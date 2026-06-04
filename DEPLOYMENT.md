@@ -103,6 +103,12 @@ pnpm prod:local:down
    pnpm prod:build && pnpm prod:up
    ```
 
+   > ⚠️ **重要**：每次部署时需确保将**根目录配置文件**一并上传到服务器，包括：
+   > - `docker-compose.prod.yml` — Docker 服务编排，含网络、资源限制等关键配置
+   > - `nginx.conf` — Nginx 反代配置
+   >
+   > 如果只上传 `backend/` 或 `frontend/` 子目录，根目录文件不会更新，可能导致服务器运行旧配置。
+
 ### 生产环境管理
 
 ```bash
@@ -164,6 +170,23 @@ openssl rand -base64 24  # POSTGRES_PASSWORD（强密码）
    # 检查Nginx配置
    docker-compose --env-file .env.production -f docker-compose.prod.yml logs nginx
    ```
+
+4. **服务间 DNS 失联（采集结果全为0、服务间无法互相访问）**
+
+   **原因**：单独重建某个容器（如 `crawl4ai`）时，若未用完整的 compose 文件，Docker 会为其创建新网络，导致与其他容器网络隔离。
+
+   **排查**：
+   ```bash
+   docker inspect crawl4ai | grep -A5 Networks
+   # 如果网络名不是 sih_prod_network，说明已漂移
+   ```
+
+   **临时修复**（不重启其他服务）：
+   ```bash
+   docker network connect --alias crawl4ai sih_prod_network crawl4ai
+   ```
+
+   **根本解决**：确保 `docker-compose.prod.yml` 中所有服务都声明了 `networks: - sih_net`，且 `networks` 段使用 `name: sih_prod_network` 固定网络名。之后任何单容器重建都不会产生网络漂移。
 
 ## 📊 监控和维护
 

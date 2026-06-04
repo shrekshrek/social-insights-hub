@@ -173,17 +173,17 @@ openssl rand -base64 24  # POSTGRES_PASSWORD（强密码）
 
 4. **服务间 DNS 失联（采集结果全为0、服务间无法互相访问）**
 
-   **原因**：单独重建某个容器（如 `crawl4ai`）时，若未用完整的 compose 文件，Docker 会为其创建新网络，导致与其他容器网络隔离。
+   **原因**：单独重建某个容器（如 `prod-crawl4ai`）时，若未用完整的 compose 文件，Docker 会为其创建新网络，导致与其他容器网络隔离。
 
    **排查**：
    ```bash
-   docker inspect crawl4ai | grep -A5 Networks
+   docker inspect prod-crawl4ai | grep -A5 Networks
    # 如果网络名不是 sih_prod_network，说明已漂移
    ```
 
    **临时修复**（不重启其他服务）：
    ```bash
-   docker network connect --alias crawl4ai sih_prod_network crawl4ai
+   docker network connect --alias crawl4ai sih_prod_network prod-crawl4ai
    ```
 
    **根本解决**：确保 `docker-compose.prod.yml` 中所有服务都声明了 `networks: - sih_net`，且 `networks` 段使用 `name: sih_prod_network` 固定网络名。之后任何单容器重建都不会产生网络漂移。

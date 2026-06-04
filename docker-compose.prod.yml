@@ -128,7 +128,7 @@ services:
 
   crawl4ai:
     image: unclecode/crawl4ai:latest
-    container_name: crawl4ai
+    container_name: prod-crawl4ai
     environment:
       - CRAWL4AI_API_TOKEN=${CRAWL4AI_TOKEN:-}
     # Chromium 共享内存：默认 64MB 在重页面下会 OOM → /crawl 返回 500。官方生产建议 2g。

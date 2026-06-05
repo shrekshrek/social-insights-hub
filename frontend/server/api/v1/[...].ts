@@ -7,8 +7,12 @@ export default defineEventHandler(async (event) => {
   const cleanPath = (path || '').replace(/^\/api\/v1/, '') || ''
   
   // 构建完整的后端URL
-  // 优先使用私有的内网地址（NUXT_API_BASE_INTERNAL），回退到 public.apiBase
-  const apiBase = (config.apiBaseInternal as string) || config.public.apiBase || ''
+  // 开发环境直连后端（与 server/api/auth/* 一致）：dev 下 devProxy 只代理客户端请求，
+  // SSR 内部 $fetch('/api/v1/...') 会落到本路由，若无此回退会因 apiBaseInternal 未设而报
+  // Invalid apiBase。生产环境优先用内网地址 NUXT_API_BASE_INTERNAL，回退 public.apiBase
+  const apiBase = import.meta.dev
+    ? 'http://localhost:8000/api/v1'
+    : (config.apiBaseInternal as string) || config.public.apiBase || ''
   const isAbsoluteBase = apiBase.startsWith('http://') || apiBase.startsWith('https://')
   if (!isAbsoluteBase) {
     throw createError({

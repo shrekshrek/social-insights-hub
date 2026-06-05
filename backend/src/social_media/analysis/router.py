@@ -18,7 +18,7 @@ from io import BytesIO
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, status, Query, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -555,22 +555,43 @@ async def delete_monitor_slice(
 @router.get(
     "/monitors/{monitor_id}/slices/{slice_id}/export",
     status_code=status.HTTP_200_OK,
-    summary="导出切片报告为 Word 文档",
+    summary="导出切片（Word 报告 / Markdown 结构化事实）",
     tags=["Social Media - Analysis"],
 )
 async def export_monitor_slice(
     monitor_id: int,
     slice_id: int,
+    format: str = Query("docx", description="docx（人读报告）/ md（agent 结构化事实）"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_social_monitor_read),
 ):
-    """导出切片的 AI 报告为 Word (.docx) 文档。
-
-    包含封面、概览摘要和已完成的报告（行业格局、话题洞察、战略诊断）。
+    """导出切片：
+    - docx：封面 + 概览 + Stage3 报告（行业格局/话题洞察/战略诊断），给人读
+    - md：front-matter + 聚合实体/话题/概览数值，给 agent / 知识库（按需渲染，不落库）
     """
-    from .export_docx import generate_slice_report_docx
-
     slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
+    monitor_name = slice_record.monitor.name if slice_record.monitor else "report"
+    slice_name = slice_record.name or f"slice_{slice_id}"
+
+    if format == "md":
+        from .export_md import render_social_slice_md
+
+        if not slice_record.result_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="该切片尚无分析结果，无法导出",
+            )
+        md = render_social_slice_md(slice_record)
+        encoded_md_name = quote(f"{monitor_name}_{slice_name}.md")
+        return Response(
+            content=md,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_md_name}",
+            },
+        )
+
+    from .export_docx import generate_slice_report_docx
 
     reports = (slice_record.result_data or {}).get("reports")
     if not reports:
@@ -580,12 +601,7 @@ async def export_monitor_slice(
         )
 
     buf: BytesIO = generate_slice_report_docx(slice_record)
-
-    monitor_name = slice_record.monitor.name if slice_record.monitor else "report"
-    slice_name = slice_record.name or f"slice_{slice_id}"
-    filename = f"{monitor_name}_{slice_name}.docx"
-    encoded_filename = quote(filename)
-
+    encoded_filename = quote(f"{monitor_name}_{slice_name}.docx")
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

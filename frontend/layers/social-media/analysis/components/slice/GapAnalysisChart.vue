@@ -162,9 +162,21 @@ const getOption = (): EChartsOption => {
   const firstVals = getItemDisplayValues(first)
   const isRatioMode = firstVals.isRatioMode
 
-  const targetData = displayItems.value.map(i => getItemDisplayValues(i).targetVal)
+  // 条形透明度编码提及量（证据权重）：声量越大越实。
+  // 使等长饱和情感（如竞品全 +1.00）下仍能区分轻重，正常场景下也表达"这个 gap 有多少证据撑着"。
+  const maxTargetMentions = Math.max(...displayItems.value.map(i => i.target_mentions || 0), 1)
+  const maxCompMentions = Math.max(...displayItems.value.map(i => i.competitor_mentions || 0), 1)
+  const volOpacity = (n: number, max: number) => 0.35 + 0.6 * Math.min(1, (n || 0) / max)
+
+  const targetData = displayItems.value.map(i => ({
+    value: getItemDisplayValues(i).targetVal,
+    itemStyle: { opacity: volOpacity(i.target_mentions, maxTargetMentions) },
+  }))
   // 竞品取负值，使其向左延伸形成龙卷风图
-  const competitorData = displayItems.value.map(i => -getItemDisplayValues(i).competitorVal)
+  const competitorData = displayItems.value.map(i => ({
+    value: -getItemDisplayValues(i).competitorVal,
+    itemStyle: { opacity: volOpacity(i.competitor_mentions, maxCompMentions) },
+  }))
 
   const axisFormatter = isRatioMode
     ? (v: number) => {
@@ -246,7 +258,7 @@ const getOption = (): EChartsOption => {
         type: 'bar',
         stack: 'total',
         barWidth: 16,
-        itemStyle: { color: '#10b981', opacity: 0.85 },
+        itemStyle: { color: '#10b981' },
         data: targetData,
       },
       {
@@ -254,7 +266,7 @@ const getOption = (): EChartsOption => {
         type: 'bar',
         stack: 'total',
         barWidth: 16,
-        itemStyle: { color: '#f59e0b', opacity: 0.85 },
+        itemStyle: { color: '#f59e0b' },
         data: competitorData,
       },
     ],
@@ -312,7 +324,7 @@ onMounted(updateChart)
     <div v-if="displayItems.length" ref="chartRef" class="h-48" />
 
     <!-- 列表 -->
-    <div v-if="displayItems.length" class="mt-3 space-y-2">
+    <div v-if="displayItems.length" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
       <div
         v-for="item in displayItems.slice(0, 5)"
         :key="item.dimension"

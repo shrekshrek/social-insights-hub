@@ -1,6 +1,15 @@
 """Research Agent API 端点"""
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -188,6 +197,49 @@ async def get_task_result(
             detail="研究结果不可用（任务未完成或不存在）",
         )
     return result
+
+
+@router.get(
+    "/tasks/{task_id}/export",
+    status_code=status.HTTP_200_OK,
+    summary="导出研究结果（Markdown，供 agent / 知识库按需消费）",
+)
+async def export_research_task(
+    task_id: int,
+    format: str = Query("md", description="导出格式，目前仅支持 md"),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_research_agent_read),
+):
+    """按需把研究结果渲染为 Markdown（纯投影 result_data，不落库）。
+
+    agent 按 task_id 调本接口即可拿到带 front-matter 的完整结构化 MD。
+    """
+    from urllib.parse import quote
+
+    from src.research_agent.export_md import render_research_md
+
+    if format != "md":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="目前仅支持 format=md",
+        )
+    await service.assert_research_task_access(db, task_id, current_user.id)
+    task = await service.get_research_task(db, task_id)
+    if not task or task.status != "completed" or not task.result_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="研究结果不可用（任务未完成或不存在）",
+        )
+
+    md = render_research_md(task)
+    filename = f"{task.title or 'research'}_{task_id}.md"
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+        },
+    )
 
 
 @router.post(

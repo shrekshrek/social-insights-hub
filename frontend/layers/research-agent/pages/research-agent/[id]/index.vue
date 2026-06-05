@@ -40,6 +40,15 @@
               刷新
             </UButton>
             <UButton
+              v-if="task?.status === 'completed'"
+              variant="outline"
+              icon="i-heroicons-arrow-down-tray"
+              :loading="exporting"
+              @click="handleExportMd"
+            >
+              导出 MD
+            </UButton>
+            <UButton
               v-if="canWriteTask"
               variant="outline"
               icon="i-heroicons-arrow-path"
@@ -495,6 +504,7 @@ const { currentUserId, hasPermission } = usePermissions()
 const {
   getTask,
   getTaskResult,
+  exportTaskMd,
   updateTask,
   rerunTask,
   deleteTask,
@@ -657,6 +667,19 @@ async function handleRerun() {
     // 错误已由 apiRequest 统一处理
   } finally {
     rerunning.value = false
+  }
+}
+
+const exporting = ref(false)
+
+async function handleExportMd() {
+  exporting.value = true
+  try {
+    await exportTaskMd(taskId, task.value?.title || '')
+  } catch {
+    // 错误已由 apiDownload 统一处理
+  } finally {
+    exporting.value = false
   }
 }
 

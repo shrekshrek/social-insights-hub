@@ -1,7 +1,7 @@
 import type { ResearchProfileOption, ResearchTask, ResearchTaskCreate, ResearchTaskResult, ResearchTaskUpdate, ParseBriefTextRequest, ParseBriefResponse } from '../types'
 
 export function useResearchAgentApi() {
-  const { apiRequest, useApiData } = useApi()
+  const { apiRequest, useApiData, apiDownload } = useApi()
 
   // 研究类型列表（industry / creative / ...）
   const getProfiles = () => {
@@ -182,11 +182,19 @@ export function useResearchAgentApi() {
     return colors[profileName] ?? 'neutral'
   }
 
+  // 导出研究结果 Markdown（按需，后端纯投影 result_data）
+  const exportTaskMd = (id: number, title: string) =>
+    apiDownload(
+      `/research/tasks/${id}/export?format=md`,
+      `${title || 'research'}_专题研究.md`,
+    )
+
   return {
     getProfiles,
     getTasks,
     getTask,
     getTaskResult,
+    exportTaskMd,
     parseBrief,
     parseBriefText,
     createTask,

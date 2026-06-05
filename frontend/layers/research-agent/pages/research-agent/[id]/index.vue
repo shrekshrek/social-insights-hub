@@ -89,6 +89,10 @@
             <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究主题</dt>
             <dd class="text-gray-900 dark:text-white font-medium whitespace-pre-line">{{ task.analysis_goal }}</dd>
           </div>
+          <div v-if="task.search_config?.context" class="flex gap-3">
+            <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究背景</dt>
+            <dd class="text-gray-900 dark:text-white font-medium whitespace-pre-line text-xs bg-gray-50 dark:bg-gray-800/50 p-2 rounded border border-gray-100 dark:border-gray-800/80">{{ task.search_config.context }}</dd>
+          </div>
 
           <div v-if="task.research_questions?.length" class="flex gap-3">
             <dt class="w-20 shrink-0 text-gray-500 dark:text-gray-400">研究问题</dt>

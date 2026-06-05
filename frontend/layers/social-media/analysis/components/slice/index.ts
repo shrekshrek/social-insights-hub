@@ -10,7 +10,7 @@ export { default as PlatformDNAChart } from './PlatformDNAChart.vue'
 export { default as IndustryQuadrantChart } from './IndustryQuadrantChart.vue'
 
 // Topic Layer (话题层)
-export { default as TopicRadarChart } from './TopicRadarChart.vue'
+export { default as TopicBubbleChart } from './TopicBubbleChart.vue'
 export { default as TopicDrilldownPanel } from './TopicDrilldownPanel.vue'
 
 // Focus Layer (聚焦层)

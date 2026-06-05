@@ -4,7 +4,7 @@ import type { EChartsOption } from 'echarts'
 import TopicDrilldownPanel from './TopicDrilldownPanel.vue'
 import TabSwitch from '../shared/TabSwitch.vue'
 
-interface TopicRadarItem {
+interface TopicBubbleItem {
   name: string
   category?: string
   heat: number
@@ -28,24 +28,24 @@ interface TopicRadarItem {
 }
 
 const props = defineProps<{
-  pains?: TopicRadarItem[]
-  gains?: TopicRadarItem[]
-  controversies?: TopicRadarItem[]
-  unmetNeeds?: TopicRadarItem[]
+  pains?: TopicBubbleItem[]
+  gains?: TopicBubbleItem[]
+  controversies?: TopicBubbleItem[]
+  unmetNeeds?: TopicBubbleItem[]
 }>()
 
 const emit = defineEmits<{
-  (e: 'select' | 'open-posts', item: TopicRadarItem, type: 'pain' | 'gain' | 'controversy' | 'unmet'): void
+  (e: 'select' | 'open-posts', item: TopicBubbleItem, type: 'pain' | 'gain' | 'controversy' | 'unmet'): void
 }>()
 
 const { chartRef, initChart, setOption, getInstance, on } = useCharts()
 
 // 侧边栏状态
 const panelOpen = ref(false)
-const selectedItem = ref<TopicRadarItem | null>(null)
+const selectedItem = ref<TopicBubbleItem | null>(null)
 const selectedType = ref<'pain' | 'gain' | 'controversy' | 'unmet' | null>(null)
 
-const handleSelect = (item: TopicRadarItem, type: 'pain' | 'gain' | 'controversy' | 'unmet') => {
+const handleSelect = (item: TopicBubbleItem, type: 'pain' | 'gain' | 'controversy' | 'unmet') => {
   selectedItem.value = item
   selectedType.value = type
   panelOpen.value = true
@@ -57,7 +57,7 @@ const closePanel = () => {
 }
 
 // 当前激活的 Tab
-const activeTab = ref<'radar' | 'unmet'>('radar')
+const activeTab = ref<'bubble' | 'unmet'>('bubble')
 
 // Spam 声量视角
 type SpamDimension = 'all' | 'organic' | 'promo'
@@ -77,7 +77,7 @@ const hasSpamData = computed(() => {
 
 // 当前视角下的有效热度
 // 优先使用 CII 加权的 organic_heat/promo_heat；回退到 spam_distribution 计数；最后用总热度
-const getEffectiveX = (item: TopicRadarItem): number => {
+const getEffectiveX = (item: TopicBubbleItem): number => {
   if (spamDimension.value === 'all') return item.heat || 0
   if (spamDimension.value === 'organic') {
     if (item.organic_heat != null) return item.organic_heat
@@ -119,7 +119,7 @@ const getOption = (): EChartsOption => {
   const truncateLabel = (s: string) => (s.length > 6 ? `${s.slice(0, 6)}…` : s)
 
   const buildSeries = (
-    items: TopicRadarItem[],
+    items: TopicBubbleItem[],
     name: string,
     color: string,
     type: 'pain' | 'gain' | 'controversy'
@@ -199,7 +199,7 @@ const getOption = (): EChartsOption => {
       trigger: 'item',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formatter: (params: any) => {
-        const [effectiveX, sentiment, heat, name, category, mentions, , item] = params.data as [number, number, number, string, string, number, string, TopicRadarItem]
+        const [effectiveX, sentiment, heat, name, category, mentions, , item] = params.data as [number, number, number, string, string, number, string, TopicBubbleItem]
         const xLabel = spamDimension.value === 'organic' ? '有机声量' : spamDimension.value === 'promo' ? '推广声量' : '热度'
         const xDisplay = spamDimension.value === 'all' ? heat.toFixed(0) : effectiveX.toString()
         const mentionsLabel = spamDimension.value === 'organic' ? '有机提及' : spamDimension.value === 'promo' ? '推广提及' : '提及'
@@ -295,7 +295,7 @@ const updateChart = async () => {
         const p = params as any
         if (p.data && p.data[7]) {
           const type = p.data[6] as 'pain' | 'gain' | 'controversy'
-          const item = p.data[7] as TopicRadarItem
+          const item = p.data[7] as TopicBubbleItem
           handleSelect(item, type)
         }
       })
@@ -313,7 +313,7 @@ onMounted(() => {
 // Unmet Needs 列表
 const unmetNeedsList = computed(() => props.unmetNeeds || [])
 
-const handleUnmetClick = (item: TopicRadarItem) => {
+const handleUnmetClick = (item: TopicBubbleItem) => {
   handleSelect(item, 'unmet')
 }
 </script>
@@ -322,9 +322,9 @@ const handleUnmetClick = (item: TopicRadarItem) => {
   <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-3">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">话题雷达</h3>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">话题气泡图（声量 × 情感）</h3>
         <TabSwitch
-          v-if="hasSpamData && activeTab === 'radar'"
+          v-if="hasSpamData && activeTab === 'bubble'"
           v-model="spamDimension"
           :options="spamDimensionOptions"
         />
@@ -333,8 +333,8 @@ const handleUnmetClick = (item: TopicRadarItem) => {
       <div class="flex gap-1 text-xs">
         <button
           class="px-2.5 py-1 rounded transition-colors"
-          :class="activeTab === 'radar' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
-          @click="activeTab = 'radar'"
+          :class="activeTab === 'bubble' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
+          @click="activeTab = 'bubble'"
         >
           痛点/爽点
         </button>
@@ -348,12 +348,12 @@ const handleUnmetClick = (item: TopicRadarItem) => {
       </div>
     </div>
 
-    <!-- 雷达气泡图 -->
-    <div v-show="activeTab === 'radar'">
+    <!-- 声量 × 情感气泡图 -->
+    <div v-show="activeTab === 'bubble'">
 
       <div v-if="hasChartData" ref="chartRef" class="h-100" />
       <div v-else class="h-80 flex items-center justify-center text-sm text-gray-400">
-        暂无话题雷达数据
+        暂无话题数据
       </div>
 
       <div class="mt-3 flex gap-4 justify-center text-xs text-gray-500 dark:text-gray-400">

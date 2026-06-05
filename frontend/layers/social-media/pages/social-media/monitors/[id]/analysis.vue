@@ -4,7 +4,7 @@ import SOVRankingChart from '../../../../analysis/components/slice/SOVRankingCha
 import GroupShareTable from '../../../../analysis/components/slice/GroupShareTable.vue'
 import PlatformDNAChart from '../../../../analysis/components/slice/PlatformDNAChart.vue'
 import IndustryQuadrantChart from '../../../../analysis/components/slice/IndustryQuadrantChart.vue'
-import TopicRadarChart from '../../../../analysis/components/slice/TopicRadarChart.vue'
+import TopicBubbleChart from '../../../../analysis/components/slice/TopicBubbleChart.vue'
 import SWOTMatrixChart from '../../../../analysis/components/slice/SWOTMatrixChart.vue'
 import ProductLineHealthTable from '../../../../analysis/components/slice/ProductLineHealthTable.vue'
 import PlatformScissorsChart from '../../../../analysis/components/slice/PlatformScissorsChart.vue'
@@ -829,6 +829,20 @@ const driversData = computed(() => foundation.value?.drivers || null)
 const entityMatrix = computed(() => driversData.value?.entity_matrix || [])
 const matrixDimensions = computed(() => driversData.value?.dimensions_top || [])
 
+// 维度情感矩阵默认收窄（top5 实体 × top6 维度），降低默认认知负担；可展开看全量（10×8）
+const MATRIX_ROWS = { collapsed: 5, full: 10 }
+const MATRIX_COLS = { collapsed: 6, full: 8 }
+const matrixExpanded = ref(false)
+const matrixRows = computed(() =>
+  entityMatrix.value.slice(0, matrixExpanded.value ? MATRIX_ROWS.full : MATRIX_ROWS.collapsed)
+)
+const matrixCols = computed(() =>
+  matrixDimensions.value.slice(0, matrixExpanded.value ? MATRIX_COLS.full : MATRIX_COLS.collapsed)
+)
+const matrixHasMore = computed(
+  () => entityMatrix.value.length > MATRIX_ROWS.collapsed || matrixDimensions.value.length > MATRIX_COLS.collapsed
+)
+
 // ==================== Focus Layer Data ====================
 const swotData = computed(() => focus.value?.swot || null)
 const productLineHealth = computed(() => focus.value?.product_line_health || null)
@@ -1132,6 +1146,23 @@ const handleExport = async () => {
     exporting.value = false
   }
 }
+
+// 导出 MD（结构化事实，给 agent / 知识库）——不依赖 Stage3 报告，有分析结果即可
+const exportingMd = ref(false)
+const handleExportMd = async () => {
+  if (!sliceId.value || exportingMd.value) return
+  exportingMd.value = true
+  try {
+    await apiDownload(
+      `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}/export?format=md`,
+    )
+    showSuccess('已导出 Markdown')
+  } catch {
+    showError('导出失败，请稍后重试')
+  } finally {
+    exportingMd.value = false
+  }
+}
 </script>
 
 <template>
@@ -1209,6 +1240,15 @@ const handleExport = async () => {
         <div class="flex items-center gap-3">
           <UButton icon="i-heroicons-arrow-path" variant="ghost" :loading="sliceLoading" @click="handleRefresh">
             刷新
+          </UButton>
+          <UButton
+            v-if="isPipelineReady"
+            variant="outline"
+            icon="i-heroicons-document-text"
+            :loading="exportingMd"
+            @click="handleExportMd"
+          >
+            导出 MD
           </UButton>
           <UButton
             v-if="slice && canDeleteSlice"
@@ -1657,14 +1697,23 @@ const handleExport = async () => {
             v-if="entityMatrix.length && matrixDimensions.length"
             class="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
           >
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">维度情感矩阵</h3>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-white">维度情感矩阵</h3>
+              <button
+                v-if="matrixHasMore"
+                class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                @click="matrixExpanded = !matrixExpanded"
+              >
+                {{ matrixExpanded ? '收起' : '展开全部' }}
+              </button>
+            </div>
             <div class="overflow-x-auto">
               <table class="text-xs w-full">
                 <thead>
                   <tr class="text-left border-b border-gray-100 dark:border-gray-800">
                     <th class="py-2 pr-3 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-900 align-top">实体</th>
                     <th
-                      v-for="dim in matrixDimensions.slice(0, 8)"
+                      v-for="dim in matrixCols"
                       :key="dim"
                       class="py-2 px-2 font-medium text-gray-500 dark:text-gray-400 text-center align-top max-w-[80px]"
                     >
@@ -1674,13 +1723,13 @@ const handleExport = async () => {
                 </thead>
                 <tbody class="divide-y divide-gray-50 dark:divide-gray-800/50">
                   <tr
-                    v-for="row in entityMatrix.slice(0, 10)"
+                    v-for="row in matrixRows"
                     :key="row.entity"
                     class="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                   >
                     <td class="py-1.5 pr-3 font-medium text-gray-900 dark:text-white whitespace-nowrap sticky left-0 bg-white dark:bg-gray-900 group-hover:bg-gray-50">{{ row.entity }}</td>
                     <td
-                      v-for="dim in matrixDimensions.slice(0, 8)"
+                      v-for="dim in matrixCols"
                       :key="dim"
                       class="py-1.5 px-1 text-center"
                     >
@@ -1714,7 +1763,7 @@ const handleExport = async () => {
           </h2>
           <p class="text-xs text-gray-500 dark:text-gray-400">产品经理/舆情官视角：全量话题（不区分实体归属）</p>
 
-          <TopicRadarChart
+          <TopicBubbleChart
             :pains="topicRadar?.pains"
             :gains="topicRadar?.gains"
             :controversies="topicRadar?.controversies"

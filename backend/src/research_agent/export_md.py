@@ -75,6 +75,21 @@ def render_research_md(task: ResearchTask) -> str:
                 lines += ["", f"**来源**：{', '.join(refs)}"]
             lines.append("")
 
+    # --- 覆盖度（二阶聚合：问题覆盖 / 高置信数 / 来源 tier 分布，下游重算不出来）---
+    coverage = data.get("coverage") or {}
+    if coverage:
+        lines.append("## 覆盖度")
+        qc = coverage.get("questions_covered")
+        qt = coverage.get("questions_total")
+        if qc is not None and qt is not None:
+            lines.append(f"- 研究问题覆盖：{qc}/{qt}")
+        if coverage.get("high_confidence_count") is not None:
+            lines.append(f"- 高置信问题数：{coverage['high_confidence_count']}")
+        sq = coverage.get("source_quality") or {}
+        if sq:
+            lines.append("- 来源质量：" + "、".join(f"{k} {v}" for k, v in sq.items()))
+        lines.append("")
+
     # --- 信息缺口 ---
     gaps = data.get("information_gaps") or []
     if gaps:
@@ -87,9 +102,11 @@ def render_research_md(task: ResearchTask) -> str:
     if sources:
         lines.append("## 来源")
         for s in sources:
-            meta = "、".join(
-                x for x in [s.get("source_tier", ""), s.get("published_date", "")] if x
-            )
+            meta_bits = [s.get("source_tier", ""), s.get("published_date", "")]
+            score = s.get("relevance_score")
+            if isinstance(score, (int, float)) and score > 0:
+                meta_bits.append(f"相关性 {score:.2f}")
+            meta = "、".join(x for x in meta_bits if x)
             meta_str = f"（{meta}）" if meta else ""
             title = s.get("title", "")
             url = s.get("url", "")

@@ -17,6 +17,7 @@ const sliceId = Number(route.params.id)
 
 const { hasPermission, currentUserId } = usePermissions()
 const { getSlice, analyzeSlice, deleteSlice: deleteSliceApi } = useNewsSlices()
+const { apiDownload, showSuccess, showError } = useApi()
 const { data: slice, pending: loading, refresh } = getSlice(sliceId)
 
 // 写/删除权限：owner 或具备相应 RBAC 权限即可（与 monitor 详情页 canWriteSlice / canDeleteSlice 对齐）
@@ -62,6 +63,21 @@ const handleDelete = async () => {
     await navigateTo(`/news-media/monitors/${slice.value.monitor_id}`)
   } catch {
     // error already handled
+  }
+}
+
+const exportingMd = ref(false)
+
+const handleExportMd = async () => {
+  if (exportingMd.value) return
+  exportingMd.value = true
+  try {
+    await apiDownload(`/news-media/slices/${sliceId}/export?format=md`)
+    showSuccess('已导出 Markdown')
+  } catch {
+    showError('导出失败，请稍后重试')
+  } finally {
+    exportingMd.value = false
   }
 }
 
@@ -337,6 +353,15 @@ const dateOnly = (iso: string | null): string => {
               @click="refresh"
             >
               刷新
+            </UButton>
+            <UButton
+              v-if="slice.status === 'completed'"
+              variant="outline"
+              icon="i-heroicons-document-text"
+              :loading="exportingMd"
+              @click="handleExportMd"
+            >
+              导出 MD
             </UButton>
             <UButton
               v-if="(slice.status === 'completed' || slice.status === 'failed') && canWriteSlice"

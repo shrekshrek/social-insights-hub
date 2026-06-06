@@ -3,7 +3,10 @@
 子资源风格：/news-media/monitors/{monitor_id}/slices
 """
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,6 +78,52 @@ async def get_slice(
             detail="切片不存在",
         )
     return NewsSliceReadWithRelations.from_orm_full(slice_obj)
+
+
+@router.get(
+    "/slices/{slice_id}/export",
+    status_code=status.HTTP_200_OK,
+    summary="导出新闻切片（Markdown 结构化事实，供 agent / 知识库）",
+)
+async def export_news_slice(
+    slice_id: int,
+    format: str = Query("md", description="md（agent 结构化事实，按需渲染不落库）"),
+    db: AsyncSession = Depends(get_async_db),
+    _current_user: User = Depends(require_news_monitor_read),
+):
+    """导出新闻切片为 Markdown：front-matter + 二阶聚合事实
+    （媒体金字塔 / 实体情感 / 竞争 SOV / 事件聚类 / 分级引语 / 报道时间线）。
+
+    只投影 LLM 自己重算会算错的二阶产物，不含 page_synthesis 散文简报。
+    """
+    if format != "md":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="新闻切片暂仅支持 md 导出",
+        )
+    slice_obj = await crud.get_news_slice(db, slice_id)
+    if not slice_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="切片不存在",
+        )
+    if not slice_obj.result_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="该切片尚无分析结果，无法导出",
+        )
+
+    from .export_md import render_news_slice_md
+
+    md = render_news_slice_md(slice_obj)
+    encoded_name = quote(f"{slice_obj.name or f'news_slice_{slice_id}'}.md")
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}",
+        },
+    )
 
 
 @router.post(

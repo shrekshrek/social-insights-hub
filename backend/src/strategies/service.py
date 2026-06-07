@@ -4976,6 +4976,27 @@ async def _create_auto_slices(
                 if dim:
                     dimension_to_news.setdefault(dim, []).append(task)
 
+        # 新闻大盘切片去冗余：预计算每个聚焦 blueprint（subject 非空）覆盖的新闻任务集合。
+        # 与社媒不同——新闻对称采集（无单品牌深挖），聚焦切片的 competitive.players 已含
+        # 主品+竞品同框的公平 media_sov，无需单独大盘新闻切片做 SOV 基准。因此当某大盘
+        # blueprint 的新闻任务集合与某聚焦 blueprint 完全相同时，其大盘新闻切片是纯冗余
+        # （同一批数据再分析一遍、仅丢失角色），下方跳过创建。
+        # 用「完全相同」而非「子集」判定：纯行业分析（无聚焦）保留大盘；万一新闻出现单品牌
+        # 深挖（聚焦任务真多于大盘）则两者不等、保留大盘做公平基准。社媒不适用此去冗余。
+        focus_news_task_sets: list[frozenset[int]] = []
+        for bp_focus in blueprint:
+            if not (bp_focus.get("subject") or "").strip():
+                continue
+            focus_dims = bp_focus.get("source_dimensions") or []
+            focus_ids = {
+                t.id
+                for dim_key, dim_tasks in dimension_to_news.items()
+                if (not focus_dims or dim_key in focus_dims)
+                for t in dim_tasks
+            }
+            if focus_ids:
+                focus_news_task_sets.append(frozenset(focus_ids))
+
         for bp in blueprint:
             bp_name: str = bp.get("name") or "综合分析"
             bp_dims: list[str] = bp.get("source_dimensions") or []
@@ -5000,6 +5021,21 @@ async def _create_auto_slices(
 
             social_already_exists = bp_name in existing_social_names
             news_already_exists = bp_name in existing_news_names
+
+            # 大盘新闻切片去冗余：subject 为空（大盘）且其新闻任务集合与某聚焦切片完全相同时，
+            # 该大盘新闻切片对策略链路是纯冗余（聚焦超集已覆盖议程层、且自带公平竞争层），跳过。
+            # 社媒侧不受影响（此处只 gate 新闻创建，社媒大盘切片照常建）。
+            news_redundant = (
+                not (bp_subject or "").strip()
+                and bool(matched_news_task_ids)
+                and frozenset(matched_news_task_ids) in focus_news_task_sets
+            )
+            if news_redundant:
+                logger.info(
+                    "Strategy %s: 大盘 blueprint '%s' 的新闻任务与聚焦切片相同，跳过冗余新闻切片",
+                    strategy.id,
+                    bp_name,
+                )
 
             # 该 blueprint 完全无任务可消费时：若已有任一侧切片视为历史已建，跳过；否则报错
             if not matched_task_ids and not matched_news_task_ids:
@@ -5035,7 +5071,7 @@ async def _create_auto_slices(
                     existing_social_names.add(bp_name)
 
             # 创建新闻 NewsSlice 行（已存在则检查是否需要补派 insight）
-            if matched_news_task_ids and strategy.news_monitor_id:
+            if matched_news_task_ids and strategy.news_monitor_id and not news_redundant:
                 goal = (
                     f"{bp_name}（关键词：{', '.join(matched_news_keywords)}）"
                     if matched_news_keywords

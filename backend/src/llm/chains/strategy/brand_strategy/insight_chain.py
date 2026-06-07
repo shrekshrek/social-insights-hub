@@ -159,6 +159,8 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **controversies[].controversy_depth**：两极均衡度（0~0.5，越接近 0.5 说明正负意见越均衡、越撕裂）。真正的核心矛盾往往 depth 高但 heat 未必高。**仅当 `polar_total >= 10` 时样本可信**，polar_total 过低时应降低置信度。
 - **pains[].organic_sentiment**：关注 `organic_sentiment` 明显低于 `sentiment` 的痛点话题（差值 >= 0.2），说明该话题被推广内容稀释，真实用户体验比数字所呈现的更差，是高价值的隐性痛点信号。
 - **topic_aspects**：按主题类别聚合的宏观分布，用于发现「某一整类话题情感集体偏负」等品类级模式，是单话题视图看不到的。
+- **group_share**：按母品牌族聚合的声量份额（个体 sov 之上的组级视图）。当多个子品牌同属一个集团时，组级份额比单品牌 sov 更能反映真实竞争格局——判断"谁主导品类"应参考 group_share 而非仅看单实体。
+- **entity_dimension_matrix**：主体与竞品在各产品维度上的逐项情感（含提及量），用于细粒度逐属性竞争定位——可锁定「竞品某维度口碑强而主体弱」的具体攻防点，比 competitive_gaps 的降维投影更细，适合支撑 brand_opportunity。
 
 ## 切片采样偏置（重要）
 
@@ -494,6 +496,18 @@ def format_slice_data_for_insight(
             for r in sov_ranking
         ]
 
+        # 品牌组聚合 — 按母品牌族汇总声量份额（个体 sov 之上的组级视图）
+        group_share_brief = [
+            {
+                "name": g.get("name"),
+                "role": g.get("role"),
+                "share": g.get("share"),
+                "mentions": g.get("mentions"),
+            }
+            for g in (landscape.get("group_share") or [])[:10]
+            if isinstance(g, dict)
+        ]
+
         # Intent 层 — topic_radar (pains/gains/controversies) + unmet_needs + audiences
         intent = layers.get("intent") or {}
         unmet_needs = intent.get("unmet_needs")
@@ -602,6 +616,33 @@ def format_slice_data_for_insight(
         ]
 
         subject = meta.get("subject") or None
+
+        # 维度情感矩阵（压缩版）：仅 主体 + 竞品 × top6 维度，做细粒度逐属性竞争定位。
+        # 整张矩阵 token 太贵，只截最相关行列；大盘切片（无 subject）跳过。
+        drivers = foundation.get("drivers") or {}
+        matrix_rows = drivers.get("entity_matrix") or []
+        matrix_dims = [d for d in (drivers.get("dimensions_top") or []) if d][:6]
+        focus_names = {n for n in ([subject] + (meta.get("competitors") or [])) if n}
+        matrix_brief = []
+        if matrix_rows and matrix_dims and focus_names:
+            for row in matrix_rows:
+                if not isinstance(row, dict) or row.get("entity") not in focus_names:
+                    continue
+                cells = row.get("dimensions") or {}
+                dim_vals = {
+                    d: {
+                        "sentiment": cells[d].get("sentiment"),
+                        "mentions": cells[d].get("mentions"),
+                    }
+                    for d in matrix_dims
+                    if isinstance(cells.get(d), dict)
+                    and cells[d].get("sentiment") is not None
+                }
+                if dim_vals:
+                    matrix_brief.append(
+                        {"entity": row.get("entity"), "dimensions": dim_vals}
+                    )
+
         ref_name = (
             slice_refs[i].get("name") if slice_refs and i < len(slice_refs) else None
         )
@@ -634,6 +675,10 @@ def format_slice_data_for_insight(
             part["swot_dimensions"] = swot_brief
         if gap_brief:
             part["competitive_gaps"] = gap_brief
+        if group_share_brief:
+            part["group_share"] = group_share_brief
+        if matrix_brief:
+            part["entity_dimension_matrix"] = matrix_brief
         if audiences_brief:
             part["audiences"] = audiences_brief
         slice_parts.append(part)

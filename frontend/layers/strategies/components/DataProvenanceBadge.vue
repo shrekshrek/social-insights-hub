@@ -19,6 +19,21 @@
         class="size-2.5 ml-0.5 opacity-70"
       />
     </UBadge>
+    <!-- 社媒交叉 chip：market_report 第1/2层用社媒大盘做消费者交叉时显示（区别于新闻主源）-->
+    <UBadge
+      v-if="chainInputs.social_slices.length > 0 && !isSocial"
+      color="primary"
+      variant="subtle"
+      size="sm"
+      :class="[
+        'flex items-center',
+        canDrillDown ? 'cursor-pointer hover:opacity-80 transition-opacity' : '',
+      ]"
+      @click="canDrillDown && (open = true)"
+    >
+      <UIcon name="i-heroicons-chat-bubble-left-right" class="size-3 mr-0.5" />
+      社媒交叉 · {{ chainInputs.social_slices.length }}
+    </UBadge>
     <!-- 行业研究视角 chip：与主数据源共用同一个详情 modal -->
     <UBadge
       v-if="provenance.research?.industry_research"

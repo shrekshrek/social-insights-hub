@@ -136,6 +136,9 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - 若某字段无数据支持，使用空数组而非伪造内容
 - momentum 判断需基于 `descriptive.coverage_timeseries` / `descriptive.sentiment_timeseries` 真实时序，
   以及 `event_clusters` 的 `tier_weighted_score` 与 `peak_date` 分布；禁止"感觉上升"
+- `themes`（议题层）= 媒体反复讨论的抽象维度 + 态度（情感量纲 [-2,2]）：`sentiment_avg` 极化或
+  `sentiment_weighted_by_tier` 分层冲突的议题是 **discourse_battles** 的直接来源；议题整体情感方向
+  辅助判断 market_dynamics 走势。与 `event_clusters`（具体事件）正交，结合使用
 
 ## representative_voices 来源约束
 
@@ -291,6 +294,19 @@ def _format_news_slices_for_landscape(
                     }
                     for c in (rd.get("event_clusters") or [])[:8]
                     if isinstance(c, dict)
+                ],
+                "themes": [
+                    {
+                        "name": t.get("name"),
+                        "article_count": t.get("article_count"),
+                        "sentiment_avg": t.get("sentiment_avg"),
+                        "sentiment_weighted_by_tier": t.get(
+                            "sentiment_weighted_by_tier"
+                        ),
+                        "tier_weighted_score": t.get("tier_weighted_score"),
+                    }
+                    for t in (rd.get("themes") or [])[:8]
+                    if isinstance(t, dict)
                 ],
                 "key_quotes": [
                     {

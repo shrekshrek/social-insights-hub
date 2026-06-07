@@ -53,6 +53,11 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 
 ## 核心分析框架
 
+> 输入里的 `themes`（议题层）是已聚合的"媒体反复讨论的抽象维度 + 态度 + tier 加权热度"，
+> 是识别 narrative / battle / pattern 的一手信号：`tier_weighted_score` 高 = 主导叙事候选；
+> `sentiment_avg` 极化（正负分明）或 `sentiment_by_tier` 分层冲突 = agenda_battle 候选。
+> 注意 themes 情感量纲为 [-2,2]。themes 与 `event_clusters`（具体事件）正交，二者结合使用。
+
 1. **Narrative Map（叙事地图）**：识别媒体正在推进的主导叙事（narratives），
    每条叙事必须说明 framing（媒体如何定义问题），supporting_sources（由哪类来源支撑），
    representative_voices（引用具体 quote + 来源）。
@@ -266,6 +271,20 @@ def _format_news_slices_for_agenda(
                         "in_task_ids": c.get("in_task_ids"),
                     }
                     for c in (rd.get("event_clusters") or [])[:8]
+                ],
+                "themes": [
+                    {
+                        "name": t.get("name"),
+                        "article_count": t.get("article_count"),
+                        "source_count": t.get("source_count"),
+                        "sentiment_avg": t.get("sentiment_avg"),
+                        "sentiment_weighted_by_tier": t.get(
+                            "sentiment_weighted_by_tier"
+                        ),
+                        "tier_weighted_score": t.get("tier_weighted_score"),
+                    }
+                    for t in (rd.get("themes") or [])[:8]
+                    if isinstance(t, dict)
                 ],
                 "entities": [
                     {

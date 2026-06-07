@@ -58,6 +58,9 @@ LANDSCAPE_SYSTEM = (
 - **优先引用 `organic_heat`** 作为品牌真实市场认知的衡量标准。
 - 若某品牌 `promo_heat` 显著高于 `organic_heat`，说明其声量主要由推广驱动，需在报告中点明（”声量虚高”）。
 - `organic_sentiment` / `promo_sentiment` 代表自然用户 vs 推广内容的情感方向，差距悬殊时是重要信号。
+- `entity_dimension_matrix`（如有）：头部品牌 × 关键产品维度的情感矩阵，用于精准刻画"头部玩家心智"——某品牌在哪个维度口碑强/弱，直接支撑第 2 节品牌画像。
+- `time_trend`（如有）：报道量按日时序（by_day）+ freshness（近 7/30 天占比、平均时效）。第 3 节「关键趋势」的"上升/回落/脉冲"判断**必须基于此数据**，禁止凭感觉断言走势。
+- `marketing`（如有）：全局促销强度（promotion_ratio 推广内容占比 / organic_ratio 自然占比），用于判断本次声量整体是自然驱动还是推广驱动。
 
 ## 长度控制
 - 全文 500-700 字。

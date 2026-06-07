@@ -46,18 +46,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-from src.database import Base  # noqa: E402
-import src.auth.models  # noqa: E402, F401
-import src.rbac.models  # noqa: E402, F401
-import src.social_media.monitors.models  # noqa: E402, F401
-import src.social_media.tasks.models  # noqa: E402, F401
-import src.jobs.models  # noqa: E402, F401
-import src.social_media.analysis.models  # noqa: E402, F401
-import src.news_media.monitors.models  # noqa: E402, F401
-import src.news_media.tasks.models  # noqa: E402, F401
-import src.news_media.analysis.models  # noqa: E402, F401
-import src.strategies.models  # noqa: E402, F401
-import src.knowledge_base.models  # noqa: E402, F401
+# 单一事实源：src.models 集中导入全部 model 模块，Base.metadata 含全部表。
+from src.models import Base  # noqa: E402, F401
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

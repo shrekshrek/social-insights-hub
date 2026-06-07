@@ -61,8 +61,11 @@ def _front_matter(slice_obj: SocialSlice) -> list[str]:
     return lines
 
 
-def _overview(landscape: dict, metrics: dict) -> list[str]:
-    """概览数值（计算型，预计算带上，别让 agent 自己算）。"""
+def _overview(landscape: dict) -> list[str]:
+    """概览数值（计算型，预计算带上，别让 agent 自己算）。
+
+    有机/推广强度由 NSR 表达；切片层不产出 metrics.marketing_analysis，故不取。
+    """
     overview = landscape.get("overview") or {}
     ov_rows = [
         ("原文总量", overview.get("total_volume")),
@@ -71,9 +74,6 @@ def _overview(landscape: dict, metrics: dict) -> list[str]:
         ("有机 NSR", overview.get("organic_nsr")),
         ("推广 NSR", overview.get("promo_nsr")),
     ]
-    marketing = metrics.get("marketing_analysis") or {}
-    if marketing.get("promotion_ratio") is not None:
-        ov_rows.append(("推广占比", marketing.get("promotion_ratio")))
     ov_rows = [(k, v) for k, v in ov_rows if v is not None]
     if not ov_rows:
         return []
@@ -88,35 +88,57 @@ def _overview(landscape: dict, metrics: dict) -> list[str]:
     return lines
 
 
-def _entities(insights: dict) -> list[str]:
-    """实体（聚合事实 + 情感/份额数值）。"""
-    top_entities = insights.get("top_entities") or []
-    if not top_entities:
+def _sentiment_str(item: dict) -> str:
+    """情感（带有机口径）：当 organic_sentiment 与综合 sentiment 明显背离（>=0.15）时
+    附上有机值——揭示推广内容掩盖的真实口碑（下游拿原始数据重算不出来的二阶信号）。"""
+    s = item.get("sentiment")
+    base = f"情感 {_fmt_sentiment(s)}"
+    org = item.get("organic_sentiment")
+    if (
+        isinstance(org, (int, float))
+        and isinstance(s, (int, float))
+        and abs(org - s) >= 0.15
+    ):
+        return f"{base}（有机 {_fmt_sentiment(org)}）"
+    return base
+
+
+def _entities(foundation: dict) -> list[str]:
+    """实体（来源 foundation.aligned_entities；含 role 与有机情感口径）。"""
+    entities = [
+        e for e in (foundation.get("aligned_entities") or []) if isinstance(e, dict)
+    ]
+    if not entities:
         return []
-    lines = ["## 实体（按声量）"]
-    for e in top_entities[:30]:
+    lines = ["## 实体（Top，按重要度）"]
+    for e in entities[:30]:
         parts = [f"**{e.get('name', '')}**"]
+        if e.get("role"):
+            parts.append(str(e["role"]))
         if e.get("mentions") is not None:
             parts.append(f"提及 {e['mentions']}")
-        if e.get("share") is not None:
-            parts.append(f"声量占比 {e['share']}")
-        parts.append(f"情感 {_fmt_sentiment(e.get('sentiment'))}")
+        if e.get("heat") is not None:
+            parts.append(f"热度 {e['heat']}")
+        parts.append(_sentiment_str(e))
         lines.append("- " + "，".join(parts))
     lines.append("")
     return lines
 
 
-def _entity_roles(insights: dict) -> list[str]:
-    """实体角色（主体 / 竞品）。"""
+def _entity_roles(foundation: dict) -> list[str]:
+    """实体角色（主体 / 竞品），从 aligned_entities 的 role 字段聚合。"""
+    entities = [
+        e for e in (foundation.get("aligned_entities") or []) if isinstance(e, dict)
+    ]
     target = [
         e.get("name", "")
-        for e in (insights.get("target_entities") or [])
-        if e.get("name")
+        for e in entities
+        if (e.get("role") or "").lower() == "target" and e.get("name")
     ]
     competitor = [
         e.get("name", "")
-        for e in (insights.get("competitor_entities") or [])
-        if e.get("name")
+        for e in entities
+        if (e.get("role") or "").lower() == "competitor" and e.get("name")
     ]
     if not target and not competitor:
         return []
@@ -197,20 +219,29 @@ def _entity_matrix(drivers: dict) -> list[str]:
     return lines
 
 
-def _topics(insights: dict) -> list[str]:
-    """话题与观点（聚合事实）。"""
-    top_topics = insights.get("top_topics") or []
-    if not top_topics:
+def _topics(foundation: dict) -> list[str]:
+    """话题与观点（来源 foundation.aligned_topics）；含有机情感口径 + 正负极化分布
+    （区分"中性"与"正负对撕"——综合 sentiment ≈0 时这俩是天壤之别）。"""
+    topics = [
+        t for t in (foundation.get("aligned_topics") or []) if isinstance(t, dict)
+    ]
+    if not topics:
         return []
     lines = ["## 话题与观点"]
-    for t in top_topics[:40]:
+    for t in topics[:40]:
         parts = [f"**{t.get('name', '')}**"]
+        if t.get("category"):
+            parts.append(str(t["category"]))
         if t.get("mentions") is not None:
             parts.append(f"提及 {t['mentions']}")
-        if t.get("post_source_count") is not None:
-            parts.append(f"源帖 {t['post_source_count']}")
-        if t.get("sentiment") is not None:
-            parts.append(f"情感 {_fmt_sentiment(t.get('sentiment'))}")
+        parts.append(_sentiment_str(t))
+        pos, neg = t.get("positive_mentions"), t.get("negative_mentions")
+        if (
+            isinstance(pos, (int, float))
+            and isinstance(neg, (int, float))
+            and pos + neg > 0
+        ):
+            parts.append(f"正/负 {int(pos)}/{int(neg)}")
         lines.append("- " + "，".join(parts))
     lines.append("")
     return lines
@@ -305,20 +336,19 @@ def render_social_slice_md(slice_obj: SocialSlice) -> str:
     landscape = layers.get("landscape") or {}
     intent = layers.get("intent") or {}
     focus = layers.get("focus") or {}
-    drivers = (data.get("foundation") or {}).get("drivers") or {}
-    insights = data.get("insights") or {}
-    metrics = data.get("metrics") or {}
+    foundation = data.get("foundation") or {}
+    drivers = foundation.get("drivers") or {}
 
     sections: list[list[str]] = [
         _front_matter(slice_obj),
         [f"# {slice_obj.name or f'社媒切片 {slice_obj.id}'}", ""],
-        _overview(landscape, metrics),
-        _entities(insights),
-        _entity_roles(insights),
+        _overview(landscape),
+        _entities(foundation),
+        _entity_roles(foundation),
         _group_share(landscape),
         _platform_dna(landscape),
         _entity_matrix(drivers),
-        _topics(insights),
+        _topics(foundation),
         _topic_aspects(intent),
         _unmet_needs(intent),
         _platform_scissors(focus),

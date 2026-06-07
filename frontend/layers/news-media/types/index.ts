@@ -221,6 +221,21 @@ export interface NewsSliceEventCluster {
   representative_article_ids: number[]
 }
 
+export interface NewsSliceTheme {
+  theme_id: number
+  name: string
+  article_ids: number[]
+  article_count: number
+  source_count: number
+  /** 情感量纲 [-2, 2]（与实体/事件一致，非 [-1,1]） */
+  sentiment_avg: number | null
+  sentiment_weighted_by_tier: number | null
+  sentiment_by_tier: TierBreakdownNullable
+  tier_weighted_score: number
+  in_task_ids: number[]
+  representative_article_ids: number[]
+}
+
 export interface NewsSliceMediaLandscape {
   source_pyramid: Array<{
     tier: TierKey
@@ -269,6 +284,7 @@ export interface NewsSliceResultData {
   entities?: NewsSliceEntity[]
   quotes?: NewsSliceQuote[]
   event_clusters?: NewsSliceEventCluster[]
+  themes?: NewsSliceTheme[]
   media_landscape?: NewsSliceMediaLandscape
   competitive?: NewsSliceCompetitive
   page_synthesis?: NewsSlicePageSynthesis

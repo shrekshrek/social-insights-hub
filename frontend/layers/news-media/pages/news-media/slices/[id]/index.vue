@@ -142,6 +142,7 @@ const eventTitles = computed(() => result.value?.page_synthesis?.event_titles ??
 const entities = computed(() => result.value?.entities ?? [])
 const quotes = computed(() => result.value?.quotes ?? [])
 const eventClusters = computed(() => result.value?.event_clusters ?? [])
+const themes = computed(() => result.value?.themes ?? [])
 const mediaLandscape = computed(() => result.value?.media_landscape ?? null)
 const competitive = computed(() => result.value?.competitive ?? null)
 
@@ -551,6 +552,45 @@ const dateOnly = (iso: string | null): string => {
                   {{ s.name }} · {{ s.count }} 篇 · {{ formatPct(s.share) }}
                 </UBadge>
               </div>
+            </div>
+          </UCard>
+
+          <!-- Themes（议题层：媒体反复讨论的维度 + 态度，与具体事件正交） -->
+          <UCard v-if="themes.length">
+            <template #header>
+              <h2 class="text-lg font-medium text-gray-900 dark:text-white">
+                议题层
+                <span class="text-sm font-normal text-gray-500 ml-2">
+                  媒体反复讨论的维度 + 态度，共 {{ themes.length }} 个（情感量纲 [-2, 2]）
+                </span>
+              </h2>
+            </template>
+            <div class="space-y-1.5">
+              <button
+                v-for="theme in themes"
+                :key="theme.theme_id"
+                type="button"
+                class="w-full text-left px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded flex items-center gap-x-3 gap-y-1 flex-wrap hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
+                :title="`查看该议题的 ${theme.article_count} 篇文章`"
+                @click="openArticleModal(theme.article_ids, theme.name, `${theme.article_count} 篇相关文章`)"
+              >
+                <h3 class="font-medium text-sm">{{ theme.name }}</h3>
+                <span
+                  v-if="theme.sentiment_avg !== null"
+                  class="text-xs font-medium"
+                  :class="sentimentClass(theme.sentiment_avg)"
+                >
+                  情感 {{ fmtSent(theme.sentiment_avg) }}
+                </span>
+                <div class="flex items-center gap-x-3 gap-y-1 text-xs text-gray-500 ml-auto flex-wrap">
+                  <span class="text-gray-700 dark:text-gray-200"><strong>{{ theme.article_count }}</strong> 篇</span>
+                  <span>{{ theme.source_count }} 来源</span>
+                  <span>热度 {{ theme.tier_weighted_score.toFixed(1) }}</span>
+                  <span v-if="theme.in_task_ids.length > 1" class="text-blue-600">
+                    跨 {{ theme.in_task_ids.length }} task
+                  </span>
+                </div>
+              </button>
             </div>
           </UCard>
 

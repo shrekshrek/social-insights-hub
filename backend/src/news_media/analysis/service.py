@@ -2,13 +2,13 @@
 
 切片综合流程（4 步）：
   Step 1：合并多 task tagged articles → URL 去重 → 过滤 relevance=low → 描述层（SQL）
-  Step 2：Pass 1 LLM → entities 归一 + role 校正 + quotes 分级 + event_clusters 聚类
-  Step 3：派生层（SQL）→ entity 多维 sentiment + competitive 投影 + source_pyramid + 事件时间锚
+  Step 2：Pass 1 LLM → entities 归一 + role 校正 + quotes 分级 + event_clusters 聚类 + themes 议题
+  Step 3：派生层（SQL）→ entity 多维 sentiment + competitive 投影 + source_pyramid + 事件时间锚 + 议题聚合
   Step 4：Pass 2 LLM → briefing + event_titles（仅 slice 页面用，不下流给策略）
 
 result_data 顶层 schema：
   - descriptive: Step 1 输出
-  - entities / quotes / event_clusters / media_landscape / competitive: Step 3 输出
+  - entities / quotes / event_clusters / themes / media_landscape / competitive: Step 3 输出
   - page_synthesis: Step 4 Pass 2 输出（briefing + event_titles）
 
 stats（列表页轻量摘要）：descriptive 子集 + 归一后 top_entities。
@@ -359,7 +359,7 @@ def _articles_for_llm(articles: list) -> list[dict]:
 def _parse_pass1_output(content: str) -> dict:
     """从 LLM 响应中提取 JSON（兼容 markdown code block 包裹）。
 
-    Pass 1 schema 要求：entities + quotes + event_clusters。任何字段缺失视为空。
+    Pass 1 schema 要求：entities + quotes + event_clusters + themes。任何字段缺失视为空。
     """
     text = content.strip()
     if "```json" in text:
@@ -383,6 +383,7 @@ def _parse_pass1_output(content: str) -> dict:
         "entities": parsed.get("entities") or [],
         "quotes": parsed.get("quotes") or [],
         "event_clusters": parsed.get("event_clusters") or [],
+        "themes": parsed.get("themes") or [],
     }
 
 
@@ -426,6 +427,13 @@ def _compute_derived(
         article_by_id,
     )
 
+    # themes 派生（议题层，与事件层正交）
+    themes = _derive_themes(
+        pass1.get("themes") or [],
+        article_by_index,
+        article_by_id,
+    )
+
     # 把 quotes 反向挂到 entities[].top_quote_ids
     _attach_top_quote_ids_to_entities(entities, quotes, article_by_id)
 
@@ -439,6 +447,7 @@ def _compute_derived(
         "entities": entities,
         "quotes": quotes,
         "event_clusters": event_clusters,
+        "themes": themes,
         "media_landscape": media_landscape,
         "competitive": competitive,
     }
@@ -685,6 +694,72 @@ def _derive_event_clusters(
     # 重排 cluster_id 保证连续（影响 Pass 2 输入与输出对齐）
     for new_id, c in enumerate(derived):
         c["cluster_id"] = new_id
+    return derived
+
+
+def _derive_themes(
+    pass1_themes: list[dict],
+    article_by_index: dict[int, Any],
+    article_by_id: dict[int, Any],
+) -> list[dict]:
+    """Step 3 议题派生：把 Pass 1 的议题（反复出现的抽象讨论维度，与具体事件正交）
+    聚合为 议题 → 文章数 / 多维情感 / tier 加权热度 / 代表文章。
+
+    与 event_clusters 区别：议题非互斥（一篇可命中多个）、抽象（讨论维度而非具体事件），
+    回答"媒体在反复谈什么、态度如何"（如"安全性"负面、"科研背书"正面）。
+    """
+    derived: list[dict] = []
+    for tid, theme in enumerate(pass1_themes):
+        if not isinstance(theme, dict):
+            continue
+        name = (theme.get("name") or "").strip()
+        indices = theme.get("article_indices") or []
+        article_ids: list[int] = []
+        theme_articles = []
+        for idx in indices:
+            a = article_by_index.get(idx)
+            if a:
+                article_ids.append(a.id)
+                theme_articles.append(a)
+        if not name or len(theme_articles) < 2:
+            continue
+
+        sent = _compute_entity_sentiments(article_ids, article_by_id)
+        tier_weighted = round(
+            sum(
+                _TIER_WEIGHT.get(a.source_tier or "tier3", 1.0) for a in theme_articles
+            ),
+            2,
+        )
+        in_task_ids = sorted({a.task_id for a in theme_articles})
+        rep_sorted = sorted(
+            theme_articles,
+            key=lambda a: (
+                _TIER_PRIORITY.get(a.source_tier or "tier3", 9),
+                a.published_at or datetime.max.replace(tzinfo=timezone.utc),
+            ),
+        )
+        rep_article_ids = [a.id for a in rep_sorted[:5]]
+
+        derived.append(
+            {
+                "theme_id": tid,
+                "name": name,
+                "article_ids": article_ids,
+                "article_count": len(article_ids),
+                "source_count": sent["source_count"],
+                "sentiment_avg": sent["sentiment_avg"],
+                "sentiment_weighted_by_tier": sent["sentiment_weighted_by_tier"],
+                "sentiment_by_tier": sent["sentiment_by_tier"],
+                "tier_weighted_score": tier_weighted,
+                "in_task_ids": in_task_ids,
+                "representative_article_ids": rep_article_ids,
+            }
+        )
+
+    derived.sort(key=lambda x: x["tier_weighted_score"], reverse=True)
+    for new_id, t in enumerate(derived):
+        t["theme_id"] = new_id
     return derived
 
 

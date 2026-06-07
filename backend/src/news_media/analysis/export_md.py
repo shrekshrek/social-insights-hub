@@ -237,6 +237,26 @@ def _cross_task(descriptive: dict) -> list[str]:
     return ["## 跨任务重叠", f"- 分布：{_dist(dist)}", ""]
 
 
+def _themes(themes: list) -> list[str]:
+    """议题层（媒体反复讨论的抽象维度 + 态度，与具体事件正交）——新闻独有二阶结构。"""
+    if not themes:
+        return []
+    lines = ["## 议题（媒体反复讨论的维度 + 态度；情感量纲 [-2,2]）"]
+    for t in themes[:10]:
+        parts = [f"**{t.get('name', '')}**"]
+        if t.get("article_count") is not None:
+            parts.append(f"文章 {t['article_count']}")
+        if t.get("source_count") is not None:
+            parts.append(f"来源 {t['source_count']}")
+        if t.get("sentiment_avg") is not None:
+            parts.append(f"情感 {_fmt_sentiment(t.get('sentiment_avg'))}")
+        if t.get("tier_weighted_score") is not None:
+            parts.append(f"热度 {t['tier_weighted_score']}")
+        lines.append("- " + "，".join(parts))
+    lines.append("")
+    return lines
+
+
 def render_news_slice_md(slice_obj: NewsSlice) -> str:
     """渲染单个新闻切片为 Markdown（front-matter + 二阶计算/聚合事实）。
 
@@ -248,6 +268,7 @@ def render_news_slice_md(slice_obj: NewsSlice) -> str:
     entities = data.get("entities") or []
     quotes = data.get("quotes") or []
     event_clusters = data.get("event_clusters") or []
+    themes = data.get("themes") or []
     media_landscape = data.get("media_landscape") or {}
     competitive = data.get("competitive") or {}
     event_titles = (data.get("page_synthesis") or {}).get("event_titles") or {}
@@ -259,6 +280,7 @@ def render_news_slice_md(slice_obj: NewsSlice) -> str:
         _media_pyramid(media_landscape),
         _entities(entities),
         _competitive(competitive),
+        _themes(themes),
         _event_clusters(event_clusters, event_titles),
         _quotes(quotes),
         _timeline(descriptive),

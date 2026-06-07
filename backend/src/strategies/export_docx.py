@@ -1,8 +1,11 @@
 """策略报告 Word 导出
 
-生成 brand_strategy 路径 3 个递进层结果的 Word 文档
-（insight → brand_role → big_idea）。
-复用 analysis/export_docx 的样式设置和 Markdown 渲染。
+按 output_type 渲染对应路径的结果：
+- campaign_strategy: Insight → Brand Role → Big Idea（仅 selected 分支）
+- market_report:     Agenda Map → Landscape → Strategic Brief
+- full_strategy:     Agenda Map → Landscape → Insight → Brand Role → Big Idea → Strategic Brief
+
+复用 analysis/export_docx 的样式设置。
 """
 
 from __future__ import annotations
@@ -20,27 +23,38 @@ from .models import Strategy
 
 
 def generate_strategy_docx(strategy: Strategy) -> BytesIO:
-    """从策略记录生成 Word 文档（多分支：仅导出 selected branch）"""
+    """从策略记录生成 Word 文档，按 output_type 渲染对应路径。
+
+    campaign_strategy 多分支仅导出 selected branch（无则按完成度回退）。
+    """
     doc = Document()
     _setup_styles(doc)
-
-    # 封面
     _add_cover(doc, strategy)
 
-    # 洞察层
-    _add_insight_section(doc, strategy.insight_result)
+    output_type = strategy.output_type or "campaign_strategy"
+    has_market = output_type in ("market_report", "full_strategy")
+    has_campaign = output_type in ("campaign_strategy", "full_strategy")
 
-    # 多分支：取 selected=true 的分支；无则按完成度回退（big_idea > brand_role > 第一个）
-    selected = _pick_export_branch(strategy.brand_strategy_branches)
-    branch_brand_role = (selected or {}).get("brand_role")
-    branch_big_idea = (selected or {}).get("big_idea")
-    branch_label = _format_branch_label(selected)
+    # 媒体侧（market_report / full_strategy）：议程图 + 竞争格局
+    if has_market:
+        _add_agenda_map_section(doc, strategy.agenda_map_result)
+        _add_landscape_section(doc, strategy.landscape_result)
 
-    # 品牌角色层
-    _add_brand_role_section(doc, branch_brand_role, branch_label=branch_label)
+    # 消费者侧（campaign_strategy / full_strategy）：洞察 + 品牌角色 + 创意
+    if has_campaign:
+        _add_insight_section(doc, strategy.insight_result)
+        selected = _pick_export_branch(strategy.brand_strategy_branches)
+        branch_label = _format_branch_label(selected)
+        _add_brand_role_section(
+            doc, (selected or {}).get("brand_role"), branch_label=branch_label
+        )
+        _add_big_idea_section(
+            doc, (selected or {}).get("big_idea"), branch_label=branch_label
+        )
 
-    # 创意层
-    _add_big_idea_section(doc, branch_big_idea, branch_label=branch_label)
+    # 战略简报（market_report / full_strategy 终层，综合上游）
+    if has_market:
+        _add_strategic_brief_section(doc, strategy.strategic_brief_result)
 
     buf = BytesIO()
     doc.save(buf)
@@ -228,6 +242,218 @@ def _add_big_idea_section(
                 for ex in examples:
                     doc.add_paragraph(f"  - {ex}", style="List Bullet")
         _add_evidence_list(doc, content.get("evidence", []))
+
+
+def _add_voices(doc: Document, voices: list[dict] | None) -> None:
+    """代表声音列表（quote / speaker / source / source_tier）"""
+    for v in voices or []:
+        if not isinstance(v, dict):
+            continue
+        meta = "、".join(
+            x for x in [v.get("speaker"), v.get("source"), v.get("source_tier")] if x
+        )
+        text = f"“{v.get('quote', '')}”" + (f" —— {meta}" if meta else "")
+        doc.add_paragraph(text, style="List Bullet")
+
+
+def _add_agenda_map_section(doc: Document, agenda: dict | None) -> None:
+    """市场报告第 1 层 Agenda Map（媒体议程图）"""
+    doc.add_heading("媒体议程图 (Agenda Map)", level=1)
+    if not agenda:
+        doc.add_paragraph("（未完成）")
+        return
+
+    if agenda.get("media_landscape_summary"):
+        doc.add_paragraph(agenda["media_landscape_summary"])
+
+    narratives = agenda.get("narrative_map") or []
+    if narratives:
+        doc.add_heading("叙事地图 (Narrative Map)", level=2)
+        for n in narratives:
+            doc.add_heading(n.get("theme", ""), level=3)
+            if n.get("framing"):
+                doc.add_paragraph(f"框架: {n['framing']}")
+            meta = []
+            if n.get("sentiment") is not None:
+                meta.append(f"情感 {n['sentiment']}")
+            if n.get("credibility"):
+                meta.append(f"可信度 {n['credibility']}")
+            if n.get("supporting_sources"):
+                meta.append(f"支撑来源 {'、'.join(n['supporting_sources'])}")
+            if meta:
+                doc.add_paragraph("，".join(meta))
+            _add_voices(doc, n.get("representative_voices"))
+
+    battles = agenda.get("agenda_battles") or []
+    if battles:
+        doc.add_heading("议题战场 (Agenda Battles)", level=2)
+        for b in battles:
+            doc.add_heading(b.get("contested_topic", ""), level=3)
+            for c in b.get("camps") or []:
+                tiers = c.get("supporting_tiers")
+                tiers_str = (
+                    "、".join(tiers) if isinstance(tiers, list) else (tiers or "")
+                )
+                doc.add_paragraph(
+                    f"立场: {c.get('stance', '')}（{tiers_str}）", style="List Bullet"
+                )
+            if b.get("implication"):
+                doc.add_paragraph(f"含义: {b['implication']}")
+
+    gaps = agenda.get("attention_gaps") or []
+    if gaps:
+        doc.add_heading("注意力盲区 (Attention Gaps)", level=2)
+        for g in gaps:
+            doc.add_paragraph(
+                f"{g.get('topic', '')}：{g.get('why_matters', '')}"
+                f"（{g.get('risk_or_opportunity', '')}）",
+                style="List Bullet",
+            )
+
+
+def _add_landscape_section(doc: Document, landscape: dict | None) -> None:
+    """市场报告第 2 层 Landscape（竞争格局）"""
+    doc.add_heading("竞争格局 (Landscape)", level=1)
+    if not landscape:
+        doc.add_paragraph("（未完成）")
+        return
+
+    if landscape.get("competitive_summary"):
+        doc.add_paragraph(landscape["competitive_summary"])
+
+    players = landscape.get("players") or []
+    if players:
+        doc.add_heading("玩家 (Players)", level=2)
+        for p in players:
+            doc.add_heading(f"{p.get('name', '')}（{p.get('role', '')}）", level=3)
+            meta = []
+            if p.get("media_sov_pct") is not None:
+                meta.append(f"媒体声量 {p['media_sov_pct']}%")
+            if p.get("media_sentiment") is not None:
+                meta.append(f"媒体情感 {p['media_sentiment']}")
+            if meta:
+                doc.add_paragraph("，".join(meta))
+            if p.get("narrative_position"):
+                doc.add_paragraph(f"叙事定位: {p['narrative_position']}")
+            for c in p.get("key_claims") or []:
+                doc.add_paragraph(c, style="List Bullet")
+            _add_voices(doc, p.get("representative_voices"))
+
+    pm = landscape.get("positioning_map") or {}
+    positions = pm.get("positions") or []
+    if positions:
+        doc.add_heading("定位图 (Positioning Map)", level=2)
+        xa = pm.get("x_axis") or {}
+        ya = pm.get("y_axis") or {}
+        doc.add_paragraph(
+            f"X 轴: {xa.get('label', '')}（{xa.get('low', '')} ↔ {xa.get('high', '')}）"
+        )
+        doc.add_paragraph(
+            f"Y 轴: {ya.get('label', '')}（{ya.get('low', '')} ↔ {ya.get('high', '')}）"
+        )
+        for pos in positions:
+            doc.add_paragraph(
+                f"{pos.get('player', '')}：{pos.get('rationale', '')}",
+                style="List Bullet",
+            )
+
+    battles = landscape.get("discourse_battles") or []
+    if battles:
+        doc.add_heading("话语权之争 (Discourse Battles)", level=2)
+        for b in battles:
+            doc.add_heading(b.get("battle", ""), level=3)
+            if b.get("shift_direction"):
+                doc.add_paragraph(f"走向: {b['shift_direction']}")
+            if b.get("evidence"):
+                doc.add_paragraph(f"依据: {b['evidence']}")
+
+    md = landscape.get("market_dynamics") or {}
+    if md:
+        doc.add_heading("市场动态 (Market Dynamics)", level=2)
+        for label, key in (("上升", "momentum_gainers"), ("下降", "momentum_losers")):
+            for item in md.get(key) or []:
+                doc.add_paragraph(
+                    f"{label}: {item.get('player', '')} — {item.get('signal', '')}",
+                    style="List Bullet",
+                )
+        for s in md.get("structural_shifts") or []:
+            doc.add_paragraph(
+                f"结构变化: {s.get('shift', '')} → {s.get('implication', '')}",
+                style="List Bullet",
+            )
+
+
+def _add_strategic_brief_section(doc: Document, brief: dict | None) -> None:
+    """市场报告第 3 层 Strategic Brief（战略简报，综合终层）"""
+    doc.add_heading("战略简报 (Strategic Brief)", level=1)
+    if not brief:
+        doc.add_paragraph("（未完成）")
+        return
+
+    if brief.get("generation_mode"):
+        view = "综合视角" if brief["generation_mode"] == "comprehensive" else "媒体视角"
+        doc.add_paragraph(f"视角: {view}")
+
+    if brief.get("executive_summary"):
+        doc.add_heading("执行摘要", level=2)
+        doc.add_paragraph(brief["executive_summary"])
+
+    priorities = brief.get("strategic_priorities") or []
+    if priorities:
+        doc.add_heading("战略优先级", level=2)
+        for i, p in enumerate(priorities):
+            doc.add_heading(f"{i + 1}. {p.get('priority', '')}", level=3)
+            if p.get("rationale"):
+                doc.add_paragraph(p["rationale"])
+            for a in p.get("actions") or []:
+                doc.add_paragraph(a, style="List Bullet")
+            if p.get("success_metric"):
+                doc.add_paragraph(f"成功指标: {p['success_metric']}")
+
+    opps = brief.get("market_opportunities") or []
+    if opps:
+        doc.add_heading("市场机会", level=2)
+        for o in opps:
+            doc.add_heading(o.get("opportunity", ""), level=3)
+            if o.get("brand_fit"):
+                doc.add_paragraph(f"品牌契合: {o['brand_fit']}")
+            if o.get("why_now"):
+                doc.add_paragraph(f"为何此时: {o['why_now']}")
+            if o.get("entry_path"):
+                doc.add_paragraph(f"切入路径: {o['entry_path']}")
+
+    risks = brief.get("risks_and_threats") or []
+    if risks:
+        doc.add_heading("风险与威胁", level=2)
+        for r in risks:
+            extra = "，".join(
+                x
+                for x in [
+                    f"可能性 {r['likelihood']}" if r.get("likelihood") else "",
+                    f"缓解: {r['mitigation']}" if r.get("mitigation") else "",
+                ]
+                if x
+            )
+            doc.add_paragraph(
+                r.get("risk", "") + (f"（{extra}）" if extra else ""),
+                style="List Bullet",
+            )
+
+    rp = brief.get("recommended_positioning") or {}
+    if rp:
+        doc.add_heading("推荐定位", level=2)
+        if rp.get("statement"):
+            p = doc.add_paragraph()
+            run = p.add_run(rp["statement"])
+            run.bold = True
+            run.font.size = Pt(12)
+        if rp.get("differentiation_logic"):
+            doc.add_paragraph(f"差异化逻辑: {rp['differentiation_logic']}")
+        if rp.get("why_this_brand_can_own_it"):
+            doc.add_paragraph(f"为何本品牌能占据: {rp['why_this_brand_can_own_it']}")
+        for pp in rp.get("proof_points") or []:
+            if isinstance(pp, dict) and pp.get("claim"):
+                doc.add_paragraph(pp["claim"], style="List Bullet")
 
 
 def _add_evidence_list(doc: Document, evidence: list[dict]) -> None:

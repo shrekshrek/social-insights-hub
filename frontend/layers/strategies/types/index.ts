@@ -674,6 +674,12 @@ export interface CompetitivePlayer {
   key_claims?: string[]
   /** 该玩家的代表性媒体引文（0-2 条），与 agenda_map.narrative_map[].representative_voices 同 schema */
   representative_voices?: RepresentativeVoice[]
+  /** 消费者侧真实地位（social 大盘交叉，仅 full_strategy）：如"媒体与口碑一致"/"声量虚高"；无社媒大盘数据为 null */
+  consumer_standing?: string | null
+  /** 社媒剔除推广后的真实情感 [-1, 1]；无社媒大盘数据为 null */
+  consumer_organic_sentiment?: number | null
+  /** true = 该品牌社媒推广声量显著高于自然声量（声量虚高）；无社媒大盘数据为 null */
+  voice_inflation?: boolean | null
 }
 
 /** 定位轴语义：label = 轴名，low/high = 两端语义 */

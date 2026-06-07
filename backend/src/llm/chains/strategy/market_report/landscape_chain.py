@@ -1,23 +1,28 @@
 """Strategy Market Report — Landscape Chain (竞争格局)
 
 market_report 三层分析的**第 2 层**：agenda_map → landscape → strategic_brief。
-基于 agenda_map 层（媒体议程图）+ 新闻切片原始数据，输出：
-媒体视角下的竞争格局、玩家定位、媒介声量对比、话语战场的胜负与动向。
+基于 agenda_map 层（媒体议程图）+ 新闻切片原始数据，full_strategy 下还交叉社媒大盘的消费者侧
+竞争信号，输出：媒体视角下的竞争格局、玩家定位、媒介声量对比、话语战场的胜负与动向，并**客观
+校验**媒体声量是否反映消费者真实口碑（一致则确认、背离则分向标注，不预设找问题）。
 
 ## 输入上下文（USER_TEMPLATE 占位符）
 
 - brief_section             : Brand Brief
 - research_context_section  : 研究问题 + 需求理解
 - agenda_map_section        : 上游 agenda_map 层的媒体议程图结果（必需，provides narrative backbone）
-- news_slice_data           : 新闻切片原始 insight（提供 entity/sentiment/SOV 数据）
+- news_slice_data           : 新闻切片原始 insight（媒体侧：entity/sentiment/SOV/themes/timeseries）
+- social_dapan_section      : 社媒大盘切片的消费者侧【竞争】投影（仅 full_strategy：各品牌 organic_heat /
+                              promo_heat + voice_inflation（声量虚高=推广声量>自然声量）+ organic_sentiment
+                              + group_share + overview；market_report / 无社媒大盘则降级为媒体纯）
 - research_findings         : Research Agent 行业研究发现（自动注入）
 
 ## 输出结构
 
 players             : 玩家名单 + media_sov + media_sentiment + narrative_position
-positioning_map     : 二维定位图（axes + positions）
+                      + 消费者交叉（consumer_standing / consumer_organic_sentiment / voice_inflation）
+positioning_map     : 二维定位图（媒体叙事轴，axes + positions）
 discourse_battles   : 话语战场——谁在主导、谁在挑战
-market_dynamics     : 动量变化（gainers / losers / structural_shifts）
+market_dynamics     : 动量变化（gainers / losers / structural_shifts）+ 媒体 vs 消费者一致性校验（背离则标注）
 
 ## 关键设计决策
 
@@ -57,6 +62,8 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 
 1. **Players（玩家）**：识别所有被媒体报道的实体，区分 target（研究主体）、
    competitor（直接竞品）、context（背景参与者，如监管/行业协会/分析机构）。
+   full_strategy 下，每个 player 还要与社媒大盘做消费者侧交叉（见下「媒体 × 消费者 跨源交叉」节），
+   揭示媒体声量是否反映真实口碑。
 2. **Positioning Map（定位图，严格基于媒体叙事）**：由 LLM 根据 agenda_map.narrative_map
    的主导叙事 / framing 选择两个最有解释力的**语义轴**（如"科学实证 vs 营销故事化"、
    "权威 tier1 共识 vs tier3/wechat_mp 长尾"、"行业领导叙事 vs 挑战者叙事"），把主要玩家
@@ -86,6 +93,9 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
       "media_sov_pct": <float, 0-100, 在本次新闻样本中的声量占比>,
       "media_sentiment": <-2~2 加权>,
       "source_count": <int, 不同来源数>,
+      "consumer_standing": "<str|null, 消费者侧真实地位一句话：如'媒体与口碑一致'/'有机口碑领先'/'声量虚高(推广驱动)'/'媒体沉默但口碑佳'；无社媒大盘数据填 null>",
+      "consumer_organic_sentiment": <float|null, 社媒剔除推广后的真实情感；无则 null>,
+      "voice_inflation": <bool|null, true=该品牌社媒推广声量显著高于自然声量(虚高)；无社媒数据 null>,
       "narrative_position": "该玩家在媒体叙事中的主要定位（一句话）",
       "key_claims": ["媒体围绕该玩家的代表性论述"],
       "representative_voices": [
@@ -146,6 +156,36 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 （quote/speaker/source/source_tier 按对应 key_quote 字段填），每个 player 0-2 条；
 该玩家无合适 quote 时输出空数组。命名与 agenda_map 同名同 schema。
 
+## 媒体 × 消费者 跨源交叉（社媒大盘 · 仅 full_strategy 提供）
+
+竞争格局是**多源综合**——媒体侧（新闻切片，已在上文）+ 消费者侧（社媒大盘切片）。媒体声量（media_sov）
+**有可能**被 PR/投放放大（主品砸钱即可占媒体声量），但**也常与真实口碑一致**。社媒大盘的 organic/promo
+拆分用来**客观校验**媒体格局是否反映消费者现实——**一致是常态、直接确认；背离才分向标注**，不是预设要找问题。
+
+`社媒大盘切片` 段（**仅当非空时使用**；为降级提示时所有 consumer_* 填 null）提供消费者侧**竞争**数据
+（`sov_ranking` 各品牌 organic/promo/情感、`group_share` 母品牌族、`overview` 自然/推广总量），声量口径：
+- `organic_heat`（自然声量）= 品牌**真实市场认知**的首选衡量——用于**排序**，不是百分比。
+- `promo_heat`（推广声量）。`voice_inflation=true`（promo 显著高于 organic）= 声量主要由**推广驱动**
+  （即"声量虚高"，自然口碑未必同样强）；**多数品牌为 false，属正常（自然声量主导），不要硬判虚高**。
+- `organic_sentiment`：剔除推广后的真实情感。
+- `group_share`：按母品牌族聚合的 organic/promo——player 若为某母品牌旗下子品牌，用其族级聚合看真实地位，避免单品牌口径误判。
+- `overview`（total_organic_heat / total_promo_heat）：品类整体自然 vs 推广基准，用于判断单品牌 voice_inflation 是否偏离品类常态。
+
+用法（按品牌名跨渠道对齐；**绝不改 positioning_map 的媒体叙事轴**）：
+1. 在你识别出的 players 内部，**按 `organic_heat` 排出"消费者真实地位"**，与各 player 的 `media_sov_pct`
+   排序对照，看是否**倒置**。**禁止把 `media_sov_pct` 与社媒声量直接比百分比**——两者口径不同
+   （媒体样本 vs 社媒样本、竞品集合 vs 全实体），只比**相对排序与方向**。
+2. 给每个 player 填 `consumer_standing`（一句话定性）、`consumer_organic_sentiment`、`voice_inflation`
+   （社媒大盘有该品牌则填，无则三者均 null）。
+3. 据对照如实判定一致性（**三种结果，按数据判定，不得预设**）；在 `competitive_summary` /
+   `market_dynamics.structural_shifts` 仅在**确有**背离时点出：
+   - **一致**（媒体声量排序 ≈ organic_heat 排序、voice_inflation 多为 false）：媒体格局如实反映消费者认知，
+     **确认即可**——常见且正常的结果，不要硬找背离。
+   - **媒体虚高**（媒体声量高但 organic_heat 靠后 / voice_inflation=true）：泡沫式领先、真实口碑落后，标注脆弱。
+   - **被低估**（organic_heat 高但媒体声量低）：被低估的真实强者，潜在威胁/机会。
+   仅当数据**确实**支持时才下"虚高/被低估"结论；多数品牌属"一致"，**不得夸大不存在的虚高**。
+4. positioning_map 仍只用媒体叙事轴；消费者数据仅用于**校验**媒体定位是否反映真实竞争，不重定义轴、不挪动位置。
+
 ## 切片溯源规范（重要）
 
 `players[].rationale` / `discourse_battles[].evidence` 等说理性字段，引用切片层数据时
@@ -181,7 +221,11 @@ USER_TEMPLATE = """{brief_section}
 
 ## 新闻切片原始数据
 
-{news_slice_data}"""
+{news_slice_data}
+
+## 社媒大盘切片（消费者侧 · 仅 full_strategy）
+
+{social_dapan_section}"""
 
 
 def create_landscape_chain() -> Runnable:
@@ -354,6 +398,62 @@ def _format_agenda_map_section(agenda_map_result: dict | None) -> str:
     return json.dumps(condensed, ensure_ascii=False, indent=2)
 
 
+def _format_social_dapan_for_landscape(dapan: dict | None) -> str:
+    """社媒大盘切片的消费者侧【竞争】投影（仅 full_strategy 注入）。
+
+    只取竞争 roster 维度——media_sov 可被 PR/投放买高，社媒 organic/promo 拆分揭示买不动的
+    真实口碑，供多源竞争交叉。投影结构化层（不碰散文报告）：sov_ranking（organic/promo/情感/虚高）
+    + group_share（母品牌族）+ overview（自然/推广总量）。
+    **不含消费者话题**——"消费者在谈什么"归 Agenda Map（attention_gaps）/ Insight，不进竞争 roster。
+    无数据时返回降级提示，LLM 据此保持媒体纯。
+    """
+    if not dapan or not isinstance(dapan, dict):
+        return "（无社媒大盘数据：本次为纯媒体视角，players 的 consumer_* 字段一律填 null）"
+    layers = dapan.get("layers") or {}
+    landscape = layers.get("landscape") or {}
+    overview = landscape.get("overview") or {}
+
+    def _brand(r: dict) -> dict:
+        oh = r.get("organic_heat")
+        ph = r.get("promo_heat")
+        return {
+            "name": r.get("name"),
+            "role": str(r.get("role") or "").lower(),
+            "organic_heat": oh,
+            "promo_heat": ph,
+            "voice_inflation": (
+                bool(ph > oh)
+                if isinstance(oh, (int, float)) and isinstance(ph, (int, float))
+                else None
+            ),
+            "organic_sentiment": r.get("organic_sentiment"),
+            "sentiment": r.get("sentiment"),
+        }
+
+    proj = {
+        "overview": {
+            "total_organic_heat": overview.get("total_organic_heat"),
+            "total_promo_heat": overview.get("total_promo_heat"),
+        },
+        "sov_ranking": [
+            _brand(r)
+            for r in (landscape.get("sov_ranking") or [])[:12]
+            if isinstance(r, dict) and r.get("name")
+        ],
+        "group_share": [
+            {
+                "name": g.get("name"),
+                "role": str(g.get("role") or "").lower(),
+                "organic_heat": g.get("organic_heat"),
+                "promo_heat": g.get("promo_heat"),
+            }
+            for g in (landscape.get("group_share") or [])[:10]
+            if isinstance(g, dict) and g.get("name")
+        ],
+    }
+    return json.dumps(proj, ensure_ascii=False, indent=2)
+
+
 def format_inputs_for_landscape(
     agenda_map_result: dict | None,
     news_slices: list[dict],
@@ -361,11 +461,14 @@ def format_inputs_for_landscape(
     research_design: dict | None = None,
     news_slice_refs: list[dict] | None = None,
     research_findings: str = "",
+    social_dapan: dict | None = None,
 ) -> dict[str, Any]:
     """构建 Landscape chain 的输入参数字典。
 
     `news_slice_refs` 与 news_slices 同序的 [{id, name}] 列表，用于让 LLM 在
     evidence 字段中以 `News Slice #<i>: <name>` 形式精准引用。
+    `social_dapan`：social 大盘切片的 result_data（仅 full_strategy），投影为消费者侧
+    结构化数据，与新闻切片一起做媒体 × 消费者多源竞争交叉。
     """
     brief_section = ""
     if brief:
@@ -381,6 +484,7 @@ def format_inputs_for_landscape(
         "news_slice_data": _format_news_slices_for_landscape(
             news_slices, news_slice_refs
         ),
+        "social_dapan_section": _format_social_dapan_for_landscape(social_dapan),
     }
 
 

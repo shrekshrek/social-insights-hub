@@ -156,6 +156,7 @@ SYSTEM_TEMPLATE = """你是一位资深社交媒体策略分析师，擅长从�
 - **original_terms**（top 5 实体）：用户提及该实体时的原始表述（最多 3 条），保留真实语言模式，evidence 可直接引用原话以增强说服力。
 - **organic_sentiment**（实体/话题/pains/gains）：剔除推广内容后的真实用户情感。若与 sentiment 差距 >= 0.2，说明推广内容正在掩盖真实口碑，优先以 organic_sentiment 为准。
 - **sov_ranking[].sentiment**：各品牌声量份额（share）配合情感，可定位四象限：高声量低情感是竞品弱点，低声量高情感是品牌机会入口。
+- **sov_ranking[].organic_heat / promo_heat**：自然声量 vs 推广声量。**判断品牌真实竞争声量优先看 organic_heat**（share 是 organic+promo 合计，会被推广拉高）。多数品牌 organic 主导、属正常；仅当某品牌 promo_heat 显著高于 organic_heat 时，说明其 share 主要由推广（软广/种草）堆出，需相应下调对其声量的采信——**不预设、不臆造**。（与 organic_sentiment 同理：声量看 organic_heat、情感看 organic_sentiment。）
 - **controversies[].controversy_depth**：两极均衡度（0~0.5，越接近 0.5 说明正负意见越均衡、越撕裂）。真正的核心矛盾往往 depth 高但 heat 未必高。**仅当 `polar_total >= 10` 时样本可信**，polar_total 过低时应降低置信度。
 - **pains[].organic_sentiment**：关注 `organic_sentiment` 明显低于 `sentiment` 的痛点话题（差值 >= 0.2），说明该话题被推广内容稀释，真实用户体验比数字所呈现的更差，是高价值的隐性痛点信号。
 - **topic_aspects**：按主题类别聚合的宏观分布，用于发现「某一整类话题情感集体偏负」等品类级模式，是单话题视图看不到的。
@@ -491,6 +492,10 @@ def format_slice_data_for_insight(
                 "name": r.get("name"),
                 "share": r.get("share"),
                 "sentiment": r.get("sentiment"),
+                # organic_heat/promo_heat：真实竞争声量优先看 organic_heat（share=organic+promo
+                # 会被推广拉高）；promo 显著高于 organic 时该品牌声量主要靠推广，下调采信
+                "organic_heat": r.get("organic_heat"),
+                "promo_heat": r.get("promo_heat"),
                 "role": r.get("role"),
             }
             for r in sov_ranking

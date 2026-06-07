@@ -38,6 +38,29 @@
           <p v-if="player.narrative_position" class="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
             {{ player.narrative_position }}
           </p>
+          <!-- 消费者侧交叉（social 大盘 · 仅 full_strategy；无社媒大盘数据则不显示）-->
+          <div
+            v-if="player.consumer_standing || player.voice_inflation === true || player.consumer_organic_sentiment != null"
+            class="mt-1.5 flex items-center gap-1.5 flex-wrap text-[11px]"
+          >
+            <UBadge color="neutral" variant="subtle" size="sm" class="shrink-0">消费者</UBadge>
+            <span v-if="player.consumer_standing" class="text-gray-600 dark:text-gray-300">
+              {{ player.consumer_standing }}
+            </span>
+            <UBadge v-if="player.voice_inflation === true" color="warning" variant="subtle" size="sm">
+              声量虚高
+            </UBadge>
+            <span
+              v-if="player.consumer_organic_sentiment != null"
+              :class="player.consumer_organic_sentiment > 0.1
+                ? 'text-green-600 dark:text-green-400'
+                : player.consumer_organic_sentiment < -0.1
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-gray-400'"
+            >
+              真实口碑 {{ player.consumer_organic_sentiment.toFixed(2) }}
+            </span>
+          </div>
           <!-- 关键论述（key_claims） -->
           <ul v-if="player.key_claims?.length" class="mt-1.5 space-y-0.5">
             <li

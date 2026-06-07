@@ -11,6 +11,8 @@ market_report 三层分析的**第 1 层**：agenda_map → landscape → strate
 - coverage_signals    : 跨切片数据质量诊断（warnings + data_highlights），来自
                         strategy.coverage_check_result，用于校准结论置信度
 - news_slice_data     : 所有 NewsSlice 的 insight 数据聚合（coverage/narratives/entities/key_quotes）
+- consumer_interest_section : 社媒大盘的消费者自然讨论话题 + 未满足需求（仅 full_strategy，用于
+                        attention_gaps 的消费者验证；market_report / 无社媒大盘则降级）
 - research_findings   : Research Agent 行业研究发现（自动注入）
 
 ## 输出结构
@@ -22,8 +24,9 @@ attention_gaps       : 值得报道但当前报道稀缺的议题
 
 ## 关键设计决策
 
-1. **不输出消费者 tension**。Agenda Map 层的视角严格限定在"媒体如何定义议题"，
-   consumer voice 不是该路径的主源，若需人群反应应走 brand_strategy 路径。
+1. **视角限定在"媒体如何定义议题"**，consumer voice 不是该路径的主源，人群反应走
+   brand_strategy 路径。**唯一例外**：full_strategy 下 attention_gaps 可用社媒大盘的消费者
+   自然讨论**验证**盲区（"消费者在意但媒体少报"）；narrative_map / battles / patterns 仍纯媒体。
 2. **强调 tier 对比**。narrative 的置信度依赖 tier1/tier2 是否达成共识，
    仅依赖 wechat_mp 的声音必须标注为 "emerging / unverified"。
 3. **模型选用 chat**。insight 级别输出，不需要 reasoner 的长链推理。
@@ -68,7 +71,8 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
    - industry_debate: tier2 内部存在分歧的议题
    - emerging_narratives: 主要来自 wechat_mp / tier3 的新兴声音（标注 unverified）
 4. **Attention Gaps（注意力盲区）**：业务层面重要、但当前媒体报道稀缺的议题。
-   需结合 brand_brief / research_questions 判断"重要"的标准。
+   需结合 brand_brief / research_questions 判断"重要"的标准；full_strategy 下还用社媒大盘的
+   消费者自然讨论**验证/排序**盲区（见下「attention_gaps 的消费者验证」节）。
 
 ## 输出格式（严格 JSON，无 markdown）
 
@@ -152,9 +156,25 @@ SYSTEM_TEMPLATE = """你是资深媒体战略分析师，擅长解读媒体议�
 
 **禁止使用**：result_data.page_synthesis（含 LLM 散文 briefing / event_titles，仅供 slice 页面阅读，不作策略输入）。
 
+## attention_gaps 的消费者验证（社媒大盘 · 仅 full_strategy 提供）
+
+`消费者关注信号` 段提供社媒大盘的**消费者自然讨论**话题 + 未满足需求（仅当非空时使用）。它用来
+**校验/排序** attention_gaps 的"重要"判断，**而非制造盲区**：
+- "消费者真在意"以 **`organic_heat`（自然讨论）为准**——总热度可被推广刷高，软广炒热但媒体不报
+  的话题**不算**真实盲区。
+- 判定（按数据，不预设）：某话题**消费者 organic 高热 + 媒体议程几乎不报 + 与 brief/RQ 相关** →
+  才是高价值盲区，在 `why_matters` 点明"消费者侧自然高热但媒体报道缺位"。
+  **媒体已在报的高热消费者话题 = 媒体议程贴合消费者关注（不是盲区）**；与 brief/RQ 无关的消费者
+  话题也**不是**盲区——**不要把每个消费者-媒体不匹配都塞成盲区**。
+- `risk_or_opportunity`：话题 `type=pains` 或 `organic_sentiment` 负 → risk；`gains` 或正 → opportunity。
+- 这是 attention_gaps **唯一**可引用消费者信号之处；narrative_map / agenda_battles / media_voice_patterns
+  仍是纯媒体议程，**不得**混入消费者声音（媒体议程图的视角必须保持媒体纯）。
+- 降级提示时（无社媒数据）按原规则仅凭 brief / research 判断盲区。
+
 ## 禁止行为
 - 禁止虚构未出现在数据中的引述或来源
 - 禁止把"消费者认为"作为论据——该路径只分析媒体视角，消费者声音走 brand_strategy 路径
+  （**例外**：attention_gaps 可按上节用社媒大盘做盲区的消费者验证）
 - 禁止输出与 research_questions 无关的通用媒体观察
 
 ## 行业研究数据（research_findings）使用指南
@@ -176,7 +196,11 @@ USER_TEMPLATE = """{brief_section}
 
 ## 新闻切片数据
 
-{news_slice_data}"""
+{news_slice_data}
+
+## 消费者关注信号（社媒大盘 · 仅 full_strategy，用于 attention_gaps 验证）
+
+{consumer_interest_section}"""
 
 
 def create_agenda_map_chain() -> Runnable:
@@ -326,6 +350,22 @@ def _format_news_slices_for_agenda(
     return json.dumps(parts, ensure_ascii=False, indent=2)
 
 
+def _format_consumer_interest(consumer_interest: dict | None) -> str:
+    """社媒大盘的消费者关注信号（仅 full_strategy），用于 attention_gaps 的消费者验证。
+
+    无数据时返回降级提示，attention_gaps 退回仅按 brief/research 推断。
+    """
+    topics = (consumer_interest or {}).get("top_topics") or []
+    unmet = (consumer_interest or {}).get("unmet_needs") or []
+    if not topics and not unmet:
+        return "（无社媒大盘数据：attention_gaps 仅依据 brief / 研究问题判断，无消费者验证）"
+    return json.dumps(
+        {"消费者自然讨论话题(按 organic_heat)": topics, "消费者未满足需求": unmet},
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
 def format_inputs_for_agenda_map(
     news_slices: list[dict],
     brief: dict | None = None,
@@ -333,11 +373,14 @@ def format_inputs_for_agenda_map(
     news_slice_refs: list[dict] | None = None,
     research_findings: str = "",
     coverage_check_result: dict | None = None,
+    consumer_interest: dict | None = None,
 ) -> dict[str, Any]:
     """构建 Agenda Map chain 的输入参数字典。
 
     `news_slice_refs` 与 news_slices 同序的 [{id, name}] 列表，用于让 LLM 在
     cross_slice_evidence 字段中以 `News Slice #<i>: <name>` 形式精准引用。
+    `consumer_interest`：social 大盘切片的消费者关注信号（仅 full_strategy），用于
+    attention_gaps 的消费者验证。
     """
     brief_section = ""
     if brief:
@@ -351,6 +394,7 @@ def format_inputs_for_agenda_map(
         "coverage_signals": format_coverage_signals(coverage_check_result),
         "research_findings": research_findings,
         "news_slice_data": _format_news_slices_for_agenda(news_slices, news_slice_refs),
+        "consumer_interest_section": _format_consumer_interest(consumer_interest),
     }
 
 

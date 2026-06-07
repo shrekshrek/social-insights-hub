@@ -566,6 +566,74 @@ async def _load_news_slice_refs(db: AsyncSession, strategy: Strategy) -> list[di
     ]
 
 
+async def _load_social_dapan(
+    db: AsyncSession, strategy: Strategy
+) -> tuple[dict | None, dict | None]:
+    """加载策略的社媒【大盘】切片（meta.subject 空 + 有 sov_ranking）的 result_data 及溯源 ref。
+
+    供 market_report 第 1/2 层做媒体 × 消费者交叉：
+    - Landscape 用 result_data 投影（sov organic/promo + group_share + overview）做竞争交叉；
+    - Agenda Map 用其话题（见 `_project_consumer_interest`）验证 attention_gaps。
+    设计：媒体 SoV 可被 PR/投放放大，社媒大盘的 organic/promo 拆分揭示买不动的真实口碑。选**大盘**
+    （对称采集、SoV/organic 公平），**不用聚焦**（单品牌深挖致 SoV 虚高）。按 id 升序取首个，确定性。
+    返回的 ref（id/name/monitor_id）写入 chain_inputs，让前端"数据来源/查看证据"显示该社媒切片。
+    无（纯 market_report / 无大盘社媒切片）时返回 (None, None)，调用方降级为媒体纯。
+    """
+    if not strategy.social_monitor_id:
+        return None, None
+    result = await db.execute(
+        select(SocialSlice)
+        .where(
+            SocialSlice.monitor_id == strategy.social_monitor_id,
+            SocialSlice.status == "completed",
+        )
+        .order_by(SocialSlice.id)
+    )
+    for s in result.scalars().all():
+        # 用表列 s.subject 判定大盘/聚焦（权威，与 result_data 解耦；meta.subject 可能为空而误判）
+        if (s.subject or "").strip():
+            continue  # 跳过聚焦切片（SoV 因单品牌深挖虚高，不做基准）
+        rd = s.result_data
+        if not isinstance(rd, dict):
+            continue
+        if ((rd.get("layers") or {}).get("landscape") or {}).get("sov_ranking"):
+            return rd, {"id": s.id, "name": s.name, "monitor_id": s.monitor_id}
+    return None, None
+
+
+def _project_consumer_interest(dapan: dict | None) -> dict | None:
+    """从社媒大盘 result_data 投影消费者关注信号（话题 + 未满足需求），供 Agenda Map 的
+    attention_gaps 验证。
+
+    用 `organic_heat`（自然讨论）衡量"消费者真在意"——总热度可被推广刷高，会把软广炒热的话题
+    误判成真实盲区；`organic_sentiment` 定 risk(负) vs opportunity(正)。无有效话题/需求时返回 None。
+    """
+    if not isinstance(dapan, dict):
+        return None
+    intent = (dapan.get("layers") or {}).get("intent") or {}
+    topic_radar = intent.get("topic_radar") or {}
+    top_topics: list[dict] = []
+    for bucket in ("pains", "gains", "controversies"):
+        for t in (topic_radar.get(bucket) or [])[:5]:
+            if isinstance(t, dict) and t.get("name"):
+                top_topics.append(
+                    {
+                        "name": t.get("name"),
+                        "type": bucket,
+                        "organic_heat": t.get("organic_heat"),
+                        "organic_sentiment": t.get("organic_sentiment"),
+                    }
+                )
+    unmet = [
+        u.get("name")
+        for u in (intent.get("unmet_needs") or [])[:8]
+        if isinstance(u, dict) and u.get("name")
+    ]
+    if not top_topics and not unmet:
+        return None
+    return {"top_topics": top_topics, "unmet_needs": unmet}
+
+
 def _build_chain_inputs(
     *,
     social_slice_refs: list[dict],
@@ -2128,6 +2196,14 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     research_findings_text = format_research_for_agenda_map(research_result)
 
+    # full_strategy：载入社媒大盘切片，用其消费者自然讨论话题验证 attention_gaps。
+    # ref 写入 chain_inputs 作数据来源；market_report / 无社媒大盘 → (None, None) → 降级媒体纯。
+    dapan_result, dapan_ref = (
+        await _load_social_dapan(db, strategy)
+        if strategy.output_type == "full_strategy"
+        else (None, None)
+    )
+
     chain = create_agenda_map_chain()
     inputs = format_inputs_for_agenda_map(
         news_slices=news_slices_data,
@@ -2136,6 +2212,7 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         news_slice_refs=news_slice_refs,
         research_findings=research_findings_text,
         coverage_check_result=strategy.coverage_check_result,
+        consumer_interest=_project_consumer_interest(dapan_result),
     )
 
     job = await create_analysis_job_async(
@@ -2155,15 +2232,18 @@ async def generate_agenda_map(db: AsyncSession, strategy: Strategy) -> Strategy:
         duration = time.time() - start
 
         result = parse_agenda_map_response(response.content)
+        # 社媒计数按实际交叉的大盘切片记（0/1），与 chain_inputs 一致——不计入未被消费的
+        # 其余社媒切片（如聚焦切片），避免高估社媒在媒体侧产出的角色。
         result["data_provenance"] = _build_data_provenance(
-            slices_data,
+            [dapan_result] if dapan_result else [],
             news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
         )
-        # market_report 路径：agenda_map 仅消费新闻切片 + 行业研究，无社媒切片
+        # full_strategy 下 agenda 交叉了社媒大盘切片做 attention_gaps 验证 → 写入数据来源；
+        # market_report 无社媒切片则为空。
         result["chain_inputs"] = _build_chain_inputs(
-            social_slice_refs=[],
+            social_slice_refs=[dapan_ref] if dapan_ref else [],
             news_slice_refs=news_slice_refs,
             research_task_id=research_task_id,
         )
@@ -2225,6 +2305,14 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
 
     research_findings_text = format_research_for_landscape(research_result)
 
+    # full_strategy：载入社媒大盘切片做媒体 × 消费者竞争交叉（organic/promo 揭示买不动的真实
+    # 口碑）。ref 写入 chain_inputs 作数据来源；market_report / 无社媒大盘 → (None, None) → 媒体纯。
+    dapan_result, dapan_ref = (
+        await _load_social_dapan(db, strategy)
+        if strategy.output_type == "full_strategy"
+        else (None, None)
+    )
+
     chain = create_landscape_chain()
     inputs = format_inputs_for_landscape(
         agenda_map_result=strategy.agenda_map_result,
@@ -2233,6 +2321,7 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         research_design=strategy.research_design,
         news_slice_refs=news_slice_refs,
         research_findings=research_findings_text,
+        social_dapan=dapan_result,
     )
 
     job = await create_analysis_job_async(
@@ -2252,15 +2341,18 @@ async def generate_landscape(db: AsyncSession, strategy: Strategy) -> Strategy:
         duration = time.time() - start
 
         result = parse_landscape_response(response.content)
+        # 社媒计数按实际交叉的大盘切片记（0/1），与 chain_inputs 一致——不计入未被消费的
+        # 其余社媒切片（如聚焦切片），避免高估社媒在媒体侧产出的角色。
         result["data_provenance"] = _build_data_provenance(
-            slices_data,
+            [dapan_result] if dapan_result else [],
             news_slices_data,
             primary_channel="news_media",
             research_findings=research_findings_text,
         )
-        # market_report 路径：landscape 仅消费新闻切片 + 行业研究，无社媒切片
+        # full_strategy 下 landscape 交叉了社媒大盘切片做消费者竞争对照 → 写入数据来源；
+        # market_report 无社媒切片则为空。
         result["chain_inputs"] = _build_chain_inputs(
-            social_slice_refs=[],
+            social_slice_refs=[dapan_ref] if dapan_ref else [],
             news_slice_refs=news_slice_refs,
             research_task_id=research_task_id,
         )

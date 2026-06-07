@@ -12,12 +12,6 @@ interface SpamDistribution {
   low_spam: { total: number; post: number; comment: number }
 }
 
-interface SentimentDistribution {
-  positive: number
-  negative: number
-  neutral: number
-}
-
 interface TopicItem {
   name: string
   category?: string
@@ -25,7 +19,9 @@ interface TopicItem {
   organic_heat?: number
   promo_heat?: number
   sentiment?: number
-  sentiment_distribution?: SentimentDistribution
+  /** 正/负向提及数（极化计数；真实字段，替代不存在的 sentiment_distribution） */
+  positive_mentions?: number
+  negative_mentions?: number
   mentions: number
   spam_distribution?: SpamDistribution
   original_terms?: OriginalTerm[]
@@ -91,11 +87,15 @@ const formatDistribution = (dist?: Record<string, number>) => {
     .slice(0, 6)
 }
 
-// 情感分布总计
-const sentimentDistTotal = computed(() => {
-  const sd = props.item?.sentiment_distribution
-  if (!sd) return 0
-  return (sd.positive || 0) + (sd.negative || 0) + (sd.neutral || 0)
+// 情感分布：正/负来自极化计数 positive_mentions/negative_mentions，
+// 中性 = 总提及 − 正 − 负（clamp 防负）。无极化数据（如未满足需求项）时返回 null 不渲染。
+const sentimentDist = computed(() => {
+  const it = props.item
+  const pos = it?.positive_mentions
+  const neg = it?.negative_mentions
+  if (typeof pos !== 'number' || typeof neg !== 'number' || pos + neg <= 0) return null
+  const neutral = Math.max(0, (it?.mentions ?? 0) - pos - neg)
+  return { positive: pos, negative: neg, neutral, total: pos + neg + neutral }
 })
 
 // 情感颜色
@@ -167,27 +167,27 @@ const getSentimentColor = (s?: number) => {
           </div>
         </div>
 
-        <!-- 情感分布（正/负/中性占比；争议点此处最有解释价值） -->
-        <div v-if="item.sentiment_distribution && sentimentDistTotal > 0" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+        <!-- 情感极化分布（正/负来自极化计数，中性=总提及−正−负；争议点此处最有解释价值） -->
+        <div v-if="sentimentDist" class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
           <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">情感分布</div>
           <div class="flex flex-wrap gap-4 text-xs">
             <div class="flex items-center gap-1">
               <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
               <span class="text-gray-500 dark:text-gray-400">正面</span>
-              <span class="font-mono text-gray-900 dark:text-white">{{ item.sentiment_distribution.positive }}</span>
-              <span class="text-gray-400">({{ ((item.sentiment_distribution.positive / sentimentDistTotal) * 100).toFixed(0) }}%)</span>
+              <span class="font-mono text-gray-900 dark:text-white">{{ sentimentDist.positive }}</span>
+              <span class="text-gray-400">({{ ((sentimentDist.positive / sentimentDist.total) * 100).toFixed(0) }}%)</span>
             </div>
             <div class="flex items-center gap-1">
               <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
               <span class="text-gray-500 dark:text-gray-400">负面</span>
-              <span class="font-mono text-gray-900 dark:text-white">{{ item.sentiment_distribution.negative }}</span>
-              <span class="text-gray-400">({{ ((item.sentiment_distribution.negative / sentimentDistTotal) * 100).toFixed(0) }}%)</span>
+              <span class="font-mono text-gray-900 dark:text-white">{{ sentimentDist.negative }}</span>
+              <span class="text-gray-400">({{ ((sentimentDist.negative / sentimentDist.total) * 100).toFixed(0) }}%)</span>
             </div>
-            <div class="flex items-center gap-1">
+            <div v-if="sentimentDist.neutral > 0" class="flex items-center gap-1">
               <span class="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
               <span class="text-gray-500 dark:text-gray-400">中性</span>
-              <span class="font-mono text-gray-900 dark:text-white">{{ item.sentiment_distribution.neutral }}</span>
-              <span class="text-gray-400">({{ ((item.sentiment_distribution.neutral / sentimentDistTotal) * 100).toFixed(0) }}%)</span>
+              <span class="font-mono text-gray-900 dark:text-white">{{ sentimentDist.neutral }}</span>
+              <span class="text-gray-400">({{ ((sentimentDist.neutral / sentimentDist.total) * 100).toFixed(0) }}%)</span>
             </div>
           </div>
         </div>

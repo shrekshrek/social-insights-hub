@@ -51,8 +51,13 @@ export interface AlignedEntity {
   role?: 'Target' | 'Competitor' | 'Context'
   type?: string
   parent?: string
+  category?: string
   heat: number
+  organic_heat?: number
+  promo_heat?: number
   mentions: number
+  /** 出现该实体的去重来源数 */
+  source_count?: number
   score: number
   sentiment?: number
   /** 推广内容情感（spam_score >= 6.0 的原文） */
@@ -68,10 +73,15 @@ export interface AlignedEntity {
     high_spam: { total: number; post: number; comment: number }
     low_spam: { total: number; post: number; comment: number }
   }
+  /** 归一化前的原始名称变体 */
+  original_names?: string[]
   original_terms?: OriginalTerm[]
   source_tasks?: SourceTask[]
   post_ids_sample?: PostRef[]
   platform_distribution?: PlatformDistribution
+  /** 有机 / 推广内容各自的平台分布 */
+  organic_platform_distribution?: PlatformDistribution
+  promo_platform_distribution?: PlatformDistribution
   keyword_distribution?: KeywordDistribution
   top_features?: EntityAttributeItem[]
   top_issues?: EntityAttributeItem[]
@@ -90,13 +100,17 @@ export interface AlignedTopic {
   organic_heat?: number
   promo_heat?: number
   mentions: number
+  /** 出现该话题的去重来源数 */
+  source_count?: number
   score: number
   sentiment?: number
-  sentiment_distribution?: {
-    positive: number
-    negative: number
-    neutral: number
-  }
+  /** 有机内容情感（spam_score < 6.0 的原文） */
+  organic_sentiment?: number
+  /** 推广内容情感（spam_score >= 6.0 的原文） */
+  promo_sentiment?: number
+  /** 正 / 负向提及数（极化度：sentiment≈0 时区分"中性"与"正负对撕"） */
+  positive_mentions?: number
+  negative_mentions?: number
   spam_distribution?: {
     high_spam: { total: number; post: number; comment: number }
     low_spam: { total: number; post: number; comment: number }

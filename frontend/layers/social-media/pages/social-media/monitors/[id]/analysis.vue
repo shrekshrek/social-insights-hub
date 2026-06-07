@@ -2187,39 +2187,6 @@ const handleExportMd = async () => {
                 </div>
               </div>
 
-              <!-- 角色 / 类型分布 -->
-              <div
-                v-if="(entityPanelEntity as any).role_breakdown || (entityPanelEntity as any).type_breakdown"
-                class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 space-y-2"
-              >
-                <div v-if="(entityPanelEntity as any).role_breakdown" class="space-y-1">
-                  <div class="text-xs text-gray-500 dark:text-gray-400">角色分布</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <span
-                      v-for="(cnt, role) in (entityPanelEntity as any).role_breakdown"
-                      :key="role"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-gray-700 text-xs"
-                    >
-                      <span class="text-gray-600 dark:text-gray-400">{{ role }}</span>
-                      <span class="font-mono text-gray-900 dark:text-white">{{ cnt }}</span>
-                    </span>
-                  </div>
-                </div>
-                <div v-if="(entityPanelEntity as any).type_breakdown" class="space-y-1">
-                  <div class="text-xs text-gray-500 dark:text-gray-400">类型分布</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <span
-                      v-for="(cnt, tp) in (entityPanelEntity as any).type_breakdown"
-                      :key="tp"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-gray-700 text-xs"
-                    >
-                      <span class="text-gray-600 dark:text-gray-400">{{ tp }}</span>
-                      <span class="font-mono text-gray-900 dark:text-white">{{ cnt }}</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-
               <!-- 产品特性 / 产品问题 -->
               <div
                 v-if="(entityPanelEntity as any).top_features?.length || (entityPanelEntity as any).top_issues?.length"

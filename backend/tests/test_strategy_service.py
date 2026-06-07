@@ -142,11 +142,18 @@ class TestStrategyDataFlowGuards:
         collect_task = MagicMock()
         collect_task.id = 101
 
+        # 去重查询（幂等优化）在配置校验之前先跑，需 mock db.execute 返回空，
+        # 否则裸 AsyncMock 的 rows.all() 返回协程会在到达 409 前先报错
+        empty_result = MagicMock()
+        empty_result.all.return_value = []
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=empty_result)
+
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
             await _create_auto_slices(
-                db=AsyncMock(),
+                db=db,
                 strategy=strategy,
                 collect_tasks=[collect_task],
                 current_user_id=1,
@@ -174,11 +181,18 @@ class TestStrategyDataFlowGuards:
         collect_task = MagicMock()
         collect_task.id = 101
 
+        # 去重查询（幂等优化）在配置校验之前先跑，需 mock db.execute 返回空，
+        # 否则裸 AsyncMock 的 rows.all() 返回协程会在到达 409 前先报错
+        empty_result = MagicMock()
+        empty_result.all.return_value = []
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=empty_result)
+
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
             await _create_auto_slices(
-                db=AsyncMock(),
+                db=db,
                 strategy=strategy,
                 collect_tasks=[collect_task],
                 current_user_id=1,

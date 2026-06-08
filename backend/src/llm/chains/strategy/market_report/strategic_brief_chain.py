@@ -6,8 +6,8 @@
   纯媒体战略简报，服务 PR/comms 团队。
 - **comprehensive 模式**（full_strategy 路径）：除媒体侧外，**同时综合**
   Insight（消费者矛盾）+ Brand Strategy Branches（多分支 brand_role + big_idea）+
-  creative_references，输出 CMO 级综合战略简报。并用 landscape.players 的消费者交叉字段
-  （voice_inflation / consumer_standing，full_strategy 才有值）做**逐竞品**的真实口碑校验。
+  creative_references，输出 CMO 级综合战略简报。并结合 landscape.players 的消费者侧字段
+  （consumer_standing / consumer_organic_sentiment，full_strategy 才有值）做逐竞品的客观竞争判断。
 
 模式自动判定：根据 USER_TEMPLATE 中 `{insight_section}` /
 `{brand_strategy_branches_section}` 是否为空切换。
@@ -101,13 +101,11 @@ USER_TEMPLATE 中如果 `## 消费者洞察 (Insight)` 段落非空 = **comprehe
 从 landscape.players 找到 target 品牌的 media_sov_pct / media_sentiment / narrative_position，
 结合 brand_brief.analysis_goal，判断品牌目前是"防守""追击"还是"领跑"状态。
 **comprehensive 模式**：
-- 考察 insight.social_tensions——消费者侧是否有未解矛盾正在影响品牌处境（如媒体广泛报道但消费者不 buy）。
-- **并读 landscape.players 的消费者交叉字段**（`consumer_standing` / `voice_inflation` /
-  `consumer_organic_sentiment`，仅 full_strategy 有）：这是**竞争级**的真实口碑读数——target 媒体声量高但
-  `voice_inflation=true` / consumer_standing 偏弱 = **泡沫式领先、处境实为脆弱**，不能只凭 media_sov 判"领跑"；
-  某竞品 media 弱但 consumer_standing 领先 = **被媒体低估的真实威胁**。
-  **仅当这些字段确显示背离时据此调整**；显示"媒体与口碑一致"则按 media 读，不臆造虚高。
-  （与 insight.social_tensions 互补：landscape 消费者字段给**逐竞品**竞争真相，insight 给**主品**消费者张力。）
+- 考察 insight.social_tensions——消费者侧是否有未解矛盾正在影响品牌处境。
+- **并读 landscape.players 的消费者侧字段**（`consumer_standing` / `consumer_organic_sentiment`，仅 full_strategy 有）：
+  这是逐竞品的消费者侧真实地位（基于社媒 organic 数据）。media_sov 是媒体声量、organic 是消费者声量，口径不同；
+  把两侧结合**客观**判断各玩家处境，**结论由数据得出，不预设**。
+  （与 insight.social_tensions 互补：landscape 消费者字段给**逐竞品**地位，insight 给**主品**消费者张力。）
 
 **第二步：品牌视角过滤机会**
 Agenda Map 的 attention_gaps + insight.brand_opportunities（如有）共同构成机会池。
@@ -177,11 +175,10 @@ big_idea.statement，让推荐定位与品牌策略层、创意层一致——�
 - 每条 strategic_priority 必须有 answers_questions（至少 1 个）；若没有匹配项，
   返回空数组并在 rationale 中说明研究计划与战略产出的失配
 - market_opportunities: 1-3 条，brand_fit=low 的机会也可列出，但须说明为何当前不适合切入
-- risks_and_threats: 1-3 条。comprehensive 模式下若 landscape.players 的消费者交叉确显示背离，应纳入：
-  target `voice_inflation=true` = 过度依赖买来声量、真实口碑落后的风险；竞品 consumer_standing 强但 media 弱
-  = 被媒体低估的真实威胁。（一致则无需特别处理，不臆造。）
-- evidence_refs 必须引用 agenda_map / landscape 的实际字段路径，禁止虚构（landscape 的消费者交叉字段
-  如 `landscape.players[X].voice_inflation` / `consumer_standing` 也是合法 ref，仅 comprehensive 模式有值）
+- risks_and_threats: 1-3 条。comprehensive 模式下，landscape.players 的 consumer_standing /
+  consumer_organic_sentiment 与媒体侧若有差异，可据此客观补充风险/威胁——由数据得出，不预设、不臆造。
+- evidence_refs 必须引用 agenda_map / landscape 的实际字段路径，禁止虚构（landscape 的消费者侧字段
+  如 `landscape.players[X].consumer_standing` / `consumer_organic_sentiment` 也是合法 ref，仅 comprehensive 模式有值）
 
 ## 禁止行为
 - 禁止引入 agenda_map / landscape 之外的新市场数据（market facts）

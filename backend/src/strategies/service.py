@@ -625,7 +625,11 @@ def _project_consumer_interest(dapan: dict | None) -> dict | None:
                     }
                 )
     unmet = [
-        u.get("name")
+        {
+            "name": u.get("name"),
+            "organic_heat": u.get("organic_heat"),
+            "organic_sentiment": u.get("organic_sentiment"),
+        }
         for u in (intent.get("unmet_needs") or [])[:8]
         if isinstance(u, dict) and u.get("name")
     ]

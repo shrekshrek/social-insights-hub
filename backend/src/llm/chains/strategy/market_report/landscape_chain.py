@@ -85,7 +85,7 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 ## 输出格式（严格 JSON，无 markdown）
 
 {{
-  "competitive_summary": "概括当前竞争形态：有社媒大盘数据时，开头先给媒体声量与消费者真实声量(organic)对照后的竞争判断（一致或何处背离，由数据得出），再补媒体侧叙事形态；无社媒数据则仅述媒体侧",
+  "competitive_summary": "1-2 句概括竞争形态（点到为止、不堆数字）：有社媒大盘数据时，开头一句给媒体 vs 消费者交叉的核心判断（谁媒体主导/谁消费者真领先，一致或背离），再一句媒体侧形态；无社媒数据则仅述媒体侧",
   "players": [
     {{
       "name": "玩家名",
@@ -163,18 +163,17 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 - `organic_heat`（自然声量）：品牌真实消费者声量，**用于排序**（不是百分比）。
 - `promo_heat`（推广声量）、`organic_sentiment`（剔除推广后的真实情感）、`group_share`（母品牌族聚合的 organic/promo，
   子品牌可看族级真实地位）、`overview`（品类整体自然/推广总量）。
-- `entity_dimension_matrix`（各头部品牌 × 关键产品维度的消费者情感 + 提及量）：刻画各 player 消费者侧的
-  **逐维度强弱**（某品牌在哪个维度口碑强/弱），是消费者侧"头部玩家心智"的细粒度证据。
+  （逐维度口碑细节归 Insight 深挖，landscape 只看逐品牌的声量/情感位置。）
 
 用法（按品牌名跨渠道对齐；**不改 positioning_map 的媒体叙事轴**）：
-1. 给每个 player 填 `consumer_standing`（依据该品牌 organic_heat 在 players 内的排序 + organic_sentiment +
-   `entity_dimension_matrix` 的逐维度口碑，**如实**描述其消费者侧地位与强弱维度）、`consumer_organic_sentiment`
-   （取该品牌的 organic_sentiment）；社媒大盘有该品牌则填，无则均 null。`players[].key_claims` / `rationale`
-   也可引用某品牌在某维度的消费者口碑作为竞争证据。
+0. **数据用来"垫"判断，不要全倒进输出**：organic_heat 排序、organic_sentiment 是你得出结论的依据，
+   但输出字段要**蒸馏成最关键的判断**，不堆砌一串数字。
+1. 给每个 player 填 `consumer_standing`：**一句话、punchy** 给该玩家最关键的消费者侧判断，**不罗列数字与多维度**；
+   `consumer_organic_sentiment` 取该品牌 organic_sentiment。社媒大盘有该品牌则填，无则均 null。
 2. 媒体声量（media_sov）与消费者真实声量（organic_heat）**口径不同，只比相对排序、不比百分比**
-   （媒体样本 vs 社媒样本、竞品集合 vs 全实体）。把两侧对照写入 `competitive_summary` / `market_dynamics`——
-   **`competitive_summary` 开头先给两侧交叉后的竞争判断**（避免被 media_sov 排序的 roster 盖住），
-   再补媒体侧形态；**一致还是背离、以及背离的含义，由数据自行得出，不预设结论、不夸大、不硬找问题**。
+   （媒体样本 vs 社媒样本、竞品集合 vs 全实体）。**`competitive_summary` 开头一句先给两侧交叉的核心判断**
+   （谁媒体主导、谁消费者真领先，一致还是背离——**点到为止、不堆数字**），避免被 media_sov 排序的 roster
+   盖住；再简述媒体侧形态。**结论由数据自行得出，不预设、不夸大、不硬找问题**。
 3. **数据量风控（重要）**：某品牌社媒 `mentions` 很少时，其 `organic_heat` 排序靠后**很可能是数据稀疏**
    （采集去重的"首见原则"会把同时提及本品+竞品的原文优先归本品，系统性低估竞品）——**不得据此判其
    "消费者弱"**；应 hedging 或注明"该竞品社媒样本小，真实口碑可能优于数据所呈现"。
@@ -441,44 +440,8 @@ def _format_social_dapan_for_landscape(dapan: dict | None) -> str:
             if isinstance(g, dict) and g.get("name")
         ],
     }
-
-    # 实体×维度情感矩阵（foundation.drivers.entity_matrix，切片已有字段）：各头部品牌在关键
-    # 产品维度上的消费者情感——社媒报告据此刻画"头部玩家心智"（某品牌哪个维度口碑强/弱）。
-    # 大盘切片 dimensions_top 常为空，故按 sov 头部品牌 × 各自 mentions 最多的维度截取。
-    matrix_rows = (
-        ((dapan.get("foundation") or {}).get("drivers") or {}).get("entity_matrix")
-        or []
-    )
-    matrix_by_name = {
-        r.get("entity"): r
-        for r in matrix_rows
-        if isinstance(r, dict) and r.get("entity")
-    }
-    dim_matrix: list[dict] = []
-    for b in proj["sov_ranking"][:8]:
-        row = matrix_by_name.get(b.get("name"))
-        cells = (row or {}).get("dimensions") or {}
-        top_dims = sorted(
-            (
-                (d, c)
-                for d, c in cells.items()
-                if isinstance(c, dict) and c.get("sentiment") is not None
-            ),
-            key=lambda kv: kv[1].get("mentions") or 0,
-            reverse=True,
-        )[:4]
-        if top_dims:
-            dim_matrix.append(
-                {
-                    "entity": b.get("name"),
-                    "dimensions": {
-                        d: {"sentiment": c.get("sentiment"), "mentions": c.get("mentions")}
-                        for d, c in top_dims
-                    },
-                }
-            )
-    if dim_matrix:
-        proj["entity_dimension_matrix"] = dim_matrix
+    # 注：逐维度心智（entity_dimension_matrix）属"消费者深挖"的深度，归 Insight（已在用，
+    # 且散文有篇幅）；landscape 是可扫读的竞争 roster，只用逐品牌指标，避免把卡片堆散。
 
     return json.dumps(proj, ensure_ascii=False, indent=2)
 

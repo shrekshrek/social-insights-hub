@@ -664,7 +664,7 @@ async def export_strategy(
     from .export_docx import generate_strategy_docx
 
     buf = generate_strategy_docx(strategy)
-    filename = f"{strategy.name}_策略报告.docx"
+    filename = f"策略报告_{strategy.name}.docx"
     encoded_filename = quote(filename)
 
     return StreamingResponse(

@@ -216,7 +216,7 @@ async def export_research_task(
     """
     from urllib.parse import quote
 
-    from src.research_agent.export_md import render_research_md
+    from src.research_agent.export_md import PROFILE_LABELS, render_research_md
 
     if format != "md":
         raise HTTPException(
@@ -232,7 +232,8 @@ async def export_research_task(
         )
 
     md = render_research_md(task)
-    filename = f"{task.title or 'research'}_{task_id}.md"
+    prefix = PROFILE_LABELS.get(task.profile_name or "", "专题研究")
+    filename = f"{prefix}_{task.title or task_id}.md"
     return Response(
         content=md,
         media_type="text/markdown; charset=utf-8",

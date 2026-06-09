@@ -6,7 +6,7 @@
 
 from src.research_agent.models import ResearchTask
 
-_PROFILE_LABELS = {"industry": "行业研究", "creative": "创意研究"}
+PROFILE_LABELS = {"industry": "行业研究", "creative": "创意研究"}
 
 
 def render_research_md(task: ResearchTask) -> str:
@@ -27,9 +27,7 @@ def render_research_md(task: ResearchTask) -> str:
     lines += [f"status: {task.status}", f"created_at: {created}", "---", ""]
 
     # --- 标题 + 研究主题 + 背景 ---
-    profile_label = _PROFILE_LABELS.get(
-        task.profile_name or "", task.profile_name or ""
-    )
+    profile_label = PROFILE_LABELS.get(task.profile_name or "", task.profile_name or "")
     lines.append(f"# {task.title or task.analysis_goal}")
     lines += [
         "",

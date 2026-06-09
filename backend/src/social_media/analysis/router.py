@@ -573,7 +573,6 @@ async def export_monitor_slice(
     - json：识别元信息 + foundation + layers 全量一二阶结构化数据，给 agent / 知识库（按需投影，不落库）
     """
     slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
-    monitor_name = slice_record.monitor.name if slice_record.monitor else "report"
     slice_name = slice_record.name or f"slice_{slice_id}"
 
     if format == "json":
@@ -585,7 +584,7 @@ async def export_monitor_slice(
                 detail="该切片尚无分析结果，无法导出",
             )
         payload = render_social_slice_json(slice_record)
-        encoded_json_name = quote(f"{monitor_name}_{slice_name}.json")
+        encoded_json_name = quote(f"社媒切片_{slice_name}.json")
         return Response(
             content=json.dumps(payload, ensure_ascii=False, indent=2),
             media_type="application/json; charset=utf-8",
@@ -604,7 +603,7 @@ async def export_monitor_slice(
         )
 
     buf: BytesIO = generate_slice_report_docx(slice_record)
-    encoded_filename = quote(f"{monitor_name}_{slice_name}.docx")
+    encoded_filename = quote(f"社媒切片_{slice_name}.docx")
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

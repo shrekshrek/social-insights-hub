@@ -119,7 +119,8 @@ async def export_news_slice(
     from .export_json import render_news_slice_json
 
     payload = render_news_slice_json(slice_obj)
-    encoded_name = quote(f"{slice_obj.name or f'news_slice_{slice_id}'}.json")
+    slice_name = slice_obj.name or f"slice_{slice_id}"
+    encoded_name = quote(f"新闻切片_{slice_name}.json")
     return Response(
         content=json.dumps(payload, ensure_ascii=False, indent=2),
         media_type="application/json; charset=utf-8",

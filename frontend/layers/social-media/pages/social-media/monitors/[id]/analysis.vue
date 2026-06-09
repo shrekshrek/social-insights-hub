@@ -1147,20 +1147,20 @@ const handleExport = async () => {
   }
 }
 
-// 导出 MD（结构化事实，给 agent / 知识库）——不依赖 Stage3 报告，有分析结果即可
-const exportingMd = ref(false)
-const handleExportMd = async () => {
-  if (!sliceId.value || exportingMd.value) return
-  exportingMd.value = true
+// 导出 JSON（结构化一二阶数据，给 agent / 知识库）——不依赖 Stage3 报告，有分析结果即可
+const exportingJson = ref(false)
+const handleExportJson = async () => {
+  if (!sliceId.value || exportingJson.value) return
+  exportingJson.value = true
   try {
     await apiDownload(
-      `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}/export?format=md`,
+      `/social-media/analysis/monitors/${monitorId.value}/slices/${sliceId.value}/export?format=json`,
     )
-    showSuccess('已导出 Markdown')
+    showSuccess('已导出 JSON')
   } catch {
     showError('导出失败，请稍后重试')
   } finally {
-    exportingMd.value = false
+    exportingJson.value = false
   }
 }
 </script>
@@ -1244,11 +1244,11 @@ const handleExportMd = async () => {
           <UButton
             v-if="isPipelineReady"
             variant="outline"
-            icon="i-heroicons-document-text"
-            :loading="exportingMd"
-            @click="handleExportMd"
+            icon="i-heroicons-code-bracket"
+            :loading="exportingJson"
+            @click="handleExportJson"
           >
-            导出 MD
+            导出 JSON
           </UButton>
           <UButton
             v-if="slice && canDeleteSlice"

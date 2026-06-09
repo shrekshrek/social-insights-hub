@@ -14,6 +14,7 @@ API 结构：
 - /monitors/{monitor_id}/slices  项目级切片 CRUD
 """
 
+import json
 from io import BytesIO
 from urllib.parse import quote
 
@@ -561,33 +562,35 @@ async def delete_monitor_slice(
 async def export_monitor_slice(
     monitor_id: int,
     slice_id: int,
-    format: str = Query("docx", description="docx（人读报告）/ md（agent 结构化事实）"),
+    format: str = Query(
+        "docx", description="docx（人读报告）/ json（agent 结构化一二阶数据）"
+    ),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_social_monitor_read),
 ):
     """导出切片：
     - docx：封面 + 概览 + Stage3 报告（行业格局/话题洞察/战略诊断），给人读
-    - md：front-matter + 聚合实体/话题/概览数值，给 agent / 知识库（按需渲染，不落库）
+    - json：识别元信息 + foundation + layers 全量一二阶结构化数据，给 agent / 知识库（按需投影，不落库）
     """
     slice_record = await _get_slice_or_403(db, monitor_id, slice_id, current_user)
     monitor_name = slice_record.monitor.name if slice_record.monitor else "report"
     slice_name = slice_record.name or f"slice_{slice_id}"
 
-    if format == "md":
-        from .export_md import render_social_slice_md
+    if format == "json":
+        from .export_json import render_social_slice_json
 
         if not slice_record.result_data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="该切片尚无分析结果，无法导出",
             )
-        md = render_social_slice_md(slice_record)
-        encoded_md_name = quote(f"{monitor_name}_{slice_name}.md")
+        payload = render_social_slice_json(slice_record)
+        encoded_json_name = quote(f"{monitor_name}_{slice_name}.json")
         return Response(
-            content=md,
-            media_type="text/markdown; charset=utf-8",
+            content=json.dumps(payload, ensure_ascii=False, indent=2),
+            media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_md_name}",
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_json_name}",
             },
         )
 

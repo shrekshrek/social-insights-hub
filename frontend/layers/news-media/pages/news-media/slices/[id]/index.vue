@@ -66,18 +66,18 @@ const handleDelete = async () => {
   }
 }
 
-const exportingMd = ref(false)
+const exportingJson = ref(false)
 
-const handleExportMd = async () => {
-  if (exportingMd.value) return
-  exportingMd.value = true
+const handleExportJson = async () => {
+  if (exportingJson.value) return
+  exportingJson.value = true
   try {
-    await apiDownload(`/news-media/slices/${sliceId}/export?format=md`)
-    showSuccess('已导出 Markdown')
+    await apiDownload(`/news-media/slices/${sliceId}/export?format=json`)
+    showSuccess('已导出 JSON')
   } catch {
     showError('导出失败，请稍后重试')
   } finally {
-    exportingMd.value = false
+    exportingJson.value = false
   }
 }
 
@@ -358,11 +358,11 @@ const dateOnly = (iso: string | null): string => {
             <UButton
               v-if="slice.status === 'completed'"
               variant="outline"
-              icon="i-heroicons-document-text"
-              :loading="exportingMd"
-              @click="handleExportMd"
+              icon="i-heroicons-code-bracket"
+              :loading="exportingJson"
+              @click="handleExportJson"
             >
-              导出 MD
+              导出 JSON
             </UButton>
             <UButton
               v-if="(slice.status === 'completed' || slice.status === 'failed') && canWriteSlice"

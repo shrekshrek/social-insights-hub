@@ -3,6 +3,7 @@
 子资源风格：/news-media/monitors/{monitor_id}/slices
 """
 
+import json
 from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -83,23 +84,25 @@ async def get_slice(
 @router.get(
     "/slices/{slice_id}/export",
     status_code=status.HTTP_200_OK,
-    summary="导出新闻切片（Markdown 结构化事实，供 agent / 知识库）",
+    summary="导出新闻切片（JSON 结构化二阶数据，供 agent / 知识库）",
 )
 async def export_news_slice(
     slice_id: int,
-    format: str = Query("md", description="md（agent 结构化事实，按需渲染不落库）"),
+    format: str = Query(
+        "json", description="json（agent 结构化二阶数据，按需投影不落库）"
+    ),
     db: AsyncSession = Depends(get_async_db),
     _current_user: User = Depends(require_news_monitor_read),
 ):
-    """导出新闻切片为 Markdown：front-matter + 二阶聚合事实
-    （媒体金字塔 / 实体情感 / 竞争 SOV / 事件聚类 / 分级引语 / 报道时间线）。
+    """导出新闻切片为 JSON：识别元信息 + 二阶聚合事实
+    （媒体金字塔 / 实体分级情感 / 竞争 SOV / 事件聚类 / 分级引语 / 报道时间线）。
 
-    只投影 LLM 自己重算会算错的二阶产物，不含 page_synthesis 散文简报。
+    只投影 LLM 自己重算会算错的二阶产物，不含 page_synthesis.briefing 散文简报。
     """
-    if format != "md":
+    if format != "json":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="新闻切片暂仅支持 md 导出",
+            detail="新闻切片暂仅支持 json 导出",
         )
     slice_obj = await crud.get_news_slice(db, slice_id)
     if not slice_obj:
@@ -113,13 +116,13 @@ async def export_news_slice(
             detail="该切片尚无分析结果，无法导出",
         )
 
-    from .export_md import render_news_slice_md
+    from .export_json import render_news_slice_json
 
-    md = render_news_slice_md(slice_obj)
-    encoded_name = quote(f"{slice_obj.name or f'news_slice_{slice_id}'}.md")
+    payload = render_news_slice_json(slice_obj)
+    encoded_name = quote(f"{slice_obj.name or f'news_slice_{slice_id}'}.json")
     return Response(
-        content=md,
-        media_type="text/markdown; charset=utf-8",
+        content=json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json; charset=utf-8",
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}",
         },

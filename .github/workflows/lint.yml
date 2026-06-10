@@ -1,14 +1,66 @@
 name: lint
 
-# 静态检查门禁：PR 时独立跑；push 到 main 时由 deploy.yml 通过 workflow_call
-# 调用，作为部署的前置门禁（lint 不过不部署）。不直接监听 push，避免与
-# deploy 内的调用重复执行。
-# 后端用 ruff（pin 0.12.12，与 backend/pyproject.toml 一致），前端用 eslint + vue-tsc。
+# 质检门禁：PR 时独立跑；push 到 main 时由 deploy.yml 通过 workflow_call
+# 调用，作为部署的前置门禁（任一 job 不过则不部署）。不直接监听 push，
+# 避免与 deploy 内的调用重复执行。
+# 后端 ruff（pin 0.12.12，与 backend/pyproject.toml 一致）+ pytest（真实
+# postgres/redis 服务容器），前端 eslint + vue-tsc。
 on:
   pull_request:
   workflow_call:
 
 jobs:
+  backend-test:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # 与 docker-compose 一致用 pgvector 镜像：conftest 建表前要 CREATE EXTENSION vector
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # .env.test 被 gitignore（本地版含真实 key），CI 生成最小等价配置：
+      # LLM 集成测试需 RUN_LLM_TESTS=1 显式启用，常规套件全程不打真实 API，
+      # 已验证此最小集与完整配置跑出相同结果
+      - name: Create minimal .env.test
+        run: |
+          cat > backend/.env.test <<'EOF'
+          ENVIRONMENT=test
+          DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/test_db
+          REDIS_URL=redis://localhost:6379/1
+          CELERY_BROKER_URL=redis://localhost:6379/1
+          CELERY_RESULT_BACKEND=redis://localhost:6379/1
+          SECRET_KEY=test_secret_key_for_testing_only_not_for_production_use_32chars
+          EOF
+      - name: Install deps
+        working-directory: backend
+        run: uv sync
+      - name: Setup test database
+        working-directory: backend
+        run: uv run python tests/setup_test_db.py
+      - name: pytest
+        working-directory: backend
+        run: uv run python -m pytest -q
+
   backend-ruff:
     name: Backend (ruff check + format)
     runs-on: ubuntu-latest

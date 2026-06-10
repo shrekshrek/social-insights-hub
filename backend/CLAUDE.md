@@ -169,6 +169,19 @@ backend/src/
 - 所有渠道通过 `src/jobs/` 创建和管理 AnalysisJob，通过 `src/llm/` 调用 LLM
 - 跨渠道 AnalysisJob 查询/取消/删除端点由 `src/jobs/router.py` 暴露（`/jobs`），前端通过这个统一入口查看所有渠道的分析任务
 
+**切片 result_data 新增顶层数据层时，必须逐一核对全部下游消费点**（教训：2026-06 新闻 themes 议题层上线时只接了 market_report 产出链，coverage_check 闸门与 campaign 新闻补充段被遗漏，后补）。消费点清单：
+
+| 消费点 | 新闻切片 | 社媒切片 |
+|---|---|---|
+| 策略产出链 | `llm/chains/strategy/market_report/{agenda_map,landscape}_chain.py` | `llm/chains/strategy/brand_strategy/insight_chain.py` 等三层 |
+| campaign 新闻补充段 | `insight_chain.py:_format_news_media_section`（insight/brand_role/big_idea 三层共用） | — |
+| ready 闸门 | `llm/chains/strategy/coverage_check_chain.py:format_coverage_check_inputs` | 同左（社媒分支） |
+| JSON 导出 | `news_media/analysis/export_json.py` | `social_media/analysis/export_json.py` |
+| 前端切片页 | `frontend/layers/news-media/` | `frontend/layers/social-media/` |
+| 页面综述 | pass2（`news_media/analysis/service.py`） | Stage3 reports（`monitor_slice/summary.py`） |
+
+不要求每个数据层都接入所有消费点——但每一处都必须**显式判断"接 / 不接 + 理由"**，而不是默认遗漏。
+
 ## 注意事项
 
 - 后端命令在 Docker 容器内执行 (pnpm scripts 自动代理)

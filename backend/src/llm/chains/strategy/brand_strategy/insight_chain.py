@@ -354,6 +354,20 @@ def _format_news_media_section(
                     for q in (rd.get("quotes") or [])[:12]
                     if q.get("speaker_role") in ("official", "executive", "analyst")
                 ],
+                # 议题层（媒体反复讨论的抽象维度 + 态度）——与社媒 aligned_topics 同构，
+                # 是消费者-媒体分歧识别的直接对照面；字段口径与 agenda_map/landscape 一致
+                "themes": [
+                    {
+                        "name": t.get("name"),
+                        "article_count": t.get("article_count"),
+                        "source_count": t.get("source_count"),
+                        "sentiment_avg": t.get("sentiment_avg"),
+                        "tier_weighted_score": t.get("tier_weighted_score"),
+                    }
+                    # pass1 上限 8，取 [:8] = 全部议题
+                    for t in (rd.get("themes") or [])[:8]
+                    if isinstance(t, dict) and t.get("name")
+                ],
                 # 竞争投影（target / competitor 子集）
                 "competitive": {
                     "players": competitive.get("players"),
@@ -369,7 +383,9 @@ def _format_news_media_section(
         "## 新闻媒体视角（补充数据）\n\n"
         "以下数据来自新闻媒体渠道（搜索引擎聚合 + 微信公众号），反映媒体/行业对相关话题的报道视角，"
         "与社媒切片中的消费者声音互为补充。**结构化数据**：含归一后实体（带 role / "
-        "by_tier sentiment）+ 分级引述（official/executive/analyst）+ 媒介金字塔 + 竞争投影。\n\n"
+        "by_tier sentiment）+ 分级引述（official/executive/analyst）+ 议题（themes，媒体反复"
+        "讨论的抽象维度 + 态度，可与社媒话题直接对照识别消费者-媒体分歧；注意其 sentiment 量纲"
+        "为 [-2,2]，与社媒话题不同）+ 媒介金字塔 + 竞争投影。\n\n"
         + json.dumps(all_insights, ensure_ascii=False, indent=2)
     )
 

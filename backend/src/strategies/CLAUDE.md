@@ -182,7 +182,7 @@ Insight → Brand Role → Big Idea，层层递进（第 1/2/3 层）。主数�
 
 #### full_strategy 路径（Agenda Map → Landscape → Insight → Brand Role → Big Idea）
 
-顺序执行两条路径：先完成 market_report 前两层（Agenda Map → Landscape），再执行 campaign_strategy 三层（Insight → Brand Role → Big Idea）。Insight 阶段以 `landscape_result` JSON 作为 `{news_media_section}` 注入，取代原始 news slices，让消费者洞察有完整的竞争格局背景。状态在 landscape_done 后保持不动，直到任意分支 Big Idea 完成跳至 completed。级联清空：重新生成 Agenda Map 或 Landscape 会同时清空 insight_result + brand_strategy_branches。
+顺序执行两条路径：先完成 market_report 前两层（Agenda Map → Landscape），再执行 campaign_strategy 三层（Insight → Brand Role → Big Idea）。Insight 阶段的新闻输入是**叠加而非替换**：原始 news slices 始终注入 `{news_media_section}`（一阶事实信号，消费者-媒体分歧识别的依据），`landscape_result` 作为额外的 `landscape_context_section` 注入（二阶 LLM 解读，仅用于机会对标验证）——避免一阶信号被二阶过滤削弱（见 `service.generate_insight` 内注释）。状态在 landscape_done 后保持不动，直到任意分支 Big Idea 完成跳至 completed。级联清空：重新生成 Agenda Map 或 Landscape 会同时清空 insight_result + brand_strategy_branches。
 
 #### NewsSlice 实体 role 归类机制（Agenda Map / Landscape 依赖）
 

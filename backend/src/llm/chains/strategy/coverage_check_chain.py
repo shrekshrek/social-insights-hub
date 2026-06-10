@@ -27,7 +27,7 @@ SYSTEM_TEMPLATE = """你是一位数据覆盖度评估专家，负责判断已�
 切片摘要中每个实体 / 话题带量化指标：
 - `mentions`：被提及的总次数（含同源帖多次）
 - `sources`：独立源帖数（**关键信号**——同样 mentions 下，sources 越多代表信号越分散可靠，sources=1 代表单帖伪相关）
-- `sentiment`：综合情感（-1 ~ +1）
+- `sentiment`：综合情感。**量纲随渠道不同**：社媒切片为 -1 ~ +1；新闻切片（实体/议题）为 -2 ~ +2。sentiment 仅作背景参考，覆盖度判定只看 sources
 
 ### 实体 role 标签解读
 
@@ -35,6 +35,14 @@ SYSTEM_TEMPLATE = """你是一位数据覆盖度评估专家，负责判断已�
 - `(Target)`：研究主体品牌
 - `(Competitor)`:竞品品牌
 - `(Context)`：被消费者主动讨论的**非品牌概念**——成分 / 技术 / 品类 / 使用场景等。例：奶粉行业的某种营养成分；汽车膜的某种材质；降噪耳机的某种降噪技术；母婴产品的某个使用场景。**这是消费者声音的核心载体，绝不是"上下文背景"或"无关词"**——RQ 涉及成分/技术/概念/场景认知时，证据主要来自 Context 实体（社媒新闻通用）
+
+### 渠道证据形态
+
+两类切片都提供"实体 + 话题"两条独立证据路径，任一路径命中即可参与判定：
+- 社媒切片：**实体** + **话题**
+- 新闻切片：**实体** + **议题**（媒体反复讨论的抽象维度，如"价格争议"/"安全性质疑"，等价于社媒的话题路径；matched_items 中 type 记为 topic）
+
+RQ 表述偏抽象（态度 / 争议 / 趋势类）时，证据常落在话题/议题路径而非实体路径——不要只扫实体清单。
 
 ## 判定逻辑（per 研究问题）
 
@@ -164,7 +172,10 @@ def _format_entity_line(e: dict, *, source_key: str) -> str:
     """渲染单个实体/话题行，统一格式：name(role): mentions=N, sources=M, sentiment=..."""
     name = e.get("name", "")
     role = e.get("role", "") or e.get("category", "")
-    mentions = e.get("mentions") or e.get("mention_count") or 0
+    # article_count：新闻议题（themes）的命中文章数，语义等同 mentions
+    mentions = (
+        e.get("mentions") or e.get("mention_count") or e.get("article_count") or 0
+    )
     sources = e.get(source_key) or 0
     sentiment = e.get("sentiment") or e.get("sentiment_avg")
     parts = [f"mentions={mentions}", f"sources={sources}"]
@@ -263,6 +274,9 @@ def format_coverage_check_inputs(
             # 新闻切片 result_data 结构（ADR-003 后）：
             #   descriptive: sentiment_distribution / sentiment_overall / articles_unique / articles_filtered
             #   entities: [{name, role, mention_count, source_count, sentiment_avg, ...}]
+            #   themes: [{name, article_count, source_count, sentiment_avg, ...}]
+            #     —— 议题层（媒体反复讨论的抽象维度），是新闻侧的"话题路径"证据，
+            #        与社媒 aligned_topics 对称；缺它会让偏抽象议题的 RQ 假阴性 uncovered
             #   event_clusters / media_landscape / competitive: 派生层
             #   page_synthesis: Pass 2 LLM 散文（briefing + event_titles），策略层禁用
             descriptive = data.get("descriptive") or {}
@@ -294,6 +308,21 @@ def format_coverage_check_inputs(
                     if e.get("name"):
                         slice_lines.append(
                             _format_entity_line(e, source_key="source_count")
+                        )
+
+            themes = data.get("themes") or []
+            if themes:
+                ths, total, covered_n = _select_evidence(
+                    themes, source_key="source_count"
+                )
+                slice_lines.append(
+                    f"议题（共 {total} 个，其中 source≥{_COVERED_SOURCE_THRESHOLD} 的 {covered_n} 个，"
+                    f"按 source 降序展示 {len(ths)} 个）:"
+                )
+                for t in ths:
+                    if t.get("name"):
+                        slice_lines.append(
+                            _format_entity_line(t, source_key="source_count")
                         )
         else:
             # 社媒切片 result_data 结构: {meta, foundation, layers, reports, pipeline}

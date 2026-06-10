@@ -5167,7 +5167,11 @@ async def _create_auto_slices(
                     existing_social_names.add(bp_name)
 
             # 创建新闻 NewsSlice 行（已存在则检查是否需要补派 insight）
-            if matched_news_task_ids and strategy.news_monitor_id and not news_redundant:
+            if (
+                matched_news_task_ids
+                and strategy.news_monitor_id
+                and not news_redundant
+            ):
                 goal = (
                     f"{bp_name}（关键词：{', '.join(matched_news_keywords)}）"
                     if matched_news_keywords

@@ -3,6 +3,11 @@ name: deploy
 on:
   push:
     branches: [main]
+    # 纯文档变更不触发部署（服务器拉取+镜像重构无意义）；
+    # 后续代码 push 会通过 git pull 一并带上文档
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   workflow_dispatch: # 允许手动触发
 
 # 同一时刻只允许一个部署在跑：连续 push 时排队执行（不取消进行中的，
@@ -20,8 +25,9 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
+      # 钉死版本：@master 会随上游作者改动漂移（供应链风险），升级需显式改版本号
       - name: Deploy to Server
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}

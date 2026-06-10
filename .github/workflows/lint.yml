@@ -36,8 +36,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
       # .env.test 被 gitignore（本地版含真实 key），CI 生成最小等价配置：
       # LLM 集成测试需 RUN_LLM_TESTS=1 显式启用，常规套件全程不打真实 API，
       # 已验证此最小集与完整配置跑出相同结果
@@ -65,8 +65,8 @@ jobs:
     name: Backend (ruff check + format)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
       # 非改写检查：check 不带 --fix，format 用 --check，CI 只判定不修改文件
       - name: ruff check
         run: uvx ruff@0.12.12 check backend/src
@@ -77,9 +77,9 @@ jobs:
     name: Frontend (eslint + vue-tsc)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4 # 读取 package.json 的 packageManager 字段确定 pnpm 版本
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6 # 读取 package.json 的 packageManager 字段确定 pnpm 版本
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm

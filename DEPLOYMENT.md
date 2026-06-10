@@ -140,6 +140,8 @@ pnpm prod:down
 > 
 > 流水线配置文件位于项目根目录的 `.github/workflows/deploy.yml` 下。
 > 
+> ⛔ **lint 前置门禁**：push 到 main 后，流水线先执行静态检查（后端 ruff + 前端 eslint/vue-tsc，复用 `.github/workflows/lint.yml`），**任一检查失败则不会部署**。本地提交前跑 `pnpm be:lint` / `pnpm fe:lint` 可避免被门禁拦下。多次连续 push 时部署串行排队，不会并发交错。
+> 
 > #### 1. 服务器端 GitOps 一次性改造
 > 为确保新加坡服务器具备免密拉取您 GitHub 私有仓库的最高安全级别权限，需进行如下注册：
 > 1. **在服务器生成 SSH 密钥对**：

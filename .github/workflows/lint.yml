@@ -1,11 +1,12 @@
 name: lint
 
-# 静态检查门禁：PR 与 push 到 main 时自动跑，挡住未格式化/不合规的代码。
+# 静态检查门禁：PR 时独立跑；push 到 main 时由 deploy.yml 通过 workflow_call
+# 调用，作为部署的前置门禁（lint 不过不部署）。不直接监听 push，避免与
+# deploy 内的调用重复执行。
 # 后端用 ruff（pin 0.12.12，与 backend/pyproject.toml 一致），前端用 eslint + vue-tsc。
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_call:
 
 jobs:
   backend-ruff:

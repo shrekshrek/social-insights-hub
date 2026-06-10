@@ -5,8 +5,19 @@ on:
     branches: [main]
   workflow_dispatch: # 允许手动触发
 
+# 同一时刻只允许一个部署在跑：连续 push 时排队执行（不取消进行中的，
+# 避免服务器上 git pull / docker build 被中途打断留下半成品）
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
+  # 前置门禁：复用 lint.yml（ruff + eslint + vue-tsc），任一检查失败则不部署
+  lint:
+    uses: ./.github/workflows/lint.yml
+
   deploy:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Server

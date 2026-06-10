@@ -221,10 +221,21 @@ def format_data_for_brand_role(
             "subject": subject,
         }
 
-        # KOL 声音（在 landscape 层，由切片 Stage 1 合并）
-        kol_voices = landscape.get("kol_voices", [])
+        # KOL 声音（在 landscape 层，由切片 Stage 1 合并；只投分析字段，不带 post_id/task_id 等运维字段）
+        kol_voices = [
+            {
+                "title": k.get("title"),
+                "author": k.get("author"),
+                "platform": k.get("platform"),
+                "cii": k.get("cii"),
+                "sentiment": k.get("sentiment"),
+                "summary": k.get("summary"),
+            }
+            for k in (landscape.get("kol_voices") or [])[:10]
+            if isinstance(k, dict)
+        ]
         if kol_voices:
-            part["kol_voices"] = kol_voices[:10]
+            part["kol_voices"] = kol_voices
 
         # 注意：不读取 time_distribution — 采集样本的时间分布可能误导 LLM 的节奏建议
 

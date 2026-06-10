@@ -159,22 +159,24 @@ SYSTEM_TEMPLATE = """你是资深市场竞争情报分析师，擅长从媒体�
 
 竞争格局是多源综合：媒体侧来自新闻切片（media_sov / media_sentiment），消费者侧来自 `社媒大盘切片` 段
 （**仅当非空时使用**；降级提示时所有 consumer_* 填 null）。社媒大盘提供各品牌的消费者侧真实数据，
-**均为切片已有字段，不要另造任何派生变量**：
-- `organic_heat`（自然声量）：品牌真实消费者声量，**用于排序**（不是百分比）。
+**均为切片已有字段或其预排名次，不要另造任何派生变量**：
+- `organic_heat`（自然声量）：品牌真实消费者声量（不是百分比）；`organic_rank`：按 organic_heat
+  预排好的名次，**直接采用、不要自行重排**。roster 为真实声量 top 与总声量 top 的并集，
+  靠推广撑声量（promo 高 / organic 低）的品牌也在场，正是交叉验证要关注的背离对象。
 - `promo_heat`（推广声量）、`organic_sentiment`（剔除推广后的真实情感）、`group_share`（母品牌族聚合的 organic/promo，
   子品牌可看族级真实地位）、`overview`（品类整体自然/推广总量）。
   （逐维度口碑细节归 Insight 深挖，landscape 只看逐品牌的声量/情感位置。）
 
 用法（按品牌名跨渠道对齐；**不改 positioning_map 的媒体叙事轴**）：
-0. **数据用来"垫"判断，不要全倒进输出**：organic_heat 排序、organic_sentiment 是你得出结论的依据，
+0. **数据用来"垫"判断，不要全倒进输出**：organic_rank 名次、organic_sentiment 是你得出结论的依据，
    但输出字段要**蒸馏成最关键的判断**，不堆砌一串数字。
 1. 给每个 player 填 `consumer_standing`：**一句话、punchy** 给该玩家最关键的消费者侧判断，**不罗列数字与多维度**；
    `consumer_organic_sentiment` 取该品牌 organic_sentiment。社媒大盘有该品牌则填，无则均 null。
-2. 媒体声量（media_sov）与消费者真实声量（organic_heat）**口径不同，只比相对排序、不比百分比**
+2. 媒体声量（media_sov）与消费者真实声量名次（organic_rank）**口径不同，只比相对排序、不比百分比**
    （媒体样本 vs 社媒样本、竞品集合 vs 全实体）。**`competitive_summary` 开头一句先给两侧交叉的核心判断**
    （谁媒体主导、谁消费者真领先，一致还是背离——**点到为止、不堆数字**），避免被 media_sov 排序的 roster
    盖住；再简述媒体侧形态。**结论由数据自行得出，不预设、不夸大、不硬找问题**。
-3. **数据量风控（重要）**：某品牌社媒 `mentions` 很少时，其 `organic_heat` 排序靠后**很可能是数据稀疏**
+3. **数据量风控（重要）**：某品牌社媒 `mentions` 很少时，其 `organic_rank` 靠后**很可能是数据稀疏**
    （采集去重的"首见原则"会把同时提及本品+竞品的原文优先归本品，系统性低估竞品）——**不得据此判其
    "消费者弱"**；应 hedging 或注明"该竞品社媒样本小，真实口碑可能优于数据所呈现"。
 4. positioning_map 仍只用媒体叙事轴；消费者数据仅用于校验媒体定位是否反映真实竞争，不重定义轴、不挪动位置。
@@ -394,9 +396,12 @@ def _format_agenda_map_section(agenda_map_result: dict | None) -> str:
 def _format_social_dapan_for_landscape(dapan: dict | None) -> str:
     """社媒大盘切片的消费者侧【竞争】投影（仅 full_strategy 注入）。
 
-    只取竞争 roster 维度，供媒体 × 消费者多源交叉。投影**切片已有的结构化字段**（不碰散文报告、
-    不派生新变量）：sov_ranking（各品牌 organic_heat / promo_heat / organic_sentiment）+ group_share
-    （母品牌族）+ overview（自然/推广总量）。
+    只取竞争 roster 维度，供媒体 × 消费者多源交叉。投影切片已有的结构化字段 +
+    `organic_rank`（按 organic_heat 预排的全表名次——已有指标的序数物化，非派生判断
+    变量；LLM 直读名次，不自行跨行比较数值。sov_ranking 的存储序是 score 综合序，
+    不能按位置读名次）。
+    roster 选取 = organic top12 ∪ heat top12 并集：真实声量强者与靠推广撑总量者
+    （交叉验证最关注的背离主角）都保证在场；输出按 organic_heat 降序。
     **不含消费者话题**——"消费者在谈什么"归 Agenda Map（attention_gaps）/ Insight，不进竞争 roster。
     无数据时返回降级提示，LLM 据此保持媒体纯。
     """
@@ -406,12 +411,27 @@ def _format_social_dapan_for_landscape(dapan: dict | None) -> str:
     landscape = layers.get("landscape") or {}
     overview = landscape.get("overview") or {}
 
+    sov_all = [
+        r
+        for r in (landscape.get("sov_ranking") or [])
+        if isinstance(r, dict) and r.get("name")
+    ]
+    organic_sorted = sorted(
+        sov_all, key=lambda r: r.get("organic_heat") or 0, reverse=True
+    )
+    organic_rank_by_name = {r["name"]: i + 1 for i, r in enumerate(organic_sorted)}
+    heat_sorted = sorted(sov_all, key=lambda r: r.get("heat") or 0, reverse=True)
+    picked_names = {r["name"] for r in organic_sorted[:12]} | {
+        r["name"] for r in heat_sorted[:12]
+    }
+
     def _brand(r: dict) -> dict:
-        # 只投影切片已有的一二阶字段，不派生新变量。mentions 用于判断数据量是否充分
+        # 切片已有字段 + organic_rank 序数物化。mentions 用于判断数据量是否充分
         # （竞品社媒讨论稀疏时不能读成"消费者弱"，见跨源交叉节的数据风控）
         return {
             "name": r.get("name"),
             "role": str(r.get("role") or "").lower(),
+            "organic_rank": organic_rank_by_name.get(r.get("name")),
             "organic_heat": r.get("organic_heat"),
             "promo_heat": r.get("promo_heat"),
             "organic_sentiment": r.get("organic_sentiment"),
@@ -419,16 +439,26 @@ def _format_social_dapan_for_landscape(dapan: dict | None) -> str:
             "mentions": r.get("mentions"),
         }
 
+    # group_share 同步：按族级 organic_heat 降序，organic∪总heat 并集选取
+    groups_all = [
+        g
+        for g in (landscape.get("group_share") or [])
+        if isinstance(g, dict) and g.get("name")
+    ]
+    groups_organic = sorted(
+        groups_all, key=lambda g: g.get("organic_heat") or 0, reverse=True
+    )
+    groups_heat = sorted(groups_all, key=lambda g: g.get("heat") or 0, reverse=True)
+    picked_groups = {g["name"] for g in groups_organic[:10]} | {
+        g["name"] for g in groups_heat[:10]
+    }
+
     proj = {
         "overview": {
             "total_organic_heat": overview.get("total_organic_heat"),
             "total_promo_heat": overview.get("total_promo_heat"),
         },
-        "sov_ranking": [
-            _brand(r)
-            for r in (landscape.get("sov_ranking") or [])[:12]
-            if isinstance(r, dict) and r.get("name")
-        ],
+        "sov_ranking": [_brand(r) for r in organic_sorted if r["name"] in picked_names],
         "group_share": [
             {
                 "name": g.get("name"),
@@ -436,8 +466,8 @@ def _format_social_dapan_for_landscape(dapan: dict | None) -> str:
                 "organic_heat": g.get("organic_heat"),
                 "promo_heat": g.get("promo_heat"),
             }
-            for g in (landscape.get("group_share") or [])[:10]
-            if isinstance(g, dict) and g.get("name")
+            for g in groups_organic
+            if g["name"] in picked_groups
         ],
     }
     # 注：逐维度心智（entity_dimension_matrix）属"消费者深挖"的深度，归 Insight（已在用，

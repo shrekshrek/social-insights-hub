@@ -484,30 +484,57 @@ def format_slice_data_for_insight(
             for t in topics
         ]
 
-        # Landscape 层 — SOV top 10（name + share + sentiment，可推导四象限位置）
+        # Landscape 层 — SOV top 10（按 share 降序截取；名次物化为字段，LLM 直读不重排。
+        # sov_ranking 的存储序并非严格按 share 单调，不能按列表位置读名次）
         landscape = layers.get("landscape") or {}
-        sov_ranking = landscape.get("sov_ranking", [])[:10]
+        sov_all = [
+            r for r in (landscape.get("sov_ranking") or []) if isinstance(r, dict)
+        ]
+        sov_sorted = sorted(sov_all, key=lambda r: r.get("share") or 0, reverse=True)
+        # organic_rank 在全表范围计算（真实声量名次），与 sov_rank 背离时说明排名靠推广撑起
+        organic_rank_map = {
+            r.get("name"): idx + 1
+            for idx, r in enumerate(
+                sorted(
+                    (
+                        r
+                        for r in sov_all
+                        if isinstance(r.get("organic_heat"), (int, float))
+                    ),
+                    key=lambda r: r.get("organic_heat"),
+                    reverse=True,
+                )
+            )
+        }
         sov_brief = [
             {
                 "name": r.get("name"),
+                "sov_rank": idx + 1,
                 "share": r.get("share"),
                 "sentiment": r.get("sentiment"),
                 # organic_heat/promo_heat：真实竞争声量优先看 organic_heat（share=organic+promo
                 # 会被推广拉高）；promo 显著高于 organic 时该品牌声量主要靠推广，下调采信
                 "organic_heat": r.get("organic_heat"),
+                "organic_rank": organic_rank_map.get(r.get("name")),
                 "promo_heat": r.get("promo_heat"),
+                # mentions：数据量风控——提及很少时名次靠后可能是数据稀疏，不可读成"弱"
+                "mentions": r.get("mentions"),
                 "role": r.get("role"),
             }
-            for r in sov_ranking
+            for idx, r in enumerate(sov_sorted[:10])
         ]
 
-        # 品牌组聚合 — 按母品牌族汇总声量份额（个体 sov 之上的组级视图）
+        # 品牌组聚合 — 按母品牌族汇总声量份额（个体 sov 之上的组级视图；
+        # organic/promo 拆分揭示族级真实声量 vs 推广占比）
         group_share_brief = [
             {
                 "name": g.get("name"),
                 "role": g.get("role"),
                 "share": g.get("share"),
                 "mentions": g.get("mentions"),
+                "organic_heat": g.get("organic_heat"),
+                "promo_heat": g.get("promo_heat"),
+                "organic_sentiment": g.get("organic_sentiment"),
             }
             for g in (landscape.get("group_share") or [])[:10]
             if isinstance(g, dict)
@@ -515,7 +542,19 @@ def format_slice_data_for_insight(
 
         # Intent 层 — topic_radar (pains/gains/controversies) + unmet_needs + audiences
         intent = layers.get("intent") or {}
-        unmet_needs = intent.get("unmet_needs")
+        # 未满足需求（已是 LLM 策展信号；只投分析字段，不带 post_ids/source_tasks 等运维字段）
+        unmet_needs = [
+            {
+                "name": u.get("name"),
+                "category": u.get("category"),
+                "heat": u.get("heat"),
+                "mentions": u.get("mentions"),
+                "sentiment": u.get("sentiment"),
+                "organic_sentiment": u.get("organic_sentiment"),
+            }
+            for u in (intent.get("unmet_needs") or [])
+            if isinstance(u, dict)
+        ]
 
         # 受众画像（Social Tension 的人群锚点 + Brand Opportunity 的目标受众）
         context_analysis = intent.get("context_analysis") or {}

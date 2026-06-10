@@ -133,7 +133,41 @@ pnpm prod:down
 > ℹ️ **生产迁移提示**：生产环境的后端容器启动不会自动执行 Alembic 迁移。
 > 如有新增迁移，请在部署后手动执行一次：`pnpm be:migrate:up`。
 
-> 🤖 **CI/CD 自动部署**：如需通过 GitLab CI/CD 自动部署到服务器，参见 [`docs/GITLAB_CI_VARIABLES.md`](docs/GITLAB_CI_VARIABLES.md) 与 `.gitlab-ci.yml`。
+> 🤖 **CI/CD 自动部署**：项目目前已 100% 接入了更智能、更敏捷的 **GitHub Actions** 自动化 CI/CD 部署。
+> 您只需在本地将代码推送到 GitHub 的 `main` 分支（`git push origin main`），新加坡生产服务器便会自动拉取最新代码、智能增量重构镜像、平滑滚动重启，完全解放手动部署的劳动力。
+> 
+> ### 🤖 自动化 CI/CD 部署指南 (GitHub Actions)
+> 
+> 流水线配置文件位于项目根目录的 `.github/workflows/deploy.yml` 下。
+> 
+> #### 1. 服务器端 GitOps 一次性改造
+> 为确保新加坡服务器具备免密拉取您 GitHub 私有仓库的最高安全级别权限，需进行如下注册：
+> 1. **在服务器生成 SSH 密钥对**：
+>    ```bash
+   ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+   cat ~/.ssh/id_ed25519.pub
+   ```
+> 2. **在 GitHub 授权**：打开 GitHub 项目主页 -> **Settings -> Deploy keys -> Add deploy key**，将上述服务器公钥粘贴进去并保存（只读权限即可）。
+> 3. **服务器端目录托管化**：
+>    * 将原有手工覆盖的运行目录重命名备份：`mv /root/social-insights-hub /root/social-insights-hub_backup`
+>    * 克隆官方仓库到运行目录：`git clone git@github.com:shrekshrek/social-insights-hub.git /root/social-insights-hub`
+>    * 迁回本地敏感配置文件：`cp /root/social-insights-hub_backup/.env.production /root/social-insights-hub/`（及 SSL 证书文件夹等）。
+> 
+> #### 2. GitHub 仓库 Secrets 密钥注入
+> 请前往您的 GitHub 仓库页面 -> **Settings -> Secrets and variables -> Actions -> 点击 New repository secret**，添加以下 3 个加密机密变量：
+> 
+> | 变量名 (Secret Name) | 对应值内容 (Value) | 如何获取或填写？ |
+> | :--- | :--- | :--- |
+> | **`DEPLOY_HOST`** | `43.159.61.34` | 新加坡生产服务器的公网 IP 地址 |
+> | **`DEPLOY_USER`** | `root` | 登录服务器使用的用户名 |
+> | **`SSH_PRIVATE_KEY`** | `您本地 Mac 上的 id_rsa 私钥文本` | 完整复制您本地 `~/.ssh/id_rsa` 的私钥内容（包含 BEGIN/END 首尾标识行）。<br>💡 *Mac 本地终端极速复制命令*：`cat ~/.ssh/id_rsa | pbcopy`（直接进剪贴板，Cmd+V 即可）。 |
+> 
+> #### 3. 智能增量判定构建优势 (Smart Increment Sensor)
+> 本部署流内置了全行业最先进的「前后端增量感知过滤器」：
+> *   **当只修改后端 Python 代码或提示词链时**：流水线自动识别，**跳过**最耗时（1-2分钟）的前端 Nuxt 全量重编译，在 **10 秒** 内实现秒级热更新重启，极力降低生产服务器的负荷与停机干扰！
+> *   **当修改了前端 Vue 页面代码时**：流水线自动判定，强制触发前端无缓存重新编译打包，并在成功后执行内存缓存刷新。
+> 
+> ---
 
 ## 🔐 安全配置
 

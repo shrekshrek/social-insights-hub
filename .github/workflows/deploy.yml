@@ -1,0 +1,62 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/social-insights-hub
+            
+            # 1. 拉取最新代码
+            git pull origin main
+            
+            # 2. 智能探测本次推送是否包含前端代码变动 (利用 git reflog 极速比对)
+            if git rev-parse --verify HEAD@{1} >/dev/null 2>&1; then
+              FRONTEND_CHANGED=$(git diff --name-only HEAD@{1} HEAD | grep -E "^frontend/" || true)
+            else
+              # 如果是服务器初次 clone 或无历史引用记录，默认编译前端
+              FRONTEND_CHANGED="first_run_fallback"
+            fi
+            
+            # 3. 后端和异步 worker 总是秒级热重构 (Docker 自带缓存)
+            echo "--- Rebuilding Backend & Celery Worker ---"
+            docker compose -f docker-compose.prod.yml build backend celery-worker
+            
+            # 4. 判断是否需要重新编译 Nuxt 前端
+            if [ -n "$FRONTEND_CHANGED" ]; then
+              echo "⚡️ Frontend changes detected! Starting clean Nuxt/Vite compilation..."
+              find frontend -type f -exec touch {} +
+              docker compose -f docker-compose.prod.yml build --no-cache frontend
+            else
+              echo "✅ No frontend changes detected. Skipping heavy Nuxt compile to save time."
+            fi
+            
+            # 5. 平滑应用新镜像并启动容器
+            echo "--- Recreating Containers ---"
+            docker compose -f docker-compose.prod.yml up -d
+            
+            # 6. 执行数据库迁移自检
+            echo "--- Running DB Migrations ---"
+            docker exec prod-backend uv run alembic upgrade head
+            
+            # 7. 如果更新了前端，才强刷 Node 缓存
+            if [ -n "$FRONTEND_CHANGED" ]; then
+              echo "--- Reloading Node Cache ---"
+              docker compose -f docker-compose.prod.yml restart frontend
+            fi
+            
+            # 8. 网络健康自检
+            echo "--- Running Health Check ---"
+            sleep 10
+            curl -f http://localhost/health || echo 'Warning: backend health check failed'

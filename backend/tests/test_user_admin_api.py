@@ -17,18 +17,18 @@ async def _prepare_super_admin(
     password: str,
     email: str,
 ) -> dict:
-    """创建并登录超级管理员，返回认证头信息"""
+    """创建并登录超级管理员，返回认证头信息。
 
-    register_payload = {
-        "username": username,
-        "password": password,
-        "email": email,
-    }
-    response = await async_client.post("/api/v1/auth/register", json=register_payload)
-    assert response.status_code == 201
-
-    admin_user = await auth_service.get_user_by_username(db, username)
-    assert admin_user is not None
+    直接走 service 建用户（注册 API 已改邀请制且不是本文件的被测对象），
+    再走真实 /token 登录拿凭证。
+    """
+    admin_user = await auth_service.create_user(
+        db,
+        username=username,
+        email=email,
+        password=password,
+        email_verified=True,
+    )
 
     super_role = await rbac_service.get_role_by_name(db, SystemRoles.SUPER_ADMIN)
     assert super_role is not None

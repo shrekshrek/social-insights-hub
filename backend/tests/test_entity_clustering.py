@@ -33,6 +33,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _skip_unless_llm_tests_enabled():
+    """真实 LLM 集成测试默认跳过（烧 token + 输出不确定），显式 RUN_LLM_TESTS=1 才跑。
+
+    CI（无真实 key）与常规本地 `pnpm be:test` 都不会触发真实 API 调用；
+    需要人工验证 LLM 链路时：RUN_LLM_TESTS=1 uv run pytest tests/test_entity_clustering.py
+    """
+    if not os.getenv("RUN_LLM_TESTS"):
+        pytest.skip("真实 LLM 集成测试需显式 RUN_LLM_TESTS=1 启用")
+    if not getattr(settings, "DEEPSEEK_API_KEY", None):
+        pytest.skip("未设置DEEPSEEK_API_KEY，跳过真实 LLM 调用测试")
+
+
 def test_format_entities():
     """测试实体格式化函数"""
     entities = [
@@ -104,8 +116,7 @@ def test_parse_response():
 
 def test_llm_clustering():
     """测试 LLM 实体聚类/归一化（需要真实 API 调用）"""
-    if not getattr(settings, "DEEPSEEK_API_KEY", None):
-        pytest.skip("未设置DEEPSEEK_API_KEY，跳过真实 LLM 调用测试")
+    _skip_unless_llm_tests_enabled()
 
     # 准备测试数据：包含同义词的实体列表
     test_entities = [
@@ -184,13 +195,12 @@ def test_llm_clustering():
 
 
 def test_aggregated_entities_clustering():
-    """测试 aggregate_entities 的完整流程（包含 LLM 聚类与打标、属性清洗）"""
+    """测试 aggregate_entities 的完整流程（含内置 LLM 聚类打标、属性清洗）"""
     from src.social_media.analysis.celery_tasks.aggregation.entity_aggregation import (
         aggregate_entities,
     )
 
-    if not getattr(settings, "DEEPSEEK_API_KEY", None):
-        pytest.skip("未设置DEEPSEEK_API_KEY，跳过 aggregate_entities 的 LLM 流程测试")
+    _skip_unless_llm_tests_enabled()
 
     # 模拟 posts_data 数据结构
     # 构造一个复杂的场景：华为 vs 苹果
@@ -262,11 +272,11 @@ def test_aggregated_entities_clustering():
     logger.info("测试 aggregate_entities 完整流程 (含线索提取与属性清洗)")
     logger.info("=" * 60)
 
-    # 测试 aggregate_entities（启用 LLM）
+    # LLM 归一化已内置于 aggregate_entities（≥5 实体自动走 _build_llm_mapping），
+    # 旧的 enable_llm_normalization 开关参数已在归一化重构（b888137）中移除
     result = aggregate_entities(
         mock_posts_data,
         task_keywords=task_keywords,
-        enable_llm_normalization=True,
     )
 
     aggregated = result.get("aggregated_entities", [])

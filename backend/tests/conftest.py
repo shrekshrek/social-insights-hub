@@ -20,13 +20,21 @@ BACKEND_ROOT = Path(__file__).parent.parent.resolve()
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from src.database import Base, get_async_db
-from src.main import app
-from src.rbac.init_data import init_rbac_data
-
-# 加载测试环境变量
+# 加载测试环境变量——必须在任何 src 模块 import 之前：
+# src.config.Settings 与 src.database 的全局引擎都在 import 时实例化，
+# 晚于 import 加载会让 audit 中间件等"自带 AsyncSessionLocal"的路径
+# 拿到默认 DATABASE_URL（user:password@localhost）而非测试库
 env_path = Path(__file__).parent.parent / ".env.test"
 load_dotenv(dotenv_path=env_path, override=True)
+
+from src.database import Base, get_async_db
+from src.main import app
+from src.rate_limit import limiter
+from src.rbac.init_data import init_rbac_data
+
+# 测试内禁用限流：auth 端点 5/min 的内存态限流在全量套件（同一 key、<1min 跑完）
+# 下会产生跨测试 429 抖动；没有测试断言 429 行为
+limiter.enabled = False
 
 # --- Database Fixtures ---
 TEST_DATABASE_URL = os.getenv(

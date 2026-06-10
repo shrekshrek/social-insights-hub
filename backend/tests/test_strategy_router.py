@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
 from src.auth.security import create_access_token, pwd_context
+from src.rbac import service as rbac_service
+from src.rbac.models import SystemRoles
 
 pytestmark = pytest.mark.asyncio
 
@@ -18,7 +20,11 @@ BASE = "/api/v1"
 
 @pytest_asyncio.fixture
 async def strategy_user(async_db_session: AsyncSession) -> tuple[User, str]:
-    """直接创建测试用户（绕过 API 速率限制），返回 (user, token)"""
+    """直接创建测试用户并授 super_admin 角色，返回 (user, token)。
+
+    strategies 端点有 RBAC 门禁（strategy:write 等），裸用户会被 403；
+    super_admin 角色由 conftest 的 init_rbac_data 种子保证存在。
+    """
     user = User(
         username="strategy_tester",
         email="strategy_tester@test.com",
@@ -26,6 +32,13 @@ async def strategy_user(async_db_session: AsyncSession) -> tuple[User, str]:
     )
     async_db_session.add(user)
     await async_db_session.flush()
+
+    super_role = await rbac_service.get_role_by_name(
+        async_db_session, SystemRoles.SUPER_ADMIN
+    )
+    assert super_role is not None
+    await rbac_service.assign_user_roles(async_db_session, user.id, [super_role.id])
+
     token = create_access_token(user.username)
     return user, token
 

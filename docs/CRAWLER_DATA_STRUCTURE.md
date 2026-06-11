@@ -1,6 +1,6 @@
 # MediaCrawlerPro 爬虫数据结构参考文档
 
-> 本文档详细说明所有平台的爬虫类型、数据模型结构，供 WebSocket 端调用参考。
+> 本文档详细说明所有平台的爬虫类型、数据模型结构，供爬虫 Agent 与云端对接参考。
 
 ## 目录
 
@@ -13,7 +13,7 @@
 - [5. Weibo (微博)](#5-weibo-微博)
 - [6. XiaoHongShu (小红书)](#6-xiaohongshu-小红书)
 - [7. Zhihu (知乎)](#7-zhihu-知乎)
-- [WebSocket 调用示例](#websocket-调用示例)
+- [任务调用协议](#任务调用协议)
 
 ---
 
@@ -101,7 +101,7 @@ JSON 文件：
 
 ## 请求参数结构
 
-> 本章节详细说明通过 WebSocket 调用爬虫任务时需要传递的配置参数结构。
+> 本章节详细说明下发爬虫任务时需要传递的配置参数结构。
 
 ### 通用配置参数
 
@@ -922,118 +922,11 @@ https://www.xiaohongshu.com/explore/68f20ba9000000000401619f?xsec_token=ABFNeBpL
 
 ---
 
-## WebSocket 调用示例
+## 任务调用协议
 
-### 1. 任务进度通知
-
-当爬虫任务执行时，云端会通过 WebSocket 向 Agent 发送任务进度通知：
-
-```json
-{
-  "type": "task_assign",
-  "data": {
-    "task_id": "task_123456",
-    "platform": "xhs",
-    "crawler_type": "search",
-    "keywords": "美食探店",
-    "max_notes_count": 100,
-    "enable_comments": 1
-  }
-}
-```
-
-### 2. Agent 任务进度上报
-
-Agent 向云端上报任务执行进度：
-
-```json
-{
-  "type": "task_progress",
-  "data": {
-    "task_id": "task_123456",
-    "status": "running",
-    "progress": 45,
-    "message": "已爬取 45/100 条笔记",
-    "data_stats": {
-      "contents_count": 45,
-      "comments_count": 230,
-      "creators_count": 12
-    }
-  }
-}
-```
-
-### 3. 任务完成通知
-
-```json
-{
-  "type": "task_complete",
-  "data": {
-    "task_id": "task_123456",
-    "status": "completed",
-    "result": {
-      "contents_count": 100,
-      "comments_count": 520,
-      "creators_count": 28,
-      "data_files": [
-        "data/xhs/1_search_contents_20240114.csv",
-        "data/xhs/1_search_comments_20240114.csv",
-        "data/xhs/1_search_creators_20240114.csv"
-      ]
-    }
-  }
-}
-```
-
-### 4. 数据统计查询
-
-云端查询某个平台的数据统计：
-
-```json
-{
-  "type": "data_stats_query",
-  "data": {
-    "platform": "xhs",
-    "date_range": {
-      "start": "2024-01-01",
-      "end": "2024-01-14"
-    }
-  }
-}
-```
-
-Agent 返回统计数据：
-
-```json
-{
-  "type": "data_stats_response",
-  "data": {
-    "platform": "xhs",
-    "stats": {
-      "total_contents": 1250,
-      "total_comments": 6780,
-      "total_creators": 340,
-      "by_crawler_type": {
-        "search": {
-          "contents": 800,
-          "comments": 4200,
-          "creators": 180
-        },
-        "detail": {
-          "contents": 300,
-          "comments": 1800,
-          "creators": 100
-        },
-        "creator": {
-          "contents": 150,
-          "comments": 780,
-          "creators": 60
-        }
-      }
-    }
-  }
-}
-```
+> 早期版本曾规划 WebSocket 推送模型，**从未实现**。实际采用 HTTP 轮询（Agent pull）：
+> Agent 轮询 `GET /api/v1/agent/tasks/pending` 认领任务 → 执行采集 → 上报进度与结果。
+> 完整接口契约（含 phase、去重幂等、上传格式）见 [`docs/云端分析平台API规范.md`](./云端分析平台API规范.md)。
 
 ---
 
@@ -1110,7 +1003,7 @@ A: 使用数据库存储时（`SAVE_DATA_OPTION=db`），会根据主键自动�
 
 **Q: 如何获取任务的实时进度？**
 
-A: 通过 WebSocket 监听任务进度事件，Agent 会定期上报进度信息。
+A: Agent 通过 HTTP 轮询认领任务并定期上报进度（见 `docs/云端分析平台API规范.md`）。
 
 **Q: 为什么 Kuaishou CSV 不支持 creator 导出？**
 

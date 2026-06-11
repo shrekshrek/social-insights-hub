@@ -1,5 +1,7 @@
 # 实验:Path B(LLM-native 一把梭)vs Path A(Pipeline)Insight 产出对比
 
+> ⚠️ **存档**：实验结论（subject_type 是路径选择的调节变量、n=2 不足以定论）已被 ADR-001 v6 吸收，按场景选型原则落地。本文仅供溯源，不再更新。
+
 > 实验日期:2026-04-20
 > 样本:Strategy #18(乐虎功能饮料)+ Strategy #7(大魔王素毛肚世界杯)
 > 样本数:n=2(需扩展到 n≥5 方可定论)

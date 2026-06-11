@@ -39,6 +39,7 @@ backend/src/
 ├── auth/                    # JWT 认证、登录注册、令牌黑名单
 ├── rbac/                    # 角色权限管理、代码驱动启动时自动同步
 ├── users/                   # 用户 CRUD、角色分配
+├── audit/                   # 用户操作日志（中间件自动捕获 + TRIGGER 显式记录）
 ├── social_media/
 │   ├── monitors/            # 社媒监测项目、平台初始化、参与者管理
 │   ├── tasks/               # 数据采集任务、多平台适配器
@@ -52,7 +53,9 @@ backend/src/
 │   └── analysis/            # 新闻切片分析（NewsSlice）+ AnalysisJob 封装
 ├── strategies/              # 策略研究引擎
 ├── knowledge_base/          # 市场知识库 + 文档向量化
-├── research_agent/          # 专题研究 Agent（LangGraph，开发中）
+├── research_agent/          # 专题研究 Agent（LangGraph，industry/creative 双 profile，已稳定运行）
+├── feishu/                  # 飞书 OAuth + IM 消息通知
+├── email/                   # 邀请/密码重置邮件
 ├── jobs/                    # 跨渠道 AnalysisJob：models/schemas/crud/factory/router
 ├── llm/                     # LLM 实例管理 + 分析链（无独立 API 路由）
 │   └── chains/              # 分析链按渠道分目录
@@ -121,7 +124,7 @@ backend/src/
 | news_media | 新闻监测、采集、分析（channel-local） | `/api/v1/news-media` |
 | strategies | 策略研究引擎 | `/api/v1/strategies` |
 | knowledge_base | 市场知识库、文档向量化 | `/api/v1/knowledge-base` |
-| research_agent | 专题研究 LangGraph Agent（开发中） | `/api/v1/research-agent` |
+| research_agent | 专题研究 LangGraph Agent | `/api/v1/research-agent` |
 | jobs | 跨渠道 AnalysisJob 管理 | `/api/v1/jobs` |
 | llm | LLM 实例 + 分析链（无 API 路由） | — |
 | agent | 外部爬虫数据上传（API Key 认证） | `/api/v1/agent` |
@@ -173,7 +176,7 @@ Stage 3 aggregation  → 聚合: NSR/SERP/IPA/四象限/实体/话题/KOL → So
 
 多渠道数据汇聚（social_media + news_media + knowledge_base），LLM 辅助生成品牌策略报告。详见 [`docs/strategy-multi-source-architecture.md`](./strategy-multi-source-architecture.md)。
 
-### 4.6 research_agent/（开发中）
+### 4.6 research_agent/
 
 基于 LangGraph 的 agentic 搜索分析，替代 KB 预存模式。详见 [`docs/research-agent-design.md`](./research-agent-design.md)。
 

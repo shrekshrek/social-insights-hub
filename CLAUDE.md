@@ -152,7 +152,7 @@
 
 ## 参考文档
 
-- 系统架构: `docs/architecture.md`
+- 系统架构: `docs/backend-architecture.md` / `docs/frontend-architecture.md`
 - 后端 tier 约定: `backend/CLAUDE.md`
 - 前端 tier 约定: `frontend/CLAUDE.md`
 - 后端编码规范 (详细版): `backend/CODING_GUIDE.md`

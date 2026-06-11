@@ -60,7 +60,7 @@ curl http://localhost/health
 ## 🔗 相关文档
 
 - [后端架构](./backend-architecture.md) - 后端配置详解
-- [GitLab CI/CD变量](./GITLAB_CI_VARIABLES.md) - CI/CD配置
+- [部署与 CI/CD](../DEPLOYMENT.md) - GitHub Actions 部署配置
 - [开发规范](../CLAUDE.md) - 项目开发规范
 
 ---

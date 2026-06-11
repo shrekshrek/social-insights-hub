@@ -59,7 +59,9 @@ frontend/
 │   │   └── analysis/         # 分析报告组件、图表、类型定义
 │   ├── news-media/           # 新闻监测/任务/分析
 │   ├── strategies/           # 策略研究全流程
-│   └── knowledge-base/       # 市场知识库管理
+│   ├── knowledge-base/       # 市场知识库管理
+│   ├── research-agent/       # 专题研究任务界面
+│   └── audit/                # 用户操作日志查询
 ├── app/                       # Nuxt 4 主应用目录
 │   ├── pages/                # 全局页面
 │   ├── components/           # 全局通用组件

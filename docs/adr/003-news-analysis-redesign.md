@@ -2,6 +2,7 @@
 
 > 决策日期：2026-04-30
 > 状态：**Accepted**
+> 附注（2026-06-07）：Pass 1 输出新增 `themes` 议题层（媒体反复讨论的抽象维度，与 event_clusters 正交），已接入 market_report 产出链、coverage_check 闸门与 campaign 新闻补充段。属架构内的数据层扩展，不改变本 ADR 的两层职责/双段 LLM 决策。
 > 相关实现：
 > - `backend/src/news_media/tasks/service.py`、`backend/src/news_media/tasks/tasks.py`
 > - `backend/src/news_media/analysis/service.py`、`backend/src/news_media/analysis/tasks.py`

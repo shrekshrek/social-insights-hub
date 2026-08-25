@@ -40,9 +40,15 @@ class TestStatusOrder:
         # 10 个状态：brand_strategy 路径 8 个 + market_report 路径新增 2 个
         # (agenda_map_done 与 insight_done 共享 order，landscape_done 与 brand_role_done 共享 order)
         expected = {
-            "draft", "planned", "probing", "collecting", "ready",
-            "insight_done", "brand_role_done",
-            "agenda_map_done", "landscape_done",
+            "draft",
+            "planned",
+            "probing",
+            "collecting",
+            "ready",
+            "insight_done",
+            "brand_role_done",
+            "agenda_map_done",
+            "landscape_done",
             "completed",
         }
         assert set(STATUS_ORDER.keys()) == expected
@@ -232,7 +238,10 @@ class TestCheckCollectionStatusSliceTrigger:
 
     @pytest.mark.asyncio
     @patch("src.strategies.service._get_research_agent_status", new_callable=AsyncMock)
-    @patch("src.news_media.tasks.service.get_news_tasks_by_strategy", new_callable=AsyncMock)
+    @patch(
+        "src.news_media.tasks.service.get_news_tasks_by_strategy",
+        new_callable=AsyncMock,
+    )
     @patch("src.strategies.service._strategy_read", new_callable=AsyncMock)
     @patch("src.strategies.service._create_auto_slices", new_callable=AsyncMock)
     async def test_trigger_auto_slices_only_when_strategy_has_no_slices(
@@ -244,6 +253,7 @@ class TestCheckCollectionStatusSliceTrigger:
     ):
         mock_get_news.return_value = []
         from src.strategies.schemas import ResearchAgentStatus
+
         mock_research_status.return_value = ResearchAgentStatus()
         mock_strategy_read.return_value = None
 
@@ -264,7 +274,10 @@ class TestCheckCollectionStatusSliceTrigger:
     @pytest.mark.asyncio
     @patch("src.strategies.service._try_advance_to_ready", new_callable=AsyncMock)
     @patch("src.strategies.service._get_research_agent_status", new_callable=AsyncMock)
-    @patch("src.news_media.tasks.service.get_news_tasks_by_strategy", new_callable=AsyncMock)
+    @patch(
+        "src.news_media.tasks.service.get_news_tasks_by_strategy",
+        new_callable=AsyncMock,
+    )
     @patch("src.strategies.service._strategy_read", new_callable=AsyncMock)
     @patch("src.strategies.service._create_auto_slices", new_callable=AsyncMock)
     async def test_skip_auto_slices_when_strategy_already_has_slices(
@@ -277,6 +290,7 @@ class TestCheckCollectionStatusSliceTrigger:
     ):
         mock_get_news.return_value = []
         from src.strategies.schemas import ResearchAgentStatus
+
         mock_research_status.return_value = ResearchAgentStatus()
         mock_strategy_read.return_value = None
         mock_try_advance.return_value = False
@@ -549,9 +563,11 @@ class TestBuildSocialProbeSummariesFailedSemantics:
     async def test_failed_with_no_data_is_not_analyzed(self):
         """failed + 0 帖：旧 _PROBE_TERMINAL_STATUSES 含 failed 时会判 has_analysis=true，
         方案 B 下必须为 false 才能阻塞 all_analyzed"""
-        db = self._mock_db_with_tasks([
-            self._make_task(status="failed", posts_count=0),
-        ])
+        db = self._mock_db_with_tasks(
+            [
+                self._make_task(status="failed", posts_count=0),
+            ]
+        )
 
         statuses, summaries = await _build_social_probe_summaries(db, [1])
 
@@ -563,14 +579,20 @@ class TestBuildSocialProbeSummariesFailedSemantics:
     @pytest.mark.asyncio
     async def test_failed_with_partial_analysis_is_not_analyzed(self):
         """failed + 已有 analysis_result（崩溃前部分写入）：仍不算 has_analysis，
-        防止时序漏洞——失败任务即便有部分数据也不该被审查 """
-        db = self._mock_db_with_tasks([
-            self._make_task(
-                status="failed",
-                posts_count=10,
-                analysis_result={"insights": {"top_topics": []}, "metrics": {}, "meta": {}},
-            ),
-        ])
+        防止时序漏洞——失败任务即便有部分数据也不该被审查"""
+        db = self._mock_db_with_tasks(
+            [
+                self._make_task(
+                    status="failed",
+                    posts_count=10,
+                    analysis_result={
+                        "insights": {"top_topics": []},
+                        "metrics": {},
+                        "meta": {},
+                    },
+                ),
+            ]
+        )
 
         statuses, summaries = await _build_social_probe_summaries(db, [1])
 
@@ -580,17 +602,23 @@ class TestBuildSocialProbeSummariesFailedSemantics:
     @pytest.mark.asyncio
     async def test_completed_with_data_is_analyzed(self):
         """成功路径回归：completed + analysis_result 正常算 has_analysis"""
-        db = self._mock_db_with_tasks([
-            self._make_task(
-                status="completed",
-                posts_count=20,
-                analysis_result={
-                    "insights": {"top_topics": [], "target_entities": [], "competitor_entities": []},
-                    "metrics": {"marketing_analysis": {}},
-                    "meta": {"data_volume": {}},
-                },
-            ),
-        ])
+        db = self._mock_db_with_tasks(
+            [
+                self._make_task(
+                    status="completed",
+                    posts_count=20,
+                    analysis_result={
+                        "insights": {
+                            "top_topics": [],
+                            "target_entities": [],
+                            "competitor_entities": [],
+                        },
+                        "metrics": {"marketing_analysis": {}},
+                        "meta": {"data_volume": {}},
+                    },
+                ),
+            ]
+        )
 
         statuses, summaries = await _build_social_probe_summaries(db, [1])
 
@@ -600,9 +628,11 @@ class TestBuildSocialProbeSummariesFailedSemantics:
     @pytest.mark.asyncio
     async def test_completed_with_no_data_is_analyzed_via_no_data_fallback(self):
         """completed + 0 帖：兜底视为已处理（规则层会自动 fail 给"建议移除"）"""
-        db = self._mock_db_with_tasks([
-            self._make_task(status="completed", posts_count=0),
-        ])
+        db = self._mock_db_with_tasks(
+            [
+                self._make_task(status="completed", posts_count=0),
+            ]
+        )
 
         statuses, _ = await _build_social_probe_summaries(db, [1])
 
@@ -611,9 +641,11 @@ class TestBuildSocialProbeSummariesFailedSemantics:
     @pytest.mark.asyncio
     async def test_running_is_not_analyzed(self):
         """running 不算终态，has_analysis=false（既有行为，做回归保险）"""
-        db = self._mock_db_with_tasks([
-            self._make_task(status="running", posts_count=0),
-        ])
+        db = self._mock_db_with_tasks(
+            [
+                self._make_task(status="running", posts_count=0),
+            ]
+        )
 
         statuses, _ = await _build_social_probe_summaries(db, [1])
 
@@ -624,13 +656,17 @@ class TestBuildSocialProbeSummariesFailedSemantics:
         """SocialProbeTaskStatus.last_updated_at 字段透传给前端用于'失败于 X 分钟前'"""
         from datetime import datetime, timezone
 
-        db = self._mock_db_with_tasks([
-            self._make_task(status="failed", posts_count=0),
-        ])
+        db = self._mock_db_with_tasks(
+            [
+                self._make_task(status="failed", posts_count=0),
+            ]
+        )
 
         statuses, _ = await _build_social_probe_summaries(db, [1])
 
-        assert statuses[0].last_updated_at == datetime(2026, 4, 30, 12, 0, 0, tzinfo=timezone.utc)
+        assert statuses[0].last_updated_at == datetime(
+            2026, 4, 30, 12, 0, 0, tzinfo=timezone.utc
+        )
 
 
 class TestTryAdvanceToReady:
@@ -648,7 +684,9 @@ class TestTryAdvanceToReady:
         strategy.name = "test"
         return strategy
 
-    def _make_social_slice(self, status="completed", stage2_status="completed", rd=None):
+    def _make_social_slice(
+        self, status="completed", stage2_status="completed", rd=None
+    ):
         slc = MagicMock()
         slc.id = 10
         slc.name = "slice"
@@ -760,7 +798,10 @@ class TestTryAdvanceToReady:
         assert result is False
         assert strategy.status == "collecting"
         # coverage 已跑过结果写入，下次轮询会跳过
-        assert strategy.coverage_check_result == {"overall_ready": False, "reason": "..."}
+        assert strategy.coverage_check_result == {
+            "overall_ready": False,
+            "reason": "...",
+        }
         mock_notify.assert_not_called()
 
 
@@ -780,25 +821,31 @@ class TestResearchDesignAdvisories:
 
         if has_social:
             rqs.append({"id": "rq1", "dimension": "consumer_voice"})
-            data_plan.append({
-                "channel": "social_media",
-                "dimension_name": "主品 UGC",
-                "question_ids": ["rq1"],
-            })
+            data_plan.append(
+                {
+                    "channel": "social_media",
+                    "dimension_name": "主品 UGC",
+                    "question_ids": ["rq1"],
+                }
+            )
         if has_competitive:
             rqs.append({"id": "rq_comp", "dimension": "competitive"})
-            data_plan.append({
-                "channel": "social_media",
-                "dimension_name": "竞品 UGC",
-                "question_ids": ["rq_comp"],
-            })
+            data_plan.append(
+                {
+                    "channel": "social_media",
+                    "dimension_name": "竞品 UGC",
+                    "question_ids": ["rq_comp"],
+                }
+            )
         if has_news:
             rqs.append({"id": "rq_news", "dimension": "media_narrative"})
-            data_plan.append({
-                "channel": "news_media",
-                "dimension_name": "竞品新闻",
-                "question_ids": ["rq_news"],
-            })
+            data_plan.append(
+                {
+                    "channel": "news_media",
+                    "dimension_name": "竞品新闻",
+                    "question_ids": ["rq_news"],
+                }
+            )
 
         return {"research_questions": rqs, "data_plan": data_plan}
 
@@ -806,11 +853,11 @@ class TestResearchDesignAdvisories:
     def _brief_with_competitor_signal(*, location: str = "constraints") -> dict:
         """构造含「竞品」信号的 brand_brief"""
         base = {
-            "subject": "美赞臣 Enfinitas",
+            "subject": "星澜 Velora",
             "analysis_goal": "提升配方优越性的品牌形象",
             "constraints": "",
             "channel_plan": [
-                {"type": "social_media", "solvable": ["消费者对 MFGM 的认知"]}
+                {"type": "social_media", "solvable": ["消费者对益生菌配方的认知"]}
             ],
         }
         signal = "竞品：高端婴幼儿配方奶粉品牌"
@@ -822,7 +869,7 @@ class TestResearchDesignAdvisories:
             base["channel_plan"] = [
                 {
                     "type": "social_media",
-                    "solvable": ["消费者对 Enfinitas 及竞品高端奶粉的价值评价与对比"],
+                    "solvable": ["消费者对 Velora 及竞品高端奶粉的价值评价与对比"],
                 }
             ]
         return base
@@ -861,9 +908,7 @@ class TestResearchDesignAdvisories:
             "subject": "某品牌",
             "analysis_goal": "了解消费者对某品牌的认知",
             "constraints": "时间：Y26",
-            "channel_plan": [
-                {"type": "social_media", "solvable": ["消费者认知"]}
-            ],
+            "channel_plan": [{"type": "social_media", "solvable": ["消费者认知"]}],
         }
 
         result = _check_missing_competitive_social_dimension(design, brief)

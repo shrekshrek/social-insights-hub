@@ -96,7 +96,11 @@ class TestEvidenceDensity:
     def test_full_score_all_have_2_plus(self):
         claims = [
             {"kind": "tension", "statement": "t", "evidence": [{"x": 1}, {"y": 2}]},
-            {"kind": "opportunity", "statement": "o", "evidence": [{"a": 1}, {"b": 2}, {"c": 3}]},
+            {
+                "kind": "opportunity",
+                "statement": "o",
+                "evidence": [{"a": 1}, {"b": 2}, {"c": 3}],
+            },
         ]
         d = _score_evidence_density(claims)
         assert d.score == 1.0
@@ -125,24 +129,26 @@ class TestEvidenceDensity:
 class TestSubjectFocus:
     def test_full_focus(self):
         claims = [
-            {"kind": "tension", "statement": "乐虎的消费者...", "evidence": []},
-            {"kind": "opportunity", "statement": "乐虎可以...", "evidence": []},
+            {"kind": "tension", "statement": "猎风的消费者...", "evidence": []},
+            {"kind": "opportunity", "statement": "猎风可以...", "evidence": []},
         ]
-        d = _score_subject_focus(claims, "乐虎")
+        d = _score_subject_focus(claims, "猎风")
         # 2/2 = 100% >= 60%,满分
         assert d.score == 1.0
 
     def test_no_subject(self):
-        d = _score_subject_focus([{"kind": "tension", "statement": "t", "evidence": []}], None)
+        d = _score_subject_focus(
+            [{"kind": "tension", "statement": "t", "evidence": []}], None
+        )
         assert d.score == 0.0
 
     def test_partial_focus_below_target(self):
         claims = [
-            {"kind": "tension", "statement": "乐虎好", "evidence": []},
+            {"kind": "tension", "statement": "猎风好", "evidence": []},
             {"kind": "tension", "statement": "其他品牌", "evidence": []},
             {"kind": "tension", "statement": "再其他", "evidence": []},
         ]
-        d = _score_subject_focus(claims, "乐虎")
+        d = _score_subject_focus(claims, "猎风")
         # 1/3 = 0.333, target 0.6, score = 0.333/0.6 = 0.555
         assert 0.5 < d.score < 0.6
 
@@ -152,10 +158,10 @@ class TestSubjectFocus:
             {
                 "kind": "tension",
                 "statement": "消费者痛点",
-                "evidence": [{"description": "乐虎相关的原话"}],
+                "evidence": [{"description": "猎风相关的原话"}],
             },
         ]
-        d = _score_subject_focus(claims, "乐虎")
+        d = _score_subject_focus(claims, "猎风")
         assert d.score == 1.0
 
 

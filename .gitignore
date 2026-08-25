@@ -10,6 +10,12 @@ backend/.env.production
 !.env.production.example
 !backend/.env.production.example
 
+# SSL certificates & private keys (never commit — provide on the server out-of-band)
+ssl/
+*.key
+*.pem
+*.crt
+
 # IDE / Editor specific
 .vscode/
 .idea/

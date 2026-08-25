@@ -40,7 +40,8 @@ async def slice_user(async_db_session: AsyncSession) -> User:
 
 
 async def test_social_slice_persists_subject_and_competitors_columns(
-    async_db_session: AsyncSession, slice_user: User,
+    async_db_session: AsyncSession,
+    slice_user: User,
 ):
     """SocialSlice 焦点切片：subject + competitors 落到表列，可读出。"""
     monitor = SocialMonitor(name="测试社媒监测", user_id=slice_user.id)
@@ -48,12 +49,12 @@ async def test_social_slice_persists_subject_and_competitors_columns(
     await async_db_session.flush()
 
     s = SocialSlice(
-        name="美赞臣 Focus",
+        name="星澜 Focus",
         monitor_id=monitor.id,
         user_id=slice_user.id,
         included_task_ids=[1, 2],
-        subject="美赞臣蓝臻",
-        competitors=["惠氏启赋", "皇家美素佳儿"],
+        subject="星澜至臻",
+        competitors=["晨贝儿天赋", "皇家优诺佳"],
         result_data={"foundation": {}},
         status="completed",
     )
@@ -61,8 +62,8 @@ async def test_social_slice_persists_subject_and_competitors_columns(
     await async_db_session.commit()
     await async_db_session.refresh(s)
 
-    assert s.subject == "美赞臣蓝臻"
-    assert s.competitors == ["惠氏启赋", "皇家美素佳儿"]
+    assert s.subject == "星澜至臻"
+    assert s.competitors == ["晨贝儿天赋", "皇家优诺佳"]
     # 配置不在 result_data
     assert "meta" not in (s.result_data or {}) or "subject" not in (
         (s.result_data or {}).get("meta") or {}
@@ -70,7 +71,8 @@ async def test_social_slice_persists_subject_and_competitors_columns(
 
 
 async def test_social_slice_landscape_mode_defaults(
-    async_db_session: AsyncSession, slice_user: User,
+    async_db_session: AsyncSession,
+    slice_user: User,
 ):
     """SocialSlice 大盘切片：subject=None / competitors=[] 默认正确。"""
     monitor = SocialMonitor(name="测试社媒监测2", user_id=slice_user.id)
@@ -96,7 +98,8 @@ async def test_social_slice_landscape_mode_defaults(
 
 
 async def test_social_slice_default_competitors_empty_list(
-    async_db_session: AsyncSession, slice_user: User,
+    async_db_session: AsyncSession,
+    slice_user: User,
 ):
     """SocialSlice competitors 列默认值 = [] (server_default '[]'::json)。"""
     monitor = SocialMonitor(name="测试社媒监测3", user_id=slice_user.id)
@@ -120,7 +123,8 @@ async def test_social_slice_default_competitors_empty_list(
 
 
 async def test_social_slice_result_data_overwrite_preserves_columns(
-    async_db_session: AsyncSession, slice_user: User,
+    async_db_session: AsyncSession,
+    slice_user: User,
 ):
     """关键防御点：LLM 重跑覆写 result_data 不会清掉 subject/competitors。"""
     monitor = SocialMonitor(name="测试社媒监测4", user_id=slice_user.id)
@@ -156,7 +160,8 @@ async def test_social_slice_result_data_overwrite_preserves_columns(
 
 
 async def test_news_slice_result_data_overwrite_preserves_columns(
-    async_db_session: AsyncSession, slice_user: User,
+    async_db_session: AsyncSession,
+    slice_user: User,
 ):
     """NewsSlice：Celery 重跑 merge result_data 不清 subject/competitors。"""
     monitor = NewsMonitor(name="测试新闻监测", user_id=slice_user.id)

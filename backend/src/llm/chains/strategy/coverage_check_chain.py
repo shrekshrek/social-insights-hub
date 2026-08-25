@@ -205,7 +205,7 @@ def _select_evidence(
 
     ⚠️ 历史 bug（v2026.05 修）：原实现直接 `items[:15]` 不排序，导致切片实体/话题
     多达数百个时 LLM 仅看到前 15 条存储顺序的样本——这一头未必包含 source 高的
-    covered 候选，造成假阴性 uncovered 判定（典型场景：strategy 41 的「乳脂球膜」
+    covered 候选，造成假阴性 uncovered 判定（典型场景：strategy 41 的「益生菌配方」
     实体 source=12 因排序靠后被截断，rq1 被误判 uncovered）。
 
     设计原则：传给 LLM 的证据样本必须与 SYSTEM_TEMPLATE 内嵌的判定阈值对齐——

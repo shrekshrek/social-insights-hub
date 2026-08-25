@@ -174,7 +174,7 @@ SYSTEM_TEMPLATE = """你是一位资深研究策略顾问，帮助品牌团队�
   "research_questions": [
     {{
       "id": "rq1",
-      "question": "具体的研究问题（如：大魔王在零食品类中的消费者认知如何？）",
+      "question": "具体的研究问题（如：晨屿在咖啡品类中的消费者认知如何？）",
       "dimension": "brand_voice",
       "priority": "high"
     }}

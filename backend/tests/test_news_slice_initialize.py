@@ -102,8 +102,11 @@ async def test_initialize_slice_with_no_articles_marks_completed(
     subject/competitors 列仍写入；descriptive 是空统计（articles_total=0）；stats 同步落地。
     """
     task = await _make_task(
-        async_db_session, news_monitor, slice_user,
-        name="空任务", keywords="kw",
+        async_db_session,
+        news_monitor,
+        slice_user,
+        name="空任务",
+        keywords="kw",
     )
 
     slice_obj = await initialize_slice(
@@ -140,15 +143,20 @@ async def test_initialize_slice_with_articles_marks_analyzing(
     descriptive.articles_total 反映真实计数；low relevance 文章被过滤。
     """
     task = await _make_task(
-        async_db_session, news_monitor, slice_user,
-        name="有文章任务", keywords="kw",
+        async_db_session,
+        news_monitor,
+        slice_user,
+        name="有文章任务",
+        keywords="kw",
     )
-    async_db_session.add_all([
-        _article(task_id=task.id, url="u1", source_tier="tier1", sentiment=1.0),
-        _article(task_id=task.id, url="u2", source_tier="tier2", sentiment=-1.0),
-        _article(task_id=task.id, url="u3", source_tier="tier3", sentiment=0.0),
-        _article(task_id=task.id, url="u4", relevance="low"),  # 被过滤
-    ])
+    async_db_session.add_all(
+        [
+            _article(task_id=task.id, url="u1", source_tier="tier1", sentiment=1.0),
+            _article(task_id=task.id, url="u2", source_tier="tier2", sentiment=-1.0),
+            _article(task_id=task.id, url="u3", source_tier="tier3", sentiment=0.0),
+            _article(task_id=task.id, url="u4", relevance="low"),  # 被过滤
+        ]
+    )
     await async_db_session.flush()
 
     slice_obj = await initialize_slice(
@@ -183,26 +191,27 @@ async def test_initialize_slice_focus_persists_subject_and_competitors(
 ):
     """焦点切片：subject + competitors 原样写入表列（与 result_data 解耦）。"""
     task = await _make_task(
-        async_db_session, news_monitor, slice_user,
-        name="焦点任务", keywords="kw",
+        async_db_session,
+        news_monitor,
+        slice_user,
+        name="焦点任务",
+        keywords="kw",
     )
-    async_db_session.add(
-        _article(task_id=task.id, url="u1", source_tier="tier1")
-    )
+    async_db_session.add(_article(task_id=task.id, url="u1", source_tier="tier1"))
     await async_db_session.flush()
 
     slice_obj = await initialize_slice(
         async_db_session,
         monitor_id=news_monitor.id,
-        name="美赞臣蓝臻 Focus",
+        name="星澜至臻 Focus",
         included_task_ids=[task.id],
         user_id=slice_user.id,
-        subject="美赞臣蓝臻",
-        competitors=["惠氏启赋", "皇家美素佳儿"],
+        subject="星澜至臻",
+        competitors=["晨贝儿天赋", "皇家优诺佳"],
     )
 
-    assert slice_obj.subject == "美赞臣蓝臻"
-    assert slice_obj.competitors == ["惠氏启赋", "皇家美素佳儿"]
+    assert slice_obj.subject == "星澜至臻"
+    assert slice_obj.competitors == ["晨贝儿天赋", "皇家优诺佳"]
     # result_data 不含切片配置（已升格到表列）
     assert "meta" not in slice_obj.result_data
 
@@ -217,18 +226,28 @@ async def test_initialize_slice_skips_articles_from_failed_tasks(
 ):
     """initialize_slice 通过 NewsTask.status=completed 过滤——失败任务的文章不参与。"""
     completed_task = await _make_task(
-        async_db_session, news_monitor, slice_user,
-        name="完成任务", keywords="kw1", status="completed",
+        async_db_session,
+        news_monitor,
+        slice_user,
+        name="完成任务",
+        keywords="kw1",
+        status="completed",
     )
     failed_task = await _make_task(
-        async_db_session, news_monitor, slice_user,
-        name="失败任务", keywords="kw2", status="failed",
+        async_db_session,
+        news_monitor,
+        slice_user,
+        name="失败任务",
+        keywords="kw2",
+        status="failed",
     )
-    async_db_session.add_all([
-        _article(task_id=completed_task.id, url="u1"),
-        _article(task_id=completed_task.id, url="u2"),
-        _article(task_id=failed_task.id, url="u3"),  # 不应被计入
-    ])
+    async_db_session.add_all(
+        [
+            _article(task_id=completed_task.id, url="u1"),
+            _article(task_id=completed_task.id, url="u2"),
+            _article(task_id=failed_task.id, url="u3"),  # 不应被计入
+        ]
+    )
     await async_db_session.flush()
 
     slice_obj = await initialize_slice(
@@ -242,5 +261,3 @@ async def test_initialize_slice_skips_articles_from_failed_tasks(
     )
 
     assert slice_obj.result_data["descriptive"]["articles_total"] == 2
-
-

@@ -809,7 +809,7 @@ MAX_CONCURRENT_TASKS = 10   # analyze 节点并发度
 后续代码(`if findings:` 分支)已能正确消费 findings-only 的情况,不需要额外改动。
 
 **为何过去没发现**:B2B 类研究每轮都能找到足够多新候选,filter 跨轮去重后
-selected 仍非空,该分支从未被触发。乐虎这种**小品牌窄主题**在 round 1 几乎穷尽
+selected 仍非空,该分支从未被触发。猎风这种**小品牌窄主题**在 round 1 几乎穷尽
 可用源,round 2 才会踩坑。
 
 **防回归**:`tests/test_research_synthesizer.py` 三个用例覆盖了

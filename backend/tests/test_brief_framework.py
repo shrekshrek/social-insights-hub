@@ -48,12 +48,16 @@ def test_parser_framework_fields_all_null_when_brief_lacks_them():
 
 def test_parser_framework_fields_empty_array_normalized_to_none():
     """LLM 错返空数组应归一化为 None，保持"未提及"语义清晰"""
-    result = parse_brief_parser_response(_minimal_llm_response({
-        "target_audiences": [],
-        "audience_insights": [],
-        "core_propositions": [],
-        "competitors": [],
-    }))
+    result = parse_brief_parser_response(
+        _minimal_llm_response(
+            {
+                "target_audiences": [],
+                "audience_insights": [],
+                "core_propositions": [],
+                "competitors": [],
+            }
+        )
+    )
     assert result["target_audiences"] is None
     assert result["audience_insights"] is None
     assert result["core_propositions"] is None
@@ -62,48 +66,60 @@ def test_parser_framework_fields_empty_array_normalized_to_none():
 
 def test_parser_framework_fields_fmcg_brief():
     """FMCG brief：人群画像 + 痛点 + 主张 + 竞品 全部抽取"""
-    result = parse_brief_parser_response(_minimal_llm_response({
-        "target_audiences": [
+    result = parse_brief_parser_response(
+        _minimal_llm_response(
             {
-                "label": "Rational Affluent 专业求证富足派",
-                "description": "90 后高知高收入妈妈",
-                "behavior_signals": ["小红书 KOL 推荐", "成分查询", "医护推荐"],
-            },
-            {
-                "label": "Big Brand Follower 体面跟风派",
-                "description": "上线城市 90/95 后妈妈",
-                "behavior_signals": ["线下口碑", "亲友推荐", "户外广告"],
-            },
-        ],
-        "audience_insights": ["MFGM 价值难以理解和衡量"],
-        "core_propositions": ["MFGM 是高端配方价值符号"],
-        "competitors": ["爱他美", "Friso", "a2"],
-    }))
+                "target_audiences": [
+                    {
+                        "label": "Rational Affluent 专业求证富足派",
+                        "description": "90 后高知高收入妈妈",
+                        "behavior_signals": ["小红书 KOL 推荐", "成分查询", "医护推荐"],
+                    },
+                    {
+                        "label": "Big Brand Follower 体面跟风派",
+                        "description": "上线城市 90/95 后妈妈",
+                        "behavior_signals": ["线下口碑", "亲友推荐", "户外广告"],
+                    },
+                ],
+                "audience_insights": ["益生菌配方价值难以理解和衡量"],
+                "core_propositions": ["益生菌配方是高端配方价值符号"],
+                "competitors": ["晨贝儿", "优诺佳", "岚舒"],
+            }
+        )
+    )
     assert len(result["target_audiences"]) == 2
     assert result["target_audiences"][0]["label"] == "Rational Affluent 专业求证富足派"
     assert "小红书 KOL 推荐" in result["target_audiences"][0]["behavior_signals"]
-    assert "MFGM 价值难以理解和衡量" in result["audience_insights"]
-    assert "爱他美" in result["competitors"]
+    assert "益生菌配方价值难以理解和衡量" in result["audience_insights"]
+    assert "晨贝儿" in result["competitors"]
 
 
 def test_parser_framework_fields_b2b_saas_brief():
     """B2B SaaS brief：决策角色而非消费者人群、竞品含'自建'替代方案"""
-    result = parse_brief_parser_response(_minimal_llm_response({
-        "target_audiences": [
+    result = parse_brief_parser_response(
+        _minimal_llm_response(
             {
-                "label": "CIO 决策者",
-                "description": "大型企业 IT 决策层",
-                "behavior_signals": ["Gartner 报告参考", "同行案例", "行业峰会"],
-            },
-            {
-                "label": "IT 实施者",
-                "behavior_signals": ["技术社区文档", "PoC 实测"],
-            },
-        ],
-        "audience_insights": ["数据孤岛严重", "合规审计耗时"],
-        "core_propositions": ["一站式合规友好平台"],
-        "competitors": ["Salesforce", "SAP", "自建团队"],
-    }))
+                "target_audiences": [
+                    {
+                        "label": "CIO 决策者",
+                        "description": "大型企业 IT 决策层",
+                        "behavior_signals": [
+                            "Gartner 报告参考",
+                            "同行案例",
+                            "行业峰会",
+                        ],
+                    },
+                    {
+                        "label": "IT 实施者",
+                        "behavior_signals": ["技术社区文档", "PoC 实测"],
+                    },
+                ],
+                "audience_insights": ["数据孤岛严重", "合规审计耗时"],
+                "core_propositions": ["一站式合规友好平台"],
+                "competitors": ["Salesforce", "SAP", "自建团队"],
+            }
+        )
+    )
     # 角色而非人群，依然能正常抽取
     assert result["target_audiences"][0]["label"] == "CIO 决策者"
     assert "Gartner 报告参考" in result["target_audiences"][0]["behavior_signals"]
@@ -115,18 +131,22 @@ def test_parser_framework_fields_b2b_saas_brief():
 
 def test_parser_framework_fields_public_welfare_brief():
     """公益反诈 brief：受众群体 + 无竞品概念"""
-    result = parse_brief_parser_response(_minimal_llm_response({
-        "target_audiences": [
+    result = parse_brief_parser_response(
+        _minimal_llm_response(
             {
-                "label": "65+ 老年人",
-                "description": "易受电信诈骗",
-                "behavior_signals": ["短视频获取信息", "亲属提醒"],
-            },
-        ],
-        "audience_insights": ["对新型 AI 换脸骗术认知盲区"],
-        "core_propositions": ["三步识别法（停-问-查）"],
-        # 公益场景明确无"竞品"概念，留空
-    }))
+                "target_audiences": [
+                    {
+                        "label": "65+ 老年人",
+                        "description": "易受电信诈骗",
+                        "behavior_signals": ["短视频获取信息", "亲属提醒"],
+                    },
+                ],
+                "audience_insights": ["对新型 AI 换脸骗术认知盲区"],
+                "core_propositions": ["三步识别法（停-问-查）"],
+                # 公益场景明确无"竞品"概念，留空
+            }
+        )
+    )
     assert len(result["target_audiences"]) == 1
     assert result["target_audiences"][0]["label"] == "65+ 老年人"
     assert result["competitors"] is None  # 公益场景无竞品
@@ -152,8 +172,8 @@ def test_format_audiences_block_renders_signals():
     """target_audiences 注入：label + description + behavior_signals 全部渲染"""
     inputs = format_research_design_inputs(
         user_input="",
-        subject="蓝臻",
-        analysis_goal="MFGM 价值符号化",
+        subject="至臻",
+        analysis_goal="益生菌配方价值符号化",
         target_audiences=[
             {
                 "label": "Rational Affluent",
@@ -227,7 +247,7 @@ def _make_design_with_dims(dim_specs: list[tuple[str, str, str]]) -> dict:
 def test_missing_competitive_triggered_by_structured_field():
     """brand_brief.competitors 非空 + data_plan 无 competitive → 触发"""
     design = _make_design_with_dims([("品牌声量", "consumer_voice", "social_media")])
-    brief = {"competitors": ["爱他美", "Friso"]}
+    brief = {"competitors": ["晨贝儿", "优诺佳"]}
     result = _check_missing_competitive_social_dimension(design, brief)
     assert result is not None
     assert result["code"] == "missing_competitive_social_dimension"
@@ -247,10 +267,12 @@ def test_missing_competitive_triggered_by_text_grep_fallback():
 
 def test_missing_competitive_not_triggered_when_dim_exists():
     """data_plan 已有 competitive 维度 → 不触发"""
-    design = _make_design_with_dims([
-        ("品牌声量", "consumer_voice", "social_media"),
-        ("竞品对比", "competitive", "social_media"),
-    ])
+    design = _make_design_with_dims(
+        [
+            ("品牌声量", "consumer_voice", "social_media"),
+            ("竞品对比", "competitive", "social_media"),
+        ]
+    )
     brief = {"competitors": ["A", "B"]}
     assert _check_missing_competitive_social_dimension(design, brief) is None
 

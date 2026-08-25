@@ -134,7 +134,7 @@ pnpm prod:down
 > 如有新增迁移，请在部署后手动执行一次：`pnpm be:migrate:up`。
 
 > 🤖 **CI/CD 自动部署**：项目目前已 100% 接入了更智能、更敏捷的 **GitHub Actions** 自动化 CI/CD 部署。
-> 您只需在本地将代码推送到 GitHub 的 `main` 分支（`git push origin main`），新加坡生产服务器便会自动拉取最新代码、智能增量重构镜像、平滑滚动重启，完全解放手动部署的劳动力。
+> 您只需在本地将代码推送到 GitHub 的 `main` 分支（`git push origin main`），生产服务器便会自动拉取最新代码、智能增量重构镜像、平滑滚动重启，完全解放手动部署的劳动力。
 > 
 > ### 🤖 自动化 CI/CD 部署指南 (GitHub Actions)
 > 
@@ -143,7 +143,7 @@ pnpm prod:down
 > ⛔ **lint 前置门禁**：push 到 main 后，流水线先执行静态检查（后端 ruff + 前端 eslint/vue-tsc，复用 `.github/workflows/lint.yml`），**任一检查失败则不会部署**。本地提交前跑 `pnpm be:lint` / `pnpm fe:lint` 可避免被门禁拦下。多次连续 push 时部署串行排队，不会并发交错。
 > 
 > #### 1. 服务器端 GitOps 一次性改造
-> 为确保新加坡服务器具备免密拉取您 GitHub 私有仓库的最高安全级别权限，需进行如下注册：
+> 为确保生产服务器具备免密拉取您 GitHub 仓库的权限，需进行如下注册：
 > 1. **在服务器生成 SSH 密钥对**：
 >    ```bash
    ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
@@ -160,8 +160,8 @@ pnpm prod:down
 > 
 > | 变量名 (Secret Name) | 对应值内容 (Value) | 如何获取或填写？ |
 > | :--- | :--- | :--- |
-> | **`DEPLOY_HOST`** | `43.159.61.34` | 新加坡生产服务器的公网 IP 地址 |
-> | **`DEPLOY_USER`** | `root` | 登录服务器使用的用户名 |
+> | **`DEPLOY_HOST`** | `<你的生产服务器公网 IP>` | 生产服务器的公网 IP 地址 |
+> | **`DEPLOY_USER`** | `<部署用户，如 root>` | 登录服务器使用的用户名 |
 > | **`SSH_PRIVATE_KEY`** | `您本地 Mac 上的 id_rsa 私钥文本` | 完整复制您本地 `~/.ssh/id_rsa` 的私钥内容（包含 BEGIN/END 首尾标识行）。<br>💡 *Mac 本地终端极速复制命令*：`cat ~/.ssh/id_rsa | pbcopy`（直接进剪贴板，Cmd+V 即可）。 |
 > 
 > #### 3. 智能增量判定构建优势 (Smart Increment Sensor)

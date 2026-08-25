@@ -7,8 +7,8 @@
 
 ## 变更记录
 
-- **2026-04-20 v1**:基于 Strategy #18(乐虎)的 n=1 实验,推出"策略研究必须重构为 LLM-native"
-- **2026-04-20 v2**:Strategy #7(大魔王素毛肚)实验结果与 v1 相反,揭示 Path B 在品牌聚焦场景下会被 IP 泛化内容带偏。修订为"场景化混合架构"
+- **2026-04-20 v1**:基于 Strategy #18(猎风)的 n=1 实验,推出"策略研究必须重构为 LLM-native"
+- **2026-04-20 v2**:Strategy #7(魔尊素肚)实验结果与 v1 相反,揭示 Path B 在品牌聚焦场景下会被 IP 泛化内容带偏。修订为"场景化混合架构"
 - **2026-04-20 v3**:落地 Prompt Caching 修复 + 评估 harness MVP。n=2 自动评分验证手动结论(Strategy 18 Δ +0.47,Strategy 7 Δ +0.38)
 - **2026-04-20 v4**:**状态降级为 Investigating**。自我反思发现证据基础不足,新增 Phase 0 Feature Inventory,原"场景化混合"方案降级为初步假设
 - **2026-04-20 v5**:**Phase 0 完成**(4 份 inventory 已产出)。新增 Phase 1 架构选项分析(Options A-F + 推荐路径)
@@ -126,7 +126,7 @@
 5. 定期监控需求(未来)通过 APScheduler 周期性创建 Task + 自动 Slice 规则可轻量支持,**现有架构天然适配**
 
 **经过的验证**:
-- 2 次 batch PoC(task 84 MFGM + task 94 宠物)见 [docs/experiments/](../experiments/)
+- 2 次 batch PoC(task 84 高端配方 + task 94 宠物)见 [docs/experiments/](../experiments/)
 - 2 份 feature inventory 对比([social_media.md](../inventory/social_media.md))
 - 多轮架构反思和修正(v1→v6)
 
@@ -212,7 +212,7 @@
 - ✅ **测试残留数据清理**:删除 5 条旧 strategy(id 6, 7, 11, 12, 13)+ 5 个关联 social_monitor + 级联的 114 tasks / 3,600 posts / 34,779 comments / 3,533 post_analysis
   - strategy 12, 13 使用了废弃值 `output_type='insight_report'`
   - strategy 11 是未完成的 probing,其余是早期测试
-  - **保留 strategy 18**(乐虎,`full_strategy` completed,Path B 实验主要 baseline)
+  - **保留 strategy 18**(猎风,`full_strategy` completed,Path B 实验主要 baseline)
 
 **评估过但不做的**:
 - ❌ `full_strategy` 是否应包含 `Strategic Brief`——产品决策而非技术问题,当前设计"Landscape 赋能创意"有其合理性
@@ -555,14 +555,14 @@ docker-compose exec backend uv run python /tmp/eval.py \
 
 | Strategy | Subject | Path A Overall | Path B Overall | Δ | 关键差异维度 |
 |---------|--------|---------------|---------------|---|---|
-| #18 乐虎(品类级) | 乐虎 | 0.485 | **0.954** | +0.469 | citation_validity +1.0,thematic_engagement +0.85 |
-| #7 大魔王素毛肚(品牌聚焦 + IP) | 大魔王素毛肚 | 0.352 | 0.727 | +0.376 | citation_validity +1.0,**subject_focus -0.13**(Path A 胜出维度) |
+| #18 猎风(品类级) | 猎风 | 0.485 | **0.954** | +0.469 | citation_validity +1.0,thematic_engagement +0.85 |
+| #7 魔尊素肚(品牌聚焦 + IP) | 魔尊素肚 | 0.352 | 0.727 | +0.376 | citation_validity +1.0,**subject_focus -0.13**(Path A 胜出维度) |
 
 自动评分成功捕获到 n=2 的关键分化:品牌聚焦场景下 `subject_focus` 维度 Path B 会降分,印证了需要场景化架构的判断。
 
 ### 已知限制
 
-1. `subject_focus` 目前只做完整字符串匹配,未做 alias/语义匹配(比如 "大魔王素毛肚" 不会匹配 "大魔王")。后续可扩展为用 LLM 做语义判断或让 brief_parser 产出 aliases
+1. `subject_focus` 目前只做完整字符串匹配,未做 alias/语义匹配(比如 "魔尊素肚" 不会匹配 "魔尊")。后续可扩展为用 LLM 做语义判断或让 brief_parser 产出 aliases
 2. 维度权重目前硬编码,应该按场景(category vs brand_focus)动态调整
 3. 未评估"反陈词度"(需 LLM-as-judge,不在 MVP 范围)
 4. 只评估 `insight_result`,其他产出类型(brand_role/big_idea/agenda_map/landscape/strategic_brief)待扩展

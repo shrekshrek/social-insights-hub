@@ -954,7 +954,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             <UFormField label="主体（可选，用于 Focus 切片）" help="填写后切片会做主体/竞品角色归类；留空 = 大盘视角，所有实体平权。">
               <UInput
                 v-model="sliceSubjectInput"
-                placeholder="例如：美赞臣蓝臻"
+                placeholder="例如：晨屿轻萃咖啡"
                 class="w-full"
               />
             </UFormField>
@@ -965,7 +965,7 @@ const taskColumns = computed<TableColumn<NewsTaskWithRelations>[]>(() => {
             >
               <UInput
                 v-model="sliceCompetitorsInput"
-                placeholder="例如：惠氏启赋, 飞鹤星飞帆, 皇家美素佳儿"
+                placeholder="例如：云顶冷萃, 山语气泡, 悦植茶咖"
                 class="w-full"
               />
             </UFormField>

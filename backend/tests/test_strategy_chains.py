@@ -261,7 +261,7 @@ class TestFixOrphanDimensions:
         blueprint 只引用了 social 那条 → news 那条变孤儿，修复后必须进入品牌聚焦+大盘切片。"""
         data_plan = [
             {
-                "dimension_name": "消费者对Enfinitas及MFGM认知",
+                "dimension_name": "消费者对Velora及益生菌配方认知",
                 "channel": "social_media",
                 "question_ids": ["rq1"],
             },
@@ -283,21 +283,21 @@ class TestFixOrphanDimensions:
         ]
         slice_blueprint = [
             {
-                "name": "Enfinitas品牌认知与竞争对比",
-                "subject": "Enfinitas",
+                "name": "Velora品牌认知与竞争对比",
+                "subject": "Velora",
                 "source_dimensions": [
-                    "消费者对Enfinitas及MFGM认知",
+                    "消费者对Velora及益生菌配方认知",
                     "竞品配方沟通策略",
                 ],
             },
             {
-                "name": "高端奶粉行业趋势与MFGM价值",
+                "name": "高端奶粉行业趋势与益生菌配方价值",
                 "subject": "",
                 "source_dimensions": ["竞品配方沟通策略", "行业趋势与科研新闻"],
             },
         ]
         dim_type_map = {
-            "消费者对Enfinitas及MFGM认知": "consumer_voice",
+            "消费者对Velora及益生菌配方认知": "consumer_voice",
             "竞品配方沟通策略": "competitive",
             "行业趋势与科研新闻": "industry",
             "竞品配方沟通新闻": "competitive",
@@ -309,7 +309,7 @@ class TestFixOrphanDimensions:
         assert "竞品配方沟通新闻" in focused_dims
         assert "竞品配方沟通新闻" in general_dims
         # 非孤儿维度不变
-        assert "消费者对Enfinitas及MFGM认知" in focused_dims
+        assert "消费者对Velora及益生菌配方认知" in focused_dims
         assert "行业趋势与科研新闻" in general_dims
 
     def test_no_orphan_returns_unchanged(self):
@@ -388,7 +388,7 @@ class TestSelectEvidence:
     """覆盖 strategy 41 事故场景：低排序高 source 实体不能被截断丢弃。"""
 
     def test_strategy_41_high_source_low_position_kept(self):
-        """乳脂球膜 source=12 处于第 50 位（远超 top 15）也必须传给 LLM。"""
+        """益生菌配方 source=12 处于第 50 位（远超 top 15）也必须传给 LLM。"""
         items = (
             [
                 {"name": f"高频 {i}", "source_count": 100 - i} for i in range(20)
@@ -396,16 +396,16 @@ class TestSelectEvidence:
             + [
                 {"name": f"中频 {i}", "source_count": 5} for i in range(30)
             ]  # 20..49 中 source
-            + [{"name": "乳脂球膜", "source_count": 12}]  # 第 50 位 source=12
+            + [{"name": "益生菌配方", "source_count": 12}]  # 第 50 位 source=12
             + [
                 {"name": f"低频 {i}", "source_count": 1} for i in range(50)
             ]  # 51..100 低 source
         )
         selected, total, covered = _select_evidence(items, source_key="source_count")
         names = {i["name"] for i in selected}
-        assert "乳脂球膜" in names, "source>=3 的实体必须保留，不能被位置截断"
+        assert "益生菌配方" in names, "source>=3 的实体必须保留，不能被位置截断"
         assert total == 101
-        assert covered == 51  # 20 高频 + 30 中频 + 乳脂球膜
+        assert covered == 51  # 20 高频 + 30 中频 + 益生菌配方
 
     def test_sorted_by_source_desc(self):
         items = [
@@ -444,10 +444,10 @@ class TestSelectEvidence:
         assert selected[0]["name"] == "c"
 
     def test_format_coverage_check_inputs_includes_low_position_high_source(self):
-        """端到端：strategy 41 切片 148 的真实结构在 LLM 输入里能看到「乳脂球膜」。"""
+        """端到端：strategy 41 切片 148 的真实结构在 LLM 输入里能看到「益生菌配方」。"""
         slices_data = [
             (
-                "Enfinitas品牌认知与竞争对比",
+                "Velora品牌认知与竞争对比",
                 {
                     "foundation": {
                         "aligned_entities": (
@@ -455,7 +455,7 @@ class TestSelectEvidence:
                                 {"name": f"E{i}", "source_count": 100 - i}
                                 for i in range(15)
                             ]
-                            + [{"name": "乳脂球膜", "source_count": 12}]
+                            + [{"name": "益生菌配方", "source_count": 12}]
                             + [{"name": f"L{i}", "source_count": 1} for i in range(50)]
                         ),
                         "aligned_topics": [],
@@ -465,18 +465,18 @@ class TestSelectEvidence:
             ),
         ]
         result = format_coverage_check_inputs(
-            brief={"subject": "Enfinitas", "analysis_goal": "MFGM"},
+            brief={"subject": "Velora", "analysis_goal": "益生菌配方"},
             research_questions=[
                 {
                     "id": "rq1",
-                    "question": "MFGM 认知",
+                    "question": "益生菌配方 认知",
                     "dimension": "consumer_voice",
                     "priority": "high",
                 },
             ],
             slices_data=slices_data,
         )
-        assert "乳脂球膜" in result["slices_summary_section"]
+        assert "益生菌配方" in result["slices_summary_section"]
         # 元信息体现全貌
         assert "共 66 个" in result["slices_summary_section"]
         assert "source≥3 的 16 个" in result["slices_summary_section"]
